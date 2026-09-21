@@ -640,6 +640,7 @@ describe('native chat terminal handoff', () => {
       harnessName: input.harnessName,
       sessionId: input.sessionId,
       runId: input.runId,
+      sessionIncarnation: input.sessionIncarnation,
     };
     // The settlement-retry probe must see the row in ANY status: a commit that
     // sealed before the caller's bookkeeping finished is 'committed', not
@@ -655,6 +656,15 @@ describe('native chat terminal handoff', () => {
     await expect(storage.loadPendingTerminalAdmission(byRun)).resolves.toBeNull();
     await expect(storage.loadTerminalAdmissionByRun(byRun)).resolves.toMatchObject({ status: 'committed' });
     await expect(storage.loadTerminalAdmissionByRun({ ...byRun, runId: 'run-other' })).resolves.toBeNull();
+    // A run id is only deterministic within its session incarnation — a
+    // deleted-then-recreated session id must never resolve the prior
+    // incarnation's admission.
+    await expect(
+      storage.loadTerminalAdmissionByRun({ ...byRun, sessionIncarnation: 'incarnation-2' }),
+    ).resolves.toBeNull();
+    await expect(
+      storage.loadPendingTerminalAdmission({ ...byRun, sessionIncarnation: 'incarnation-2' }),
+    ).resolves.toBeNull();
   });
 
   it('preserves completed canonical evidence when a retried commit finds no intent row', async () => {
@@ -785,6 +795,7 @@ describe('native chat terminal handoff', () => {
         harnessName: input.harnessName,
         sessionId: input.sessionId,
         runId: input.runId,
+        sessionIncarnation: input.sessionIncarnation,
       }),
     ).rejects.toBeInstanceOf(expected);
     await expect(
@@ -792,6 +803,7 @@ describe('native chat terminal handoff', () => {
         harnessName: input.harnessName,
         sessionId: input.sessionId,
         runId: input.runId,
+        sessionIncarnation: input.sessionIncarnation,
       }),
     ).rejects.toBeInstanceOf(expected);
     await expect(

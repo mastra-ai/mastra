@@ -1631,6 +1631,17 @@ export class Session {
   private readonly _openRuns = new Map<string, OpenRunSpan>();
   /** Span-summary — runIds whose `run_completed` was already emitted, so duplicate terminal `agent_end` paths finalize at most once. Bounded by {@link MAX_FINALIZED_RUN_IDS}. */
   private readonly _finalizedRunIds = new Set<string>();
+  /**
+   * Durable resume-usage fence. `_recordTurnCompletion` applies a resumed run's
+   * usage delta to the live counter immediately, and every flush persists the
+   * live counter — so an unrelated flush landing before the pending-clearing
+   * flush could persist the new total while `pendingResume.accountedTokenUsage`
+   * still holds the suspend-time baseline, double-counting after a cold
+   * restart. While armed, `_flushUpdate` folds the post-resume baseline into
+   * the still-parked pending generation so the durable watermark advances
+   * atomically with whichever write commits first.
+   */
+  private _resumeUsageBaseline: { generationKey: string; runUsage: TokenUsage } | undefined;
   /** Span-summary — tail promise serializing best-effort durable run-summary writes (Slice B). */
   private _runSummaryPersistence: Promise<void> = Promise.resolve();
   private readonly _activeTurnWaiters = new Set<ActiveTurnWaiter>();
@@ -3760,6 +3771,71 @@ export class Session {
       }, 1_000);
       this._pendingInteractionExpiryTimer.unref?.();
       return false;
+    }
+
+    // A committed terminal admission means the resumed run's outcome already
+    // sealed — the crash was in the post-commit bookkeeping (the
+    // pendingResume-clearing flush), not the provider run. Recover the durable
+    // winner and finish the remaining bookkeeping instead of failing the
+    // interaction as abandoned. The stale-failure transition below only runs
+    // when no sealed winner exists.
+    const recoveryIncarnation = this._record.sessionIncarnation;
+    if (
+      this._storage.supportsTerminalHandoff &&
+      recoveryIncarnation !== undefined &&
+      currentPending !== undefined &&
+      currentPending.resumedAt === expected.resumedAt &&
+      currentPending.runId === expected.runId &&
+      currentPending.toolCallId === expected.toolCallId
+    ) {
+      const boundAdmission = await this._storage.loadTerminalAdmissionByRun({
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        runId: expected.runId,
+        sessionIncarnation: recoveryIncarnation,
+      });
+      if (boundAdmission?.status === 'committed') {
+        const stored = await this._storage.loadMessageResultEvidence({
+          harnessName: this._record.harnessName,
+          sessionId: this.id,
+          resourceId: this.resourceId,
+          threadId: this.threadId,
+          signalId: boundAdmission.signalId,
+        });
+        const parked = this._record.pendingResume;
+        if (
+          stored !== null &&
+          'status' in stored &&
+          stored.status === 'completed' &&
+          stored.result !== undefined &&
+          parked !== undefined &&
+          parked.runId === expected.runId &&
+          parked.toolCallId === expected.toolCallId &&
+          parked.resumedAt === expected.resumedAt
+        ) {
+          const full = stored.result as FullOutput<unknown>;
+          // Repopulate the local run cache so the per-generation usage marker
+          // still dedupes a concurrent settlement retry.
+          this._rememberCompletedRun(parked.runId, { ok: true, full });
+          const pendingQueuedItemId = this._queuedItemIdForPendingResume(parked);
+          const resumeRuntimeDependencies = this._runtimeDependenciesForPendingResume(parked);
+          await this._withActiveDeletedWaiter(async activeTurnWaiter => {
+            await this._finalizeResumedTurnOutcome(parked, full, {
+              pendingQueuedItemId,
+              completingQueuedItemId: expectedQueuedItemId,
+              // The resume-data payload (and thus any plan-approval mode flip)
+              // lived in the dead caller; the committed outcome is recovered
+              // without it.
+              previousModeId: this._record.modeId,
+              resumeModeId: this._modeIdForPendingResume(parked),
+              resumeModelId: resumeRuntimeDependencies.modelId,
+              deletedTurnWaiter: activeTurnWaiter,
+            });
+          });
+          if (expectedQueuedItemId !== undefined) void this._maybeDrainQueue();
+          return true;
+        }
+      }
     }
 
     const recoveryError = new ResumeRecoveryStaleError();
@@ -7599,6 +7675,13 @@ export class Session {
     const admittedOpts = {
       ...opts,
       ...(logicalMessageIdentity === undefined ? {} : { logicalMessageIdentity }),
+      // The seed is bound into the admission hash AND persisted on the durable
+      // admission row, but the admit happens after awaits. Snapshot it here —
+      // before the first yield — so a caller mutating its object mid-flight
+      // cannot split the hashed value from the persisted one.
+      ...(opts.terminalAdmissionSeed === undefined
+        ? {}
+        : { terminalAdmissionSeed: structuredClone(opts.terminalAdmissionSeed) }),
     };
 
     if (opts.stream === true && opts.output !== undefined) {
@@ -8018,7 +8101,7 @@ export class Session {
             // duplicate provider execution after a restart.
             const probedTerminalAdmission =
               terminalIdentity !== undefined &&
-              this._terminalFinalizer !== undefined &&
+              this._storage.supportsTerminalHandoff &&
               'status' in existing &&
               existing.status === 'pending'
                 ? await this._storage.loadTerminalAdmission({
@@ -8028,6 +8111,25 @@ export class Session {
                     executionGrant: opts.executionAuthorityGrant!,
                   })
                 : undefined;
+            // A stored admission that is already cancelled or fenced can never
+            // produce completed evidence — surface the durable outcome now
+            // instead of waiting out the generic duplicate path.
+            if (
+              probedTerminalAdmission !== undefined &&
+              probedTerminalAdmission !== null &&
+              (probedTerminalAdmission.status === 'cancelled' || probedTerminalAdmission.status === 'fenced')
+            ) {
+              const terminalError =
+                probedTerminalAdmission.status === 'cancelled'
+                  ? new HarnessTerminalHandoffCancelledError(probedTerminalAdmission.executionGrant.key)
+                  : new HarnessTerminalHandoffFencedError(this.id);
+              try {
+                opts.onTerminalCommitError?.(terminalError);
+              } catch {
+                // The terminal outcome below is authoritative.
+              }
+              throw terminalError;
+            }
             const dispatch = (existing as AgentSignalResultEvidence).dispatch;
             const dispatchNotStarted = dispatch === undefined || dispatch.state === 'reserved';
             const strandedPendingTerminal =
@@ -8050,7 +8152,11 @@ export class Session {
           }
         }
         if (terminalIdentity !== undefined && this._terminalFinalizer !== undefined) {
-          await this._admitTerminalHandoff(terminalIdentity, opts.terminalAdmissionSeed!, opts.onTerminalCommitError);
+          await this._admitTerminalHandoff(
+            terminalIdentity,
+            admittedOpts.terminalAdmissionSeed!,
+            opts.onTerminalCommitError,
+          );
           // Stamp the durable dispatch marker before invoking sendSignal: a
           // retry that finds this reservation with a pending admission but no
           // `dispatching` state knows the provider was never invoked and may
@@ -8907,14 +9013,21 @@ export class Session {
                   onFailure: opts.onTerminalCommitError,
                 });
               }
-              const identity = adoptedTerminal
-                ? this._prepareTerminalIdentity(
-                    this._messageAdmissionIdentity(evidence.admissionId!),
-                    evidence.admissionId!,
-                    evidence.admissionHash!,
-                    opts.executionAuthorityGrant!,
-                  )
-                : undefined;
+              // `_prepareTerminalIdentity` can throw synchronously — drain the
+              // observers retained above before propagating or they strand.
+              let identity: HarnessTerminalIdentity | undefined;
+              try {
+                identity = adoptedTerminal
+                  ? this._prepareTerminalIdentity(
+                      this._messageAdmissionIdentity(evidence.admissionId!),
+                      evidence.admissionId!,
+                      evidence.admissionHash!,
+                      opts.executionAuthorityGrant!,
+                    )
+                  : undefined;
+              } catch (err) {
+                throw this._terminalFailure(err, undefined, runId);
+              }
               const duplicateMode = this._messageDuplicateModeId(evidence, opts);
               const duplicateModel = this._messageDuplicateModelId(evidence, opts);
               // Settle through the canonical run-completion barrier, not the raw
@@ -8925,17 +9038,28 @@ export class Session {
               void this._awaitRunCompletion(runId!)
                 .then(async full => {
                   const fullOutput = full as FullOutput<unknown>;
-                  await this._prepareCachedDuplicateMessageCompletion(fullOutput, evidence, opts, activeDeleted);
-                  if (identity !== undefined) {
-                    await this._commitTerminalHandoff(identity, fullOutput, {
-                      modeId: duplicateMode,
-                      modelId: duplicateModel,
-                    });
+                  try {
+                    await this._prepareCachedDuplicateMessageCompletion(fullOutput, evidence, opts, activeDeleted);
+                    if (identity !== undefined) {
+                      await this._commitTerminalHandoff(identity, fullOutput, {
+                        modeId: duplicateMode,
+                        modelId: duplicateModel,
+                      });
+                    }
+                  } catch (err) {
+                    // `_commitTerminalHandoff` drains retained observers on its
+                    // own failures, but pre-commit failures (suspension park,
+                    // usage persist, run-materialization) never reach that
+                    // drain — surface an indeterminate outcome here instead of
+                    // stranding the observers retained above. The drain is
+                    // idempotent against the helper's own.
+                    this._terminalFailure(err, undefined, runId);
                   }
                 })
                 .catch(() => {
                   // Settlement failures drain retained observers inside the
-                  // commit helper; the admission stays pending for recovery.
+                  // commit helper or the pre-commit barrier above; the
+                  // admission stays pending for recovery.
                 });
               return output;
             }
@@ -9100,14 +9224,23 @@ export class Session {
       // then resurrects a pending interaction whose grant can never settle —
       // a later respond would drive the provider against a revoked or finished
       // grant. Only a still-pending admission may be re-parked here; the
-      // commit helper below reports the terminal outcome to this caller.
+      // commit helper below reports the terminal outcome to this caller. The
+      // probe keys off durable state, not local finalizer registration — a
+      // reopened session without a finalizer must still see the dead grant.
       const admissionRunId = full.runId ?? evidence.runId;
-      if (this._terminalFinalizer !== undefined && evidence.admissionId !== undefined && admissionRunId !== undefined) {
+      const sessionIncarnation = this._record.sessionIncarnation;
+      if (
+        this._storage.supportsTerminalHandoff &&
+        sessionIncarnation !== undefined &&
+        evidence.admissionId !== undefined &&
+        admissionRunId !== undefined
+      ) {
         const admission = await this._raceActiveTurnWaiter(
           this._storage.loadTerminalAdmissionByRun({
             harnessName: this._record.harnessName,
             sessionId: this.id,
             runId: admissionRunId,
+            sessionIncarnation,
           }),
           activeDeleted,
         );
@@ -9156,11 +9289,17 @@ export class Session {
     full: FullOutput<unknown>,
     options: { modeId?: string; modelId?: string },
   ): Promise<void> {
-    if (this._terminalFinalizer === undefined) return;
+    // Probe durable state even when no finalizer is registered on this session
+    // instance — a reopened session must still observe a bound admission and
+    // fail closed through the commit barrier rather than report success on an
+    // unsettled (or dead) grant.
+    const sessionIncarnation = this._record.sessionIncarnation;
+    if (!this._storage.supportsTerminalHandoff || sessionIncarnation === undefined) return;
     const admission = await this._storage.loadTerminalAdmissionByRun({
       harnessName: this._record.harnessName,
       sessionId: this.id,
       runId: pending.runId,
+      sessionIncarnation,
     });
     if (!admission) return;
     await this._commitTerminalHandoff(admission, full, options);
@@ -9178,13 +9317,51 @@ export class Session {
     pending: PendingResume,
     error: { code: string; message: string },
   ): Promise<void> {
-    if (this._terminalFinalizer === undefined) return;
-    const admission = await this._storage.loadPendingTerminalAdmission({
+    // Durable admission state is independent of local finalizer registration —
+    // a reopened session must still drain observers for a dead grant.
+    const sessionIncarnation = this._record.sessionIncarnation;
+    if (!this._storage.supportsTerminalHandoff || sessionIncarnation === undefined) return;
+    // Probe across statuses: an external cancellation may have already moved
+    // the row out of 'pending', and the retained observers still need their
+    // terminal outcome.
+    const admission = await this._storage.loadTerminalAdmissionByRun({
       harnessName: this._record.harnessName,
       sessionId: this.id,
       runId: pending.runId,
+      sessionIncarnation,
     });
     if (!admission) return;
+    if (admission.status === 'cancelled') {
+      this._drainTerminalObservers(
+        pending.runId,
+        new HarnessTerminalHandoffCancelledError(admission.executionGrant.key),
+      );
+      return;
+    }
+    if (admission.status === 'fenced') {
+      this._drainTerminalObservers(pending.runId, new HarnessTerminalHandoffFencedError(this.id));
+      return;
+    }
+    if (admission.status === 'committed') {
+      // The winner already sealed; replay its durable receipt to observers a
+      // crashed commit never reached. Missing intent is tolerable — the
+      // receipt still reports the sealed admission.
+      let intent: HarnessTerminalIntent | null = null;
+      try {
+        intent = await this._storage.loadTerminalIntent({
+          harnessName: admission.harnessName,
+          intentId: harnessTerminalIntentId(admission.id),
+        });
+      } catch {
+        intent = null;
+      }
+      this._drainTerminalObservers(pending.runId, {
+        status: 'duplicate',
+        admission,
+        ...(intent !== null ? { intent } : {}),
+      });
+      return;
+    }
     const receipt = await this._storage.cancelTerminalHandoff({
       harnessName: admission.harnessName,
       sessionId: admission.sessionId,
@@ -9225,7 +9402,11 @@ export class Session {
       responseId?: string;
     },
   ): Promise<AgentResult | InboxResponseResult | undefined> {
-    if (this._terminalFinalizer === undefined) return undefined;
+    // Probe durable state even without a locally-registered finalizer — a
+    // reopened session must still reconcile a bound admission (the commit
+    // barrier replays a sealed winner or fails closed on a live one).
+    const sessionIncarnation = this._record.sessionIncarnation;
+    if (!this._storage.supportsTerminalHandoff || sessionIncarnation === undefined) return undefined;
     // Probe by run regardless of status: a commit may have sealed the grant
     // while the post-commit bookkeeping (the pendingResume-clearing flush)
     // failed — the admission is then 'committed' rather than 'pending', and
@@ -9235,6 +9416,7 @@ export class Session {
       harnessName: this._record.harnessName,
       sessionId: this.id,
       runId: pending.runId,
+      sessionIncarnation,
     });
     if (!admission || (admission.status !== 'pending' && admission.status !== 'committed')) {
       return undefined;
@@ -9381,6 +9563,32 @@ export class Session {
       if ('status' in latest) {
         if (latest.status === 'completed') return latest.result as AgentResult;
         if (latest.status === 'failed') throw publicErrorProjectionToError(latest.error);
+        // While canonical evidence stays pending, consult the durable terminal
+        // admission each pass — a cancelled/fenced grant can never produce the
+        // completed evidence this loop waits on, and surfacing the durable
+        // outcome beats expiring into an unrelated liveness error (or waiting
+        // forever on a parked pendingResume).
+        const sessionIncarnation = this._record.sessionIncarnation;
+        if (this._storage.supportsTerminalHandoff && sessionIncarnation !== undefined && latest.runId !== undefined) {
+          const boundAdmission = await this._storage.loadTerminalAdmissionByRun({
+            harnessName: this._record.harnessName,
+            sessionId: this.id,
+            runId: latest.runId,
+            sessionIncarnation,
+          });
+          if (boundAdmission?.status === 'cancelled' || boundAdmission?.status === 'fenced') {
+            const terminalError =
+              boundAdmission.status === 'cancelled'
+                ? new HarnessTerminalHandoffCancelledError(boundAdmission.executionGrant.key)
+                : new HarnessTerminalHandoffFencedError(this.id);
+            try {
+              opts.onTerminalCommitError?.(terminalError);
+            } catch {
+              // The terminal outcome below is authoritative.
+            }
+            throw terminalError;
+          }
+        }
       } else {
         throw new HarnessValidationError('message().admissionId', 'duplicate message result evidence has expired');
       }
@@ -9504,6 +9712,15 @@ export class Session {
         ),
       );
     }
+    // A `duplicate`/`admitted` envelope can still carry a dead stored row when
+    // fencing or cancellation landed between the probe and the re-admission —
+    // the stored status is authoritative and must never reach dispatch.
+    if (receipt.admission.status === 'cancelled') {
+      return reportFailure(new HarnessTerminalHandoffCancelledError(identity.executionGrant.key));
+    }
+    if (receipt.admission.status === 'fenced') {
+      return reportFailure(new HarnessTerminalHandoffFencedError(identity.sessionId));
+    }
     if (receipt.admission.status === 'committed') {
       return reportFailure(
         new HarnessTerminalHandoffError(
@@ -9586,10 +9803,12 @@ export class Session {
       onFailure?: (error: HarnessTerminalHandoffError) => void;
     },
   ): Promise<HarnessTerminalCommitReceipt | undefined> {
+    // The registered finalizer is required only to COMMIT a still-pending
+    // admission — the cancelled/fenced barriers and the committed fast-path
+    // replay are durable reads that must work on a reopened session that has
+    // not re-registered one. The missing-finalizer check therefore sits below
+    // the replay, immediately before `finalize` is invoked.
     const finalizer = this._terminalFinalizer;
-    if (finalizer === undefined) {
-      throw new HarnessTerminalHandoffValidationError('terminalHandoff', 'finalizer is not registered');
-    }
     const reportFailure = (error: unknown): never => {
       const terminalError =
         error instanceof HarnessTerminalHandoffError
@@ -9687,6 +9906,9 @@ export class Session {
     // re-registers a different finalizer must not have its output committed
     // under the recorded identity. Reject as a retryable pending failure so a
     // corrected registration can still settle the grant.
+    if (finalizer === undefined) {
+      return reportFailure(new HarnessTerminalHandoffValidationError('terminalHandoff', 'finalizer is not registered'));
+    }
     if (finalizer.id !== admission.finalizerId || finalizer.version !== admission.finalizerVersion) {
       return reportFailure(
         new Error(
@@ -14358,21 +14580,31 @@ export class Session {
     // interaction survives (e.g. a duplicate-path restore raced the teardown).
     // Stamping `resumedAt` and invoking `resumeStream` against a revoked grant
     // would re-run the provider for a turn that can never settle; surface the
-    // grant's terminal outcome instead. The probe is by-run across statuses so
-    // cancelled and fenced rows are both seen. Committed rows are left to the
-    // post-output settlement barrier, which replays the durable receipt.
-    if (this._terminalFinalizer !== undefined) {
+    // grant's terminal outcome instead. The probe keys off durable state, not
+    // local finalizer registration — a reopened session without a finalizer
+    // must still fence a dead grant (and fail closed on a live one it can
+    // never settle). Committed rows are left to the post-output settlement
+    // barrier, which replays the durable receipt.
+    const boundAdmissionSessionIncarnation = this._record.sessionIncarnation;
+    if (this._storage.supportsTerminalHandoff && boundAdmissionSessionIncarnation !== undefined) {
       const boundAdmission = await this._storage.loadTerminalAdmissionByRun({
         harnessName: this._record.harnessName,
         sessionId: this.id,
         runId: pending.runId,
+        sessionIncarnation: boundAdmissionSessionIncarnation,
       });
-      if (boundAdmission !== null && (boundAdmission.status === 'cancelled' || boundAdmission.status === 'fenced')) {
-        const terminalError =
-          boundAdmission.status === 'cancelled'
+      const resumeRefusal =
+        boundAdmission === null
+          ? undefined
+          : boundAdmission.status === 'cancelled'
             ? new HarnessTerminalHandoffCancelledError(boundAdmission.executionGrant.key)
-            : new HarnessTerminalHandoffFencedError(this.id);
-        this._drainTerminalObservers(pending.runId, terminalError);
+            : boundAdmission.status === 'fenced'
+              ? new HarnessTerminalHandoffFencedError(this.id)
+              : boundAdmission.status === 'pending' && this._terminalFinalizer === undefined
+                ? new HarnessTerminalHandoffValidationError('terminalHandoff', 'finalizer is not registered')
+                : undefined;
+      if (resumeRefusal !== undefined) {
+        this._drainTerminalObservers(pending.runId, resumeRefusal);
         if (responseId !== undefined) {
           try {
             await this._recordInboxResponsePreDispatchFailure(
@@ -14386,14 +14618,14 @@ export class Session {
                 response: persistedResponse,
                 ...(approvalScope !== undefined ? { approvalScope } : {}),
               },
-              terminalError,
+              resumeRefusal,
             );
           } catch {
             // The terminal outcome below is authoritative; a failed
             // bookkeeping write must not mask it.
           }
         }
-        throw terminalError;
+        throw resumeRefusal;
       }
     }
 
@@ -14976,6 +15208,13 @@ export class Session {
     const markResumeAccountingDone = (): void => {
       const entry = this._completedRuns.get(pending.runId);
       if (entry !== undefined && entry.ok === true) entry.resumeAccountingKey = resumeAccountingKey;
+      // Arm the durable fence: the live counter already holds this delta, so
+      // every flush until the pending clears must persist the advanced
+      // baseline alongside it — a cold retry then computes a zero delta.
+      const runUsage = this._tokenUsageDeltaFromFullOutput(full);
+      if (runUsage !== undefined) {
+        this._resumeUsageBaseline = { generationKey: resumeAccountingKey, runUsage };
+      }
     };
     let alreadyAccounted = false;
     if (completingQueuedItemId !== undefined) {
@@ -18114,6 +18353,25 @@ export class Session {
           tokenUsage: { ...tokenUsageForSave },
           lastActivityAt: Date.now(),
         };
+        // Resume-usage fence: while armed, any write that persists the bumped
+        // cumulative usage must also advance the parked pending's durable
+        // baseline — otherwise a crash between the two leaves a stale
+        // `accountedTokenUsage` and a cold settlement retry double-counts.
+        const resumeUsageBaseline = this._resumeUsageBaseline;
+        if (resumeUsageBaseline !== undefined && next.pendingResume !== undefined) {
+          const parked = next.pendingResume;
+          if (
+            pendingInteractionGenerationKey({
+              kind: parked.kind,
+              itemId: parked.itemId,
+              runId: parked.runId,
+              toolCallId: parked.toolCallId,
+              requestedAt: parked.requestedAt,
+            }) === resumeUsageBaseline.generationKey
+          ) {
+            next.pendingResume = { ...parked, accountedTokenUsage: resumeUsageBaseline.runUsage };
+          }
+        }
         // PF-2251 D2/D4 — receipts stay bounded on EVERY persisted record, at
         // the single flush chokepoint, so no write path can regrow them past
         // the storage document limit.
@@ -18200,6 +18458,24 @@ export class Session {
             version: saved.version,
             leaseExpiresAt: committedLeaseExpiresAt,
           };
+          // Disarm the resume-usage fence once the parked generation is gone
+          // (pending-clearing flush) or was superseded by a different one.
+          const armedBaseline = this._resumeUsageBaseline;
+          if (armedBaseline !== undefined) {
+            const parkedNow = this._record.pendingResume;
+            if (
+              parkedNow === undefined ||
+              pendingInteractionGenerationKey({
+                kind: parkedNow.kind,
+                itemId: parkedNow.itemId,
+                runId: parkedNow.runId,
+                toolCallId: parkedNow.toolCallId,
+                requestedAt: parkedNow.requestedAt,
+              }) !== armedBaseline.generationKey
+            ) {
+              this._resumeUsageBaseline = undefined;
+            }
+          }
           this._syncPendingInteractionExpiryTimer();
           // §10.2 state_changed — emit only when durable `session.state` actually
           // changed, after the record is committed so subscribers reading state

@@ -7,6 +7,9 @@ import {
   HarnessTerminalHandoffIdentityConflictError,
   HarnessTerminalHandoffUnsupportedError,
   HarnessTerminalHandoffValidationError,
+  TABLE_HARNESS_SESSION_PROJECTION_FENCES,
+  TABLE_HARNESS_SESSION_PROJECTION_INTENTS,
+  TABLE_HARNESS_SESSION_PROJECTION_PRESSURE,
   TABLE_HARNESS_TERMINAL_ADMISSIONS,
   TABLE_HARNESS_TERMINAL_INTENTS,
   TABLE_HARNESS_TERMINAL_TOMBSTONES,
@@ -155,6 +158,14 @@ describe('HarnessPG native terminal handoff', () => {
   const rowCount = async (table: string) => {
     const row = await store.db.one<{ count: string }>(`SELECT COUNT(*)::text AS count FROM "${schemaName}"."${table}"`);
     return Number(row.count);
+  };
+  // A projection-disabled store never creates its outbox tables — report 0 for
+  // a missing relation so the assertion covers both "no table" and "no rows".
+  const optionalRowCount = async (table: string) => {
+    const reg = await store.db.one<{ reg: string | null }>(`SELECT to_regclass($1)::text AS reg`, [
+      `${schemaName}.${table}`,
+    ]);
+    return reg.reg === null ? 0 : rowCount(table);
   };
 
   beforeAll(async () => {
@@ -742,6 +753,13 @@ describe('HarnessPG native terminal handoff', () => {
       await expect(th.commitTerminalHandoff(commitInput(input, 'terminal-only'))).resolves.toMatchObject({
         status: 'committed',
       });
+
+      // The incarnation exists for terminal fencing, but a projection-disabled
+      // store must not enqueue session-record projection intents, fences, or
+      // capacity reservations — nothing would ever drain them.
+      expect(await optionalRowCount(TABLE_HARNESS_SESSION_PROJECTION_INTENTS)).toBe(0);
+      expect(await optionalRowCount(TABLE_HARNESS_SESSION_PROJECTION_FENCES)).toBe(0);
+      expect(await optionalRowCount(TABLE_HARNESS_SESSION_PROJECTION_PRESSURE)).toBe(0);
     } finally {
       await terminalOnly.close();
     }
@@ -863,6 +881,7 @@ describe('HarnessPG native terminal handoff', () => {
         harnessName: HARNESS,
         sessionId: first.id,
         runId: input.runId,
+        sessionIncarnation: first.sessionIncarnation!,
       }),
     ).resolves.toMatchObject({ id: harnessTerminalAdmissionId(input), status: 'pending' });
     await expect(
@@ -870,6 +889,7 @@ describe('HarnessPG native terminal handoff', () => {
         harnessName: HARNESS,
         sessionId: second.id,
         runId: input.runId,
+        sessionIncarnation: second.sessionIncarnation!,
       }),
     ).resolves.toMatchObject({ id: harnessTerminalAdmissionId(other), status: 'pending' });
     await expect(
@@ -877,6 +897,7 @@ describe('HarnessPG native terminal handoff', () => {
         harnessName: HARNESS,
         sessionId: first.id,
         runId: 'run-unknown',
+        sessionIncarnation: first.sessionIncarnation!,
       }),
     ).resolves.toBeNull();
 
@@ -889,6 +910,7 @@ describe('HarnessPG native terminal handoff', () => {
         harnessName: HARNESS,
         sessionId: first.id,
         runId: input.runId,
+        sessionIncarnation: first.sessionIncarnation!,
       }),
     ).resolves.toBeNull();
   });
@@ -899,7 +921,12 @@ describe('HarnessPG native terminal handoff', () => {
     await harness().writeMessageResultEvidence(pendingEvidence(input));
     await harness().admitTerminalHandoff(input);
 
-    const byRun = { harnessName: HARNESS, sessionId: session.id, runId: input.runId };
+    const byRun = {
+      harnessName: HARNESS,
+      sessionId: session.id,
+      runId: input.runId,
+      sessionIncarnation: input.sessionIncarnation,
+    };
     // The settlement-retry probe must see the row in ANY status: a commit that
     // sealed before the caller's bookkeeping finished is 'committed', not
     // 'pending', and still owns the run.
@@ -915,6 +942,15 @@ describe('HarnessPG native terminal handoff', () => {
       status: 'committed',
     });
     await expect(harness().loadTerminalAdmissionByRun({ ...byRun, runId: 'run-unknown' })).resolves.toBeNull();
+    // A run id is only deterministic within its session incarnation — a
+    // deleted-then-recreated session id must never resolve the prior
+    // incarnation's admission.
+    await expect(
+      harness().loadTerminalAdmissionByRun({ ...byRun, sessionIncarnation: 'other-incarnation' }),
+    ).resolves.toBeNull();
+    await expect(
+      harness().loadPendingTerminalAdmission({ ...byRun, sessionIncarnation: 'other-incarnation' }),
+    ).resolves.toBeNull();
   });
 
   it('replays an identical commit when the result payload holds a Date', async () => {

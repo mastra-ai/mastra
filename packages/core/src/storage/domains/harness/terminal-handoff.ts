@@ -217,11 +217,15 @@ export interface HarnessTerminalAdmissionLoadInput {
  * Recovery probe for a suspended-then-resumed run: the durable admission
  * identity is keyed by the deterministic run id the admission was minted with,
  * so a terminal resume can find the still-pending admission it must settle.
+ * `sessionIncarnation` is required because a run id is only deterministic
+ * within an incarnation — a deleted-then-recreated session id could otherwise
+ * resolve a previous incarnation's admission.
  */
 export interface HarnessPendingTerminalAdmissionLoadInput {
   harnessName?: string;
   sessionId: string;
   runId: string;
+  sessionIncarnation: string;
 }
 
 export interface HarnessTerminalIntentLoadInput {

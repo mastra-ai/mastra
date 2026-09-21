@@ -1532,6 +1532,7 @@ export class InMemoryHarness extends HarnessStorage {
       if (
         admission.harnessName === namespace &&
         admission.sessionId === input.sessionId &&
+        admission.sessionIncarnation === input.sessionIncarnation &&
         admission.runId === input.runId &&
         admission.status === 'pending'
       ) {
@@ -1548,6 +1549,7 @@ export class InMemoryHarness extends HarnessStorage {
       if (
         admission.harnessName === namespace &&
         admission.sessionId === input.sessionId &&
+        admission.sessionIncarnation === input.sessionIncarnation &&
         admission.runId === input.runId
       ) {
         return cloneHarnessTerminal(admission);

@@ -3284,6 +3284,665 @@ describe('Session.message() — default path', () => {
       message: expect.stringContaining('duplicate stream is no longer live'),
     });
   });
+
+  it('reconciles a committed resume winner when the parked response deadline expires', async () => {
+    const db = new InMemoryDB();
+    const storage1 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent1 = new MockAgent({ id: 'default' });
+    agent1.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent1.enqueueRun({ finishReason: 'stop', text: 'resumed answer' });
+    const { harness: harness1 } = setupHarness({
+      agents: { default: agent1 },
+      sessions: {
+        storage: storage1,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session1 = await harness1.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const sessionId = session1.id;
+    const grant = { key: 'usage-claim-stale-committed', generation: 1 };
+    const result = await session1.message({
+      content: 'needs approval',
+      admissionId: 'stale-committed-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(result.finishReason).toBe('suspended');
+
+    // The durable commit seals, then the pendingResume-clearing flush is lost.
+    const originalCommit = storage1.commitTerminalHandoff.bind(storage1);
+    let commitSealed = false;
+    vi.spyOn(storage1, 'commitTerminalHandoff').mockImplementation(async input => {
+      const receipt = await originalCommit(input);
+      commitSealed = true;
+      return receipt;
+    });
+    const originalSave = storage1.saveSession.bind(storage1);
+    let failedOnce = false;
+    vi.spyOn(storage1, 'saveSession').mockImplementation(async (record: any, opts?: any) => {
+      if (commitSealed && record.pendingResume === undefined && !failedOnce) {
+        failedOnce = true;
+        throw new Error('pendingResume flush lost');
+      }
+      return originalSave(record, opts);
+    });
+    await expect(session1.respondToToolApproval({ approved: true })).rejects.toThrow(
+      'An internal harness error occurred',
+    );
+    vi.restoreAllMocks();
+    await harness1.shutdown();
+
+    // Forge the resume-recovery deadline into the past so the cold sweep
+    // generation picks the parked row up.
+    const fixtureOwner = 'stale-committed-fixture';
+    const lease = await storage1.acquireSessionLease({ sessionId, ownerId: fixtureOwner, ttlMs: 30_000 });
+    const stored = await storage1.loadSession({ harnessName: 'default', sessionId });
+    if (!stored?.pendingResume?.resumedAt) throw new Error('expected resumed pending fixture');
+    await storage1.saveSession(
+      {
+        ...stored,
+        ownerId: fixtureOwner,
+        leaseExpiresAt: lease.expiresAt,
+        pendingResume: { ...stored.pendingResume, resumeRecoveryAt: Date.now() - 1 },
+      },
+      { ownerId: fixtureOwner, ifVersion: lease.version },
+    );
+    await storage1.releaseSessionLease({ sessionId, ownerId: fixtureOwner });
+    const generation = (await storage1.listDuePendingInteractions({ now: Date.now(), limit: 1 })).items[0];
+    if (!generation) throw new Error('expected stale due-scan generation');
+
+    // Cold owner: the sweep must recover the sealed winner and finish the
+    // pending-clearing bookkeeping rather than fail the interaction as
+    // abandoned.
+    const storage2 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent2 = new MockAgent({ id: 'default' });
+    const { harness: harness2 } = setupHarness({
+      agents: { default: agent2 },
+      sessions: {
+        storage: storage2,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const events: any[] = [];
+    const off = harness2.subscribe(e => events.push(e));
+    try {
+      (harness2 as any)._stopPendingInteractionExpirySweepLoop();
+      (harness2 as any)._pendingInteractionExpirySweepRunning = true;
+      await (harness2 as any)._runPendingInteractionExpiryGeneration(storage2, generation);
+      (harness2 as any)._pendingInteractionExpirySweepRunning = false;
+
+      // The sealed winner is recovered — a stale classification would emit
+      // `resume_failed` and tear down the pending instead.
+      expect(events.filter(e => e.type === 'resume_failed')).toHaveLength(0);
+      const after = await storage2.loadSession({ harnessName: 'default', sessionId });
+      expect(after?.pendingResume).toBeUndefined();
+      const admission = await storage2.loadTerminalAdmission({
+        harnessName: 'default',
+        sessionId,
+        admissionId: 'stale-committed-admission',
+        executionGrant: grant,
+      });
+      expect(admission?.status).toBe('committed');
+      await expect(
+        storage2.loadMessageResultEvidence({
+          harnessName: 'default',
+          sessionId,
+          resourceId: 'u1',
+          threadId: after!.threadId,
+          signalId: admission!.signalId,
+        }),
+      ).resolves.toMatchObject({ status: 'completed' });
+      expect(agent2.streamCalls).toHaveLength(0);
+      expect(agent2.resumeCalls).toHaveLength(0);
+    } finally {
+      off();
+      await harness2.shutdown();
+    }
+  });
+
+  it('does not double-count resumed usage when the pending-clearing flush is lost across a restart', async () => {
+    const db = new InMemoryDB();
+    const storage1 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent1 = new MockAgent({ id: 'default' });
+    agent1.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+    });
+    // A resumed stream restores its prior counter — FullOutput.totalUsage is
+    // cumulative across the suspend boundary.
+    agent1.enqueueRun({
+      finishReason: 'stop',
+      text: 'resumed answer',
+      usage: { inputTokens: 14, outputTokens: 9, totalTokens: 23 },
+      totalUsage: { inputTokens: 14, outputTokens: 9, totalTokens: 23 },
+    });
+    const { harness: harness1 } = setupHarness({
+      agents: { default: agent1 },
+      sessions: {
+        storage: storage1,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session1 = await harness1.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const sessionId = session1.id;
+    const grant = { key: 'usage-claim-restart-usage', generation: 1 };
+    const result = await session1.message({
+      content: 'needs approval',
+      admissionId: 'restart-usage-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(result.finishReason).toBe('suspended');
+    const parkedBaseline = (await storage1.loadSession({ harnessName: 'default', sessionId }))?.pendingResume
+      ?.accountedTokenUsage;
+    expect(parkedBaseline?.totalTokens).toBe(15);
+
+    const originalCommit = storage1.commitTerminalHandoff.bind(storage1);
+    let commitSealed = false;
+    vi.spyOn(storage1, 'commitTerminalHandoff').mockImplementation(async input => {
+      const receipt = await originalCommit(input);
+      commitSealed = true;
+      return receipt;
+    });
+    const originalSave = storage1.saveSession.bind(storage1);
+    let failedOnce = false;
+    vi.spyOn(storage1, 'saveSession').mockImplementation(async (record: any, opts?: any) => {
+      if (commitSealed && record.pendingResume === undefined && !failedOnce) {
+        failedOnce = true;
+        throw new Error('pendingResume flush lost');
+      }
+      return originalSave(record, opts);
+    });
+    await expect(session1.respondToToolApproval({ approved: true })).rejects.toThrow(
+      'An internal harness error occurred',
+    );
+    vi.restoreAllMocks();
+
+    // The next durable write (here, the shutdown token-usage persist) must fold
+    // the advanced resume baseline into the still-parked pending row — a stale
+    // durable baseline makes a cold settlement retry re-apply the same delta.
+    await harness1.shutdown();
+    const parked = (await storage1.loadSession({ harnessName: 'default', sessionId }))?.pendingResume;
+    expect(parked?.accountedTokenUsage?.totalTokens).toBe(23);
+
+    const storage2 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent2 = new MockAgent({ id: 'default' });
+    const { harness: harness2 } = setupHarness({
+      agents: { default: agent2 },
+      sessions: {
+        storage: storage2,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    try {
+      const session2 = await harness2.session({ sessionId, resourceId: 'u1' });
+      const retried = await session2.respondToToolApproval({ approved: true });
+      expect(retried.text).toBe('resumed answer');
+      expect(agent2.resumeCalls).toHaveLength(0);
+      const after = await storage2.loadSession({ harnessName: 'default', sessionId });
+      expect(after?.pendingResume).toBeUndefined();
+      expect(after?.tokenUsage?.totalTokens).toBe(23);
+    } finally {
+      await harness2.shutdown();
+    }
+  });
+
+  it('fails closed on a live pending grant when the resumed session has no registered finalizer', async () => {
+    const db = new InMemoryDB();
+    const storage1 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent1 = new MockAgent({ id: 'default' });
+    agent1.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const { harness: harness1 } = setupHarness({
+      agents: { default: agent1 },
+      sessions: {
+        storage: storage1,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session1 = await harness1.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const sessionId = session1.id;
+    const grant = { key: 'usage-claim-no-finalizer', generation: 1 };
+    const result = await session1.message({
+      content: 'needs approval',
+      admissionId: 'no-finalizer-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(result.finishReason).toBe('suspended');
+    await harness1.shutdown();
+
+    // A reopened session without a registered finalizer can still read durable
+    // terminal state — but a live pending grant can never settle through it, so
+    // the resume must fail closed instead of dispatching the provider.
+    const storage2 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent2 = new MockAgent({ id: 'default' });
+    const { harness: harness2 } = setupHarness({
+      agents: { default: agent2 },
+      sessions: { storage: storage2 },
+    });
+    try {
+      const session2 = await harness2.session({ sessionId, resourceId: 'u1' });
+      await expect(session2.respondToToolApproval({ approved: true })).rejects.toMatchObject({
+        name: 'HarnessTerminalHandoffError:harness.terminal_invalid',
+      });
+      expect(agent2.resumeCalls).toHaveLength(0);
+      expect(agent2.streamCalls).toHaveLength(0);
+      const admission = await storage2.loadTerminalAdmission({
+        harnessName: 'default',
+        sessionId,
+        admissionId: 'no-finalizer-admission',
+        executionGrant: grant,
+      });
+      expect(admission?.status).toBe('pending');
+      expect((await storage2.loadSession({ harnessName: 'default', sessionId }))?.pendingResume).toBeDefined();
+    } finally {
+      await harness2.shutdown();
+    }
+  });
+
+  it('snapshots the terminal admission seed before the first yield', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-seed-snapshot', generation: 1 };
+
+    let releaseAdmit!: () => void;
+    let admitEntered!: () => void;
+    const admitGate = new Promise<void>(resolve => (releaseAdmit = resolve));
+    const admitStarted = new Promise<void>(resolve => (admitEntered = resolve));
+    const originalAdmit = storage.admitTerminalHandoff.bind(storage);
+    vi.spyOn(storage, 'admitTerminalHandoff').mockImplementation(async input => {
+      admitEntered();
+      await admitGate;
+      return originalAdmit(input);
+    });
+
+    const seed: Record<string, unknown> = { collector: { responseId: 'r1' }, schemaVersion: 2 };
+    const pending = session.message({
+      content: 'go',
+      admissionId: 'seed-snapshot-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: seed,
+    });
+    await admitStarted;
+    // The caller mutates its object while admission work is awaiting storage —
+    // the hashed and persisted seed must both be the pre-mutation snapshot.
+    seed.injected = 'mutated-after-dispatch';
+    releaseAdmit();
+    await pending;
+
+    const admission = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'seed-snapshot-admission',
+      executionGrant: grant,
+    });
+    expect(admission?.status).toBe('committed');
+    expect(admission?.seed).toEqual({ collector: { responseId: 'r1' }, schemaVersion: 2 });
+  });
+
+  it('surfaces a cancellation tombstone to a duplicate waiting on durable evidence', async () => {
+    const db = new InMemoryDB();
+    const storage1 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent1 = new MockAgent({ id: 'default' });
+    agent1.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const { harness: harness1 } = setupHarness({
+      agents: { default: agent1 },
+      sessions: {
+        storage: storage1,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session1 = await harness1.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const sessionId = session1.id;
+    const grant = { key: 'usage-claim-wait-cancelled', generation: 1 };
+    const opts = {
+      content: 'needs approval',
+      admissionId: 'wait-cancelled-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    } as const;
+    const result = await session1.message({ ...opts });
+    expect(result.finishReason).toBe('suspended');
+    const admitted = await storage1.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId,
+      admissionId: 'wait-cancelled-admission',
+      executionGrant: grant,
+    });
+    expect(admitted?.status).toBe('pending');
+    await harness1.shutdown();
+
+    // Cold owner: no cached run, no live stream — the identical retry lands on
+    // the durable-evidence wait loop. Its entry probe still sees the admission
+    // pending; the cancel lands immediately after, so the wait must surface the
+    // tombstone on its next pass instead of expiring into an unrelated liveness
+    // error.
+    const storage2 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent2 = new MockAgent({ id: 'default' });
+    const { harness: harness2 } = setupHarness({
+      agents: { default: agent2 },
+      sessions: {
+        storage: storage2,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    try {
+      const session2 = await harness2.session({ sessionId, resourceId: 'u1' });
+      const originalLoad = storage2.loadTerminalAdmission.bind(storage2);
+      let probed = false;
+      vi.spyOn(storage2, 'loadTerminalAdmission').mockImplementation(async input => {
+        const admission = await originalLoad(input);
+        if (!probed && admission?.status === 'pending') {
+          probed = true;
+          await storage2.cancelTerminalHandoff({
+            harnessName: admission.harnessName,
+            sessionId: admission.sessionId,
+            sessionIncarnation: admission.sessionIncarnation,
+            admissionId: admission.admissionId,
+            admissionHash: admission.admissionHash,
+            executionGrant: admission.executionGrant,
+            reason: { code: 'harness.terminal_cancelled', message: 'revoked mid-wait' },
+          });
+        }
+        return admission;
+      });
+      const failures: Error[] = [];
+      const second = session2.message({ ...opts, onTerminalCommitError: err => failures.push(err) });
+      void second.catch(() => {});
+      await expect(settleWithinTicks(second, 20)).rejects.toMatchObject({
+        name: 'HarnessTerminalHandoffError:harness.terminal_cancelled',
+      });
+      expect(failures).toHaveLength(1);
+      expect(failures[0]!.name).toBe('HarnessTerminalHandoffError:harness.terminal_cancelled');
+      expect(agent2.streamCalls).toHaveLength(0);
+    } finally {
+      await harness2.shutdown();
+    }
+  });
+
+  it('rejects a re-admission whose duplicate envelope carries a fenced stored row', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-fenced-duplicate', generation: 1 };
+    const opts = {
+      content: 'go',
+      admissionId: 'fenced-duplicate-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    } as const;
+
+    // Strand the first attempt: the terminal admission lands, then the durable
+    // dispatch-marker write is lost — so a retry provably never dispatched.
+    const originalWrite = storage.writeMessageResultEvidence.bind(storage);
+    let markerLost = false;
+    vi.spyOn(storage, 'writeMessageResultEvidence').mockImplementation(async (input: any, opts2?: any) => {
+      if (!markerLost && input?.dispatch?.state === 'dispatching') {
+        markerLost = true;
+        throw new Error('dispatch marker write lost');
+      }
+      return originalWrite(input, opts2);
+    });
+    await expect(session.message({ ...opts })).rejects.toThrow('An internal harness error occurred');
+    vi.restoreAllMocks();
+    const admitted = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'fenced-duplicate-admission',
+      executionGrant: grant,
+    });
+    expect(admitted?.status).toBe('pending');
+
+    // Fencing lands between the retry's pending probe and its re-admission: the
+    // storage returns a duplicate envelope carrying the dead row, and the
+    // caller must surface the fence rather than dispatching the provider.
+    vi.spyOn(storage, 'admitTerminalHandoff').mockImplementation(async () => ({
+      status: 'duplicate',
+      admission: { ...admitted!, status: 'fenced' },
+    }));
+    await expect(session.message({ ...opts })).rejects.toMatchObject({
+      name: 'HarnessTerminalHandoffError:harness.terminal_fenced',
+    });
+    expect(agent.streamCalls).toHaveLength(0);
+  });
+
+  it('drains retained terminal observers when pending teardown finds the admission already cancelled', async () => {
+    vi.useFakeTimers();
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        pendingInteractionTtlMs: 1_000,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    try {
+      const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+      const grant = { key: 'usage-claim-teardown-drain', generation: 1 };
+      const failures: Error[] = [];
+      const result = await session.message({
+        content: 'needs approval',
+        admissionId: 'teardown-drain-admission',
+        executionAuthorityGrant: grant,
+        terminalAdmissionSeed: { v: 1 },
+        onTerminalCommitError: err => failures.push(err),
+      });
+      expect(result.finishReason).toBe('suspended');
+      const admitted = await storage.loadTerminalAdmission({
+        harnessName: 'default',
+        sessionId: session.id,
+        admissionId: 'teardown-drain-admission',
+        executionGrant: grant,
+      });
+      expect(admitted?.status).toBe('pending');
+
+      // An external teardown cancels the grant while the parked interaction
+      // survives; the pending's own expiry then must hand the retained
+      // observers the cancelled outcome — not the generic expiry error.
+      await storage.cancelTerminalHandoff({
+        harnessName: admitted!.harnessName,
+        sessionId: admitted!.sessionId,
+        sessionIncarnation: admitted!.sessionIncarnation,
+        admissionId: admitted!.admissionId,
+        admissionHash: admitted!.admissionHash,
+        executionGrant: admitted!.executionGrant,
+        reason: { code: 'harness.terminal_cancelled', message: 'external teardown' },
+      });
+
+      // Move past the pending interaction deadline and drive the due-scan
+      // generation on the owning harness — it routes to the live session whose
+      // retained observers are keyed to this run.
+      vi.setSystemTime(Date.now() + 2_000);
+      const generation = (await storage.listDuePendingInteractions({ now: Date.now(), limit: 1 })).items[0];
+      if (!generation) throw new Error('expected stale due-scan generation');
+      (harness as any)._stopPendingInteractionExpirySweepLoop();
+      (harness as any)._pendingInteractionExpirySweepRunning = true;
+      await (harness as any)._runPendingInteractionExpiryGeneration(storage, generation);
+      (harness as any)._pendingInteractionExpirySweepRunning = false;
+
+      expect(failures).toHaveLength(1);
+      expect(failures[0]!.name).toBe('HarnessTerminalHandoffError:harness.terminal_cancelled');
+      const after = await storage.loadSession({ harnessName: 'default', sessionId: session.id });
+      expect(after?.pendingResume).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('Session.message() — streaming path', () => {

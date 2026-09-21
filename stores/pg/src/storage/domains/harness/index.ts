@@ -2157,10 +2157,11 @@ export class HarnessPG extends HarnessStorage {
               VALUES (${cols.names.map(() => '?').join(', ')})`,
         args: cols.values,
       });
-      // The incarnation is also the attachment byte-owner scope, so it exists
-      // whenever an owner is configured; projection intents and capacity only
-      // drain under the projection pipeline, so writing them while it is
-      // disabled would consume quota that is never released.
+      // The incarnation is also the attachment byte-owner scope and the
+      // terminal fencing scope, so it exists whenever either is configured;
+      // projection intents and capacity only drain under the projection
+      // pipeline, so writing them while it is disabled would consume quota
+      // that is never released.
       if (sessionIncarnation !== undefined && this.sessionRecordProjection.enabled) {
         const intent = this.#buildProjectionIntent(namespacedRecord, sessionIncarnation, 1, storageNow);
         await this.#upsertProjectionFenceTx(
@@ -4817,9 +4818,9 @@ export class HarnessPG extends HarnessStorage {
     const harnessName = this.#resolveHarnessName(input.harnessName);
     const result = await this.#client.execute({
       sql: `SELECT * FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
-            WHERE harness_name = ? AND session_id = ? AND run_id = ? AND status = 'pending'
+            WHERE harness_name = ? AND session_id = ? AND session_incarnation = ? AND run_id = ? AND status = 'pending'
             LIMIT 1`,
-      args: [harnessName, input.sessionId, input.runId],
+      args: [harnessName, input.sessionId, input.sessionIncarnation, input.runId],
     });
     return result.rows[0] ? rowToHarnessTerminalAdmission(result.rows[0] as Record<string, unknown>) : null;
   }
@@ -4832,9 +4833,9 @@ export class HarnessPG extends HarnessStorage {
     const harnessName = this.#resolveHarnessName(input.harnessName);
     const result = await this.#client.execute({
       sql: `SELECT * FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
-            WHERE harness_name = ? AND session_id = ? AND run_id = ?
+            WHERE harness_name = ? AND session_id = ? AND session_incarnation = ? AND run_id = ?
             LIMIT 1`,
-      args: [harnessName, input.sessionId, input.runId],
+      args: [harnessName, input.sessionId, input.sessionIncarnation, input.runId],
     });
     return result.rows[0] ? rowToHarnessTerminalAdmission(result.rows[0] as Record<string, unknown>) : null;
   }
