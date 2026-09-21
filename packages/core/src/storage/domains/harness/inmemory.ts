@@ -58,6 +58,7 @@ import {
   HarnessTerminalHandoffFencedError,
   HarnessTerminalHandoffIdentityConflictError,
   HarnessTerminalHandoffNotFoundError,
+  HarnessTerminalHandoffUnsupportedError,
   HarnessTerminalHandoffValidationError,
   canonicalHarnessTerminalResult,
   cloneHarnessTerminal,
@@ -608,13 +609,13 @@ export class InMemoryHarness extends HarnessStorage {
       existingSessions.set(sessionKey(namespace, sessionId), { namespace, sessionId, record: existing });
     }
 
-    for (const { namespace, sessionId } of existingSessions.values()) {
+    for (const { namespace, sessionId, record } of existingSessions.values()) {
       // Synchronous within the delete critical section — awaiting here would
       // let a concurrent saveSession interleave between guard and removal.
       this.fenceTerminalHandoffsForSessionSync({
         harnessName: namespace,
         sessionId,
-        sessionIncarnation: existingSessions.get(sessionKey(namespace, sessionId))?.record.sessionIncarnation,
+        sessionIncarnation: record.sessionIncarnation,
         deletedAt: Date.now(),
       });
       this.db.harnessSessions.delete(sessionKey(namespace, sessionId));
@@ -880,6 +881,12 @@ export class InMemoryHarness extends HarnessStorage {
   private assertProjectionEnabled(): void {
     if (!this.sessionRecordProjection.enabled) {
       throw new HarnessStorageSessionRecordProjectionUnsupportedError();
+    }
+  }
+
+  private assertTerminalHandoffEnabled(): void {
+    if (!this.terminalHandoff.enabled) {
+      throw new HarnessTerminalHandoffUnsupportedError();
     }
   }
 
@@ -1470,6 +1477,7 @@ export class InMemoryHarness extends HarnessStorage {
   // -------------------------------------------------------------------------
 
   async admitTerminalHandoff(input: HarnessTerminalAdmissionInput): Promise<HarnessTerminalAdmissionReceipt> {
+    this.assertTerminalHandoffEnabled();
     const namespace = resolveHarnessName(input.harnessName, this.harnessName);
     const normalizedInput = { ...input, harnessName: namespace };
     const admission = prepareHarnessTerminalAdmission(normalizedInput, this.terminalHandoff);
@@ -1503,16 +1511,22 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   async loadTerminalAdmission(input: HarnessTerminalAdmissionLoadInput) {
+    this.assertTerminalHandoffEnabled();
     const id = harnessTerminalAdmissionId({
       harnessName: resolveHarnessName(input.harnessName, this.harnessName),
       sessionId: input.sessionId,
       executionGrant: input.executionGrant,
     });
     const admission = this.db.harnessTerminalAdmissions.get(id);
-    return admission ? cloneHarnessTerminal(admission) : null;
+    if (!admission) return null;
+    if (admission.admissionId !== input.admissionId) {
+      throw new HarnessTerminalHandoffIdentityConflictError(input.executionGrant.key);
+    }
+    return cloneHarnessTerminal(admission);
   }
 
   async loadPendingTerminalAdmission(input: HarnessPendingTerminalAdmissionLoadInput) {
+    this.assertTerminalHandoffEnabled();
     const namespace = resolveHarnessName(input.harnessName, this.harnessName);
     for (const admission of this.db.harnessTerminalAdmissions.values()) {
       if (
@@ -1533,6 +1547,7 @@ export class InMemoryHarness extends HarnessStorage {
     terminalResult: HarnessTerminalResult;
     projection: import('./terminal-handoff').HarnessTerminalProjection;
   }): Promise<HarnessTerminalCommitReceipt> {
+    this.assertTerminalHandoffEnabled();
     const namespace = resolveHarnessName(input.admission.harnessName, this.harnessName);
     const admissionInput = { ...input.admission, harnessName: namespace };
     validateHarnessTerminalIdentity(admissionInput);
@@ -1669,6 +1684,7 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   async loadTerminalIntent(input: HarnessTerminalIntentLoadInput): Promise<HarnessTerminalIntent | null> {
+    this.assertTerminalHandoffEnabled();
     const namespace = resolveHarnessName(input.harnessName, this.harnessName);
     const intent = this.db.harnessTerminalIntents.get(input.intentId);
     if (!intent || intent.harnessName !== namespace) return null;
@@ -1676,6 +1692,7 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   async cancelTerminalHandoff(input: HarnessTerminalCancelInput): Promise<HarnessTerminalCancelReceipt> {
+    this.assertTerminalHandoffEnabled();
     const namespace = resolveHarnessName(input.harnessName, this.harnessName);
     const now = input.cancelledAt ?? Date.now();
     if (!Number.isSafeInteger(now) || now < 0)
@@ -1744,6 +1761,7 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   async claimTerminalIntents(input: HarnessTerminalClaimInput): Promise<HarnessTerminalClaimReceipt> {
+    this.assertTerminalHandoffEnabled();
     const namespace = resolveHarnessName(input.harnessName, this.harnessName);
     if (
       !Number.isSafeInteger(input.limit) ||
@@ -1791,6 +1809,7 @@ export class InMemoryHarness extends HarnessStorage {
   async renewTerminalIntent(
     input: HarnessTerminalClaimIdentity & { leaseMs?: number },
   ): Promise<HarnessTerminalRenewReceipt> {
+    this.assertTerminalHandoffEnabled();
     const current = this.requireTerminalClaim(input);
     const now = input.now ?? Date.now();
     const leaseMs = input.leaseMs ?? this.terminalHandoff.claimLeaseMs;
@@ -1800,6 +1819,7 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   async ackTerminalIntent(input: HarnessTerminalClaimIdentity): Promise<HarnessTerminalAckReceipt> {
+    this.assertTerminalHandoffEnabled();
     const current = this.requireTerminalIdentity(input);
     if (current.status === 'fenced') return { status: 'fenced', intent: cloneHarnessTerminal(current) };
     if (current.status === 'acked') return { status: 'duplicate', intent: cloneHarnessTerminal(current) };
@@ -1816,6 +1836,7 @@ export class InMemoryHarness extends HarnessStorage {
   async failTerminalIntent(
     input: HarnessTerminalClaimIdentity & { error: HarnessTerminalError },
   ): Promise<HarnessTerminalFailReceipt> {
+    this.assertTerminalHandoffEnabled();
     const current = this.requireTerminalIdentity(input);
     if (current.status === 'fenced') return { status: 'fenced', intent: cloneHarnessTerminal(current) };
     this.requireTerminalClaim(input);
@@ -1836,6 +1857,7 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   async getTerminalQueuePressure(input: { harnessName?: string }): Promise<HarnessTerminalQueuePressure> {
+    this.assertTerminalHandoffEnabled();
     const namespace = resolveHarnessName(input.harnessName, this.harnessName);
     return { ...this.terminalPressure(namespace) };
   }
