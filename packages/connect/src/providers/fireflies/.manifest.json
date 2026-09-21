@@ -1,0 +1,49 @@
+{
+  "providerId": "fireflies",
+  "localId": "fireflies",
+  "templateSha": "c3091db1e8a623113d581197a8ee0d5b1aa87136",
+  "templateRepo": "arctic-char/integration-templates",
+  "generatedAt": "2026-09-21T18:02:26.644Z",
+  "toolCount": 27,
+  "skippedActions": [
+    {
+      "action": "list-channels",
+      "reason": "missing identifier input/output or exec in createAction"
+    },
+    {
+      "action": "update-meeting-title",
+      "reason": "missing identifier input/output or exec in createAction"
+    }
+  ],
+  "files": {
+    "index.ts": "bfa1887776e8abed2e9ebe60edad5520c216819e8991e735fd2ba48f3dbea2e1",
+    "tools.ts": "4a7ead2736860f5da35d2c7a1bddffef3d6e04de0b7f39ddbf20dcf75fac6fd3",
+    "tools/add-to-live.ts": "506401597c73cd14b40f08666b07ba8fca0ae97dfab4d3de82bd083b61cbbff8",
+    "tools/continue-askfred-thread.ts": "3015f0560b9419653ca98986607f7c40cd39b9fd6f04aa9d3ceb929e036d565e",
+    "tools/create-askfred-thread.ts": "880b382d4a6f0b803262766d21de8a8f1c73616a46a37ad3682878c5cb4005c2",
+    "tools/create-bite.ts": "735c5e6de130599334b5835e54f82dae2ec6d5d243e6bc296a7c62534795e0d4",
+    "tools/create-live-action-item.ts": "2447ea422916bf6891618761dafe8ada7acae4e4c4f1a439340b3eb384c3af98",
+    "tools/create-live-soundbite.ts": "1ee8221146d3928d8264fb54388959835f258936e8cf2452f5b2dc0998451272",
+    "tools/delete-askfred-thread.ts": "58c7bc419413d12e679d3f803139b14d4905e00f3bd0ee7454d9ac6ba30a4be8",
+    "tools/delete-transcript.ts": "173b71c5f2582050a44a9edc7f73adcc677e01dfb5c697a5769e8a18c12b18eb",
+    "tools/get-analytics.ts": "46d8debf2294c5dc7240ab42eee06ba7e7dceced6575247c17bbd5c3ac86e86c",
+    "tools/get-askfred-thread.ts": "af88e9cd9f7ad30a0c1f8b065bfdea6490bda9d630cfcc700983fc907114ea86",
+    "tools/get-bite.ts": "d5e843d4f9658f218a1bde3bb69f43a4dca07d0c31625702638db3a967917f63",
+    "tools/get-channel.ts": "e2d15aabf650a50717b4a7780bb8699c7e74962d04b5580eb86145f74e4805ae",
+    "tools/get-transcript.ts": "5b53de95b5e88677a80a546ff42d115e2e020367d39b4c48fb43ec0777cac89f",
+    "tools/get-user.ts": "7879836a84bdff66a1d0c50f4f2dcd09fa2d9dc1ba47805620340b31d2f07512",
+    "tools/list-active-meetings.ts": "3deb6737a662c570552326dcfda0a057b447bf8c4158189bba8b7dbf094d40bf",
+    "tools/list-askfred-threads.ts": "3b49ce1fc6de3b8ad63c9614c37b466776a10a091b6056273a9d3f6f9a5c9774",
+    "tools/list-bites.ts": "66db3a3dca1f0c4f30cad87a2a44ec715c6428ed41925caa82b8c793690bd9bd",
+    "tools/list-contacts.ts": "aa240f82bd54613997657191eeed305efdced6538ba7e697b382651585befc6c",
+    "tools/list-transcripts.ts": "9861ccbcbead22a850cc885b8e67e4474cd7a0cda1dff43c1802594d9c93ac11",
+    "tools/list-user-groups.ts": "b9b3d371c07f1bb09eb66acdf905286183e109f63d30e5f94b3436c35c599f76",
+    "tools/list-users.ts": "bfade8c196c5d56b154c42dbf4591cff70d1bf812ba3eecf4022f056f3c93d14",
+    "tools/revoke-shared-meeting-access.ts": "50e689a0772f1b86f654bfe544b7f808283bdfc0bdfd4ae87497fdace027397d",
+    "tools/share-meeting.ts": "a435cb572d91128648af909e681be7eb52774e617988162dacd73e7a56636a16",
+    "tools/update-meeting-channel.ts": "ce4cd3fbd352467bf1a2d331360b831428df34fbdb8fbd55109807906a2e0bd9",
+    "tools/update-meeting-privacy.ts": "2a6d87443a7e57c4247707e07e99d45fa8eb685ac4da0750e77b2754c9126871",
+    "tools/update-meeting-state.ts": "71cb2873d8f24571c7616536d4d2a2b148b45f17545e23df0f5745961a07ec41",
+    "tools/upload-audio.ts": "5dee88194011afa282e3abe1b024e7dd8830350fcd811f1a0b85e772b3c38f69"
+  }
+}

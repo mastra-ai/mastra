@@ -11,15 +11,26 @@ describe('shipped provider registry', () => {
     // Extend this list when generated provider branches land.
     expect(integrationIds).toEqual([
       'anthropic',
+      'attio',
       'clerk',
+      'discord',
+      'fireflies',
+      'github',
+      'google-calendar',
+      'google-mail',
+      'hubspot',
       'incident-io',
       'jira',
       'linear',
       'notion',
       'openai',
+      'posthog',
       'resend',
+      'slack',
       'snowflake',
+      'stripe',
       'supabase',
+      'twitter-v2',
       'workos',
     ]);
   });

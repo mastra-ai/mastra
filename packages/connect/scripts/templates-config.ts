@@ -27,6 +27,19 @@ export const TEMPLATE_SHA = 'bb789a55bfcf744b3c83aa9132e4ffa562106aa3';
  * Remove an entry once its templates land in NangoHQ/integration-templates
  * and regenerate the provider from the upstream pin.
  */
+/**
+ * NangoHQ/integration-templates#677 adds agent-focused actions across eight
+ * integrations (posthog run-query, attio list-attributes, stripe reads,
+ * github tags/tree, slack invite-shared, twitter-v2 search/following,
+ * hubspot submit-form). The fork commit is upstream main plus that change,
+ * so providers that only need upstream templates share the same pin for a
+ * consistent generation source.
+ */
+const PIN_677: TemplatePin = {
+  repo: 'arctic-char/integration-templates',
+  sha: 'c3091db1e8a623113d581197a8ee0d5b1aa87136',
+};
+
 export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
   // NangoHQ/integration-templates#667
   resend: {
@@ -38,6 +51,18 @@ export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
     repo: 'rhysbalevicius/integration-templates',
     sha: 'c4fb0d5d5b2c677f794d836a470013da46c347a2',
   },
+  // NangoHQ/integration-templates#677
+  slack: PIN_677,
+  github: PIN_677,
+  posthog: PIN_677,
+  attio: PIN_677,
+  stripe: PIN_677,
+  'twitter-v2': PIN_677,
+  hubspot: PIN_677,
+  fireflies: PIN_677,
+  discord: PIN_677,
+  'google-mail': PIN_677,
+  'google-calendar': PIN_677,
 };
 
 /** Resolves the template pin for a provider, falling back to the shared upstream pin. */

@@ -7,3 +7,5 @@ The generated copies have been modified: they run as Mastra tools and route all 
 A verbatim copy of the Elastic License 2.0 is included in [`LICENSE-ELv2.txt`](./LICENSE-ELv2.txt).
 
 The Resend and incident.io providers currently use the contribution fork [rhysbalevicius/integration-templates](https://github.com/rhysbalevicius/integration-templates) while their upstream PRs are reviewed. Their contracts were derived from the official provider OpenAPI specifications; source URLs, revisions, and contract compatibility notes are recorded in each upstream provider directory's `schema-source.json` and README. The fork and these generated adaptations retain Elastic License 2.0 attribution.
+
+The Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Attio, Stripe, Discord, Twitter/X, and HubSpot providers currently use the contribution fork [arctic-char/integration-templates](https://github.com/arctic-char/integration-templates) — upstream main plus [NangoHQ/integration-templates#677](https://github.com/NangoHQ/integration-templates/pull/677) — while that PR is reviewed. The fork and these generated adaptations retain Elastic License 2.0 attribution.
