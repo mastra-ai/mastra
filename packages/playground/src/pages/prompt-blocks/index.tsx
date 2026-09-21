@@ -5,8 +5,12 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useState } from 'react';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
 import { PromptBlocksHeaderCreateAction } from '@/domains/prompt-blocks/prompt-blocks-header-actions';
+
+const crumbs = [navCrumb('/prompts')];
 
 const PROMPT_BLOCKS_PER_PAGE = 50;
 
@@ -34,7 +38,7 @@ export default function PromptBlocks() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -42,7 +46,7 @@ export default function PromptBlocks() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="prompt blocks" />
       </NoDataPageLayout>
     );
@@ -50,7 +54,7 @@ export default function PromptBlocks() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load prompt blocks" message={error.message} />
       </NoDataPageLayout>
     );
@@ -58,16 +62,14 @@ export default function PromptBlocks() {
 
   if (promptBlocks.length === 0 && !isLoading && page === 0) {
     return (
-      <NoDataPageLayout>
-        <PromptBlocksHeaderCreateAction />
+      <NoDataPageLayout {...pageHeaderProps(crumbs)} actions={<PromptBlocksHeaderCreateAction />}>
         <NoPromptBlocksInfo />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout height="full">
-      <PromptBlocksHeaderCreateAction />
+    <PageLayout {...pageHeaderProps(crumbs)} actions={<PromptBlocksHeaderCreateAction />} height="full">
       <PageLayout.TopArea>
         <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">

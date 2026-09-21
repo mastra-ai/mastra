@@ -10,7 +10,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredScorer, useStoredScorerMutations } from '@/domains/scores';
 import { ScorerEditMain } from '@/domains/scores/components/scorer-edit-page/scorer-edit-main';
 import { ScorerEditSidebar } from '@/domains/scores/components/scorer-edit-page/scorer-edit-sidebar';
@@ -18,8 +20,10 @@ import { useScorerEditForm } from '@/domains/scores/components/scorer-edit-page/
 import type { ScorerFormValues } from '@/domains/scores/components/scorer-edit-page/utils/form-validation';
 import { ScorerVersionCombobox } from '@/domains/scores/components/scorer-version-combobox';
 import { useScorerVersions, useScorerVersion } from '@/domains/scores/hooks/use-scorer-versions';
+import { StoredScorerCrumb } from '@/domains/scores/scorer-crumb';
 import { useLinkComponent } from '@/lib/framework';
-import { RouteHeaderActions } from '@/lib/route-header';
+
+const crumbs = [navCrumb('/scorers'), { id: 'scorer', Component: StoredScorerCrumb, heading: 'Scorer' }];
 
 type StoredScorerData = NonNullable<ReturnType<typeof useStoredScorer>['data']>;
 
@@ -243,7 +247,7 @@ function CmsScorersEditPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout className="grid-rows-[1fr]">
+      <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={
             <div className="flex h-full items-center justify-center">
@@ -261,7 +265,7 @@ function CmsScorersEditPage() {
 
   if (!scorer || !scorerId) {
     return (
-      <MainContentLayout className="grid-rows-[1fr]">
+      <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={
             <div className="text-muted-foreground flex h-full items-center justify-center">Scorer not found</div>
@@ -273,20 +277,21 @@ function CmsScorersEditPage() {
     );
   }
 
+  const actions = (
+    <div className="flex items-center gap-2">
+      {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
+      <ScorerVersionCombobox
+        scorerId={scorerId}
+        value={selectedVersionId ?? ''}
+        onValueChange={handleVersionSelect}
+        variant="ghost"
+        activeVersionId={activeVersionId}
+      />
+    </div>
+  );
+
   return (
-    <MainContentLayout className="grid-rows-[1fr]">
-      <RouteHeaderActions owner="cms-scorer-edit">
-        <div className="flex items-center gap-2">
-          {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
-          <ScorerVersionCombobox
-            scorerId={scorerId}
-            value={selectedVersionId ?? ''}
-            onValueChange={handleVersionSelect}
-            variant="ghost"
-            activeVersionId={activeVersionId}
-          />
-        </div>
-      </RouteHeaderActions>
+    <MainContentLayout {...pageHeaderProps(crumbs)} actions={actions} className="grid-rows-[1fr]">
       <CmsScorersEditForm
         scorer={scorer}
         scorerId={scorerId}

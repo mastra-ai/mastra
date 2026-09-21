@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest';
 
 import { PageShell } from './page-shell';
 
+// The page-layout wrapper is always h-full; `height` only drives the <main> scroll container.
+function mainClassName(markup: string) {
+  return /<main class="([^"]*)"/.exec(markup)?.[1] ?? '';
+}
+
 describe('PageShell', () => {
   describe('when every slot is provided', () => {
     it('composes the icon, title, description, action, and main content', () => {
@@ -107,7 +112,7 @@ describe('PageShell', () => {
       );
 
       expect(markup).toContain('px-6');
-      expect(markup).toContain('h-full');
+      expect(mainClassName(markup)).toContain('h-full');
     });
 
     it('supports overriding width, height, and className', () => {
@@ -118,7 +123,7 @@ describe('PageShell', () => {
       );
 
       expect(markup).toContain('max-w-screen-lg');
-      expect(markup).not.toContain('h-full');
+      expect(mainClassName(markup)).not.toContain('h-full');
       expect(markup).toContain('px-2');
       expect(markup).not.toContain('px-6');
     });

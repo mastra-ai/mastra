@@ -1,13 +1,18 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useMemo, useState } from 'react';
 import { ExistingConnectionsPanel } from './components/existing-connections-panel';
 import { ProviderToolkitSelector } from './components/provider-toolkit-selector';
 import { getGroupedConnectionsByAuthor } from './group-connections';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 import { useAuthorize } from '@/domains/tool-providers/hooks/use-authorize';
 import { useDisconnectConnection } from '@/domains/tool-providers/hooks/use-disconnect-connection';
 import { useExistingConnections } from '@/domains/tool-providers/hooks/use-existing-connections';
 import { useIsToolProviderAdmin } from '@/domains/tool-providers/hooks/use-is-tool-provider-admin';
 import { useToolProviders } from '@/domains/tool-providers/hooks/use-tool-providers';
 import { useToolkits } from '@/domains/tool-providers/hooks/use-toolkits';
+
+const crumbs: CrumbDef[] = [{ id: 'integrations', label: 'Integrations' }];
 
 /**
  * Minimal MVP page to exercise the v1 ToolProvider backend end-to-end:
@@ -54,43 +59,44 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <div className="p-4 max-w-3xl space-y-6 text-ui-md">
-      <h1 className="text-header-md font-semibold">Integrations</h1>
-      <p className="text-gray-500">
-        Minimal page to verify the ToolProvider backend. Pick a provider and toolkit, then connect.
-      </p>
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
+      <div className="max-w-3xl space-y-6 text-ui-md">
+        <p className="text-gray-500">
+          Minimal page to verify the ToolProvider backend. Pick a provider and toolkit, then connect.
+        </p>
 
-      <ProviderToolkitSelector
-        providers={providers}
-        toolkits={toolkits}
-        providerId={providerId}
-        toolkit={toolkit}
-        label={label}
-        providersLoading={providersQuery.isLoading}
-        providersError={providersQuery.error}
-        toolkitsLoading={toolkitsQuery.isLoading}
-        toolkitsError={toolkitsQuery.error}
-        authorizePending={authorize.isPending}
-        authorizeError={authorize.error}
-        authorizedConnection={authorize.data}
-        onProviderChange={handleProviderChange}
-        onToolkitChange={setToolkit}
-        onLabelChange={setLabel}
-        onConnect={handleConnect}
-      />
+        <ProviderToolkitSelector
+          providers={providers}
+          toolkits={toolkits}
+          providerId={providerId}
+          toolkit={toolkit}
+          label={label}
+          providersLoading={providersQuery.isLoading}
+          providersError={providersQuery.error}
+          toolkitsLoading={toolkitsQuery.isLoading}
+          toolkitsError={toolkitsQuery.error}
+          authorizePending={authorize.isPending}
+          authorizeError={authorize.error}
+          authorizedConnection={authorize.data}
+          onProviderChange={handleProviderChange}
+          onToolkitChange={setToolkit}
+          onLabelChange={setLabel}
+          onConnect={handleConnect}
+        />
 
-      <ExistingConnectionsPanel
-        providerId={providerId}
-        toolkit={toolkit}
-        connections={connections}
-        groupedByAuthor={groupedByAuthor}
-        isAdmin={isAdmin}
-        isLoading={connectionsQuery.isLoading}
-        error={connectionsQuery.error}
-        disconnectPending={disconnect.isPending}
-        disconnectError={disconnect.error}
-        onDisconnect={handleDisconnect}
-      />
-    </div>
+        <ExistingConnectionsPanel
+          providerId={providerId}
+          toolkit={toolkit}
+          connections={connections}
+          groupedByAuthor={groupedByAuthor}
+          isAdmin={isAdmin}
+          isLoading={connectionsQuery.isLoading}
+          error={connectionsQuery.error}
+          disconnectPending={disconnect.isPending}
+          disconnectError={disconnect.error}
+          onDisconnect={handleDisconnect}
+        />
+      </div>
+    </PageLayout>
   );
 }

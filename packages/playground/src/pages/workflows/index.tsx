@@ -8,9 +8,13 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+
+const crumbs = [navCrumb('/workflows')];
 
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
@@ -18,7 +22,7 @@ function Workflows() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -26,7 +30,7 @@ function Workflows() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="workflows" />
       </NoDataPageLayout>
     );
@@ -34,7 +38,7 @@ function Workflows() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load workflows" message={error.message} />
       </NoDataPageLayout>
     );
@@ -42,14 +46,14 @@ function Workflows() {
 
   if (Object.keys(workflows || {}).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <NoWorkflowsInfo />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
       <PageLayout.TopArea>
         <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">

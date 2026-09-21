@@ -7,8 +7,6 @@ import { AgentHeaderCreateAction } from '../agent-header-actions';
 import type { AuthCapabilities } from '@/domains/auth/types';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
-import { RouteHeaderActionsProvider } from '@/lib/route-header';
-import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
@@ -27,13 +25,10 @@ const renderAction = () =>
     <TooltipProvider>
       {/* Real react-router Link so the C shortcut's synthetic click navigates the MemoryRouter. */}
       <LinkComponentProvider Link={Link} navigate={() => {}} paths={stubLinkPaths}>
-        <RouteHeaderActionsProvider>
-          <RouteHeaderActionsSlot />
-          <Routes>
-            <Route path="/agents" element={<AgentHeaderCreateAction />} />
-            <Route path="/cms/agents/create" element={<div>Create agent page</div>} />
-          </Routes>
-        </RouteHeaderActionsProvider>
+        <Routes>
+          <Route path="/agents" element={<AgentHeaderCreateAction />} />
+          <Route path="/cms/agents/create" element={<div>Create agent page</div>} />
+        </Routes>
       </LinkComponentProvider>
     </TooltipProvider>,
     { router: { initialEntries: ['/agents'] } },

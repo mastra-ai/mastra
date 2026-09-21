@@ -10,8 +10,10 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { MoreVertical, Pencil, Play } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
+import { navCrumb, scorerCrumb } from '@/domains/navigation/crumbs';
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
 import { ScoresColumnsMenu } from '@/domains/scores/components/scores-columns';
 import { ScoresList } from '@/domains/scores/components/scores-list';
@@ -20,6 +22,8 @@ import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/compon
 import { useScorer, useScoresByScorerId } from '@/domains/scores/hooks/use-scorers';
 import { useScoresColumns } from '@/domains/scores/hooks/use-scores-columns';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+
+const crumbs = [navCrumb('/scorers'), scorerCrumb];
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -200,7 +204,12 @@ export default function Scorer() {
     const hasError = isUnauthorized || isForbidden || hasOtherError;
 
     return (
-      <PageLayout width="wide" height="full" className={hasError || !scorerActionsMenu ? 'grid-rows-[1fr]' : undefined}>
+      <PageLayout
+        {...pageHeaderProps(crumbs)}
+        width="wide"
+        height="full"
+        className={hasError || !scorerActionsMenu ? 'grid-rows-[1fr]' : undefined}
+      >
         {!hasError && scorerActionsMenu && (
           <PageLayout.TopArea>
             <ButtonsGroup className="ml-auto">{scorerActionsMenu}</ButtonsGroup>
@@ -223,7 +232,7 @@ export default function Scorer() {
   }
 
   return (
-    <PageLayout width="wide" height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
       <PageLayout.TopArea>
         <div className="flex items-center justify-between gap-3">
           <ScoresTools

@@ -1,8 +1,12 @@
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useParams } from 'react-router';
+import { WorkflowRunCopyAction, WorkflowRunCrumb } from './workflow-crumbs';
 import { WorkflowHeader } from './workflow-header';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { navCrumb, workflowCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { WorkflowInformation } from '@/domains/workflows/components/workflow-information';
@@ -28,22 +32,32 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 function WorkflowRoute({ children }: { children: React.ReactNode }) {
   const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
+  const crumbs: CrumbDef[] = [
+    navCrumb('/workflows'),
+    // The `to` link only renders on the nested graph/:runId route.
+    runId ? { ...workflowCrumb, to: `/workflows/${encodeURIComponent(workflowId ?? '')}/graph` } : workflowCrumb,
+    ...(runId
+      ? [{ id: 'workflow-run', Component: WorkflowRunCrumb, Action: WorkflowRunCopyAction, heading: 'Workflow run' }]
+      : []),
+  ];
 
   if (!workflowId) {
     return (
-      <div className="flex h-full flex-col items-center justify-center">
-        <Txt variant="ui-md" className="text-foreground text-center">
-          No workflow ID provided
-        </Txt>
-      </div>
+      <PageLayout {...pageHeaderProps(crumbs)} height="full">
+        <div className="flex h-full flex-col items-center justify-center">
+          <Txt variant="ui-md" className="text-foreground text-center">
+            No workflow ID provided
+          </Txt>
+        </div>
+      </PageLayout>
     );
   }
 
   if (isWorkflowLoading) {
     return (
-      <div className="h-full p-4">
+      <PageLayout {...pageHeaderProps(crumbs)} height="full">
         <Skeleton className="h-full" />
-      </div>
+      </PageLayout>
     );
   }
 
@@ -53,12 +67,16 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
         <WorkflowStepDetailProvider key={workflowId}>
           <WorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
             <WorkflowSelectedStepProvider>
-              <div className="flex h-full min-h-0 flex-col">
-                <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
+              <PageLayout
+                {...pageHeaderProps(crumbs)}
+                actions={<WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />}
+                height="full"
+                className="grid-rows-[minmax(0,1fr)] p-0"
+              >
                 <WorkflowLayoutUI leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}>
                   {children}
                 </WorkflowLayoutUI>
-              </div>
+              </PageLayout>
             </WorkflowSelectedStepProvider>
           </WorkflowRunProvider>
         </WorkflowStepDetailProvider>

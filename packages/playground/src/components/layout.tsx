@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { PageHeadingContext } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
@@ -24,14 +23,6 @@ import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
 import { NavigationCommand, useNavigationCommand } from '@/lib/command';
-import {
-  RouteHeader,
-  RouteHeaderActionsProvider,
-  RouteHeaderCrumbsProvider,
-  getRouteHeaderHeading,
-  useRouteHeader,
-  useRouteHeaderCrumbsOverride,
-} from '@/lib/route-header';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
 
@@ -128,9 +119,6 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
-  const { crumbs: handleCrumbs } = useRouteHeader();
-  const overrideCrumbs = useRouteHeaderCrumbsOverride();
-  const pageHeading = getRouteHeaderHeading(overrideCrumbs ?? handleCrumbs);
   // Optimistic: render chrome by default so cold loads don't jump.
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = !shouldHideSidebar;
@@ -138,23 +126,21 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <>
       <NavigationCommand />
-      <div className={cn('h-full', shouldShowSidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]')}>
-        {shouldShowSidebar && <AppSidebar />}
-        <AppShell
-          mainLabel={pageHeading ?? 'Page content'}
-          mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
-          routeHeader={shouldShowSidebar ? <RouteHeader /> : undefined}
-          renderFrame={({ children: frame, className }) => (
-            <PageHeadingContext.Provider value={pageHeading}>
-              <StudioFrame className={className}>{frame}</StudioFrame>
-            </PageHeadingContext.Provider>
-          )}
-        >
-          <AuthRequired>
-            <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-          </AuthRequired>
-        </AppShell>
-      </div>
+      <AppShell
+        sidebar={shouldShowSidebar ? <AppSidebar /> : undefined}
+        mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
+      >
+        <StudioFrame className="flex min-h-0 flex-1 flex-col">
+          <div
+            data-slot="studio-card"
+            className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame relative m-1.5 ml-0 min-h-0 flex-1 overflow-hidden border lg:m-2 lg:ml-0"
+          >
+            <AuthRequired>
+              <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+            </AuthRequired>
+          </div>
+        </StudioFrame>
+      </AppShell>
     </>
   );
 }
@@ -170,13 +156,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>
               <SidebarShortcuts />
-              <RouteHeaderActionsProvider>
-                <RouteHeaderCrumbsProvider>
-                  <RouteSidePanelProvider>
-                    <LayoutContent>{children}</LayoutContent>
-                  </RouteSidePanelProvider>
-                </RouteHeaderCrumbsProvider>
-              </RouteHeaderActionsProvider>
+              <RouteSidePanelProvider>
+                <LayoutContent>{children}</LayoutContent>
+              </RouteSidePanelProvider>
             </MainSidebarProvider>
           </ExperimentalUIProvider>
         </TooltipProvider>

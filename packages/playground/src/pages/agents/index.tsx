@@ -5,6 +5,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
 import { AgentsCompactGrid } from '@/domains/agents/components/agent-list/agents-compact-grid';
 import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
@@ -15,6 +16,9 @@ import type { AgentsView } from '@/domains/agents/components/agent-list/agents-v
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { extractPrompt } from '@/domains/agents/utils/extractPrompt';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/agents')];
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
@@ -24,7 +28,7 @@ function Agents() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -32,7 +36,7 @@ function Agents() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="agents" />
       </NoDataPageLayout>
     );
@@ -40,7 +44,7 @@ function Agents() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load agents" message={error.message} />
       </NoDataPageLayout>
     );
@@ -48,7 +52,7 @@ function Agents() {
 
   if (Object.keys(agents).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <NoAgentsInfo />
       </NoDataPageLayout>
     );
@@ -75,8 +79,7 @@ function Agents() {
   }
 
   return (
-    <PageLayout height="full">
-      <AgentHeaderCreateAction />
+    <PageLayout {...pageHeaderProps(crumbs)} actions={<AgentHeaderCreateAction />} height="full">
       <PageLayout.TopArea>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="max-w-120 flex-1">

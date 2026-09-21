@@ -5,6 +5,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import {
@@ -14,6 +15,7 @@ import {
   NoExperimentsInfo,
 } from '@/domains/experiments';
 import { useInfiniteExperiments } from '@/domains/experiments/hooks/use-infinite-experiments';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useReviewSummary } from '@/domains/review';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
 import {
@@ -21,6 +23,8 @@ import {
   TARGET_TYPE_PARAM,
   useTargetFilterParams,
 } from '@/domains/shared/hooks/use-target-filter-params';
+
+const crumbs = [navCrumb('/experiments')];
 
 export default function Experiments() {
   const [search, setSearch] = useState('');
@@ -105,7 +109,7 @@ export default function Experiments() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -113,7 +117,7 @@ export default function Experiments() {
 
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="experiments" />
       </NoDataPageLayout>
     );
@@ -121,7 +125,7 @@ export default function Experiments() {
 
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="datasets" />
       </NoDataPageLayout>
     );
@@ -129,7 +133,7 @@ export default function Experiments() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load experiments" message={error.message} />
       </NoDataPageLayout>
     );
@@ -146,7 +150,7 @@ export default function Experiments() {
   // With a dataset or target filter active, keep the toolbar so the user can reset it.
   if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
         {runDialog}
       </NoDataPageLayout>
@@ -172,7 +176,7 @@ export default function Experiments() {
   };
 
   return (
-    <PageLayout height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
       <PageLayout.TopArea>
         <ExperimentsToolbar
           search={search}

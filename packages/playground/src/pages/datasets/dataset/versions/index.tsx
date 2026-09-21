@@ -9,9 +9,13 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from '@/domains/datasets';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { datasetCrumb, navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-versions', label: 'Versions' }];
 
 function DatasetCompareVersionsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -48,7 +52,7 @@ function DatasetCompareVersionsPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -58,7 +62,7 @@ function DatasetCompareVersionsPage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="datasets" />
         </div>
@@ -68,7 +72,7 @@ function DatasetCompareVersionsPage() {
 
   if (!datasetId || versionNumbers.length < 2) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <MainContentContent>
           <div className="text-muted-foreground py-5 text-center">
             <p>Select at least two versions to compare.</p>
@@ -85,7 +89,7 @@ function DatasetCompareVersionsPage() {
   };
 
   return (
-    <MainContentLayout>
+    <MainContentLayout {...pageHeaderProps(crumbs)}>
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-4">
           <MainHeader>

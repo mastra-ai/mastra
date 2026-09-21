@@ -6,8 +6,6 @@ import PromptBlocksPage from '..';
 import { fewPromptBlocks, pagedPromptBlocks, systemPackages } from './fixtures/prompt-blocks';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
-import { RouteHeaderActionsProvider } from '@/lib/route-header';
-import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { stubLinkPaths, TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -152,13 +150,10 @@ describe('Prompt Blocks page', () => {
       renderWithProviders(
         // Real react-router Link so the C shortcut's synthetic click navigates the MemoryRouter.
         <LinkComponentProvider Link={Link} navigate={() => {}} paths={stubLinkPaths}>
-          <RouteHeaderActionsProvider>
-            <RouteHeaderActionsSlot />
-            <Routes>
-              <Route path="/prompt-blocks" element={<PromptBlocksPage />} />
-              <Route path="/cms/prompt-blocks/create" element={<div>Create prompt page</div>} />
-            </Routes>
-          </RouteHeaderActionsProvider>
+          <Routes>
+            <Route path="/prompt-blocks" element={<PromptBlocksPage />} />
+            <Route path="/cms/prompt-blocks/create" element={<div>Create prompt page</div>} />
+          </Routes>
         </LinkComponentProvider>,
         { router: { initialEntries: ['/prompt-blocks'] } },
       );

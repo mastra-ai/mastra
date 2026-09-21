@@ -8,12 +8,16 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { DatabaseIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { EditDatasetForm } from '@/domains/datasets/components/edit-dataset-form';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { datasetCrumb, navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-edit', label: 'Edit dataset' }];
 
 function EditDatasetPageShell({ children }: { children?: ReactNode }) {
   return (
-    <PageLayout height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
       <div />
       <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
     </PageLayout>
@@ -57,7 +61,7 @@ function EditDatasetPage() {
   }
 
   return (
-    <PageLayout height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
       <div />
       <PageLayout.MainArea isCentered>
         <div className="w-full max-w-2xl overflow-y-auto px-4 py-5">

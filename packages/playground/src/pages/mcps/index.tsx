@@ -5,9 +5,13 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
 import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';
 import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/mcps')];
 
 const MCPs = () => {
   const { data: mcpServers = [], isLoading, error } = useMCPServers();
@@ -15,7 +19,7 @@ const MCPs = () => {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -23,7 +27,7 @@ const MCPs = () => {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="MCP servers" />
       </NoDataPageLayout>
     );
@@ -31,7 +35,7 @@ const MCPs = () => {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load MCP servers" message={error.message} />
       </NoDataPageLayout>
     );
@@ -39,14 +43,14 @@ const MCPs = () => {
 
   if (mcpServers.length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <NoMCPServersInfo />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
       <PageLayout.TopArea>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter MCP servers" placeholder="Filter by name" />

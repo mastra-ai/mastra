@@ -5,8 +5,10 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { createMetricsPropertyFilterFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { metricsCrumbs } from '../metrics-crumbs';
 import { MetricsCapabilityError } from './metrics-capability-error';
 import { MetricsPageLayout } from './metrics-page-layout';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
 const filterFieldsWithoutDiscovery = createMetricsPropertyFilterFields({
@@ -32,7 +34,7 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
   }
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(metricsCrumbs)}>
         <MetricsCapabilityError error={error} />
       </NoDataPageLayout>
     );

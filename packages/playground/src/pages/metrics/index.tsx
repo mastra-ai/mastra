@@ -22,6 +22,7 @@ import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { LatencyCard } from '@/domains/metrics/components/latency-card';
 import { MemoryCard } from '@/domains/metrics/components/memory-card';
@@ -38,6 +39,7 @@ import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cos
 import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
 import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
 import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
+import { metricsCrumbs } from '@/domains/metrics/metrics-crumbs';
 
 const PERIOD_PARAM = 'period';
 const DATE_FROM_PARAM = 'dateFrom';
@@ -211,7 +213,7 @@ function MetricsContent() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(metricsCrumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -219,7 +221,7 @@ function MetricsContent() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(metricsCrumbs)}>
         <PermissionDenied resource="metrics" />
       </NoDataPageLayout>
     );
@@ -227,7 +229,7 @@ function MetricsContent() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(metricsCrumbs)}>
         <ErrorState title="Failed to load metrics" message={error.message} />
       </NoDataPageLayout>
     );

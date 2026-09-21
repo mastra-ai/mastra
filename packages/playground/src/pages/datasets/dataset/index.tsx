@@ -13,6 +13,7 @@ import { ArrowLeft, Copy, DatabaseIcon, FlaskConical, MoreVertical, Pencil, Play
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import {
   DatasetItemsView,
   DatasetTagsEditor,
@@ -27,10 +28,11 @@ import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-ite
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
-function DatasetPageShell({ children }: { children?: ReactNode }) {
+function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
       <div />
       <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
     </PageLayout>
@@ -38,7 +40,18 @@ function DatasetPageShell({ children }: { children?: ReactNode }) {
 }
 
 function DatasetPage() {
-  const { datasetId } = useParams()! as { datasetId: string };
+  const { datasetId, itemId } = useParams()! as { datasetId: string; itemId?: string };
+  // The `to` link only renders on the nested items/:itemId route.
+  const crumbs: CrumbDef[] = [
+    navCrumb('/datasets'),
+    { ...datasetCrumb, to: `/datasets/${encodeURIComponent(datasetId)}` },
+    ...(itemId
+      ? [
+          { id: 'dataset-items', label: 'Items' },
+          { id: 'dataset-item', label: truncateItemIdCrumb(itemId) },
+        ]
+      : []),
+  ];
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion, handleVersionChange } = useDatasetItemsUrlState(searchParams, setSearchParams);
@@ -66,7 +79,7 @@ function DatasetPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <DatasetPageShell>
+      <DatasetPageShell crumbs={crumbs}>
         <SessionExpired />
       </DatasetPageShell>
     );
@@ -74,7 +87,7 @@ function DatasetPage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <DatasetPageShell>
+      <DatasetPageShell crumbs={crumbs}>
         <PermissionDenied resource="datasets" />
       </DatasetPageShell>
     );
@@ -82,7 +95,7 @@ function DatasetPage() {
 
   if ((error && is404NotFoundError(error)) || (!isDatasetLoading && !error && !dataset)) {
     return (
-      <DatasetPageShell>
+      <DatasetPageShell crumbs={crumbs}>
         <EmptyState
           iconSlot={<DatabaseIcon />}
           titleSlot="Dataset not found"
@@ -99,7 +112,7 @@ function DatasetPage() {
 
   if (error) {
     return (
-      <DatasetPageShell>
+      <DatasetPageShell crumbs={crumbs}>
         <ErrorState
           title="Failed to load dataset"
           message={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
@@ -120,7 +133,7 @@ function DatasetPage() {
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
       <div className="h-full">
-        <PageLayout height="full" className="grid-rows-[1fr] p-0">
+        <PageLayout {...pageHeaderProps(crumbs)} height="full" className="grid-rows-[1fr] p-0">
           <PageLayout.MainArea>
             <DatasetItemsView
               datasetId={datasetId}

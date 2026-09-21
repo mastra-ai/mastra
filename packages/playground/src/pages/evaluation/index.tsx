@@ -7,16 +7,20 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { DatasetHealthCard } from '@/domains/datasets';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { EvaluationKpiCards } from '@/domains/evaluation/components/evaluation-kpi-cards';
 import { ExperimentStatusCard } from '@/domains/experiments';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { ReviewPipelineCard, useReviewSummary } from '@/domains/review';
 import { computeReviewTotals } from '@/domains/review/review-maps';
 import { useScoreMetrics, useScorers } from '@/domains/scores';
 import type { ScoreMetricsDateRange } from '@/domains/scores';
 import { ScoresOverTimeCard } from '@/domains/scores/components/scores-over-time-card';
+
+const crumbs = [navCrumb('/evaluation')];
 
 export default function Evaluation() {
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
@@ -46,7 +50,7 @@ export default function Evaluation() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -54,7 +58,7 @@ export default function Evaluation() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="evaluation" />
       </NoDataPageLayout>
     );
@@ -62,14 +66,14 @@ export default function Evaluation() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load evaluation data" message={error.message} />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout width="wide" height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
       <PageLayout.TopArea>
         <PageLayout.Row>
           <PageLayout.Column>

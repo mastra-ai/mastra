@@ -27,6 +27,10 @@ import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/logs')];
 
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -163,7 +167,7 @@ export default function LogsPage() {
 
   if (logsError) {
     return (
-      <PageLayout width="wide" height="full">
+      <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
         {pageTopArea}
         <PageLayout.MainArea isCentered>
           <LogsErrorContent error={logsError} resource="logs" errorTitle="Failed to load logs" />
@@ -176,7 +180,7 @@ export default function LogsPage() {
 
   if (logs.length === 0 && !isLoadingLogs && !contentFiltersApplied) {
     return (
-      <PageLayout width="wide" height="full">
+      <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
         {pageTopArea}
         <PageLayout.MainArea isCentered>
           <NoLogsInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
@@ -186,7 +190,7 @@ export default function LogsPage() {
   }
 
   return (
-    <PageLayout width="wide" height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
       {pageTopArea}
       <LogsLayout
         logCollapsed={logDetailsCollapsed}

@@ -3,7 +3,6 @@ import { ApiIcon } from '@mastra/playground-ui/icons/ApiIcon';
 import { CalendarClockIcon, EyeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
-import { RouteHeaderActions } from '@/lib/route-header';
 
 export function WorkflowHeader({ workflowName, workflowId }: { workflowName: string; workflowId: string }) {
   const { data: schedules } = useSchedules({ workflowId });
@@ -14,30 +13,24 @@ export function WorkflowHeader({ workflowName, workflowId }: { workflowName: str
     : `/workflows/schedules?workflowId=${encodeURIComponent(workflowId)}`;
 
   return (
-    <RouteHeaderActions owner="workflow-detail">
-      <div className="flex items-center gap-2">
-        {scheduleCount > 0 && (
-          <Button render={<Link to={schedulesHref} />} size="sm" icon={<CalendarClockIcon />}>
-            Schedules ({scheduleCount})
-          </Button>
-        )}
-        <Button
-          render={<Link to={`/traces?entity=${encodeURIComponent(workflowName)}`} />}
-          size="sm"
-          icon={<EyeIcon />}
-        >
-          Traces
+    <div className="flex items-center gap-2">
+      {scheduleCount > 0 && (
+        <Button render={<Link to={schedulesHref} />} size="sm" icon={<CalendarClockIcon />}>
+          Schedules ({scheduleCount})
         </Button>
-        <Button
-          render={<a target="_blank" rel="noopener noreferrer" href="/swagger-ui" />}
+      )}
+      <Button render={<Link to={`/traces?entity=${encodeURIComponent(workflowName)}`} />} size="sm" icon={<EyeIcon />}>
+        Traces
+      </Button>
+      <Button
+        render={<a target="_blank" rel="noopener noreferrer" href="/swagger-ui" />}
 
-          variant="ghost"
-          size="sm"
-          icon={<ApiIcon />}
-        >
-          API endpoints
-        </Button>
-      </div>
-    </RouteHeaderActions>
+        variant="ghost"
+        size="sm"
+        icon={<ApiIcon />}
+      >
+        API endpoints
+      </Button>
+    </div>
   );
 }

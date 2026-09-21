@@ -7,12 +7,16 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ClipboardCheck, MessageSquare } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { useFeedback, useUpdateFeedbackReviewStatus } from '@/domains/feedback/hooks/use-feedback';
 import { InboxDatasetReviewList } from '@/domains/inbox/components/inbox-dataset-review-list';
 import { InboxEmptyState } from '@/domains/inbox/components/inbox-empty-state';
 import { InboxFeedbackList } from '@/domains/inbox/components/inbox-feedback-list';
 import { InboxTracePanel } from '@/domains/inbox/components/inbox-trace-panel';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useInboxDatasetReviewItems } from '@/domains/review/hooks/use-inbox-review-items';
+
+const crumbs = [navCrumb('/inbox')];
 
 type InboxTab = 'dataset' | 'feedback';
 
@@ -101,7 +105,7 @@ export default function InboxPage() {
 
   return (
     <div className="relative h-full overflow-hidden">
-      <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
+      <PageLayout {...pageHeaderProps(crumbs)} height="full" className="grid-rows-[minmax(0,1fr)]">
         <PageLayout.MainArea className="min-h-0 overflow-hidden">
           {isInboxEmpty ? (
             <InboxEmptyState />

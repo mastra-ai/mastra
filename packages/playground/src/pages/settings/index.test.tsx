@@ -1,4 +1,3 @@
-import { PageHeadingContext } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -21,9 +20,7 @@ async function renderSettingsPage() {
     <QueryClientProvider client={queryClient}>
       <StudioConfigProvider endpoint={BASE_URL}>
         <ThemeProvider>
-          <PageHeadingContext.Provider value="Settings">
-            <StudioSettingsPage />
-          </PageHeadingContext.Provider>
+          <StudioSettingsPage />
         </ThemeProvider>
       </StudioConfigProvider>
     </QueryClientProvider>,

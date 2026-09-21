@@ -10,8 +10,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
 import {
   useStoredPromptBlock,
@@ -24,8 +26,10 @@ import {
   usePromptBlockEditForm,
   DeletePromptBlockAction,
 } from '@/domains/prompt-blocks';
+import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
 import { useLinkComponent } from '@/lib/framework';
-import { RouteHeaderActions } from '@/lib/route-header';
+
+const crumbs = [navCrumb('/prompts'), { id: 'prompt-block', Component: PromptBlockCrumb, heading: 'Prompt block' }];
 
 type StoredPromptBlockData = NonNullable<ReturnType<typeof useStoredPromptBlock>['data']>;
 
@@ -246,7 +250,7 @@ function CmsPromptBlocksEditPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout className="grid-rows-[1fr]">
+      <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={
             <div className="flex h-full items-center justify-center">
@@ -264,7 +268,7 @@ function CmsPromptBlocksEditPage() {
 
   if (!block || !blockId) {
     return (
-      <MainContentLayout className="grid-rows-[1fr]">
+      <MainContentLayout {...pageHeaderProps(crumbs)} className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={
             <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
@@ -276,21 +280,22 @@ function CmsPromptBlocksEditPage() {
     );
   }
 
+  const actions = (
+    <div className="flex items-center gap-2">
+      {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
+      <PromptBlockVersionCombobox
+        blockId={blockId}
+        value={selectedVersionId ?? ''}
+        onValueChange={handleVersionSelect}
+        variant="ghost"
+        activeVersionId={activeVersionId}
+      />
+      {isCmsAvailable && <DeletePromptBlockAction blockId={blockId} blockName={block.name} />}
+    </div>
+  );
+
   return (
-    <MainContentLayout className="grid-rows-[1fr]">
-      <RouteHeaderActions owner="cms-prompt-block-edit">
-        <div className="flex items-center gap-2">
-          {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
-          <PromptBlockVersionCombobox
-            blockId={blockId}
-            value={selectedVersionId ?? ''}
-            onValueChange={handleVersionSelect}
-            variant="ghost"
-            activeVersionId={activeVersionId}
-          />
-          {isCmsAvailable && <DeletePromptBlockAction blockId={blockId} blockName={block.name} />}
-        </div>
-      </RouteHeaderActions>
+    <MainContentLayout {...pageHeaderProps(crumbs)} actions={actions} className="grid-rows-[1fr]">
       <CmsPromptBlocksEditForm
         block={block}
         blockId={blockId}

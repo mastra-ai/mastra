@@ -40,7 +40,9 @@ import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTracesListSource } from './hooks/use-traces-list-source';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
@@ -51,6 +53,8 @@ import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
+
+const crumbs = [navCrumb('/traces')];
 
 type TracesPageProps = {
   scopedEntityId?: string;
@@ -341,7 +345,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
   if (isDiscoveryLoading) {
     return (
-      <PageLayout width="wide" height="full">
+      <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
         <PageLayout.MainArea>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
         </PageLayout.MainArea>
@@ -351,7 +355,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   if (tracesError) {
     return (
-      <PageLayout width="wide" height="full">
+      <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
         {pageTopArea}
         <PageLayout.MainArea isCentered>
           <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
@@ -364,7 +368,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
-      <PageLayout width="wide" height="full">
+      <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
         {pageTopArea}
         <PageLayout.MainArea isCentered>
           <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
@@ -374,7 +378,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   }
 
   return (
-    <PageLayout width="wide" height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} width="wide" height="full">
       {pageTopArea}
 
       <TracesListView

@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PlusIcon, CircleSlashIcon } from 'lucide-react';
 
+import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
 import { PageHeader } from '../PageHeader';
-import { NoDataPageLayout, PageHeadingContext, PageLayout } from './index';
+import { NoDataPageLayout, PageLayout } from './index';
 
 const meta: Meta<typeof PageLayout> = {
   title: 'Layout/PageLayout',
@@ -19,40 +20,67 @@ const resources = ['Research agent', 'Support workflow', 'Knowledge search tool'
 
 export const FullPage: Story = {
   render: () => (
-    <PageHeadingContext value="Resources">
-      <div className="bg-surface1 h-152">
-        <PageLayout width="wide" height="full">
-          <PageLayout.TopArea>
-            <PageLayout.Row align="center" stack="responsive">
-              <PageLayout.Column>
-                <PageHeader>
-                  <PageHeader.Title>Resources</PageHeader.Title>
-                  <PageHeader.Description>
-                    Agents, workflows, and tools available in this workspace.
-                  </PageHeader.Description>
-                </PageHeader>
-              </PageLayout.Column>
-              <Button variant="primary">
-                <PlusIcon />
-                Create resource
-              </Button>
-            </PageLayout.Row>
-          </PageLayout.TopArea>
-          <PageLayout.MainArea>
-            <div className="grid gap-3 md:grid-cols-3">
-              {resources.map(resource => (
-                <div
-                  key={resource}
-                  className="border-border1 bg-surface2 text-ui-md text-foreground rounded-xl border p-5"
-                >
-                  {resource}
-                </div>
-              ))}
-            </div>
-          </PageLayout.MainArea>
-        </PageLayout>
-      </div>
-    </PageHeadingContext>
+    <div className="bg-surface1 h-152">
+      <PageLayout width="wide" height="full" heading="Resources">
+        <PageLayout.TopArea>
+          <PageLayout.Row align="center" stack="responsive">
+            <PageLayout.Column>
+              <PageHeader>
+                <PageHeader.Title>Resources</PageHeader.Title>
+                <PageHeader.Description>
+                  Agents, workflows, and tools available in this workspace.
+                </PageHeader.Description>
+              </PageHeader>
+            </PageLayout.Column>
+            <Button variant="primary">
+              <PlusIcon />
+              Create resource
+            </Button>
+          </PageLayout.Row>
+        </PageLayout.TopArea>
+        <PageLayout.MainArea>
+          <div className="grid gap-3 md:grid-cols-3">
+            {resources.map(resource => (
+              <div
+                key={resource}
+                className="border-border1 bg-surface2 text-ui-md text-foreground rounded-xl border p-5"
+              >
+                {resource}
+              </div>
+            ))}
+          </div>
+        </PageLayout.MainArea>
+      </PageLayout>
+    </div>
+  ),
+};
+
+export const WithHeader: Story = {
+  render: () => (
+    <div className="bg-surface1 h-152">
+      <PageLayout
+        height="full"
+        heading="Research agent"
+        breadcrumbs={
+          <Breadcrumb label="Breadcrumb">
+            <Crumb as="span">Agents</Crumb>
+            <Crumb as="span" isCurrent>
+              Research agent
+            </Crumb>
+          </Breadcrumb>
+        }
+        actions={
+          <Button variant="primary">
+            <PlusIcon />
+            New agent
+          </Button>
+        }
+      >
+        <PageLayout.MainArea>
+          <div className="border-border1 bg-surface2 text-muted-foreground rounded-xl border p-5">Agent details</div>
+        </PageLayout.MainArea>
+      </PageLayout>
+    </div>
   ),
 };
 

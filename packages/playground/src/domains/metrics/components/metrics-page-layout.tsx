@@ -12,7 +12,9 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
+import { metricsCrumbs } from '../metrics-crumbs';
 import { MetricsToolbar } from './metrics-toolbar';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 
 type MetricsPageLayoutProps = {
   children: ReactNode;
@@ -54,7 +56,7 @@ export function MetricsPageLayout({ children, filterFields, isLoading = false }:
   };
 
   return (
-    <PageLayout width="wide" height="full">
+    <PageLayout {...pageHeaderProps(metricsCrumbs)} width="wide" height="full">
       <PageLayout.TopArea>
         <PageLayout.Row>
           <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">

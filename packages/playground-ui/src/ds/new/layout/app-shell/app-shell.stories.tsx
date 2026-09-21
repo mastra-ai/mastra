@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Bot, Boxes, Search, Settings, Workflow } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
 import { AppShell } from './app-shell';
-import type { AppShellFrameProps } from './app-shell';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
-import { Header } from '@/ds/components/Header';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@/ds/components/MainSidebar';
+import { PageLayout } from '@/ds/components/PageLayout';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
@@ -77,21 +77,25 @@ function MobileHeader() {
   );
 }
 
-function ExampleRouteHeader() {
+const crumbs = (
+  <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
+    <Crumb as="span" isCurrent icon={<Bot />}>
+      Research agent
+    </Crumb>
+  </Breadcrumb>
+);
+
+function Frame({ children }: { children: ReactNode }) {
   return (
-    <Header className="h-10 min-h-10 gap-2 overflow-hidden px-2">
-      <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
-        <Crumb as="span" isCurrent icon={<Bot />}>
-          Research agent
-        </Crumb>
-      </Breadcrumb>
-    </Header>
+    <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame relative m-1.5 ml-0 min-h-0 flex-1 overflow-hidden border lg:m-2 lg:ml-0">
+      {children}
+    </div>
   );
 }
 
-function MainContent() {
+function MainContent({ withHeader = true }: { withHeader?: boolean }) {
   return (
-    <main className="grid min-h-full content-start gap-4 p-5">
+    <PageLayout breadcrumbs={withHeader ? crumbs : undefined} heading="Research agent" className="grid-rows-none gap-4">
       <PageHeader>
         <PageHeader.Icon>
           <Bot />
@@ -107,22 +111,20 @@ function MainContent() {
           </p>
         </article>
       ))}
-    </main>
+    </PageLayout>
   );
 }
 
-function FrameWithPanel({ children, className }: AppShellFrameProps) {
+function FrameWithPanel({ children }: { children: ReactNode }) {
   return (
-    <div className={className}>
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">{children}</div>
-        <aside className="border-border1 bg-surface1 hidden w-72 shrink-0 border-l p-4 xl:block">
-          <p className="text-ui-sm text-foreground font-medium">Details panel</p>
-          <p className="text-ui-xs text-muted-foreground mt-1">
-            A consumer-owned panel rendered outside the framed content.
-          </p>
-        </aside>
-      </div>
+    <div className="flex min-h-0 flex-1">
+      <Frame>{children}</Frame>
+      <aside className="border-border1 bg-surface1 hidden w-72 shrink-0 border-l p-4 xl:block">
+        <p className="text-ui-sm text-foreground font-medium">Details panel</p>
+        <p className="text-ui-xs text-muted-foreground mt-1">
+          A consumer-owned panel rendered beside the framed content.
+        </p>
+      </aside>
     </div>
   );
 }
@@ -131,7 +133,7 @@ const meta = {
   title: 'Layout/AppShell',
   component: AppShell,
   parameters: { layout: 'fullscreen' },
-  args: { children: null, mainLabel: 'Page content' },
+  args: { children: null },
 } satisfies Meta<typeof AppShell>;
 
 export default meta;
@@ -141,14 +143,11 @@ export const StandardDesktop: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
-          <Sidebar />
-          <AppShell
-            mainLabel="Research agent content"
-            mobileHeader={<MobileHeader />}
-            routeHeader={<ExampleRouteHeader />}
-          >
-            <MainContent />
+        <div className="bg-surface1 h-dvh w-dvw font-sans">
+          <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
+            <Frame>
+              <MainContent />
+            </Frame>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -167,14 +166,11 @@ export const CollapsedSidebar: Story = {
         collapseBelow={160}
         storageKey="app-shell-story-collapsed"
       >
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
-          <Sidebar />
-          <AppShell
-            mainLabel="Research agent content"
-            mobileHeader={<MobileHeader />}
-            routeHeader={<ExampleRouteHeader />}
-          >
-            <MainContent />
+        <div className="bg-surface1 h-dvh w-dvw font-sans">
+          <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
+            <Frame>
+              <MainContent />
+            </Frame>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -187,14 +183,11 @@ export const Mobile: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
-          <Sidebar />
-          <AppShell
-            mainLabel="Research agent content"
-            mobileHeader={<MobileHeader />}
-            routeHeader={<ExampleRouteHeader />}
-          >
-            <MainContent />
+        <div className="bg-surface1 h-dvh w-dvw font-sans">
+          <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
+            <Frame>
+              <MainContent />
+            </Frame>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -206,10 +199,11 @@ export const WithoutRouteHeader: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
-          <Sidebar />
-          <AppShell mainLabel="Research agent content" mobileHeader={<MobileHeader />}>
-            <MainContent />
+        <div className="bg-surface1 h-dvh w-dvw font-sans">
+          <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
+            <Frame>
+              <MainContent withHeader={false} />
+            </Frame>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -222,22 +216,18 @@ export const WithFrameWrapper: Story = {
     docs: {
       description: {
         story:
-          'Uses `renderFrame` to place a consumer-owned details panel beside the framed page while AppShell keeps control of the frame geometry.',
+          'Consumers own the frame: a details panel is rendered beside the framed page inside the AppShell content column.',
       },
     },
   },
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
-          <Sidebar />
-          <AppShell
-            mainLabel="Research agent content"
-            mobileHeader={<MobileHeader />}
-            routeHeader={<ExampleRouteHeader />}
-            renderFrame={FrameWithPanel}
-          >
-            <MainContent />
+        <div className="bg-surface1 h-dvh w-dvw font-sans">
+          <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
+            <FrameWithPanel>
+              <MainContent />
+            </FrameWithPanel>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -250,14 +240,11 @@ export const LightTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
-          <Sidebar />
-          <AppShell
-            mainLabel="Research agent content"
-            mobileHeader={<MobileHeader />}
-            routeHeader={<ExampleRouteHeader />}
-          >
-            <MainContent />
+        <div className="bg-surface1 h-dvh w-dvw font-sans">
+          <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
+            <Frame>
+              <MainContent />
+            </Frame>
           </AppShell>
         </div>
       </MainSidebarProvider>
@@ -270,14 +257,11 @@ export const DarkTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
-          <Sidebar />
-          <AppShell
-            mainLabel="Research agent content"
-            mobileHeader={<MobileHeader />}
-            routeHeader={<ExampleRouteHeader />}
-          >
-            <MainContent />
+        <div className="bg-surface1 h-dvh w-dvw font-sans">
+          <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
+            <Frame>
+              <MainContent />
+            </Frame>
           </AppShell>
         </div>
       </MainSidebarProvider>

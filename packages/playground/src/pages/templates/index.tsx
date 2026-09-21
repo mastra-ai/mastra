@@ -4,10 +4,13 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { PackageIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { TemplatesList } from '@/domains/templates/templates-list';
 import { TemplatesTools } from '@/domains/templates/templates-tools';
 import { useMastraTemplates } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
+
+const crumbs = [{ id: 'templates', label: 'Templates' }];
 
 export default function Templates() {
   const { data, isLoading } = useMastraTemplates();
@@ -63,7 +66,7 @@ export default function Templates() {
   const isFiltered = searchTerm || selectedTag !== 'all' || selectedProvider !== 'all';
 
   return (
-    <MainContentLayout>
+    <MainContentLayout {...pageHeaderProps(crumbs)}>
       <Header>
         <HeaderTitle>
           <Icon>

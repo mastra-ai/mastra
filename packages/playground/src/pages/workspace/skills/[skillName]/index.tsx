@@ -8,13 +8,12 @@ import { useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 
 import { validateAgentId } from './validate-agent-id';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { decodeRouteParam, navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 import { ReferenceViewerDialog } from '@/domains/workspace/components/reference-viewer-dialog';
 import { SkillDetail } from '@/domains/workspace/components/skill-detail';
 import { useWorkspaceFile } from '@/domains/workspace/hooks/use-workspace';
 import { useWorkspaceSkill, useWorkspaceSkillReference } from '@/domains/workspace/hooks/use-workspace-skills';
-import { navCrumb } from '@/lib/nav';
-import { RouteHeaderCrumbs } from '@/lib/route-header';
-import type { CrumbDef } from '@/lib/route-header';
 
 export default function WorkspaceSkillDetailPage() {
   const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
@@ -37,7 +36,7 @@ export default function WorkspaceSkillDetailPage() {
   const cachedAgents = agentsCache?.[0]?.[1] ?? null;
   const validAgentId = validateAgentId(decodedAgentId, cachedAgents);
 
-  const agentCrumbs = useMemo<CrumbDef[] | null>(
+  const crumbs = useMemo<CrumbDef[]>(
     () =>
       validAgentId
         ? [
@@ -45,8 +44,16 @@ export default function WorkspaceSkillDetailPage() {
             { id: 'agent', label: validAgentId, to: `/agents/${encodeURIComponent(validAgentId)}` },
             { id: 'skill', label: decodedSkillName },
           ]
-        : null,
-    [validAgentId, decodedSkillName],
+        : [
+            navCrumb('/workspaces'),
+            {
+              id: 'workspace',
+              label: decodeRouteParam(workspaceId),
+              to: workspaceId ? `/workspaces/${encodeURIComponent(workspaceId)}` : undefined,
+            },
+            { id: 'skill', label: decodedSkillName },
+          ],
+    [validAgentId, workspaceId, decodedSkillName],
   );
 
   const [viewingReference, setViewingReference] = useState<string | null>(null);
@@ -77,8 +84,7 @@ export default function WorkspaceSkillDetailPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout>
-        {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="grid h-full place-items-center">
           <div className="border-accent1 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
         </div>
@@ -89,8 +95,7 @@ export default function WorkspaceSkillDetailPage() {
   // 401 check - session expired
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout>
-        {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -101,8 +106,7 @@ export default function WorkspaceSkillDetailPage() {
   // 403 check - permission denied for workspaces
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout>
-        {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="workspaces" />
         </div>
@@ -112,8 +116,7 @@ export default function WorkspaceSkillDetailPage() {
 
   if (error || !skill) {
     return (
-      <MainContentLayout>
-        {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="grid h-full place-items-center">
           <div className="text-center">
             <p className="mb-2 text-red-400">Failed to load skill</p>
@@ -127,8 +130,7 @@ export default function WorkspaceSkillDetailPage() {
   }
 
   return (
-    <MainContentLayout>
-      {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
+    <MainContentLayout {...pageHeaderProps(crumbs)}>
       <div className="grid h-full overflow-x-hidden overflow-y-auto">
         <div className="mx-auto h-full w-full max-w-[100rem] overflow-x-hidden px-[3rem] py-5">
           <SkillDetail skill={skill} rawSkillMd={rawSkillMdData?.content} onReferenceClick={setViewingReference} />

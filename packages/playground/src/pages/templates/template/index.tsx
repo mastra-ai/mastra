@@ -5,6 +5,8 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { decodeRouteParam } from '@/domains/navigation/crumbs';
 import { TemplateFailure } from '@/domains/templates/template-failure';
 import { TemplateForm } from '@/domains/templates/template-form';
 import { TemplateInfo } from '@/domains/templates/template-info';
@@ -23,6 +25,10 @@ import { cn } from '@/lib/utils';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
+  const crumbs = [
+    { id: 'templates', label: 'Templates', to: '/templates' },
+    { id: 'template', label: decodeRouteParam(templateSlug) },
+  ];
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedProvider, setSelectedProvider] = useState<string>('');
   const [selectedModelProvider, setSelectedModelProvider] = useState<string>('');
@@ -326,7 +332,7 @@ export default function Template() {
   };
 
   return (
-    <MainContentLayout>
+    <MainContentLayout {...pageHeaderProps(crumbs)}>
       <div className={cn('w-full lg:px-12 h-full overflow-y-scroll')}>
         <div className="mx-auto grid w-full max-w-[80rem] gap-y-4 p-4">
           <TemplateInfo

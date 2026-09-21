@@ -3,6 +3,7 @@ import { MainContentLayout } from '@mastra/playground-ui/components/MainContent'
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useParams, useLocation, useNavigate } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
 import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
@@ -14,9 +15,12 @@ import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { cleanProviderId } from '@/domains/llm/utils';
+import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { RouteSidePanel } from '@/lib/route-side-panel';
+
+const crumbs = [navCrumb('/agents'), agentCrumb];
 
 /** Shadows the global "go to" sequences with agent-scoped targets while an agent page is mounted. */
 const AgentShortcuts = ({ agentId }: { agentId: string }) => {
@@ -52,13 +56,12 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
     <KeyboardScope>
       <AgentShortcuts agentId={agentId!} />
       <OverviewPanelShortcuts />
-      <AgentDetailHeaderActions agentId={agentId!} />
       <RouteSidePanel owner="agent-detail">
         <ActivatedSkillsProvider key={agentId}>
           <AgentOverviewPanel agentId={agentId!} />
         </ActivatedSkillsProvider>
       </RouteSidePanel>
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)} actions={<AgentDetailHeaderActions agentId={agentId!} />}>
         <AgentPageTabs
           agentId={agentId!}
           activeTab={activeTab}

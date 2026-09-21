@@ -1,26 +1,40 @@
-import { usePageHeading } from '../PageLayout/page-heading-context';
+import type { ReactNode } from 'react';
+import { PageHeaderRow } from '../PageLayout/page-header-row';
 import { cn } from '@/lib/utils';
+
+export interface MainContentLayoutProps {
+  children: ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+  /** Left side of the page header row. */
+  breadcrumbs?: ReactNode;
+  /** Right side of the page header row. */
+  actions?: ReactNode;
+  /** Visually hidden page `<h1>` for screen readers. */
+  heading?: string;
+}
 
 export function MainContentLayout({
   children,
   className,
   style,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  style?: React.CSSProperties;
-}) {
+  breadcrumbs,
+  actions,
+  heading,
+}: MainContentLayoutProps) {
   const devStyleRequested = devUIStyleRequested('MainContentLayout');
-  const pageHeading = usePageHeading();
 
   return (
-    <main
-      className={cn(`grid h-full grid-rows-[auto_1fr] content-start items-start`, className)}
-      style={{ ...style, ...(devStyleRequested ? { border: '3px dotted red' } : {}) }}
-    >
-      {pageHeading && <h1 className="sr-only">{pageHeading}</h1>}
-      {children}
-    </main>
+    <div data-slot="page-layout" className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+      {(breadcrumbs || actions) && <PageHeaderRow breadcrumbs={breadcrumbs} actions={actions} />}
+      <main
+        className={cn(`grid h-full min-h-0 grid-rows-[auto_1fr] content-start items-start`, className)}
+        style={{ ...style, ...(devStyleRequested ? { border: '3px dotted red' } : {}) }}
+      >
+        {heading && <h1 className="sr-only">{heading}</h1>}
+        {children}
+      </main>
+    </div>
   );
 }
 
@@ -64,7 +78,7 @@ export type GetMainContentContentClassNameArgs = {
   className?: string;
 };
 
-export const getMainContentContentClassName = ({
+const getMainContentContentClassName = ({
   isCentered,
   isDivided,
   hasLeftServiceColumn,

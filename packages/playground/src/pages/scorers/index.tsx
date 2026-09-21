@@ -4,10 +4,14 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { ScorersToolbar, useScorers } from '@/domains/scores';
 import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';
 import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-list';
 import { ScorersHeaderCreateAction } from '@/domains/scores/scorers-header-actions';
+
+const crumbs = [navCrumb('/scorers')];
 
 export default function Scorers() {
   const { data: scorers = {}, isLoading, error } = useScorers();
@@ -16,7 +20,7 @@ export default function Scorers() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -24,7 +28,7 @@ export default function Scorers() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="scorers" />
       </NoDataPageLayout>
     );
@@ -32,7 +36,7 @@ export default function Scorers() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load scorers" message={error.message} />
       </NoDataPageLayout>
     );
@@ -40,8 +44,7 @@ export default function Scorers() {
 
   if (Object.keys(scorers).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout>
-        <ScorersHeaderCreateAction />
+      <NoDataPageLayout {...pageHeaderProps(crumbs)} actions={<ScorersHeaderCreateAction />}>
         <NoScorersInfo />
       </NoDataPageLayout>
     );
@@ -55,8 +58,7 @@ export default function Scorers() {
   };
 
   return (
-    <PageLayout height="full">
-      <ScorersHeaderCreateAction />
+    <PageLayout {...pageHeaderProps(crumbs)} actions={<ScorersHeaderCreateAction />} height="full">
       <PageLayout.TopArea>
         <ScorersToolbar
           search={search}

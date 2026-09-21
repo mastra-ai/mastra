@@ -8,9 +8,13 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftRightIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { useDatasetExperiment } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { ExperimentsComparison } from '@/domains/experiments';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useLinkComponent } from '@/lib/framework';
+
+const crumbs = [navCrumb('/experiments'), { id: 'experiments-compare', label: 'Compare' }];
 
 function ExperimentIdLink({ experimentId }: { experimentId: string }) {
   const { Link, paths } = useLinkComponent();
@@ -41,7 +45,7 @@ function CompareExperimentsPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -51,7 +55,7 @@ function CompareExperimentsPage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="experiments" />
         </div>
@@ -61,7 +65,7 @@ function CompareExperimentsPage() {
 
   if (!datasetId || !experimentIdA || !experimentIdB) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <MainContentContent>
           <div className="text-muted-foreground py-5 text-center">
             <p>Select two experiments to compare.</p>
@@ -79,7 +83,7 @@ function CompareExperimentsPage() {
 
   if (error && !is404NotFoundError(error)) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="flex h-full items-center justify-center">
           <ErrorState title="Failed to load experiments" message={error.message} />
         </div>
@@ -90,7 +94,7 @@ function CompareExperimentsPage() {
   // 404 (or no data): the experiment does not exist or belongs to another dataset.
   if (error || !experimentA.data || !experimentB.data) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <MainContentContent>
           <div className="text-muted-foreground py-5 text-center">
             <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
@@ -108,7 +112,7 @@ function CompareExperimentsPage() {
   }
 
   return (
-    <MainContentLayout>
+    <MainContentLayout {...pageHeaderProps(crumbs)}>
       <MainContentContent>
         {/* Padding lives on the toolbar only: the comparison table runs edge to edge. */}
         <div className="grid w-full content-start">

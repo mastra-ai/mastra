@@ -6,12 +6,16 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { DatasetReview, type ReviewListFilters } from '@/domains/review/components/dataset-review';
 import { ReviewQueueFilterBar, type ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
 import { TARGET_ID_PARAM, TARGET_TYPE_PARAM } from '@/domains/shared/hooks/use-target-filter-params';
 import { useLinkComponent } from '@/lib/framework';
+
+const crumbs = [navCrumb('/experiments'), navCrumb('/experiments/review-queue')];
 
 const EXPERIMENT_PARAM = 'experiment';
 const REVIEW_PARAM = 'review';
@@ -61,7 +65,7 @@ function ReviewQueuePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -69,7 +73,7 @@ function ReviewQueuePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="experiments" />
       </NoDataPageLayout>
     );
@@ -77,14 +81,14 @@ function ReviewQueuePage() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load experiments" message={error.message} />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
       <DatasetReview
         datasetId={selected?.datasetId ?? undefined}
         experimentId={selectedId ?? undefined}

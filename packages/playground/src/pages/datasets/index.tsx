@@ -6,12 +6,15 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
 import { useInfiniteDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
-import { RouteHeaderActions } from '@/lib/route-header';
+
+const crumbs = [navCrumb('/datasets')];
 
 export default function Datasets() {
   const navigate = useNavigate();
@@ -39,16 +42,14 @@ export default function Datasets() {
   const openCreatePage = () => void navigate('/datasets/new');
 
   const headerCreateAction = (
-    <RouteHeaderActions owner="dataset-list">
-      <CreateButton onClick={openCreatePage} tooltip="Create a dataset" variant="ghost" size="sm">
-        New dataset
-      </CreateButton>
-    </RouteHeaderActions>
+    <CreateButton onClick={openCreatePage} tooltip="Create a dataset" variant="ghost" size="sm">
+      New dataset
+    </CreateButton>
   );
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -56,7 +57,7 @@ export default function Datasets() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="datasets" />
       </NoDataPageLayout>
     );
@@ -64,7 +65,7 @@ export default function Datasets() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load datasets" message={error.message} />
       </NoDataPageLayout>
     );
@@ -73,8 +74,7 @@ export default function Datasets() {
   // With a target filter active, keep the toolbar so the user can reset it.
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
-      <NoDataPageLayout>
-        {headerCreateAction}
+      <NoDataPageLayout {...pageHeaderProps(crumbs)} actions={headerCreateAction}>
         <NoDatasetsInfo onCreateClick={openCreatePage} />
       </NoDataPageLayout>
     );
@@ -90,8 +90,7 @@ export default function Datasets() {
   };
 
   return (
-    <PageLayout height="full">
-      {headerCreateAction}
+    <PageLayout {...pageHeaderProps(crumbs)} actions={headerCreateAction} height="full">
       <PageLayout.TopArea>
         <DatasetsToolbar
           search={search}

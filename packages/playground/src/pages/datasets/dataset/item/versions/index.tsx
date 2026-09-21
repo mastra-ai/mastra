@@ -12,11 +12,12 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { format } from 'date-fns';
 import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon, GitCompareIcon } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { DatasetItemDetails } from '@/domains/datasets';
 import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { RouteHeaderActions } from '@/lib/route-header';
+import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
 function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {
   return {
@@ -65,6 +66,19 @@ function parseVersionParam(value: string | null): number | null {
 function DatasetItemVersionsComparePage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const crumbs: CrumbDef[] = [
+    navCrumb('/datasets'),
+    datasetCrumb,
+    {
+      id: 'dataset-item',
+      label: truncateItemIdCrumb(itemId),
+      to:
+        datasetId && itemId
+          ? `/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`
+          : undefined,
+    },
+    { id: 'dataset-item-versions', label: 'Item Version History' },
+  ];
 
   // Whole view lives in the URL so a link reproduces it:
   // ?version=3 — left column; ?compare=2 — right column; ?view=diff
@@ -102,7 +116,7 @@ function DatasetItemVersionsComparePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -112,7 +126,7 @@ function DatasetItemVersionsComparePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="datasets" />
         </div>
@@ -122,7 +136,7 @@ function DatasetItemVersionsComparePage() {
 
   if (!datasetId || !itemId) {
     return (
-      <MainContentLayout>
+      <MainContentLayout {...pageHeaderProps(crumbs)}>
         <MainContentContent>
           <div className="text-muted-foreground py-5 text-center">
             <p>Item not found.</p>
@@ -140,9 +154,10 @@ function DatasetItemVersionsComparePage() {
   const leftIsOlder = (leftVersion?.datasetVersion ?? 0) < (rightVersion?.datasetVersion ?? 0);
 
   return (
-    <MainContentLayout>
-      <RouteHeaderActions owner="dataset-item-versions">
-        {canDiff && (
+    <MainContentLayout
+      {...pageHeaderProps(crumbs)}
+      actions={
+        canDiff && (
           <Button variant="outline" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
             {isDiffView ? (
               <>
@@ -154,9 +169,9 @@ function DatasetItemVersionsComparePage() {
               </>
             )}
           </Button>
-        )}
-      </RouteHeaderActions>
-
+        )
+      }
+    >
       <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
         <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
           <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">

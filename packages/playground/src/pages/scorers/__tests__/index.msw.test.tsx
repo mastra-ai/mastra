@@ -6,8 +6,6 @@ import { describe, expect, it } from 'vitest';
 import ScorersPage from '..';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
-import { RouteHeaderActionsProvider } from '@/lib/route-header';
-import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
@@ -47,13 +45,10 @@ const renderPage = () =>
   renderWithProviders(
     // Real react-router Link so the C shortcut's synthetic click navigates the MemoryRouter.
     <LinkComponentProvider Link={Link} navigate={() => {}} paths={stubLinkPaths}>
-      <RouteHeaderActionsProvider>
-        <RouteHeaderActionsSlot />
-        <Routes>
-          <Route path="/scorers" element={<ScorersPage />} />
-          <Route path="/cms/scorers/create" element={<div>Create scorer page</div>} />
-        </Routes>
-      </RouteHeaderActionsProvider>
+      <Routes>
+        <Route path="/scorers" element={<ScorersPage />} />
+        <Route path="/cms/scorers/create" element={<div>Create scorer page</div>} />
+      </Routes>
     </LinkComponentProvider>,
     { router: { initialEntries: ['/scorers'] } },
   );

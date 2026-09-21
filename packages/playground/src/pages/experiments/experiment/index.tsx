@@ -9,6 +9,7 @@ import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
@@ -18,15 +19,17 @@ import { ExperimentResultsSection } from '@/domains/experiments/components/exper
 import { ExperimentSideRail } from '@/domains/experiments/components/experiment-side-rail';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
+import { ExperimentCrumb, ExperimentCrumbStatusIcon } from '@/domains/experiments/experiment-crumb';
 import { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
+import { navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
 // Stable fallback so the selection hook's memoised filters don't churn while results load.
 const EMPTY_RESULTS: never[] = [];
 
-function ExperimentPageShell({ children }: { children?: ReactNode }) {
+function ExperimentPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
       <div />
       <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
     </PageLayout>
@@ -34,7 +37,24 @@ function ExperimentPageShell({ children }: { children?: ReactNode }) {
 }
 
 function ExperimentPage() {
-  const { experimentId } = useParams<{ experimentId: string }>();
+  const { experimentId, itemId } = useParams<{ experimentId: string; itemId: string }>();
+  // The `to` link only renders on the nested items/:itemId route.
+  const crumbs: CrumbDef[] = [
+    navCrumb('/experiments'),
+    {
+      id: 'experiment',
+      Component: ExperimentCrumb,
+      icon: ExperimentCrumbStatusIcon,
+      heading: 'Experiment',
+      to: experimentId ? `/experiments/${encodeURIComponent(experimentId)}` : undefined,
+    },
+    ...(itemId
+      ? [
+          { id: 'experiment-items', label: 'Items' },
+          { id: 'experiment-item', label: truncateItemIdCrumb(itemId) },
+        ]
+      : []),
+  ];
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -74,7 +94,7 @@ function ExperimentPage() {
 
   if (experimentError && is401UnauthorizedError(experimentError)) {
     return (
-      <ExperimentPageShell>
+      <ExperimentPageShell crumbs={crumbs}>
         <SessionExpired />
       </ExperimentPageShell>
     );
@@ -82,14 +102,14 @@ function ExperimentPage() {
 
   if (experimentError && is403ForbiddenError(experimentError)) {
     return (
-      <ExperimentPageShell>
+      <ExperimentPageShell crumbs={crumbs}>
         <PermissionDenied resource="datasets" />
       </ExperimentPageShell>
     );
   }
 
   const notFound = (
-    <ExperimentPageShell>
+    <ExperimentPageShell crumbs={crumbs}>
       <EmptyState
         iconSlot={<PlayCircle />}
         titleSlot="Experiment not found"
@@ -107,7 +127,7 @@ function ExperimentPage() {
 
   if (experimentError) {
     return (
-      <ExperimentPageShell>
+      <ExperimentPageShell crumbs={crumbs}>
         <ErrorState
           title="Failed to load experiment"
           message={
@@ -134,7 +154,7 @@ function ExperimentPage() {
       hasNextPage={hasNextPage}
     >
       <div className="h-full">
-        <PageLayout height="full">
+        <PageLayout {...pageHeaderProps(crumbs)} height="full">
           <ExperimentTopArea experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)}>
             <ExperimentResultsBulkActions selection={selection} />
           </ExperimentTopArea>

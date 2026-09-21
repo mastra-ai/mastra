@@ -6,8 +6,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import DatasetsPage from '..';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
-import { RouteHeaderActionsProvider } from '@/lib/route-header';
-import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -23,13 +21,10 @@ const renderPage = () =>
   renderWithProviders(
     <TooltipProvider>
       <TestLinkProvider>
-        <RouteHeaderActionsProvider>
-          <RouteHeaderActionsSlot />
-          <Routes>
-            <Route path="/datasets" element={<DatasetsPage />} />
-            <Route path="/datasets/new" element={<div>Create dataset page</div>} />
-          </Routes>
-        </RouteHeaderActionsProvider>
+        <Routes>
+          <Route path="/datasets" element={<DatasetsPage />} />
+          <Route path="/datasets/new" element={<div>Create dataset page</div>} />
+        </Routes>
       </TestLinkProvider>
     </TooltipProvider>,
     { router: { initialEntries: ['/datasets'] } },

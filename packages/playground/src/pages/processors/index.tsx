@@ -5,9 +5,13 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
+import { pageHeaderProps } from '@/components/ui/page-header-props';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoProcessorsInfo } from '@/domains/processors/components/processors-list/no-processors-info';
 import { ProcessorsList } from '@/domains/processors/components/processors-list/processors-list';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
+
+const crumbs = [navCrumb('/processors')];
 
 export function Processors() {
   const { data: processors = {}, isLoading, error } = useProcessors();
@@ -15,7 +19,7 @@ export function Processors() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -23,7 +27,7 @@ export function Processors() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <PermissionDenied resource="processors" />
       </NoDataPageLayout>
     );
@@ -31,7 +35,7 @@ export function Processors() {
 
   if (error) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <ErrorState title="Failed to load processors" message={error.message} />
       </NoDataPageLayout>
     );
@@ -39,14 +43,14 @@ export function Processors() {
 
   if (Object.keys(processors).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout>
+      <NoDataPageLayout {...pageHeaderProps(crumbs)}>
         <NoProcessorsInfo />
       </NoDataPageLayout>
     );
   }
 
   return (
-    <PageLayout height="full">
+    <PageLayout {...pageHeaderProps(crumbs)} height="full">
       <PageLayout.TopArea>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter processors" placeholder="Filter by name" />
