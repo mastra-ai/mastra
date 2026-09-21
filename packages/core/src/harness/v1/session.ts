@@ -683,6 +683,7 @@ const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
 const MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS = 30_000;
 const MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS = 100;
 const MESSAGE_ADMISSION_DURABLE_WAIT_EXTENDED_INTERVAL_MS = 1_000;
+const MESSAGE_ADMISSION_DURABLE_WAIT_MAX_INTERVAL_MS = 15_000;
 const SIGNAL_DISPATCH_CLAIM_TTL_MS = 30_000;
 const SIGNAL_DISPATCH_CLAIM_RENEW_MS = 10_000;
 const SIGNAL_ACCEPTED_RECOVERY_STALE_MS = 30_000;
@@ -9565,6 +9566,7 @@ export class Session {
     opts: MessageOptions,
   ): Promise<AgentResult> {
     const deadline = Date.now() + MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS;
+    let extendedWaitMs = MESSAGE_ADMISSION_DURABLE_WAIT_EXTENDED_INTERVAL_MS;
     while (true) {
       throwIfAborted(opts.abortSignal, 'message().admissionId');
       const latest = await this._storage.loadMessageResultEvidence({
@@ -9623,10 +9625,10 @@ export class Session {
         }
         pastDeadline = true;
       }
-      await delay(
-        pastDeadline ? MESSAGE_ADMISSION_DURABLE_WAIT_EXTENDED_INTERVAL_MS : MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS,
-        opts.abortSignal,
-      );
+      await delay(pastDeadline ? extendedWaitMs : MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS, opts.abortSignal);
+      if (pastDeadline) {
+        extendedWaitMs = Math.min(extendedWaitMs * 2, MESSAGE_ADMISSION_DURABLE_WAIT_MAX_INTERVAL_MS);
+      }
     }
   }
 
@@ -9768,44 +9770,55 @@ export class Session {
       onFailure?: (error: HarnessTerminalHandoffError) => void;
     },
   ): Promise<HarnessTerminalCommitReceipt | undefined> {
-    const inFlight = this._terminalCommitsByRunId.get(identity.runId);
-    if (inFlight !== undefined) {
-      return inFlight.then(
-        receipt => {
-          if (receipt === undefined) {
-            // The winning attempt deferred (suspended run): retain this
-            // caller's observers for the resume-side settlement too.
-            this._retainTerminalObservers(identity.runId, options);
-            return undefined;
-          }
-          try {
-            options.onReceipt?.(receipt);
-          } catch {
-            // Receipt observers are diagnostics only and cannot change the durable winner.
-          }
-          return receipt;
-        },
-        error => {
-          const terminalError =
-            error instanceof HarnessTerminalHandoffError
-              ? error
-              : new HarnessTerminalFinalizationPendingError(Date.now() + 1_000, error);
-          try {
-            options.onFailure?.(terminalError);
-          } catch {
-            // Failure observers are diagnostics only.
-          }
-          throw terminalError;
-        },
-      );
-    }
-    const attempt = this._runTerminalHandoffCommit(identity, full, options);
-    this._terminalCommitsByRunId.set(identity.runId, attempt);
-    try {
-      return await attempt;
-    } finally {
-      if (this._terminalCommitsByRunId.get(identity.runId) === attempt) {
-        this._terminalCommitsByRunId.delete(identity.runId);
+    for (;;) {
+      const inFlight = this._terminalCommitsByRunId.get(identity.runId);
+      if (inFlight !== undefined) {
+        const joined = await inFlight.then(
+          receipt => {
+            if (receipt === undefined) {
+              // The winning attempt deferred (suspended run): retain this
+              // caller's observers for the resume-side settlement too.
+              this._retainTerminalObservers(identity.runId, options);
+              return undefined;
+            }
+            try {
+              options.onReceipt?.(receipt);
+            } catch {
+              // Receipt observers are diagnostics only and cannot change the durable winner.
+            }
+            return receipt;
+          },
+          error => {
+            const terminalError =
+              error instanceof HarnessTerminalHandoffError
+                ? error
+                : new HarnessTerminalFinalizationPendingError(Date.now() + 1_000, error);
+            try {
+              options.onFailure?.(terminalError);
+            } catch {
+              // Failure observers are diagnostics only.
+            }
+            throw terminalError;
+          },
+        );
+        if (joined !== undefined) return joined;
+        // The shared attempt deferred because ITS output suspended. This
+        // caller's own output may be terminal — a resume settling the same
+        // run's deferred admission — and joining the suspended attempt must
+        // not report deferral for it. Re-drive settlement with our output now
+        // that the in-flight entry has cleared; a suspended caller simply
+        // stands by its own deferral.
+        if (this._agentEndReasonForFullOutput(full) === 'suspended') return undefined;
+        continue;
+      }
+      const attempt = this._runTerminalHandoffCommit(identity, full, options);
+      this._terminalCommitsByRunId.set(identity.runId, attempt);
+      try {
+        return await attempt;
+      } finally {
+        if (this._terminalCommitsByRunId.get(identity.runId) === attempt) {
+          this._terminalCommitsByRunId.delete(identity.runId);
+        }
       }
     }
   }
@@ -9900,9 +9913,50 @@ export class Session {
     if (endReason === 'suspended') {
       // A suspended run has not reached a terminal outcome — the approval-gated
       // resume settles this admission later, so defer instead of sealing a
-      // false 'completed' winner. The original caller's observers outlive this
-      // settlement attempt, so retain them for the resume-side commit.
-      this._retainTerminalObservers(identity.runId, options);
+      // false 'completed' winner. Deferral is only valid while a resumable
+      // interaction is durably parked for this run: the session-record size
+      // budget can expire an oversized suspension payload during the park
+      // flush, leaving no interaction that could ever settle the grant. In
+      // that case cancel the admission and drain observers with the terminal
+      // outcome instead of stranding a pending grant behind a dead
+      // suspension.
+      const parked = this._record.pendingResume;
+      if (parked !== undefined && parked.runId === identity.runId) {
+        // The original caller's observers outlive this settlement attempt, so
+        // retain them for the resume-side commit.
+        this._retainTerminalObservers(identity.runId, options);
+        return undefined;
+      }
+      try {
+        const receipt = await this._storage.cancelTerminalHandoff({
+          harnessName: admission.harnessName,
+          sessionId: admission.sessionId,
+          sessionIncarnation: admission.sessionIncarnation,
+          admissionId: admission.admissionId,
+          admissionHash: admission.admissionHash,
+          executionGrant: admission.executionGrant,
+          reason: {
+            code: 'harness.terminal_cancelled',
+            message: 'suspension was not durably parked; the deferred terminal admission cannot be settled by a resume',
+          },
+          cancelledAt: Date.now(),
+        });
+        const cancelledError = new HarnessTerminalHandoffCancelledError(admission.executionGrant.key);
+        try {
+          options.onFailure?.(cancelledError);
+        } catch {
+          // Failure observers are diagnostics only.
+        }
+        if (receipt.status === 'cancelled' || receipt.status === 'duplicate') {
+          this._drainTerminalObservers(identity.runId, cancelledError);
+        } else if (receipt.status === 'fenced') {
+          this._drainTerminalObservers(identity.runId, new HarnessTerminalHandoffFencedError(identity.sessionId));
+        }
+        // 'committed' — a concurrent commit already drained observers with its
+        // receipt and owns the durable winner.
+      } catch (error) {
+        return reportFailure(error);
+      }
       return undefined;
     }
     const terminalResult: HarnessTerminalResult = {
@@ -10664,6 +10718,7 @@ export class Session {
     options: { waitIndefinitely?: boolean } = {},
   ): Promise<AgentResult> {
     const deadline = options.waitIndefinitely ? undefined : Date.now() + MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS;
+    let extendedWaitMs = MESSAGE_ADMISSION_DURABLE_WAIT_EXTENDED_INTERVAL_MS;
     while (true) {
       throwIfAborted(abortSignal, 'signal().admissionId');
       const latest = await this._storage.loadMessageResultEvidence({
@@ -10681,7 +10736,10 @@ export class Session {
       if (deadline !== undefined && Date.now() >= deadline) {
         throw new HarnessValidationError('signal().admissionId', 'pending signal admission is not live');
       }
-      await delay(MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS, abortSignal);
+      await delay(options.waitIndefinitely ? extendedWaitMs : MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS, abortSignal);
+      if (options.waitIndefinitely) {
+        extendedWaitMs = Math.min(extendedWaitMs * 2, MESSAGE_ADMISSION_DURABLE_WAIT_MAX_INTERVAL_MS);
+      }
     }
   }
 
@@ -15234,22 +15292,37 @@ export class Session {
       }
     };
     let alreadyAccounted = false;
+    // Tracks whether THIS settle durably wrote the mode transition — either in
+    // the queue pre-flush below or in the bookkeeping flush — so a stale retry
+    // fenced out of the generation does not announce a flip it never persisted.
+    let modeFlipApplied = false;
+    let modeFlipAppliedThisPass = false;
     if (completingQueuedItemId !== undefined) {
       if (modeFlipTarget && modeFlipTarget !== previousModeId) {
         // §4.2e — a plan-approval mode transition re-establishes the target
         // mode's base permission policy (when it declares one), exactly like
         // create + switchMode. Keeps permissionRules consistent with modeId.
+        // Fenced to this pending generation like the bookkeeping flush below:
+        // a stale settlement retry must not overwrite a newer switchMode.
         const seededRules = this._harness._modePermissionRules(modeFlipTarget);
         await Promise.race([
-          this._flushUpdate(prev => ({
-            ...prev,
-            modeId: modeFlipTarget,
-            ...(seededRules !== undefined
-              ? { permissionRules: seededRules, permissionRulesSeedHash: sha256CanonicalJson(seededRules) }
-              : {}),
-          })),
+          this._flushUpdate(prev => {
+            modeFlipAppliedThisPass = false;
+            const prevPendingGenerationKey =
+              prev.pendingResume === undefined ? undefined : pendingInteractionGenerationKey(prev.pendingResume);
+            if (prevPendingGenerationKey !== resumeAccountingKey) return prev;
+            modeFlipAppliedThisPass = true;
+            return {
+              ...prev,
+              modeId: modeFlipTarget,
+              ...(seededRules !== undefined
+                ? { permissionRules: seededRules, permissionRulesSeedHash: sha256CanonicalJson(seededRules) }
+                : {}),
+            };
+          }),
           deletedTurnWaiter,
         ]);
+        modeFlipApplied ||= modeFlipAppliedThisPass;
       }
       const queuedItem = this._record.pendingQueue.find(item => item.id === completingQueuedItemId);
       if (queuedItem) {
@@ -15307,13 +15380,16 @@ export class Session {
     await Promise.race([
       this._flushUpdate(
         prev => {
+          modeFlipAppliedThisPass = false;
           const next: SessionRecord = { ...prev };
           // Fence the pending write to the captured generation: a settlement
           // retry can pause on its storage probe and resume after the winner
           // cleared `pendingResume` and a later turn parked a NEWER pending.
           // Clearing or replacing here would strand that newer interaction —
           // and re-parking over an already-cleared field would resurrect an
-          // aborted or expired one.
+          // aborted or expired one. The same fence covers the mode flip: the
+          // transition belongs to this generation's response, so a stale
+          // retry must not overwrite a newer switchMode/permission policy.
           const prevPendingGenerationKey =
             prev.pendingResume === undefined ? undefined : pendingInteractionGenerationKey(prev.pendingResume);
           if (prevPendingGenerationKey === capturedPendingGenerationKey) {
@@ -15321,6 +15397,16 @@ export class Session {
               next.pendingResume = suspendedPending;
             } else {
               delete next.pendingResume;
+            }
+            if (modeFlipTarget) {
+              next.modeId = modeFlipTarget;
+              // §4.2e — re-seed the base permission policy for the transitioned mode.
+              const seededRules = this._harness._modePermissionRules(modeFlipTarget);
+              if (seededRules !== undefined) {
+                next.permissionRules = seededRules;
+                next.permissionRulesSeedHash = sha256CanonicalJson(seededRules);
+              }
+              modeFlipAppliedThisPass = true;
             }
           }
           const receipt =
@@ -15370,15 +15456,6 @@ export class Session {
               });
             }
           }
-          if (modeFlipTarget) {
-            next.modeId = modeFlipTarget;
-            // §4.2e — re-seed the base permission policy for the transitioned mode.
-            const seededRules = this._harness._modePermissionRules(modeFlipTarget);
-            if (seededRules !== undefined) {
-              next.permissionRules = seededRules;
-              next.permissionRulesSeedHash = sha256CanonicalJson(seededRules);
-            }
-          }
           if (completingQueuedItemId !== undefined) {
             next.pendingQueue = (prev.pendingQueue ?? []).filter(x => x.id !== completingQueuedItemId);
             const receipt = prev.queueAdmissionReceipts?.[completingQueuedItemId];
@@ -15406,15 +15483,17 @@ export class Session {
       ),
       deletedTurnWaiter,
     ]);
+    modeFlipApplied ||= modeFlipAppliedThisPass;
     if (full.finishReason !== 'suspended') {
       this._pendingReplacementToolSurfaces.delete(pending.runId);
     }
 
     // §10.2 defines no suspension_resolved event — resolution is observed via
     // the inbox response transition + display snapshot. A mode flip on a plan
-    // approval still emits mode_changed; a re-suspension emits the matching
-    // §10.2 pending event.
-    if (modeFlipTarget && modeFlipTarget !== previousModeId) {
+    // approval still emits mode_changed — but only when this caller's write
+    // actually landed; a stale retry fenced out of the generation must not
+    // announce a transition it did not persist.
+    if (modeFlipApplied && modeFlipTarget !== undefined && modeFlipTarget !== previousModeId) {
       this._emitter.emit({
         type: 'mode_changed',
         modeId: modeFlipTarget,
@@ -15429,6 +15508,22 @@ export class Session {
       this._emitPendingEvent(suspendedPending);
     }
 
+    // If the record size budget expired the re-suspension during the park
+    // flush, no resumable interaction survives to settle this run's deferred
+    // terminal admission — cancel the grant and drain its observers rather
+    // than stranding it pending forever. The expired-interaction marker is
+    // what distinguishes a budget drop (cancel) from a generation-fence skip
+    // (a newer pending owns the live admission — leave it alone).
+    if (suspendedPending !== undefined && this._record.pendingResume !== suspendedPending) {
+      const expiredEntry = getOwnRecordValue(
+        this._record.expiredPendingInteractions,
+        pendingInteractionGenerationKey(suspendedPending),
+      );
+      if (expiredEntry !== undefined) {
+        await this._cancelTerminalizedPendingAdmission(suspendedPending, expiredEntry.error);
+      }
+    }
+
     // If the resumed run did NOT suspend again, the turn is complete from
     // the harness's perspective. Surface that to subscribers via agent_end.
     // A settlement retry (committed admission, failed post-commit bookkeeping)
@@ -15436,7 +15531,14 @@ export class Session {
     // the first emit, so the guard keeps the terminal event exactly-once while
     // the steps below still re-run their own idempotent bookkeeping.
     if (full.finishReason !== 'suspended') {
-      if (full.runId === undefined || !this._finalizedRunIds.has(full.runId)) {
+      // `_finalizedRunIds` is populated synchronously by `_emitAgentEnd`, so
+      // the flag captured here is true for exactly one caller per completed
+      // run. Goal judging joins the same once-scope: a settlement retry that
+      // re-enters this helper must not invoke `_runGoalJudge` again — a second
+      // 'continue' verdict would consume additional goal budget and enqueue a
+      // duplicate continuation.
+      const firstFinalize = full.runId === undefined || !this._finalizedRunIds.has(full.runId);
+      if (firstFinalize) {
         this._emitAgentEnd({ runId: full.runId, finishReason: this._agentEndReasonForFullOutput(full), full });
       }
 
@@ -15457,8 +15559,10 @@ export class Session {
       // If this was the terminal completion of a queued turn, settle the
       // resolver, remove the head item, clear current, then kick the drain
       // for the next item.
-      const wasGoalDriven = (this._currentQueuedItemSource ?? 'user') === 'goal';
-      await Promise.race([this._runGoalJudge(full, wasGoalDriven), deletedTurnWaiter]);
+      if (firstFinalize) {
+        const wasGoalDriven = (this._currentQueuedItemSource ?? 'user') === 'goal';
+        await Promise.race([this._runGoalJudge(full, wasGoalDriven), deletedTurnWaiter]);
+      }
       if (completingQueuedItemId !== undefined) {
         this._currentQueuedItemId = undefined;
         this._currentQueuedItemSource = undefined;
@@ -15499,6 +15603,19 @@ export class Session {
     let failedQueueReceipt: QueueAdmissionReceipt | undefined;
 
     this._captureTurnRunId(full);
+
+    // Cancel the deferred terminal admission BEFORE the fenced generation is
+    // cleared: once `pendingResume` is gone there is no discoverable marker
+    // left to retry this teardown, so a cancellation failure or crash after
+    // the clear would strand the grant pending forever. Cancelling first keeps
+    // the parked pending as the recovery marker — a crash here leaves a
+    // `resumedAt`-stamped row that stale-resume recovery re-drives
+    // idempotently, and a `respondTo*` racing the gap fails closed on the
+    // cancelled grant instead of re-executing the provider. The cancel probes
+    // by run id, so it is already terminal-state aware: a concurrent commit or
+    // fence drains observers and returns without mutating durable state.
+    await this._cancelTerminalizedPendingAdmission(pending, projectedError);
+
     await this._flushUpdate(
       prev => {
         // `_flushUpdate` can replay this pure updater once after a CAS reload;
@@ -15574,14 +15691,6 @@ export class Session {
 
     if (!terminalized) return false;
     this._pendingReplacementToolSurfaces.delete(pending.runId);
-
-    // The pending row is gone — the interaction that could settle this run's
-    // deferred terminal admission no longer exists, so cancel the grant and
-    // drain its retained observers now. This runs only after `terminalized`
-    // confirmed OUR generation was removed: a winner that re-parked a newer
-    // suspension of the same run leaves `terminalized` false, and its live
-    // admission must not be cancelled.
-    await this._cancelTerminalizedPendingAdmission(pending, projectedError);
 
     if (queuedItemId !== undefined) {
       const settledReceipt = this._record.queueAdmissionReceipts?.[queuedItemId] ?? failedQueueReceipt;

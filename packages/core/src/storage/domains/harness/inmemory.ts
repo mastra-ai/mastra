@@ -1829,10 +1829,12 @@ export class InMemoryHarness extends HarnessStorage {
         continue;
       if (this.hasEarlierUnsettledTerminalIntent(current)) continue;
       if (current.attempts >= this.terminalHandoff.maxAttempts) {
+        // Release before the status mutation so a cold derive still counts
+        // this intent; otherwise the -1 below double-subtracts.
+        this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
         current.status = 'dead';
         current.deadAt = now;
         current.updatedAt = now;
-        this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
         continue;
       }
       current.status = 'claimed';
@@ -1863,12 +1865,12 @@ export class InMemoryHarness extends HarnessStorage {
     if (current.status === 'fenced') return { status: 'fenced', intent: cloneHarnessTerminal(current) };
     if (current.status === 'acked') return { status: 'duplicate', intent: cloneHarnessTerminal(current) };
     this.requireTerminalClaim(input);
+    this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
     current.status = 'acked';
     current.ackedAt = input.now ?? Date.now();
     current.claimId = undefined;
     current.claimExpiresAt = undefined;
     current.updatedAt = current.ackedAt;
-    this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
     return { status: 'acked', intent: cloneHarnessTerminal(current) };
   }
 
@@ -1885,9 +1887,9 @@ export class InMemoryHarness extends HarnessStorage {
     current.claimExpiresAt = undefined;
     current.updatedAt = now;
     if (current.attempts >= this.terminalHandoff.maxAttempts) {
+      this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
       current.status = 'dead';
       current.deadAt = now;
-      this.adjustTerminalPressure(current.harnessName, -1, -current.projection.payloadBytes);
       return { status: 'dead', intent: cloneHarnessTerminal(current) };
     }
     current.status = 'failed';
@@ -1938,11 +1940,11 @@ export class InMemoryHarness extends HarnessStorage {
       )
         continue;
       if (intent.status === 'pending' || intent.status === 'claimed' || intent.status === 'failed') {
+        this.adjustTerminalPressure(intent.harnessName, -1, -intent.projection.payloadBytes);
         intent.status = 'fenced';
         intent.claimId = undefined;
         intent.claimExpiresAt = undefined;
         intent.updatedAt = now;
-        this.adjustTerminalPressure(intent.harnessName, -1, -intent.projection.payloadBytes);
       }
     }
   }
