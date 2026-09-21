@@ -5100,7 +5100,7 @@ export class HarnessPG extends HarnessStorage {
                 )
               ORDER BY candidate.revision ASC, candidate.id ASC
               LIMIT ? FOR UPDATE SKIP LOCKED`,
-        args: [harnessName, now, now, this.terminalHandoff.maxPendingIntents],
+        args: [harnessName, now, now, input.limit],
       });
       const claimed: HarnessTerminalIntent[] = [];
       for (const raw of candidates.rows) {
@@ -5299,9 +5299,17 @@ export class HarnessPG extends HarnessStorage {
     const harnessName = this.#resolveHarnessName(input.harnessName);
     const tx = await this.#client.transaction('write');
     try {
-      const pressure = await this.#lockTerminalPressure(tx, harnessName, Date.now());
+      const result = await tx.execute({
+        sql: `SELECT pending_intents, pending_bytes
+              FROM ${TABLE_HARNESS_TERMINAL_PRESSURE}
+              WHERE id = ? LIMIT 1`,
+        args: [harnessName],
+      });
+      const row = result.rows[0] as Record<string, unknown> | undefined;
       await tx.commit();
-      return pressure;
+      return row
+        ? { pendingIntents: Number(row.pending_intents), pendingBytes: Number(row.pending_bytes) }
+        : { pendingIntents: 0, pendingBytes: 0 };
     } catch (err) {
       if (!tx.closed) await tx.rollback();
       throw err;
@@ -10099,7 +10107,6 @@ function rowToSession(row: Record<string, unknown>): SessionRecord {
     sessionIncarnation: row.session_incarnation != null ? String(row.session_incarnation) : undefined,
     resourceId: String(row.resource_id),
     threadId: String(row.thread_id),
-    ...(row.session_incarnation == null ? {} : { sessionIncarnation: String(row.session_incarnation) }),
     parentSessionId: row.parent_session_id != null ? String(row.parent_session_id) : undefined,
     origin: String(row.origin) as SessionRecord['origin'],
     subagentDepth: row.subagent_depth != null ? Number(row.subagent_depth) : undefined,

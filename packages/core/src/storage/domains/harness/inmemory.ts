@@ -4202,6 +4202,10 @@ export class InMemoryHarness extends HarnessStorage {
     this.db.harnessAttachmentBytes.clear();
     this.db.harnessAttachmentReferences.clear();
     this.db.harnessMessageResultEvidence.clear();
+    this.db.harnessTerminalAdmissions.clear();
+    this.db.harnessTerminalIntents.clear();
+    this.db.harnessTerminalPressure.clear();
+    this.db.harnessTerminalTombstones.clear();
     this.db.harnessOperationTombstones.clear();
     this.db.harnessSessionEvents.clear();
     this.db.harnessSessionRecordProjectionIntents.clear();

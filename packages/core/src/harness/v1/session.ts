@@ -94,8 +94,12 @@ import type {
   HarnessPlanTaskStatus,
   HarnessRunSummary,
   HarnessStorage,
+  HarnessTerminalAdmissionReceipt,
+  HarnessTerminalCommitReceipt,
+  HarnessTerminalExecutionGrant,
   HarnessTerminalFinalizer,
   HarnessTerminalIdentity,
+  HarnessTerminalProjection,
   HarnessTerminalResult,
   HarnessStorageAttachmentUnavailableError,
   HarnessRuntimeDependencyRefs,
@@ -8906,7 +8910,7 @@ export class Session {
     admissionIdentity: MessageAdmissionIdentity | undefined,
     admissionId: string | undefined,
     admissionHash: string | undefined,
-    executionGrant: import('../../storage/domains/harness').HarnessTerminalExecutionGrant | undefined,
+    executionGrant: HarnessTerminalExecutionGrant | undefined,
   ): HarnessTerminalIdentity {
     if (admissionIdentity === undefined || admissionId === undefined) {
       throw new HarnessTerminalHandoffValidationError(
@@ -8961,7 +8965,7 @@ export class Session {
       }
       throw terminalError;
     };
-    let receipt: import('../../storage/domains/harness').HarnessTerminalAdmissionReceipt;
+    let receipt: HarnessTerminalAdmissionReceipt;
     try {
       receipt = await this._storage.admitTerminalHandoff({
         ...identity,
@@ -9007,10 +9011,10 @@ export class Session {
     options: {
       modeId?: string;
       modelId?: string;
-      onReceipt?: (receipt: import('../../storage/domains/harness').HarnessTerminalCommitReceipt) => void;
+      onReceipt?: (receipt: HarnessTerminalCommitReceipt) => void;
       onFailure?: (error: HarnessTerminalHandoffError) => void;
     },
-  ): Promise<import('../../storage/domains/harness').HarnessTerminalCommitReceipt> {
+  ): Promise<HarnessTerminalCommitReceipt> {
     const finalizer = this._terminalFinalizer;
     if (finalizer === undefined) {
       throw new HarnessTerminalHandoffValidationError('terminalHandoff', 'finalizer is not registered');
@@ -9053,7 +9057,7 @@ export class Session {
       ...(finishReason !== undefined ? { finishReason } : {}),
       completedAt: Date.now(),
     };
-    let projection: import('../../storage/domains/harness').HarnessTerminalProjection;
+    let projection: HarnessTerminalProjection;
     try {
       projection = await finalizer.finalize({
         identity,
@@ -9083,7 +9087,7 @@ export class Session {
       createdAt: admission.createdAt,
       updatedAt: Date.now(),
     };
-    let receipt: import('../../storage/domains/harness').HarnessTerminalCommitReceipt;
+    let receipt: HarnessTerminalCommitReceipt;
     try {
       receipt = await this._storage.commitTerminalHandoff({
         admission: {

@@ -340,6 +340,137 @@ describe('native chat terminal handoff', () => {
     });
   });
 
+  it('retries a failed claim, dead-letters at maxAttempts, and releases queue pressure', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true, maxAttempts: 2 },
+    });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const input = admission();
+    await storage.writeMessageResultEvidence(pendingEvidence(input));
+    await storage.admitTerminalHandoff(input);
+    await storage.commitTerminalHandoff({
+      admission: input,
+      resultEvidence: { ...pendingEvidence(input), status: 'completed', result: { text: 'done' }, updatedAt: 3_000 },
+      terminalResult: { status: 'completed', runId: input.runId, completedAt: 3_000 },
+      projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'done' } },
+    });
+    const committed = (
+      await storage.claimTerminalIntents({
+        harnessName: 'default',
+        consumerId: 'worker-a',
+        limit: 1,
+        now: 4_000,
+        leaseMs: 10_000,
+      })
+    ).intents[0]!;
+
+    const failed = await storage.failTerminalIntent({
+      harnessName: committed.harnessName,
+      intentId: committed.id,
+      sessionId: committed.sessionId,
+      sessionIncarnation: committed.sessionIncarnation,
+      revision: committed.revision,
+      payloadHash: committed.projection.payloadHash,
+      claimId: committed.claimId!,
+      consumerId: 'worker-a',
+      now: 5_000,
+      error: { code: 'delivery_failed', message: 'sink unavailable' },
+    });
+    expect(failed.status).toBe('failed');
+    expect(failed.intent.nextAttemptAt).toBeGreaterThan(5_000);
+    expect(failed.intent.lastError).toMatchObject({ code: 'delivery_failed' });
+    await expect(storage.getTerminalQueuePressure({ harnessName: 'default' })).resolves.toMatchObject({
+      pendingIntents: 1,
+    });
+
+    const reclaimed = (
+      await storage.claimTerminalIntents({
+        harnessName: 'default',
+        consumerId: 'worker-b',
+        limit: 1,
+        now: failed.intent.nextAttemptAt!,
+        leaseMs: 10_000,
+      })
+    ).intents[0]!;
+    const dead = await storage.failTerminalIntent({
+      harnessName: reclaimed.harnessName,
+      intentId: reclaimed.id,
+      sessionId: reclaimed.sessionId,
+      sessionIncarnation: reclaimed.sessionIncarnation,
+      revision: reclaimed.revision,
+      payloadHash: reclaimed.projection.payloadHash,
+      claimId: reclaimed.claimId!,
+      consumerId: 'worker-b',
+      now: 7_000,
+      error: { code: 'delivery_failed', message: 'still unavailable' },
+    });
+    expect(dead.status).toBe('dead');
+    await expect(storage.getTerminalQueuePressure({ harnessName: 'default' })).resolves.toEqual({
+      pendingIntents: 0,
+      pendingBytes: 0,
+    });
+    await expect(
+      storage.claimTerminalIntents({ harnessName: 'default', consumerId: 'worker-c', limit: 1, now: 8_000 }),
+    ).resolves.toMatchObject({ intents: [] });
+  });
+
+  it('rejects a terminal commit when pending capacity is exhausted and lets it retry after drain', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true, maxPendingIntents: 1, maxPendingBytes: 1_000_000 },
+    });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const first = admission();
+    await storage.writeMessageResultEvidence(pendingEvidence(first));
+    await storage.admitTerminalHandoff(first);
+    await storage.commitTerminalHandoff({
+      admission: first,
+      resultEvidence: { ...pendingEvidence(first), status: 'completed', result: { text: 'one' }, updatedAt: 3_000 },
+      terminalResult: { status: 'completed', runId: first.runId, completedAt: 3_000 },
+      projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'one' } },
+    });
+
+    const second = {
+      ...admission(),
+      admissionId: 'admission-2',
+      admissionHash: 'admission-hash-2',
+      signalId: 'signal-2',
+      runId: 'run-2',
+      executionGrant: { key: 'grant-2', generation: 1 },
+    };
+    await storage.writeMessageResultEvidence(pendingEvidence(second));
+    await storage.admitTerminalHandoff(second);
+    const secondCommit = {
+      admission: second,
+      resultEvidence: {
+        ...pendingEvidence(second),
+        status: 'completed' as const,
+        result: { text: 'two' },
+        updatedAt: 3_000,
+      },
+      terminalResult: { status: 'completed' as const, runId: second.runId, completedAt: 3_000 },
+      projection: { projectionKind: 'chat.summary', projectionId: 'summary-2', payload: { text: 'two' } },
+    };
+    await expect(storage.commitTerminalHandoff(secondCommit)).rejects.toThrow('queue capacity is exhausted');
+
+    const claimed = (
+      await storage.claimTerminalIntents({ harnessName: 'default', consumerId: 'worker-a', limit: 1, now: 4_000 })
+    ).intents[0]!;
+    await storage.ackTerminalIntent({
+      harnessName: claimed.harnessName,
+      intentId: claimed.id,
+      sessionId: claimed.sessionId,
+      sessionIncarnation: claimed.sessionIncarnation,
+      revision: claimed.revision,
+      payloadHash: claimed.projection.payloadHash,
+      claimId: claimed.claimId!,
+      consumerId: 'worker-a',
+      now: 5_000,
+    });
+    await expect(storage.commitTerminalHandoff(secondCommit)).resolves.toMatchObject({ status: 'committed' });
+  });
+
   it('keeps finalization-pending typed at the public error projection', () => {
     const error = new HarnessTerminalFinalizationPendingError(4_000, new Error('provider detail'));
     expect(projectHarnessPublicError(error)).toMatchObject({

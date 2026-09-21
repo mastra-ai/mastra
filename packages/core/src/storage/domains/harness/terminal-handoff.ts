@@ -112,9 +112,9 @@ export function normalizeHarnessTerminalHandoffOption(
     maxPendingBytes: value.maxPendingBytes ?? DEFAULT_HARNESS_TERMINAL_MAX_PENDING_BYTES,
     claimLeaseMs: value.claimLeaseMs ?? DEFAULT_HARNESS_TERMINAL_CLAIM_LEASE_MS,
   };
-  for (const [name, value] of Object.entries(normalized)) {
-    if (typeof value !== 'number') continue;
-    if (!Number.isSafeInteger(value) || value <= 0) {
+  for (const [name, bound] of Object.entries(normalized)) {
+    if (typeof bound !== 'number') continue;
+    if (!Number.isSafeInteger(bound) || bound <= 0) {
       throw new RangeError(`Harness terminal ${name} must be a positive safe integer`);
     }
   }
@@ -499,7 +499,12 @@ function assertJsonValue(value: unknown, path: string): asserts value is JsonVal
   }
   if (typeof value === 'object') {
     for (const [key, entry] of Object.entries(value)) {
-      boundedId(key, `${path}.${key}`);
+      if (key.length > MAX_HARNESS_TERMINAL_ID_CHARS) {
+        throw new HarnessTerminalHandoffValidationError(
+          `${path}.${key}`,
+          `key must be at most ${MAX_HARNESS_TERMINAL_ID_CHARS} characters`,
+        );
+      }
       assertJsonValue(entry, `${path}.${key}`);
     }
     return;
