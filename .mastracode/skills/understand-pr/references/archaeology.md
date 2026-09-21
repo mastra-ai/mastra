@@ -8,8 +8,8 @@ Zero judgment in this file. These are known-working command shapes; adapt them t
 
 ```bash
 # Accepts a number, URL, or branch. Keep the first query minimal.
-gh pr view <pr> --json number,title,body,author,baseRefName,url,linkedIssues \
-  --jq '{number,title,author:.author.login,base:.baseRefName,url,issues:[.linkedIssues[]?.number],body}'
+gh pr view <pr> --json number,title,body,author,baseRefName,url,closingIssuesReferences \
+  --jq '{number,title,author:.author.login,base:.baseRefName,url,issues:[.closingIssuesReferences[]?.number],body}'
 ```
 
 `baseRefName` is the comparison branch; it may not be `main`. Extract the problem statement from `body` and ignore implementation/change-list sections until after the pre-diff model is written.
@@ -36,19 +36,21 @@ gh pr view <pr> --json commits --jq '.commits[] | "\(.oid[0:8])  \(.messageHeadl
 gh api graphql -f query='
   query($owner:String!,$repo:String!,$pr:Int!){
     repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
-      reviews(first:50){ nodes{ author{login} state submittedAt body } }
-      reviewThreads(first:100){ nodes{ isResolved isOutdated path line
-        comments(first:20){ nodes{ author{login} createdAt body } } } }
+      reviews(first:50){ pageInfo{hasNextPage endCursor} nodes{ author{login} state submittedAt body } }
+      reviewThreads(first:100){ pageInfo{hasNextPage endCursor} nodes{ isResolved isOutdated path line
+        comments(first:20){ pageInfo{hasNextPage endCursor} nodes{ author{login} createdAt body } } } }
     }}}' -F owner=<owner> -F repo=<repo> -F pr=<pr>
+# Follow pageInfo.hasNextPage/endCursor on reviews, reviewThreads, and comments until
+# exhausted — a truncated history reads as complete and re-raises omitted findings.
 
 # PR-level (issue) comments
-gh api repos/<owner>/<repo>/issues/<pr>/comments --jq '.[] | "\(.user.login) \(.created_at)\n\(.body)\n---"'
+gh api repos/<owner>/<repo>/issues/<pr>/comments --paginate --jq '.[] | "\(.user.login) \(.created_at)\n\(.body)\n---"'
 
 # CI status
 gh pr checks <pr> 2>&1 || true
 ```
 
-If GraphQL is rate-limited, the REST equivalents: `gh api repos/<owner>/<repo>/pulls/<pr>/files`, `.../pulls/<pr>/commits`, `.../pulls/<pr>/reviews`, `.../pulls/<pr>/comments` (review comments; no resolved state via REST — note that). Check quota with `gh api rate_limit --jq '.resources | {core:.core.remaining, graphql:.graphql.remaining}'`.
+If GraphQL is rate-limited, the REST equivalents (all with `--paginate`): `gh api repos/<owner>/<repo>/pulls/<pr>/files`, `.../pulls/<pr>/commits`, `.../pulls/<pr>/reviews`, `.../pulls/<pr>/comments` (review comments; no resolved state via REST — note that). Check quota with `gh api rate_limit --jq '.resources | {core:.core.remaining, graphql:.graphql.remaining}'`.
 
 ## Linked issues (step 2)
 
@@ -57,7 +59,7 @@ gh issue view <n> --json number,title,body,author,state,labels,comments \
   --jq '{number,title,author:.author.login,state,labels:[.labels[].name],body,comments:[.comments[] | {author:.author.login,body}]}'
 ```
 
-Also scan the PR body for `#NNN`, `fixes`, `closes`, `resolves` — `linkedIssues` only catches the formally linked ones.
+Also scan the PR body for `#NNN`, `fixes`, `closes`, `resolves` — `closingIssuesReferences` only catches the formally linked ones.
 
 ## Base-branch worktree before prediction
 
@@ -71,8 +73,10 @@ A clean existing base checkout is also fine. Do not open the PR head until the p
 ## Head and diff after prediction
 
 ```bash
-git fetch origin <head>
-git worktree add /tmp/review-head-<pr> origin/<head>
+# Fork heads are not on origin/<head>; fetch the PR ref and pin the worktree to the head SHA
+gh pr view <pr> --json headRefOid --jq .headRefOid   # <sha>
+git fetch origin refs/pull/<pr>/head
+git worktree add --detach /tmp/review-head-<pr> <sha>
 git -C /tmp/review-head-<pr> diff origin/<base>...HEAD --stat
 git -C /tmp/review-head-<pr> diff origin/<base>...HEAD
 ```
@@ -206,11 +210,9 @@ Name a person in "Needs you," not "someone."
 | Users       | "Half the community calls this with a string"       | `git grep -n "<api>" -- examples/ docs/`; `gh issue list --search "<api>"`; call sites in the repo                  |
 | Conventions | "We always go through the storage abstraction here" | The sibling feature; the three closest public neighbors; the package `CHANGELOG.md` for recent movement in the area |
 
-After the PR is open, `mastra_expert` can help with Mastra-specific history that remains unclear; verify its source leads. `recall` can recover prior reviews or discussion. Neither is a required review step.
-
 ## Posting (explicit approval or eligible autonomous draft review)
 
-Posting authorization, including the draft-and-owned-author exception, voice, structure, and commands live in the `gh-review` skill — load it before drafting. Reviews land as `--request-changes` or `--approve`; never `--comment`. Write the body to a file first; never inline a multi-line body in the command.
+Posting authorization, including the draft-and-owned-author exception, voice, structure, and commands live in the `gh-review2` skill — load it before drafting. Reviews land as `--request-changes` or `--approve`; never `--comment`. Write the body to a file first; never inline a multi-line body in the command.
 
 ```bash
 # Edit a posted review body (review_id: gh api repos/<owner>/<repo>/pulls/<pr>/reviews --jq '.[-1].id')

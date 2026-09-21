@@ -1,6 +1,6 @@
 ---
-name: gh-review
-description: Draft and post direct, unhedged GitHub PR reviews and issue comments — every item is a required change with a pointer and reason, PR reviews land as "request changes" or "approve" (never a bare comment), and nothing is marked optional or deferred to a follow-up. Use whenever understand-pr or understand-issue (or any review) is about to draft or post to GitHub.
+name: gh-review2
+description: Draft and post direct, unhedged GitHub PR reviews and issue comments — every item is a required change with a pointer and reason, PR reviews land as "request changes" or "approve" (never a bare comment), and nothing is marked optional or deferred to a follow-up. Use whenever understand-pr2 or understand-issue2 (or any review) is about to draft or post to GitHub.
 ---
 
 # GitHub review voice
@@ -85,10 +85,10 @@ Never `gh pr review --comment`; use `gh pr comment` for review findings only und
 gh pr review <n> --request-changes --body-file /tmp/review-body.md
 gh pr review <n> --approve --body-file /tmp/review-body.md
 
-# Inline comments attached to the request-changes review (REST). `line` is the head-side line.
+# Inline comments attached to the request-changes review (REST). `line` is the head-side line; always set `side` (`RIGHT` for added/context lines, `LEFT` for deletions), and `start_line`/`start_side` for multi-line ranges — GitHub rejects or mis-anchors comments without them.
 gh api repos/<owner>/<repo>/pulls/<n>/reviews -X POST --input - <<'EOF'
 {"event":"REQUEST_CHANGES","body":"<requests not tied to a line, or empty>",
- "comments":[{"path":"src/retry/policy.ts","line":41,"body":"Advance `attempt` before this comparison; the second call sees `attempt === max` and stops."}]}
+ "comments":[{"path":"src/retry/policy.ts","line":41,"side":"RIGHT","body":"Advance `attempt` before this comparison; the second call sees `attempt === max` and stops."}]}
 EOF
 
 # Issue diagnosis

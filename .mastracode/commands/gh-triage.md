@@ -292,7 +292,7 @@ C) Update the note, then draft a separate author-facing comment
 D) Continue Review before updating anything
 ```
 
-When updating, edit the same note comment: `Current Phase: Reviewed`, top-level `Next Step: Continue to Approve`, concise `Review` findings, exact Review confidence value (`1/5`-`5/5`), `Approve` still pending. After the note update, do not stop with a completion summary; ask whether to continue to Approve.
+When updating, edit the same note comment: `Current Phase: Reviewed`, concise `Review` findings, exact Review confidence value (`1/5`-`5/5`), `Approve` still pending. Set the top-level `Next Step` from the issue verdict: `Continue to Approve` only when the verdict is `bug`, `regression`, or `working as designed` with no required request or decision outstanding; a `cannot determine` or `needs <info>` verdict routes to further investigation or an author information request instead — do not send it to Approve. After the note update, do not stop with a completion summary; ask whether to continue to Approve.
 
 ```text
 Maintainer's Triage Note updated with Review findings.

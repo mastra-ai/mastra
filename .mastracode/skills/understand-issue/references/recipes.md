@@ -17,7 +17,7 @@ gh api repos/<owner>/<repo>/issues/<n>/timeline --paginate \
   --jq '[.[] | select(.event=="cross-referenced" and .source.issue.pull_request != null)] | length'
 
 # From a branch name
-git branch --show-current | grep -oE '[0-9]{2,}' | head -1
+git branch --show-current | grep -oE '(fix|issue|gh)-[0-9]+' | head -1   # fail and check manually if the branch has no recognized prefix or several matches
 ```
 
 ## Open the thread (after the own model, if the thread is non-empty)
@@ -56,7 +56,7 @@ git grep -n "<exact error fragment>" -- ':!**/*.test.*' ':!**/dist/**'
 git grep -n "<functionName>(" -- '*.ts' ':!**/*.test.*'
 
 # Where a config key or option is read
-git grep -nE "<optionName>\b" -- '*.ts' ':!**/*.test.*'
+git grep -nwE "<optionName>" -- '*.ts' ':!**/*.test.*'   # POSIX ERE has no \b; -w gives the word boundary
 ```
 
 ## History
@@ -100,7 +100,7 @@ Keep probes minimal and remove them. Prefer a throwaway test file alongside the 
 
 ## Posting (only with explicit user approval)
 
-Voice and post commands live in the `gh-review` skill — load it before drafting. Write the body to a file first.
+Voice and post commands live in the `gh-review2` skill — load it before drafting. Write the body to a file first.
 
 ```bash
 # Edit a posted issue comment
