@@ -9,9 +9,10 @@ import { Agent } from '../agent';
 function uiMessageTest(version: 'v1' | 'v2') {
   describe(`${version} - UIMessageWithMetadata support`, () => {
     let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
-    const mockMemory = new MockMemory();
+    let mockMemory: MockMemory;
 
     beforeEach(() => {
+      mockMemory = new MockMemory();
       if (version === 'v1') {
         dummyModel = new MockLanguageModelV1({
           doGenerate: async () => ({
