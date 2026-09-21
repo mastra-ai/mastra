@@ -30,8 +30,9 @@ function getJscodeshiftBin(): string {
 }
 
 function buildArgs(codemodPath: string, targetPath: string, options: TransformOptions): string[] {
-  // Ignoring everything under `.*/` covers `.mastra/` along with any other
-  // framework build related or otherwise intended-to-be-hidden directories.
+  // Ignore hidden directories inside the target without matching hidden
+  // directories that contain the target itself.
+  const hiddenDirectoryPattern = path.join(targetPath, '**/.*/**');
   const args = [
     '-t',
     codemodPath,
@@ -39,7 +40,7 @@ function buildArgs(codemodPath: string, targetPath: string, options: TransformOp
     '--parser',
     'tsx',
     '--ignore-pattern=**/node_modules/**',
-    '--ignore-pattern=**/.*/**',
+    `--ignore-pattern=${hiddenDirectoryPattern}`,
     '--ignore-pattern=**/dist/**',
     '--ignore-pattern=**/build/**',
     '--ignore-pattern=**/*.min.js',
