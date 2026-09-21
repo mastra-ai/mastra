@@ -253,6 +253,19 @@ minimumReleaseAgeExclude:
   # before the 1-day minimumReleaseAge window; pinned to exact versions.
   - fastify@5.12.4
   - '@blaxel/core@0.3.20'
+  - '@fastify/proxy-addr@5.1.1'
+  - 'fast-uri@3.1.8'
+  - 'fast-uri@4.2.1'
+  - 'compression@1.8.2'
+  - 'ip-address@10.7.2'
+  - 'systeminformation@5.33.13'
+  - 'tinypool@2.1.2'
+  - '@fastify/forwarded@3.0.2'
+  - 'ajv@8.20.0'
+  - jose@6.2.12
+  - brace-expansion@2.1.7 || 5.0.12 || 1.1.21
+  - better-auth@1.7.5
+  - better-auth@1.6.26
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -279,10 +292,10 @@ overrides:
   ssri: '>=6.0.2'
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
-  client-js-e2e-tests-zod-v4>zod: ^4.3.6
+  client-js-e2e-tests-zod-v4>zod: ^4.6.5
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
-  better-auth: ^1.6.23
+  better-auth: ^1.6.26
   js-yaml: ^5.2.2
   glob@<=10.5.0: 10.5.0
   body-parser@<2.3.0: 2.3.0
@@ -295,7 +308,7 @@ overrides:
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 3.36.0
-  axios@>=1.0.0 <1.16.0: 1.18.0
+  axios@>=1.0.0 <1.20.0: 1.20.0
   protobufjs@>=7.0.0 <7.6.6: 7.6.6
   protobufjs@>=8.0.0 <8.8.0: 8.8.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
@@ -303,7 +316,8 @@ overrides:
   ws@>=8.0.0 <8.21.3: 8.21.3
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.16.0: 6.16.0
-  fast-uri@<3.1.7: 3.1.7
+  fast-uri@<3.1.8: 3.1.8
+  fast-uri@>=4.0.0 <4.1.5: 4.2.1
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
@@ -341,21 +355,22 @@ overrides:
   '@babel/core@>=7.0.0 <7.29.6': 8.0.1
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   dompurify@>=3.0.0 <3.4.15: 3.4.15
-  hono@<4.13.5: 4.13.8
+  hono@<4.13.8: 4.13.8
   '@hono/node-server@<1.19.15': 1.19.15
   nanoid@>=3.0.0 <3.3.19: 3.3.19
   nanoid@>=5.0.0 <5.1.16: 5.1.16
   postcss@<8.5.23: 8.5.23
-  ip-address@<10.3.1: 10.3.1
+  ip-address@<10.7.1: 10.7.2
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
   sharp@<0.35.4: 0.35.4
   # Vanta/Dependabot 2026-09-17 (overrides allowed): critical + remaining GHSA floors
   proxy-addr@<2.0.8: 2.0.8
+  '@fastify/proxy-addr@<=5.1.0': 5.1.1
   # Round 2 2026-09-18: clear remaining Dependabot + raise Aikido-visible floors
   image-size@<=2.0.2: 2.0.4
   '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11
   vitest@>=2.1.0 <4.1.11: 4.1.11
-  jose@>=6.0.0 <6.2.12: 6.2.12
+  jose@>=4.14.0 <6.2.12: 6.2.12
   raw-body@>=2.0.0 <2.5.3: 2.5.3
   raw-body@>=3.0.0 <3.0.2: 3.0.2
   '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0
@@ -382,6 +397,15 @@ overrides:
   find-my-way@<9.7.0: 9.9.0
   adm-zip@<=0.6.0: 0.6.1
   '@tootallnate/once@<3.0.1': ^3.0.1
+  # Round 3 2026-09-21: nested-lock scrub + Vanta zero-attempt floors
+  compression@<=1.8.1: 1.8.2
+  '@fastify/busboy@<3.2.2': 3.2.2
+  '@fastify/forwarded@<=3.0.1': 3.0.2
+  systeminformation@<5.32.0: 5.33.13
+  tinypool@<2.1.2: 2.1.2
+  ajv@>=8.0.0 <8.20.0: 8.20.0
+  zod@>=4.0.0 <4.6.5: 4.6.5
+  # Note: zod@3.x has no AIKIDO patches (fixes are 4.x-only); left as residual.
   '@codemirror/lang-jinja': ^6.0.1
   'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'
   'array-buffer-byte-length': 'npm:@socketregistry/array-buffer-byte-length@^1'

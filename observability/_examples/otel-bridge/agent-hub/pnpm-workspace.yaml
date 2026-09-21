@@ -12,12 +12,16 @@ overrides:
   '@mastra/observability': link:../../../mastra
   '@mastra/otel-bridge': link:../../../otel-bridge
   '@mastra/server': link:../../../../packages/server
-  systeminformation: 5.31.0
-  ajv@<=8.18.0: 8.18.0
-  fast-uri@<3.1.7: 3.1.7
+  systeminformation: 5.33.13
+  ajv@>=8.0.0 <8.20.0: 8.20.0
+  fast-uri@<3.1.8: 3.1.8
+  fast-uri@>=4.0.0 <4.1.5: 4.2.1
+  '@fastify/proxy-addr@<=5.1.0': 5.1.1
+  proxy-addr: 2.0.8
   minimatch@<=10.2.1: 10.2.1
   '@isaacs/brace-expansion@<=5.0.1': 5.0.1
-  brace-expansion@>=4.0.0 <5.0.9: 5.0.9
+  brace-expansion@>=4.0.0 <5.0.12: 5.0.12
+  brace-expansion@>=2.0.0 <2.1.7: 2.1.7
 
   vitest@>=2.1.0 <4.1.11: 4.1.11
   '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11
