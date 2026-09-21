@@ -23,4 +23,6 @@ Eager work honours the same configured concurrency limit, but counts against it 
 
 If the model errors and a replacement attempt demonstrably starts — a retry or a fallback model — a tool that already finished has its call and result written into the conversation, so that attempt sees the work as done rather than asking for it again. A tool still running when that happens is aborted. Where no replacement attempt starts, finished work is left uncommitted.
 
+A call that suspended has no result to carry, so the discard drops its pending suspension intent. If the replacement attempt asks for that call again, the tool runs from the top and can repeat effects it performed before `suspend()`. Set `eagerToolExecution: false` where that cannot safely happen for an attempt that is later thrown away.
+
 A caller abort is the exception. It drops both the work still running and any result that finished but has not been written into the conversation yet, so a tool that completed in the moments before the abort can leave its side effect unrecorded.
