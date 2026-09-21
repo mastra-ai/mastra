@@ -112,13 +112,19 @@ export async function listPullRequestSubscriptionsForThread(
   storage: GithubSubscriptionStorage,
 ): Promise<GithubSignalSubscriptionRow[]> {
   const rows = await storage.subscriptions.listByThread(input.resourceId, input.threadId);
-  return rows.filter(
+  const matching = rows.filter(
     row =>
       row.orgId === input.orgId &&
       row.resourceId === input.resourceId &&
       row.threadId === input.threadId &&
       (row.sessionScope ?? '') === (input.sessionScope ?? ''),
   );
+  if (matching.length > 0 || input.sessionScope) return matching;
+  // A user session is addressed by its own id (its thread is its session), but
+  // its subscriptions were recorded under the Factory project that owns the
+  // repository. Answer those rows for the session that created them.
+  const owned = await storage.subscriptions.listBySession(input.resourceId);
+  return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId && !row.sessionScope);
 }
 
 export async function listPullRequestSubscriptions(
