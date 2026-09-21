@@ -3,7 +3,6 @@ import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
-import { randomUUID } from 'node:crypto';
 
 /**
  * Automatic tool resumption with `autoResumeSuspendedTools`.
@@ -62,8 +61,8 @@ describeForAllEngines(
         engine,
       });
 
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = globalThis.crypto.randomUUID();
+      const resourceId = globalThis.crypto.randomUUID();
 
       // First call: model calls the tool, which suspends for the user's name
       const { chunks } = await runLoopScenario({
@@ -174,8 +173,8 @@ describeForAllEngines(
         engine,
       });
 
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = globalThis.crypto.randomUUID();
+      const resourceId = globalThis.crypto.randomUUID();
 
       // First call: tool suspends
       const { chunks } = await runLoopScenario({

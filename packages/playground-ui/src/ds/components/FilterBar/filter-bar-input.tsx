@@ -239,7 +239,7 @@ export function FilterBarInput({
             // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
             // and the Button icon offset); the bar itself has no chrome. Focus lives on the
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
-            comboboxTriggerClass({ variant: 'default', size: 'sm' }),
+            comboboxTriggerClass({ variant: 'default', size: 'md' }),
             'w-auto cursor-text',
             'focus-within:bg-foreground/14',
             inputFocusBorderWithin,

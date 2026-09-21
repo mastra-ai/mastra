@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
@@ -254,7 +253,7 @@ async function executeAgent(
     !requestContext?.[MASTRA_THREAD_ID_KEY] &&
     typeof agent.hasOwnMemory === 'function' &&
     agent.hasOwnMemory();
-  const injectedThreadId = shouldInjectThread ? randomUUID() : undefined;
+  const injectedThreadId = shouldInjectThread ? globalThis.crypto.randomUUID() : undefined;
   const memoryOption = injectedThreadId
     ? {
         memory: {
@@ -273,7 +272,7 @@ async function executeAgent(
           },
           resource: contextResourceId
             ? String(contextResourceId)
-            : `dataset-experiment:${experimentId ?? randomUUID()}:thread:${injectedThreadId}`,
+            : `dataset-experiment:${experimentId ?? globalThis.crypto.randomUUID()}:thread:${injectedThreadId}`,
           // Suppress title generation: these threads are runner bookkeeping, so an
           // extra title LLM call per item (and per retry) is pure waste (precedent:
           // ephemeral subagent-delegation threads, issue #18738). lastMessages is
@@ -302,7 +301,7 @@ async function executeAgent(
   // consumption of repeated (toolName, args) mocks. No cost for mock-free runs.
   const mockConcurrency = shouldInterceptTools ? { toolCallConcurrency: 1 } : undefined;
 
-  const assignedTraceId = randomUUID().replaceAll('-', '');
+  const assignedTraceId = globalThis.crypto.randomUUID().replaceAll('-', '');
   onTraceIdAssigned?.(assignedTraceId);
   const tracingOptions = {
     traceId: assignedTraceId,

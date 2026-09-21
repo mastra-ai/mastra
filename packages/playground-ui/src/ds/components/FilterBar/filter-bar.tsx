@@ -43,16 +43,13 @@ function FilterBarSurface({
       data-slot="filter-bar"
       className={cn(
         // No chrome of its own: chips and the typeahead input sit directly on the parent surface.
-        // Layout: wrapping chip list | Clear. Clear stays pinned to the first line; only the
-        // list wraps.
-        'flex w-full items-start gap-1',
+        // Layout: chips, input, then Clear right beside the input — all in one wrapping row so
+        // Clear never drifts to the far edge of a wide container.
+        'flex w-full flex-wrap items-center gap-1',
         className,
       )}
-      onClick={ctx.focusInput}
     >
-      <div data-slot="filter-bar-list" className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-        {children}
-      </div>
+      {children}
       <span className="flex shrink-0 items-center empty:hidden">
         <FilterBarClear label={clearLabel} />
       </span>

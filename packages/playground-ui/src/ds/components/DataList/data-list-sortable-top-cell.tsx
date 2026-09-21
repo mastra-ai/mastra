@@ -18,6 +18,11 @@ const sortLabels = {
   desc: 'descending',
 };
 
+const sortAnimations = {
+  asc: 'animate-sort-arrow-up',
+  desc: 'animate-sort-arrow-down',
+};
+
 const sortTooltips = {
   asc: 'Asc',
   desc: 'Desc',
@@ -61,7 +66,7 @@ export function DataListSortableTopCell({
         onClick={() => onSortChange(next, sortKey)}
         className={cn('shrink-0', sort ? 'text-foreground' : 'text-muted-foreground')}
       >
-        <SortIcon />
+        <SortIcon key={sort ?? 'none'} className={sort && sortAnimations[sort]} />
       </Button>
     </DataListTopCell>
   );

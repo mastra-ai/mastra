@@ -7,7 +7,7 @@ description: "Browse NanoGPT model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/nano-gpt.svg" alt="NanoGPT logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />NanoGPT
 
-Access 575 NanoGPT models through Mastra's model router. Authentication is handled automatically using the `NANO_GPT_API_KEY` environment variable.
+Access 576 NanoGPT models through Mastra's model router. Authentication is handled automatically using the `NANO_GPT_API_KEY` environment variable.
 
 Learn more in the [NanoGPT documentation](https://docs.nano-gpt.com).
 
@@ -4718,7 +4718,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
     "contextWindow": 41000,
     "maxOutput": 32768,
@@ -4879,7 +4879,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 131072,
     "maxOutput": 32768,
     "inputCost": 0.3,
-    "outputCost": 1.2
+    "outputCost": 1.9
   },
   {
     "model": "nano-gpt/qwen/qwen3-vl-235b-a22b-thinking",
@@ -5266,6 +5266,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.5
   },
   {
+    "model": "nano-gpt/qwen/qwen3.8-27b-hemmingway",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.25,
+    "outputCost": 1.5
+  },
+  {
     "model": "nano-gpt/qwen/qwen3.8-27b-obliterated",
     "imageInput": true,
     "audioInput": false,
@@ -5406,8 +5418,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 32768,
     "maxOutput": 32768,
-    "inputCost": 0.5,
-    "outputCost": 1.2
+    "inputCost": 0.3,
+    "outputCost": 1.9
   },
   {
     "model": "nano-gpt/Qwen3.5-27B-BlueStar-v3-Derestricted",
