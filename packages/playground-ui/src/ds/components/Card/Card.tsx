@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
   // Base styles
-  'rounded-lg transition-all duration-normal ease-out-custom motion-reduce:transition-none',
+  'duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none',
   {
     variants: {
       appearance: {
