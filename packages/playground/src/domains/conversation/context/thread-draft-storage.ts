@@ -76,10 +76,10 @@ function transaction<T>(operation: (store: DraftStore) => Promise<T>): Promise<T
         }
       },
     });
-    const tx = db.transaction(['drafts'], 'readwrite');
+    const tx = db.transaction('drafts', 'readwrite');
     const done = tx.done;
     try {
-      const value = await operation(tx.objectStore('drafts'));
+      const value = await operation(tx.store);
       await done;
       return value;
     } catch (error) {
