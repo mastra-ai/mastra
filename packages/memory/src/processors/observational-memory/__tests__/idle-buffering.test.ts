@@ -80,6 +80,7 @@ function createMockOM(opts: { asyncEnabled: boolean; bufferOnIdle?: boolean; uno
     getOrCreateRecord: vi.fn(async () => record),
     getUnobservedMessages: vi.fn(() => opts.unobservedMessages ?? []),
     persistMessages: vi.fn(async () => {}),
+    persistClientInputMessages: vi.fn(async () => {}),
     buffer: vi.fn(async () => ({ buffered: true, record })),
     trackBackgroundWork: vi.fn(<T>(work: Promise<T>) => work),
     scope: 'thread' as const,
@@ -332,8 +333,8 @@ describe('turn.end() idle buffering', () => {
 
     await turn.end();
 
-    expect(mockOM.persistMessages).toHaveBeenCalledTimes(1);
-    expect(mockOM.persistMessages).toHaveBeenCalledWith([...unsavedInput, ...unsavedOutput], threadId, resourceId);
+    expect(mockOM.persistClientInputMessages).toHaveBeenCalledTimes(1);
+    expect(mockOM.persistClientInputMessages).toHaveBeenCalledWith(unsavedInput, unsavedOutput, threadId, resourceId);
     expect(mockOM.buffer).toHaveBeenCalledTimes(1);
   });
 
@@ -421,7 +422,12 @@ describe('22573 idle', () => {
       const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
       await turn.start();
       await turn.end();
-      expect(mockOM.persistMessages).toHaveBeenCalledWith(list.get.all.db(), 'idle-buffer-thread', undefined);
+      expect(mockOM.persistClientInputMessages).toHaveBeenCalledWith(
+        list.get.all.db(),
+        [],
+        'idle-buffer-thread',
+        undefined,
+      );
       if (expected) {
         expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: messages.slice(0, expected) }));
       } else {
@@ -455,8 +461,9 @@ describe('22573 idle', () => {
         await turn.start();
         await turn.end();
         if (source !== 'memory') {
-          expect(mockOM.persistMessages).toHaveBeenCalledWith(
-            list.get.all.db(),
+          expect(mockOM.persistClientInputMessages).toHaveBeenCalledWith(
+            source === 'input' ? list.get.all.db() : [],
+            source === 'response' ? list.get.all.db() : [],
             'idle-buffer-thread',
             'idle-buffer-resource',
           );
