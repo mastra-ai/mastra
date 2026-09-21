@@ -15,10 +15,10 @@ function StatusIcon({ status }: WorkflowRunStatusIconProps) {
     case 'failed':
       return <X className="text-accent2" />;
     case 'canceled':
-      return <CircleSlash className="text-neutral3" />;
+      return <CircleSlash className="text-muted-foreground" />;
     case 'pending':
     case 'waiting':
-      return <Clock className="text-neutral3" />;
+      return <Clock className="text-muted-foreground" />;
     case 'paused':
       return <Pause className="text-badge-yellow-fg" />;
     case 'suspended':
@@ -26,7 +26,7 @@ function StatusIcon({ status }: WorkflowRunStatusIconProps) {
     case 'success':
       return <Check className="text-accent1" />;
     default:
-      return <Clock className="text-neutral3" />;
+      return <Clock className="text-muted-foreground" />;
   }
 }
 

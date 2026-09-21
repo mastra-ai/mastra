@@ -89,12 +89,12 @@
   background: var(--surface2);
 }
 
-.tabbed-container-data-list .text-neutral2 {
-  color: var(--neutral3);
+.tabbed-container-data-list .text-placeholder {
+  color: var(--muted-foreground);
 }
 
-.tabbed-container-data-list .data-list-top .text-neutral2 {
-  color: var(--neutral5);
+.tabbed-container-data-list .data-list-top .text-placeholder {
+  color: var(--foreground);
 }
 
 [data-slot='tabbed-container-search'] {

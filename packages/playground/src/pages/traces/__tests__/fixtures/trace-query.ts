@@ -28,6 +28,14 @@ export const traceQueryRegionValues: GetTraceQueryValuesResponse = {
   valuesTruncated: false,
 };
 
+export const traceQuerySpanModelValues: GetTraceQueryValuesResponse = {
+  values: [
+    { value: 'gpt-4o', count: 20 },
+    { value: 'claude-sonnet-4', count: 5 },
+  ],
+  valuesTruncated: false,
+};
+
 export const traceQueryPage: Awaited<ReturnType<MastraClient['queryTraces']>> = {
   traces: [
     {

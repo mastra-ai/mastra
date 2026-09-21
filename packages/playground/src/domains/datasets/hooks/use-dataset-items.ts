@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
@@ -22,18 +23,26 @@ const PER_PAGE = 10;
  * Hook to list items in a dataset with infinite scroll pagination and optional search
  * @param version - Optional version timestamp to view historical snapshot
  */
-export const useDatasetItems = (datasetId: string, search?: string, version?: number | null) => {
+export type DatasetItemsOrderBy = NonNullable<NonNullable<Parameters<MastraClient['listDatasetItems']>[1]>['orderBy']>;
+
+export const useDatasetItems = (
+  datasetId: string,
+  search?: string,
+  version?: number | null,
+  orderBy?: DatasetItemsOrderBy,
+) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
-    queryKey: ['dataset-items', datasetId, search, version],
+    queryKey: ['dataset-items', datasetId, search, version, orderBy],
     queryFn: async ({ pageParam }) => {
       const res = await client.listDatasetItems(datasetId, {
         page: pageParam,
         perPage: PER_PAGE,
         search: search || undefined,
         version: version || undefined,
+        orderBy,
       });
       return res;
     },
@@ -60,7 +69,7 @@ export const useDatasetItems = (datasetId: string, search?: string, version?: nu
     if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
       void query.fetchNextPage();
     }
-  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
+  }, [isEndOfListInView, query]);
 
   return { ...query, data: items, total, setEndOfListElement };
 };

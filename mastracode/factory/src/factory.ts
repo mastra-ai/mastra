@@ -3,9 +3,9 @@
  *
  * The consumer's deploy entry constructs deployment-specific config instances
  * (auth adapter, pubsub) and passes them here explicitly. The only provider
- * defaults constructed here are Platform GitHub, incident.io, and Linear
- * integrations when Platform credentials exist and the caller did not provide
- * those integrations.
+ * defaults constructed here are Platform GitHub, GitLab, Jira, incident.io, and
+ * Linear integrations when Platform credentials exist and the caller did not
+ * provide those integrations.
  *
  * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -52,9 +52,12 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
-import { isValidGitRef } from './integrations/github/sandbox.js';
+import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
+import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
+import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integration.js';
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
+import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
@@ -73,12 +76,13 @@ import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
+import { isValidGitRef } from './sandbox/git-ref.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
-import { refreshFactorySessionMemorySettings } from './session/factory-session.js';
+import { createSourceControlSessionLookup, refreshFactorySessionMemorySettings } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
@@ -86,6 +90,7 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
+import { createSourceControlTools } from './session/source-control-tools.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -204,8 +209,11 @@ export interface MastraFactoryConfig {
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
    * agent/session tools, intake, source control, and diagnostics — into the
-   * system. When Platform credentials are configured, missing `github` and
-   * `linear` integrations default to their Platform-backed implementations.
+   * system. When Platform credentials are configured, missing `github`,
+   * `gitlab`, and `linear` integrations default to their Platform-backed
+   * implementations. Missing `jira` and `incidentio` integrations also default
+   * to their Platform-backed implementations, which discover visible `jira` and
+   * `incident-io` connections at runtime.
    */
   integrations?: FactoryIntegration[];
   /**
@@ -400,11 +408,14 @@ export class MastraFactory {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
       }
-      if (
-        process.env.MASTRA_INCIDENT_IO_CONNECTION_ID?.trim() &&
-        !integrations.some(integration => integration.id === 'incidentio')
-      ) {
+      if (!integrations.some(integration => integration.id === 'incidentio')) {
         integrations.push(new PlatformIncidentioIntegration());
+      }
+      if (!integrations.some(integration => integration.id === 'jira')) {
+        integrations.push(new PlatformJiraIntegration());
+      }
+      if (!integrations.some(integration => integration.id === 'gitlab')) {
+        integrations.push(new PlatformGitLabIntegration());
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
@@ -547,17 +558,27 @@ export class MastraFactory {
     registerCustomProvidersSource({ storage: customProvidersStorage, authEnabled: Boolean(auth) });
 
     for (const integration of integrations) {
+      const integrationSourceControl = integration.versionControl
+        ? sourceControlStorage.forIntegration(integration.id)
+        : undefined;
       integration.initialize?.({
         storage: integrationStorage.forIntegration(integration.id),
         projects: factoryProjectsStorage,
         auth: routeAuth,
+        intake: intakeStorage,
+        ...(integrationSourceControl ? { sourceControl: integrationSourceControl } : {}),
       });
-      if (integration.versionControl) {
-        integration.versionControl.initialize({
-          storage: sourceControlStorage.forIntegration(integration.id),
-        });
+      if (integration.versionControl && integrationSourceControl) {
+        integration.versionControl.initialize({ storage: integrationSourceControl });
       }
     }
+    // Keep the legacy GitHub partition readable even when no GitHub
+    // integration is registered; existing sessions may outlive a config change.
+    const sourceControlIntegrationIds = [
+      ...new Set(['github', ...integrations.filter(integration => integration.versionControl).map(({ id }) => id)]),
+    ];
+    const sourceControlHandles = sourceControlIntegrationIds.map(id => sourceControlStorage.forIntegration(id));
+    const sourceControlSessions = createSourceControlSessionLookup(sourceControlHandles);
 
     // Every integration uses generic integration storage. Version-control
     // providers additionally require the source-control storage domain. Readiness
@@ -585,6 +606,9 @@ export class MastraFactory {
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
+    const gitlabIntegration = integrations.find(
+      integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
+    );
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
@@ -593,14 +617,24 @@ export class MastraFactory {
           })
         : undefined;
     const retireTerminalSessions =
-      sessionRetirement && githubIntegration && workItemsReady
-        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) =>
-            sessionRetirement.retireWorkItemSessions({
-              workItems: workItemsStorage,
-              sourceControl: sourceControlStorage.forIntegration(githubIntegration.id),
-              orgId,
-              workItemId,
-            })
+      sessionRetirement && workItemsReady
+        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) => {
+            const item = await workItemsStorage.get({ orgId, id: workItemId });
+            if (!item) return;
+            const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))];
+            await Promise.all(
+              sessionIds.map(async sessionId => {
+                const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
+                if (!sourceControl) return;
+                await sessionRetirement.retireSession({
+                  sourceControl,
+                  orgId,
+                  sessionId,
+                  deleteSession: false,
+                });
+              }),
+            );
+          }
         : undefined;
     // Terminal-stage cleanup: ingest any trailing tool results from the item's
     // bound threads, then revoke the bindings so completed items leave the
@@ -678,28 +712,65 @@ export class MastraFactory {
       versionControlIntegrationIds: integrations
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
-      ...(githubIntegration
+      ...(githubIntegration || gitlabIntegration
         ? {
-            resolveRepository: async ({ integrationId, orgId, installationId, externalId, slug }) => {
-              if (integrationId !== githubIntegration.id) return null;
-              const installation = await githubIntegration.sourceControlStorage.installations.get({
-                orgId,
-                id: installationId,
-              });
+            resolveRepository: async ({ integrationId, orgId, userId, installationId, externalId, slug }) => {
+              if (githubIntegration && integrationId === githubIntegration.id) {
+                const installation = await githubIntegration.sourceControlStorage.installations.get({
+                  orgId,
+                  id: installationId,
+                });
+                if (!installation) return null;
+                const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
+                const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
+                if (!selected) return null;
+                return githubIntegration.sourceControlStorage.repositories.upsert({
+                  orgId,
+                  input: {
+                    installationId,
+                    externalId,
+                    slug: selected.fullName,
+                    defaultBranch: isValidGitRef(selected.defaultBranch) ? selected.defaultBranch : 'main',
+                    providerMetadata: { private: selected.private, owner: selected.owner },
+                  },
+                });
+              }
+
+              if (
+                !gitlabIntegration?.intake ||
+                !gitlabIntegration.versionControl ||
+                integrationId !== gitlabIntegration.id
+              )
+                return null;
+              const handle = sourceControlStorage.forIntegration(gitlabIntegration.id);
+              const installation = await handle.installations.get({ orgId, id: installationId });
               if (!installation) return null;
-              const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
-              const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
+              const sources = await gitlabIntegration.intake.listSources({ orgId, userId });
+              const selected = sources.find(
+                source =>
+                  source.name === slug &&
+                  typeof source.metadata?.projectId === 'string' &&
+                  source.metadata.projectId === externalId &&
+                  source.metadata.connectionId === installation.externalId,
+              );
               if (!selected) return null;
-              return githubIntegration.sourceControlStorage.repositories.upsert({
+              const [repository] = await gitlabIntegration.versionControl.registerRepositories({
                 orgId,
-                input: {
-                  installationId,
-                  externalId,
-                  slug: selected.fullName,
-                  defaultBranch: isValidGitRef(selected.defaultBranch) ? selected.defaultBranch : 'main',
-                  providerMetadata: { private: selected.private, owner: selected.owner },
-                },
+                installationId,
+                repositories: [
+                  {
+                    externalId,
+                    slug,
+                    defaultBranch:
+                      typeof selected.metadata?.defaultBranch === 'string' &&
+                      isValidGitRef(selected.metadata.defaultBranch)
+                        ? selected.metadata.defaultBranch
+                        : 'main',
+                    metadata: selected.metadata,
+                  },
+                ],
               });
+              return repository ?? null;
             },
           }
         : {}),
@@ -764,6 +835,17 @@ export class MastraFactory {
     const toolIntegrations = integrationRegistrations.filter(
       ({ integration }) => integration.agentTools || integration.sessionTools,
     );
+    const sourceControlToolProviders = integrations.flatMap(integration =>
+      integration.versionControl
+        ? [
+            {
+              id: integration.id,
+              versionControl: integration.versionControl,
+              storage: sourceControlStorage.forIntegration(integration.id),
+            },
+          ]
+        : [],
+    );
 
     // Build the real production controller (agents, modes, tools, memory, OM,
     // MCP, providers) — identical to the terminal app. Agent state lives in
@@ -776,7 +858,18 @@ export class MastraFactory {
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
-          ...(githubIntegration ? { github: githubIntegration } : {}),
+          sourceControls: integrations.flatMap(integration =>
+            integration.versionControl
+              ? [
+                  {
+                    id: integration.id,
+                    versionControl: integration.versionControl,
+                    storage: sourceControlStorage.forIntegration(integration.id),
+                    ...(integration.id === 'github' && githubIntegration ? { github: githubIntegration } : {}),
+                  },
+                ]
+              : [],
+          ),
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
@@ -814,7 +907,9 @@ export class MastraFactory {
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
         ...(vector ? { vector } : {}),
-        ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
+        ...(toolIntegrations.length > 0 ||
+        sourceControlToolProviders.length > 0 ||
+        (workItemsStorage && transitionService)
           ? {
               extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
                 const tools: IntegrationTools = {};
@@ -831,6 +926,16 @@ export class MastraFactory {
                     tools[name] = tool;
                   }
                 };
+                if (storage.isDomainReady('source-control')) {
+                  mergeTools(
+                    'source-control',
+                    createSourceControlTools({
+                      requestContext,
+                      providers: sourceControlToolProviders,
+                      audit: auditDomain,
+                    }),
+                  );
+                }
                 if (workItemsStorage && transitionService) {
                   mergeTools(
                     'factory',
@@ -844,9 +949,7 @@ export class MastraFactory {
                       // Only offered while the source-control domain is ready — a
                       // throwing lookup would abort recovery's catch block and also
                       // skip the metadata baseRef fallback.
-                      ...(storage.isDomainReady('source-control')
-                        ? { sessions: sourceControlStorage.forIntegration('github').sessions }
-                        : {}),
+                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
                   // The supervisor session has no seat, so it never gets the
@@ -1031,6 +1134,15 @@ export class MastraFactory {
           ...projectRoutes.routes(),
           ...auditDomain.routes(),
           ...commentsDomain.routes(),
+          // Connect/reconnect session minting for Platform-managed providers.
+          // Server-side because only the deploy holds Platform machine
+          // credentials; the SPA runs the OAuth popup with the minted token.
+          ...(hasPlatformCredentials()
+            ? buildPlatformConnectRoutes({
+                auth: routeAuth,
+                client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+              })
+            : []),
         ],
         buildServerConfig: () => {
           const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
@@ -1089,16 +1201,16 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {
         filesystem: filesystemStorage,
-        sourceControl: sourceControlStorage.forIntegration('github'),
+        sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionFirstMessage(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
+        sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionFirstExec(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
+        sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionThreadTitle(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
+        sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionRunEnd(session, { audit: auditDomain });
     });
@@ -1126,7 +1238,7 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionMemorySettings(session, {
-          sourceControl: sourceControlStorage.forIntegration('github'),
+          sourceControl: { sessions: sourceControlSessions },
           projects: factoryProjectsStorage,
           memorySettings: memorySettingsStorage,
         }),
@@ -1138,7 +1250,7 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionModelPack(session, {
-          sourceControl: sourceControlStorage.forIntegration('github'),
+          sourceControl: { sessions: sourceControlSessions },
           workItems: workItemsStorage,
           modelPacks: modelPacksStorage,
         }),
@@ -1177,6 +1289,7 @@ export class MastraFactory {
           factoryStorage: storage,
           integrationStorage,
           sourceControlStorage,
+          integrations: integrationRegistrations,
           configVersion,
           boardRegistry: this.#boards,
           factoryReady,
@@ -1208,6 +1321,7 @@ export class MastraFactory {
           factoryStorage: storage,
           integrationStorage,
           sourceControlStorage,
+          integrations: integrationRegistrations,
           configVersion,
           boardRegistry: this.#boards,
           factoryReady,
@@ -1251,6 +1365,7 @@ export class MastraFactory {
                 factoryStorage: storage,
                 integrationStorage,
                 sourceControlStorage,
+                integrations: integrationRegistrations,
                 configVersion,
                 boardRegistry: this.#boards,
                 factoryReady,

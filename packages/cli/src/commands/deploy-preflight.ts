@@ -455,7 +455,9 @@ function checkEnvVarNames(
           // Only the host is echoed — connection URLs can carry credentials,
           // and preflight warnings end up in CI logs.
           message: `${name} in the env file being deployed points at localhost (${localhostHostOf(envVars[name]!)}) — the deployed server won't be able to reach it.`,
-          fix: `Point ${name} at a hosted ${autofix.provider} instance, or let \`mastra deploy\` provision a managed ${autofix.provider} for this environment.`,
+          fix: SELF_SERVE_DB_KINDS.has(autofix.provider)
+            ? `Point ${name} at a hosted ${autofix.provider} instance, or let \`mastra deploy\` provision a managed ${autofix.provider} for this environment.`
+            : `Point ${name} at a hosted ${autofix.provider} instance.`,
           autofix,
         });
       }
@@ -482,7 +484,9 @@ function checkEnvVarNames(
         code: 'MISSING_ENV_VAR',
         severity: 'warning',
         message: `Build references ${name} but the env file being deployed does not provide it.`,
-        fix: `Add ${name} to your env file, or let \`mastra deploy\` provision a managed ${autofix.provider} for this environment.`,
+        fix: SELF_SERVE_DB_KINDS.has(autofix.provider)
+          ? `Add ${name} to your env file, or let \`mastra deploy\` provision a managed ${autofix.provider} for this environment.`
+          : `Add ${name} to your env file.`,
         autofix,
       });
     } else {
@@ -580,7 +584,7 @@ async function checkWorkersNeedRedis(
       severity: 'warning',
       message:
         'Background tasks are enabled in this project, but the deploy env has no REDIS_URL — the platform needs Redis to coordinate the worker service with the API.',
-      fix: 'Add REDIS_URL to your env file, or let `mastra deploy` provision a managed redis for this environment.',
+      fix: 'Add REDIS_URL to your env file.',
       autofix,
     },
   ];
@@ -645,6 +649,15 @@ export function dbCreateCommandFor(envVarName: string, environmentName?: string)
  * Returns undefined for env vars that don't map to a provider — those still
  * get a text-only fix.
  */
+/**
+ * Kinds users can self-serve today via `mastra env db create`. Managed redis
+ * exists behind a platform feature flag but isn't released yet, so printed
+ * remediation text must not advertise it. The structured `redis` autofix is
+ * still emitted: `maybeAutoProvisionDatabases` consults the platform's
+ * per-org provider catalog before offering it, so gated orgs never see it.
+ */
+export const SELF_SERVE_DB_KINDS: ReadonlySet<DatabaseKind> = new Set(['turso', 'neon']);
+
 export function dbAutofixFor(envVarName: string): PreflightAutofix | undefined {
   for (const [kind, names] of Object.entries(DB_ENV_VAR_NAMES) as [DatabaseKind, string[]][]) {
     if (names.includes(envVarName)) {
@@ -732,12 +745,13 @@ async function checkLocalStoragePaths(
           code: 'LOCAL_STORAGE_PATH',
           severity: 'error',
           message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-          fix: autofix
-            ? [
-                `Run \`${dbCreateCommandFor(d.guardedBy, environmentName)}\` to attach a managed database`,
-                `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
-              ]
-            : envVarFix,
+          fix:
+            autofix && SELF_SERVE_DB_KINDS.has(autofix.provider)
+              ? [
+                  `Run \`${dbCreateCommandFor(d.guardedBy, environmentName)}\` to attach a managed database`,
+                  `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
+                ]
+              : envVarFix,
           autofix,
         });
       }
@@ -749,13 +763,14 @@ async function checkLocalStoragePaths(
         code: 'LOCAL_STORAGE_PATH',
         severity: 'error',
         message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-        fix: autofix
-          ? [
-              `Run \`${dbCreateCommandFor(d.guardedBy, environmentName)}\` to attach a managed database`,
-              `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
-              platformFix,
-            ]
-          : [envVarFix, platformFix],
+        fix:
+          autofix && SELF_SERVE_DB_KINDS.has(autofix.provider)
+            ? [
+                `Run \`${dbCreateCommandFor(d.guardedBy, environmentName)}\` to attach a managed database`,
+                `Or ${envVarFix.charAt(0).toLowerCase()}${envVarFix.slice(1)}`,
+                platformFix,
+              ]
+            : [envVarFix, platformFix],
         autofix,
       });
     } else {

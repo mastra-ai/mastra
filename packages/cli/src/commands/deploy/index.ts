@@ -203,7 +203,7 @@ export async function resolveWorkersDeployMode(input: {
   if (input.workersOption === 'dedicated') {
     if (!input.redisRequirementMet) {
       throw new WorkersRedisRequirementError(
-        'A dedicated workers service requires Redis for coordination (pub/sub), but the deploy env has no usable REDIS_URL. Add REDIS_URL to your env file, or run `mastra deploy` without --workers and accept the managed Redis attach when prompted.',
+        'A dedicated workers service requires Redis for coordination (pub/sub), but the deploy env has no usable REDIS_URL. Add REDIS_URL to your env file.',
       );
     }
     return 'dedicated';

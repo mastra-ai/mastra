@@ -43,7 +43,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
       <div className="grid gap-x-24 lg:grid-cols-[1fr_1fr]">
         <div className="grid">
           <p
-            className={cn('mb-4 text-ui-md text-neutral4 mt-2', {
+            className={cn('mb-4 text-ui-md text-muted-foreground mt-2', {
               'bg-surface4 rounded-lg ': isLoading,
             })}
           >
@@ -58,10 +58,10 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
               </div>
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
-                  <GitBranchIcon className="text-neutral4 h-[1em] w-[1em]" />
-                  <span className="text-ui-md text-neutral5 font-medium">A new Git branch will be created</span>
+                  <GitBranchIcon className="text-muted-foreground h-[1em] w-[1em]" />
+                  <span className="text-ui-md text-foreground font-medium">A new Git branch will be created</span>
                 </div>
-                <div className="text-ui-sm text-neutral4 space-y-1">
+                <div className="text-ui-sm text-muted-foreground space-y-1">
                   <div>
                     <span className="font-medium">Branch name:</span>{' '}
                     <code className="bg-surface3 text-ui-sm rounded px-1.5 py-0.5 font-mono">{branchName}</code>
@@ -79,7 +79,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-neutral3 text-ui-md hover:text-neutral5 mt-auto flex items-center gap-2"
+              className="text-muted-foreground text-ui-md hover:text-foreground mt-auto flex items-center gap-2"
             >
               <GithubIcon />
               {githubUrl?.split('/')?.pop()}

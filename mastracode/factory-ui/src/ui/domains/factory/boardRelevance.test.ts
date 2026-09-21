@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { issueCandidate, linearCandidate, pullRequestCandidate } from './boardCandidates';
+import {
+  gitlabCandidate,
+  incidentioCandidate,
+  issueCandidate,
+  jiraCandidate,
+  linearCandidate,
+  pullRequestCandidate,
+} from './boardCandidates';
 import {
   boardLabels,
   boardLabelsFromQuery,
@@ -80,6 +87,13 @@ describe('board relevance', () => {
     expect([...relevance['review-requested']]).toEqual(['github:monalisa']);
   });
 
+  it('attributes GitLab MR authors, assignees, and requested reviewers to GitLab identities', () => {
+    const relevance = workItemRelevance({ ...item, source: 'gitlab-pr' }, undefined);
+    expect([...relevance.authored]).toEqual(['gitlab:octocat']);
+    expect([...relevance.assigned]).toEqual(['gitlab:hubot']);
+    expect([...relevance['review-requested']]).toEqual(['gitlab:monalisa']);
+  });
+
   it('matches any selected relevance type for the selected teammate', () => {
     expect(workItemMatchesRelevance(item, activityPage, 'github:octocat', new Set(['authored']))).toBe(true);
     expect(workItemMatchesRelevance(item, activityPage, 'github:octocat', new Set(['assigned']))).toBe(false);
@@ -89,7 +103,7 @@ describe('board relevance', () => {
     expect(workItemMatchesRelevance(item, activityPage, undefined, new Set())).toBe(true);
   });
 
-  it('filters intake candidates by GitHub and Linear provider metadata', () => {
+  it('filters intake candidates by GitHub, GitLab, and Linear provider metadata', () => {
     const githubIssue = issueCandidate({
       number: 7,
       title: 'Fix login bug',
@@ -113,6 +127,24 @@ describe('board relevance', () => {
       createdAt: '2026-08-01T09:00:00.000Z',
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
+    const gitlab = gitlabCandidate({
+      id: '7',
+      externalId: 'gitlab-issue:7',
+      identifier: 'group/project#7',
+      title: 'Match provider metadata',
+      url: 'https://gitlab.com/group/project/-/issues/7',
+      state: 'opened',
+      stateType: 'unstarted',
+      priority: null,
+      assignee: 'Grace Hopper',
+      assignees: ['Grace Hopper', 'Katherine Johnson'],
+      author: 'Ada Lovelace',
+      source: 'group/project',
+      sourceId: 'gitlab-project:7',
+      labels: [],
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+    });
     const linear = linearCandidate({
       id: 'linear-1',
       identifier: 'ENG-12',
@@ -129,10 +161,51 @@ describe('board relevance', () => {
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
 
+    const jira = jiraCandidate({
+      id: 'jira-1',
+      identifier: 'ENG-13',
+      title: 'Filter the board from Jira',
+      url: 'https://acme.atlassian.net/browse/ENG-13',
+      state: 'To Do',
+      stateType: 'unstarted',
+      priorityLabel: 'High',
+      assignee: 'Grace Hopper',
+      author: 'Ada Lovelace',
+      project: 'ENG',
+      site: 'acme.atlassian.net',
+      labels: [],
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+      sourceId: '10001',
+    });
+
     expect(candidateMatchesRelevance(githubIssue, 'github:hubot', new Set(['assigned']))).toBe(true);
     expect(candidateMatchesRelevance(githubPr, 'github:monalisa', new Set(['review-requested']))).toBe(true);
+    expect(candidateMatchesRelevance(gitlab, 'gitlab:ada lovelace', new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(gitlab, 'gitlab:katherine johnson', new Set(['assigned']))).toBe(true);
     expect(candidateMatchesRelevance(linear, 'linear:ada lovelace', new Set(['authored']))).toBe(true);
     expect(candidateMatchesRelevance(linear, 'linear:grace hopper', new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(jira, 'jira:ada lovelace', new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(jira, 'jira:grace hopper', new Set(['assigned']))).toBe(true);
+
+    const incidentio = incidentioCandidate({
+      id: 'incidentio:follow-up:01HFOLLOWUP',
+      identifier: 'INC-42',
+      title: 'Add database failover alert',
+      url: 'https://app.incident.io/org/follow-ups/01HFOLLOWUP',
+      state: 'outstanding',
+      stateType: 'unstarted',
+      priorityLabel: 'Urgent',
+      assignee: 'Grace Hopper',
+      author: 'Ada Lovelace',
+      incident: 'incident-1',
+      labels: [],
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+      sourceId: 'incidentio:follow-ups',
+    });
+    expect(candidateMatchesRelevance(incidentio, 'incidentio:ada lovelace', new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(incidentio, 'incidentio:grace hopper', new Set(['assigned']))).toBe(true);
   });
 
   it('builds a named teammate list from auth, audit, and provider metadata without raw Factory ids', () => {

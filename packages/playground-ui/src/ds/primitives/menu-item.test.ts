@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { menuItemClass, menuItemDestructiveClass, menuPopupClass } from './menu-item';
+import { menuItemClass, menuItemDestructiveClass, menuPopupClass, menuSearchClasses } from './menu-item';
 
 describe('menuItemClass', () => {
   it('inherits the Button ghost/md size rhythm', () => {
@@ -27,9 +27,18 @@ describe('menuItemClass', () => {
   });
 
   it('exposes a destructive variant', () => {
-    expect(menuItemDestructiveClass).toContain('text-accent2');
-    expect(menuItemDestructiveClass).toContain('data-highlighted:bg-accent2/10');
+    expect(menuItemDestructiveClass).toContain('text-destructive');
+    expect(menuItemDestructiveClass).toContain('data-highlighted:bg-destructive/20');
     expect(menuItemDestructiveClass).toContain('rounded-lg');
+  });
+});
+
+describe('menuSearchClasses', () => {
+  it('shows focus on the search row without boxing the input', () => {
+    expect(menuSearchClasses.container).toContain('focus-within:bg-foreground/4');
+    expect(menuSearchClasses.container).toContain('border-b border-border');
+    expect(menuSearchClasses.container).not.toContain('focus-within:border');
+    expect(menuSearchClasses.input).not.toContain('focus-visible:outline');
   });
 });
 

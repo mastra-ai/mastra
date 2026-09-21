@@ -71,7 +71,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
         <button
           type="button"
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-ui-sm text-neutral6',
+            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-ui-sm text-foreground',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
           )}
         >
@@ -132,7 +132,9 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               }}
             />
           </div>
-          <div className="text-ui-xs text-neutral3 w-12 text-right tabular-nums">{formatDuration(span.latency)}</div>
+          <div className="text-ui-xs text-muted-foreground w-12 text-right tabular-nums">
+            {formatDuration(span.latency)}
+          </div>
         </HoverCardTrigger>
         <SpanTimingHoverCard span={span} startShiftMs={startShiftMs} />
       </HoverCard>

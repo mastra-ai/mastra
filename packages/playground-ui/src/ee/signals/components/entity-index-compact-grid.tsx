@@ -51,16 +51,16 @@ function EntityIndexCompactCard({
         </div>
         <dl id={detailsId} className="grid grid-cols-3 gap-3">
           <div>
-            <dt className="text-ui-xs text-neutral3">Traces</dt>
-            <dd className="text-ui-sm text-neutral5">{metadata.traceCount}</dd>
+            <dt className="text-ui-xs text-muted-foreground">Traces</dt>
+            <dd className="text-ui-sm text-foreground">{metadata.traceCount}</dd>
           </div>
           <div>
-            <dt className="text-ui-xs text-neutral3">Signals set</dt>
-            <dd className="text-ui-sm text-neutral5">{metadata.signalsSet}</dd>
+            <dt className="text-ui-xs text-muted-foreground">Signals set</dt>
+            <dd className="text-ui-sm text-foreground">{metadata.signalsSet}</dd>
           </div>
           <div>
-            <dt className="text-ui-xs text-neutral3">Updated</dt>
-            <dd className="text-ui-sm text-neutral5" title={entity.updatedAt}>
+            <dt className="text-ui-xs text-muted-foreground">Updated</dt>
+            <dd className="text-ui-sm text-foreground" title={entity.updatedAt}>
               {metadata.updatedAt}
             </dd>
           </div>
@@ -77,7 +77,7 @@ export function EntityIndexCompactGrid({
   LinkComponent,
 }: EntityIndexCompactGridProps) {
   if (entities.length === 0 && hasSearch) {
-    return <p className="text-ui-sm text-neutral3 py-8 text-center">No entities match your search</p>;
+    return <p className="text-ui-sm text-muted-foreground py-8 text-center">No entities match your search</p>;
   }
   return (
     <ScrollArea className="h-full">

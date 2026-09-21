@@ -26,7 +26,7 @@ export const menuItemClass = cn(buttonVariants({ variant: 'ghost', size: 'md' })
 export const menuItemDestructiveClass = cn(
   buttonVariants({ variant: 'destructive-ghost', size: 'md' }),
   MENU_ITEM_OVERRIDES,
-  'data-highlighted:bg-accent2/10 data-highlighted:text-accent2',
+  'data-highlighted:bg-destructive/20 data-highlighted:text-destructive',
 );
 
 // Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the
@@ -69,7 +69,8 @@ export const menuEmptyClass =
 export const menuSearchClasses = {
   // Row = h-form-md input + py-0.5 → 32px, one notch above the 28px items so the
   // divider does not crowd the first option while the text stays on the item grid.
-  container: 'flex items-center gap-[.75em] border-b border-border px-[.9em] py-0.5 text-ui-smd',
+  container:
+    'flex items-center gap-[.75em] border-b border-border px-[.9em] py-0.5 text-ui-smd focus-within:bg-foreground/4',
   icon: 'size-[1.1em] shrink-0 text-muted-foreground',
-  input: 'h-form-md w-full bg-transparent text-ui-smd text-foreground outline-none placeholder:text-muted-foreground',
+  input: 'h-form-md w-full bg-transparent text-ui-smd text-foreground outline-hidden placeholder:text-muted-foreground',
 };

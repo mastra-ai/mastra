@@ -523,8 +523,14 @@ export class SessionThread {
 
   /** Read a setting (metadata value) for the active thread. */
   async getSetting({ key }: { key: string }): Promise<unknown> {
-    if (!this.#store || this.#threadId === null) return undefined;
-    return this.#store.getMetadata({ threadId: this.#threadId, key });
+    if (this.#threadId === null) return undefined;
+    return this.getSettingOn({ threadId: this.#threadId, key });
+  }
+
+  /** Read a setting from a specific thread, regardless of the current binding. */
+  async getSettingOn({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
+    if (!this.#store) return undefined;
+    return this.#store.getMetadata({ threadId, key });
   }
 
   /** Persist a setting (metadata value) for the active thread. */
@@ -2167,9 +2173,14 @@ class SessionState<TState = unknown> {
     return defaults as Partial<TState>;
   }
 
-  private async apply(updates: Partial<TState>, persistSetting?: PersistSettingFn): Promise<void> {
+  private async apply(
+    updates: Partial<TState>,
+    persistSetting?: PersistSettingFn,
+    shouldApply?: () => boolean,
+  ): Promise<boolean> {
     const changedKeys = Object.keys(updates as Record<string, unknown>);
     const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
+    let validatedState: TState;
 
     if (this.#schema) {
       const result = await this.#schema['~standard'].validate(newState);
@@ -2177,10 +2188,16 @@ class SessionState<TState = unknown> {
         const messages = result.issues.map(i => i.message).join('; ');
         throw new Error(`Invalid state update: ${messages}`);
       }
-      this.#state = result.value as TState;
+      validatedState = result.value as TState;
     } else {
-      this.#state = newState as TState;
+      validatedState = newState as TState;
     }
+
+    // Re-check after async schema validation, immediately before mutating the
+    // live session. Callers use this to prevent a queued update from crossing
+    // a session/thread ownership boundary while validation was in flight.
+    if (shouldApply && !shouldApply()) return false;
+    this.#state = validatedState;
 
     this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
 
@@ -2198,6 +2215,7 @@ class SessionState<TState = unknown> {
         }
       }
     }
+    return true;
   }
 
   set(updates: Partial<TState>): Promise<void> {
@@ -2205,7 +2223,21 @@ class SessionState<TState = unknown> {
     // Captured now, not at apply time: an update queued behind a thread switch
     // must persist to the thread that was active when the update was requested.
     const persistSetting = this.#capturePersistSetting?.();
-    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting));
+    const run = this.#updateQueue.then(async () => {
+      await this.apply(updateSnapshot, persistSetting);
+    });
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /** Apply an update only while a caller-owned identity still matches. */
+  setIf(updates: Partial<TState>, shouldApply: () => boolean): Promise<boolean> {
+    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
+    const persistSetting = this.#capturePersistSetting?.();
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting, shouldApply));
     this.#updateQueue = run.then(
       () => undefined,
       () => undefined,

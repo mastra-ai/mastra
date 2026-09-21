@@ -57,7 +57,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       {/* Non-root group header */}
       {!isRoot && (
         <div className="border-border1 flex items-center justify-between border-b border-dashed py-1.5 pr-4 pl-3">
-          <span className="text-ui-xs text-neutral3">Group</span>
+          <span className="text-ui-xs text-muted-foreground">Group</span>
           {onRemove && (
             <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
               <X />
@@ -148,7 +148,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
       <button
         type="button"
         onClick={handleAddFirstRule}
-        className="border-border1 text-ui-sm text-neutral3 hover:text-neutral6 flex w-full items-center justify-center gap-2 rounded-md border border-dashed p-2"
+        className="border-border1 text-ui-sm text-muted-foreground hover:text-foreground flex w-full items-center justify-center gap-2 rounded-md border border-dashed p-2"
       >
         <Icon>
           <Plus />

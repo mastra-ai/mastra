@@ -12,7 +12,7 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
     <div className={`border-border1 rounded-2xl border p-5 ${className}`}>
-      <p className="text-ui-xs text-neutral3 mb-4 tracking-wide uppercase">{label}</p>
+      <p className="text-ui-xs text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
   );
@@ -20,7 +20,7 @@ function SurfaceFrame({ className, label, children }: { className: string; label
 
 function CheckboxStateGrid({ idPrefix }: { idPrefix: string }) {
   return (
-    <div className="text-ui-sm text-neutral3 grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
+    <div className="text-ui-sm text-muted-foreground grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
       <span />
       <span>Default</span>
       <span>Checked</span>
@@ -28,7 +28,7 @@ function CheckboxStateGrid({ idPrefix }: { idPrefix: string }) {
       <span>Disabled</span>
       <span>Disabled on</span>
 
-      <span className="text-neutral5">State</span>
+      <span className="text-foreground">State</span>
       <Checkbox aria-label={`${idPrefix} default`} />
       <Checkbox aria-label={`${idPrefix} checked`} checked onCheckedChange={() => {}} />
       <Checkbox aria-label={`${idPrefix} mixed`} checked="indeterminate" onCheckedChange={() => {}} />
@@ -93,14 +93,14 @@ export const AllStates: Story = {
   },
   render: () => (
     <div className="border-border1 bg-surface2 grid min-w-104 gap-4 rounded-lg border p-4">
-      <div className="text-ui-sm text-neutral3 grid grid-cols-[9rem_repeat(4,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
+      <div className="text-ui-sm text-muted-foreground grid grid-cols-[9rem_repeat(4,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
         <span />
         <span>Default</span>
         <span>Checked</span>
         <span>Mixed</span>
         <span>Focus</span>
 
-        <span className="text-neutral5">Enabled</span>
+        <span className="text-foreground">Enabled</span>
         <Checkbox aria-label="enabled unchecked" />
         <Checkbox aria-label="enabled checked" checked onCheckedChange={() => {}} />
         <Checkbox aria-label="enabled mixed" checked="indeterminate" onCheckedChange={() => {}} />
@@ -111,7 +111,7 @@ export const AllStates: Story = {
           className="border-neutral5/60 outline-neutral5/55 outline-1 outline-offset-2 outline-solid"
         />
 
-        <span className="text-neutral5">Disabled</span>
+        <span className="text-foreground">Disabled</span>
         <Checkbox aria-label="disabled unchecked" disabled />
         <Checkbox aria-label="disabled checked" checked disabled onCheckedChange={() => {}} />
         <Checkbox aria-label="disabled mixed" checked="indeterminate" disabled onCheckedChange={() => {}} />

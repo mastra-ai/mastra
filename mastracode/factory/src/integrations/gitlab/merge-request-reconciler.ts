@@ -1,0 +1,349 @@
+import { workItemPhaseSemantics } from '../../boards/index.js';
+import type { PullRequest } from '../../capabilities/version-control.js';
+import type { FactoryProject } from '../../storage/domains/projects/base.js';
+import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
+import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
+import type { IntegrationContext } from '../base.js';
+import type { IssueReconcileSummary } from '../issue-reconciler.js';
+import { decodeMergeRequestReference, gitlabConnection, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
+import type { GitLabIntegrationBase } from './integration.js';
+import { attachGitLabRules } from './rules.js';
+import { retireMergeRequestSubscriptions } from './subscriptions.js';
+import type { ParsedGitLabWebhook } from './webhook.js';
+
+function stringMetadata(item: WorkItemRow, key: string): string | undefined {
+  const value = item.metadata?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function numberMetadata(item: WorkItemRow, key: string): number | undefined {
+  const value = item.metadata?.[key];
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+function normalizeHost(host: string): string {
+  return host.trim().toLowerCase().replace(/\.$/, '');
+}
+
+/** The provider outcome a card's metadata already records, if it is closed. */
+function reconciledOutcome(metadata: Record<string, unknown>): 'merged' | 'closed' | undefined {
+  if (metadata.state !== 'closed' || typeof metadata.merged !== 'boolean') return undefined;
+  return metadata.merged ? 'merged' : 'closed';
+}
+
+function identityForItem(item: WorkItemRow): { projectId: number; mergeRequestIid: number; host: string } | null {
+  const reference = decodeMergeRequestReference(item.externalSource?.externalId ?? '');
+  if (!reference) return null;
+  const metadataProjectId = numberMetadata(item, 'gitlabProjectId');
+  const metadataMergeRequestIid = numberMetadata(item, 'gitlabMergeRequestIid');
+  const metadataHost = stringMetadata(item, 'gitlabHost');
+  if (
+    (metadataProjectId && metadataProjectId !== reference.projectId) ||
+    (metadataMergeRequestIid && metadataMergeRequestIid !== reference.mergeRequestIid) ||
+    (metadataHost && normalizeHost(metadataHost) !== normalizeHost(reference.host))
+  ) {
+    return null;
+  }
+  return {
+    projectId: reference.projectId,
+    mergeRequestIid: reference.mergeRequestIid,
+    host: normalizeHost(reference.host),
+  };
+}
+
+function projectPathFromUrl(url: string, host: string, mergeRequestIid: number): string | undefined {
+  try {
+    const parsed = new URL(url);
+    if (parsed.host.toLowerCase() !== host.toLowerCase()) return undefined;
+    const suffix = `/-/merge_requests/${mergeRequestIid}`;
+    if (!parsed.pathname.endsWith(suffix)) return undefined;
+    return decodeURIComponent(parsed.pathname.slice(1, -suffix.length));
+  } catch {
+    return undefined;
+  }
+}
+
+function terminalEvent(
+  item: WorkItemRow,
+  pullRequest: PullRequest,
+  identity: { projectId: number; mergeRequestIid: number; host: string },
+): ParsedGitLabWebhook {
+  const { projectId, mergeRequestIid, host } = identity;
+  const projectPath = item.externalSource?.url
+    ? projectPathFromUrl(item.externalSource.url, host, mergeRequestIid)
+    : undefined;
+  if (!projectPath) {
+    throw new Error('GitLab merge-request work item is missing canonical reconciliation metadata.');
+  }
+  const action = pullRequest.merged ? 'merge' : 'close';
+  const username = pullRequest.author?.trim() || 'factory-reconciler';
+  return {
+    event: 'Merge Request Hook',
+    deliveryId: `reconcile:merge-request:${normalizeHost(host)}:${projectId}:${mergeRequestIid}:${pullRequest.updatedAt}:${action}`,
+    instanceHost: host,
+    payload: {
+      user_username: username,
+      user: { username },
+      project: {
+        id: projectId,
+        path_with_namespace: projectPath,
+        web_url: `https://${host}/${projectPath}`,
+      },
+      object_attributes: {
+        iid: mergeRequestIid,
+        action,
+        state: pullRequest.merged ? 'merged' : 'closed',
+        title: pullRequest.title,
+        url: pullRequest.url,
+        created_at: pullRequest.createdAt,
+        updated_at: pullRequest.updatedAt,
+        source_branch: pullRequest.headBranch,
+        target_branch: pullRequest.baseBranch,
+        draft: pullRequest.draft,
+        author: { username },
+        assignees: (pullRequest.assignees ?? []).map(username => ({ username })),
+        reviewers: (pullRequest.requestedReviewers ?? []).map(username => ({ username })),
+        labels: pullRequest.labels ?? [],
+      },
+    },
+  };
+}
+
+async function connectionForItem(
+  gitlab: Pick<GitLabIntegrationBase, 'resolveActiveConnectionForHost'>,
+  context: IntegrationContext,
+  project: FactoryProject,
+  projectId: string,
+  host: string,
+): Promise<string | undefined> {
+  const keys = (await context.storage.sourceControl.projectRepositories.listConfiguredExternalKeys()).filter(
+    key => key.repositoryExternalId === projectId,
+  );
+  for (const key of keys.sort((left, right) => {
+    const directOrder =
+      Number(right.installationExternalId === 'direct') - Number(left.installationExternalId === 'direct');
+    return directOrder || left.installationExternalId.localeCompare(right.installationExternalId);
+  })) {
+    const targets = await context.storage.sourceControl.projectRepositories.listByExternalRepository(key);
+    if (!targets.some(target => target.orgId === project.orgId && target.factoryProjectId === project.id)) continue;
+    const installation = await context.storage.sourceControl.installations.findByExternalId({
+      orgId: project.orgId,
+      externalId: key.installationExternalId,
+    });
+    const installationHost = installation?.providerMetadata.host;
+    if (
+      typeof installationHost === 'string' &&
+      installationHost.trim().toLowerCase().replace(/\.$/, '') === host.trim().toLowerCase().replace(/\.$/, '')
+    ) {
+      return gitlab.resolveActiveConnectionForHost(key.installationExternalId, host);
+    }
+  }
+  return undefined;
+}
+
+export type GitLabMergeRequestReconciler = () => Promise<IssueReconcileSummary>;
+
+/** The integration storage handle when the host bound one; tests may omit it. */
+function subscriptionStorage(
+  gitlab: Partial<Pick<GitLabIntegrationBase, 'integrationStorage'>>,
+): GitLabIntegrationBase['integrationStorage'] | undefined {
+  try {
+    return gitlab.integrationStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+export function attachGitLabMergeRequestReconciler(
+  gitlab: Pick<
+    GitLabIntegrationBase,
+    | 'versionControl'
+    | 'rules'
+    | 'getProjectMemberAccessLevel'
+    | 'getWorkItemAuthorUsername'
+    | 'resolveActiveConnectionForHost'
+  > &
+    Partial<Pick<GitLabIntegrationBase, 'integrationStorage'>>,
+  context: IntegrationContext,
+): GitLabMergeRequestReconciler | undefined {
+  if (!context.runtime) return undefined;
+  const ingest = attachGitLabRules(gitlab, context);
+  if (!ingest) return undefined;
+  const boards = context.runtime.boards;
+
+  return async () => {
+    const summary: IssueReconcileSummary = {
+      projects: 0,
+      checked: 0,
+      updated: 0,
+      closed: 0,
+      missing: 0,
+      failed: 0,
+      errors: [],
+    };
+    for (const project of await context.storage.projects.listAll()) {
+      const items = (
+        await context.runtime!.workItems.list({ orgId: project.orgId, factoryProjectId: project.id })
+      ).filter(item => {
+        if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'pull-request') {
+          return false;
+        }
+        if (workItemPhaseSemantics(boards, item)?.kind !== 'terminal') return true;
+        // Same contract as the GitHub sweep: a terminal card is settled once
+        // the provider's terminal outcome has been replayed and stamped. Done
+        // means the review finished, not that the MR merged, so a later close
+        // still gets exactly one replay before the card drops out of the sweep.
+        const metadata = item.metadata ?? {};
+        const outcome = reconciledOutcome(metadata);
+        return outcome === undefined || metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] !== outcome;
+      });
+      if (items.length === 0) continue;
+      summary.projects += 1;
+      for (const item of items) {
+        summary.checked += 1;
+        try {
+          const identity = identityForItem(item);
+          if (!identity) {
+            summary.missing += 1;
+            continue;
+          }
+          const { projectId, mergeRequestIid, host } = identity;
+          const connectionId = await connectionForItem(gitlab, context, project, String(projectId), host);
+          if (!connectionId) {
+            summary.missing += 1;
+            continue;
+          }
+          const pullRequest = await gitlab.versionControl.getPullRequest({
+            connection: gitlabConnection(connectionId),
+            sourceId: String(projectId),
+            pullRequestId: String(mergeRequestIid),
+          });
+          if (!pullRequest) {
+            summary.missing += 1;
+            continue;
+          }
+          const current = item.metadata ?? {};
+          let authorTrusted: boolean | undefined;
+          if (pullRequest.author) {
+            try {
+              const accessLevel = await gitlab.getProjectMemberAccessLevel(
+                connectionId,
+                String(projectId),
+                pullRequest.author,
+              );
+              authorTrusted = (accessLevel ?? 0) >= GITLAB_TRUSTED_ACCESS_LEVEL;
+            } catch (error) {
+              summary.failed += 1;
+              summary.errors.push({
+                projectId: project.id,
+                workItemId: item.id,
+                error: `Unable to refresh GitLab author trust: ${error instanceof Error ? error.message : String(error)}`,
+              });
+            }
+          }
+          const desired = {
+            gitlabHost: host,
+            gitlabProjectId: projectId,
+            gitlabMergeRequestIid: mergeRequestIid,
+            state: pullRequest.state,
+            draft: pullRequest.draft,
+            merged: pullRequest.merged,
+            assignees: pullRequest.assignees ?? [],
+            requestedReviewers: pullRequest.requestedReviewers ?? [],
+            labels: pullRequest.labels ?? [],
+            headBranch: pullRequest.headBranch,
+            baseBranch: pullRequest.baseBranch,
+            ...(pullRequest.author ? { author: pullRequest.author } : {}),
+            ...(authorTrusted !== undefined ? { authorTrusted } : {}),
+            updatedAt: pullRequest.updatedAt,
+          };
+          const metadataChanged = (next: Record<string, unknown>) =>
+            !Object.entries(next).every(([key, value]) => JSON.stringify(current[key]) === JSON.stringify(value));
+          if (pullRequest.state === 'closed') {
+            const terminal = workItemPhaseSemantics(boards, item)?.kind === 'terminal';
+            let cleanupFailed = false;
+            if (terminal) {
+              // Retire whatever the card still had pending, as the GitHub sweep
+              // does, so a stale proposal cannot resurface on a settled card.
+              try {
+                await context.runtime!.workItems.supersedeDecisionsForWorkItem({
+                  orgId: project.orgId,
+                  factoryProjectId: project.id,
+                  workItemId: item.id,
+                  supersededAt: new Date(),
+                });
+              } catch (error) {
+                cleanupFailed = true;
+                summary.failed += 1;
+                summary.errors.push({
+                  projectId: project.id,
+                  workItemId: item.id,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+            const terminalTransition =
+              current.state !== 'closed' ||
+              current.merged !== pullRequest.merged ||
+              !item.stages.includes(pullRequest.merged ? 'done' : 'canceled');
+            if (terminalTransition) {
+              await ingest(terminalEvent(item, pullRequest, identity));
+              // The webhook path retires thread subscriptions itself; a missed
+              // terminal event must not leave the session's MR chip open.
+              const subscriptions = subscriptionStorage(gitlab);
+              if (subscriptions) {
+                await retireMergeRequestSubscriptions(
+                  {
+                    host,
+                    projectId: String(projectId),
+                    changeRequestId: String(mergeRequestIid),
+                    merged: pullRequest.merged,
+                  },
+                  subscriptions,
+                );
+              }
+            }
+            // The settled stamp is what takes a terminal card out of later
+            // sweeps. Withhold it while cleanup failed so the next sweep retries.
+            const settled = cleanupFailed
+              ? {}
+              : { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: pullRequest.merged ? 'merged' : 'closed' };
+            if (metadataChanged({ ...desired, ...settled })) {
+              await context.runtime!.workItems.update({
+                orgId: project.orgId,
+                id: item.id,
+                userId: 'factory-rule-dispatcher',
+                patch: { metadata: { ...current, ...desired, ...settled } },
+              });
+              summary.updated += 1;
+            }
+            summary.closed += 1;
+            continue;
+          }
+          // A reopened MR is live again: clear a stale stamp so a later close
+          // gets its replay, but never write the key onto a card that lacks it.
+          const reopened =
+            current[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] === undefined
+              ? {}
+              : { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: null };
+          if (!metadataChanged({ ...desired, ...reopened })) continue;
+          await context.runtime!.workItems.update({
+            orgId: project.orgId,
+            id: item.id,
+            userId: 'factory-rule-dispatcher',
+            patch: { metadata: { ...current, ...desired, ...reopened } },
+          });
+          summary.updated += 1;
+        } catch (error) {
+          summary.failed += 1;
+          summary.errors.push({
+            projectId: project.id,
+            workItemId: item.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+    return summary;
+  };
+}

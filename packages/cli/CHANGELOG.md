@@ -1,5 +1,58 @@
 # mastra
 
+## 1.31.0-alpha.11
+
+### Minor Changes
+
+- Show the resource a workflow run belongs to in Studio: recent run rows and the run header now display the run's `resourceId` when the stored run has one. ([#24534](https://github.com/mastra-ai/mastra/pull/24534))
+
+- Added a Resource ID field to the workflow Run Options dialog in Studio. Runs started from Studio are now attributed to that resource and show up in resource-filtered run lists (`GET /api/workflows/:workflowId/runs?resourceId=...`). The value is remembered per workflow, and leaving it empty keeps the previous behavior. When server auth derives the resource ID from the authenticated user, that value still wins. Fixes #24135. ([#24519](https://github.com/mastra-ai/mastra/pull/24519))
+
+  Open a workflow in Studio, click **Run Options**, type a Resource ID such as `tenant-42`, then run the workflow. The run is stored under that resource:
+
+  ```bash
+  curl "http://localhost:4111/api/workflows/my-workflow/runs?resourceId=tenant-42"
+  # { "runs": [ { "runId": "...", "resourceId": "tenant-42", ... } ], "total": 1 }
+  ```
+
+### Patch Changes
+
+- Studio: a workflow run suspended on human input no longer counts that wait as run time. The run duration stops at the moment it suspended and a separate clock, next to the Suspended badge, shows how long the run has been waiting for input. Suspended steps show the time they actually ran before suspending instead of a dash, and a nested workflow waiting on its child now reads "Needs input" rather than showing a running spinner. Once resumed, the run duration is wall clock again and says so on hover: the engine drops the suspension timestamp on resume, so the time spent waiting cannot be subtracted after the fact. ([#24537](https://github.com/mastra-ai/mastra/pull/24537))
+
+- Removed managed Redis from CLI hints and docs until the feature is released. `mastra env db create` help and errors now list `turso` and `neon` only, and deploy preflight messages no longer suggest provisioning a managed Redis. Organizations with the feature enabled can still attach one — the interactive deploy prompt is unchanged. ([#24570](https://github.com/mastra-ai/mastra/pull/24570))
+
+- Fixed Studio chat showing only the most recent messages of a conversation. Scrolling to the top of a thread now loads the previous messages, keeping the reading position where it was. ([#23669](https://github.com/mastra-ai/mastra/pull/23669))
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0), [`361f142`](https://github.com/mastra-ai/mastra/commit/361f142de0a50916b662e2a8fde4772a91f0566a)]:
+  - @mastra/core@1.68.0-alpha.10
+  - @mastra/deployer@1.68.0-alpha.10
+
+## 1.31.0-alpha.10
+
+## 1.31.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`2cb5319`](https://github.com/mastra-ai/mastra/commit/2cb5319fc72ef20e7feebfa1e786ff78956aae84), [`f6e7562`](https://github.com/mastra-ai/mastra/commit/f6e7562b2ccfdd5d7d77a7eeea0849b6ffd2ec94), [`d4795a4`](https://github.com/mastra-ai/mastra/commit/d4795a42067605d2bbec10ad0b3dcc45acf02147), [`b87aa0d`](https://github.com/mastra-ai/mastra/commit/b87aa0dc38055558950024f750532ddae6ccf40c), [`53519a2`](https://github.com/mastra-ai/mastra/commit/53519a29ce0063712786b74973ae2dbe97a433a7)]:
+  - @mastra/core@1.68.0-alpha.9
+  - @mastra/deployer@1.68.0-alpha.9
+
+## 1.31.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`d21aa84`](https://github.com/mastra-ai/mastra/commit/d21aa84aac0dc61bbc43434af7a3b3180373a8a7), [`a0fbeab`](https://github.com/mastra-ai/mastra/commit/a0fbeabf6298854bcc6d64c8b31530bedd1ea934), [`79385bb`](https://github.com/mastra-ai/mastra/commit/79385bbd8a52ed5e5536b16190dd8b8ac1ee0840), [`5014bf6`](https://github.com/mastra-ai/mastra/commit/5014bf6a52f04304c30b4e572df4052085e3ac02), [`58c88c4`](https://github.com/mastra-ai/mastra/commit/58c88c4e58504176ccb06d52df9440105aca788d), [`fc1e4f2`](https://github.com/mastra-ai/mastra/commit/fc1e4f2d4e0c1caa9d29de02f7be6a7d69ee2ea2), [`aee580d`](https://github.com/mastra-ai/mastra/commit/aee580d98976560e68e401c36790ce0cc6443aad), [`7c73bac`](https://github.com/mastra-ai/mastra/commit/7c73baccc8336a4fb0db92614bf778bae5459e24)]:
+  - @mastra/core@1.68.0-alpha.8
+  - @mastra/deployer@1.68.0-alpha.8
+
+## 1.31.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`11560f5`](https://github.com/mastra-ai/mastra/commit/11560f54627055f5ae541a6825669778983a23c9), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`15d3e76`](https://github.com/mastra-ai/mastra/commit/15d3e7647636c7286650ef517953c9885806c3dd), [`8639bce`](https://github.com/mastra-ai/mastra/commit/8639bce6d032cabd65d402e870898c1f8279d0a2), [`3c86726`](https://github.com/mastra-ai/mastra/commit/3c867260be59d3cd8337bc0af9a76bac517fe16f), [`0a989ab`](https://github.com/mastra-ai/mastra/commit/0a989abf37c409040ee2ce9a9ccfcfb5a700508e), [`ed24c7f`](https://github.com/mastra-ai/mastra/commit/ed24c7f654bb193a0c503469f4f19dda9d687ecb), [`0894a0e`](https://github.com/mastra-ai/mastra/commit/0894a0e6ede48058b547aab5bb8a2a3d71c3878a), [`261c1a7`](https://github.com/mastra-ai/mastra/commit/261c1a7a7cecb4da3515fc3f5531c6ee8320aa26), [`5968b71`](https://github.com/mastra-ai/mastra/commit/5968b718044f8dd21bab6ce4ae7da3590729842b), [`dafabf2`](https://github.com/mastra-ai/mastra/commit/dafabf22e4f4b0aabecb09839de5abe54e03151a), [`150a670`](https://github.com/mastra-ai/mastra/commit/150a67086539eea91cac3550fc068e6ac5c7e79b), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`c6999e2`](https://github.com/mastra-ai/mastra/commit/c6999e2b4ab805301e66723ca8ba9fe30faa82ca)]:
+  - @mastra/core@1.68.0-alpha.7
+  - @mastra/deployer@1.68.0-alpha.7
+
 ## 1.31.0-alpha.6
 
 ### Patch Changes

@@ -12,7 +12,13 @@ export const EXPERIMENTS_PER_PAGE = 100;
  * dataset filter is active (a dataset's runs may not be in the first pages of the global list). The
  * optional target filter is applied server-side for the same reason.
  */
-export function useInfiniteExperiments(datasetId: string | undefined, target?: ExperimentTargetFilter) {
+export type ExperimentsOrderBy = NonNullable<ListExperimentsParams['orderBy']>;
+
+export function useInfiniteExperiments(
+  datasetId: string | undefined,
+  target?: ExperimentTargetFilter,
+  orderBy?: ExperimentsOrderBy,
+) {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
   const targetType = target?.targetType || undefined;
@@ -21,12 +27,13 @@ export function useInfiniteExperiments(datasetId: string | undefined, target?: E
   const query = useInfiniteQuery({
     // Prefixes match the keys invalidated by dataset/experiment mutations.
     queryKey: datasetId
-      ? ['dataset-experiments', datasetId, 'infinite', { targetType, targetId }]
-      : ['experiments', 'infinite', { targetType, targetId }],
+      ? ['dataset-experiments', datasetId, 'infinite', { targetType, targetId, orderBy }]
+      : ['experiments', 'infinite', { targetType, targetId, orderBy }],
     queryFn: ({ pageParam }) => {
       const params: ListExperimentsParams = { page: pageParam, perPage: EXPERIMENTS_PER_PAGE };
       if (targetType) params.targetType = targetType;
       if (targetId) params.targetId = targetId;
+      if (orderBy) params.orderBy = orderBy;
       return datasetId ? client.listDatasetExperiments(datasetId, params) : client.listExperiments(params);
     },
     initialPageParam: 0,

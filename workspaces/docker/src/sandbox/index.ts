@@ -18,6 +18,7 @@ import type {
   MastraSandboxOptions,
   SandboxCloneOptions,
   SandboxFileInput,
+  SandboxStartOptions,
   WriteFilesOptions,
 } from '@mastra/core/workspace';
 import {
@@ -30,13 +31,22 @@ import {
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
+import { normalizeAbortError, throwIfAborted } from '../abort';
+import type { DockerRepoTemplateResolveOptions } from '../template/repo-template';
 import type { DockerTemplate } from '../template/template';
 import { DockerProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[DockerSandbox]';
 
+export interface DockerSandboxStartOptions extends SandboxStartOptions {
+  /** Cancel repository-template resolution or a lazy template build. */
+  abortSignal?: AbortSignal;
+}
+
 /** A prepared template, or a resolver producing one (see `DockerSandboxOptions.template`). */
-export type DockerTemplateSpec = DockerTemplate | (() => DockerTemplate | Promise<DockerTemplate>);
+export type DockerTemplateSpec =
+  | DockerTemplate
+  | ((options?: DockerRepoTemplateResolveOptions) => DockerTemplate | Promise<DockerTemplate>);
 
 /**
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
@@ -405,7 +415,9 @@ export class DockerSandbox extends MastraSandbox {
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  async start(): Promise<void> {
+  async start(options: DockerSandboxStartOptions = {}): Promise<void> {
+    const { abortSignal } = options;
+    throwIfAborted(abortSignal, 'start Docker sandbox');
     this.logger.debug(`${LOG_PREFIX} Starting sandbox ${this.id}...`);
 
     // Try to reconnect to existing container
@@ -444,7 +456,7 @@ export class DockerSandbox extends MastraSandbox {
 
     this._warnOnPrivilegedHardeningConflict(this._privileged);
 
-    await this._resolveTemplate();
+    await this._resolveTemplate(abortSignal);
 
     // Pull image if not available locally
     await this._ensureImage();
@@ -802,11 +814,19 @@ export class DockerSandbox extends MastraSandbox {
    * creates a container, so a resolver-form template re-resolves each time.
    * Adopts the template's workdir unless the sandbox was given one explicitly.
    */
-  private async _resolveTemplate(): Promise<void> {
+  private async _resolveTemplate(abortSignal?: AbortSignal): Promise<void> {
     if (!this._templateSpec) return;
-    const template = typeof this._templateSpec === 'function' ? await this._templateSpec() : this._templateSpec;
+    throwIfAborted(abortSignal, 'start Docker sandbox');
+    let template: DockerTemplate;
+    try {
+      template =
+        typeof this._templateSpec === 'function' ? await this._templateSpec({ abortSignal }) : this._templateSpec;
+    } catch (error) {
+      throw normalizeAbortError(error, 'start Docker sandbox');
+    }
+    throwIfAborted(abortSignal, 'start Docker sandbox');
     // Build on this sandbox's daemon, which may differ from the template's default.
-    const result = await template.build({ docker: this._docker });
+    const result = await template.build({ docker: this._docker, abortSignal });
     if (result.status !== 'ready') {
       throw new SandboxError(`Docker template build failed: ${result.error ?? 'unknown error'}`, 'START_FAILED', {
         templateId: result.templateId,

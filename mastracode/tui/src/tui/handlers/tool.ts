@@ -12,7 +12,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parseJsonRiver } from 'jsonriver';
 
 import { ensureAssistantRenderSegment } from '../assistant-render-registry.js';
-import { parseBackgroundToolTaskId } from '../background-tool-result.js';
+import { getBackgroundToolMetadata } from '../background-tool-result.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -316,14 +316,6 @@ function ensureSubmitPlanComponent(
  */
 function isToolResultError(result: unknown): boolean {
   return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
-}
-
-export function getBackgroundToolTaskId(result: unknown): string | undefined {
-  return parseBackgroundToolTaskId(formatToolResult(result));
-}
-
-export function isBackgroundToolPlaceholder(result: unknown): boolean {
-  return getBackgroundToolTaskId(result) !== undefined;
 }
 
 export function formatToolResult(result: unknown): string {
@@ -767,18 +759,23 @@ export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string)
   closeToolInputParser(toolCallId);
 }
 
-export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
+export function handleToolEnd(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  result: unknown,
+  isError: boolean,
+  providerMetadata?: unknown,
+): void {
   flushPendingShellOutput(ctx, toolCallId);
   const { state } = ctx;
+  const background = state.options?.backgroundToolsEnabled ? getBackgroundToolMetadata(providerMetadata) : undefined;
   // If this is a subagent tool, store the result in the SubagentExecutionComponent
   const subagentComponent = state.pendingSubagents.get(toolCallId);
   if (subagentComponent) {
     const resultText = formatToolResult(result);
     if (pluginSubagentToolCallIds.has(toolCallId)) {
-      const backgroundTaskId =
-        state.options?.backgroundToolsEnabled && !isError ? getBackgroundToolTaskId(result) : undefined;
-      if (backgroundTaskId) {
-        subagentComponent.setBackgroundTaskId(backgroundTaskId);
+      if (background) subagentComponent.setBackgroundTaskId(background.taskId);
+      if (background?.status === 'running' && !isError) {
         flushRender(state);
       } else {
         subagentComponent.finish(isError, 0, resultText);
@@ -813,10 +810,8 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
     }
 
     const resultText = formatToolResult(result);
-    const backgroundTaskId =
-      state.options?.backgroundToolsEnabled && !effectiveIsError ? getBackgroundToolTaskId(result) : undefined;
-    const isBackgroundPlaceholder = backgroundTaskId !== undefined;
-    if (backgroundTaskId) component.setBackgroundTaskId?.(backgroundTaskId);
+    const isBackgroundPlaceholder = background?.status === 'running' && !effectiveIsError;
+    if (background) component.setBackgroundTaskId?.(background.taskId);
     const toolResult: ToolResult = {
       content: [{ type: 'text', text: resultText }],
       isError: effectiveIsError,

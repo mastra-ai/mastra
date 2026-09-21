@@ -2,7 +2,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod/v3';
 
+import type { TUIState } from '../../src/tui/state.js';
 import type { McE2eScenario } from './types.js';
+
+let state: TUIState | undefined;
 
 type JsonObject = Record<string, unknown>;
 
@@ -65,6 +68,10 @@ export const backgroundSubagentsScenario = {
         extraTools: { background_probe: delayedProbeTool },
         unixSocketPubSub: false,
       },
+      onTuiCreated(tui) {
+        if (!tui || (typeof tui !== 'object' && typeof tui !== 'function')) throw new Error('Expected TUI instance');
+        state = Reflect.get(tui, 'state') as TUIState;
+      },
     });
   },
   async run({ terminal, runtime }) {
@@ -124,9 +131,34 @@ export const backgroundSubagentsScenario = {
     terminal.write('\u001bg');
     await new Promise(resolve => setTimeout(resolve, 200));
 
+    check(state, 'Expected live TUI state');
+    const threadId = state.session.thread.getId();
+    check(threadId, 'Expected an origin thread');
     terminal.submit('/new');
     await runtime.waitForScreenText(/Ready for new conversation/i, terminal, 10_000);
+    // Deliver queued lifecycle events after leaving the thread that produced them.
+    const toolCallId = 'late-origin-tool';
+    state.session.emit({
+      type: 'tool_start',
+      threadId,
+      toolCallId,
+      toolName: 'view',
+      args: { path: 'OLD_THREAD_ONLY' },
+    });
+    state.session.emit({ type: 'tool_update', threadId, toolCallId, partialResult: 'OLD_THREAD_ONLY' });
+    state.session.emit({
+      type: 'tool_end',
+      threadId,
+      toolCallId,
+      result: 'OLD_THREAD_ONLY',
+      isError: false,
+      providerMetadata: { mastra: { backgroundTask: { taskId: 'late-origin-task', status: 'running' } } },
+    });
     await new Promise(resolve => setTimeout(resolve, 21_000));
+    check(!state.pendingTools.has(toolCallId), 'Late origin tool created a pending row');
+    check(!state.backgroundToolContexts.has(toolCallId), 'Late origin tool created a context');
+    check(!state.backgroundActivities.has('late-origin-task'), 'Late origin tool created background activity');
+    check(!terminal.serialize().view.includes('OLD_THREAD_ONLY'), 'Late origin tool appeared in the new conversation');
     const newConversationOutput = terminal.serialize().view;
     check(
       !newConversationOutput.includes('Background activity') &&

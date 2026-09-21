@@ -16,7 +16,7 @@ export const Default: Story = {};
 export const InConversation: Story = {
   render: () => (
     <div className="border-border1 bg-surface2 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3 rounded-xl border p-5">
-      <p className="text-ui-sm text-neutral5">Find the latest failed workflow runs.</p>
+      <p className="text-ui-sm text-foreground">Find the latest failed workflow runs.</p>
       <PendingIndicator />
     </div>
   ),
