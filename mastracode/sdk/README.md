@@ -38,7 +38,23 @@ background: {
 
 The SDK doesn't infer support from tool names or serialize plugin calls. When the setting is off, it disables plugin-declared background execution without modifying the original tool.
 
-Declaring support means the tool's `execute()` promise must represent the complete operation for native background calls, including cleanup. Tools that already await their work need no separate execution path. A tool that normally returns an acknowledgement while continuing independently must check `context.agent?.isBackgroundTask` and await that operation in the background path. It must also forward `context.abortSignal` and reject on failure. The plugin owns any conversation-level queue.
+Tools that already await their work need no separate execution path. For a tool that returns an acknowledgement while continuing independently, native execution exposes `context.background`. Adopt the existing operation before returning:
+
+```ts
+const operation = startResearch(input, context.abortSignal)
+if (context.background) {
+  context.background.adopt({
+    completion: operation.finished,
+    cancel: reason => operation.cancel(reason),
+  })
+  return { answer: 'Research started' }
+}
+return await operation.finished
+```
+
+Here, `startResearch` represents the plugin's own operation API. Its `finished` promise must resolve with the terminal tool result only after work and cleanup finish, or reject on failure. The native task tracks that promise instead of the acknowledgement. Adopt at most one operation, before `execute()` returns. Forward cancellation through the supplied signal or the operation's `cancel` callback. Without adoption, `execute()` must itself await the complete operation.
+
+The handle stays in memory and isn't restart-safe. The plugin still owns its conversation-level queue and answer signals. Adoption doesn't suppress host completion notifications; keep progress rendering active until the adopted operation finishes.
 
 `defaultDisposition: 'foreground'` preserves normal calls unless the caller explicitly requests `_background.disposition: 'deferred'` or `'awaited'`. Plugins without a declaration remain usable in the foreground, including older versions of `mastra_expert`.
 

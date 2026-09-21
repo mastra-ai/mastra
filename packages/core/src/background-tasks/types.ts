@@ -214,6 +214,28 @@ export interface BackgroundTaskManagerConfig {
 
 export type BackgroundExecutionDisposition = 'foreground' | 'deferred' | 'awaited';
 
+/**
+ * A process-local operation started by a tool and adopted by its native
+ * background task. The operation handle is never persisted or published.
+ */
+export interface BackgroundTaskOperation<TResult = unknown> {
+  /** Resolves with the task's terminal result after the complete operation and cleanup finish. */
+  completion: Promise<TResult>;
+  /** Cancels the operation when the native background task is cancelled or times out. */
+  cancel?: (reason?: unknown) => void | Promise<void>;
+}
+
+/** Runtime bridge exposed only while a tool executes as a native background task. */
+export interface BackgroundTaskAdoptionContext {
+  taskId: string;
+  disposition: Exclude<BackgroundExecutionDisposition, 'foreground'>;
+  /**
+   * Transfers lifecycle ownership of an already-started process-local operation
+   * to the native background task. A tool may adopt at most one operation.
+   */
+  adopt<TResult>(operation: BackgroundTaskOperation<TResult>): void;
+}
+
 export interface ToolBackgroundConfig {
   /** Whether this tool is eligible for background execution. Default: false */
   enabled?: boolean;

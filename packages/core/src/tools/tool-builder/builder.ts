@@ -699,6 +699,7 @@ export class CoreToolBuilder extends MastraBase {
             ),
             ...createObservabilityContext({ currentSpan: toolSpan }),
             abortSignal: execOptions.abortSignal,
+            ...(execOptions.backgroundTask ? { background: execOptions.backgroundTask } : {}),
             suspend: (args: any, suspendOptions?: SuspendOptions) => {
               suspendData = args;
               const newSuspendOptions = {

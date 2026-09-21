@@ -13,6 +13,12 @@ import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
+import {
+  backgroundAdoptionDeferredScenario,
+  backgroundAdoptionAwaitedScenario,
+  backgroundAdoptionCancelScenario,
+  backgroundAdoptionFailureScenario,
+} from './background-adoption.js';
 import { backgroundPlaceholderOptOutScenario } from './background-placeholder-opt-out.js';
 import { backgroundSubagentsScenario } from './background-subagents.js';
 import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
@@ -216,6 +222,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
+  'background-adoption-deferred': backgroundAdoptionDeferredScenario,
+  'background-adoption-awaited': backgroundAdoptionAwaitedScenario,
+  'background-adoption-cancel': backgroundAdoptionCancelScenario,
+  'background-adoption-failure': backgroundAdoptionFailureScenario,
   'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
   'background-subagents': backgroundSubagentsScenario,
   'background-tools-settings': backgroundToolsSettingsScenario,

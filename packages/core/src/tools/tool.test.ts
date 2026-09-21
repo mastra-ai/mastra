@@ -365,4 +365,42 @@ describe('AgentToolExecutionContext', () => {
     expect(capturedContext.agent).toBeDefined();
     expect(capturedContext.agent.agentId).toBe('');
   });
+
+  it('should expose the background task adoption bridge in context.background', async () => {
+    let capturedContext: any;
+    const backgroundTask = {
+      taskId: 'task-123',
+      disposition: 'deferred' as const,
+      adopt: vi.fn(),
+    };
+
+    const tool = createTool({
+      id: 'background-adoption-test',
+      description: 'Test tool for background operation adoption',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async (_input, context) => {
+        capturedContext = context;
+        return { success: true };
+      },
+    });
+
+    await tool.execute(
+      { message: 'hello' },
+      {
+        requestContext: new RequestContext(),
+        agentId: 'test-agent',
+        toolCallId: 'call-background',
+        messages: [],
+        suspend: async () => {},
+        isBackgroundTask: true,
+        backgroundTask,
+      },
+    );
+
+    expect(capturedContext.agent).toMatchObject({
+      agentId: 'test-agent',
+      toolCallId: 'call-background',
+    });
+    expect(capturedContext.background).toBe(backgroundTask);
+  });
 });
