@@ -16,7 +16,9 @@ export const WorkflowCard = ({ header, children, footer }: WorkflowCardProps) =>
       <button className="flex w-full items-center justify-between gap-3 px-2 py-1" onClick={() => setExpanded(s => !s)}>
         <div className="w-full">{header}</div>
         <Icon>
-          <ChevronDownIcon className={cn('text-muted-foreground transition-transform -rotate-90', expanded && 'rotate-0')} />
+          <ChevronDownIcon
+            className={cn('text-muted-foreground transition-transform -rotate-90', expanded && 'rotate-0')}
+          />
         </Icon>
       </button>
       {children && expanded && <div className="border-border1 max-h-[400px] overflow-y-auto border-t">{children}</div>}

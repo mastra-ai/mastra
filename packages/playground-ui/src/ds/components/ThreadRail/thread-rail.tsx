@@ -375,7 +375,10 @@ function ThreadRailPreviewContent({
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
         <div className="border-border1/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
           {turn.files.map(file => (
-            <span key={file} className="text-ui-sm text-muted-foreground inline-flex max-w-44 items-center gap-1.5 truncate">
+            <span
+              key={file}
+              className="text-ui-sm text-muted-foreground inline-flex max-w-44 items-center gap-1.5 truncate"
+            >
               <FileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
               {file}
             </span>

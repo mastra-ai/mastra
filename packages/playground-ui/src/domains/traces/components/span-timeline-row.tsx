@@ -132,7 +132,9 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               }}
             />
           </div>
-          <div className="text-ui-xs text-muted-foreground w-12 text-right tabular-nums">{formatDuration(span.latency)}</div>
+          <div className="text-ui-xs text-muted-foreground w-12 text-right tabular-nums">
+            {formatDuration(span.latency)}
+          </div>
         </HoverCardTrigger>
         <SpanTimingHoverCard span={span} startShiftMs={startShiftMs} />
       </HoverCard>

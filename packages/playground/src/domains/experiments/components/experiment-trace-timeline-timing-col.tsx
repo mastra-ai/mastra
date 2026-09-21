@@ -57,7 +57,9 @@ export function ExperimentTraceTimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-muted-foreground text-ui-sm')}>{(span.latency / 1000).toFixed(3)}&nbsp;s</div>
+        <div className={cn('flex justify-end text-muted-foreground text-ui-sm')}>
+          {(span.latency / 1000).toFixed(3)}&nbsp;s
+        </div>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content

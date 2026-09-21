@@ -74,7 +74,9 @@ export function LogDetailsView({
 
       {!collapsed && (
         <DataDetailsPanel.Content>
-          <p className="text-ui-md text-muted-foreground font-mono wrap-break-word whitespace-pre-wrap">{log.message}</p>
+          <p className="text-ui-md text-muted-foreground font-mono wrap-break-word whitespace-pre-wrap">
+            {log.message}
+          </p>
 
           {(traceId || spanId) && (
             <div className={cn('my-8 grid gap-2', '[&>button]:justify-between [&>button]:overflow-hidden')}>

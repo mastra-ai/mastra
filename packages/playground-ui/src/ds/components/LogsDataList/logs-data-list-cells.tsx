@@ -79,7 +79,9 @@ export interface LogsDataListMessageCellProps {
 }
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
-  return <DataListCell className="text-ui-smd text-muted-foreground min-w-0 truncate font-mono">{message}</DataListCell>;
+  return (
+    <DataListCell className="text-ui-smd text-muted-foreground min-w-0 truncate font-mono">{message}</DataListCell>
+  );
 }
 
 // ---------------------------------------------------------------------------

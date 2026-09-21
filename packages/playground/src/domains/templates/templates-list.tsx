@@ -71,10 +71,15 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                 </div>
               )}
               <div
-                className={cn('grid py-3 px-4 w-full gap-0.5', '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-muted-foreground')}
+                className={cn(
+                  'grid py-3 px-4 w-full gap-0.5',
+                  '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-muted-foreground',
+                )}
               >
                 <h2 className="text-ui-md text-foreground">{template.title}</h2>
-                <p className="text-ui-md text-muted-foreground transition-colors duration-500">{template.description}</p>
+                <p className="text-ui-md text-muted-foreground transition-colors duration-500">
+                  {template.description}
+                </p>
                 <div className="text-muted-foreground text-ui-md mt-3 hidden flex-wrap items-center gap-4 2xl:flex">
                   {hasMetaInfo && (
                     <ul

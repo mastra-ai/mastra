@@ -435,10 +435,14 @@ export default function Workspace() {
                         <span className="bg-surface4 text-muted-foreground text-ui-xs rounded px-1.5 py-0.5">FS</span>
                       )}
                       {workspace.capabilities.hasSandbox && (
-                        <span className="bg-surface4 text-muted-foreground text-ui-xs rounded px-1.5 py-0.5">Sandbox</span>
+                        <span className="bg-surface4 text-muted-foreground text-ui-xs rounded px-1.5 py-0.5">
+                          Sandbox
+                        </span>
                       )}
                       {workspace.capabilities.hasSkills && (
-                        <span className="bg-surface4 text-muted-foreground text-ui-xs rounded px-1.5 py-0.5">Skills</span>
+                        <span className="bg-surface4 text-muted-foreground text-ui-xs rounded px-1.5 py-0.5">
+                          Skills
+                        </span>
                       )}
                     </div>
                   </button>
@@ -508,7 +512,9 @@ export default function Workspace() {
                   <Wand2 className="h-4 w-4" />
                   Skills
                   {isSkillsConfigured && skills.length > 0 && (
-                    <span className="bg-surface4 text-muted-foreground text-ui-sm rounded px-1.5 py-0.5">{skills.length}</span>
+                    <span className="bg-surface4 text-muted-foreground text-ui-sm rounded px-1.5 py-0.5">
+                      {skills.length}
+                    </span>
                   )}
                 </Tab>
               )}

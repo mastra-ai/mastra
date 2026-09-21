@@ -99,7 +99,9 @@ CardTitle.displayName = 'CardTitle';
 export type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
 
 export const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescriptionProps>(
-  ({ className, ...props }, ref) => <p ref={ref} className={cn('text-ui-sm text-muted-foreground', className)} {...props} />,
+  ({ className, ...props }, ref) => (
+    <p ref={ref} className={cn('text-ui-sm text-muted-foreground', className)} {...props} />
+  ),
 );
 CardDescription.displayName = 'CardDescription';
 

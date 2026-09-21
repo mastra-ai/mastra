@@ -59,7 +59,9 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                 {icon} <LabelWrapper>{label}</LabelWrapper>
               </span>
               {!labelsAreHidden && (
-                <span className={cn('text-muted-foreground', '[&>svg]:size-[1em] [&>svg]:text-muted-foreground')}>{separator}</span>
+                <span className={cn('text-muted-foreground', '[&>svg]:size-[1em] [&>svg]:text-muted-foreground')}>
+                  {separator}
+                </span>
               )}
             </dt>
             <dd

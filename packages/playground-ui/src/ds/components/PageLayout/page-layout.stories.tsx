@@ -68,7 +68,9 @@ export const NarrowSettings: Story = {
         </PageLayout.TopArea>
         <PageLayout.MainArea className="grid gap-3">
           <div className="border-border1 bg-surface2 text-muted-foreground rounded-xl border p-5">General settings</div>
-          <div className="border-border1 bg-surface2 text-muted-foreground rounded-xl border p-5">Environment variables</div>
+          <div className="border-border1 bg-surface2 text-muted-foreground rounded-xl border p-5">
+            Environment variables
+          </div>
         </PageLayout.MainArea>
       </PageLayout>
     </div>

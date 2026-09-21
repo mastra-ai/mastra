@@ -37,7 +37,11 @@ export interface ScoresDataListTimeCellProps {
 
 export function ScoresDataListTimeCell({ timestamp }: ScoresDataListTimeCellProps) {
   const date = toDate(timestamp);
-  return <DataListCell className="text-ui-smd text-muted-foreground">{date ? format(date, 'h:mm:ss aaa') : '-'}</DataListCell>;
+  return (
+    <DataListCell className="text-ui-smd text-muted-foreground">
+      {date ? format(date, 'h:mm:ss aaa') : '-'}
+    </DataListCell>
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -55,7 +55,9 @@ export function SignalDeltaColumn({
         </Tooltip>
       </h3>
       <ul className="mt-2 space-y-1.5">
-        {deltas.length === 0 ? <li className="text-muted-foreground text-ui-sm">No themes in either snapshot.</li> : null}
+        {deltas.length === 0 ? (
+          <li className="text-muted-foreground text-ui-sm">No themes in either snapshot.</li>
+        ) : null}
         {deltas.map(delta => {
           const themeId = delta.themeId;
           const card = (

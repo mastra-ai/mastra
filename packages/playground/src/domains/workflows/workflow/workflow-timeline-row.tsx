@@ -28,7 +28,12 @@ const statusPresentation = {
   canceled: { label: 'Canceled', icon: CircleSlash, color: 'text-muted-foreground', bar: 'bg-neutral3/40' },
 } satisfies Record<Step['status'], { label: string; icon: typeof Check; color: string; bar: string }>;
 
-const unknownStatus = { label: 'Status unavailable', icon: CircleHelp, color: 'text-muted-foreground', bar: 'bg-neutral3/25' };
+const unknownStatus = {
+  label: 'Status unavailable',
+  icon: CircleHelp,
+  color: 'text-muted-foreground',
+  bar: 'bg-neutral3/25',
+};
 
 export interface WorkflowTimelineRowProps {
   row: TimelineRow;

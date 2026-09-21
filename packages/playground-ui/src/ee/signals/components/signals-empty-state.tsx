@@ -276,7 +276,9 @@ export const SignalsEmptyState = ({
                 <h3 className="text-ui-md font-semibold" style={signalStyle(signal.key)}>
                   {signal.label}
                 </h3>
-                {signal.description ? <p className="text-ui-sm text-muted-foreground mt-1.5">{signal.description}</p> : null}
+                {signal.description ? (
+                  <p className="text-ui-sm text-muted-foreground mt-1.5">{signal.description}</p>
+                ) : null}
               </li>
             ))}
           </ul>

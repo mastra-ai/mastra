@@ -11,7 +11,10 @@ interface AutosaveIndicatorProps {
 export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndicatorProps) => {
   if (status === 'saving') {
     return (
-      <span className="text-ui-sm text-muted-foreground flex items-center gap-1.5" data-testid="agent-builder-autosave-saving">
+      <span
+        className="text-ui-sm text-muted-foreground flex items-center gap-1.5"
+        data-testid="agent-builder-autosave-saving"
+      >
         <Spinner size="sm" />
         Saving…
       </span>
@@ -20,7 +23,10 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
 
   if (status === 'saved') {
     return (
-      <span className="text-ui-sm text-muted-foreground flex items-center gap-1.5" data-testid="agent-builder-autosave-saved">
+      <span
+        className="text-ui-sm text-muted-foreground flex items-center gap-1.5"
+        data-testid="agent-builder-autosave-saved"
+      >
         <CheckIcon className="h-3.5 w-3.5" />
         Saved
       </span>
@@ -29,7 +35,10 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
 
   if (status === 'error') {
     return (
-      <span className="text-ui-sm text-muted-foreground flex items-center gap-1.5" data-testid="agent-builder-autosave-error">
+      <span
+        className="text-ui-sm text-muted-foreground flex items-center gap-1.5"
+        data-testid="agent-builder-autosave-error"
+      >
         <span title={lastError?.message}>Failed to save</span>
         <button
           type="button"

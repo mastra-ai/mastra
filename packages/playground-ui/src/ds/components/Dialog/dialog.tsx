@@ -209,7 +209,10 @@ const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
         <ScrollArea className="flex min-h-0 min-w-0 shrink flex-col" viewPortClassName="h-auto min-h-0" mask>
           <div
             ref={ref}
-            className={cn('flex flex-col gap-3 px-4 py-2 text-ui-md [overflow-wrap:anywhere] text-muted-foreground', className)}
+            className={cn(
+              'flex flex-col gap-3 px-4 py-2 text-ui-md [overflow-wrap:anywhere] text-muted-foreground',
+              className,
+            )}
             {...props}
           >
             {children}
@@ -256,7 +259,10 @@ const DialogDescription = React.forwardRef<HTMLParagraphElement, DialogDescripti
     return (
       <DialogPrimitive.Description
         ref={ref}
-        className={cn(variant === 'new' ? 'text-ui-md [overflow-wrap:anywhere] text-muted-foreground' : 'sr-only', className)}
+        className={cn(
+          variant === 'new' ? 'text-ui-md [overflow-wrap:anywhere] text-muted-foreground' : 'sr-only',
+          className,
+        )}
         {...props}
       />
     );

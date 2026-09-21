@@ -159,7 +159,9 @@ export const SearchAndFilter: Story = {
           <TabbedContainer.Panel value="overview" label="Overview">
             <div className="grid gap-1">
               <h2 className={cn('text-ui-md', 'font-medium', 'text-foreground')}>Evaluation overview</h2>
-              <p className="text-ui-sm text-muted-foreground">Any product content can share the frame with data-heavy tabs.</p>
+              <p className="text-ui-sm text-muted-foreground">
+                Any product content can share the frame with data-heavy tabs.
+              </p>
             </div>
           </TabbedContainer.Panel>
           <TabbedContainer.DataList
@@ -266,7 +268,9 @@ export const OverflowAndClosable: Story = {
               <TabbedContainer.Panel key={tab.value} value={tab.value} label={tab.label} onClose={closeTab(tab.value)}>
                 <div className="grid gap-1">
                   <h2 className={cn('text-ui-md', 'font-medium', 'text-foreground')}>Workspace overview</h2>
-                  <p className="text-ui-sm text-muted-foreground">Arbitrary content shares the same closable tab rail.</p>
+                  <p className="text-ui-sm text-muted-foreground">
+                    Arbitrary content shares the same closable tab rail.
+                  </p>
                 </div>
               </TabbedContainer.Panel>
             ) : (

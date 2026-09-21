@@ -193,7 +193,8 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
     case 'ready':
       message = (
         <>
-          <b className="text-foreground font-medium">{validation.total}</b> item{validation.total !== 1 ? 's' : ''} ready
+          <b className="text-foreground font-medium">{validation.total}</b> item{validation.total !== 1 ? 's' : ''}{' '}
+          ready
           {validation.missingGroundTruthCount > 0 && ` · ${validation.missingGroundTruthCount} without groundTruth`}
         </>
       );

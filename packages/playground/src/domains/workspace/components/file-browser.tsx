@@ -391,7 +391,9 @@ export function FileBrowser({
                             </span>
                           ))}
                         {entry.type === 'file' && entry.size !== undefined && (
-                          <span className="text-muted-foreground text-ui-sm tabular-nums">{formatBytes(entry.size)}</span>
+                          <span className="text-muted-foreground text-ui-sm tabular-nums">
+                            {formatBytes(entry.size)}
+                          </span>
                         )}
                       </button>
                       {onDelete && !entry.mount && (

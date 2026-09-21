@@ -128,7 +128,9 @@ export function ThemeDetailPanel({
               {detailQuery.data && !detailQuery.data.theme && (
                 <section>
                   <h2 className="text-foreground text-ui-md font-semibold">Not present in this snapshot</h2>
-                  <p className="text-muted-foreground text-ui-md mt-2">This theme has no data in the selected snapshot.</p>
+                  <p className="text-muted-foreground text-ui-md mt-2">
+                    This theme has no data in the selected snapshot.
+                  </p>
                 </section>
               )}
               {detailQuery.data?.theme && (
@@ -158,7 +160,9 @@ export function ThemeDetailPanel({
                     >
                       Examples
                     </h2>
-                    {examplesQuery.isPending && <p className="text-muted-foreground text-ui-md mt-3">Loading examples…</p>}
+                    {examplesQuery.isPending && (
+                      <p className="text-muted-foreground text-ui-md mt-3">Loading examples…</p>
+                    )}
                     {examplesQuery.isError && <p className="text-ui-md mt-3 text-red-500">Unable to load examples.</p>}
                     {examplesQuery.data && (
                       <>
@@ -197,7 +201,9 @@ export function ThemeDetailPanel({
                       >
                         Trend
                       </h2>
-                      {historyQuery.isPending && <p className="text-muted-foreground text-ui-md mt-3">Loading trend…</p>}
+                      {historyQuery.isPending && (
+                        <p className="text-muted-foreground text-ui-md mt-3">Loading trend…</p>
+                      )}
                       {historyQuery.isError && (
                         <p className="text-ui-md mt-3 text-red-500">Unable to load the trend.</p>
                       )}

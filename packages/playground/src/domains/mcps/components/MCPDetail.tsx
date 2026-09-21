@@ -94,7 +94,9 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
               Regular HTTP Endpoint
             </Badge>
 
-            <Txt className="text-muted-foreground pt-1 pb-2">Use for stateless HTTP transport with streamable responses.</Txt>
+            <Txt className="text-muted-foreground pt-1 pb-2">
+              Use for stateless HTTP transport with streamable responses.
+            </Txt>
 
             <div className="flex items-start gap-2">
               <Txt className="bg-surface4 rounded-lg px-2 py-1">{httpStreamUrl}</Txt>
@@ -124,7 +126,9 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           <div className="border-border1 bg-surface3 rounded-lg border p-4">
             <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">CLI</span>}>Command Line</Badge>
 
-            <Txt className="text-muted-foreground pt-1 pb-2">Use for local command-line access via npx and mcp-remote.</Txt>
+            <Txt className="text-muted-foreground pt-1 pb-2">
+              Use for local command-line access via npx and mcp-remote.
+            </Txt>
 
             <div className="flex items-start gap-2">
               <Txt className="bg-surface4 rounded-lg px-2 py-1">{commandLineConfig}</Txt>

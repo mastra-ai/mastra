@@ -89,7 +89,9 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                 })()}
               </div>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="text-ui-sm text-muted-foreground line-clamp-1">{skill.description || 'No description'}</span>
+                <span className="text-ui-sm text-muted-foreground line-clamp-1">
+                  {skill.description || 'No description'}
+                </span>
               </div>
               {showFavorites && (
                 <div className="mt-2 md:hidden">

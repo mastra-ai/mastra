@@ -157,7 +157,11 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <Avatar name={agentName ?? 'Agent'} src={agentAvatarUrl} size="lg" />
             </div>
             <div className="starter-chip" style={{ animationDelay: '150ms' }}>
-              <Txt variant="ui-lg" className="text-foreground font-semibold" style={{ viewTransitionName: 'agent-name' }}>
+              <Txt
+                variant="ui-lg"
+                className="text-foreground font-semibold"
+                style={{ viewTransitionName: 'agent-name' }}
+              >
                 {agentName ?? 'your agent'}
               </Txt>
             </div>
@@ -194,7 +198,10 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                   >
                     {starterPrompt.title}
                   </Txt>
-                  <Txt variant="ui-xs" className="text-muted-foreground group-hover:text-foreground mt-1 transition-colors">
+                  <Txt
+                    variant="ui-xs"
+                    className="text-muted-foreground group-hover:text-foreground mt-1 transition-colors"
+                  >
                     {starterPrompt.description}
                   </Txt>
                 </span>

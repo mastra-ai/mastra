@@ -707,7 +707,9 @@ export const AsChild: Story = {
                       <DialogTitle>Contact support</DialogTitle>
                       <DialogDescription>asChild lets a NavLink act as a Dialog trigger.</DialogDescription>
                     </DialogHeader>
-                    <p className="text-ui-sm text-muted-foreground">Anything that can be clicked can be a sidebar item.</p>
+                    <p className="text-ui-sm text-muted-foreground">
+                      Anything that can be clicked can be a sidebar item.
+                    </p>
                   </DialogContent>
                 </Dialog>
 

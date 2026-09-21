@@ -34,7 +34,9 @@ export interface DataDetailsPanelKeyValueListHeaderProps {
 
 function Header({ className, children }: DataDetailsPanelKeyValueListHeaderProps) {
   return (
-    <dt className={cn('col-span-2 py-3 text-ui-sm tracking-widest text-placeholder uppercase', className)}>{children}</dt>
+    <dt className={cn('col-span-2 py-3 text-ui-sm tracking-widest text-placeholder uppercase', className)}>
+      {children}
+    </dt>
   );
 }
 

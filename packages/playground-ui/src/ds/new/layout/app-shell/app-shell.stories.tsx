@@ -102,7 +102,9 @@ function MainContent() {
       {Array.from({ length: 14 }, (_, index) => (
         <article key={index} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
           <p className="text-ui-sm text-foreground font-medium">Activity {index + 1}</p>
-          <p className="text-ui-xs text-muted-foreground mt-1">A representative row that makes the content area scroll.</p>
+          <p className="text-ui-xs text-muted-foreground mt-1">
+            A representative row that makes the content area scroll.
+          </p>
         </article>
       ))}
     </main>
@@ -116,7 +118,9 @@ function FrameWithPanel({ children, className }: AppShellFrameProps) {
         <div className="min-w-0 flex-1">{children}</div>
         <aside className="border-border1 bg-surface1 hidden w-72 shrink-0 border-l p-4 xl:block">
           <p className="text-ui-sm text-foreground font-medium">Details panel</p>
-          <p className="text-ui-xs text-muted-foreground mt-1">A consumer-owned panel rendered outside the framed content.</p>
+          <p className="text-ui-xs text-muted-foreground mt-1">
+            A consumer-owned panel rendered outside the framed content.
+          </p>
         </aside>
       </div>
     </div>

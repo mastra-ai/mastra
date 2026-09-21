@@ -253,7 +253,9 @@ const SiblingsWithDepthDemo = () => {
           </DataPanel.Heading>
         </DataPanel.Header>
         <DataPanel.Content>
-          <p className="text-ui-sm text-muted-foreground">Escape closes this panel first; the result stays open beneath.</p>
+          <p className="text-ui-sm text-muted-foreground">
+            Escape closes this panel first; the result stays open beneath.
+          </p>
         </DataPanel.Content>
       </DataPanel>
     </div>

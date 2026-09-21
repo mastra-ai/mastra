@@ -142,7 +142,8 @@ const ProgressBar = ({
                 )}
                 {isAdaptive && totalBudget && (
                   <div>
-                    <span className="text-muted-foreground">Mode:</span> <span className="text-amber-400">Adaptive</span>{' '}
+                    <span className="text-muted-foreground">Mode:</span>{' '}
+                    <span className="text-amber-400">Adaptive</span>{' '}
                     <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
                   </div>
                 )}

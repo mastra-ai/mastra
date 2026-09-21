@@ -138,7 +138,9 @@ function IntegrationDialogContent({
                     </span>
                     {item.badge ? <Badge size="sm">{item.badge}</Badge> : null}
                     {item.meta ? (
-                      <span className="text-ui-sm leading-ui-sm text-muted-foreground ml-auto shrink-0">{item.meta}</span>
+                      <span className="text-ui-sm leading-ui-sm text-muted-foreground ml-auto shrink-0">
+                        {item.meta}
+                      </span>
                     ) : null}
                   </button>
                 </li>

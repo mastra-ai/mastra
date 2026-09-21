@@ -150,7 +150,11 @@ export function ScheduleTriggersList({
             </DataList.Cell>
 
             <DataList.Cell>
-              {t.run ? <span>{formatDuration(t.run.durationMs)}</span> : <span className="text-muted-foreground">—</span>}
+              {t.run ? (
+                <span>{formatDuration(t.run.durationMs)}</span>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
             </DataList.Cell>
             <DataList.Cell> </DataList.Cell>
           </>

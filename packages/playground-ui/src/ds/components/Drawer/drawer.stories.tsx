@@ -45,7 +45,9 @@ export const Default: Story = {
           <DrawerDescription>You are all caught up. Good job!</DrawerDescription>
         </DrawerHeader>
         <DrawerBody>
-          <p className="text-ui-sm text-muted-foreground">Swipe down or press the close button to dismiss this sheet.</p>
+          <p className="text-ui-sm text-muted-foreground">
+            Swipe down or press the close button to dismiss this sheet.
+          </p>
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>

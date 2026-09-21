@@ -78,14 +78,19 @@ export function NoiseDetailPanel({
           {insightTraceId === undefined && (
             <>
               <section aria-labelledby="noise-summary-heading">
-                <h2 id="noise-summary-heading" className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase">
+                <h2
+                  id="noise-summary-heading"
+                  className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase"
+                >
                   Summary
                 </h2>
                 <p className="text-foreground text-ui-md mt-3">
                   Noise contains trace signal summaries that did not consistently match a recurring theme in this
                   snapshot.
                 </p>
-                {noiseQuery.isPending && <p className="text-muted-foreground text-ui-md mt-4">Loading noise details…</p>}
+                {noiseQuery.isPending && (
+                  <p className="text-muted-foreground text-ui-md mt-4">Loading noise details…</p>
+                )}
                 {noiseQuery.isError && <p className="text-ui-md mt-4 text-red-500">Unable to load noise details.</p>}
                 {noiseQuery.data && (
                   <p className="text-foreground text-ui-md mt-4 font-mono tabular-nums">
@@ -98,7 +103,10 @@ export function NoiseDetailPanel({
               </section>
 
               <section aria-labelledby="noise-examples-heading">
-                <h2 id="noise-examples-heading" className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase">
+                <h2
+                  id="noise-examples-heading"
+                  className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase"
+                >
                   Example summaries
                 </h2>
                 {examplesQuery.isPending && <p className="text-muted-foreground text-ui-md mt-3">Loading examples…</p>}

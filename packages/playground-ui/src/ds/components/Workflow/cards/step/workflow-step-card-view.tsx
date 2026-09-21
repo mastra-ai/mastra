@@ -148,7 +148,9 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                   )}
                 </span>
               )}
-              {capabilities.length > 0 && <span className="text-ui-xs text-muted-foreground">{capabilities.join(' · ')}</span>}
+              {capabilities.length > 0 && (
+                <span className="text-ui-xs text-muted-foreground">{capabilities.join(' · ')}</span>
+              )}
             </span>
           </Summary>
           <div

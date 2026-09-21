@@ -135,7 +135,9 @@ export default function AgentBuilderLibraryPage() {
                 <button
                   onClick={() => setTab('agents')}
                   className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
-                    tab === 'agents' ? 'bg-surface4 text-foreground' : 'bg-surface2 text-muted-foreground hover:text-foreground'
+                    tab === 'agents'
+                      ? 'bg-surface4 text-foreground'
+                      : 'bg-surface2 text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   Agents
@@ -143,7 +145,9 @@ export default function AgentBuilderLibraryPage() {
                 <button
                   onClick={() => setTab('skills')}
                   className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
-                    tab === 'skills' ? 'bg-surface4 text-foreground' : 'bg-surface2 text-muted-foreground hover:text-foreground'
+                    tab === 'skills'
+                      ? 'bg-surface4 text-foreground'
+                      : 'bg-surface2 text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   Skills

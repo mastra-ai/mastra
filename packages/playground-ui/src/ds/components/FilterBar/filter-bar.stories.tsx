@@ -102,7 +102,9 @@ function Demo({
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
       {children?.(items)}
-      <pre className="bg-surface3 text-ui-xs text-muted-foreground rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+      <pre className="bg-surface3 text-ui-xs text-muted-foreground rounded-lg p-3">
+        {JSON.stringify(items, null, 2)}
+      </pre>
     </div>
   );
 }

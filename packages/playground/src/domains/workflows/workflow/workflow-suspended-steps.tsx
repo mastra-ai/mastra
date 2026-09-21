@@ -153,7 +153,9 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
               <span className="flex min-w-0 items-center gap-2">
                 <Icon>
                   <ChevronRight
-                    className={cn('transition-transform text-muted-foreground', { 'transform rotate-90': isPayloadOpen })}
+                    className={cn('transition-transform text-muted-foreground', {
+                      'transform rotate-90': isPayloadOpen,
+                    })}
                   />
                 </Icon>
                 <Txt as="span" variant="ui-md" className="text-foreground truncate">
