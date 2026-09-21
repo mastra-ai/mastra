@@ -16,7 +16,7 @@ export type DrawerSide = 'top' | 'right' | 'bottom' | 'left';
 const drawerBackdropVariants = cva('drawer-backdrop fixed inset-0 z-50', {
   variants: {
     overlay: {
-      visible: 'bg-overlay backdrop-blur-xs',
+      visible: 'bg-scrim backdrop-blur-xs',
       transparent: 'bg-transparent',
       none: 'hidden',
     },

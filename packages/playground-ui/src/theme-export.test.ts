@@ -5,6 +5,8 @@ import { compile } from 'tailwindcss';
 import { resolveConfig } from 'vite';
 import { describe, expect, it } from 'vitest';
 import { BorderColors, Colors } from './ds/tokens/colors';
+import { FontSizes } from './ds/tokens/fonts';
+import { Shadows } from './ds/tokens/shadows';
 import { Sizes } from './ds/tokens/sizes';
 
 const pkgRoot = resolve(__dirname, '..');
@@ -271,6 +273,17 @@ describe('theme.css export', () => {
     expect(lightTheme).toContain('--border-focus: oklch(var(--fill-tint) 0 0 / 50%)');
   });
 
+  // Two token sets that feed the same utility prefix cannot share a key. `overlay`
+  // lived in both `Colors` and `Shadows`, so tailwind-merge read `shadow-overlay` as
+  // a shadow *colour* and no call site could replace or cancel it — a `shadow-none`
+  // beside it survived the merge and lost on source order instead.
+  it('keeps one meaning per utility prefix across token namespaces', () => {
+    const colorNames = new Set(Object.keys({ ...Colors, ...BorderColors }));
+
+    expect(Object.keys(Shadows).filter(name => colorNames.has(name))).toEqual([]);
+    expect(Object.keys(FontSizes).filter(name => colorNames.has(name))).toEqual([]);
+  });
+
   // The rim has to be assembled by the utility, on the element. A custom property
   // holding `var(--surface-rim)` is substituted once where it is declared — the
   // root — so every descendant inherits a finished string and a focused field
@@ -282,7 +295,8 @@ describe('theme.css export', () => {
 
     for (const elevation of ['raised', 'overlay']) {
       const rim = 'inset 0 0 0 1px var(--surface-rim)';
-      expect(output).toContain(`box-shadow: var(--elevation-lip), ${rim}, var(--elevation-${elevation});`);
+      const tint = 'inset 0 0 0 9999px var(--surface-tint)';
+      expect(output).toContain(`box-shadow: var(--elevation-lip), ${rim}, ${tint}, var(--elevation-${elevation});`);
       for (const theme of [darkTheme, lightTheme]) {
         expect(theme).toMatch(new RegExp(`--elevation-${elevation}:`));
       }
@@ -292,7 +306,7 @@ describe('theme.css export', () => {
     // surfaces needs less than a line drawn inside one.
     for (const theme of [darkTheme, lightTheme]) {
       expect(theme).toMatch(/--surface-rim:/);
-      expect(theme).toMatch(/--surface-rim-hover:/);
+      expect(theme).toMatch(/--surface-rim-focus:/);
       expect(theme).toMatch(/--elevation-lip:/);
     }
   });

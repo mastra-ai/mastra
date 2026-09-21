@@ -43,23 +43,24 @@
 }
 
 .command-palette-results-panel::after {
+  /* Inset by the rim: the panel's boundary is an inset shadow, which children paint over. */
   position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  right: 1px;
+  bottom: 1px;
+  left: 1px;
   z-index: 10;
   height: var(--command-palette-footer-height);
   pointer-events: none;
   content: '';
   background: linear-gradient(
     to top,
-    var(--background) 0%,
-    var(--background) 28%,
-    color-mix(in oklab, var(--background) 94%, transparent) 68%,
+    var(--card) 0%,
+    var(--card) 28%,
+    color-mix(in oklab, var(--card) 94%, transparent) 68%,
     transparent 100%
   );
-  border-bottom-right-radius: 1rem;
-  border-bottom-left-radius: 1rem;
+  border-bottom-right-radius: calc(var(--radius-xl) - 1px);
+  border-bottom-left-radius: calc(var(--radius-xl) - 1px);
 }
 
 .command-palette-list {
@@ -72,8 +73,6 @@
 
 .command-palette-footer {
   min-height: calc(var(--command-palette-footer-height) - 1.25rem);
-  border-bottom-right-radius: 1rem;
-  border-bottom-left-radius: 1rem;
 }
 
 .command-palette-popup[data-open] .command-palette-surface {

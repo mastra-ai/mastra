@@ -2,7 +2,7 @@ import type { BaseUIEvent } from '@base-ui/react/types';
 import { ListFilterIcon, Search } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { FilterBarFieldLabel } from './filter-bar-chip';
+import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
@@ -239,7 +239,7 @@ export function FilterBarInput({
             // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
             // and the Button icon offset); the bar itself has no chrome. Focus lives on the
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
-            comboboxTriggerClass({ variant: 'default', size: 'md' }),
+            comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
             'w-auto cursor-text',
             'focus-within:bg-fill-hover',
             inputFocusBorderWithin,

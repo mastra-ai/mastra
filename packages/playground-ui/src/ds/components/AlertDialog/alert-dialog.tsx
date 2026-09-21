@@ -51,7 +51,7 @@ type AlertDialogOverlayProps = Omit<AlertDialogPrimitive.Backdrop.Props, 'classN
 const AlertDialogOverlay = React.forwardRef<HTMLDivElement, AlertDialogOverlayProps>(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Backdrop
     ref={ref}
-    className={cn('dialog-overlay-anim fixed inset-0 z-50 bg-overlay backdrop-blur-xs', className)}
+    className={cn('dialog-overlay-anim fixed inset-0 z-50 bg-scrim backdrop-blur-xs', className)}
     {...props}
   />
 ));

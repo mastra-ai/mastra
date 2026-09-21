@@ -47,7 +47,7 @@ interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'
 export const AskUserOptionControl = ({ type, label, description, className, ...props }: AskUserOptionControlProps) => (
   <label
     className={cn(
-      'state-layer bg-card shadow-raised flex cursor-pointer items-start gap-2 rounded-md px-3 py-2 text-foreground transition-colors has-[:checked]:bg-fill-hover has-[:checked]:[--surface-rim:var(--border-strong)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
+      'state-layer bg-card shadow-raised flex cursor-pointer items-start gap-2 rounded-md px-3 py-2 text-foreground transition-colors has-[:checked]:[--surface-tint:var(--fill-hover)] has-[:checked]:[--surface-rim:var(--border-strong)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
       className,
     )}
   >

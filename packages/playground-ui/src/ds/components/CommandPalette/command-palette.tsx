@@ -3,6 +3,8 @@ import type { ComponentPropsWithoutRef, HTMLAttributes, ReactNode } from 'react'
 import { CommandDialog, CommandInput, CommandItem, CommandList, CommandShortcut } from '@/ds/components/Command';
 import { Kbd } from '@/ds/components/Kbd';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -30,8 +32,7 @@ function CommandPaletteDialog({
       commandClassName={cn(
         // Height lives in `.command-palette-shell` — see command-palette.css.
         'command-palette-shell gap-2 overflow-visible rounded-none bg-transparent text-muted-foreground shadow-none backdrop-blur-none',
-        '[&_[data-slot=command-input-wrapper]]:h-11 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:rounded-xl [&_[data-slot=command-input-wrapper]]:border [&_[data-slot=command-input-wrapper]]:border-border [&_[data-slot=command-input-wrapper]]:bg-card [&_[data-slot=command-input-wrapper]]:px-3 [&_[data-slot=command-input-wrapper]]:shadow-[0_6px_18px_-16px_rgb(0_0_0_/_0.55)]',
-        '[&_[data-slot=command-input-wrapper]]:pr-11 [&_[data-slot=command-input-wrapper]]:transition-[border-color,box-shadow] [&_[data-slot=command-input-wrapper]]:duration-150 [&_[data-slot=command-input-wrapper]]:ease-out [&_[data-slot=command-input-wrapper]_svg]:text-muted-foreground [&_[data-slot=command-input-wrapper]:focus-within]:border-border [&_[data-slot=command-input-wrapper]:focus-within]:shadow-[0_8px_22px_-18px_rgb(0_0_0_/_0.6)]',
+        '[&_[data-slot=command-input-wrapper]_svg]:text-muted-foreground',
         '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-body',
         '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-2 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group]]:p-0',
         '**:[[cmdk-item]]:px-2 **:[[cmdk-item]]:py-1.5',
@@ -49,7 +50,14 @@ type CommandPaletteInputProps = ComponentPropsWithoutRef<typeof CommandInput>;
 function CommandPaletteInput({ wrapperClassName, ...props }: CommandPaletteInputProps) {
   return (
     <CommandInput
-      wrapperClassName={cn('command-palette-surface command-palette-surface-input', wrapperClassName)}
+      wrapperClassName={cn(
+        'command-palette-surface command-palette-surface-input',
+        inputSurfaceAndFocusWithinStyle,
+        // `border-0` because `CommandInput`'s own `border-b` is the separator of a single-panel
+        // Command; here the input is a detached pill and the material already carries its rim.
+        'h-11 shrink-0 rounded-xl border-0 px-3 pr-11',
+        wrapperClassName,
+      )}
       {...props}
     />
   );
@@ -57,7 +65,7 @@ function CommandPaletteInput({ wrapperClassName, ...props }: CommandPaletteInput
 
 function CommandPaletteBody({ children, className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className="min-h-0 flex-1 rounded-2xl">
+    <div className="min-h-0 flex-1">
       <div
         className={cn(
           'grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 md:grid-cols-[13rem_minmax(0,1fr)] md:grid-rows-none',
@@ -79,7 +87,8 @@ function CommandPaletteRail({ children, className, ...props }: CommandPaletteRai
   return (
     <aside
       className={cn(
-        'command-palette-surface command-palette-surface-rail flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-background p-2 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none',
+        'command-palette-surface command-palette-surface-rail flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-xl p-2 md:h-full md:max-h-none',
+        overlaySurfaceStyle,
         className,
       )}
       {...props}
@@ -136,7 +145,10 @@ function CommandPaletteResults({ children, footer, ...props }: CommandPaletteRes
   return (
     <div
       role="region"
-      className="command-palette-surface command-palette-surface-results command-palette-results-panel border-border bg-background relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border shadow-[0_10px_28px_-22px_rgb(0_0_0_/_0.6)]"
+      className={cn(
+        'command-palette-surface command-palette-surface-results command-palette-results-panel relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl',
+        overlaySurfaceStyle,
+      )}
       {...props}
     >
       <CommandList
@@ -144,7 +156,7 @@ function CommandPaletteResults({ children, footer, ...props }: CommandPaletteRes
         scrollAreaClassName="min-h-0 flex-1 rounded-none"
         scrollAreaViewportClassName="command-palette-scroll-viewport"
         className="command-palette-list max-h-none rounded-none border-none bg-transparent shadow-none"
-        highlightClassName="rounded-xl"
+        highlightClassName="rounded-lg"
       >
         {children}
       </CommandList>
@@ -175,7 +187,7 @@ function CommandPaletteItem({
   return (
     <CommandItem
       className={cn(
-        'group h-auto items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 data-[selected=true]:border-border',
+        'group h-auto items-start gap-3 rounded-lg border border-transparent px-3 py-2.5 data-[selected=true]:border-border',
         className,
       )}
       {...props}

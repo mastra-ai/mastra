@@ -38,10 +38,12 @@ export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';
 
 // Open ("popup-open") state per variant. `default` is the Button's own hover
 // (for Button-shaped triggers: DropdownMenu, Popover, DateTimePicker); `field`
-// is the Input-family overlay used by the filled Select/Combobox triggers.
+// is the Input-family material used by the filled Select/Combobox triggers, and
+// it washes through `--surface-tint` for the same reason its hover does — a
+// pinned card fill cannot be swapped without going translucent.
 export const controlTriggerOpenState: Record<ControlTriggerVisualVariant | 'field', string> = {
   default: 'data-[popup-open]:bg-fill-hover data-[popup-open]:text-foreground',
-  field: 'data-[popup-open]:bg-fill-hover data-[popup-open]:text-foreground',
+  field: 'data-[popup-open]:[--surface-tint:var(--fill)] data-[popup-open]:text-foreground',
   outline: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground data-[popup-open]:border-border-hover',
   ghost: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground',
 };

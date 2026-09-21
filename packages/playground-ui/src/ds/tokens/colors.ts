@@ -40,7 +40,7 @@ export const Colors = {
 
   error: 'var(--error)',
 
-  overlay: 'var(--overlay)',
+  scrim: 'var(--scrim)',
 };
 
 export const BorderColors = {

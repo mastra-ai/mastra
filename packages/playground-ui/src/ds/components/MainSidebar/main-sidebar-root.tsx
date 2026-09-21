@@ -199,8 +199,8 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
           className={cn(
             'border-0 bg-sidebar text-foreground',
             mobileMode === 'takeover'
-              ? 'w-[calc(100%-3.5rem)] max-w-none overflow-visible rounded-l-none rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-overlay'
-              : 'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none shadow-overlay',
+              ? 'w-[calc(100%-3.5rem)] max-w-none overflow-visible rounded-l-none rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]'
+              : 'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none',
             className,
           )}
         >

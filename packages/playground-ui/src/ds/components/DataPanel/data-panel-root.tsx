@@ -65,8 +65,8 @@ export function DataPanelRoot({
       swipeDirection="right"
     >
       <DrawerPrimitive.Portal>
-        {/* Lighter than the shared `--overlay`: a side panel should keep the page beneath readable. */}
-        <DrawerPrimitive.Backdrop className="drawer-backdrop bg-overlay/30 fixed inset-0 z-50" />
+        {/* Lighter than the shared `--scrim`: a side panel should keep the page beneath readable. */}
+        <DrawerPrimitive.Backdrop className="drawer-backdrop bg-scrim/30 fixed inset-0 z-50" />
         <DrawerPrimitive.Viewport className="fixed inset-0 z-50">
           <DrawerPrimitive.Popup
             data-slot="data-panel-popup"

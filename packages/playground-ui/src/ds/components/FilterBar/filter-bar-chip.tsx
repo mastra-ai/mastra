@@ -24,7 +24,9 @@ import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { controlHeight } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
@@ -37,10 +39,19 @@ export const segmentClass = cn(
   'first:rounded-l-full last:rounded-r-full',
 );
 
-// A chip shares the `md` control height (border-box, like the typeahead pill beside it and the default Button).
+// A filter bar is a dense row: it sits above a list, carries many chips at once, and never
+// competes with the page's own controls. Chip and typeahead pill read this one rung so they
+// stay the same height by construction rather than by two call sites agreeing.
+export const FILTER_BAR_CONTROL_SIZE: ControlSize = 'sm';
+
+// A chip is a field whose value is edited in place, so it wears the field material rather than a
+// fill rung: on a light canvas a `bg-fill` chip read as a grey slab beside the white typeahead
+// pill it belongs to. The segments layer their own state over that card, which is why the chip
+// keeps `divide-border` for the internal seams and takes its outer edge from the material's rim.
 export const chipClass = cn(
-  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border rounded-full border border-border bg-fill text-foreground',
-  controlHeight.md,
+  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border rounded-full',
+  inputSurfaceAndFocusWithinStyle,
+  controlHeight[FILTER_BAR_CONTROL_SIZE],
 );
 
 export const editableSegmentClass = cn(

@@ -58,7 +58,7 @@ export function SettingsRowLayout({
         <LabelElement
           htmlFor={htmlFor}
           className={cn(
-            'text-subheading text-foreground',
+            'text-label text-foreground',
             viewOnly && 'text-muted-foreground',
             tone === 'destructive' && 'text-destructive',
           )}

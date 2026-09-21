@@ -20,18 +20,32 @@
 
 /* Assembled here, not in `theme.css`, so `--surface-rim` resolves against the
  * element wearing the utility: a custom property that referenced it would be
- * substituted once on the root and inherited as a finished string. */
+ * substituted once on the root and inherited as a finished string.
+ *
+ * `--surface-tint` is the state layer of a surface that cannot carry a
+ * pseudo-element — an `<input>`. An inset shadow paints over the element's own
+ * fill and under its content, so a wash there behaves like `state-layer`'s
+ * `::before` without needing a child, and it sits below the rim layer so the
+ * boundary keeps its resting weight while the fill moves. Each utility resets
+ * it, because a custom property would otherwise inherit into every raised
+ * surface nested inside a hovered one. */
 @utility shadow-raised {
+  --surface-tint: transparent;
+
   box-shadow:
     var(--elevation-lip),
     inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
     var(--elevation-raised);
 }
 
 @utility shadow-overlay {
+  --surface-tint: transparent;
+
   box-shadow:
     var(--elevation-lip),
     inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
     var(--elevation-overlay);
 }
 
@@ -50,8 +64,14 @@
  *
  * It does not touch the rim: `--surface-rim` inherits, so brightening it here
  * would repaint the rim of every raised surface nested inside the hovered one.
- * A field has to move that edge because it cannot carry a pseudo-element; a
- * surface that can layer keeps the rim as its resting boundary. */
+ *
+ * This and `--surface-tint` are the same rung by two mechanisms, and both stay:
+ * the pseudo-element transitions its colour and stops a pixel short of the rim,
+ * which is what a surface with content inside it wants; the tint paints edge to
+ * edge, cannot transition (a box-shadow list transitions as a whole, so the rim
+ * and the drops would animate with it), and is the only option for an element
+ * that cannot own a child — an `<input>`. Reach for this one unless the element
+ * is a bare control. */
 @utility state-layer {
   position: relative;
   isolation: isolate;

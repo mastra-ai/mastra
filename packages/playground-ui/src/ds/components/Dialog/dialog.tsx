@@ -84,7 +84,7 @@ const DialogOverlay = React.forwardRef<HTMLDivElement, DialogOverlayProps>(({ cl
         variant === 'new'
           ? 'transition-opacity duration-normal ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none'
           : 'dialog-overlay-anim',
-        'fixed inset-0 z-50 bg-overlay backdrop-blur-xs',
+        'fixed inset-0 z-50 bg-scrim backdrop-blur-xs',
         className,
       )}
       {...props}

@@ -27,11 +27,11 @@ describe('Settings', () => {
       </SettingsGroup>,
     );
 
-    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-heading');
+    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-subheading');
     expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-foreground');
     expect(screen.getByText('Stored in this browser.').classList).toContain('text-caption');
     expect(screen.getByText('Stored in this browser.').classList).toContain('text-muted-foreground');
-    expect(screen.getByText('Theme').classList).toContain('text-subheading');
+    expect(screen.getByText('Theme').classList).toContain('text-label');
     expect(screen.getByText('Theme').classList).toContain('text-foreground');
     expect(screen.getByText('Color scheme for the interface').classList).toContain('text-caption');
     expect(screen.getByText('Color scheme for the interface').classList).toContain('text-muted-foreground');

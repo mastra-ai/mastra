@@ -16,6 +16,8 @@ The scale also had a fourth rung at 20px that nothing could use honestly: a cont
 
 Sidebar nav rows read `controlHeight` like any other control instead of declaring their own heights, which is what lets a consumer delete its per-row size overrides: a nav row is a control, and it was only ever off the scale by accident.
 
+`FilterBar` picks the `sm` rung, once, for both its chips and its typeahead pill. It is a dense row sitting above a list, carrying a dozen chips at a time, and it should not compete with the page's own controls; the two parts used to each name `md` and stay level only because a comment told the next reader to keep them in sync.
+
 The icon scale is renamed for the same reason. `sm | smd | default | lg` becomes `xs | sm | md | lg` (12 / 14 / 16 / 20), so there is no rung called `default` competing with the actual default and no `smd` between `sm` and what should have been `md`. With honest names, the two maps inside `Button` that translated a control size into a glyph size collapse into one, because the glyph rung and the control rung are now the same word.
 
 **Consumers**

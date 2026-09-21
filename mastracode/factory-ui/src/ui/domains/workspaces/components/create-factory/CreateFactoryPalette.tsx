@@ -95,10 +95,7 @@ export function CreateFactoryPalette({
         value={value}
         onValueChange={onValueChange}
         rightSlot={<Kbd size="sm">Esc</Kbd>}
-        wrapperClassName={cn(
-          'border-border bg-card h-14 shrink-0 rounded-xl border px-4',
-          !searchable && '[&>svg]:hidden',
-        )}
+        wrapperClassName={cn('h-14 px-4', !searchable && '[&>svg]:hidden')}
       />
 
       <div className="flex shrink-0 items-center justify-end gap-1.5 px-1">

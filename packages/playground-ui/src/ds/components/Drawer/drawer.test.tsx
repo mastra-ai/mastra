@@ -125,7 +125,7 @@ describe('Drawer', () => {
     const backdrop = document.querySelector('[data-slot="drawer-backdrop"]');
     expect(backdrop).toBeDefined();
     expect(backdrop?.getAttribute('data-overlay')).toBe('visible');
-    expect(backdrop?.classList.contains('bg-overlay')).toBe(true);
+    expect(backdrop?.classList.contains('bg-scrim')).toBe(true);
     expect(backdrop?.classList.contains('backdrop-blur-xs')).toBe(true);
     expect(document.querySelector('[data-slot="drawer-viewport"]')).toBeDefined();
     expect(document.querySelector('[data-slot="drawer-popup"]')).toBeDefined();
@@ -270,7 +270,7 @@ describe('Drawer', () => {
     expect(backdrop?.getAttribute('data-overlay')).toBe('transparent');
     expect(overlayDismissLayer).toBeNull();
     expect(backdrop?.classList.contains('bg-transparent')).toBe(true);
-    expect(backdrop?.classList.contains('bg-overlay')).toBe(false);
+    expect(backdrop?.classList.contains('bg-scrim')).toBe(false);
     expect(backdrop?.classList.contains('backdrop-blur-xs')).toBe(false);
     expect(viewport?.getAttribute('data-variant')).toBe('floating');
     expect(viewport?.classList.contains('inset-0')).toBe(true);
@@ -293,7 +293,7 @@ describe('Drawer', () => {
     const popup = document.querySelector('[data-slot="drawer-popup"]');
     expect(backdrop?.getAttribute('data-overlay')).toBe('visible');
     expect(overlayDismissLayer).toBeNull();
-    expect(backdrop?.classList.contains('bg-overlay')).toBe(true);
+    expect(backdrop?.classList.contains('bg-scrim')).toBe(true);
     expect(viewport?.classList.contains('pointer-events-none')).toBe(false);
     expect(viewport?.classList.contains('inset-0')).toBe(true);
     expect(viewport?.classList.contains('right-0')).toBe(false);

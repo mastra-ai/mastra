@@ -25,3 +25,5 @@ The `header-*` scale, the `leading-ui-*` line heights, and the Tailwind `text-xs
 **Also**
 
 Supporting text moved one rung further from the ink (`--gray-9` to `--gray-8`), because at one step from the ink it read as a second ink instead of stepping back.
+
+Settings picked its roles one rung too high: a group title (`SettingsTitle`) rendered at `text-heading`, the same role as the page title above it, so "GitHub issues" shouted as loud as "Work Intake" and darker, and a row label sat at `text-subheading`, the role for the title above it. The page now descends: page title 16, group title 14, row label 13, descriptions 12.

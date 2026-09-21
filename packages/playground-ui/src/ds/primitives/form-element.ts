@@ -44,39 +44,44 @@ export const inputHoverBorderWithin = '[&:hover:not(:focus-within):not(:has(:dis
 // filter input and the panel beside it read as one system — in light the field is
 // white on the off-white canvas, in dark it is the same step above it.
 //
-// Its states repaint the rim rather than the fill. An `<input>` cannot carry a
-// pseudo-element, so the state-layer trick raised surfaces use is unavailable, and
-// stepping the fill would break the pinned card colour. `--surface-rim` reaches
-// into the one inset ring the `shadow-raised` utility draws, so hover and focus
-// move that single edge instead of adding a second one beside it. Disabled is the
-// exception: it drops the card fill for the lowest translucent rung, which is how
-// a disabled field reads as recessed rather than raised.
+// Hover washes the fill, focus repaints the rim. Both go through `shadow-raised`:
+// an `<input>` cannot carry a pseudo-element, so `--surface-tint` reaches into an
+// inset layer of that utility and gives a field the same state layer a `Card` gets
+// from `state-layer` — the rung a filter chip's segments already wear, which is the
+// weight a resting field should move by. Brightening the rim on hover instead made
+// every field in a form announce the pointer: the boundary is the loudest part of a
+// surface that has no border of its own, so it is reserved for focus, where being
+// unmissable is the point. Disabled is the exception that drops the card fill for
+// the lowest translucent rung, which is how a disabled field reads as recessed.
 //
-// The three rungs stay close together — focus sits one step above hover, not at
-// the `--border-focus` weight a bare outline needs, because the edge here is the
-// boundary of a surface that already reads as raised. Wrappers whose focus lives
-// on a nested control (InputGroup) take the `within` flavour of the same rungs.
+// Focus sits at `--surface-rim-focus` rather than the `--border-focus` weight a bare
+// outline needs, because the edge here bounds a surface that already reads as raised.
+// Wrappers whose focus lives on a nested control (InputGroup, a chip) take the
+// `within` flavour.
 //
 // Caller appends a radius (`rounded-full` for single-line inputs, `rounded-xl` for
 // textareas).
-const surfaceRimHover = '[&:hover:not(:focus-visible):not(:disabled)]:[--surface-rim:var(--surface-rim-hover)]';
+// `:not([data-popup-open])` because a trigger's open rung is a plain attribute
+// selector and would otherwise lose to this compound one while the pointer is
+// still on the trigger that opened the popup.
+const surfaceTintHover =
+  '[&:hover:not(:focus-visible):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--fill-subtle)]';
 const surfaceRimFocus = 'focus-visible:[--surface-rim:var(--surface-rim-focus)]';
 
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
 // guards have to ask about descendants.
-const surfaceRimHoverWithin =
-  '[&:hover:not(:focus-within):not(:has(:disabled))]:[--surface-rim:var(--surface-rim-hover)]';
+const surfaceTintHoverWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
 const surfaceRimFocusWithin = 'focus-within:[--surface-rim:var(--surface-rim-focus)]';
 
 export const inputSurfaceAndFocusStyle =
   'bg-card shadow-raised text-foreground disabled:bg-fill-subtle ' +
-  surfaceRimHover +
+  surfaceTintHover +
   ' outline-hidden focus-visible:outline-hidden ' +
   surfaceRimFocus;
 
 export const inputSurfaceAndFocusWithinStyle =
   'bg-card shadow-raised text-foreground has-[:disabled]:bg-fill-subtle ' +
-  surfaceRimHoverWithin +
+  surfaceTintHoverWithin +
   ' outline-hidden focus-within:outline-hidden ' +
   surfaceRimFocusWithin;
 
@@ -91,12 +96,15 @@ export const inputOutlineAndFocusStyle =
 
 // Filled field trigger (Select/Combobox `default`): the same surface as Input.
 // Applied *after* `buttonVariants` so tailwind-merge replaces the Button's fill
-// and border with the field material — a field is not a button. The Button
-// variant it lands on drives `background-color` on hover, so the pinned
-// `hover:bg-card` is what keeps the trigger from turning translucent mid-hover.
+// and border with the field material — a field is not a button. The pins have to
+// repeat the Button's own `not-disabled:` prefix: tailwind-merge keys a class by
+// its variants, so a bare `hover:bg-card` sits in a different group from
+// `not-disabled:hover:bg-fill-hover`, both survive, and the Button's two-variant
+// selector then wins on specificity — which is how a field trigger ended up
+// swapping its whole fill on hover while every other field only washed.
 export const fieldTriggerSurfaceStyle =
-  'bg-card hover:bg-card active:bg-card border-0 shadow-raised text-foreground ' +
-  surfaceRimHover +
+  'bg-card not-disabled:hover:bg-card not-disabled:active:bg-card border-0 shadow-raised text-foreground ' +
+  surfaceTintHover +
   ' ' +
   surfaceRimFocus;
 

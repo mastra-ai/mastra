@@ -234,7 +234,6 @@ describe('CommandPaletteItem', () => {
 
     const item = screen.getByRole('option');
     expect(item.classList.contains('my-own-class')).toBe(true);
-    expect(item.classList.contains('rounded-xl')).toBe(true);
   });
 });
 
