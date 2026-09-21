@@ -295,6 +295,27 @@ describe('filter operator URL params', () => {
       expect(getTracePropertyFilterTokens(params)).toEqual(tokens);
     });
 
+    it('round-trips an in selection without an explicit operator', () => {
+      const params = new URLSearchParams();
+
+      applyTracePropertyFilterTokens(params, [{ fieldId: 'environment', value: ['eu', 'us'] }]);
+
+      expect(params.toString()).toBe('filterEnvironment=eu&filterEnvironment=us&filterEnvironment.op=in');
+      expect(getTracePropertyFilterTokens(params)).toEqual([
+        { fieldId: 'environment', value: ['eu', 'us'], operatorId: 'in' },
+      ]);
+    });
+
+    it('round-trips a single-valued in selection as an array', () => {
+      const params = new URLSearchParams();
+
+      applyTracePropertyFilterTokens(params, [{ fieldId: 'environment', value: ['eu'], operatorId: 'in' }]);
+
+      expect(getTracePropertyFilterTokens(params)).toEqual([
+        { fieldId: 'environment', value: ['eu'], operatorId: 'in' },
+      ]);
+    });
+
     it('writes an empty value param for a presence token', () => {
       const params = new URLSearchParams();
 

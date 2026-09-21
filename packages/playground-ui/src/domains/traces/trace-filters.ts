@@ -657,9 +657,12 @@ export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: 
       params.set(param, token.value.trim());
     }
 
+    // Only `is` is implicit on read. `in` must be written explicitly (except
+    // for tags, which are always multi-valued) or a reload would collapse the
+    // selection to its first value.
     const operatorId = traceFilterTokenOperator(token);
-    const defaultOperator = Array.isArray(token.value) ? 'in' : 'is';
-    if (operatorId !== defaultOperator) params.set(traceFilterOperatorParam(param), operatorId);
+    const implicit = token.fieldId === 'tags' ? 'in' : 'is';
+    if (operatorId !== implicit) params.set(traceFilterOperatorParam(param), operatorId);
   }
 }
 
