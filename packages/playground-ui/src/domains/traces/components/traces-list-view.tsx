@@ -10,6 +10,7 @@ import type { TraceColumnPreferences, TraceUsageSummary } from '../trace-list-co
 import { formatSpanDuration, getInputPreview } from '../utils/span-utils';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
 import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
+import type { DataListSort } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
 
 export type TracesListViewTrace = {
@@ -62,6 +63,9 @@ export type TracesListViewProps = {
   usageByTraceId?: ReadonlyMap<string, TraceUsageSummary>;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
+  /** Current sort of the Created column. When `onSortChange` is provided the header becomes sortable. */
+  createdSort?: DataListSort;
+  onSortChange?: (direction: DataListSort, key: 'startedAt') => void;
 };
 
 /**
@@ -82,6 +86,8 @@ export function TracesListView({
   columnPreferences = DEFAULT_TRACE_COLUMN_PREFERENCES,
   usageByTraceId,
   onTraceClick,
+  createdSort,
+  onSortChange,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const columns = buildTraceListColumns(columnPreferences);
@@ -131,7 +137,13 @@ export function TracesListView({
   return (
     <TracesDataList columns={columns} fit="container" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>Start</TracesDataList.TopCell>
+        {onSortChange ? (
+          <TracesDataList.SortableTopCell sortKey="startedAt" sort={createdSort} onSortChange={onSortChange}>
+            Start
+          </TracesDataList.SortableTopCell>
+        ) : (
+          <TracesDataList.TopCell>Start</TracesDataList.TopCell>
+        )}
         {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Type</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}

@@ -3,6 +3,7 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
@@ -27,6 +28,8 @@ export interface InboxFeedbackListProps {
   /** Opens the trace side panel for the row's feedback. */
   onSelect: (feedback: FeedbackItem) => void;
   selectedFeedbackId?: string;
+  timestampSort?: DataListSort;
+  onSortChange: (sort: DataListSort, key: string) => void;
 }
 
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
@@ -42,6 +45,8 @@ export function InboxFeedbackList({
   pendingFeedbackId,
   onSelect,
   selectedFeedbackId,
+  timestampSort,
+  onSortChange,
 }: InboxFeedbackListProps) {
   const [search, setSearch] = useState('');
   const term = search.trim().toLowerCase();
@@ -90,7 +95,9 @@ export function InboxFeedbackList({
             <DataList.TopCell>Author</DataList.TopCell>
             <DataList.TopCell>Source</DataList.TopCell>
             <DataList.TopCell>Trace</DataList.TopCell>
-            <DataList.TopCell>Date</DataList.TopCell>
+            <DataList.SortableTopCell sortKey="timestamp" sort={timestampSort} onSortChange={onSortChange}>
+              Date
+            </DataList.SortableTopCell>
             <DataList.TopCell>&nbsp;</DataList.TopCell>
           </DataList.Top>
 

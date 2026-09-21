@@ -1,5 +1,18 @@
 # @mastra/server
 
+## 1.68.0-alpha.10
+
+### Patch Changes
+
+- Exposed the existing authorization provider selector so adapters can skip unnecessary request body parsing. ([#24563](https://github.com/mastra-ai/mastra/pull/24563))
+
+- Fixed workspace and skills query flags parsing the string `"false"` as `true`. The `recursive` flag on list/write/mkdir/delete, the `force` flag on delete, and the `includeReferences` flag on skills search now parse `"false"` as `false`, so a client that explicitly disables a flag no longer has it silently turned on. ([#24568](https://github.com/mastra-ai/mastra/pull/24568))
+
+  Fixes #24511.
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0)]:
+  - @mastra/core@1.68.0-alpha.10
+
 ## 1.68.0-alpha.9
 
 ### Patch Changes
