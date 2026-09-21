@@ -25,13 +25,16 @@ import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
+import { BranchForkMarker } from './messages/branch-fork-marker';
+import { BranchFromMessageAction } from './messages/branch-from-message-action';
+import { buildBranchForkMarkers } from './messages/build-branch-fork-markers';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
 import { SuggestedPromptList } from './suggested-prompt-list';
@@ -42,8 +45,10 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
+import { useBranchThread, useThreadBranches } from '@/domains/memory/hooks';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
+import { useLinkComponent } from '@/lib/framework';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
@@ -151,6 +156,27 @@ export const Thread = ({
   const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
   const threadRailTurns = useMemo(() => buildThreadRailTurns(messages), [messages]);
   const threadRailAnchorIds = useMemo(() => new Set(threadRailTurns.map(turn => turn.messageId)), [threadRailTurns]);
+
+  const { paths, navigate } = useLinkComponent();
+  const { data: branchLineage } = useThreadBranches({ threadId, agentId });
+  const { mutateAsync: branchThread, isPending: isBranching } = useBranchThread();
+  const canBranch = Boolean(agentId && threadId && threadId !== 'new' && branchLineage?.isSupported);
+  const branchMarkers = buildBranchForkMarkers(branchLineage);
+
+  // Only persisted messages have UUID ids; the chat accumulator renders
+  // streamed messages under synthetic ids (e.g. `text-<runId>-<ts>`) that the
+  // server cannot fork at. Hide the action while streaming and on synthetic
+  // ids rather than failing the branch with a 404.
+  const PERSISTED_MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const canBranchMessage = (messageId: string) => canBranch && !isRunning && PERSISTED_MESSAGE_ID.test(messageId);
+
+  const handleBranchFromMessage = async (messageId: string) => {
+    if (!agentId || !threadId) return;
+    const result = await branchThread({ threadId, agentId, branchPointMessageId: messageId });
+    if (result?.thread?.id) {
+      navigate(paths.agentThreadLink(agentId, result.thread.id));
+    }
+  };
   // Keyed by the opening message's client key: `data-user-message` reconciliation
   // swaps `message.id` to the server signal id, and a changing key would remount
   // the whole turn.
@@ -193,19 +219,41 @@ export const Thread = ({
                           className="gap-4"
                         >
                           {group.entries.map(message => (
-                            <MessageScrollerItem
-                              key={getClientMessageKey(message)}
-                              messageId={message.id}
-                              scrollAnchor={threadRailAnchorIds.has(message.id)}
-                            >
-                              <MessageRow
-                                message={message}
-                                hasModelList={hasModelList}
-                                isSpeaking={isSpeaking}
-                                onReadAloud={readAloud}
-                                onStopSpeaking={stopSpeaking}
-                              />
-                            </MessageScrollerItem>
+                            <Fragment key={getClientMessageKey(message)}>
+                              <MessageScrollerItem
+                                messageId={message.id}
+                                scrollAnchor={threadRailAnchorIds.has(message.id)}
+                              >
+                                <MessageRow
+                                  message={message}
+                                  hasModelList={hasModelList}
+                                  isSpeaking={isSpeaking}
+                                  onReadAloud={readAloud}
+                                  onStopSpeaking={stopSpeaking}
+                                  footer={
+                                    canBranchMessage(message.id) ? (
+                                      <BranchFromMessageAction
+                                        disabled={isBranching}
+                                        onBranch={() => {
+                                          // Errors surface via the mutation's onError toast.
+                                          handleBranchFromMessage(message.id).catch(() => {});
+                                        }}
+                                      />
+                                    ) : undefined
+                                  }
+                                />
+                              </MessageScrollerItem>
+                              {agentId &&
+                                branchMarkers
+                                  .get(message.id)
+                                  ?.map(marker => (
+                                    <BranchForkMarker
+                                      key={`${marker.kind}-${marker.targetThreadId}`}
+                                      marker={marker}
+                                      agentId={agentId}
+                                    />
+                                  ))}
+                            </Fragment>
                           ))}
                           {isLiveTurn && delayedPending && <PendingIndicator />}
                         </ChatShell.Turn>
