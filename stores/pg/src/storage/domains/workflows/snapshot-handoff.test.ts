@@ -552,7 +552,9 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     ).resolves.toMatchObject({ status: 'created' });
 
     // A snapshot whose Error differs only in an enumerable field is a real
-    // divergence, not a replay.
+    // divergence, not a replay. Reuse the original timestamp so the Error
+    // payload is the ONLY difference — a fresh timestamp would mask a
+    // canonicalizer that wrongly drops enumerable Error fields.
     const divergentName = `${workflowName}-divergent`;
     const divergentError = Object.assign(new Error('boom'), {
       name: 'CustomError',
@@ -562,7 +564,7 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     await workflows.persistWorkflowSnapshot({
       workflowName: divergentName,
       runId,
-      snapshot: snapshot(runId, 'failed', { error: divergentError }),
+      snapshot: { ...snapshot(runId, 'failed', { error: divergentError }), timestamp: canonical.timestamp },
     });
     await expect(
       workflows.claimWorkflowSnapshotHandoff({
@@ -680,5 +682,107 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
         expect(promise).rejects.toMatchObject({ code: 'WORKFLOW_SNAPSHOT_HANDOFF_FENCED' }),
       ]),
     );
+  });
+
+  it('keeps an explicitly enumerable Error.message in the CAS projection', async () => {
+    const workflowName = `enum-message-${randomUUID()}`;
+    const runId = randomUUID();
+    // A message made enumerable by the caller persists through JSON.stringify
+    // into JSONB, so it must participate in the canonical comparison.
+    const visible = new Error('visible');
+    Object.defineProperty(visible, 'message', {
+      value: 'visible',
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+    const canonical = snapshot(runId, 'failed', { error: visible });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: canonical });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: canonical },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-a',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+
+    const divergent = new Error('changed');
+    Object.defineProperty(divergent, 'message', {
+      value: 'changed',
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+    const divergentName = `${workflowName}-divergent`;
+    await workflows.persistWorkflowSnapshot({
+      workflowName: divergentName,
+      runId,
+      snapshot: { ...snapshot(runId, 'failed', { error: divergent }), timestamp: canonical.timestamp },
+    });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: divergentName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: canonical },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-b',
+      }),
+    ).resolves.toMatchObject({ status: 'conflict' });
+  });
+
+  it('pins the expected canonical state before serializing the replacement snapshot', async () => {
+    const workflowName = `expected-pin-${randomUUID()}`;
+    const runId = randomUUID();
+    const stored = snapshot(runId, 'running');
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    // The replacement snapshot's toJSON swaps the caller's expected snapshot
+    // after the call starts; the expectation must already be materialized.
+    const expectedCanonical = { kind: 'present' as const, snapshot: stored };
+    const replacement = snapshot(runId, 'waiting');
+    Object.defineProperty(replacement, 'trigger', {
+      enumerable: true,
+      value: {
+        toJSON: () => {
+          expectedCanonical.snapshot = snapshot(runId, 'failed', { swapped: true });
+          return { armed: true };
+        },
+      },
+    });
+
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical,
+        snapshot: replacement,
+        mutationFence: 'owner-a',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('pins step-update identity before spreading caller input', async () => {
+    const workflowName = `step-pin-${randomUUID()}`;
+    let runIdReads = 0;
+    const input = {
+      workflowName,
+      get runId() {
+        return runIdReads++ === 0 ? 'pinned-run' : 'swapped-run';
+      },
+      snapshot: snapshot('pinned-run', 'running'),
+    };
+
+    // snapshot.runId must be compared against the first captured identity, not
+    // the getter's second value — a torn read would surface invalid_snapshot.
+    await expect(workflows.persistWorkflowStepUpdate(input)).resolves.toMatchObject({
+      status: 'persisted',
+    });
+    const row = await store.db.oneOrNone<{ snapshot: { runId?: string } }>(
+      `SELECT snapshot FROM mastra_workflow_snapshot WHERE workflow_name = $1 AND run_id = $2`,
+      [workflowName, 'pinned-run'],
+    );
+    expect(row?.snapshot?.runId).toBe('pinned-run');
   });
 });

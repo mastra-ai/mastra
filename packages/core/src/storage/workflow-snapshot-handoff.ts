@@ -45,16 +45,10 @@ function canonicalize(value: unknown): unknown {
   // Compare on the exact JSON projection durable adapters persist. Plain
   // JSON.stringify keeps enumerable properties assigned onto an Error (name,
   // cause, custom fields) and honors custom toJSON, so a live value and its
-  // stored JSONB round-trip canonicalize identically. The single exception is
-  // `message`: in-memory snapshot clones always expose it as an enumerable own
-  // property while a fresh Error's is non-enumerable, so it is normalized away
-  // to keep both sides on the durable-adapter projection.
-  const serialized = JSON.stringify(value, (_key, nestedValue: unknown) => {
-    if (nestedValue instanceof Error && typeof (nestedValue as { toJSON?: unknown }).toJSON !== 'function') {
-      return Object.fromEntries(Object.entries(nestedValue).filter(([key]) => key !== 'message'));
-    }
-    return nestedValue;
-  });
+  // stored JSONB round-trip canonicalize identically. In-memory snapshot
+  // clones preserve each Error property's original enumerability for the same
+  // reason, so no Error-specific handling is needed here.
+  const serialized = JSON.stringify(value);
   if (serialized === undefined) return undefined;
   const sanitized = serialized
     .replace(WORKFLOW_HANDOFF_UNSAFE_JSON_UNICODE_ESCAPE_RE, '$1$2')

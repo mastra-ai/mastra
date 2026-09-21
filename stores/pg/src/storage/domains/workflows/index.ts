@@ -434,11 +434,14 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
-    const frozenInput = { ...input };
+    const { workflowName, runId, resourceId } = input;
+    // The spread re-invokes getters; override identity fields with the values
+    // captured by the destructure so every use agrees on the same identity.
+    const frozenInput = { ...input, workflowName, runId, resourceId };
     return this.mutateWorkflowResume(
-      frozenInput.workflowName,
-      frozenInput.runId,
-      frozenInput.resourceId,
+      workflowName,
+      runId,
+      resourceId,
       snapshot =>
         admitWorkflowResumeRecord(snapshot, frozenInput, Date.now(), value => this.materializeResumeSnapshot(value)),
       'admit_workflow_resume',
@@ -446,11 +449,12 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
-    const frozenInput = { ...input };
+    const { workflowName, runId, resourceId } = input;
+    const frozenInput = { ...input, workflowName, runId, resourceId };
     return this.mutateWorkflowResume(
-      frozenInput.workflowName,
-      frozenInput.runId,
-      frozenInput.resourceId,
+      workflowName,
+      runId,
+      resourceId,
       snapshot =>
         rollbackWorkflowResumeRecord(snapshot, frozenInput, Date.now(), value => this.materializeResumeSnapshot(value)),
       'rollback_workflow_resume',
@@ -458,11 +462,12 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
-    const frozenInput = { ...input };
+    const { workflowName, runId, resourceId } = input;
+    const frozenInput = { ...input, workflowName, runId, resourceId };
     return this.mutateWorkflowResume(
-      frozenInput.workflowName,
-      frozenInput.runId,
-      frozenInput.resourceId,
+      workflowName,
+      runId,
+      resourceId,
       snapshot =>
         finalizeWorkflowResumeRecord(snapshot, frozenInput, Date.now(), value => this.materializeResumeSnapshot(value)),
       'finalize_workflow_resume',
@@ -470,10 +475,11 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async consumeWorkflowResumeResult(input: ConsumeWorkflowResumeResultInput): Promise<ConsumeWorkflowResumeResult> {
-    const frozenInput = { ...input };
+    const { workflowName, runId } = input;
+    const frozenInput = { ...input, workflowName, runId };
     return this.mutateWorkflowResume(
-      frozenInput.workflowName,
-      frozenInput.runId,
+      workflowName,
+      runId,
       undefined,
       snapshot =>
         consumeWorkflowResumeResultRecord(snapshot, frozenInput, Date.now(), value =>
@@ -486,9 +492,10 @@ export class WorkflowsPG extends WorkflowsStorage {
   async persistWorkflowStepUpdate(input: PersistWorkflowStepUpdateInput): Promise<PersistWorkflowStepUpdateResult> {
     // Capture every input field before awaiting so a mutated input object
     // cannot redirect the write away from the locked row or swap the CAS
-    // expectations mid-transaction.
+    // expectations mid-transaction. The spread re-invokes getters, so identity
+    // fields are pinned from the destructure.
     const { workflowName, runId, resourceId } = input;
-    const frozenInput = { ...input };
+    const frozenInput = { ...input, workflowName, runId, resourceId };
     try {
       return await this.#db.client.tx(async t => {
         const revision = await this.lockWorkflowParentRevisionForSnapshotUpsert(t, workflowName, runId);
@@ -5030,16 +5037,19 @@ export class WorkflowsPG extends WorkflowsStorage {
       expectedCanonical: rawExpectedCanonical,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
-    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
-    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
-    const expectedCanonical =
+    // Materialize the expectation before the replacement snapshot so no
+    // caller serialization runs while an expected field is still uncaptured,
+    // and never retain the caller's expected object itself.
+    const expectedCanonical: WorkflowSnapshotHandoffCanonicalState =
       rawExpectedCanonical.kind === 'present'
         ? {
             kind: 'present' as const,
             resourceId: rawExpectedCanonical.resourceId,
             snapshot: this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedCanonical.snapshot),
           }
-        : rawExpectedCanonical;
+        : { kind: 'absent' };
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
+    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
     return this.#db.client.tx(async t => {
       const revision = await this.lockWorkflowParentRevisionForSnapshotHandoff(t, workflowName, runId);
       const observedCanonical = await this.lockWorkflowSnapshotHandoffCanonicalState(t, workflowName, runId);
@@ -5102,9 +5112,11 @@ export class WorkflowsPG extends WorkflowsStorage {
       expectedSnapshot: rawExpectedSnapshot,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
+    // Materialize the expectation before the replacement snapshot so no
+    // caller serialization runs while an expected field is still uncaptured.
+    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
     const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
-    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
     return this.#db.client.tx(async t => {
       await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
       const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
@@ -5159,9 +5171,11 @@ export class WorkflowsPG extends WorkflowsStorage {
       expectedSnapshot: rawExpectedSnapshot,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
+    // Materialize the expectation before the replacement snapshot so no
+    // caller serialization runs while an expected field is still uncaptured.
+    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
     const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
-    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
     return this.#db.client.tx(async t => {
       await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
       const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);

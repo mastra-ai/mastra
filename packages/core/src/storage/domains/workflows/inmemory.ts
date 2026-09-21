@@ -185,6 +185,20 @@ export function cloneRunData<T>(value: T): T {
 const TERMINAL_PARENT_STATUSES = ['success', 'failed', 'canceled', 'tripwire', 'bailed', 'skipped'] as const;
 type TerminalParentStatus = (typeof TERMINAL_PARENT_STATUSES)[number];
 
+// Consistency re-check loops retry when caller-controlled serialization
+// (toJSON/getters) reentrantly changed the source record. Honest reentrancy
+// converges on the first retry; a caller that mutates on every clone is
+// degenerate, so the loop is bounded instead of spinning forever.
+const WORKFLOW_REENTRANT_ATTEMPT_LIMIT = 3;
+
+function throwIfWorkflowReentrantAttemptsExhausted(attempt: number): void {
+  if (attempt >= WORKFLOW_REENTRANT_ATTEMPT_LIMIT) {
+    throw new TypeError(
+      `Workflow storage operation did not converge after ${attempt} attempts; input serialization mutated shared state on every retry`,
+    );
+  }
+}
+
 function isTerminalParentStatus(value: unknown): value is TerminalParentStatus {
   return typeof value === 'string' && TERMINAL_PARENT_STATUSES.includes(value as TerminalParentStatus);
 }
@@ -266,15 +280,16 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     // Clone via Object.create(proto) so `instanceof Error` and subclass
     // branches keep working (e.g. `expect.any(Error)`) without invoking
     // subclass constructors that may have non-standard signatures
-    // (AssertionError expects an options object). Surface `message` as an
-    // enumerable own prop so Vitest's snapshot serializer renders it
-    // alongside subclass-specific fields.
+    // (AssertionError expects an options object). Preserve the source
+    // enumerability of `message`: a fresh Error's own message is
+    // non-enumerable while an explicitly assigned/defined one may be
+    // enumerable, and the JSON persistence projection differs accordingly.
     const out = Object.create(Object.getPrototypeOf(value)) as Error;
     Object.defineProperty(out, 'message', {
       value: value.message,
       writable: true,
       configurable: true,
-      enumerable: true,
+      enumerable: Object.getOwnPropertyDescriptor(value, 'message')?.enumerable ?? false,
     });
     Object.defineProperty(out, 'name', { value: value.name, writable: true, configurable: true });
     // For `stack`, defer to the Error's own `toJSON` if present — that's how
@@ -461,7 +476,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     mutate: (snapshot: WorkflowRunState | undefined) => { status: string; snapshot?: WorkflowRunState },
   ) {
     const key = this.getWorkflowKey(workflowName, runId);
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       const existing = this.db.workflows.get(key);
       this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
       // Cloning the stored snapshot and computing the mutation can invoke
@@ -471,13 +486,20 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         ? cloneRunData(typeof existing.snapshot === 'string' ? JSON.parse(existing.snapshot) : existing.snapshot)
         : undefined;
       const result = mutate(existingSnapshot);
-      if (this.db.workflows.get(key) !== existing) continue;
       const { snapshot: updatedSnapshot, ...publicResult } = result;
-      if (updatedSnapshot && existing) {
+      // Clone before the final source check: cloning invokes caller
+      // toJSON/getters, so no caller code may run between the check and the
+      // map write.
+      const storedSnapshot = updatedSnapshot ? cloneRunData(updatedSnapshot) : undefined;
+      if (this.db.workflows.get(key) !== existing) {
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
+        continue;
+      }
+      if (storedSnapshot && existing) {
         this.setWorkflowRunRecord(workflowName, runId, {
           ...existing,
-          resourceId: existing.resourceId ?? resourceId ?? updatedSnapshot.resourceId,
-          snapshot: cloneRunData(updatedSnapshot),
+          resourceId: existing.resourceId ?? resourceId ?? storedSnapshot.resourceId,
+          snapshot: storedSnapshot,
           updatedAt: new Date(),
         });
         this.bumpParentRevision(key);
@@ -489,7 +511,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
     const { workflowName, runId, resourceId } = input;
-    const frozenInput = { ...input };
+    // The spread re-invokes getters; override identity fields with the values
+    // captured by the destructure so every use agrees on the same identity.
+    const frozenInput = { ...input, workflowName, runId, resourceId };
     return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
       admitWorkflowResumeRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as AdmitWorkflowResumeResult;
@@ -497,7 +521,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
     const { workflowName, runId, resourceId } = input;
-    const frozenInput = { ...input };
+    const frozenInput = { ...input, workflowName, runId, resourceId };
     return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
       rollbackWorkflowResumeRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as RollbackWorkflowResumeResult;
@@ -505,7 +529,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
     const { workflowName, runId, resourceId } = input;
-    const frozenInput = { ...input };
+    const frozenInput = { ...input, workflowName, runId, resourceId };
     return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
       finalizeWorkflowResumeRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as FinalizeWorkflowResumeResult;
@@ -513,7 +537,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
   async consumeWorkflowResumeResult(input: ConsumeWorkflowResumeResultInput): Promise<ConsumeWorkflowResumeResult> {
     const { workflowName, runId } = input;
-    const frozenInput = { ...input };
+    const frozenInput = { ...input, workflowName, runId };
     return this.applyWorkflowResumeMutation(workflowName, runId, undefined, snapshot =>
       consumeWorkflowResumeResultRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as ConsumeWorkflowResumeResult;
@@ -522,11 +546,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async persistWorkflowStepUpdate(input: PersistWorkflowStepUpdateInput): Promise<PersistWorkflowStepUpdateResult> {
     // Capture every input field before invoking caller serialization
     // (toJSON/getters) so a mutated input object cannot redirect the write or
-    // swap the CAS expectations mid-computation.
-    const { workflowName, runId } = input;
-    const frozenInput = { ...input };
+    // swap the CAS expectations mid-computation. The spread re-invokes
+    // getters, so identity fields are pinned from the destructure.
+    const { workflowName, runId, resourceId } = input;
+    const frozenInput = { ...input, workflowName, runId, resourceId };
     const key = this.getWorkflowKey(workflowName, runId);
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       const existing = this.db.workflows.get(key);
       this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
       // Cloning the stored snapshot and merging the update can both invoke
@@ -536,15 +561,21 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         ? cloneRunData(typeof existing.snapshot === 'string' ? JSON.parse(existing.snapshot) : existing.snapshot)
         : undefined;
       const outcome = persistWorkflowStepUpdateRecord(existingSnapshot, frozenInput, cloneRunData);
-      if (this.db.workflows.get(key) !== existing) continue;
       const { snapshot, ...result } = outcome;
-      if (snapshot) {
+      // Clone before the final source check so no caller code runs between
+      // the check and the map write.
+      const storedSnapshot = snapshot ? cloneRunData(snapshot) : undefined;
+      if (this.db.workflows.get(key) !== existing) {
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
+        continue;
+      }
+      if (storedSnapshot) {
         const now = new Date();
         this.setWorkflowRunRecord(workflowName, runId, {
           workflow_name: workflowName,
           run_id: runId,
-          resourceId: existing?.resourceId ?? snapshot.resourceId ?? frozenInput.resourceId,
-          snapshot: cloneRunData(snapshot),
+          resourceId: existing?.resourceId ?? storedSnapshot.resourceId ?? resourceId,
+          snapshot: storedSnapshot,
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
         });
@@ -1495,18 +1526,20 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       expectedCanonical: rawExpectedCanonical,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
-    // Materialize every caller-provided snapshot before touching shared state;
-    // serialization may run arbitrary user code that must not execute between
-    // the canonical comparison and the record write.
-    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
-    const expectedCanonical =
+    // Materialize the expectation before the replacement snapshot so no
+    // caller serialization runs while an expected field is still uncaptured,
+    // and before touching shared state; serialization may run arbitrary user
+    // code that must not execute between the canonical comparison and the
+    // record write.
+    const expectedCanonical: WorkflowSnapshotHandoffCanonicalState =
       rawExpectedCanonical.kind === 'present'
         ? {
             kind: 'present' as const,
             resourceId: rawExpectedCanonical.resourceId,
             snapshot: materializeWorkflowSnapshotHandoffSnapshot(rawExpectedCanonical.snapshot),
           }
-        : rawExpectedCanonical;
+        : { kind: 'absent' };
+    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
     const key = this.getWorkflowKey(workflowName, runId);
     // Reading the canonical state materializes the stored snapshot, which can
     // invoke caller toJSON/getters and reenter these maps. Re-read both source
@@ -1515,12 +1548,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     let observedCanonical: WorkflowSnapshotHandoffCanonicalState;
     let existing: WorkflowSnapshotHandoffRecord | undefined;
     let canonicalMatches: boolean;
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       const run = this.db.workflows.get(key);
       existing = this.db.workflowSnapshotHandoffs.get(key);
       observedCanonical = this.getWorkflowSnapshotHandoffCanonicalStateFrom(run);
       canonicalMatches = workflowSnapshotHandoffCanonicalStatesEqual(expectedCanonical, observedCanonical);
       if (this.db.workflows.get(key) === run && this.db.workflowSnapshotHandoffs.get(key) === existing) break;
+      throwIfWorkflowReentrantAttemptsExhausted(attempt);
     }
     // From here to the map write no caller code may run: every comparison uses
     // already-materialized (plain JSON) values.
@@ -1569,8 +1603,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       expectedSnapshot: rawExpectedSnapshot,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
-    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
+    // Materialize the expectation before the replacement snapshot so no caller
+    // serialization runs while an expected field is still uncaptured.
     const expectedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
+    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
     const key = this.getWorkflowKey(workflowName, runId);
     const existing = this.db.workflowSnapshotHandoffs.get(key);
     if (!existing) return { status: 'missing' };
@@ -1611,8 +1647,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       expectedSnapshot: rawExpectedSnapshot,
     } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
-    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
+    // Materialize the expectation before the replacement snapshot so no caller
+    // serialization runs while an expected field is still uncaptured.
     const expectedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
+    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
     const key = this.getWorkflowKey(workflowName, runId);
     const existing = this.db.workflowSnapshotHandoffs.get(key);
     if (!existing) return { status: 'missing' };
@@ -1696,7 +1734,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
     validateWorkflowNestedRunOwnershipInput(operation);
     const key = this.getWorkflowKey(operation.workflowName, operation.runId);
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       const run = this.db.workflows.get(key);
       this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
       if (!run?.snapshot) return { status: 'missing_run' };
@@ -1710,7 +1748,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         return { status: 'already_bound', stepResults: cloneRunData(ownership.snapshot.context) };
       }
       const storedSnapshot = cloneRunData(ownership.snapshot);
-      if (this.db.workflows.get(key) !== run) continue;
+      if (this.db.workflows.get(key) !== run) {
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
+        continue;
+      }
       this.setWorkflowRunRecord(operation.workflowName, operation.runId, {
         ...run,
         snapshot: storedSnapshot,
@@ -1753,7 +1794,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     // caller toJSON/getters that reenter these maps. The loop re-reads the
     // source rows and restarts whenever a reentrant write changed either one
     // mid-computation so ownership binding never overwrites a newer record.
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
       const run = this.db.workflows.get(parentKey);
       if (!run?.snapshot) return { status: 'missing_run' };
@@ -1861,8 +1902,18 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         return { status: 'ancestry_conflict' };
       }
       if (ownership.status === 'already_bound' && existingRecovery) {
+        // The record helpers and clones above ran caller code; re-read both
+        // source rows before initializing the child so a reentrant write
+        // cannot make this branch act on stale ownership.
+        if (this.db.workflows.get(parentKey) !== run || this.db.workflows.get(childKey) !== existingChild) {
+          throwIfWorkflowReentrantAttemptsExhausted(attempt);
+          continue;
+        }
         const childSnapshotState = ensureInitialChildSnapshot();
-        if (childSnapshotState === 'stale') continue;
+        if (childSnapshotState === 'stale') {
+          throwIfWorkflowReentrantAttemptsExhausted(attempt);
+          continue;
+        }
         return {
           status: 'already_admitted',
           stepResults: cloneRunData(ownership.snapshot.context),
@@ -1881,7 +1932,15 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       }
       const storedSnapshot = cloneRunData(ownership.snapshot);
       const storedRecovery = copyWorkflowTerminalRecoveryAncestryRecord(recovery);
-      if (this.db.workflows.get(parentKey) !== run || this.db.workflows.get(childKey) !== existingChild) continue;
+      if (this.db.workflows.get(parentKey) !== run || this.db.workflows.get(childKey) !== existingChild) {
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
+        continue;
+      }
+      // Fence both runs adjacent to the first mutation: a reentrant handoff
+      // claimed while cloning must not leave child ancestry committed without
+      // the parent write that justifies it.
+      this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
+      this.assertWorkflowSnapshotHandoffAvailable(operation.nestedWorkflowName, operation.nestedRunId);
       this.db.workflowTerminalRecoveryAncestries.set(childKey, storedRecovery);
       if (ownership.status === 'bound') {
         this.setWorkflowRunRecord(operation.workflowName, operation.runId, {
@@ -1892,7 +1951,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         this.bumpParentRevision(parentKey);
       }
       const childSnapshotState = ensureInitialChildSnapshot();
-      if (childSnapshotState === 'stale') continue;
+      if (childSnapshotState === 'stale') {
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
+        continue;
+      }
       return {
         status: 'admitted',
         stepResults: cloneRunData(storedSnapshot.context),
@@ -1916,7 +1978,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const key = this.getWorkflowKey(workflowName, runId);
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       const run = this.db.workflows.get(key);
       this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
@@ -1930,6 +1992,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
           ...run,
           snapshot,
         });
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
         continue;
       }
 
@@ -1945,10 +2008,14 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       }
 
       mergeWorkflowStepResult({ snapshot: working, stepId, result, requestContext });
-      // Caller code above may reenter this map; restart if the source row
-      // changed so the CAS merge never overwrites a newer record.
-      if (this.db.workflows.get(key) !== run) continue;
+      // Clone before the final source check so no caller code runs between
+      // the check and the map write; restart if a reentrant write changed the
+      // source row so the CAS merge never overwrites a newer record.
       const storedSnapshot = cloneRunData(working);
+      if (this.db.workflows.get(key) !== run) {
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
+        continue;
+      }
 
       this.setWorkflowRunRecord(workflowName, runId, {
         ...run,
@@ -1970,7 +2037,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     const key = this.getWorkflowKey(workflowName, runId);
-    for (;;) {
+    // Pin the CAS fields and state options once: getters on `opts` would
+    // otherwise re-run per retry and could hand each attempt different
+    // expectations.
+    const { expectedStatus, expectedExecutionGeneration, expectedLifecycleResumeAttempt, finalState, ...stateOptions } =
+      opts;
+    for (let attempt = 1; ; attempt++) {
       const run = this.db.workflows.get(key);
       this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
@@ -1984,6 +2056,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
           ...run,
           snapshot,
         });
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
         continue;
       }
 
@@ -1996,14 +2069,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       if (!working || !working?.context) {
         throw new Error(`Snapshot not found for runId ${runId}`);
       }
-
-      const {
-        expectedStatus,
-        expectedExecutionGeneration,
-        expectedLifecycleResumeAttempt,
-        finalState,
-        ...stateOptions
-      } = opts;
       // Compare-and-set guards run before any mutation: a mismatch makes
       // the whole update a no-op, including the terminal `finalState` replacement.
       if (
@@ -2032,7 +2097,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       const storedSnapshot = cloneRunData(nextSnapshot);
       // Caller code above may reenter this map; restart if the source row
       // changed so the CAS merge never overwrites a newer record.
-      if (this.db.workflows.get(key) !== run) continue;
+      if (this.db.workflows.get(key) !== run) {
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
+        continue;
+      }
       this.setWorkflowRunRecord(workflowName, runId, {
         ...run,
         snapshot: storedSnapshot,
@@ -2060,14 +2128,17 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       const existing = this.db.workflows.get(key);
       this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
       // Cloning the caller snapshot can invoke toJSON/getters that reenter
       // this map; restart if a reentrant write changed the row so a persisted
       // snapshot never silently overwrites a newer record.
       const clonedSnapshot = cloneRunData(snapshot);
-      if (this.db.workflows.get(key) !== existing) continue;
+      if (this.db.workflows.get(key) !== existing) {
+        throwIfWorkflowReentrantAttemptsExhausted(attempt);
+        continue;
+      }
       const data: StorageWorkflowRun = {
         workflow_name: workflowName,
         run_id: runId,

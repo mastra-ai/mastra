@@ -467,13 +467,18 @@ describe('workflow snapshot handoff', () => {
     ).resolves.toMatchObject({ status: 'created' });
 
     // A snapshot whose Error differs only in an enumerable field is a real
-    // divergence, not a replay.
+    // divergence, not a replay. Reuse the original timestamp so the Error
+    // payload is the ONLY difference — a fresh timestamp would mask a
+    // canonicalizer that wrongly drops enumerable Error fields.
     const divergentError = Object.assign(new Error('boom'), {
       name: 'CustomError',
       cause: { reason: 'changed' },
       code: 'E_PERSISTED',
     });
-    const divergentCanonical = snapshot(runId, 'failed', { error: divergentError });
+    const divergentCanonical = {
+      ...snapshot(runId, 'failed', { error: divergentError }),
+      timestamp: canonical.timestamp,
+    };
     await workflows.persistWorkflowSnapshot({
       workflowName: 'enumerable-error-workflow-2',
       runId,
@@ -632,5 +637,188 @@ describe('workflow snapshot handoff', () => {
     const page2 = await workflows.listWorkflowSnapshotHandoffs({ limit: 2, after: page1.nextCursor });
     expect(page2.records.map(record => record.workflowName)).toEqual(['x￿', 'x💥']);
     expect(page2.hasMore).toBe(false);
+  });
+
+  it('keeps an explicitly enumerable Error.message in the CAS projection', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'enumerable-message-workflow';
+    const runId = 'enumerable-message-run';
+    // A message made enumerable by the caller is part of the persisted JSON
+    // document, so it participates in the canonical comparison.
+    const visible = new Error('visible');
+    Object.defineProperty(visible, 'message', {
+      value: 'visible',
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+    const canonical = snapshot(runId, 'failed', { error: visible });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: canonical });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: canonical },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-a',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+
+    const divergent = new Error('changed');
+    Object.defineProperty(divergent, 'message', {
+      value: 'changed',
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: `${workflowName}-2`,
+      runId,
+      snapshot: { ...snapshot(runId, 'failed', { error: divergent }), timestamp: canonical.timestamp },
+    });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: `${workflowName}-2`,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: canonical },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-b',
+      }),
+    ).resolves.toMatchObject({ status: 'conflict' });
+  });
+
+  it('pins the expected canonical state before serializing the replacement snapshot', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'expected-pin-workflow';
+    const runId = 'expected-pin-run';
+    const stored = snapshot(runId, 'running');
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    // The replacement snapshot's toJSON swaps the caller's expected snapshot
+    // after the call starts; the expectation must already be materialized.
+    const expectedCanonical = { kind: 'present' as const, snapshot: stored };
+    const replacement = snapshot(runId, 'waiting');
+    Object.defineProperty(replacement, 'trigger', {
+      enumerable: true,
+      value: {
+        toJSON: () => {
+          expectedCanonical.snapshot = snapshot(runId, 'failed', { swapped: true });
+          return { armed: true };
+        },
+      },
+    });
+
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical,
+        snapshot: replacement,
+        mutationFence: 'owner-a',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('pins step-update identity before spreading caller input', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'step-pin-workflow';
+    let runIdReads = 0;
+    const input = {
+      workflowName,
+      get runId() {
+        return runIdReads++ === 0 ? 'pinned-run' : 'swapped-run';
+      },
+      snapshot: snapshot('pinned-run', 'running'),
+    };
+
+    // snapshot.runId must be compared against the first captured identity, not
+    // the getter's second value — a torn read would surface invalid_snapshot.
+    const result = await workflows.persistWorkflowStepUpdate(input);
+    expect(result).toMatchObject({ status: 'persisted' });
+    const stored = await workflows.loadWorkflowSnapshot({ workflowName, runId: 'pinned-run' });
+    expect(stored?.runId).toBe('pinned-run');
+  });
+
+  it('fails a mutation whose input serialization mutates shared state on every retry', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'nonconvergent-workflow';
+    const runId = 'nonconvergent-run';
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, 'running') });
+
+    // Every clone of this snapshot reentrantly rewrites the same row with a
+    // plain snapshot, so the source record never stays stable long enough for
+    // the consistency check to pass.
+    const armed = snapshot(runId, 'running');
+    Object.defineProperty(armed.value as Record<string, unknown>, 'trigger', {
+      enumerable: true,
+      get() {
+        void workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, 'waiting') });
+        return { armed: true };
+      },
+    });
+
+    await expect(workflows.persistWorkflowStepUpdate({ workflowName, runId, snapshot: armed })).rejects.toThrow(
+      /did not converge/,
+    );
+  });
+
+  it('commits no nested admission records when a claim fences the child mid-admit', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'nested-parent';
+    const runId = 'parent-run';
+    const child = { workflowName: 'nested-child', runId: 'child-run' };
+    const childKey = JSON.stringify([child.workflowName, child.runId]);
+
+    const parent = snapshot(runId, 'running');
+    parent.serializedStepGraph = NESTED_PARENT_GRAPH;
+    parent.context = {
+      nested: { status: 'running', payload: {}, metadata: {} },
+    } as WorkflowRunState['context'];
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: parent });
+    const parentBefore = JSON.stringify(await workflows.loadWorkflowSnapshot({ workflowName, runId }));
+
+    // The first deep read of result.payload is the record helper's spread —
+    // after the child fence assert but before the ancestry commit. Claiming
+    // the child handoff there must abort the whole admission atomically.
+    const result = {
+      status: 'running' as const,
+      get payload() {
+        void workflows.claimWorkflowSnapshotHandoff({
+          workflowName: child.workflowName,
+          runId: child.runId,
+          expectedCanonical: { kind: 'absent' },
+          snapshot: snapshot(child.runId, 'waiting'),
+          mutationFence: 'child-owner',
+        });
+        return {};
+      },
+    };
+    const childSnapshot = snapshot(child.runId, 'running');
+    childSnapshot.serializedStepGraph = [];
+
+    await expect(
+      workflows.admitWorkflowNestedRun({
+        workflowName,
+        runId,
+        stepId: 'nested',
+        nestedWorkflowName: child.workflowName,
+        nestedRunId: child.runId,
+        expectedChildGraphFingerprint: createWorkflowTerminalGraphFingerprint([]),
+        result,
+        requestContext: {},
+        recoveryAncestry: nestedAncestry(child, { workflowName, runId }),
+        initialChildSnapshot: { snapshot: childSnapshot },
+      }),
+    ).rejects.toThrow(WorkflowSnapshotHandoffFenceError);
+
+    const db = (workflows as unknown as { db: { workflowTerminalRecoveryAncestries: Map<string, unknown> } }).db;
+    expect(db.workflowTerminalRecoveryAncestries.get(childKey)).toBeUndefined();
+    const parentAfter = JSON.stringify(await workflows.loadWorkflowSnapshot({ workflowName, runId }));
+    expect(parentAfter).toBe(parentBefore);
   });
 });
