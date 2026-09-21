@@ -2,4 +2,4 @@
 '@mastra/temporal': patch
 ---
 
-Fixed Temporal workflow bundles to exclude activity-only Node.js dependencies while preserving them for activity execution.
+Fixed Temporal builds to preserve Node.js dependencies used by activities while rejecting builtins that remain in generated workflow bundles.

@@ -290,7 +290,7 @@ describe('Temporal prebuild integration', () => {
     expect(sleep).toHaveBeenCalledWith(1000);
   });
 
-  it('excludes activity-only Node initialization from generated workflows', async () => {
+  it('excludes Node dependencies used inside activities from generated workflows', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-node-isolation-'));
     tempDirs.push(tempDir);
     const entryFile = path.join(tempDir, 'src', 'index.ts');
@@ -301,7 +301,6 @@ describe('Temporal prebuild integration', () => {
       import { readFileSync } from 'node:fs';
       import { createStep, createWorkflow } from '@mastra/core/workflows';
 
-      readFileSync(new URL(import.meta.url));
       const readResource = createStep({
         id: 'read-resource',
         execute: async () => ({
@@ -328,5 +327,54 @@ describe('Temporal prebuild integration', () => {
     expect(activitiesSource).toContain("from 'node:fs'");
     expect(activitiesSource).toContain("import('node:fs')");
     expect(activitiesSource).toContain('readFileSync');
+  });
+
+  it('rejects Node dependencies that remain after workflow tree-shaking', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-node-rejection-'));
+    tempDirs.push(tempDir);
+    const entryFile = path.join(tempDir, 'src', 'index.ts');
+    await mkdir(path.dirname(entryFile), { recursive: true });
+    await writeFile(entryFile, 'export {};');
+
+    mockCompiledBundle(`
+      import { readFileSync } from 'node:fs';
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      readFileSync(new URL(import.meta.url));
+      const readResource = createStep({
+        id: 'read-resource',
+        execute: async () => readFileSync(new URL(import.meta.url)).byteLength,
+      });
+      export const resourceWorkflow = createWorkflow({ id: 'resource-workflow' })
+        .then(readResource)
+        .commit();
+    `);
+
+    const plugin = new MastraPlugin(entryFile, tempDir);
+
+    await expect(plugin.configureWorker({ taskQueue: 'mastra' } as any)).rejects.toThrow(
+      "Temporal workflow bundle cannot depend on Node.js builtin 'node:fs'",
+    );
+  });
+
+  it('rejects dynamic Node dependencies that remain after workflow tree-shaking', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-dynamic-node-rejection-'));
+    tempDirs.push(tempDir);
+    const entryFile = path.join(tempDir, 'src', 'index.ts');
+    await mkdir(path.dirname(entryFile), { recursive: true });
+    await writeFile(entryFile, 'export {};');
+
+    mockCompiledBundle(`
+      import { createWorkflow } from '@mastra/core/workflows';
+
+      await import('node:fs');
+      export const resourceWorkflow = createWorkflow({ id: 'resource-workflow' }).commit();
+    `);
+
+    const plugin = new MastraPlugin(entryFile, tempDir);
+
+    await expect(plugin.configureWorker({ taskQueue: 'mastra' } as any)).rejects.toThrow(
+      "Temporal workflow bundle cannot depend on Node.js builtin 'node:fs'",
+    );
   });
 });
