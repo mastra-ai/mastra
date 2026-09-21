@@ -2716,6 +2716,7 @@ describe('MongoDBVector autoEmbed', () => {
       const v = makeVector();
       const aggregate = vi.fn().mockReturnValue({ toArray: async () => [] });
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      const getDeclaredFilterPaths = vi.spyOn(v as any, 'getDeclaredFilterPaths');
       vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
         collectionName: 'movies',
         searchIndexName: 'movies_vector_index',
@@ -2725,6 +2726,51 @@ describe('MongoDBVector autoEmbed', () => {
       await v.query({ indexName: 'movies', queryVector: [0.1], documentFilter: { $eq: 'astronaut' } });
 
       expect(aggregate.mock.calls[0][0][0].$vectorSearch.filter).toEqual({ document: { $eq: 'astronaut' } });
+      // createIndex always declares `document` on a managed index, so the declaration does not
+      // need reading. Reading it would also disable pushdown while the index is rebuilding.
+      expect(getDeclaredFilterPaths).not.toHaveBeenCalled();
+    });
+
+    it('pushes documentFilter on a BYO index that declares the document field', async () => {
+      const v = makeVector();
+      const aggregate = vi.fn().mockReturnValue({ toArray: async () => [] });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'getDeclaredFilterPaths').mockResolvedValue(new Set(['document']));
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'ops_col',
+        searchIndexName: 'ops_vec_idx',
+        isByo: true,
+      });
+
+      await v.query({ indexName: 'precedents', queryVector: [0.1], documentFilter: { $eq: 'astronaut' } });
+
+      expect(aggregate.mock.calls[0][0][0].$vectorSearch.filter).toEqual({ document: { $eq: 'astronaut' } });
+    });
+
+    it('pre-filters documentFilter on a BYO index whose search index does not declare it', async () => {
+      const v = makeVector();
+      const aggregate = vi
+        .fn()
+        .mockReturnValueOnce({
+          map: () => ({ toArray: async () => ['doc-1'] }),
+          toArray: async () => [{ _id: 'doc-1' }],
+        })
+        .mockReturnValueOnce({ toArray: async () => [] });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      // An Atlas index Mastra did not create: no `document` filter field.
+      vi.spyOn(v as any, 'getDeclaredFilterPaths').mockResolvedValue(new Set());
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'ops_col',
+        searchIndexName: 'external_vec_idx',
+        isByo: true,
+      });
+
+      await v.query({ indexName: 'precedents', queryVector: [0.1], documentFilter: { $eq: 'astronaut' } });
+
+      // Pushing it would fail server-side with "Path 'document' needs to be indexed as filter".
+      const vectorSearch = aggregate.mock.calls[1][0][0].$vectorSearch;
+      expect(vectorSearch.filter).toEqual({ _id: { $in: ['doc-1'] } });
+      expect(aggregate.mock.calls[0][0][0].$match).toEqual({ document: { $eq: 'astronaut' } });
     });
 
     it('returns the embedded text as document when a custom path is configured', async () => {
@@ -2774,7 +2820,34 @@ describe('MongoDBVector autoEmbed', () => {
       const v = makeVector();
       stubQuery(v, null);
 
-      await expect(v.query({ indexName: 'movies', queryText: 'space opera' })).rejects.toThrow(/autoEmbed/);
+      // Classification matters as much as the message: a caller mistake must stay USER, or
+      // callers that branch on category treat it as a MongoDB failure and retry it.
+      let caught: any;
+      try {
+        await v.query({ indexName: 'movies', queryText: 'space opera' });
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught.message).toMatch(/autoEmbed/);
+      expect(caught.category).toBe('USER');
+      expect(caught.id).toMatch(/NOT_AUTO_EMBED/);
+      expect(caught.id).not.toMatch(/FAILED/);
+    });
+
+    it('rejects includeVector on an autoEmbed index as a USER error', async () => {
+      const v = makeVector();
+      stubQuery(v);
+
+      let caught: any;
+      try {
+        await v.query({ indexName: 'movies', queryText: 'space opera', includeVector: true });
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught.message).toMatch(/includeVector is not supported/);
+      expect(caught.category).toBe('USER');
+      expect(caught.id).toMatch(/INVALID_ARGS/);
+      expect(caught.id).not.toMatch(/FAILED/);
     });
 
     it('still rejects a query with neither input', async () => {

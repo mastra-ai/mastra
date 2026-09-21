@@ -1553,26 +1553,28 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       });
     }
 
+    // Outside the try: these USER errors must not be re-wrapped as THIRD_PARTY.
+    const { collectionName, searchIndexName, autoEmbed, isByo } = await this.resolveIndexTarget(indexName);
+    if (queryText && !autoEmbed) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'QUERY', 'NOT_AUTO_EMBED'),
+        text: `Index "${indexName}" was not created with autoEmbed, so MongoDB cannot embed a query string for it. Pass queryVector instead, or use textQuery() for full-text search.`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+    if (includeVector && autoEmbed) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'QUERY', 'INVALID_ARGS'),
+        text: `includeVector is not supported on autoEmbed index "${indexName}": MongoDB keeps the generated embeddings in its own internal database, so they are not on the returned documents.`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     try {
-      const { collectionName, searchIndexName, autoEmbed } = await this.resolveIndexTarget(indexName);
-      if (queryText && !autoEmbed) {
-        throw new MastraError({
-          id: createVectorErrorId('MONGODB', 'QUERY', 'NOT_AUTO_EMBED'),
-          text: `Index "${indexName}" was not created with autoEmbed, so MongoDB cannot embed a query string for it. Pass queryVector instead, or use textQuery() for full-text search.`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { indexName },
-        });
-      }
-      if (includeVector && autoEmbed) {
-        throw new MastraError({
-          id: createVectorErrorId('MONGODB', 'QUERY', 'INVALID_ARGS'),
-          text: `includeVector is not supported on autoEmbed index "${indexName}": MongoDB keeps the generated embeddings in its own internal database, so they are not on the returned documents.`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { indexName },
-        });
-      }
       const collection = await this.getCollection(collectionName, true);
       const indexNameInternal = searchIndexName;
 
@@ -1594,9 +1596,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // index, or the field an autoEmbed index embeds.
       const documentTextField = autoEmbed ? autoEmbed.path : this.documentFieldName;
       const documentFilterExpr = documentFilter ? { [documentTextField]: documentFilter } : undefined;
-      // An embedded path cannot also be declared as a filter field, so on an autoEmbed index
-      // the condition goes through the $match pre-filter instead of into $vectorSearch.
-      const canPushDocumentFilter = !autoEmbed;
+      // Whether the text field can be filtered inside $vectorSearch depends on who built the
+      // index. createIndex always declares `document`, except on an autoEmbed index where the
+      // embedded path cannot also be a filter field. A BYO collection may carry an Atlas index
+      // Mastra never created, which need not declare it at all, and filtering an undeclared
+      // path fails with "Path 'document' needs to be indexed as filter". So trust the
+      // declaration for indexes we build and read it for the ones we do not.
+      const verifyDocumentPath = Boolean(documentFilterExpr) && !autoEmbed && isByo;
 
       if (hasMetadataFilter || documentFilterExpr) {
         // Fast path: if every field the filter touches was declared via
@@ -1605,7 +1611,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // straight to $vectorSearch — no $match, no _id materialisation, no
         // 16 MB BSON ceiling. See https://github.com/mastra-ai/mastra/issues/18587
         let declaredPaths = new Set<string>();
-        if (hasMetadataFilter) {
+        if (hasMetadataFilter || verifyDocumentPath) {
           try {
             declaredPaths = await this.getDeclaredFilterPaths(indexName);
           } catch {
@@ -1616,7 +1622,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         }
 
         const pushMetadata = !hasMetadataFilter || this.canPushDownFilter(metadataFilter, declaredPaths);
-        const pushDocument = !documentFilterExpr || canPushDocumentFilter;
+        const pushDocument =
+          !documentFilterExpr || (!autoEmbed && (!verifyDocumentPath || declaredPaths.has(documentTextField)));
         const pushed: Document[] = [
           ...(hasMetadataFilter && pushMetadata ? [metadataFilter] : []),
           ...(documentFilterExpr && pushDocument ? [documentFilterExpr] : []),
