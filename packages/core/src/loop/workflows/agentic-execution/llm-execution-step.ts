@@ -2105,6 +2105,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                               : 'processLLMResponse' in processor || 'processOutputStep' in processor,
                           ),
                         ),
+                        // `processToolResult` is a separate exclusion: it does not run
+                        // after the stream, it runs inside it, and its abort bails the
+                        // attempt before the post-stream pass ever starts the call.
+                        hasToolResultProcessor: Boolean(
+                          outputProcessors?.some(processor =>
+                            isProcessorWorkflow(processor)
+                              ? processor.__processToolResult !== false
+                              : 'processToolResult' in processor,
+                          ),
+                        ),
                         isProviderTool,
                         getNeedsApprovalFn,
                         backgroundTaskManager: readScoped(
@@ -2200,16 +2210,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           //
           // Queued work dropped here falls back to the foreach when the step reaches it,
           // which accounts for it against the same limit. Work already running is left
-          // alone rather than cancelled. On a normal terminal finish, and on a per-chunk
+          // alone rather than cancelled: on a normal terminal finish, and on a per-chunk
           // stream-processor tripwire, the step still returns its tool calls and the
           // foreach adopts it — cancelling here would strip the adoption entry and make
-          // the foreach run the body a second time. A `processToolResult` tripwire is the
-          // exception: it builds a bail response, so nothing adopts the work and it is
-          // simply orphaned. Letting it finish is a deliberate tradeoff, not a necessity:
-          // cancellation cannot undo effects already performed and may interrupt an
-          // in-progress operation, but it can prevent further ones. A caller abort is
-          // terminal too and makes the opposite choice, so what differs here is the
-          // tradeoff, not terminality.
+          // the foreach run the body a second time.
+          //
+          // The bail below is the one path where nothing adopts the work, and it cannot
+          // reach here holding any: a `processToolResult` hook is the only thing that
+          // reaches that branch, and a run declaring one never dispatches early in the
+          // first place (`isEagerlyExecutableToolCall`). Were it to dispatch, the bail
+          // would start a tool the post-stream pass never starts at all, which is why
+          // the exclusion is up front rather than repaired here.
           eagerCoordinator?.stop();
 
           if (toolResultTripwireFromStream) {

@@ -956,6 +956,14 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
    * carry the flag without it meaning anything there.
    */
   __processOutputStep?: boolean;
+  /**
+   * @internal Whether any wrapped processor implements `processToolResult`. That hook
+   * runs *inside* the model stream and can abort the turn before the post-stream pass,
+   * so it is a separate question from `__processOutputStep`. Recorded here for the same
+   * reason: the wrapper is the only place that still knows. Unknown workflows leave it
+   * undefined and are treated as implementing it.
+   */
+  __processToolResult?: boolean;
   /** @internal Direct adapter execution, only for framework-generated plain processor chains. */
   __executeOutputStream?: ProcessorStepExecutor;
 };

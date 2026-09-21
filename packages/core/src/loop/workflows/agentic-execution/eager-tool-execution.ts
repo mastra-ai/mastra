@@ -498,6 +498,7 @@ export function isEagerlyExecutableToolCall({
   requireToolApproval,
   autoResumeSuspendedTools,
   hasPostStreamProcessor,
+  hasToolResultProcessor,
   isProviderTool,
   getNeedsApprovalFn,
   backgroundTaskManager,
@@ -509,6 +510,7 @@ export function isEagerlyExecutableToolCall({
   requireToolApproval: unknown;
   autoResumeSuspendedTools: boolean | undefined;
   hasPostStreamProcessor: boolean;
+  hasToolResultProcessor: boolean;
   isProviderTool: (tool: any) => boolean;
   getNeedsApprovalFn: (tool: any) => unknown;
   backgroundTaskManager: unknown;
@@ -517,6 +519,13 @@ export function isEagerlyExecutableToolCall({
   // A processor that runs after the stream completes is contractually allowed to
   // rewrite or drop the response before any tool runs, so nothing may start early.
   if (hasPostStreamProcessor) return false;
+
+  // A `processToolResult` processor can abort the turn from inside the model stream.
+  // That bail returns before the post-stream pass, so without early execution the tool
+  // is never started at all — not merely started and left unrecorded. Starting one
+  // early would make the two schedules disagree about whether the tool ran, so a run
+  // carrying this hook is left to the post-stream pass entirely.
+  if (hasToolResultProcessor) return false;
 
   // Arguments must be complete. Partial or absent arguments are never executed.
   if (!toolCall.args || typeof toolCall.args !== 'object') return false;

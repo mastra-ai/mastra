@@ -1254,107 +1254,19 @@ describe('eager tool dispatch — unsafe terminations', () => {
   });
 
   /**
-   * A `processToolResult` tripwire on a *server-executed* tool's result fires in
-   * `llm-mapping-step.ts`, i.e. after the foreach has already adopted the eager promises.
-   * That is not the bail path at `llm-execution-step.ts` — see the next test for that one —
-   * but it is worth its own lock: the unconditional dispatch backstop must not cancel work
-   * the foreach is still relying on, or every tool in flight at `finish` would be re-run.
-   */
-  it('runs an adopted eager call exactly once when a mapping-step tripwire aborts the turn', async () => {
-    const { events, record } = createRecorder();
-    const model = createToolCallModel(
-      [
-        { toolCallId: 'call-fast', toolName: 'fast-tool', input: { value: 'fast' } },
-        { toolCallId: 'call-slow', toolName: 'slow-tool', input: { value: 'slow' } },
-      ],
-      record,
-    );
-
-    class TripwireOnToolResult {
-      readonly id = 'tripwire-on-tool-result';
-      async processToolResult({ toolName, abort }: any) {
-        if (toolName === 'fast-tool') {
-          record('tripwire');
-          abort('blocked by tool-result-guard');
-        }
-      }
-    }
-
-    const agent = new Agent({
-      id: 'eager-tripwire-agent',
-      name: 'Eager tripwire agent',
-      instructions: 'Call both tools.',
-      model,
-      tools: {
-        'fast-tool': createTool({
-          id: 'fast-tool',
-          description: 'Returns immediately so its result trips the processor.',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }) => {
-            record('execute-fast');
-            return { value };
-          },
-        }),
-        'slow-tool': createTool({
-          id: 'slow-tool',
-          description: 'Still running when the model stream finishes.',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }) => {
-            record('enter-slow');
-            await new Promise(resolve => setTimeout(resolve, 150));
-            record('finish-slow');
-            return { value };
-          },
-        }),
-      },
-      outputProcessors: [new TripwireOnToolResult() as any],
-    });
-
-    const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
-
-    expect(events).toContain('tripwire');
-    expect(chunks.some(chunk => chunk.type === 'tripwire')).toBe(true);
-
-    // Both calls were dispatched eagerly — bodies entered before the model stream finished.
-    const finishIndex = events.indexOf('finish');
-    expect(events.indexOf('execute-fast')).toBeLessThan(finishIndex);
-    expect(events.indexOf('enter-slow')).toBeLessThan(finishIndex);
-
-    // The adopted call completed, once. Cancelling running work at the backstop would
-    // strip the adoption entry and make the foreach run the body a second time.
-    expect(events).toContain('finish-slow');
-    expect(events.filter(event => event === 'enter-slow')).toHaveLength(1);
-    expect(events.filter(event => event === 'execute-fast')).toHaveLength(1);
-  });
-
-  /**
-   * The real bail path. A `processToolResult` tripwire reaches
-   * `llm-execution-step.ts`'s bail branch only from a *provider-executed* result arriving in
-   * the model stream (`llm-execution-step.ts` says so where it runs the hook: client- and
-   * server-executed tools take the mapping-step site instead). When it does, the step builds a
-   * bail response and no foreach ever adopts the eagerly dispatched server tool.
+   * A `processToolResult` processor is excluded from early dispatch entirely, and the
+   * reason is stronger than the post-stream exclusion next to it.
    *
-   * The backstop stops the coordinator *without* `cancelRunning`. That is a deliberate
-   * tradeoff rather than a consequence of the bail being terminal — a caller abort is
-   * terminal too and does cancel. Here nothing will re-issue the call, so there is no
-   * duplicate run to prevent; cancellation cannot undo effects already performed and may
-   * interrupt an in-progress operation, though it can prevent further ones. This test
-   * locks the chosen behaviour in: the orphaned call is allowed to finish, not aborted.
+   * The hook runs *inside* the model stream. When it aborts, `llm-execution-step.ts`
+   * builds a bail response and returns before the post-stream pass ever runs — so
+   * without early execution the tool is never started. Starting one early would make
+   * the two schedules disagree about whether the tool ran at all, not merely about
+   * when, and no bookkeeping at the bail can repair that. Unlike a runtime `suspend()`,
+   * this hook is declared on the processor, so it can be excluded up front.
    */
-  it('lets orphaned eager work finish when a stream tool-result tripwire bails the attempt', async () => {
+  async function runToolResultProcessorScenario(eagerToolExecution: boolean, trippingToolName: string) {
     const { events, record } = createRecorder();
-    let releaseSlow: (() => void) | undefined;
-    let slowEntered: () => void;
-    const slowHasEntered = new Promise<void>((resolve, reject) => {
-      // Bounded: a dispatch regression fails fast with a named cause rather than hanging.
-      const bound = setTimeout(() => reject(new Error('eager dispatch never entered slow-tool')), 1000);
-      slowEntered = () => {
-        clearTimeout(bound);
-        resolve();
-      };
-    });
+    const effects: string[] = [];
 
     const model = new MockLanguageModelV2({
       doStream: async () => ({
@@ -1369,18 +1281,16 @@ describe('eager tool dispatch — unsafe terminations', () => {
               modelId: 'mock-model',
               timestamp: new Date(0),
             });
-            // The server tool the eager dispatcher will start.
             controller.enqueue({
               type: 'tool-call',
-              toolCallId: 'call-slow',
-              toolName: 'slow-tool',
-              input: JSON.stringify({ value: 'slow' }),
+              toolCallId: 'call-local',
+              toolName: 'local-tool',
+              input: JSON.stringify({ value: 'local' }),
             });
-            // Hand off to the eager dispatcher: proceed only once the body has actually
-            // entered, so the in-flight window is a handshake rather than a timing race.
-            await slowHasEntered;
-            // A deferred provider-executed result arriving mid-stream. This is the only
-            // shape that reaches the stream-level processToolResult hook.
+            // Long enough that an eagerly dispatched body would have run by now.
+            await new Promise(resolve => setTimeout(resolve, 150));
+            // A deferred provider-executed result: the only shape that reaches the
+            // stream-level hook, and therefore the only one that can bail the attempt.
             controller.enqueue({
               type: 'tool-result',
               toolCallId: 'call-provider',
@@ -1400,72 +1310,109 @@ describe('eager tool dispatch — unsafe terminations', () => {
       }),
     });
 
-    class TripwireOnProviderResult {
-      readonly id = 'tripwire-on-provider-result';
+    class TripwireOnToolResult {
+      readonly id = 'tripwire-on-tool-result';
       async processToolResult({ toolName, abort }: any) {
-        if (toolName === 'web_search') {
+        if (toolName === trippingToolName) {
           record('tripwire');
-          abort('blocked by provider-result-guard');
+          abort(`blocked by ${trippingToolName}-guard`);
         }
       }
     }
 
     const agent = new Agent({
-      id: 'eager-stream-tripwire-agent',
-      name: 'Eager stream tripwire agent',
+      id: 'eager-tool-result-processor-agent',
+      name: 'Eager tool-result processor agent',
       instructions: 'Call the tool.',
       model,
       tools: {
-        'slow-tool': createTool({
-          id: 'slow-tool',
-          description: 'Still running when the tripwire bails the attempt.',
+        'local-tool': createTool({
+          id: 'local-tool',
+          description: 'The call whose execution must not depend on the schedule.',
           inputSchema: z.object({ value: z.string() }),
           outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }, options) => {
-            record('enter-slow');
-            slowEntered();
-            const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
-            await new Promise<void>(resolve => {
-              releaseSlow = resolve;
-              signal?.addEventListener('abort', () => resolve(), { once: true });
-              if (signal?.aborted) resolve();
-            });
-            // Distinguish "cancelled mid-flight" from "allowed to finish".
-            record(signal?.aborted ? 'aborted-slow' : 'finish-slow');
+          execute: async ({ value }) => {
+            record('execute-local');
+            effects.push('local');
             return { value };
           },
         }),
       },
-      outputProcessors: [new TripwireOnProviderResult() as any],
+      outputProcessors: [new TripwireOnToolResult() as any],
     });
 
-    try {
-      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+    const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution }));
+    // Anything dispatched early would land in the window after the stream closes.
+    await new Promise(resolve => setTimeout(resolve, 300));
 
-      // The tripwire really fired, on the stream-level hook, and really bailed the attempt.
-      expect(events).toContain('tripwire');
-      expect(chunks.some(chunk => chunk.type === 'tripwire')).toBe(true);
-      // No result for the orphaned call: nothing adopted it, so the mapping-step
-      // processToolResult site — the only other tripwire emitter — never ran.
-      expect(chunks.some(chunk => chunk.type === 'tool-result' && chunk.payload?.toolCallId === 'call-slow')).toBe(
-        false,
-      );
+    return { events, effects, types: chunks.map(chunk => chunk.type) };
+  }
 
-      // It was dispatched eagerly — the body entered before the model stream finished.
-      expect(events.indexOf('enter-slow')).toBeLessThan(events.indexOf('finish'));
-      // It is still in flight at bail time, i.e. the backstop had something to cancel.
-      expect(events).not.toContain('finish-slow');
-      expect(events).not.toContain('aborted-slow');
+  it('does not start a call early when a processToolResult tripwire bails the attempt', async () => {
+    const off = await runToolResultProcessorScenario(false, 'web_search');
+    const on = await runToolResultProcessorScenario(true, 'web_search');
 
-      // Now let it settle. It must complete, not report an abort.
-      releaseSlow?.();
-      await vi.waitFor(() => expect(events).toContain('finish-slow'), { timeout: 2000 });
-      expect(events).not.toContain('aborted-slow');
-      expect(events.filter(event => event === 'enter-slow')).toHaveLength(1);
-    } finally {
-      // Never leave the blocked tool pending if an assertion above threw.
-      releaseSlow?.();
+    // The tripwire really fired on the stream-level hook and really bailed the attempt.
+    expect(on.events).toContain('tripwire');
+    expect(on.types).toContain('tripwire');
+
+    // The point of the exclusion: the two schedules agree on whether the tool ran.
+    // Before it, the chunk sequences matched while the side effects did not — opting
+    // in decided whether a tool executed at all.
+    expect(off.effects).toEqual([]);
+    expect(on.effects).toEqual(off.effects);
+    expect(on.types).toEqual(off.types);
+  });
+
+  it('leaves a processToolResult run to the post-stream pass even when nothing trips', async () => {
+    // The exclusion is decided from the declared hook, not from whether it aborts, so a
+    // processor that never trips is still left to the post-stream pass. This is what
+    // makes the guard predictable — and it is the cost of it.
+    const on = await runToolResultProcessorScenario(true, 'nothing-trips');
+
+    expect(on.events).not.toContain('tripwire');
+    expect(on.effects).toEqual(['local']);
+    // Ran, but on the post-stream pass: the body entered after the model stream finished.
+    expect(on.events.indexOf('execute-local')).toBeGreaterThan(on.events.indexOf('finish'));
+  });
+
+  it('still dispatches early when an output processor declares no tool-result hook', async () => {
+    // The guard keys on `processToolResult` specifically. A processor that only touches
+    // the stream must not cost the whole run its early dispatch.
+    const { events, record } = createRecorder();
+
+    class StreamOnlyProcessor {
+      readonly id = 'stream-only-processor';
+      async processOutputStream({ part }: any) {
+        return part;
+      }
     }
+
+    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+
+    const agent = new Agent({
+      id: 'eager-stream-only-processor-agent',
+      name: 'Eager stream-only processor agent',
+      instructions: 'Call the tool.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Dispatched early.',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            record('execute-call-a');
+            return { value };
+          },
+        }),
+      },
+      outputProcessors: [new StreamOnlyProcessor() as any],
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+
+    expect(events.indexOf('execute-call-a')).toBeLessThan(events.indexOf('finish'));
   });
 });
 
