@@ -57,8 +57,10 @@ const sectionsResponseSchema = z.object({
 
 /**
  * Fetches Help Center sections once per run, bounded by `MAX_SECTION_PAGES`.
- * Returns `undefined` on any failure — the run then imports articles without
- * section containers or `in` links; containment resumes on a later good run.
+ * Returns `undefined` on any failure — the run then imports NEW articles
+ * without section containers or `in` links, while sectioned articles that
+ * already have a record are left untouched (a transient outage must never
+ * replace a good record with one missing its containment link).
  */
 async function fetchSectionNames(
   ctx: ImporterProviderContext,
@@ -226,6 +228,11 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
           metadata: nodeSelfMetadata(address),
         });
         const existingRecords = await node.listRecords();
+        // Sections fetch failed and this article belongs to a section: its
+        // computed record is missing the `in` link. Never replace an existing
+        // good record with the degraded one — keep what we have; the article
+        // re-records on its next edit or a later run with sections available.
+        if (sectionNames === undefined && sectionId && existingRecords.length > 0) continue;
         if (!existingRecords.some(r => r.id === recordId)) {
           await node.appendRecord({
             id: recordId,

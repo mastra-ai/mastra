@@ -293,6 +293,37 @@ describe('zendesk importer', () => {
     expect(await state.get('zendesk:articles:watermark')).toBe(JSON.stringify({ watermark: '100' }));
   });
 
+  it('a transient sections outage never replaces a good record with a degraded one', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    // Run 1: sections available — article gets its `in` link.
+    request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }], {
+        end_time: 100,
+      }),
+    );
+    request.mockResolvedValueOnce(sectionsResponse([{ id: 10, name: 'Guides' }]));
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+    const goodIds = [...importer.nodes.get('zendesk:article:1')!.records.keys()];
+    expect(goodIds).toHaveLength(1);
+
+    // Run 2: the article was edited, but the sections fetch fails. The good
+    // record (with its `in` link) must survive — replacing it would durably
+    // strip containment because the watermark advances past this window.
+    request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: '<p>y</p>', section_id: 10, updated_at: '2026-09-02T00:00:00Z' }], {
+        end_time: 200,
+      }),
+    );
+    request.mockRejectedValueOnce(new Error('sections down'));
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+
+    const records = importer.nodes.get('zendesk:article:1')!.records;
+    expect([...records.keys()]).toEqual(goodIds);
+    const record = [...records.values()][0]!;
+    expect((record.metadata as { links: unknown[] }).links).toEqual([{ address: 'zendesk:section:10', rel: 'in' }]);
+    expect(await state.get('zendesk:articles:watermark')).toBe(JSON.stringify({ watermark: '200' }));
+  });
+
   it('section pagination stops at the page cap', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce(
