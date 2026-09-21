@@ -4,7 +4,7 @@ import { MastraError } from '../error/index.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
 import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
-import type { DatasetTenancyFilters, TargetType } from '../storage/types.js';
+import type { DatasetTenancyFilters, ListDatasetsInput, TargetType } from '../storage/types.js';
 import { Dataset } from './dataset.js';
 import { compareExperiments as compareExperimentsInternal } from './experiment/analytics/compare.js';
 import { deleteExperimentTraces } from './experiment-traces.js';
@@ -197,11 +197,13 @@ export class DatasetsManager {
       /** Substring match on dataset `name`, case-insensitive. */
       name?: string;
     };
+    orderBy?: ListDatasetsInput['orderBy'];
   }) {
     const store = await this.#getDatasetsStore();
     return store.listDatasets({
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
       ...(args?.filters ? { filters: args.filters } : {}),
+      ...(args?.orderBy ? { orderBy: args.orderBy } : {}),
     });
   }
 

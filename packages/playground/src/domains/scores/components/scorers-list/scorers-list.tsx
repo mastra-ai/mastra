@@ -5,18 +5,33 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { sortBy } from '@mastra/playground-ui/sort/sort-by';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
 export type ScorersListItem = GetScorerResponse & { id: string };
 
+export type ScorersSortKey = 'name' | 'source' | 'agents' | 'workflows';
+export type ScorersSort = ListSort<ScorersSortKey>;
+
+const sortAccessors = {
+  name: (scorer: ScorersListItem) => scorer.scorer.config?.name || scorer.id,
+  source: (scorer: ScorersListItem) => scorer.source,
+  agents: (scorer: ScorersListItem) => scorer.agentIds?.length ?? 0,
+  workflows: (scorer: ScorersListItem) => scorer.workflowIds?.length ?? 0,
+};
+
 export interface ScorersListProps {
   scorers: RouteResponse<'GET /scores/scorers'>;
   isLoading: boolean;
   search?: string;
   sourceFilter?: string;
+  sort?: ScorersSort;
+  onSortChange?: (direction: DataListSort, key: ScorersSortKey) => void;
   /** When provided, rows become buttons that call this instead of navigating to the scorer page. */
   onSelectScorer?: (scorer: ScorersListItem) => void;
   /** Highlights the row for the given scorer id (used with `onSelectScorer`). */
@@ -32,6 +47,8 @@ export function ScorersList({
   isLoading,
   search = '',
   sourceFilter = 'all',
+  sort,
+  onSortChange,
   onSelectScorer,
   selectedScorerId,
   keyboardGlobal = true,
@@ -49,7 +66,7 @@ export function ScorersList({
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();
-    return scorerData.filter(s => {
+    const filtered = scorerData.filter(s => {
       const matchesSearch =
         !term ||
         s.scorer.config?.id?.toLowerCase().includes(term) ||
@@ -57,7 +74,8 @@ export function ScorersList({
       const matchesSource = sourceFilter === 'all' || s.source === sourceFilter;
       return matchesSearch && matchesSource;
     });
-  }, [scorerData, search, sourceFilter]);
+    return sortBy(filtered, sort, sortAccessors);
+  }, [scorerData, search, sourceFilter, sort]);
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
@@ -65,24 +83,56 @@ export function ScorersList({
     return <EntityListSkeleton columns={COLUMNS} />;
   }
 
+  const sortFor = (key: ScorersSortKey) => (sort?.key === key ? sort.direction : undefined);
+
   return (
     <EntityList columns={COLUMNS} scrollRef={containerRef}>
       <EntityList.Top>
-        <EntityList.TopCell>Name</EntityList.TopCell>
-        <EntityList.TopCell>Description</EntityList.TopCell>
-        <EntityList.TopCell>Source</EntityList.TopCell>
-        <EntityList.TopCellSmart
-          long="Agents"
-          short={<AgentIcon />}
-          tooltip="Number of attached Agents"
-          className="text-center"
-        />
-        <EntityList.TopCellSmart
-          long="Workflows"
-          short={<WorkflowIcon />}
-          tooltip="Number of attached Workflows"
-          className="text-center"
-        />
+        {onSortChange ? (
+          <>
+            <EntityList.SortableTopCell sortKey="name" sort={sortFor('name')} onSortChange={onSortChange}>
+              Name
+            </EntityList.SortableTopCell>
+            <EntityList.TopCell>Description</EntityList.TopCell>
+            <EntityList.SortableTopCell sortKey="source" sort={sortFor('source')} onSortChange={onSortChange}>
+              Source
+            </EntityList.SortableTopCell>
+            <EntityList.SortableTopCell
+              sortKey="agents"
+              sort={sortFor('agents')}
+              onSortChange={onSortChange}
+              align="end"
+            >
+              Agents
+            </EntityList.SortableTopCell>
+            <EntityList.SortableTopCell
+              sortKey="workflows"
+              sort={sortFor('workflows')}
+              onSortChange={onSortChange}
+              align="end"
+            >
+              Workflows
+            </EntityList.SortableTopCell>
+          </>
+        ) : (
+          <>
+            <EntityList.TopCell>Name</EntityList.TopCell>
+            <EntityList.TopCell>Description</EntityList.TopCell>
+            <EntityList.TopCell>Source</EntityList.TopCell>
+            <EntityList.TopCellSmart
+              long="Agents"
+              short={<AgentIcon />}
+              tooltip="Number of attached Agents"
+              className="text-center"
+            />
+            <EntityList.TopCellSmart
+              long="Workflows"
+              short={<WorkflowIcon />}
+              tooltip="Number of attached Workflows"
+              className="text-center"
+            />
+          </>
+        )}
       </EntityList.Top>
 
       {filteredData.map((scorer, index) => {

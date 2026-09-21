@@ -1,4 +1,5 @@
 import type { TraceQueryTrace } from '@mastra/core/storage';
+import { displayTraceName } from '../trace-list-columns';
 import type { TracesListViewTrace } from './traces-list-view';
 
 export function toTracesListViewTraces(traces: TraceQueryTrace[]): TracesListViewTrace[] {
@@ -6,7 +7,7 @@ export function toTracesListViewTraces(traces: TraceQueryTrace[]): TracesListVie
     traceId: trace.traceId,
     spanId: trace.rootSpanId,
     parentSpanId: trace.parentSpanId,
-    name: trace.name,
+    name: displayTraceName(trace.name),
     createdAt: trace.createdAt,
     inputPreview: trace.inputPreview,
     metadata: trace.metadata,

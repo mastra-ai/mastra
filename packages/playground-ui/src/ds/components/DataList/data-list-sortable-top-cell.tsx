@@ -29,15 +29,18 @@ const sortTooltips = {
   none: 'Sort',
 };
 
-export type DataListSortableTopCellProps = Omit<DataListTopCellProps, 'aria-sort' | 'as' | 'children' | 'onClick'> & {
+export type DataListSortableTopCellProps<K extends string = string> = Omit<
+  DataListTopCellProps,
+  'aria-sort' | 'as' | 'children' | 'onClick'
+> & {
   children: ReactNode;
-  sortKey: string;
+  sortKey: K;
   sort?: DataListSort;
-  onSortChange: (sort: DataListSort, key: string) => void;
+  onSortChange: (sort: DataListSort, key: K) => void;
   align?: 'start' | 'end';
 };
 
-export function DataListSortableTopCell({
+export function DataListSortableTopCell<K extends string = string>({
   children,
   sortKey,
   sort,
@@ -45,7 +48,7 @@ export function DataListSortableTopCell({
   align = 'start',
   className,
   ...props
-}: DataListSortableTopCellProps) {
+}: DataListSortableTopCellProps<K>) {
   const next: DataListSort = sort === 'asc' ? 'desc' : 'asc';
   const SortIcon = sortIcons[sort ?? 'none'];
   const label = typeof children === 'string' ? children : sortKey;

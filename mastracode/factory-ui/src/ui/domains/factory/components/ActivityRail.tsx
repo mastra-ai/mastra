@@ -68,11 +68,11 @@ const DEED_GLYPHS: Record<AuditNamespace, LucideIcon> = {
 const DEED_PHRASES: Record<AuditAction, string> = {
   'factory.run.started': 'started a run on',
   'factory.run.ended': 'ended a run on',
+  'factory.run.queued': 'queued a run on',
+  'factory.run.rejected': 'rejected the run on',
   'factory.run.approved': 'approved the run on',
   'factory.run.dismissed': 'dismissed the run on',
   'factory.run.retry': 'retried the run on',
-  'factory.run.rejected': 'rejected a run on',
-  'factory.run.queued': 'queued a run on',
   'factory.git.commit': 'committed to',
   'factory.git.push': 'pushed to',
   'factory.git.pr_opened': 'opened a pull request for',

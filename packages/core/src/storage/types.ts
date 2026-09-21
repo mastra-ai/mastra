@@ -2795,9 +2795,21 @@ export interface ListDatasetsFilters extends DatasetTenancyFilters {
   name?: string;
 }
 
+export type DatasetOrderByField = 'createdAt' | 'updatedAt' | 'name';
+export type DatasetItemOrderByField = 'createdAt' | 'updatedAt';
+export type ExperimentOrderByField = 'createdAt' | 'status';
+export type ExperimentResultOrderByField = 'startedAt' | 'createdAt';
+
+export interface ListOrderBy<TField extends string> {
+  field?: TField;
+  direction?: ThreadSortDirection;
+}
+
 export interface ListDatasetsInput {
   pagination: StoragePagination;
   filters?: ListDatasetsFilters;
+  /** Sort order. Defaults to `createdAt DESC`. Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<DatasetOrderByField>;
 }
 
 export interface ListDatasetsOutput {
@@ -2811,6 +2823,8 @@ export interface ListDatasetItemsInput {
   search?: string;
   pagination: StoragePagination;
   filters?: DatasetTenancyFilters;
+  /** Sort order. Defaults to `createdAt DESC`. Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<DatasetItemOrderByField>;
 }
 
 export interface ListDatasetItemsOutput {
@@ -3166,6 +3180,8 @@ export interface ListExperimentsInput {
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
+  /** Sort order. Defaults to `createdAt DESC`. Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<ExperimentOrderByField>;
 }
 
 export interface ListExperimentsOutput {
@@ -3182,6 +3198,8 @@ export interface ListExperimentResultsInput {
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
+  /** Sort order. Defaults to `startedAt ASC` (execution order). Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<ExperimentResultOrderByField>;
 }
 
 export interface ListExperimentResultsOutput {

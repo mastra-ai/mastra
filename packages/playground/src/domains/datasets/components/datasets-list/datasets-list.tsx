@@ -7,6 +7,7 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useMemo, useRef } from 'react';
 import type { ReactNode, SyntheticEvent } from 'react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
@@ -36,7 +37,12 @@ export interface DatasetsListProps {
    * fall back to the default experiments badge.
    */
   renderTrailingCell?: (dataset: DatasetRecord) => ReactNode | null;
+  /** Server-side sort; headers are only sortable when `onSortChange` is provided. */
+  sort?: ListSort<DatasetsSortKey>;
+  onSortChange?: (direction: 'asc' | 'desc', key: DatasetsSortKey) => void;
 }
+
+export type DatasetsSortKey = 'name' | 'updatedAt';
 
 const COLUMNS = 'auto 1fr auto 5rem 10rem 7rem';
 
@@ -175,6 +181,8 @@ export function DatasetsList({
   selectedDatasetId,
   keyboardGlobal = true,
   renderTrailingCell,
+  sort,
+  onSortChange,
 }: DatasetsListProps) {
   const enrichedDatasets = useMemo(() => {
     return datasets.map(ds => {
@@ -208,11 +216,31 @@ export function DatasetsList({
   return (
     <EntityList columns={COLUMNS} scrollRef={containerRef}>
       <EntityList.Top>
-        <EntityList.TopCell>Name</EntityList.TopCell>
+        {onSortChange ? (
+          <EntityList.SortableTopCell
+            sortKey="name"
+            sort={sort?.key === 'name' ? sort.direction : undefined}
+            onSortChange={onSortChange}
+          >
+            Name
+          </EntityList.SortableTopCell>
+        ) : (
+          <EntityList.TopCell>Name</EntityList.TopCell>
+        )}
         <EntityList.TopCell>Description</EntityList.TopCell>
         <EntityList.TopCell>Tags</EntityList.TopCell>
         <EntityList.TopCell>Version</EntityList.TopCell>
-        <EntityList.TopCell>Last Updated</EntityList.TopCell>
+        {onSortChange ? (
+          <EntityList.SortableTopCell
+            sortKey="updatedAt"
+            sort={sort?.key === 'updatedAt' ? sort.direction : undefined}
+            onSortChange={onSortChange}
+          >
+            Last Updated
+          </EntityList.SortableTopCell>
+        ) : (
+          <EntityList.TopCell>Last Updated</EntityList.TopCell>
+        )}
         <EntityList.TopCell>Experiments</EntityList.TopCell>
       </EntityList.Top>
 

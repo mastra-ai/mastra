@@ -4516,15 +4516,15 @@ describe('FactoryDecisionDispatcher', () => {
             type: 'upsertLinkedWorkItem',
             idempotencyKey: 'linked-1',
             board: 'work',
-            source: 'github-issue',
-            sourceKey: 'github-issue:2',
+            source: 'gitlab-issue',
+            sourceKey: 'gitlab-issue:2',
             title: 'Linked issue',
             url: null,
             stage: 'intake',
           }),
         },
       },
-      intake: { issue: { onEnter: intakeEntered } },
+      intake: { gitlabIssue: { onEnter: intakeEntered } },
     });
     const transitionService = new FactoryTransitionService({
       storage,
@@ -4566,9 +4566,13 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date(first.getTime() + 2_000));
 
     const linked = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).find(
-      item => item.externalSource?.externalId === 'github-issue:2',
+      item => item.externalSource?.externalId === 'gitlab-issue:2',
     );
-    expect(linked).toMatchObject({ parentWorkItemId: parent.id, stages: ['intake'] });
+    expect(linked).toMatchObject({
+      parentWorkItemId: parent.id,
+      stages: ['intake'],
+      externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:2' },
+    });
     expect(intakeEntered).toHaveBeenCalledTimes(1);
     expect(await decisionByKey(storage, 'linked-1')).toMatchObject({ status: 'succeeded' });
   });

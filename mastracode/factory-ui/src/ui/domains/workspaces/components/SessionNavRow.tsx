@@ -33,6 +33,7 @@ export function SessionNavRow({
   loading,
   status,
   merged,
+  changeRequestProvider = 'github',
   preview: previewDetails,
   pinned = false,
   onSelect,
@@ -49,8 +50,10 @@ export function SessionNavRow({
   disabled: boolean;
   /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
   loading?: boolean;
-  /** Merged pull request for this session's branch — shown only when the row is otherwise idle. */
+  /** Merged change request for this session's branch — shown only when the row is otherwise idle. */
   merged?: boolean;
+  /** Names the merged badge: GitHub pull requests or GitLab merge requests. */
+  changeRequestProvider?: 'github' | 'gitlab';
   status?: SessionRowStatus;
   preview?: SessionPreviewDetails;
   pinned?: boolean;
@@ -87,6 +90,7 @@ export function SessionNavRow({
   );
   const belt = loading ? undefined : status;
   const trailing = trailingKind({ loading, status, merged });
+  const mergedLabel = changeRequestProvider === 'gitlab' ? 'Merge request merged' : 'Pull request merged';
   const action = (
     <>
       {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
@@ -95,8 +99,8 @@ export function SessionNavRow({
         {trailing === 'merged' ? (
           <span
             role="img"
-            aria-label={`Pull request merged for ${name}`}
-            title="Pull request merged"
+            aria-label={`${mergedLabel} for ${name}`}
+            title={mergedLabel}
             className={cn('flex', yieldsToActions)}
           >
             <PullRequestStatusIcon status="merged" className="size-3!" decorative />

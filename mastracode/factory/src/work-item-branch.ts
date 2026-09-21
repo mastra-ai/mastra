@@ -8,6 +8,8 @@ import type { ExternalWorkItemSource } from './storage/domains/work-items/base.j
 export type WorkItemBranchSource =
   | 'github-issue'
   | 'github-pr'
+  | 'gitlab-issue'
+  | 'gitlab-pr'
   | 'linear-issue'
   | 'jira-issue'
   | 'incidentio-follow-up'
@@ -24,9 +26,12 @@ export interface WorkItemBranchInput {
 export function workItemBranchSource(externalSource: ExternalWorkItemSource | null | undefined): WorkItemBranchSource {
   if (!externalSource) return 'manual';
   if (externalSource.integrationId === 'linear') return 'linear-issue';
+  if (externalSource.integrationId === 'gitlab') {
+    return externalSource.type === 'pull-request' ? 'gitlab-pr' : 'gitlab-issue';
+  }
   if (externalSource.integrationId === 'jira') return 'jira-issue';
   if (externalSource.integrationId === 'incidentio') return 'incidentio-follow-up';
-  // Only GitHub, Linear, Jira, and incident.io carry provider identities; anything
+  // Only GitHub, GitLab, Linear, Jira, and incident.io carry provider identities; anything
   // else (a Slack thread, say) is a plain work item rather than a mislabeled GitHub issue.
   if (externalSource.integrationId !== 'github') return 'manual';
   return externalSource.type === 'pull-request' ? 'github-pr' : 'github-issue';
@@ -42,6 +47,8 @@ export function workItemNumber(item: Pick<WorkItemBranchInput, 'source' | 'metad
   const metadata = item.metadata ?? {};
   if (item.source === 'github-issue') return branchNumber(metadata, 'githubIssueNumber');
   if (item.source === 'github-pr') return branchNumber(metadata, 'githubPullRequestNumber');
+  if (item.source === 'gitlab-issue') return branchNumber(metadata, 'gitlabIssueIid');
+  if (item.source === 'gitlab-pr') return branchNumber(metadata, 'gitlabMergeRequestIid');
   return;
 }
 
@@ -51,7 +58,8 @@ export function workItemThreadTitle(
 ): string {
   const number = workItemNumber(item);
   if (number === undefined) return item.title;
-  return `${item.source === 'github-pr' ? 'PR' : 'Issue'} #${number}: ${item.title}`;
+  const kind = item.source === 'github-pr' ? 'PR' : item.source === 'gitlab-pr' ? 'MR' : 'Issue';
+  return `${kind} #${number}: ${item.title}`;
 }
 
 /**
@@ -63,9 +71,9 @@ export function workItemThreadTitle(
  */
 export function workItemBranch(item: WorkItemBranchInput): string {
   const metadata = item.metadata ?? {};
-  const githubNumber = workItemNumber(item);
-  if (githubNumber !== undefined) {
-    return item.source === 'github-issue' ? `factory/issue-${githubNumber}` : `factory/pr-${githubNumber}`;
+  const providerNumber = workItemNumber(item);
+  if (providerNumber !== undefined && (item.source === 'github-issue' || item.source === 'github-pr')) {
+    return item.source === 'github-issue' ? `factory/issue-${providerNumber}` : `factory/pr-${providerNumber}`;
   }
   if (
     (item.source === 'linear-issue' || item.source === 'jira-issue' || item.source === 'incidentio-follow-up') &&
@@ -77,6 +85,24 @@ export function workItemBranch(item: WorkItemBranchInput): string {
       return `factory/${provider}-${identifier.toLowerCase()}`;
     }
   }
+  if (item.source === 'gitlab-pr' && providerNumber !== undefined) {
+    const uniqueSuffix = item.id
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '')
+      .slice(-12);
+    if (uniqueSuffix) return `factory/gitlab-mr-${providerNumber}-${uniqueSuffix}`;
+  }
+  if (item.source === 'gitlab-issue' && typeof metadata.identifier === 'string') {
+    const identifier = metadata.identifier
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-');
+    const uniqueSuffix = item.id
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '')
+      .slice(-12);
+    if (identifier && uniqueSuffix) return `factory/gitlab-${identifier.slice(0, 60)}-${uniqueSuffix}`;
+  }
   return `factory/item-${item.id}`;
 }
 
@@ -84,4 +110,11 @@ export function workItemBranch(item: WorkItemBranchInput): string {
 export function pullRequestNumberFromBranch(branch: string): number | undefined {
   const match = /^factory\/pr-([1-9]\d*)$/.exec(branch);
   return match ? Number(match[1]) : undefined;
+}
+
+/** The GitLab MR IID encoded in Factory's collision-resistant review branch. */
+export function mergeRequestNumberFromBranch(branch: string): number | undefined {
+  const match = /^factory\/gitlab-mr-([1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);
+  const number = match ? Number(match[1]) : undefined;
+  return number !== undefined && Number.isSafeInteger(number) ? number : undefined;
 }

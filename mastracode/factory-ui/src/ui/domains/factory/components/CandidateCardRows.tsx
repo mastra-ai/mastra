@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
 import type { BoardCardStatus } from '../boardCardStatus';
-import { externalLinkLabel, metadataLabels } from '../boardItems';
+import { externalLinkLabel, metadataLabelColors, metadataLabels } from '../boardItems';
 import { CardLabels, CardStatus, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 
@@ -47,7 +47,7 @@ export function CandidateCardRows({
           </a>
         </div>
       </div>
-      <CardLabels labels={metadataLabels(candidate.metadata)} />
+      <CardLabels labels={metadataLabels(candidate.metadata)} colors={metadataLabelColors(candidate.metadata)} />
       <CardStatus status={status} />
       {actions}
     </>

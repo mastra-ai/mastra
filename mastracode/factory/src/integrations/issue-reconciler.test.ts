@@ -9,6 +9,7 @@ import { resolveGithubRules } from './github/default-rules.js';
 import type { GithubRuleOverrides } from './github/default-rules.js';
 import { createGithubIssueReconciler } from './github/issue-reconciler.js';
 import type { GithubIssueFetcher, ReconcileIssueState } from './github/rules.js';
+import { createIssueReconciler } from './issue-reconciler.js';
 import { resolveLinearRules } from './linear/default-rules.js';
 import { attachLinearIssueReconciler } from './linear/issue-reconciler.js';
 
@@ -130,6 +131,47 @@ function githubState(overrides: Partial<ReconcileIssueState> = {}): ReconcileIss
 }
 
 describe('issue reconcilers', () => {
+  it('does not rewrite a card when provider metadata contains an unchanged object', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const { item } = await seeded.workItems.upsert({
+      orgId: project.orgId,
+      userId: project.createdBy,
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'gitlab',
+          type: 'issue',
+          externalId: 'gitlab-issue:42',
+          url: 'https://gitlab.example.com/acme/app/-/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const intake = {
+      resolveIntakeDispatch: vi.fn().mockResolvedValue({ issueId: '42', sourceId: 'gitlab-project:1' }),
+      getIssue: vi.fn().mockResolvedValue(issue()),
+    } as unknown as Intake;
+    const reconcile = createIssueReconciler({
+      integrationId: 'gitlab',
+      intake,
+      projects: seeded.projects,
+      storage: seeded.workItems,
+      issueId: () => '42',
+      isTerminal: () => false,
+      metadata: () => ({ labelColors: { bug: '#428BCA' }, labels: ['bug'], state: 'opened' }),
+    });
+
+    await expect(reconcile()).resolves.toMatchObject({ checked: 1, updated: 1, failed: 0 });
+    const afterFirst = await seeded.workItems.get({ orgId: project.orgId, id: item.id });
+    await expect(reconcile()).resolves.toMatchObject({ checked: 1, updated: 0, failed: 0 });
+    const afterSecond = await seeded.workItems.get({ orgId: project.orgId, id: item.id });
+    expect(afterSecond?.revision).toBe(afterFirst?.revision);
+  });
+
   it('reconciles only scoped GitHub issue cards and refreshes metadata', async () => {
     const fetchIssue = vi.fn().mockResolvedValue(githubState());
     const setup = await githubSetup({ metadata: { assignees: ['old'] }, fetchIssue });

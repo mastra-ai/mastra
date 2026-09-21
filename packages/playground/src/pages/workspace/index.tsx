@@ -16,6 +16,7 @@ import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility'
 import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
+import type { SkillsSort } from '@/domains/workspace/components/skills-table';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
 import { isImageFile, isVideoFile } from '@/domains/workspace/file-type-utils';
@@ -44,6 +45,7 @@ export default function Workspace() {
   const [updatingSkillName, setUpdatingSkillName] = useState<string | null>(null);
   // Track if we installed a skill that wasn't discovered (client-side only, resets on refresh)
   const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
+  const [skillsSort, setSkillsSort] = useState<SkillsSort>();
 
   // Get state from URL query params (path, file, tab are still query params)
   const fileFromUrl = searchParams.get('file');
@@ -537,6 +539,8 @@ export default function Workspace() {
                 <SkillsTable
                   skills={skills}
                   isLoading={isLoadingSkills}
+                  sort={skillsSort}
+                  onSortChange={(direction, key) => setSkillsSort({ key, direction })}
                   isSkillsConfigured={isSkillsConfigured}
                   hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
                   basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}

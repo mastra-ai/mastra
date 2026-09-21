@@ -1993,10 +1993,21 @@ export class AgentController<TState = {}> {
         const data = chunk.data as { toolCallId?: string; progress?: unknown } | undefined;
         if (!data?.toolCallId || data.progress === undefined) return;
 
-        session.emit({ type: 'tool_update', toolCallId: data.toolCallId, partialResult: data.progress });
+        session.emit({
+          type: 'tool_update',
+          threadId: runThreadId,
+          toolCallId: data.toolCallId,
+          partialResult: data.progress,
+        });
         const output = this.formatToolProgressOutput(data.progress);
         if (output) {
-          session.emit({ type: 'shell_output', toolCallId: data.toolCallId, output, stream: 'stdout' });
+          session.emit({
+            type: 'shell_output',
+            threadId: runThreadId,
+            toolCallId: data.toolCallId,
+            output,
+            stream: 'stdout',
+          });
         }
       },
       ...(tracingContext && { tracingContext }),

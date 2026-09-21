@@ -1,14 +1,23 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { sortBy } from '@mastra/playground-ui/sort/sort-by';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { AlertTriangle, BookOpen, CircleSlashIcon, Plus } from 'lucide-react';
+import { useMemo } from 'react';
 import type { SyntheticEvent } from 'react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
 import { useLinkComponent } from '@/lib/framework';
 
+export type SkillsSortKey = 'name' | 'path';
+export type SkillsSort = ListSort<SkillsSortKey>;
+
 export interface SkillsTableProps {
   skills: SkillMetadata[];
   isLoading: boolean;
+  sort?: SkillsSort;
+  onSortChange?: (direction: DataListSort, key: SkillsSortKey) => void;
   isSkillsConfigured?: boolean;
   /** True if .agents/skills has skills that aren't being discovered */
   hasUndiscoveredAgentSkills?: boolean;
@@ -30,18 +39,25 @@ export interface SkillsTableProps {
 const DOWNLOADED_SKILLS_PATH = '.agents/skills/';
 
 const baseColumns = [
-  { label: 'Skill', size: 'minmax(8rem,auto)' },
-  { label: 'Path', size: 'minmax(8rem,1fr)' },
+  { label: 'Skill', size: 'minmax(8rem,auto)', sortKey: 'name' },
+  { label: 'Path', size: 'minmax(8rem,1fr)', sortKey: 'path' },
   { label: 'Description', size: 'minmax(0,2fr)' },
 ] as const;
 
 const columnsWithActions = [...baseColumns, { label: '', size: 'auto' }] as const;
 
+const sortAccessors = {
+  name: (skill: SkillMetadata) => skill.name,
+  path: (skill: SkillMetadata) => skill.path,
+};
+
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
 
 export function SkillsTable({
-  skills,
+  skills: unsortedSkills,
   isLoading,
+  sort,
+  onSortChange,
   isSkillsConfigured = true,
   hasUndiscoveredAgentSkills = false,
   basePath = '/workspace/skills',
@@ -52,6 +68,15 @@ export function SkillsTable({
   removingSkillName,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
+  const skills = useMemo(
+    () =>
+      sortBy(
+        unsortedSkills.map(skill => ({ ...skill, id: skill.path })),
+        sort,
+        sortAccessors,
+      ),
+    [unsortedSkills, sort],
+  );
   const { containerRef, getRowProps } = useDataListKeyboard({ count: skills.length, global: true });
 
   const isDownloaded = (skill: SkillMetadata) => skill.path?.includes(DOWNLOADED_SKILLS_PATH) ?? false;
@@ -92,9 +117,20 @@ export function SkillsTable({
 
       <DataList columns={gridColumns} scrollRef={containerRef}>
         <DataList.Top>
-          {activeColumns.map(col => (
-            <DataList.TopCell key={col.label}>{col.label}</DataList.TopCell>
-          ))}
+          {activeColumns.map(col =>
+            onSortChange && 'sortKey' in col ? (
+              <DataList.SortableTopCell
+                key={col.label}
+                sortKey={col.sortKey}
+                sort={sort?.key === col.sortKey ? sort.direction : undefined}
+                onSortChange={onSortChange}
+              >
+                {col.label}
+              </DataList.SortableTopCell>
+            ) : (
+              <DataList.TopCell key={col.label}>{col.label}</DataList.TopCell>
+            ),
+          )}
         </DataList.Top>
 
         {skills.length === 0 ? (

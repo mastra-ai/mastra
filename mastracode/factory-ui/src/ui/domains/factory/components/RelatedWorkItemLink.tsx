@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { externalLinkLabel, PULL_REQUEST_STATUS_LABELS, pullRequestStatusForItem } from '../boardItems';
 import { relationshipLabel, workItemReferenceLabel } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
+import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
@@ -25,7 +26,7 @@ export function RelatedWorkItemLink({
   const reference = workItemReferenceLabel(item);
   const relation = relationshipLabel(item);
   const titleSuffix = reference === undefined ? '' : ` — ${item.title}`;
-  const pullRequestStatus = item.source === 'github-pr' ? pullRequestStatusForItem(item) : undefined;
+  const pullRequestStatus = isPullRequestSource(item.source) ? pullRequestStatusForItem(item) : undefined;
   const statusLabel = pullRequestStatus === undefined ? undefined : PULL_REQUEST_STATUS_LABELS[pullRequestStatus];
   let ariaLabel = `Open ${relation}${titleSuffix}`;
   if (live) ariaLabel = `Open live session for ${relation}${titleSuffix}`;

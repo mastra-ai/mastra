@@ -171,6 +171,27 @@ describe('FactoryStartCoordinator', () => {
     expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([]);
   });
 
+  it('resolves GitLab-backed runs from the GitLab source-control partition', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const githubSourceControl = makeSourceControl();
+    const gitlabSourceControl = makeSourceControl();
+    const resolveSourceControl = vi.fn(request =>
+      request.workItem.input.externalSource?.integrationId === 'gitlab'
+        ? (gitlabSourceControl as never)
+        : (githubSourceControl as never),
+    );
+    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, resolveSourceControl);
+    const request = startRequest();
+    request.workItem.input.externalSource.integrationId = 'gitlab';
+
+    await coordinator.prepare(request);
+
+    expect(resolveSourceControl).toHaveBeenCalledWith(request);
+    expect(gitlabSourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
+    expect(githubSourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+  });
+
   it('seeds caller identity into an existing request context', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller } = makeController();

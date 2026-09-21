@@ -15,11 +15,11 @@ import {
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { TextFieldBlock } from '@/ds/components/FormFieldBlocks';
 
-const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['input', 'entity', 'duration'];
+const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration'];
 
 const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
+  type: 'Type',
   input: 'Input',
-  entity: 'Entity',
   duration: 'Duration',
   inputTokens: 'Input tokens',
   outputTokens: 'Output tokens',

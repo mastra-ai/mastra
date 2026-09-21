@@ -2,8 +2,18 @@ import type { DatasetItem } from '@mastra/client-js';
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { format, isThisYear, isToday } from 'date-fns';
 import { CircleSlashIcon, ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
+
+export type DatasetItemsSortKey = 'createdAt';
+
+export interface DatasetItemsColumn {
+  name: string;
+  label: string;
+  size: string;
+  sortKey?: DatasetItemsSortKey;
+}
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -15,8 +25,11 @@ export interface DatasetItemsListProps {
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
-  columns?: { name: string; label: string; size: string }[];
+  columns?: DatasetItemsColumn[];
   searchQuery?: string;
+  /** Server-side sort; a column header is sortable when it declares a `sortKey` and `onSortChange` is provided. */
+  sort?: ListSort<DatasetItemsSortKey>;
+  onSortChange?: (direction: 'asc' | 'desc', key: DatasetItemsSortKey) => void;
   // Selection props (owned by parent)
   isSelectionActive: boolean;
   selectedIds: Set<string>;
@@ -65,6 +78,8 @@ export function DatasetItemsList({
   onAddClick,
   onImportClick,
   onImportJsonClick,
+  sort,
+  onSortChange,
 }: DatasetItemsListProps) {
   const { containerRef, getRowProps } = useDataListKeyboard({
     count: items.length,
@@ -109,6 +124,20 @@ export function DatasetItemsList({
     onToggleSelection(id, shiftKey, allIds);
   };
 
+  const renderTopCell = (col: DatasetItemsColumn) =>
+    col.sortKey && onSortChange ? (
+      <DataList.SortableTopCell
+        key={col.name}
+        sortKey={col.sortKey}
+        sort={sort?.key === col.sortKey ? sort.direction : undefined}
+        onSortChange={onSortChange}
+      >
+        {col.label || col.name}
+      </DataList.SortableTopCell>
+    ) : (
+      <DataList.TopCell key={col.name}>{col.label || col.name}</DataList.TopCell>
+    );
+
   const gridColumns = [isSelectionActive ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
@@ -122,13 +151,9 @@ export function DatasetItemsList({
           />
         )}
         {isSelectionActive ? (
-          <DataList.TopCells colStart={2}>
-            {columns.map(col => (
-              <DataList.TopCell key={col.name}>{col.label || col.name}</DataList.TopCell>
-            ))}
-          </DataList.TopCells>
+          <DataList.TopCells colStart={2}>{columns.map(renderTopCell)}</DataList.TopCells>
         ) : (
-          columns.map(col => <DataList.TopCell key={col.name}>{col.label || col.name}</DataList.TopCell>)
+          columns.map(renderTopCell)
         )}
       </DataList.Top>
 

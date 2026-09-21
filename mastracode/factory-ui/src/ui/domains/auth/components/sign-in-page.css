@@ -1,8 +1,8 @@
 .factory-halftone-field {
-  --factory-intake: var(--chart-1);
-  --factory-build: var(--chart-2);
-  --factory-review: var(--chart-4);
-  --factory-ship: var(--chart-3);
+  --factory-intake: var(--chart-blue);
+  --factory-build: var(--chart-green);
+  --factory-review: var(--chart-purple);
+  --factory-ship: var(--chart-orange);
   --factory-dot: var(--muted-foreground);
   --factory-lane-line: var(--border);
   --factory-rail-line: var(--border-strong);

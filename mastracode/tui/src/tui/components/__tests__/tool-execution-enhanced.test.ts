@@ -13,6 +13,33 @@ function stripAnsi(text: string): string {
     .replace(/\u001b\]8;;\u0007/g, '');
 }
 
+describe('completed shell/process background status', () => {
+  it.each(['execute_command', 'get_process_output', 'kill_process'])(
+    '%s preserves terminal background badges',
+    toolName => {
+      for (const isError of [false, true]) {
+        const component = new ToolExecutionComponentEnhanced(toolName, { command: 'echo done', pid: '123' }, {}, ui);
+        component.setBackgroundTaskId('shell-task');
+        component.updateResult({ content: [{ type: 'text', text: 'done' }], isError });
+        expect(stripAnsi(component.render(120).join('\n'))).toContain(`${isError ? '✗' : '✓'} background · shell-task`);
+        component.cancelBackground();
+        expect(stripAnsi(component.render(120).join('\n'))).toContain('■ background · shell-task');
+      }
+    },
+  );
+
+  it('preserves inferred shell errors with and without background identity', () => {
+    for (const background of [false, true]) {
+      const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'example' }, {}, ui);
+      if (background) component.setBackgroundTaskId('shell-task');
+      component.updateResult({ content: [{ type: 'text', text: 'Error: failed' }], isError: false });
+      const output = stripAnsi(component.render(120).join('\n'));
+      expect(output).toContain(background ? '✗ background · shell-task' : '✗');
+      if (!background) expect(output).not.toContain('background');
+    }
+  });
+});
+
 describe('ToolExecutionComponentEnhanced quiet display', () => {
   it('shows the latest lines from partial generic tool progress in quiet mode', () => {
     const component = new ToolExecutionComponentEnhanced(

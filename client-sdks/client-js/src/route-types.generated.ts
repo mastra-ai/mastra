@@ -207,12 +207,12 @@ type InputShared_Auxiliary_737 = {
   children?: InputShared_Auxiliary_737[] | undefined;
 };
 
-type Shared_Auxiliary_745 = {
+type Shared_Auxiliary_746 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_745[] | undefined;
+  children?: Shared_Auxiliary_746[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -4055,7 +4055,7 @@ type Shared_Type_79 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_745[] | undefined;
+  files?: Shared_Auxiliary_746[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -10086,6 +10086,11 @@ export type PostObservabilityTracesQuery_Body = {
         perPage?: number | undefined;
       }
     | undefined;
+  mode?: 'delta' | undefined;
+  /** Opaque cursor value for incremental polling */
+  after?: string | undefined;
+  /** Maximum number of updates to return in one delta poll */
+  limit?: number | undefined;
 };
 
 export type PostObservabilityTracesQuery_Response =
@@ -10098,6 +10103,15 @@ export type PostObservabilityTracesQuery_Response =
   | {
       traces: Shared_Type_62[];
       pagination: Shared_Type_55;
+      /** Opaque cursor value for incremental polling */
+      deltaCursor?: string | undefined;
+    }
+  | {
+      traces: Shared_Type_62[];
+      /** Incremental polling metadata */
+      delta: Shared_Type_56;
+      /** Opaque cursor value for incremental polling */
+      deltaCursor: string;
     }
   | {
       groups: {
@@ -18901,6 +18915,15 @@ export type GetDatasets_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return datasets attached to at least one of these target IDs */
   targetIds?: string[] | undefined;
+  orderBy?:
+    | (
+        | {
+            field: 'createdAt' | 'updatedAt' | 'name';
+            direction: 'ASC' | 'DESC';
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetDatasets_Response = {
@@ -19138,6 +19161,15 @@ export type GetDatasetsDatasetIdItems_QueryParams = {
   perPage?: number | undefined;
   version?: number | undefined;
   search?: string | undefined;
+  orderBy?:
+    | (
+        | {
+            field: 'createdAt' | 'updatedAt';
+            direction: 'ASC' | 'DESC';
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetDatasetsDatasetIdItems_Response = {
@@ -19603,6 +19635,15 @@ export type GetExperiments_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return experiments run against this target ID */
   targetId?: string | undefined;
+  orderBy?:
+    | (
+        | {
+            field: 'createdAt' | 'status';
+            direction: 'ASC' | 'DESC';
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetExperiments_Response = {
@@ -20134,6 +20175,15 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = {
   perPage?: number | undefined;
   /** Only return results that have all of these tags */
   tags?: string[] | undefined;
+  orderBy?:
+    | (
+        | {
+            field: 'startedAt' | 'createdAt';
+            direction: 'ASC' | 'DESC';
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
