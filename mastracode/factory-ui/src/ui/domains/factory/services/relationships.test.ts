@@ -62,11 +62,15 @@ describe('Factory work item relationships', () => {
 
   it('links a GitLab MR back to its issue session and names it as a Review item', () => {
     const issue = workItem({
-      id: 'gitlab-issue-1', source: 'gitlab-issue',
-      sessions: { work: { sessionId: 'session-1', branch: 'feature/gitlab', threadId: 'thread-1', startedBy: 'user-1' } },
+      id: 'gitlab-issue-1',
+      source: 'gitlab-issue',
+      sessions: {
+        work: { sessionId: 'session-1', branch: 'feature/gitlab', threadId: 'thread-1', startedBy: 'user-1' },
+      },
     });
     const review = workItem({
-      id: 'gitlab-mr-5', source: 'gitlab-pr',
+      id: 'gitlab-mr-5',
+      source: 'gitlab-pr',
       metadata: { headBranch: 'feature/gitlab', gitlabMergeRequestIid: 5 },
     });
     expect(relatedWorkItemIndex([review, issue])(review)).toEqual([issue]);

@@ -243,12 +243,8 @@ describe('useBoardIntake GitLab routing', () => {
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
         HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
       ),
-      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
-        HttpResponse.json({ issues: [], nextCursor: null }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: false, connected: false }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
       http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () => {
         githubIssueRequests++;
         return HttpResponse.json({ issues: [], nextPage: null });
@@ -259,12 +255,14 @@ describe('useBoardIntake GitLab routing', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useBoardIntake({
-      factoryProjectId: 'factory-1',
-      repository: { ...repository, provider: 'gitlab' },
-      definition: workBoard,
-      knownSourceKeys: new Set(),
-    }));
+    const { result } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repository: { ...repository, provider: 'gitlab' },
+        definition: workBoard,
+        knownSourceKeys: new Set(),
+      }),
+    );
 
     await waitFor(() => expect(result.current.active).toBe('gitlab'));
     await waitFor(() => expect(result.current.isPending).toBe(false));
@@ -280,19 +278,21 @@ describe('useBoardIntake GitLab routing', () => {
         expect(url.searchParams.get('factoryProjectId')).toBe('factory-1');
         expect(url.searchParams.get('page')).toBe('1');
         return HttpResponse.json({
-          pullRequests: [{
-            number: 5,
-            externalId: 'gitlab-pr:encoded-5',
-            title: 'Validate GitLab',
-            url: 'https://gitlab.com/acme/app/-/merge_requests/5',
-            author: 'rhys',
-            assignees: [],
-            requestedReviewers: [],
-            baseBranch: 'main',
-            headBranch: 'test-branch',
-            createdAt: '2026-09-18T00:00:00Z',
-            updatedAt: '2026-09-18T00:00:00Z',
-          }],
+          pullRequests: [
+            {
+              number: 5,
+              externalId: 'gitlab-pr:encoded-5',
+              title: 'Validate GitLab',
+              url: 'https://gitlab.com/acme/app/-/merge_requests/5',
+              author: 'rhys',
+              assignees: [],
+              requestedReviewers: [],
+              baseBranch: 'main',
+              headBranch: 'test-branch',
+              createdAt: '2026-09-18T00:00:00Z',
+              updatedAt: '2026-09-18T00:00:00Z',
+            },
+          ],
           nextPage: null,
         });
       }),
@@ -301,12 +301,14 @@ describe('useBoardIntake GitLab routing', () => {
         return HttpResponse.json({ pullRequests: [], nextPage: null });
       }),
     );
-    const { result } = renderHookWithProviders(() => useBoardIntake({
-      factoryProjectId: 'factory-1',
-      repository: { ...repository, provider: 'gitlab' },
-      definition: reviewBoard,
-      knownSourceKeys: new Set(),
-    }));
+    const { result } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repository: { ...repository, provider: 'gitlab' },
+        definition: reviewBoard,
+        knownSourceKeys: new Set(),
+      }),
+    );
 
     await waitFor(() => expect(result.current.candidates).toHaveLength(1));
     expect(result.current.active).toBe('gitlab-prs');

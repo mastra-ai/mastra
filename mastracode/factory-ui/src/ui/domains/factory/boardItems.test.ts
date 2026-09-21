@@ -72,9 +72,9 @@ describe('workItemMeta', () => {
   });
 
   it('names a GitLab merge request by its IID and links to GitLab', () => {
-    expect(workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } }))).toBe(
-      '!5 · Rhys · just now',
-    );
+    expect(
+      workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
+    ).toBe('!5 · Rhys · just now');
     expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
   });
 });

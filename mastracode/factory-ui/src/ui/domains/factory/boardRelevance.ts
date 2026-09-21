@@ -85,7 +85,12 @@ function externalProfile(source: RelevanceTarget['source'], name: string): Board
 }
 
 function externalCreator(target: RelevanceTarget): string | undefined {
-  if (target.source === 'github-issue' || target.source === 'github-pr' || target.source === 'gitlab-issue' || target.source === 'gitlab-pr') {
+  if (
+    target.source === 'github-issue' ||
+    target.source === 'github-pr' ||
+    target.source === 'gitlab-issue' ||
+    target.source === 'gitlab-pr'
+  ) {
     return metadataString(target.metadata, 'author');
   }
   if (target.source === 'linear-issue' || target.source === 'jira-issue' || target.source === 'incidentio-follow-up') {
@@ -99,7 +104,12 @@ function externalCreator(target: RelevanceTarget): string | undefined {
 }
 
 function externalAssignees(target: RelevanceTarget): string[] {
-  if (target.source === 'github-issue' || target.source === 'github-pr' || target.source === 'gitlab-issue' || target.source === 'gitlab-pr') {
+  if (
+    target.source === 'github-issue' ||
+    target.source === 'github-pr' ||
+    target.source === 'gitlab-issue' ||
+    target.source === 'gitlab-pr'
+  ) {
     const assignees = metadataStrings(target.metadata, 'assignees');
     const assignee = metadataString(target.metadata, 'assignee');
     return [...new Set([...assignees, ...(assignee ? [assignee] : [])])];

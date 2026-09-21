@@ -69,7 +69,9 @@ function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined 
     const assignees = item.metadata.assignees;
     const assignee =
       metadataString(item.metadata, 'assignee') ??
-      (Array.isArray(assignees) ? assignees.find(value => typeof value === 'string' && value.trim())?.trim() : undefined);
+      (Array.isArray(assignees)
+        ? assignees.find(value => typeof value === 'string' && value.trim())?.trim()
+        : undefined);
     return assignee ? { id: `gitlab:${assignee}`, name: assignee } : undefined;
   }
   if (item.source === 'linear-issue') {

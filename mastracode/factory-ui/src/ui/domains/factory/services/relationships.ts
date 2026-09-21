@@ -86,7 +86,8 @@ export function inferredParentWorkItemId(
   const headBranch = metadata.headBranch;
   if (typeof headBranch !== 'string') return undefined;
   return allItems.find(
-    item => !isPullRequestSource(item.source) && Object.values(item.sessions).some(session => session.branch === headBranch),
+    item =>
+      !isPullRequestSource(item.source) && Object.values(item.sessions).some(session => session.branch === headBranch),
   )?.id;
 }
 

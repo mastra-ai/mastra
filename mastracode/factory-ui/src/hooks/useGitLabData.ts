@@ -59,13 +59,17 @@ export function useGitLabIssueDetail(factoryProjectId: string | undefined, issue
   });
 }
 
-export function useGitLabMergeRequestsQuery(factoryProjectId: string | undefined, projectRepositoryId: string | undefined) {
+export function useGitLabMergeRequestsQuery(
+  factoryProjectId: string | undefined,
+  projectRepositoryId: string | undefined,
+) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
     queryKey: queryKeys.gitlabPulls(baseUrl, factoryProjectId, projectRepositoryId),
-    queryFn: factoryProjectId && projectRepositoryId
-      ? ({ pageParam }) => listGitLabMergeRequests(baseUrl, factoryProjectId, projectRepositoryId, pageParam)
-      : skipToken,
+    queryFn:
+      factoryProjectId && projectRepositoryId
+        ? ({ pageParam }) => listGitLabMergeRequests(baseUrl, factoryProjectId, projectRepositoryId, pageParam)
+        : skipToken,
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
     enabled: Boolean(factoryProjectId && projectRepositoryId),
@@ -75,13 +79,18 @@ export function useGitLabMergeRequestsQuery(factoryProjectId: string | undefined
   });
 }
 
-export function useGitLabMergeRequestDetail(factoryProjectId: string | undefined, projectRepositoryId: string | undefined, number: number | undefined) {
+export function useGitLabMergeRequestDetail(
+  factoryProjectId: string | undefined,
+  projectRepositoryId: string | undefined,
+  number: number | undefined,
+) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.gitlabPull(baseUrl, factoryProjectId, projectRepositoryId, number),
-    queryFn: factoryProjectId && projectRepositoryId && number
-      ? () => getGitLabMergeRequest(baseUrl, factoryProjectId, projectRepositoryId, number)
-      : skipToken,
+    queryFn:
+      factoryProjectId && projectRepositoryId && number
+        ? () => getGitLabMergeRequest(baseUrl, factoryProjectId, projectRepositoryId, number)
+        : skipToken,
     staleTime: DETAIL_STALE_MS,
   });
 }
