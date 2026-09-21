@@ -90,7 +90,7 @@ export const ThreadListItem = ({
         className={cn(
           'w-full min-w-0 justify-start rounded-xl px-3 text-left',
           onDelete && 'pr-9',
-          isActive && 'bg-surface4 text-neutral6',
+          isActive && 'bg-surface4 text-foreground',
           className,
         )}
       >
@@ -118,7 +118,7 @@ export interface ThreadListEmptyProps {
 
 export const ThreadListEmpty = ({ children }: ThreadListEmptyProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className="text-neutral3 px-3 py-2">
+    <Txt as="p" variant="ui-sm" className="text-muted-foreground px-3 py-2">
       {children}
     </Txt>
   );

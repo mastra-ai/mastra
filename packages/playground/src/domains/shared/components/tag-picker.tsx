@@ -53,7 +53,7 @@ export function TagPicker({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="text-neutral3 hover:text-neutral5 hover:bg-surface3 text-ui-xs inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors"
+            className="text-muted-foreground hover:text-foreground hover:bg-surface3 text-ui-xs inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors"
           >
             <Plus className="h-3 w-3" />
             tag
@@ -75,7 +75,7 @@ export function TagPicker({
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="hover:bg-surface3 text-neutral4 text-ui-sm w-full rounded px-2 py-1 text-left"
+                className="hover:bg-surface3 text-muted-foreground text-ui-sm w-full rounded px-2 py-1 text-left"
               >
                 {tag}
               </button>
@@ -90,7 +90,7 @@ export function TagPicker({
               </button>
             )}
             {filtered.length === 0 && !canCreate && (
-              <Txt variant="ui-xs" className="text-neutral2 px-2 py-1">
+              <Txt variant="ui-xs" className="text-placeholder px-2 py-1">
                 {vocabulary.length === 0 ? 'Type to create a tag' : 'No matching tags'}
               </Txt>
             )}

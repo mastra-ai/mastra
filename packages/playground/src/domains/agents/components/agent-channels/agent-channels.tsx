@@ -30,7 +30,7 @@ export const AgentChannels = ({ agentId }: AgentChannelsProps) => {
 
   if (!platforms || platforms.length === 0) {
     return (
-      <Txt variant="ui-sm" className="text-neutral6">
+      <Txt variant="ui-sm" className="text-foreground">
         No channel platforms configured.
       </Txt>
     );
@@ -74,11 +74,11 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
       <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
 
       <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="ui-md" className="text-neutral5 truncate">
+        <Txt as="span" variant="ui-md" className="text-foreground truncate">
           {platform.name}
         </Txt>
         {activeInstallation ? (
-          <Txt variant="ui-xs" className="text-neutral3 truncate">
+          <Txt variant="ui-xs" className="text-muted-foreground truncate">
             {activeInstallation.displayName || 'Workspace'}
           </Txt>
         ) : null}

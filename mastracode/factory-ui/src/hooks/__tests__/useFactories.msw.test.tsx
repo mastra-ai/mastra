@@ -71,6 +71,8 @@ describe('useLinkRepositoryMutation', () => {
     const saved = stubIntakeConfig({
       github: { enabled: true, sourceIds: null },
       linear: { enabled: false, sourceIds: null },
+      jira: { enabled: false, sourceIds: null },
+      incidentio: { enabled: false, sourceIds: null },
     });
 
     const { client, result } = renderHookWithProviders(() => ({
@@ -84,7 +86,12 @@ describe('useLinkRepositoryMutation', () => {
     await waitForMutationsIdle(client);
     expect(result.current.link.isSuccess).toBe(true);
     expect(saved).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+        incidentio: { enabled: false, sourceIds: null },
+      },
     ]);
     expect(result.current.intake.data?.github.sourceIds).toEqual(['octo/hello']);
   });
@@ -94,6 +101,8 @@ describe('useLinkRepositoryMutation', () => {
     const saved = stubIntakeConfig({
       github: { enabled: false, sourceIds: ['octo/other'] },
       linear: { enabled: false, sourceIds: null },
+      jira: { enabled: false, sourceIds: null },
+      incidentio: { enabled: false, sourceIds: null },
     });
 
     const { client, result } = renderHookWithProviders(() => useLinkRepositoryMutation());
@@ -106,6 +115,8 @@ describe('useLinkRepositoryMutation', () => {
       {
         github: { enabled: true, sourceIds: ['octo/other', 'octo/hello'] },
         linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+        incidentio: { enabled: false, sourceIds: null },
       },
     ]);
   });
@@ -115,6 +126,8 @@ describe('useLinkRepositoryMutation', () => {
     const saved = stubIntakeConfig({
       github: { enabled: true, sourceIds: ['octo/hello'] },
       linear: { enabled: false, sourceIds: null },
+      jira: { enabled: false, sourceIds: null },
+      incidentio: { enabled: false, sourceIds: null },
     });
 
     const { client, result } = renderHookWithProviders(() => useLinkRepositoryMutation());

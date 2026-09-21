@@ -88,7 +88,7 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
         onClick={() => onModeChange('form')}
         className={cn(
           'flex items-center gap-1.5 px-2 py-1 rounded text-ui-sm transition-colors',
-          mode === 'form' ? 'bg-surface3 text-neutral5' : 'text-neutral3 hover:text-neutral5',
+          mode === 'form' ? 'bg-surface3 text-foreground' : 'text-muted-foreground hover:text-foreground',
         )}
       >
         <Icon size="sm">
@@ -102,7 +102,7 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
         onClick={() => onModeChange('json')}
         className={cn(
           'flex items-center gap-1.5 px-2 py-1 rounded text-ui-sm transition-colors',
-          mode === 'json' ? 'bg-surface3 text-neutral5' : 'text-neutral3 hover:text-neutral5',
+          mode === 'json' ? 'bg-surface3 text-foreground' : 'text-muted-foreground hover:text-foreground',
         )}
       >
         <Icon size="sm">

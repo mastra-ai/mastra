@@ -1,4 +1,6 @@
 import { abortFollowupScenario } from './abort-followup.js';
+import { accountRotationScenario } from './account-rotation.js';
+import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { agentConnectionsExpectedReplyWatchdogScenario } from './agent-connections-expected-reply-watchdog.js';
 import { agentConnectionsNotificationSignalScenario } from './agent-connections-notification-signal.js';
@@ -19,7 +21,10 @@ import {
   backgroundAdoptionCancelScenario,
   backgroundAdoptionFailureScenario,
 } from './background-adoption.js';
-import { backgroundPlaceholderOptOutScenario } from './background-placeholder-opt-out.js';
+import {
+  backgroundPlaceholderOptInScenario,
+  backgroundPlaceholderOptOutScenario,
+} from './background-placeholder-opt-out.js';
 import { backgroundSubagentsScenario } from './background-subagents.js';
 import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
 import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
@@ -70,6 +75,7 @@ import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.
 import { goalFreshThreadPersistenceScenario } from './goal-fresh-thread-persistence.js';
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
+import { goalMaxRunsEndsGoalScenario } from './goal-max-runs-ends-goal.js';
 import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
@@ -94,6 +100,8 @@ import { modelSearchScenario } from './model-search.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
 import { modelSelectionCancelEnvScenario } from './model-selection-cancel-env.js';
 import { modelsPackActivationPersistenceScenario } from './models-pack-activation-persistence.js';
+import { modelsPackMemoryModelScenario } from './models-pack-memory-model.js';
+import { multiAccountLoginScenario } from './multi-account-login.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
 import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
@@ -110,6 +118,7 @@ import { omStatusIndicatorScenario } from './om-status-indicator.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
+import { packFallbackScenario } from './pack-fallback.js';
 import { permissionRequestHookScenario } from './permission-request-hook.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
@@ -226,6 +235,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'background-adoption-awaited': backgroundAdoptionAwaitedScenario,
   'background-adoption-cancel': backgroundAdoptionCancelScenario,
   'background-adoption-failure': backgroundAdoptionFailureScenario,
+  'background-placeholder-opt-in': backgroundPlaceholderOptInScenario,
   'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
   'background-subagents': backgroundSubagentsScenario,
   'background-tools-settings': backgroundToolsSettingsScenario,
@@ -273,6 +283,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-fresh-thread-persistence': goalFreshThreadPersistenceScenario,
   'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
+  'goal-max-runs-ends-goal': goalMaxRunsEndsGoalScenario,
   'goal-resume-single-render': goalResumeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
@@ -299,6 +310,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
+  'models-pack-memory-model': modelsPackMemoryModelScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
   'notification-inbox-reload': notificationInboxReloadScenario,
   'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
@@ -375,6 +387,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'storage-settings': storageSettingsScenario,
   'storage-startup-pg-fallback': storageStartupPgFallbackScenario,
   'stream-error-retry': streamErrorRetryScenario,
+  'account-rotation': accountRotationScenario,
+  'account-routing-targeted': accountRoutingTargetedScenario,
+  'pack-fallback': packFallbackScenario,
+  'multi-account-login': multiAccountLoginScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,
   'subagents-command': subagentsCommandScenario,

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
@@ -919,6 +918,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               resolveReconciliation = resolve;
             });
 
+            const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
+              ...inputData.providerMetadata,
+              mastra: {
+                ...inputData.providerMetadata?.mastra,
+                backgroundTask: { taskId, status },
+              },
+            });
+
             // Create a self-contained background task with per-stream hooks
             const bgTask = createBackgroundTask(backgroundTaskManager, {
               toolName: inputData.toolName,
@@ -1096,7 +1103,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 toolName: chunk.payload.toolName,
                                 args: inputData.args,
                                 result: chunk.payload.result,
-                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                                providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
                                 providerExecuted: inputData.providerExecuted,
                               },
                             },
@@ -1117,7 +1124,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 toolName: chunk.payload.toolName,
                                 error: chunk.payload.error,
                                 args: inputData.args,
-                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                                providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'failed'),
                                 providerExecuted: inputData.providerExecuted,
                               },
                             },
@@ -1238,7 +1245,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     }
                     providerMetadata = {
                       ...providerMetadata,
-                      mastra: { ...(providerMetadata as any)?.mastra, modelOutput },
+                      mastra: {
+                        ...(providerMetadata as any)?.mastra,
+                        modelOutput,
+                        backgroundTask: {
+                          taskId: params.taskId,
+                          status: params.status === 'failed' ? 'failed' : 'completed',
+                        },
+                      },
                     } as ProviderMetadata;
 
                     const updated = messageList.updateToolInvocation(
@@ -1286,7 +1300,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                             {
                               role: 'tool' as const,
                               type: 'tool-call',
-                              id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID(),
+                              id:
+                                readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ??
+                                globalThis.crypto.randomUUID(),
                               createdAt: new Date(),
                               content: [
                                 {
@@ -1313,6 +1329,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 toolName: params.toolName,
                                 result: transcriptResult,
                                 isError: params.status === 'failed',
+                                providerOptions: providerMetadata,
                               },
                             ],
                           },
@@ -1405,6 +1422,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 return {
                   result: await awaitAuthoritativeBackgroundResult(),
                   ...inputData,
+                  providerMetadata: backgroundResultMetadata(task.id, 'completed'),
                   ...(approvalGrant ?? {}),
                 };
               }
@@ -1412,6 +1430,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               return {
                 result: `Background task resumed. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
                 ...inputData,
+                providerMetadata: backgroundResultMetadata(task.id, 'running'),
               };
             }
 
@@ -1452,6 +1471,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 return {
                   result: await awaitAuthoritativeBackgroundResult(),
                   ...inputData,
+                  providerMetadata: backgroundResultMetadata(task.id, 'completed'),
                   ...(approvalGrant ?? {}),
                 };
               }
@@ -1460,6 +1480,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               return {
                 result: `Background task started. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
                 ...inputData,
+                providerMetadata: backgroundResultMetadata(task.id, 'running'),
                 ...(approvalGrant ?? {}),
               };
             }

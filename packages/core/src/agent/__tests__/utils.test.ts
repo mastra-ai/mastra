@@ -1,5 +1,36 @@
-import { describe, expect, it } from 'vitest';
-import { resolveThreadIdFromArgs } from '../utils';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { Agent } from '../agent';
+import { resolveThreadIdFromArgs, tryGenerateWithJsonFallback } from '../utils';
+
+describe('tryGenerateWithJsonFallback', () => {
+  it('retries structured output truncated by the provider', async () => {
+    const generate = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new MastraError({
+          id: 'STRUCTURED_OUTPUT_TRUNCATED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: 'Structured output was truncated.',
+        }),
+      )
+      .mockResolvedValueOnce({ object: { name: 'Ana' } });
+    const agent = { generate } as unknown as Agent;
+
+    await expect(
+      tryGenerateWithJsonFallback(agent, 'prompt', {
+        structuredOutput: { schema: z.object({ name: z.string() }) },
+      }),
+    ).resolves.toMatchObject({ object: { name: 'Ana' } });
+
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[1]?.[1]).toMatchObject({
+      structuredOutput: { jsonPromptInjection: true },
+    });
+  });
+});
 
 describe('resolveThreadIdFromArgs', () => {
   describe('basic behavior', () => {

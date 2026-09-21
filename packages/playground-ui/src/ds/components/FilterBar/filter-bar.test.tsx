@@ -76,14 +76,15 @@ function Harness({
       }}
     >
       {readOnlyIds.length > 0 || nonRemovableIds.length > 0 ? (
-        items.map(item => (
-          <FilterBar.Chip
-            key={item.id}
-            item={item}
-            readOnly={readOnlyIds.includes(item.id)}
-            removable={!nonRemovableIds.includes(item.id)}
-          />
-        ))
+        <FilterBar.Chips
+          renderChip={item => (
+            <FilterBar.Chip
+              item={item}
+              readOnly={readOnlyIds.includes(item.id)}
+              removable={!nonRemovableIds.includes(item.id)}
+            />
+          )}
+        />
       ) : (
         <FilterBar.Chips />
       )}
@@ -279,7 +280,7 @@ describe('FilterBar', () => {
     it('accumulates the draft as an inline chip next to the input', async () => {
       render(<Harness />);
       const input = getInput();
-      const draftChip = () => document.querySelector('[data-slot="filter-bar-draft-chip"]');
+      const draftChip = () => document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
 
       input.focus();
       expect(draftChip()).toBeNull();
@@ -307,6 +308,161 @@ describe('FilterBar', () => {
       key('Enter');
       expect(draftChip()).toBeNull();
       expect(getChips()).toHaveLength(1);
+    });
+
+    describe('when a value is picked for the draft', () => {
+      it('turns the draft chip itself into the committed chip instead of replacing it', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        expect(draftNode).not.toBeNull();
+        // The draft is chrome only: the consumer's value is untouched until the value is picked.
+        expect(onChange).not.toHaveBeenCalled();
+
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed).toBe(draftNode);
+        expect(committed.hasAttribute('data-draft')).toBe(false);
+        expect(onChange).toHaveBeenCalledTimes(1);
+      });
+
+      it('glints the committed chip once, while chips present from the start never glint', async () => {
+        render(<Harness initial={[{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'Failed' }]} />);
+        const preexisting = screen.getByRole('group', { name: 'Status is Failed' });
+        expect(preexisting.hasAttribute('data-shine')).toBe(false);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        expect(document.querySelector('[data-draft]')?.hasAttribute('data-shine')).toBe(false);
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed.hasAttribute('data-shine')).toBe(true);
+        expect(preexisting.hasAttribute('data-shine')).toBe(false);
+
+        // jsdom has no AnimationEvent: build one with the name the browser would report.
+        const end = new Event('animationend', { bubbles: true });
+        Object.defineProperty(end, 'animationName', { value: 'filter-bar-chip-shine' });
+        fireEvent(committed, end);
+        expect(committed.hasAttribute('data-shine')).toBe(false);
+      });
+
+      it('keeps the draft chip element when the consumer derives item ids itself', async () => {
+        // Consumers that round-trip filters through a URL rebuild items on every change, so the
+        // id they hand back is theirs, not ours. `createItemId` lets the draft carry that id up front.
+        function DerivedIds() {
+          const [fieldIds, setFieldIds] = useState<string[]>([]);
+          const items = fieldIds.map(fieldId => ({ id: fieldId, fieldId, operatorId: 'is', value: 'Running' }));
+          return (
+            <FilterBar
+              fields={FIELDS}
+              operators={OPERATORS}
+              value={items}
+              onValueChange={next => setFieldIds(next.map(item => item.fieldId))}
+              createItemId={fieldId => fieldId}
+            >
+              <FilterBar.Chips />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          );
+        }
+        render(<DerivedIds />);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed).toBe(draftNode);
+        expect(committed.hasAttribute('data-shine')).toBe(true);
+      });
+
+      it('keeps showing the committed chip while the consumer has not reflected it in value yet', async () => {
+        // URL-backed consumers update `value` a tick later (router round trip). The chip must not
+        // disappear in between, and must still be the same element once value catches up.
+        let flush: (() => void) | undefined;
+        function Deferred() {
+          const [items, setItems] = useState<FilterBarItem[]>([]);
+          return (
+            <FilterBar
+              fields={FIELDS}
+              operators={OPERATORS}
+              value={items}
+              onValueChange={next => {
+                flush = () => setItems(next);
+              }}
+            >
+              <FilterBar.Chips />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          );
+        }
+        render(<Deferred />);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed).toBe(draftNode);
+        expect(getChips()).toHaveLength(1);
+
+        act(() => flush?.());
+
+        expect(screen.getByRole('group', { name: 'Status is Running' })).toBe(draftNode);
+        expect(getChips()).toHaveLength(1);
+      });
+
+      it('keeps the draft chip element with a custom renderChip that skips some items', async () => {
+        function Custom() {
+          const [items, setItems] = useState<FilterBarItem[]>([
+            { id: 'hidden', fieldId: 'status', operatorId: 'is', value: 'Failed' },
+          ]);
+          return (
+            <FilterBar fields={FIELDS} operators={OPERATORS} value={items} onValueChange={setItems}>
+              <FilterBar.Chips renderChip={item => (item.id === 'hidden' ? null : <FilterBar.Chip item={item} />)} />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          );
+        }
+        render(<Custom />);
+        expect(getChips()).toHaveLength(0);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        expect(draftNode).not.toBeNull();
+
+        key('Enter');
+
+        expect(getChips()).toHaveLength(1);
+        expect(screen.getByRole('group', { name: 'Status is Running' })).toBe(draftNode);
+      });
     });
 
     it('commits immediately for arity "none" operators', async () => {
@@ -386,7 +542,7 @@ describe('FilterBar', () => {
         getInput().focus();
         type('duration');
         key('Enter');
-        const draft = document.querySelector('[data-slot="filter-bar-draft-chip"]');
+        const draft = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
         expect(draft?.textContent).toBe('Duration');
       });
 

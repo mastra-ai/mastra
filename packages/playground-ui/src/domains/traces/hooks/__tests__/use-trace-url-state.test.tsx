@@ -675,6 +675,16 @@ describe('useTraceUrlState.handleRemoveAll', () => {
     expect(() => act(() => api.handleRemoveAll())).not.toThrow();
     expect(paramsNow().get('status')).toBeNull();
   });
+
+  describe('when a filter carries an operator or is a metadata field', () => {
+    it('removes the operator and metadata params too', () => {
+      render(<Harness initial="filterTraceId=t&filterTraceId.op=isNot&filterMetadata.region=eu" />);
+
+      act(() => api.handleRemoveAll());
+
+      expect(paramsNow().toString()).toBe('');
+    });
+  });
 });
 
 describe('useTraceUrlState.applyFilterTokens', () => {

@@ -6,6 +6,7 @@ import {
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { getShortId } from '@mastra/playground-ui/components/Text';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { Trash2 } from 'lucide-react';
 import type { MouseEvent, ReactNode, SyntheticEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
@@ -39,7 +40,15 @@ export interface ExperimentsListProps {
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
+  /**
+   * Server-side sort. When provided the list keeps the server order instead of
+   * re-sorting by `createdAt` client-side; headers are sortable when `onSortChange` is set.
+   */
+  sort?: ListSort<ExperimentsSortKey>;
+  onSortChange?: (direction: 'asc' | 'desc', key: ExperimentsSortKey) => void;
 }
+
+export type ExperimentsSortKey = 'createdAt' | 'status';
 
 export interface ExperimentsListSelection {
   selectedExperimentIds: string[];
@@ -51,17 +60,17 @@ const BASE_COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DESCRIPTION_COLUMN}
 // Trailing `auto` track hosts the row actions cell (delete), which only navigating rows render.
 const COLUMNS = `${BASE_COLUMNS} auto`;
 
-const columnHeaders = [
+const columnHeaders: { label: string; className?: string; sortKey?: ExperimentsSortKey }[] = [
   { label: experimentColumnLabels.experiment },
   { label: experimentColumnLabels.description },
   { label: experimentColumnLabels.dataset },
   { label: experimentColumnLabels.target },
-  { label: experimentColumnLabels.status },
+  { label: experimentColumnLabels.status, sortKey: 'status' },
   { label: experimentColumnLabels.items, className: 'text-center' },
   { label: experimentColumnLabels.succeeded, className: 'text-center' },
   { label: experimentColumnLabels.failed, className: 'text-center' },
   { label: experimentColumnLabels.review, className: 'text-center' },
-  { label: experimentColumnLabels.date },
+  { label: experimentColumnLabels.date, sortKey: 'createdAt' },
 ];
 
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
@@ -148,6 +157,8 @@ export function ExperimentsList({
   isFetchingNextPage,
   hasNextPage,
   setEndOfListElement,
+  sort,
+  onSortChange,
 }: ExperimentsListProps) {
   const isSelectionActive = selection !== undefined;
   const datasetMap = useMemo(() => {
@@ -157,12 +168,13 @@ export function ExperimentsList({
   }, [datasets]);
 
   const sortedExperiments = useMemo(() => {
+    if (sort) return experiments;
     return [...experiments].sort((a, b) => {
       const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return db - da;
     });
-  }, [experiments]);
+  }, [experiments, sort]);
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();
@@ -189,11 +201,23 @@ export function ExperimentsList({
   }
 
   const gridColumns = isSelectionActive ? `auto ${BASE_COLUMNS}` : COLUMNS;
-  const headerCells = columnHeaders.map(col => (
-    <EntityList.TopCell key={col.label} className={col.className}>
-      {col.label}
-    </EntityList.TopCell>
-  ));
+  const headerCells = columnHeaders.map(col =>
+    col.sortKey && onSortChange ? (
+      <EntityList.SortableTopCell
+        key={col.label}
+        className={col.className}
+        sortKey={col.sortKey}
+        sort={sort?.key === col.sortKey ? sort.direction : undefined}
+        onSortChange={onSortChange}
+      >
+        {col.label}
+      </EntityList.SortableTopCell>
+    ) : (
+      <EntityList.TopCell key={col.label} className={col.className}>
+        {col.label}
+      </EntityList.TopCell>
+    ),
+  );
 
   return (
     <EntityList columns={gridColumns} scrollRef={containerRef}>

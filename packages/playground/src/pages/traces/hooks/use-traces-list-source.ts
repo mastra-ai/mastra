@@ -5,17 +5,19 @@ import { useEffect, useState } from 'react';
 
 export function useTracesListSource({
   query: buildQuery,
+  orderBy,
   rolling = true,
   initialAutoRefetch = true,
 }: {
   query: (now: Date) => TraceQueryArgs;
+  orderBy?: TraceQueryArgs['orderBy'];
   rolling?: boolean;
   initialAutoRefetch?: boolean;
 }) {
   const [now, setNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
   const result = useTraceQuery({
-    query: buildQuery(now),
+    query: orderBy ? { ...buildQuery(now), orderBy } : buildQuery(now),
     refetchInterval: autoRefetch && !rolling ? 10_000 : false,
     refetchOnWindowFocus: autoRefetch,
   });

@@ -3,6 +3,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import { beginGoalActivity, stopGoalActivity } from '../../agent/goal';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
+import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import { ConsoleLogger } from '../../logger';
 import { createObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
@@ -225,13 +226,14 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Bound the whole run (every loop iteration, tool call and retry) by composing the
       // caller's abort signal with modelSettings.timeout.totalMs. Everything downstream
       // reads `options.abortSignal`, so injecting here covers the entire agentic loop.
+      const timeout = validateModelTimeoutSettings(modelSettings?.timeout);
       const {
         signal: totalTimeoutSignal,
         timeoutPromise: totalTimeoutPromise,
         cleanup: cleanupTotalTimeout,
       } = createTimeoutAbortSignal({
         parentSignal: rest.options?.abortSignal,
-        timeoutMs: modelSettings?.timeout?.totalMs,
+        timeoutMs: timeout?.totalMs,
         timeoutType: 'total',
       });
 
