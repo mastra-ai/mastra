@@ -12,6 +12,7 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { Section } from '@/ds/components/Section';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 /** Dark theme — matches original side-dialog draculaInit settings exactly. */
 function buildSideDialogDarkTheme(): Extension {
@@ -119,7 +120,9 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
         </ButtonsGroup>
       </Section.Header>
       {codeStr && (
-        <div className="border-border1 bg-surface3 text-body text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl border p-3 break-all dark:border-white/10 dark:bg-black/20">
+        <div
+          className={`${raisedSurfaceStyle} text-body text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl p-3 break-all`}
+        >
           {simplified ? (
             <div className="text-muted-foreground px-2 font-mono break-all">
               <pre className="text-wrap">{codeStr}</pre>

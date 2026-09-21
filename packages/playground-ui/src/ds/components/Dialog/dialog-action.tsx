@@ -141,7 +141,7 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogActionProps, 'confir
               'transition-[clip-path] ease-linear motion-reduce:transition-none',
               'group-data-[holding]/hold:[clip-path:inset(0)] motion-reduce:group-data-[holding]/hold:[clip-path:inset(0_50%_0_0)]',
               'group-data-[completed]/hold:[clip-path:inset(0)]',
-              intent === 'destructive' ? 'bg-accent2 text-white' : 'bg-neutral6 text-surface1',
+              intent === 'destructive' ? 'bg-accent2 text-white' : 'bg-neutral6 text-sidebar',
             )}
             style={{ transitionDuration: holding ? `${holdSeconds}s` : '0s' }}
           >

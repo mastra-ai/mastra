@@ -65,11 +65,8 @@ export function comboboxTriggerClass({
   );
 }
 
-/**
- * Options are shared menu items. Options may carry a description (two lines),
- * so the fixed Button height becomes a minimum and the item grows with `py-1`.
- */
-export const comboboxItemClass = cva(cn(menuItemClass, 'h-auto min-h-form-md py-1'), {
+/** Options are shared menu items, which already grow to fit a second line. */
+export const comboboxItemClass = cva(menuItemClass, {
   variants: {
     multiple: {
       false: '',

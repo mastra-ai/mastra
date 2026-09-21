@@ -102,7 +102,7 @@ function Demo({
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
       {children?.(items)}
-      <pre className="bg-surface3 text-meta text-muted-foreground rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+      <pre className="bg-card text-meta text-muted-foreground rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
     </div>
   );
 }
@@ -163,7 +163,7 @@ export const LazyValues: Story = {
     return (
       <Demo fields={fields}>
         {() => (
-          <div className="border-border1 rounded-lg border p-3">
+          <div className="border-border rounded-lg border p-3">
             <Txt variant="meta" className="text-muted-foreground">
               Resolver calls ({calls.length}) — none until a field and operator are chosen:
             </Txt>

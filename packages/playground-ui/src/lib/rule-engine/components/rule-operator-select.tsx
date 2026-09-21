@@ -48,7 +48,7 @@ export const RuleOperatorSelect: React.FC<RuleOperatorSelectProps> = ({ value, o
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-surface4 text-foreground" size="sm">
+        <SelectTrigger className="bg-muted text-foreground" size="sm">
           <SelectValue placeholder="Select operator" />
         </SelectTrigger>
         <SelectContent>

@@ -48,7 +48,7 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-surface4 text-foreground" size="sm">
+        <SelectTrigger className="bg-muted text-foreground" size="sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>

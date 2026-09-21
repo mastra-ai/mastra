@@ -26,6 +26,7 @@ import {
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // -- Search highlight extension -----------------------------------------------
@@ -327,7 +328,12 @@ export function DataCodeSection({
         </div>
       </div>
 
-      <div className="border-border1 bg-surface3 text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div
+        className={cn(
+          raisedSurfaceStyle,
+          'text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+        )}
+      >
         {usePlainTextView ? (
           <div className="text-muted-foreground font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
@@ -390,7 +396,12 @@ export function DataCodeSection({
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="border-border1 bg-surface3 text-caption text-muted-foreground overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+              <div
+                className={cn(
+                  raisedSurfaceStyle,
+                  'text-caption text-muted-foreground overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+                )}
+              >
                 <div className="text-muted-foreground font-mono break-all">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>

@@ -60,7 +60,7 @@ export function LifelineRow({
   return (
     <li
       aria-label={`${row.label}: present in ${row.points.length} of ${snapshots.length} landmarks`}
-      className={`group hover:bg-surface3 flex items-center gap-3 rounded-md ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
+      className={`group hover:bg-fill-subtle flex items-center gap-3 rounded-md ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
     >
       <span
         className={cn(
@@ -72,7 +72,7 @@ export function LifelineRow({
       >
         {row.label}
       </span>
-      <div className="border-border1 relative mx-2 h-7 min-w-0 flex-1 border-b">
+      <div className="border-border relative mx-2 h-7 min-w-0 flex-1 border-b">
         {connectors.length > 0 || segments.length > 0 ? (
           <svg
             aria-hidden="true"

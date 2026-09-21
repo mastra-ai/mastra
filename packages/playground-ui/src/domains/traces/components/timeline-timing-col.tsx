@@ -31,14 +31,14 @@ export function TimelineTimingCol({
         className={cn(
           'grid h-8 cursor-help grid-cols-[1fr_auto] items-center gap-2 rounded-r-md p-1 pr-2',
           chartWidth === 'wide' ? 'min-w-72' : 'min-w-32',
-          '[&:hover>div]:bg-surface5',
+          '[&:hover>div]:bg-fill',
           {
             'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
-            'bg-surface4': selectedSpanId === span.id,
+            'bg-fill-hover': selectedSpanId === span.id,
           },
         )}
       >
-        <div className={cn('w-full rounded-md bg-surface4 p-1.5')}>
+        <div className={cn('w-full rounded-md bg-muted p-1.5')}>
           <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
             <div
               className={cn('absolute top-0 h-1.5 rounded-sm bg-neutral1')}

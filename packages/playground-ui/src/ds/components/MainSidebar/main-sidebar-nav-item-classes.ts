@@ -1,5 +1,6 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -47,9 +48,9 @@ const nestedExpandedItemClasses = (level: number) => {
 // Two neutral tones, never more: a row is either quiet (`muted-foreground`) or
 // current (`foreground`). Icons inherit that colour — lucide strokes with
 // `currentColor` — so there is nothing to restate per state.
-const idleSurface = 'rounded-lg text-muted-foreground hover:bg-fill-subtle hover:text-foreground';
+const idleSurface = cn('rounded-lg text-muted-foreground hover:text-foreground', surfaceStateLayerStyle);
 
-const activeSurface = 'bg-fill text-foreground hover:bg-fill-hover';
+const activeSurface = 'bg-fill text-foreground';
 
 const featuredSurface = cn(
   'my-2 border border-accent1/30 bg-accent1Dark text-accent1 hover:bg-accent1Darker hover:text-accent1',

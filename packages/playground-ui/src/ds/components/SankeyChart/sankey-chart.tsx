@@ -82,7 +82,7 @@ export function SankeyChart({
     <div className={cn('min-w-0', className)}>
       {graph.links.length === 0 ? (
         <div
-          className="border-border1 text-caption text-muted-foreground flex items-center justify-center rounded-md border"
+          className="border-border text-caption text-muted-foreground flex items-center justify-center rounded-md border"
           style={{ height }}
         >
           Select at least two columns with data to display a flow

@@ -72,7 +72,7 @@ function UserLandControls() {
                 return (
                   <div
                     key={column.id}
-                    className="border-border1 bg-surface2 text-caption text-foreground rounded-md border px-2.5 py-1.5"
+                    className="border-border bg-background text-caption text-foreground rounded-md border px-2.5 py-1.5"
                   >
                     {checkbox}
                   </div>
@@ -86,7 +86,7 @@ function UserLandControls() {
                     <div
                       ref={dragProvided.innerRef}
                       {...dragProvided.draggableProps}
-                      className="border-border1 bg-surface2 text-caption text-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5"
+                      className="border-border bg-background text-caption text-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5"
                     >
                       {checkbox}
                       <button
@@ -132,7 +132,7 @@ export const ClickableCurves: Story = {
         <Sankey data={data} columns={columns}>
           <SankeyChart onCurveClick={setSelection} />
         </Sankey>
-        <div className="border-border1 bg-surface2 text-caption text-muted-foreground rounded-md border p-3">
+        <div className="border-border bg-background text-caption text-muted-foreground rounded-md border p-3">
           {selection
             ? `${selection.source.column.label}: ${selection.source.value} → ${selection.target.column.label}: ${selection.target.value} (${selection.records.length} records)`
             : 'Select a curve to inspect its records.'}
@@ -162,7 +162,7 @@ const signalColumns = [
 export const SignalColumnHeaders: Story = {
   render: () => (
     <div className="w-full p-8">
-      <div className="border-border1 rounded-lg border">
+      <div className="border-border rounded-lg border">
         <Sankey data={signalData} columns={signalColumns}>
           <SankeyChart height={420} margin={{ top: 64, right: 32, bottom: 24, left: 32 }} />
         </Sankey>

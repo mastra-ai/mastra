@@ -27,7 +27,7 @@ export interface AskUserResult {
 }
 
 export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>) => (
-  <div className={cn('rounded-lg border border-border1 bg-surface2 p-3 text-body', className)} {...props} />
+  <div className={cn('rounded-lg border border-border bg-background p-3 text-body', className)} {...props} />
 );
 
 export const AskUserQuestion = ({ className, ...props }: ComponentProps<'legend'>) => (
@@ -47,7 +47,7 @@ interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'
 export const AskUserOptionControl = ({ type, label, description, className, ...props }: AskUserOptionControlProps) => (
   <label
     className={cn(
-      'flex cursor-pointer items-start gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2 text-foreground transition-colors hover:bg-surface4 has-[:checked]:border-border2 has-[:checked]:bg-surface4 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
+      'state-layer bg-card shadow-raised flex cursor-pointer items-start gap-2 rounded-md px-3 py-2 text-foreground transition-colors has-[:checked]:bg-fill-hover has-[:checked]:[--surface-rim:var(--border-strong)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
       className,
     )}
   >
@@ -78,7 +78,7 @@ export interface AskUserOutputProps extends ComponentProps<'div'> {
 export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProps) => (
   <div
     role={result.isError ? 'alert' : 'status'}
-    className={cn('space-y-2 rounded-md bg-surface3 p-3 text-foreground', result.isError && 'text-error', className)}
+    className={cn('space-y-2 rounded-md bg-card p-3 text-foreground', result.isError && 'text-error', className)}
     {...props}
   >
     <Badge size="xs" variant={result.isError ? 'red' : 'green'}>

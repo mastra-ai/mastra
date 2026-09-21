@@ -5,12 +5,13 @@ import type { ComponentProps, ReactNode } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 export type TaskListItem = TaskItem;
 
 export const TaskListContainer = ({ className, ...props }: ComponentProps<'section'>) => (
-  <section className={cn('rounded-2xl border border-border2/40 bg-surface3 px-3 py-2.5', className)} {...props} />
+  <section className={cn(raisedSurfaceStyle, 'rounded-2xl px-3 py-2.5', className)} {...props} />
 );
 
 export const TaskListHeader = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
@@ -23,7 +24,7 @@ export const TaskListHeader = ({ className, ...props }: ComponentProps<typeof Co
 const barColors: Record<TaskListItem['status'], string> = {
   completed: 'bg-positive1',
   in_progress: 'bg-warning1',
-  pending: 'bg-surface6',
+  pending: 'bg-fill-hover',
 };
 
 export interface TaskListProgressProps extends Omit<ComponentProps<'span'>, 'children'> {

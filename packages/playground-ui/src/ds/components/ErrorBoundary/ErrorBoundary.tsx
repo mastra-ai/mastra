@@ -170,7 +170,7 @@ function DefaultErrorFallback({
         </p>
         <p
           className={cn(
-            'rounded-md bg-surface3 px-3 py-2 font-mono break-words text-muted-foreground',
+            'rounded-md bg-card px-3 py-2 font-mono break-words text-muted-foreground',
             isInline ? 'text-meta' : 'text-caption',
           )}
         >
@@ -200,7 +200,7 @@ function DefaultErrorFallback({
         {stack ? (
           <details className={cn('w-full text-left', isInline ? 'mt-1' : 'mt-2')}>
             <summary className={cn('text-caption cursor-pointer', quietTextHover)}>Show error details</summary>
-            <pre className="bg-surface3 text-meta text-muted-foreground mt-2 max-h-64 overflow-auto rounded-md p-3 break-words whitespace-pre-wrap">
+            <pre className="bg-card text-meta text-muted-foreground mt-2 max-h-64 overflow-auto rounded-md p-3 break-words whitespace-pre-wrap">
               {stack}
             </pre>
           </details>

@@ -11,7 +11,7 @@ export type ItemListHeaderProps = {
 
 export function ItemListHeader({ columns, isSelectionActive, children }: ItemListHeaderProps) {
   return (
-    <div className={cn('sticky top-0 z-10 mb-2 rounded-lg bg-surface3 px-3')}>
+    <div className={cn('sticky top-0 z-10 mb-2 rounded-lg bg-card px-3')}>
       <div
         className={cn('grid items-center gap-3 text-left text-meta tracking-widest text-muted-foreground uppercase', {
           'pl-12 [&>label]:absolute [&>label]:left-0': isSelectionActive,

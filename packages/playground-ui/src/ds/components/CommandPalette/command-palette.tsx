@@ -22,7 +22,7 @@ function CommandPaletteDialog({
   return (
     <CommandDialog
       showOverlay={showOverlay}
-      overlayClassName={cn('bg-surface1/40 backdrop-blur-none', overlayClassName)}
+      overlayClassName={cn('bg-sidebar/40 backdrop-blur-none', overlayClassName)}
       contentClassName={cn(
         'command-palette-popup max-w-[min(56rem,calc(100vw-2rem))] overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[min(56rem,calc(100vw-2rem))]',
         contentClassName,
@@ -30,8 +30,8 @@ function CommandPaletteDialog({
       commandClassName={cn(
         // Height lives in `.command-palette-shell` — see command-palette.css.
         'command-palette-shell gap-2 overflow-visible rounded-none bg-transparent text-muted-foreground shadow-none backdrop-blur-none',
-        '[&_[data-slot=command-input-wrapper]]:h-11 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:rounded-xl [&_[data-slot=command-input-wrapper]]:border [&_[data-slot=command-input-wrapper]]:border-border1 [&_[data-slot=command-input-wrapper]]:bg-surface3 [&_[data-slot=command-input-wrapper]]:px-3 [&_[data-slot=command-input-wrapper]]:shadow-[0_6px_18px_-16px_rgb(0_0_0_/_0.55)]',
-        '[&_[data-slot=command-input-wrapper]]:pr-11 [&_[data-slot=command-input-wrapper]]:transition-[border-color,box-shadow] [&_[data-slot=command-input-wrapper]]:duration-150 [&_[data-slot=command-input-wrapper]]:ease-out [&_[data-slot=command-input-wrapper]_svg]:text-muted-foreground [&_[data-slot=command-input-wrapper]:focus-within]:border-border1 [&_[data-slot=command-input-wrapper]:focus-within]:bg-surface3 [&_[data-slot=command-input-wrapper]:focus-within]:shadow-[0_8px_22px_-18px_rgb(0_0_0_/_0.6)]',
+        '[&_[data-slot=command-input-wrapper]]:h-11 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:rounded-xl [&_[data-slot=command-input-wrapper]]:border [&_[data-slot=command-input-wrapper]]:border-border [&_[data-slot=command-input-wrapper]]:bg-card [&_[data-slot=command-input-wrapper]]:px-3 [&_[data-slot=command-input-wrapper]]:shadow-[0_6px_18px_-16px_rgb(0_0_0_/_0.55)]',
+        '[&_[data-slot=command-input-wrapper]]:pr-11 [&_[data-slot=command-input-wrapper]]:transition-[border-color,box-shadow] [&_[data-slot=command-input-wrapper]]:duration-150 [&_[data-slot=command-input-wrapper]]:ease-out [&_[data-slot=command-input-wrapper]_svg]:text-muted-foreground [&_[data-slot=command-input-wrapper]:focus-within]:border-border [&_[data-slot=command-input-wrapper]:focus-within]:shadow-[0_8px_22px_-18px_rgb(0_0_0_/_0.6)]',
         '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-body',
         '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-2 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group]]:p-0',
         '**:[[cmdk-item]]:px-2 **:[[cmdk-item]]:py-1.5',
@@ -79,7 +79,7 @@ function CommandPaletteRail({ children, className, ...props }: CommandPaletteRai
   return (
     <aside
       className={cn(
-        'command-palette-surface command-palette-surface-rail flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border1 bg-surface2 p-2 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none',
+        'command-palette-surface command-palette-surface-rail flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-background p-2 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none',
         className,
       )}
       {...props}
@@ -109,7 +109,7 @@ function CommandPaletteScope({
       type="button"
       className={cn(
         quietTextHover,
-        'text-body-sm hover:border-border1 hover:bg-surface4 data-[active=true]:border-border1 data-[active=true]:bg-surface4 data-[active=true]:text-foreground flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left',
+        'text-body-sm hover:border-border hover:bg-fill-subtle data-[active=true]:border-border data-[active=true]:bg-fill-hover data-[active=true]:text-foreground flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left',
         // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- v4 emits nothing for `scale-0.99`
         'transition-[color,transform] duration-fast ease-out-custom motion-reduce:transition-none active:scale-[0.99]',
       )}
@@ -119,7 +119,7 @@ function CommandPaletteScope({
     >
       <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="border-border1 bg-surface4/70 text-meta text-muted-foreground rounded-md border px-1.5 py-0.5 leading-none">
+      <span className="border-border bg-muted/70 text-meta text-muted-foreground rounded-md border px-1.5 py-0.5 leading-none">
         {count}
       </span>
     </button>
@@ -136,7 +136,7 @@ function CommandPaletteResults({ children, footer, ...props }: CommandPaletteRes
   return (
     <div
       role="region"
-      className="command-palette-surface command-palette-surface-results command-palette-results-panel border-border1 bg-surface2 relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border shadow-[0_10px_28px_-22px_rgb(0_0_0_/_0.6)]"
+      className="command-palette-surface command-palette-surface-results command-palette-results-panel border-border bg-background relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border shadow-[0_10px_28px_-22px_rgb(0_0_0_/_0.6)]"
       {...props}
     >
       <CommandList
@@ -175,7 +175,7 @@ function CommandPaletteItem({
   return (
     <CommandItem
       className={cn(
-        'group h-auto items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 data-[selected=true]:border-border1',
+        'group h-auto items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 data-[selected=true]:border-border',
         className,
       )}
       {...props}
@@ -192,7 +192,7 @@ function CommandPaletteItem({
         <span className="flex min-w-0 items-center gap-2">
           <span className="text-label text-foreground truncate">{title}</span>
           {badge && (
-            <span className="border-border1 bg-surface4/60 text-meta text-muted-foreground shrink-0 rounded-md border px-1.5 py-0.5 leading-none uppercase">
+            <span className="border-border bg-muted/60 text-meta text-muted-foreground shrink-0 rounded-md border px-1.5 py-0.5 leading-none uppercase">
               {badge}
             </span>
           )}
@@ -201,7 +201,7 @@ function CommandPaletteItem({
           <span className="text-meta text-muted-foreground flex min-w-0 items-center gap-2">
             {subtitle && <span className="truncate">{subtitle}</span>}
             {path && (
-              <span className="border-border1 bg-surface4/70 text-meta text-muted-foreground max-w-52 truncate rounded-md border px-1.5 py-0.5 font-mono leading-none">
+              <span className="border-border bg-muted/70 text-meta text-muted-foreground max-w-52 truncate rounded-md border px-1.5 py-0.5 font-mono leading-none">
                 {path}
               </span>
             )}

@@ -4,7 +4,7 @@
    ignored by the spec, so the highlight cannot have rounded corners. */
 ::highlight(search-result) {
   background-color: var(--color-accent6);
-  color: var(--color-surface1);
+  color: var(--color-sidebar);
 }
 
 /* The indirect match is a hint, not the answer: same hue, muted pairing (`accent6Dark`

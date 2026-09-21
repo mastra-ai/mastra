@@ -3,15 +3,15 @@ import { Label } from '../Label';
 import { Checkbox } from './checkbox';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
-  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface1' },
-  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface2' },
-  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface3' },
-  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
+  { token: 'sidebar', label: 'sidebar (studio shell)', className: 'bg-sidebar' },
+  { token: 'background', label: 'background (main frame)', className: 'bg-background' },
+  { token: 'card', label: 'card (raised surface)', className: 'bg-card' },
+  { token: 'muted', label: 'muted (quiet step)', className: 'bg-muted' },
 ];
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
-    <div className={`border-border1 rounded-2xl border p-5 ${className}`}>
+    <div className={`border-border rounded-2xl border p-5 ${className}`}>
       <p className="text-meta text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
@@ -92,7 +92,7 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="border-border1 bg-surface2 grid min-w-104 gap-4 rounded-lg border p-4">
+    <div className="border-border bg-background grid min-w-104 gap-4 rounded-lg border p-4">
       <div className="text-caption text-muted-foreground grid grid-cols-[9rem_repeat(4,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
         <span />
         <span>Default</span>

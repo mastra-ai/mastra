@@ -10,7 +10,7 @@ export function ItemListItemText({ children, isLoading }: ItemListItemTextProps)
   return (
     <div className="text-body text-muted-foreground truncate">
       {isLoading ? (
-        <div className="bg-surface4 h-4 animate-pulse rounded-md text-transparent select-none"></div>
+        <div className="bg-muted h-4 animate-pulse rounded-md text-transparent select-none"></div>
       ) : (
         children
       )}

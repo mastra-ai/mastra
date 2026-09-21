@@ -10,7 +10,7 @@ export function ItemListTextCell({ children, isLoading, className }: ItemListTex
   return (
     <div className={cn('truncate py-[0.6rem] text-body text-muted-foreground', className)}>
       {isLoading ? (
-        <div className="bg-surface4 h-4 animate-pulse rounded-md text-transparent select-none"></div>
+        <div className="bg-muted h-4 animate-pulse rounded-md text-transparent select-none"></div>
       ) : (
         children
       )}

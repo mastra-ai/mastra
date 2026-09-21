@@ -58,10 +58,10 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
       // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
       onClick={() => onSpanClick?.(span.id)}
       className={cn(
-        'col-span-2 grid h-7 cursor-pointer grid-cols-subgrid items-stretch rounded-md opacity-80 hover:bg-surface4',
+        'col-span-2 grid h-7 cursor-pointer grid-cols-subgrid items-stretch rounded-md opacity-80 hover:bg-fill-subtle',
         {
           'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
-          'bg-surface4': isSelected,
+          'bg-fill-hover': isSelected,
         },
       )}
     >
@@ -106,7 +106,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               aria-expanded={isExpanded}
               className={cn(
                 'flex size-5 cursor-pointer items-center justify-center rounded-md',
-                'hover:bg-surface5 [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
+                'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
                 'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1',
               )}
             >
@@ -121,7 +121,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
           render={<div />}
           className="grid min-w-0 cursor-help grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2"
         >
-          <div className="bg-surface5/40 relative h-4 w-full rounded-sm">
+          <div className="bg-fill-subtle relative h-4 w-full rounded-sm">
             <div
               data-testid="span-timeline-bar"
               className="absolute inset-y-0 rounded-sm"

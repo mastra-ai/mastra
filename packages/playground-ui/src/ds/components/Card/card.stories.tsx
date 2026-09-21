@@ -50,7 +50,7 @@ export const Elevation: Story = {
           <CardHeader>
             <CardTitle className="capitalize">{elevation}</CardTitle>
             <CardDescription>
-              {elevation === 'raised' ? 'Rim and shadow from --shadow-raised' : 'Nested inside another raised surface'}
+              {elevation === 'raised' ? 'Rim and shadow from shadow-raised' : 'Nested inside another raised surface'}
             </CardDescription>
           </CardHeader>
           <CardContent density="compact">

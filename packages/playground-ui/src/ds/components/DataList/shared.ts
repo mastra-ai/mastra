@@ -20,15 +20,17 @@ export const dataListRowOuterStyles = [
  *
  * Hover is not painted per row: the root renders one fluid `fill-subtle`
  * highlight under the row content. Rows are sunken wells (`--background`) inside
- * the lighter panel, so resting tones step up to the next opaque level (`--card`)
- * rather than taking a fill rung, which can only brighten. Pressed rises a full
- * `--fill` rung — the same rung a resting control carries — and error sits on the
- * row element itself so it reads on top of the highlight.
+ * the card panel, whose material also shows through the 1px gaps between them,
+ * so a resting tone steps to `--surface-panel` — the opaque twin of a `--fill`
+ * rung over the well — rather than to `--card`, which would make a selected row
+ * the exact colour of the separators around it. Pressed rises a full `--fill`
+ * rung, the same rung a resting control carries, and error sits on the row
+ * element itself so it reads on top of the highlight.
  */
 export const dataListRowStateStyles = [
   'active:bg-fill',
-  'focus-visible:bg-card has-focus-visible:bg-card',
-  'data-featured:before:bg-card has-data-featured:before:bg-card has-data-selected:before:bg-card',
+  'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
+  'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
   'data-[variant=error]:bg-notice-destructive/10 has-data-[variant=error]:bg-notice-destructive/10',
 ] as const;
 

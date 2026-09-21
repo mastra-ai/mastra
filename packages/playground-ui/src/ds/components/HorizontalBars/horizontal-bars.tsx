@@ -172,7 +172,7 @@ export function HorizontalBars({
               <LinkComponent
                 key={d.name}
                 href={d.href}
-                className="hover:bg-surface3 focus-visible:bg-surface3 flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none"
+                className="hover:bg-fill-subtle focus-visible:bg-fill-subtle flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none"
               >
                 {rowBody}
               </LinkComponent>

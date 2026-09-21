@@ -67,7 +67,7 @@ export const Default: Story = {
       <Section.Header inset={inset}>
         <Section.Heading>Section Title</Section.Heading>
       </Section.Header>
-      <div className="border-border1 bg-surface2 rounded-md border p-4">
+      <div className="border-border bg-background rounded-md border p-4">
         <p className="text-foreground text-body">Section content goes here</p>
       </div>
     </Section>
@@ -88,7 +88,7 @@ export const WithAction: Story = {
           Add Agent
         </Button>
       </Section.Header>
-      <div className="border-border1 bg-surface2 rounded-md border p-4">
+      <div className="border-border bg-background rounded-md border p-4">
         <p className="text-foreground text-body">List of agents would go here</p>
       </div>
     </Section>
@@ -108,7 +108,7 @@ export const ConfigurationSection: Story = {
           Edit
         </Button>
       </Section.Header>
-      <div className="border-border1 bg-surface2 space-y-3 rounded-md border p-4">
+      <div className="border-border bg-background space-y-3 rounded-md border p-4">
         <div className="flex justify-between">
           <span className="text-muted-foreground text-body">Model</span>
           <span className="text-foreground text-body">GPT-4</span>

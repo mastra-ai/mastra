@@ -33,7 +33,7 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       ref={ref}
       data-slot="composer-box"
       className={cn(
-        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 transition-colors duration-normal focus-within:border-border2',
+        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border-strong/40 transition-colors duration-normal focus-within:border-border-strong',
         className,
       )}
       {...props}

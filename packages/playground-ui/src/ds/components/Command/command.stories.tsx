@@ -41,7 +41,7 @@ const InlineResult = ({
   value: string;
 }) => (
   <CommandItem value={value} className="h-auto items-start gap-3 px-2.5 py-2">
-    <span className="bg-surface5 text-muted-foreground mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md">
+    <span className="bg-card text-muted-foreground mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md">
       {icon}
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
@@ -97,11 +97,11 @@ export const Default: Story = {
 export const InlineVercelStyle: Story = {
   render: () => (
     <div className="bg-card shadow-raised w-sm overflow-hidden rounded-xl">
-      <Command className="bg-surface2 rounded-none">
+      <Command className="bg-background rounded-none">
         <CommandInput
           placeholder="Find..."
           rightSlot={
-            <Kbd className="border-border1 bg-surface4 text-muted-foreground text-meta min-w-0 rounded px-1.5 py-0">
+            <Kbd className="border-border bg-muted text-muted-foreground text-meta min-w-0 rounded px-1.5 py-0">
               Esc
             </Kbd>
           }
@@ -179,7 +179,7 @@ export const WithDialog: Story = {
       <>
         <p className="text-muted-foreground text-body mb-4">
           Press{' '}
-          <kbd className="border-border1 bg-surface4 text-foreground text-meta pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono select-none">
+          <kbd className="border-border bg-muted text-foreground text-meta pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono select-none">
             <span className="text-caption">⌘</span>K
           </kbd>{' '}
           or click the button below

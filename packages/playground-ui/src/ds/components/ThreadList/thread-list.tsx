@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { createElement, type ElementType, type MouseEvent, type ReactNode } from 'react';
 
 import { cn } from '../../../lib/utils';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { Button, type ButtonProps } from '../Button';
 import { Txt } from '../Txt';
 
@@ -22,7 +23,7 @@ export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embe
         aria-label={ariaLabel}
         className={cn(
           'flex h-full flex-col gap-1 overflow-y-auto p-1',
-          !embedded && 'rounded-studio-panel border border-border1/50 bg-surface3',
+          !embedded && cn(raisedSurfaceStyle, 'rounded-studio-panel'),
         )}
       >
         {children}
@@ -45,7 +46,7 @@ export const ThreadListNewItem = ({ render, children }: ThreadListNewItemProps) 
 };
 
 export const ThreadListSeparator = () => (
-  <div role="separator" aria-orientation="horizontal" className="bg-border1/40 -mx-1 my-1 h-px" />
+  <div role="separator" aria-orientation="horizontal" className="bg-border/40 -mx-1 my-1 h-px" />
 );
 
 export interface ThreadListItemsProps {
@@ -90,7 +91,7 @@ export const ThreadListItem = ({
         className={cn(
           'w-full min-w-0 justify-start rounded-xl px-3 text-left',
           onDelete && 'pr-9',
-          isActive && 'bg-surface4 text-foreground',
+          isActive && 'bg-fill-hover text-foreground',
           className,
         )}
       >

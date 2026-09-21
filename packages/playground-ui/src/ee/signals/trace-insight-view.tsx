@@ -5,6 +5,8 @@ import type { TraceInsightResponse } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 interface TraceInsightViewProps {
   traceId: string;
@@ -68,16 +70,16 @@ function parseTraceObservation(observation: string): ParsedObservation {
 }
 
 const OBSERVATION_SEVERITY_CARD: Record<ObservationSeverity, string> = {
-  info: 'border-border1 bg-surface3',
-  success: 'border-green-400/30 bg-green-500/10',
-  problem: 'border-red-400/30 bg-red-500/10',
+  info: raisedSurfaceStyle,
+  success: 'border border-green-400/30 bg-green-500/10',
+  problem: 'border border-red-400/30 bg-red-500/10',
 };
 
 function ObservationItem({ observation }: { observation: string }) {
   const { severity, kind, text } = parseTraceObservation(observation);
 
   return (
-    <li className={`text-body rounded-md border p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
+    <li className={`text-body rounded-md p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
       {kind !== undefined && (
         <p className="text-meta text-muted-foreground font-mono tracking-wider uppercase">
           {severity === 'problem' && (
@@ -145,7 +147,7 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
           </h2>
           <ul className="mt-3 space-y-3">
             {insight.signals.map(signal => (
-              <li key={signal.signalName} className="border-border1 bg-surface3 text-body rounded-md border p-3">
+              <li key={signal.signalName} className={cn(raisedSurfaceStyle, 'text-body rounded-md p-3')}>
                 <p className="text-muted-foreground">{signalLabel(signalCatalog, signal.signalName)}</p>
                 <p className="text-foreground mt-1">{signal.signalText}</p>
               </li>

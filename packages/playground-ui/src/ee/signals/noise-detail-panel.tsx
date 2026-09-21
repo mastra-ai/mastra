@@ -14,6 +14,8 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/ds/components/Drawer';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 interface NoiseDetailPanelProps {
   entityId: string;
@@ -67,7 +69,7 @@ export function NoiseDetailPanel({
       variant="floating"
     >
       <DrawerContent>
-        <DrawerHeader className="border-border1 border-b">
+        <DrawerHeader className="border-border border-b">
           <DrawerTitle>Noise</DrawerTitle>
           <DrawerDescription className="sr-only">Noise details for the {signalName} trace signal</DrawerDescription>
         </DrawerHeader>
@@ -120,7 +122,10 @@ export function NoiseDetailPanel({
                             <button
                               type="button"
                               aria-label={`View trace insight for ${example.signalText}`}
-                              className="border-border1 bg-surface3 text-foreground hover:bg-surface5 text-body w-full cursor-pointer rounded-md border p-3 text-left"
+                              className={cn(
+                                raisedSurfaceStyle,
+                                'state-layer text-foreground text-body w-full cursor-pointer rounded-md p-3 text-left',
+                              )}
                               onClick={() => setInsightTraceId(example.traceId)}
                             >
                               {example.signalText}

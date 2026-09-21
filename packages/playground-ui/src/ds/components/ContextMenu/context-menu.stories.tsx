@@ -30,7 +30,7 @@ export default meta;
 type Story = StoryObj<typeof ContextMenu>;
 
 const triggerClass =
-  'flex items-center justify-center w-80 h-60 rounded-md border border-dashed border-border1 text-muted-foreground select-none text-body-sm';
+  'flex items-center justify-center w-80 h-60 rounded-md border border-dashed border-border text-muted-foreground select-none text-body-sm';
 
 export const Default: Story = {
   render: () => (

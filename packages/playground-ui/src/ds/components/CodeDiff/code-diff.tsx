@@ -10,6 +10,7 @@ import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import { useEffect, useMemo, useRef } from 'react';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const removed = 'var(--accent2)';
 const added = 'var(--accent1)';
@@ -45,14 +46,16 @@ const diffOverrides = EditorView.theme({
   '&.cm-merge-b .cm-changedLineGutter': { background: added },
 
   '&.cm-editor .cm-collapsedLines': {
-    backgroundColor: 'var(--surface4)',
+    backgroundColor: 'var(--muted)',
     backgroundImage: 'none',
     color: 'var(--neutral3)',
     fontSize: 'var(--text-caption)',
     padding: '4px 12px',
     cursor: 'pointer',
   },
-  '&.cm-editor .cm-collapsedLines:hover': { backgroundColor: 'var(--surface5)' },
+  '&.cm-editor .cm-collapsedLines:hover': {
+    backgroundImage: 'linear-gradient(var(--fill-subtle), var(--fill-subtle))',
+  },
 });
 
 export interface CodeDiffProps {
@@ -149,8 +152,8 @@ export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
   }, [codeA, codeB, theme]);
 
   return (
-    <div className="border-border1 bg-surface3 relative overflow-auto rounded-xl border dark:border-white/10 dark:bg-black/20">
-      <div className="bg-border1 absolute top-0 left-1/2 z-10 h-full w-px dark:bg-white/10" />
+    <div className={`${raisedSurfaceStyle} relative overflow-auto rounded-xl`}>
+      <div className="bg-border absolute top-0 left-1/2 z-10 h-full w-px dark:bg-white/10" />
       <div
         ref={containerRef}
         className="[&_.cm-editor]:bg-transparent [&_.cm-editor]:py-3 [&_.cm-gutters]:bg-transparent [&_.cm-mergeViewEditor]:flex-1"

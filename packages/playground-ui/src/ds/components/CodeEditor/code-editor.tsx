@@ -74,8 +74,8 @@ function buildDarkTheme(): Extension {
       backgroundColor: 'color-mix(in srgb, var(--accent3) 22%, transparent)',
     },
     '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
+      backgroundColor: 'var(--background)',
+      border: '1px solid var(--border)',
       borderRadius: '6px',
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
@@ -92,8 +92,8 @@ function buildDarkTheme(): Extension {
       paddingLeft: '12px',
     },
     '.cm-completionInfo': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
+      backgroundColor: 'var(--background)',
+      border: '1px solid var(--border)',
       color: 'var(--neutral3)',
       padding: '8px 12px',
     },
@@ -101,7 +101,7 @@ function buildDarkTheme(): Extension {
       display: 'none',
     },
     'ul.cm-completionList li[aria-selected]': {
-      backgroundColor: 'var(--surface4)',
+      backgroundColor: 'var(--fill-hover)',
       color: 'var(--neutral6)',
     },
     '.cm-line .cm-variable-highlight': {
@@ -150,8 +150,8 @@ function buildLightTheme(): Extension {
         background: 'color-mix(in srgb, var(--accent3) 22%, transparent) !important',
       },
     '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
+      backgroundColor: 'var(--background)',
+      border: '1px solid var(--border)',
       borderRadius: '6px',
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
@@ -168,8 +168,8 @@ function buildLightTheme(): Extension {
       paddingLeft: '12px',
     },
     '.cm-completionInfo': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
+      backgroundColor: 'var(--background)',
+      border: '1px solid var(--border)',
       color: 'var(--neutral3)',
       padding: '8px 12px',
     },
@@ -177,7 +177,7 @@ function buildLightTheme(): Extension {
       display: 'none',
     },
     'ul.cm-completionList li[aria-selected]': {
-      backgroundColor: 'var(--surface4)',
+      backgroundColor: 'var(--fill-hover)',
       color: 'var(--neutral6)',
     },
     '.cm-line .cm-variable-highlight': {
@@ -232,7 +232,7 @@ const codeEditorVariants = cva(
   {
     variants: {
       variant: {
-        default: 'rounded-md border border-border1 bg-surface3 p-1 focus-within:border-neutral6/20',
+        default: 'rounded-md border border-border bg-card p-1 focus-within:border-neutral6/20',
         embedded: 'rounded-none border-none bg-transparent p-0',
       },
     },

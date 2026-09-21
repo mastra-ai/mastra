@@ -83,8 +83,8 @@ export function SignalDeltaColumn({
           return (
             <li
               key={delta.label}
-              className={`border-border1 rounded-lg border ${
-                delta.delta > 0 ? 'bg-green-500/5' : delta.delta < 0 ? 'bg-red-500/5' : 'bg-surface3'
+              className={`border-border rounded-lg border ${
+                delta.delta > 0 ? 'bg-green-500/5' : delta.delta < 0 ? 'bg-red-500/5' : 'bg-card'
               }`}
             >
               {themeId === undefined ? (
@@ -92,7 +92,7 @@ export function SignalDeltaColumn({
               ) : (
                 <button
                   aria-label={`View theme details for ${delta.label}`}
-                  className="hover:border-border2 block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left hover:bg-white/[0.03]"
+                  className="hover:border-border-strong block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left hover:bg-white/[0.03]"
                   onClick={() =>
                     onThemeSelect({ kind: 'theme', signalName, themeId, label: delta.label }, detailIndexFor(delta))
                   }

@@ -2,15 +2,15 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SectionCard } from './section-card';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
-  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface1' },
-  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface2' },
-  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface3' },
-  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
+  { token: 'sidebar', label: 'sidebar · the recessed shell', className: 'bg-sidebar' },
+  { token: 'background', label: 'background · the page canvas', className: 'bg-background' },
+  { token: 'card', label: 'card · a raised surface', className: 'bg-card' },
+  { token: 'muted', label: 'muted · the quiet step above the canvas', className: 'bg-muted' },
 ];
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
-    <div className={`border-border1 rounded-2xl border p-6 ${className}`}>
+    <div className={`border-border rounded-2xl border p-6 ${className}`}>
       <p className="text-meta text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
@@ -25,7 +25,7 @@ const meta: Meta<typeof SectionCard> = {
   },
   decorators: [
     Story => (
-      <div className="border-border1 bg-surface2 rounded-2xl border p-6">
+      <div className="border-border bg-background rounded-2xl border p-6">
         <Story />
       </div>
     ),
@@ -57,7 +57,7 @@ export const WithAction: Story = {
         </div>
       }
     >
-      <div className="bg-surface3 h-40 rounded-md" />
+      <div className="bg-card h-40 rounded-md" />
     </SectionCard>
   ),
 };
@@ -78,10 +78,10 @@ export const FillHeight: Story = {
   render: () => (
     <div className="grid h-105 grid-cols-2 gap-4">
       <SectionCard fillHeight title="Left" description="Stretches to grid row height">
-        <div className="bg-surface3 h-full rounded-md" />
+        <div className="bg-card h-full rounded-md" />
       </SectionCard>
       <SectionCard fillHeight title="Right" description="Same height as sibling">
-        <div className="bg-surface3 h-full rounded-md" />
+        <div className="bg-card h-full rounded-md" />
       </SectionCard>
     </div>
   ),

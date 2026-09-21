@@ -3,6 +3,7 @@ import { forwardRef } from 'react';
 import { useMaybeSidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
 import type { SidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
 import type { LinkComponent } from '@/ds/types/link-component';
+import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 export type SidebarNewMeterTone = 'neutral' | 'warning' | 'danger';
@@ -158,7 +159,7 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       data-state={state}
       className={cn(
         'relative isolate flex flex-col justify-center overflow-hidden rounded-lg border border-border bg-background px-3',
-        href && 'transition-colors hover:bg-card',
+        href && surfaceStateLayerStyle,
         className,
       )}
       style={{ height: CARD_HEIGHT }}

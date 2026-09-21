@@ -6,13 +6,14 @@ import { CommentContext, useCommentVariant } from './comment-context';
 import type { CommentVariant } from './comment-context';
 import { Txt } from '@/ds/components/Txt';
 import type { TxtProps } from '@/ds/components/Txt';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 const commentVariants = cva('flex flex-col', {
   variants: {
     variant: {
       default: 'gap-2',
-      embed: 'gap-1 rounded-xl border border-border1 bg-surface3 p-3',
+      embed: cn(raisedSurfaceStyle, 'gap-1 rounded-xl p-3'),
       thread: '',
     },
   },
@@ -63,7 +64,7 @@ CommentList.displayName = 'CommentList';
 const commentItemLayout: Record<CommentVariant, string> = {
   default: 'flex flex-col gap-1',
   embed: 'flex flex-col gap-1',
-  thread: 'relative flex gap-2 rounded-lg px-2 hover:bg-surface3/60',
+  thread: 'relative flex gap-2 rounded-lg px-2 hover:bg-fill-subtle',
 };
 
 export interface CommentItemProps extends HTMLAttributes<HTMLElement> {
@@ -199,7 +200,7 @@ const commentItemBodySize: Record<CommentVariant, TxtProps['variant']> = {
 };
 
 const commentItemBodyTone: Record<CommentVariant, string> = {
-  default: 'whitespace-pre-wrap text-foreground border-l border-border1 pl-3',
+  default: 'whitespace-pre-wrap text-foreground border-l border-border pl-3',
   embed: 'whitespace-pre-wrap text-foreground',
   thread: '',
 };

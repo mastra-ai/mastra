@@ -8,7 +8,7 @@ import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const surfaceClasses = 'rounded-[calc(var(--radius-xl)-2px)] bg-surface3 text-meta';
+const surfaceClasses = 'rounded-[calc(var(--radius-xl)-2px)] bg-card text-meta';
 
 export function WorkflowConditionCardView({
   type,

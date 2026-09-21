@@ -4,15 +4,15 @@ import { Label } from '../Label';
 import { RadioGroup, RadioGroupItem } from './radio-group';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
-  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface1' },
-  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface2' },
-  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface3' },
-  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
+  { token: 'sidebar', label: 'sidebar · the recessed shell', className: 'bg-sidebar' },
+  { token: 'background', label: 'background · the page canvas', className: 'bg-background' },
+  { token: 'card', label: 'card · a raised surface', className: 'bg-card' },
+  { token: 'muted', label: 'muted · the quiet step above the canvas', className: 'bg-muted' },
 ];
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
-    <div className={`border-border1 rounded-2xl border p-5 ${className}`}>
+    <div className={`border-border rounded-2xl border p-5 ${className}`}>
       <p className="text-meta text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
@@ -119,7 +119,7 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="border-border1 bg-surface2 grid min-w-md gap-4 rounded-lg border p-4">
+    <div className="border-border bg-background grid min-w-md gap-4 rounded-lg border p-4">
       <RadioStateGrid idPrefix="all-states" />
     </div>
   ),

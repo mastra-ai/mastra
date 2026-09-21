@@ -14,7 +14,7 @@ export function ItemListMessage({ children, message, className, type }: ItemList
   }
 
   return (
-    <div className={cn('grid border-t border-border1', className)}>
+    <div className={cn('grid border-t border-border', className)}>
       {message ? (
         <p
           className={cn(

@@ -5,7 +5,7 @@ import type { ThreadRailTurn } from './thread-rail-turns';
 
 import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '@/ds/components/MessageScroller';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
@@ -332,7 +332,7 @@ function ThreadRailPreview({
       data-visible={containerVisible ? 'true' : undefined}
       className={cn(
         'pointer-events-none absolute top-0 left-full z-30 ml-3 w-72 overflow-hidden rounded-xl text-left transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
-        raisedSurfaceStyle,
+        overlaySurfaceStyle,
         containerVisible ? 'opacity-100' : 'opacity-0',
       )}
       style={{ ...previewHeightStyle, translate: `0 calc(${top}px - 50%)` }}
@@ -375,7 +375,7 @@ function ThreadRailPreviewContent({
       <div className="text-subheading text-foreground truncate">{turn.prompt}</div>
       {turn.reply && <p className="text-caption text-muted-foreground mt-1.5 line-clamp-3">{turn.reply}</p>}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
-        <div className="border-border1/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
+        <div className="border-border/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
           {turn.files.map(file => (
             <span
               key={file}

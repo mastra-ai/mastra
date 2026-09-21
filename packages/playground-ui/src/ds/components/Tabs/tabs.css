@@ -94,9 +94,9 @@
       z-index: 10;
       margin-bottom: 0;
       min-height: 36px;
-      border: 1px solid var(--border1);
+      border: 1px solid var(--border);
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-      background: var(--surface4);
+      background: var(--muted);
       padding: 6px 16px;
     }
 
@@ -112,19 +112,19 @@
       margin-left: -1px;
     }
     [data-slot='tab']:hover {
-      background: var(--surface3);
+      background: linear-gradient(var(--fill-subtle), var(--fill-subtle)), var(--muted);
     }
     [data-slot='tab'][data-active] {
       z-index: 20;
-      border-bottom-color: var(--surface2);
-      background: var(--surface2);
+      border-bottom-color: var(--background);
+      background: var(--background);
     }
 
     [data-slot='tabs-content'] {
       margin-top: -1px;
       border-radius: 0 var(--radius-xl) var(--radius-xl) var(--radius-xl);
-      border: 1px solid var(--border1);
-      background: var(--surface2);
+      border: 1px solid var(--border);
+      background: var(--background);
       padding: 24px;
     }
 
@@ -159,7 +159,7 @@
         z-index: 20;
         margin-inline: 1px;
         width: calc(var(--active-tab-width) - 2px);
-        background: var(--surface2);
+        background: var(--background);
         transition: none;
       }
 
@@ -175,11 +175,11 @@
           radial-gradient(
             circle at var(--corner),
             transparent 9px,
-            var(--border1) 9px,
-            var(--border1) 10px,
-            var(--surface2) 10px
+            var(--border) 9px,
+            var(--border) 10px,
+            var(--background) 10px
           ),
-          radial-gradient(circle at var(--corner), transparent 9px, var(--surface2) 9px);
+          radial-gradient(circle at var(--corner), transparent 9px, var(--background) 9px);
       }
       [data-slot='tab'][data-active]::before {
         right: 100%;
@@ -207,7 +207,7 @@
         min-width: 0;
         gap: 4px;
         border-radius: var(--tab-frame-radius) var(--tab-frame-radius) 0 0;
-        background: var(--surface4);
+        background: var(--muted);
         padding: var(--tab-inset);
         margin-right: calc(var(--tab-frame-radius) + 8px);
       }
@@ -223,7 +223,7 @@
         background: radial-gradient(
           circle at top right,
           transparent var(--tab-frame-radius),
-          var(--surface4) calc(var(--tab-frame-radius) + 0.5px)
+          var(--muted) calc(var(--tab-frame-radius) + 0.5px)
         );
       }
 
@@ -239,7 +239,7 @@
 
       [data-slot='tabs-content'] {
         border: 0;
-        background: var(--surface4);
+        background: var(--muted);
         padding: var(--tab-inset);
       }
 
@@ -261,7 +261,7 @@
         display: block;
         min-width: 0;
         border-radius: var(--radius-lg);
-        background: var(--surface2);
+        background: var(--background);
         padding: 24px;
       }
       .tabs-overflow {
@@ -282,7 +282,7 @@
         z-index: 0;
         height: calc(var(--active-tab-height) + var(--tab-join-radius));
         border-radius: var(--tab-inner-radius) var(--tab-inner-radius) 0 0;
-        background: var(--surface2);
+        background: var(--background);
         transition: none;
       }
 
@@ -296,7 +296,7 @@
         background: radial-gradient(
           circle at var(--corner),
           transparent var(--join),
-          var(--surface2) calc(var(--join) + 0.5px)
+          var(--background) calc(var(--join) + 0.5px)
         );
       }
       [data-slot='tabs-indicator']::before {

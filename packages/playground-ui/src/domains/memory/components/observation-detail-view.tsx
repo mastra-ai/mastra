@@ -74,7 +74,7 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
       };
     default:
       return {
-        card: 'border-border1 bg-surface2',
+        card: 'border-border bg-background',
         text: 'text-foreground',
         time: 'text-icon3',
       };
@@ -185,7 +185,7 @@ function parseObservations(raw: string): ParsedSection[] {
 
 function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nested?: boolean }) {
   return (
-    <div className={nested ? 'border-border1 space-y-2 border-l pl-4' : 'space-y-3'}>
+    <div className={nested ? 'border-border space-y-2 border-l pl-4' : 'space-y-3'}>
       {items.map((item, i) => {
         const styles = priorityClasses(item.priority, nested);
         return (
@@ -221,7 +221,7 @@ function ObservationContent({ observations }: { observations: string }) {
     <div className="space-y-5">
       {sections.map((section, i) => (
         <section key={`${section.title}-${i}`} className="space-y-3">
-          <div className="border-border1 flex items-baseline justify-between gap-3 border-b pb-2">
+          <div className="border-border flex items-baseline justify-between gap-3 border-b pb-2">
             <div className="min-w-0">
               <h3 className="text-column text-foreground">{section.title}</h3>
               {section.relativeTime && <p className="text-icon3 text-meta">{section.relativeTime}</p>}
@@ -246,8 +246,8 @@ function ObservationHistoryPanel({
   if (records.length <= 1) return null;
 
   return (
-    <div className="border-border1 flex w-50 min-w-45 flex-col overflow-hidden border-l">
-      <div className="border-border1 border-b px-4 py-2">
+    <div className="border-border flex w-50 min-w-45 flex-col overflow-hidden border-l">
+      <div className="border-border border-b px-4 py-2">
         <p className="text-body text-foreground">History</p>
       </div>
       <div className="flex-1 overflow-y-auto">
@@ -258,8 +258,8 @@ function ObservationHistoryPanel({
               key={record.id}
               type="button"
               className={cn(
-                'text-icon3 w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption hover:bg-surface3/50',
-                isSelected && 'border-l-accent1 bg-surface3/50',
+                'text-icon3 w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption hover:bg-fill-subtle',
+                isSelected && 'border-l-accent1 bg-fill-hover',
               )}
               onClick={() => onSelectRecord(record.id)}
             >
@@ -336,7 +336,7 @@ export function ObservationDetailView({
       {/* Main observation content */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {previousRecord && (
-          <div className="border-border1 border-b px-4 py-2">
+          <div className="border-border border-b px-4 py-2">
             <div className="flex items-start justify-end gap-3">
               <label className="text-caption flex cursor-pointer items-center gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />

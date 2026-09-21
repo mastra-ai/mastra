@@ -27,7 +27,7 @@ export function WorkflowDebugControls({
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="workflow-debug-step-controls">
-      <div className="border-border1/50 bg-surface2 rounded-xl border p-3">
+      <div className="border-border/50 bg-background rounded-xl border p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <span className="text-meta text-muted-foreground">Next step</span>
           <Badge size="sm" icon={<Pause />} emphasis="muted">

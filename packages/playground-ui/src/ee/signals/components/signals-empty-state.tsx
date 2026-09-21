@@ -10,6 +10,8 @@ import type { LinkComponent } from '../../../ds/types/link-component';
 import { getSignalHue } from '../signal-colors';
 import { BUILT_IN_SIGNAL_CATALOG, orderedSignals, signalDescription, signalLabel } from '../signal-formatting';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 const traceRows = [
   ['chat.completion', '1.2s'],
@@ -23,7 +25,7 @@ const signalStyle = (label: string): CSSProperties => ({
 
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
-    <div className="border-border1 w-full border-t border-dashed" />
+    <div className="border-border w-full border-t border-dashed" />
     <span className="signals-pipeline-connector bg-positive1 absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full shadow-[0_0_12px_currentColor]" />
   </div>
 );
@@ -73,17 +75,17 @@ function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) 
   const readySignalCount = catalog.filter(signal => signal.enabled && signal.status === 'ready').length;
   return (
     <dl className="mt-4 grid gap-2 sm:grid-cols-3">
-      <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
+      <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
         <dt className="text-caption text-muted-foreground">Traces analyzed</dt>
         <dd className="text-heading text-foreground mt-1">{formatNumber(progress.traceCount)}</dd>
       </div>
-      <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
+      <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
         <dt className="text-caption text-muted-foreground">Trace signal types ready</dt>
         <dd className="text-heading text-foreground mt-1">
           {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
         </dd>
       </div>
-      <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
+      <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
         <dt className="text-caption text-muted-foreground">Status</dt>
         <dd className="text-heading text-foreground mt-1 capitalize">{progress.status}</dd>
       </div>
@@ -106,7 +108,7 @@ function SignalProgressList({ progress }: { progress?: TraceIntelligenceProgress
         const label = signalLabel(catalog, signalName);
         const isReady = catalogEntry ? catalogEntry.status === 'ready' : progress.availableSignals.includes(signalName);
         return (
-          <li className="border-border1 bg-surface2 rounded-md border px-3 py-2" key={signalName}>
+          <li className="border-border bg-background rounded-md border px-3 py-2" key={signalName}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-subheading" style={signalStyle(signalName)}>
                 {label}
@@ -135,7 +137,7 @@ export function PendingSignalProgress({
   if (pendingSignals.length === 0) return null;
 
   return (
-    <section className="border-border1 bg-surface2 rounded-lg border p-4" aria-labelledby="pending-signals-heading">
+    <section className="border-border bg-background rounded-lg border p-4" aria-labelledby="pending-signals-heading">
       <h2 id="pending-signals-heading" className="text-subheading text-foreground">
         Signals building themes
       </h2>
@@ -146,7 +148,7 @@ export function PendingSignalProgress({
         {pendingSignals.map(signal => {
           const value = progress?.signals[signal.name] ?? { generated: 0, embedded: 0 };
           return (
-            <li className="border-border1 bg-surface3 rounded-md border px-3 py-2 font-sans" key={signal.name}>
+            <li className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2 font-sans')} key={signal.name}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-subheading" style={signalStyle(signal.name)}>
                   {signalLabel(catalog, signal.name)}
@@ -187,7 +189,7 @@ export const SignalsEmptyState = ({
   }));
 
   return (
-    <section className="bg-surface1 min-h-full w-full p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
+    <section className="bg-sidebar min-h-full w-full p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
       <div className="mx-auto w-full max-w-260">
         <header>
           <p className="text-caption text-muted-foreground flex items-center gap-2 font-mono tracking-wider uppercase">
@@ -214,7 +216,10 @@ export const SignalsEmptyState = ({
             <div className="mt-2.5 space-y-2">
               {traceRows.map(([name, duration]) => (
                 <div
-                  className="border-border1 bg-surface3 text-meta flex items-center justify-between rounded border px-3 py-1.5 font-mono"
+                  className={cn(
+                    raisedSurfaceStyle,
+                    'text-meta flex items-center justify-between rounded px-3 py-1.5 font-mono',
+                  )}
                   key={name}
                 >
                   <span className="text-muted-foreground">{name}</span>
@@ -254,7 +259,7 @@ export const SignalsEmptyState = ({
             <div className="mt-3 flex flex-wrap gap-2">
               {signalDefinitions.map(signal => (
                 <span
-                  className="signals-chip bg-surface3 text-column inline-flex items-center gap-2 rounded border border-current/25 px-2.5 py-1.5 shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)]"
+                  className="signals-chip bg-card text-column inline-flex items-center gap-2 rounded border border-current/25 px-2.5 py-1.5 shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)]"
                   key={signal.key}
                   style={signalStyle(signal.key)}
                 >
@@ -284,7 +289,7 @@ export const SignalsEmptyState = ({
           </ul>
         </section>
 
-        <aside className="border-border1 bg-surface2 mt-9 rounded-md border px-5 py-4">
+        <aside className="border-border bg-background mt-9 rounded-md border px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden="true"

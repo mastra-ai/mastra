@@ -29,12 +29,12 @@ describe('ProcessStepListItem', () => {
 
   it('leaves the active step without a card surface in the plain variant', () => {
     render(<ProcessStepListItem step={step} isActive position={2} />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(true);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-card')).toBe(true);
 
     cleanup();
 
     render(<ProcessStepListItem step={step} isActive position={2} variant="plain" />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(false);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-card')).toBe(false);
   });
 
   it('drops the filled disc from a completed marker in the plain variant', () => {
@@ -76,7 +76,7 @@ describe('ProcessStepListItem', () => {
   it('leaves an inactive step without the card surface', () => {
     render(<ProcessStepListItem step={step} isActive={false} position={1} />);
 
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(false);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-card')).toBe(false);
   });
 
   it('draws a dashed ring for a step that has not started', () => {

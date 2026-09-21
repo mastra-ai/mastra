@@ -52,7 +52,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
     <DataList.RowStatic className={cn('min-h-14', className)} {...props}>
       {showIcon && (
         <DataList.Cell className="justify-items-center overflow-visible">
-          <span className="border-border1 text-muted-foreground flex size-7 items-center justify-center rounded-full border [&>svg]:size-3.5">
+          <span className="border-border text-muted-foreground flex size-7 items-center justify-center rounded-full border [&>svg]:size-3.5">
             {leadingIcon}
           </span>
         </DataList.Cell>

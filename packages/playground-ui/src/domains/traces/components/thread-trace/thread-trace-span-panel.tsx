@@ -23,7 +23,7 @@ export function ThreadTraceSpanPanel({ className, panelClassName, ...props }: Th
       className={cn(
         // Same chrome as the span column of the trace panel: flush to the edge, divided by a left border.
         'flex min-h-0 min-w-0 flex-col overflow-hidden',
-        selected && 'animate-in border-l border-border1 duration-300 fade-in-0',
+        selected && 'animate-in border-l border-border duration-300 fade-in-0',
         className,
       )}
       {...props}

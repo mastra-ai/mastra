@@ -35,13 +35,13 @@ html.light [data-composer-tone='orange'] {
 .composer-box {
   --composer-edge: oklch(0% 0 0deg / 18%);
 
-  background-color: var(--surface4);
+  background-color: var(--muted);
 }
 
 html.light .composer-box {
   --composer-edge: transparent;
 
-  background-color: var(--surface3);
+  background-color: var(--card);
 }
 
 .composer-box::before,

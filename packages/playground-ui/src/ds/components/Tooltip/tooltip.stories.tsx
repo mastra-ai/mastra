@@ -58,7 +58,7 @@ export const WithIcon: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button className="hover:bg-surface2 rounded p-1" aria-label="More information">
+        <button className="hover:bg-fill-subtle rounded p-1" aria-label="More information">
           <Info className="text-muted-foreground size-4" />
         </button>
       </TooltipTrigger>

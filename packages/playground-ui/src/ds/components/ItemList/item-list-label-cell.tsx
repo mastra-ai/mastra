@@ -9,7 +9,7 @@ export function ItemListLabelCell({ children, className }: ItemListLabelCellProp
   return (
     <label
       className={cn(
-        'flex h-full w-14 items-center justify-center rounded-lg text-caption hover:bg-surface5',
+        'flex h-full w-14 items-center justify-center rounded-lg text-caption hover:bg-fill-subtle',
         className,
       )}
     >

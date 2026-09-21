@@ -32,9 +32,7 @@ export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
   const { inputValue, outputValue, total, showSplit, inputPct, outputPct, inputDetails, outputDetails } = view;
 
   return (
-    <div
-      className={cn('mt-2 mb-8 grid grid-cols-1 border-b border-border1 pb-3 4xl:grid-cols-2 4xl:gap-12', className)}
-    >
+    <div className={cn('mt-2 mb-8 grid grid-cols-1 border-b border-border pb-3 4xl:grid-cols-2 4xl:gap-12', className)}>
       {showSplit && (
         <div className="mb-2">
           <div className="text-placeholder flex items-baseline gap-3">
@@ -44,7 +42,7 @@ export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
               {Math.round(inputPct)}% Input vs {Math.round(outputPct)}% Output
             </span>
           </div>
-          <div className="bg-surface4 mt-2 rounded-md p-1.5">
+          <div className="bg-muted mt-2 rounded-md p-1.5">
             <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
               <div
                 className="absolute top-0 left-0 h-1.5"

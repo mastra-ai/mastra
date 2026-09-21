@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Textarea } from './textarea';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof Textarea> = {
   title: 'Elements/Textarea',
@@ -75,17 +76,17 @@ export const Disabled: Story = {
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-96 flex-col gap-4">
-      <div className="border-border1 bg-surface1 rounded-lg border p-4">
-        <Textarea placeholder="On bg-surface1" />
+      <div className="border-border bg-sidebar rounded-lg border p-4">
+        <Textarea placeholder="On bg-sidebar" />
       </div>
-      <div className="border-border1 bg-surface2 rounded-lg border p-4">
-        <Textarea placeholder="On bg-surface2" />
+      <div className="border-border bg-background rounded-lg border p-4">
+        <Textarea placeholder="On bg-background" />
       </div>
-      <div className="border-border1 bg-surface3 rounded-lg border p-4">
-        <Textarea placeholder="On bg-surface3" />
+      <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
+        <Textarea placeholder="On bg-card" />
       </div>
-      <div className="border-border1 bg-surface4 rounded-lg border p-4">
-        <Textarea placeholder="On bg-surface4" />
+      <div className="border-border bg-muted rounded-lg border p-4">
+        <Textarea placeholder="On bg-muted" />
       </div>
     </div>
   ),

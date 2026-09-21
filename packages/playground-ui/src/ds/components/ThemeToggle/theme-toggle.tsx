@@ -4,6 +4,7 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 
 import { useTheme } from '../ThemeProvider';
 import type { Theme } from '../ThemeProvider/theme-context';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -91,7 +92,8 @@ export const ThemeToggle = ({
       onValueChange={handleChange}
       aria-label={ariaLabel}
       className={cn(
-        'relative inline-flex w-fit items-center rounded-full border border-border1 bg-surface3',
+        raisedSurfaceStyle,
+        'relative inline-flex w-fit items-center rounded-full',
         sizeConfig.root,
         className,
       )}
@@ -99,7 +101,7 @@ export const ThemeToggle = ({
       <span
         aria-hidden="true"
         className={cn(
-          'pointer-events-none absolute rounded-full bg-surface5 motion-reduce:transition-none',
+          'pointer-events-none absolute rounded-full bg-fill-hover motion-reduce:transition-none',
           transitions.transform,
           sizeConfig.indicator,
         )}

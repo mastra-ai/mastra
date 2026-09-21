@@ -97,7 +97,7 @@ export function DataPanelRoot({
               <DrawerPrimitive.Content
                 render={<section />}
                 className={cn(
-                  'flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-border1 bg-surface2',
+                  'flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-background',
                   className,
                 )}
               >

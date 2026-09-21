@@ -20,7 +20,7 @@ const resources = ['Research agent', 'Support workflow', 'Knowledge search tool'
 export const FullPage: Story = {
   render: () => (
     <PageHeadingContext value="Resources">
-      <div className="bg-surface1 h-152">
+      <div className="bg-sidebar h-152">
         <PageLayout width="wide" height="full">
           <PageLayout.TopArea>
             <PageLayout.Row align="center" stack="responsive">
@@ -43,7 +43,7 @@ export const FullPage: Story = {
               {resources.map(resource => (
                 <div
                   key={resource}
-                  className="border-border1 bg-surface2 text-body text-foreground rounded-xl border p-5"
+                  className="border-border bg-background text-body text-foreground rounded-xl border p-5"
                 >
                   {resource}
                 </div>
@@ -58,7 +58,7 @@ export const FullPage: Story = {
 
 export const NarrowSettings: Story = {
   render: () => (
-    <div className="bg-surface1 min-h-136">
+    <div className="bg-sidebar min-h-136">
       <PageLayout width="narrow">
         <PageLayout.TopArea>
           <PageHeader>
@@ -67,8 +67,10 @@ export const NarrowSettings: Story = {
           </PageHeader>
         </PageLayout.TopArea>
         <PageLayout.MainArea className="grid gap-3">
-          <div className="border-border1 bg-surface2 text-muted-foreground rounded-xl border p-5">General settings</div>
-          <div className="border-border1 bg-surface2 text-muted-foreground rounded-xl border p-5">
+          <div className="border-border bg-background text-muted-foreground rounded-xl border p-5">
+            General settings
+          </div>
+          <div className="border-border bg-background text-muted-foreground rounded-xl border p-5">
             Environment variables
           </div>
         </PageLayout.MainArea>
@@ -79,7 +81,7 @@ export const NarrowSettings: Story = {
 
 export const CenteredEmptyState: Story = {
   render: () => (
-    <div className="bg-surface1 h-136">
+    <div className="bg-sidebar h-136">
       <NoDataPageLayout>
         <EmptyState
           iconSlot={<CircleSlashIcon />}

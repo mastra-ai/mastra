@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { overlaySurfaceStyle, surfaceGroupStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
 import { quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
@@ -199,8 +199,8 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
           className={cn(
             'border-0 bg-sidebar text-foreground',
             mobileMode === 'takeover'
-              ? 'w-[calc(100%-3.5rem)] max-w-none overflow-visible rounded-l-none rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-raised'
-              : 'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none shadow-raised',
+              ? 'w-[calc(100%-3.5rem)] max-w-none overflow-visible rounded-l-none rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-overlay'
+              : 'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none shadow-overlay',
             className,
           )}
         >
@@ -213,9 +213,10 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
               >
                 <span
                   className={cn(
-                    raisedSurfaceStyle,
+                    overlaySurfaceStyle,
                     quietTextHoverInGroup,
-                    'group-hover:bg-muted group-focus-visible:ring-accent1 inline-flex size-9 items-center justify-center rounded-full backdrop-blur-sm group-focus-visible:ring-1',
+                    surfaceGroupStateLayerStyle,
+                    'group-focus-visible:ring-accent1 inline-flex size-9 items-center justify-center rounded-full backdrop-blur-sm group-focus-visible:ring-1',
                   )}
                 >
                   <MenuIcon className="size-4" />

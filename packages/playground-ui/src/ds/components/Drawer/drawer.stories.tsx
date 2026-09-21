@@ -21,6 +21,7 @@ import {
   DrawerTrigger,
   DrawerViewport,
 } from './drawer';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof Drawer> = {
   title: 'Feedback/Drawer',
@@ -161,7 +162,7 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
   const [deployments, setDeployments] = React.useState(12);
 
   return (
-    <div className="bg-surface1 min-h-140 p-4 sm:p-6">
+    <div className="bg-sidebar min-h-140 p-4 sm:p-6">
       <div className="mx-auto grid max-w-6xl gap-4">
         <div className="border-border bg-fill flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="grid gap-1">
@@ -172,7 +173,7 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
-          <div className="border-border1 bg-surface2 rounded-lg border p-4">
+          <div className="border-border bg-background rounded-lg border p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-subheading text-foreground">Recent runs</h3>
@@ -186,7 +187,7 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
               {['main', 'release/canary', 'codex/drawer-floating-variant'].map((branch, index) => (
                 <div
                   key={branch}
-                  className="border-border1 bg-surface3 flex items-center justify-between rounded-md border px-3 py-2"
+                  className={`${raisedSurfaceStyle} flex items-center justify-between rounded-md px-3 py-2`}
                 >
                   <span className="text-column text-foreground">{branch}</span>
                   <span className="text-meta text-muted-foreground">{index === 0 ? 'Ready' : 'Building'}</span>
@@ -195,14 +196,14 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="border-border1 bg-surface2 rounded-lg border p-4">
+          <div className="border-border bg-background rounded-lg border p-4">
             <h3 className="text-subheading text-foreground">Environment</h3>
             <div className="mt-3 grid gap-3">
-              <div className="bg-surface3 rounded-md p-3">
+              <div className="bg-card rounded-md p-3">
                 <p className="text-meta text-muted-foreground">Region</p>
                 <p className="text-caption text-foreground">eu-west-1</p>
               </div>
-              <div className="bg-surface3 rounded-md p-3">
+              <div className="bg-card rounded-md p-3">
                 <p className="text-meta text-muted-foreground">Runtime</p>
                 <p className="text-caption text-foreground">Node.js 22</p>
               </div>
@@ -403,7 +404,7 @@ export const SnapPoints: Story = {
         </DrawerHeader>
         <DrawerBody className="grid gap-3">
           {Array.from({ length: 16 }, (_, index) => (
-            <div key={index} className="bg-surface4 h-12 shrink-0 rounded-md" />
+            <div key={index} className="bg-muted h-12 shrink-0 rounded-md" />
           ))}
         </DrawerBody>
         <DrawerFooter>
@@ -449,9 +450,12 @@ function SwipeToOpenExample() {
   const [container, setContainer] = React.useState<HTMLDivElement | null>(null);
 
   return (
-    <div ref={setContainer} className="border-border1 bg-surface2 relative h-80 w-96 overflow-hidden rounded-xl border">
+    <div
+      ref={setContainer}
+      className="border-border bg-background relative h-80 w-96 overflow-hidden rounded-xl border"
+    >
       <Drawer side="right" modal={false}>
-        <DrawerSwipeArea className="border-border2 bg-surface4/40 absolute inset-y-0 right-0 z-10 w-10 border-l border-dashed" />
+        <DrawerSwipeArea className="border-border-strong bg-muted/40 absolute inset-y-0 right-0 z-10 w-10 border-l border-dashed" />
         <div className="flex h-full items-center justify-center px-12 text-center">
           <p className="text-caption text-muted-foreground">Swipe from the right edge to open the drawer.</p>
         </div>
@@ -507,7 +511,7 @@ function ActionSheetExample() {
             </Button>
           ))}
         </div>
-        <DrawerFooter className="border-border1 border-t">
+        <DrawerFooter className="border-border border-t">
           <Button
             variant="ghost"
             className="text-negative1 w-full justify-center rounded-none"

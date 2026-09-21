@@ -28,8 +28,8 @@ const useLog = () => {
 };
 
 const LogConsole = ({ entries, onClear }: { entries: LogEntry[]; onClear: () => void }) => (
-  <div className="border-border1 bg-surface2 text-caption rounded-lg border font-mono">
-    <div className="border-border1 flex items-center justify-between border-b px-3 py-2">
+  <div className="border-border bg-background text-caption rounded-lg border font-mono">
+    <div className="border-border flex items-center justify-between border-b px-3 py-2">
       <span className="text-muted-foreground">console ({entries.length})</span>
       <button type="button" onClick={onClear} className="text-muted-foreground hover:text-foreground">
         clear
@@ -207,13 +207,13 @@ const ScopedTargetDemo = () => {
         <div
           ref={ref}
           tabIndex={0}
-          className="border-border1 bg-surface3 text-caption text-muted-foreground focus:border-accent1 flex-1 rounded-lg border p-6 outline-none"
+          className="border-border bg-card text-caption text-muted-foreground focus:border-accent1 flex-1 rounded-lg border p-6 outline-none"
         >
           Focus me, then press <Keys keys="g then a" /> or <Keys keys="Enter" />.
         </div>
         <div
           tabIndex={0}
-          className="border-border1 text-caption text-muted-foreground focus:border-accent1 flex-1 rounded-lg border border-dashed p-6 outline-none"
+          className="border-border text-caption text-muted-foreground focus:border-accent1 flex-1 rounded-lg border border-dashed p-6 outline-none"
         >
           Keys pressed here are ignored.
         </div>
@@ -243,7 +243,7 @@ const TypingInFieldsDemo = () => {
     >
       <input
         placeholder="Type g, a or ? here — they are typed, not intercepted. Try mod+k."
-        className="border-border1 bg-surface3 text-caption text-foreground focus:border-accent1 rounded-md border px-3 py-2 outline-none"
+        className="border-border bg-card text-caption text-foreground focus:border-accent1 rounded-md border px-3 py-2 outline-none"
       />
     </Layout>
   );
@@ -326,7 +326,7 @@ const Level = ({ index, maxDepth, log }: { index: number; maxDepth: number; log:
   if (index > maxDepth) return null;
   return (
     <KeyboardScope>
-      <div className="border-border1 text-caption text-muted-foreground rounded-lg border p-3">
+      <div className="border-border text-caption text-muted-foreground rounded-lg border p-3">
         scope depth {index}
         <LevelShortcuts level={`depth ${index}`} log={log} />
         <div className="mt-3">
@@ -377,7 +377,7 @@ const TableNavigationDemo = () => {
       title="useTableKeydown: ArrowUp/Down, PageUp/Down (5), Home/End, mod+Home/End. Works before any row has focus (global)."
       log={out}
     >
-      <div ref={containerRef} className="border-border1 max-h-48 overflow-auto rounded-lg border">
+      <div ref={containerRef} className="border-border max-h-48 overflow-auto rounded-lg border">
         {rows.map((row, index) => (
           <div
             key={row}
@@ -388,7 +388,7 @@ const TableNavigationDemo = () => {
               if (event.key === 'Enter') activate(index);
             }}
             className={`text-caption cursor-pointer px-3 py-1.5 outline-none ${
-              index === activeIndex ? 'bg-surface4 text-foreground' : 'text-muted-foreground hover:bg-surface3'
+              index === activeIndex ? 'bg-fill-hover text-foreground' : 'text-muted-foreground hover:bg-fill-subtle'
             }`}
           >
             {row}

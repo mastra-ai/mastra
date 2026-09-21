@@ -86,9 +86,9 @@ const dataListGridStyles = [
   '[&_.data-list-top]:bg-(--data-list-background)',
   '[&_.data-list-row>.data-list-sticky-start]:bg-background',
   // A sticky cell must stay opaque over horizontally scrolled cells, so it
-  // cannot show the fluid highlight through; it takes the nearest opaque level
-  // above the row well instead.
-  '[&_.data-list-row[data-fluid-hover-active]>.data-list-sticky-start]:bg-card',
+  // cannot show the fluid highlight through; it takes the opaque twin of a fill
+  // rung over the row well instead, the same level a selected row rests on.
+  '[&_.data-list-row[data-fluid-hover-active]>.data-list-sticky-start]:bg-surface-panel',
   '[&_.data-list-row>.data-list-sticky-start]:after:right-0',
   '[&_.data-list-top>.data-list-sticky-start]:after:right-0',
 ] as const;
@@ -162,7 +162,7 @@ export function DataListRoot({
       // a grid/flex parent from stretching the root to the full row height.
       viewPortClassName="min-h-0 flex-1 basis-auto"
       className={cn(
-        'flex max-h-full w-full flex-col self-start rounded-xl px-1 pb-1',
+        'flex max-h-full w-full flex-col self-start rounded-xl p-1',
         dataListVariantClasses[variant],
         className,
       )}

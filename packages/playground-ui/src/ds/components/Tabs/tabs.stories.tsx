@@ -97,7 +97,7 @@ function ContainedExample({
         }
       : undefined;
   return (
-    <main className="bg-surface1 min-h-screen p-4 sm:p-10">
+    <main className="bg-sidebar min-h-screen p-4 sm:p-10">
       <div className="mx-auto w-full max-w-5xl">
         <Tabs defaultTab="activity" value={activeTab} onValueChange={setActiveTab} appearance="contained" frame={frame}>
           <TabList>
@@ -136,7 +136,7 @@ function ContainedExample({
                 <h2 className="text-heading text-foreground">Recent activity</h2>
                 <p className="text-body text-muted-foreground">Runs and deployments from the last seven days.</p>
               </div>
-              <div className="divide-border1 border-border1 bg-surface2 divide-y overflow-hidden rounded-lg border">
+              <div className="divide-border border-border bg-background divide-y overflow-hidden rounded-lg border">
                 <div className="flex items-center justify-between gap-4 p-4">
                   <span className="text-body text-foreground">Production deployment</span>
                   <span className="text-caption text-muted-foreground">2 minutes ago</span>

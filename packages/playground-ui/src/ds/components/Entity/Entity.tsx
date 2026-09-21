@@ -1,5 +1,6 @@
 import { Txt } from '../Txt';
 import { Icon } from '@/ds/icons';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 export interface EntityProps {
@@ -21,8 +22,9 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
         }
       }}
       className={cn(
-        'group/entity flex gap-3 rounded-xl border border-border1 bg-surface3 px-3 py-2',
-        onClick && 'cursor-pointer transition-all hover:bg-surface4',
+        raisedSurfaceStyle,
+        'group/entity flex gap-3 rounded-xl px-3 py-2',
+        onClick && 'cursor-pointer transition-all hover:bg-fill-subtle',
         className,
       )}
       onClick={onClick}

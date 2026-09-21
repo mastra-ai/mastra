@@ -8,6 +8,7 @@ import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { Header } from '@/ds/components/Header';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@/ds/components/MainSidebar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 function SidebarBrand() {
@@ -65,7 +66,7 @@ function Sidebar() {
 
 function MobileHeader() {
   return (
-    <div className="border-border1 bg-surface1 flex h-12 shrink-0 items-center justify-between border-b px-3 lg:hidden">
+    <div className="border-border bg-sidebar flex h-12 shrink-0 items-center justify-between border-b px-3 lg:hidden">
       <span className="flex items-center gap-3">
         <MainSidebar.MobileTrigger />
         <span className="text-subheading text-foreground">Workspace</span>
@@ -100,7 +101,7 @@ function MainContent() {
         <PageHeader.Description>Configuration and recent activity.</PageHeader.Description>
       </PageHeader>
       {Array.from({ length: 14 }, (_, index) => (
-        <article key={index} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
+        <article key={index} className={cn(raisedSurfaceStyle, 'rounded-studio-panel p-4')}>
           <p className="text-column text-foreground">Activity {index + 1}</p>
           <p className="text-meta text-muted-foreground mt-1">
             A representative row that makes the content area scroll.
@@ -116,7 +117,7 @@ function FrameWithPanel({ children, className }: AppShellFrameProps) {
     <div className={className}>
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">{children}</div>
-        <aside className="border-border1 bg-surface1 hidden w-72 shrink-0 border-l p-4 xl:block">
+        <aside className="border-border bg-sidebar hidden w-72 shrink-0 border-l p-4 xl:block">
           <p className="text-column text-foreground">Details panel</p>
           <p className="text-meta text-muted-foreground mt-1">
             A consumer-owned panel rendered outside the framed content.
@@ -141,7 +142,7 @@ export const StandardDesktop: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -167,7 +168,7 @@ export const CollapsedSidebar: Story = {
         collapseBelow={160}
         storageKey="app-shell-story-collapsed"
       >
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -187,7 +188,7 @@ export const Mobile: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -206,7 +207,7 @@ export const WithoutRouteHeader: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell mainLabel="Research agent content" mobileHeader={<MobileHeader />}>
             <MainContent />
@@ -229,7 +230,7 @@ export const WithFrameWrapper: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -250,7 +251,7 @@ export const LightTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"
@@ -270,7 +271,7 @@ export const DarkTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+        <div className="bg-sidebar h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
           <Sidebar />
           <AppShell
             mainLabel="Research agent content"

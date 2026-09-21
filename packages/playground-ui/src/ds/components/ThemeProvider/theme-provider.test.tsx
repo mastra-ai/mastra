@@ -412,7 +412,7 @@ describe('ThemeToggle', () => {
     const radios = getAllByRole('radio');
 
     expect(group.classList.contains('gap-0.5')).toBe(true);
-    expect(indicator?.classList.contains('bg-surface5')).toBe(true);
+    expect(indicator?.classList.contains('bg-fill-hover')).toBe(true);
     expect(indicator?.style.width).toBe('28px');
     expect(indicator?.style.transform).toBe('translateX(60px)');
     expect(radios.every(radio => radio.style.width === '28px')).toBe(true);

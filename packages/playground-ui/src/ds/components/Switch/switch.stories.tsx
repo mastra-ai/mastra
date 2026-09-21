@@ -7,10 +7,10 @@ import type { SwitchProps } from './switch';
 import { Switch } from './switch';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
-  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface1' },
-  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface2' },
-  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface3' },
-  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
+  { token: 'sidebar', label: 'sidebar · the recessed shell', className: 'bg-sidebar' },
+  { token: 'background', label: 'background · the page canvas', className: 'bg-background' },
+  { token: 'card', label: 'card · a raised surface', className: 'bg-card' },
+  { token: 'muted', label: 'muted · the quiet step above the canvas', className: 'bg-muted' },
 ];
 
 type SwitchIconProps = Pick<SwitchProps, 'checkedIcon' | 'icon' | 'uncheckedIcon'>;
@@ -53,7 +53,7 @@ function RepositoryVisibilitySwitch() {
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
-    <div className={`border-border1/70 rounded-2xl border p-5 ${className}`}>
+    <div className={`border-border/70 rounded-2xl border p-5 ${className}`}>
       <p className="text-meta text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
@@ -82,7 +82,7 @@ function RepositoryVisibilitySwitch() {
   const [isPrivate, setIsPrivate] = useState(true);
 
   return (
-    <div className="bg-surface2 grid gap-4 rounded-lg p-4">
+    <div className="bg-background grid gap-4 rounded-lg p-4">
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="repository-visibility-icons">Repository visibility</Label>
         <span className="inline-flex items-center gap-2">
@@ -184,7 +184,7 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="bg-surface2 grid min-w-108 gap-4 rounded-lg p-4">
+    <div className="bg-background grid min-w-108 gap-4 rounded-lg p-4">
       <div className="text-caption text-muted-foreground grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
         <span />
         <span>Default</span>

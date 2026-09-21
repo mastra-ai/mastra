@@ -15,7 +15,7 @@ const Command = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <CommandPrimitive
     ref={ref}
-    className={cn('flex size-full flex-col overflow-hidden rounded-xl bg-surface3 text-muted-foreground', className)}
+    className={cn('flex size-full flex-col overflow-hidden rounded-xl bg-card text-muted-foreground', className)}
     {...props}
   />
 ));
@@ -103,7 +103,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
   ({ className, rightSlot, wrapperClassName, ...props }, ref) => (
     <div
       data-slot="command-input-wrapper"
-      className={cn('flex items-center border-b border-border1 px-3', transitions.colors, wrapperClassName)}
+      className={cn('flex items-center border-b border-border px-3', transitions.colors, wrapperClassName)}
     >
       <Search className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
       <CommandPrimitive.Input
@@ -211,7 +211,7 @@ const CommandSeparator = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Separator>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
 >(({ className, ...props }, ref) => (
-  <CommandPrimitive.Separator ref={ref} className={cn('-mx-1 h-px bg-border1', className)} {...props} />
+  <CommandPrimitive.Separator ref={ref} className={cn('-mx-1 h-px bg-border', className)} {...props} />
 ));
 CommandSeparator.displayName = CommandPrimitive.Separator.displayName;
 

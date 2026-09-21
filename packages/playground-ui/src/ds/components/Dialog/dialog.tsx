@@ -9,7 +9,7 @@ import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { asChildRenderProps } from '@/lib/as-child';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 import './dialog.css';
@@ -117,7 +117,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
             aria-busy={pending || undefined}
             className={cn(
               'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col overflow-y-auto overscroll-contain rounded-xl outline-hidden',
-              raisedSurfaceStyle,
+              overlaySurfaceStyle,
               'data-[ending-style]:scale-0.98 data-[starting-style]:scale-0.98 transition-[opacity,scale] duration-normal ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none',
               className,
             )}
@@ -151,7 +151,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
             'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
             'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
             'rounded-xl backdrop-blur-md',
-            raisedSurfaceStyle,
+            overlaySurfaceStyle,
             'focus-visible:outline-hidden',
             className,
           )}

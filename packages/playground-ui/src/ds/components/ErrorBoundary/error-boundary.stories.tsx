@@ -31,17 +31,17 @@ function InteractiveDemo() {
 
 function ScopedBoundaryDemo() {
   return (
-    <div className="border-border1 grid h-105 w-180 grid-cols-[200px_1fr] gap-4 rounded-lg border p-3">
-      <aside className="bg-surface3 flex flex-col gap-2 rounded-md p-3">
+    <div className="border-border grid h-105 w-180 grid-cols-[200px_1fr] gap-4 rounded-lg border p-3">
+      <aside className="bg-card flex flex-col gap-2 rounded-md p-3">
         <p className="text-column text-foreground">Sidebar</p>
         <p className="text-meta text-muted-foreground">Still interactive — the crash is scoped to the editor panel.</p>
       </aside>
       <main className="flex flex-col gap-3">
-        <div className="bg-surface3 rounded-md p-3">
+        <div className="bg-card rounded-md p-3">
           <p className="text-column text-foreground">Header</p>
           <p className="text-meta text-muted-foreground">Unaffected by the failing panel below.</p>
         </div>
-        <div className="border-border1 bg-surface2 flex-1 overflow-hidden rounded-md border">
+        <div className="border-border bg-background flex-1 overflow-hidden rounded-md border">
           <ErrorBoundary
             title="The agent editor failed to render"
             description="A referenced workspace skill could not be resolved."
@@ -68,7 +68,7 @@ type Story = StoryObj<typeof ErrorBoundary>;
 export const SectionVariantSmallParent: Story = {
   name: 'Section variant — small container',
   render: () => (
-    <div className="border-border1 h-65 w-95 rounded-lg border">
+    <div className="border-border h-65 w-95 rounded-lg border">
       <ErrorBoundary>
         <Bomb shouldThrow />
       </ErrorBoundary>
@@ -79,7 +79,7 @@ export const SectionVariantSmallParent: Story = {
 export const SectionVariantLargeParent: Story = {
   name: 'Section variant — large container (scales up)',
   render: () => (
-    <div className="border-border1 h-140 w-220 rounded-lg border">
+    <div className="border-border h-140 w-220 rounded-lg border">
       <ErrorBoundary>
         <Bomb shouldThrow />
       </ErrorBoundary>
@@ -90,7 +90,7 @@ export const SectionVariantLargeParent: Story = {
 export const InlineVariant: Story = {
   name: 'Inline variant — stays compact',
   render: () => (
-    <div className="border-border1 h-105 w-180 rounded-lg border p-4">
+    <div className="border-border h-105 w-180 rounded-lg border p-4">
       <ErrorBoundary variant="inline">
         <Bomb shouldThrow />
       </ErrorBoundary>
@@ -118,7 +118,7 @@ export const CustomFallback: Story = {
   render: () => (
     <ErrorBoundary
       fallback={({ error, reset }) => (
-        <div className="border-border1 flex flex-col items-center gap-3 rounded-md border p-6">
+        <div className="border-border flex flex-col items-center gap-3 rounded-md border p-6">
           <p className="text-body text-foreground">Custom fallback: {error.message}</p>
           <Button onClick={reset}>Retry</Button>
         </div>

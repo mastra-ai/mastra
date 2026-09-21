@@ -17,7 +17,7 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
     <blockquote
       data-slot="comment-quote"
       className={cn(
-        'm-0 flex min-w-0 gap-2 border-l-2 border-border2 pl-2 text-caption text-muted-foreground',
+        'm-0 flex min-w-0 gap-2 border-l-2 border-border-strong pl-2 text-caption text-muted-foreground',
         className,
       )}
     >

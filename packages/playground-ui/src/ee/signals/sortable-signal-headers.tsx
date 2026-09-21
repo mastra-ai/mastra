@@ -16,7 +16,7 @@ import type { TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -138,7 +138,7 @@ export function SortableSignalHeaders({
                         >
                           <div
                             className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass(anchor)} ${
-                              dragSnapshot.isDragging ? `scale-1.03 ${raisedSurfaceStyle}` : ''
+                              dragSnapshot.isDragging ? `scale-1.03 ${overlaySurfaceStyle}` : ''
                             }`}
                             data-header-anchor={anchor}
                             data-testid="signal-column-header-content"

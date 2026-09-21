@@ -557,7 +557,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
         />
       )}
       {step.isMany && (
-        <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
+        <div className="border-border flex items-center justify-end gap-1 border-t p-1">
           <Button size="xs" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>

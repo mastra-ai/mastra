@@ -24,7 +24,7 @@ function DialTick({ angle, major, className, ...props }: ComponentProps<'line'> 
       y1={inner.y}
       x2={outer.x}
       y2={outer.y}
-      className={cn(major ? 'stroke-neutral2' : 'stroke-border2', className)}
+      className={cn(major ? 'stroke-neutral2' : 'stroke-border-strong', className)}
       {...props}
     />
   );

@@ -11,6 +11,7 @@ import {
   InputGroupText,
   InputGroupTextarea,
 } from './input-group';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof InputGroup> = {
   title: 'Composite/InputGroup',
@@ -286,7 +287,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput aria-label="Search agents on the main canvas" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border bg-card rounded-lg border p-4">
+      <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
         <Txt variant="caption" className="text-muted-foreground mb-2">
           Card
         </Txt>

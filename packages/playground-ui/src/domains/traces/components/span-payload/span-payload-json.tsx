@@ -1,4 +1,5 @@
 import { Code } from '@/ds/components/Code/code';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 export interface SpanPayloadJsonProps {
@@ -14,7 +15,8 @@ export function SpanPayloadJson({ value, className }: SpanPayloadJsonProps) {
       lang="json"
       data-slot="span-payload-json"
       className={cn(
-        'max-h-[30vh] overflow-y-auto rounded-lg border border-border1 bg-surface3 p-3 font-mono text-caption text-wrap break-all text-muted-foreground',
+        raisedSurfaceStyle,
+        'max-h-[30vh] overflow-y-auto rounded-lg p-3 font-mono text-caption text-wrap break-all text-muted-foreground',
         className,
       )}
     />

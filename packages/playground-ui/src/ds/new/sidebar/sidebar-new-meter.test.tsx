@@ -85,7 +85,6 @@ describe('SidebarNewMeter', () => {
     const link = container.querySelector('a[aria-label="Credit balance"]');
     expect(link).not.toBeNull();
     expect(link?.querySelector('button')).toBeNull();
-    expect(link?.parentElement?.className).toContain('hover:bg-card');
     expect(screen.getByRole('button', { name: 'What are credits?' })).toBeDefined();
   });
 });

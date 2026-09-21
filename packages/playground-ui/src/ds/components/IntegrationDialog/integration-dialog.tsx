@@ -125,7 +125,7 @@ function IntegrationDialogContent({
                     disabled={item.disabled}
                     onClick={() => onSelect(item)}
                     className={cn(
-                      'flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border1 px-4 py-3 text-left transition-colors duration-normal ease-out-custom hover:bg-surface3 disabled:pointer-events-none disabled:opacity-50',
+                      'flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border px-4 py-3 text-left transition-colors duration-normal ease-out-custom hover:bg-fill-subtle disabled:pointer-events-none disabled:opacity-50',
                       controlFocusBorderVisible,
                     )}
                   >

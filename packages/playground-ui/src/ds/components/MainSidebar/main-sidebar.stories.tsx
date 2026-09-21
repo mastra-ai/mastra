@@ -49,6 +49,7 @@ import {
   WorkflowIcon,
   WorkspacesIcon,
 } from '@/ds/icons';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import type { LinkComponentProps } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -72,7 +73,7 @@ const HelperCopy = () => (
 );
 
 const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="border-border1 bg-surface1 flex h-125 w-210 rounded-lg border">
+  <div className="border-border bg-sidebar flex h-125 w-210 rounded-lg border">
     {children}
     <div className="min-w-0 flex-1 p-6">
       <HelperCopy />
@@ -81,7 +82,7 @@ const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
 );
 
 const StudioFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="bg-surface1 flex h-180 w-270 overflow-hidden">
+  <div className="bg-sidebar flex h-180 w-270 overflow-hidden">
     {children}
     <main className="flex min-w-0 flex-1 flex-col">
       <header className="mx-2 mt-1.5 flex h-12 shrink-0 items-center justify-between px-3">
@@ -89,7 +90,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
           <p className="text-heading text-foreground truncate">Traces</p>
           <p className="text-meta text-muted-foreground truncate">Observability / Traces</p>
         </div>
-        <span className="border-border1 bg-surface3 text-meta text-foreground rounded-md border px-2.5 py-1">Live</span>
+        <span className="border-border bg-card text-meta text-foreground rounded-md border px-2.5 py-1">Live</span>
       </header>
       <section className="rounded-studio-frame bg-card shadow-raised mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
         <div className="grid min-h-full grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
@@ -99,14 +100,14 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
               ['p95 latency', '428ms'],
               ['Error rate', '0.8%'],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
+              <div key={label} className={`${raisedSurfaceStyle} rounded-studio-panel p-4`}>
                 <p className="text-meta text-muted-foreground uppercase">{label}</p>
                 <p className="text-foreground text-title mt-2">{value}</p>
               </div>
             ))}
           </div>
           <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_280px] gap-4">
-            <div className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
+            <div className={`${raisedSurfaceStyle} rounded-studio-panel min-h-0 p-4`}>
               <div className="mb-4 flex items-center justify-between">
                 <p className="text-subheading text-foreground">Recent spans</p>
                 <p className="text-meta text-muted-foreground">Updated now</p>
@@ -115,7 +116,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
                 {['agent.generate', 'tool.weather.lookup', 'workflow.evaluate', 'llm.call'].map((name, index) => (
                   <div
                     key={name}
-                    className="border-border1 bg-surface2 grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border px-3 py-2"
+                    className="border-border bg-background grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border px-3 py-2"
                   >
                     <span className="text-caption text-foreground truncate">{name}</span>
                     <span className="text-meta text-muted-foreground text-right">
@@ -126,7 +127,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
                 ))}
               </div>
             </div>
-            <aside className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
+            <aside className={`${raisedSurfaceStyle} rounded-studio-panel min-h-0 p-4`}>
               <p className="text-subheading text-foreground">Trace detail</p>
               <dl className="text-caption mt-4 grid gap-3">
                 <div>
@@ -151,8 +152,8 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
 );
 
 const MobileFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="bg-surface1 flex h-screen w-screen flex-col overflow-hidden">
-    <header className="border-border1 flex h-12 shrink-0 items-center gap-3 border-b px-3">
+  <div className="bg-sidebar flex h-screen w-screen flex-col overflow-hidden">
+    <header className="border-border flex h-12 shrink-0 items-center gap-3 border-b px-3">
       <MainSidebar.MobileTrigger />
       <span className="text-foreground text-subheading">Mastra Studio</span>
     </header>
@@ -238,7 +239,7 @@ const StudioSidebarBody = () => {
                 </div>
               )}
             </div>
-            <span className="border-border1 bg-surface4 size-6 rounded-full border" aria-label="Signed in" />
+            <span className="border-border bg-muted size-6 rounded-full border" aria-label="Signed in" />
           </div>
         ) : (
           <span className="flex items-center justify-between pr-2 pl-3">
@@ -249,7 +250,7 @@ const StudioSidebarBody = () => {
               </span>
               {!isMobile && <MainSidebar.Trigger />}
             </span>
-            <span className="border-border1 bg-surface4 size-7 rounded-full border" aria-label="Signed in" />
+            <span className="border-border bg-muted size-7 rounded-full border" aria-label="Signed in" />
           </span>
         )}
       </div>
@@ -260,14 +261,14 @@ const StudioSidebarBody = () => {
             <button
               type="button"
               aria-label="Search and navigate"
-              className="border-border1 bg-surface3 text-foreground hover:bg-surface4 hover:text-foreground active:bg-surface5 [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground border"
+              className={`${raisedSurfaceStyle} state-layer text-foreground hover:text-foreground [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground`}
             >
               <Search />
               <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
               {state !== 'collapsed' && (
                 <kbd
                   aria-hidden="true"
-                  className="border-border1 bg-surface4 text-muted-foreground text-meta ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                  className="border-border bg-muted text-muted-foreground text-meta ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                 >
                   ⌘K
                 </kbd>
@@ -300,7 +301,7 @@ const StudioSidebarBody = () => {
         </MainSidebar.NavList>
         {state !== 'collapsed' && (
           <>
-            <hr className="bg-border1 mx-6 my-2 h-px border-0" />
+            <hr className="bg-border mx-6 my-2 h-px border-0" />
             <span className="bg-fill text-meta dark:text-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none text-black/80">
               v0.0.0
             </span>
@@ -326,7 +327,7 @@ type Story = StoryObj<typeof MainSidebar>;
 export const Default: Story = {
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-border bg-background border-r">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavList>
@@ -347,7 +348,7 @@ export const Default: Story = {
 export const WithSections: Story = {
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-border bg-background border-r">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Main</MainSidebar.NavHeader>
@@ -387,7 +388,7 @@ export const WithNestedItems: Story = {
   },
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-border bg-background border-r">
         <MainSidebar.Nav>
           <MainSidebar.Sections
             sections={[
@@ -437,7 +438,7 @@ export const WithNestedItems: Story = {
 export const WithBottom: Story = {
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-border bg-background border-r">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavList>
@@ -484,7 +485,7 @@ export const FullSidebar: Story = {
 /* ------------------------------------------------------------------------- */
 
 const SidebarBody = () => (
-  <MainSidebar className="border-border1 bg-surface2 border-r">
+  <MainSidebar className="border-border bg-background border-r">
     <MainSidebar.Nav>
       <MainSidebar.NavSection>
         <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -600,11 +601,11 @@ export const Floating: Story = {
 /* ------------------------------------------------------------------------- */
 
 const ParityFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="border-border1 bg-surface1 flex h-125 w-210 gap-4 rounded-lg border p-3">{children}</div>
+  <div className="border-border bg-sidebar flex h-125 w-210 gap-4 rounded-lg border p-3">{children}</div>
 );
 
 const ParityBody = () => (
-  <MainSidebar className="border-border1 bg-surface2 rounded-md border">
+  <MainSidebar className="border-border bg-background rounded-md border">
     <MainSidebar.Nav>
       <MainSidebar.NavSection>
         <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -671,7 +672,7 @@ export const AsChild: Story = {
       const [supportOpen, setSupportOpen] = useState(false);
 
       return (
-        <MainSidebar className="border-border1 bg-surface2 border-r">
+        <MainSidebar className="border-border bg-background border-r">
           <MainSidebar.Nav>
             <MainSidebar.NavSection>
               <MainSidebar.NavHeader>Navigation</MainSidebar.NavHeader>
@@ -751,7 +752,7 @@ export const Mobile: Story = {
   },
   render: () => (
     <MobileFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-border bg-background border-r">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>

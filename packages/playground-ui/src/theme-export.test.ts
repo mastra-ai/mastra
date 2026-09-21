@@ -5,6 +5,7 @@ import { compile } from 'tailwindcss';
 import { resolveConfig } from 'vite';
 import { describe, expect, it } from 'vitest';
 import { BorderColors, Colors } from './ds/tokens/colors';
+import { Sizes } from './ds/tokens/sizes';
 
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));
@@ -114,6 +115,29 @@ const oklchLightness = (value: string) => {
   return value.startsWith(`oklch(${lightness}%`) ? parsed / 100 : parsed;
 };
 
+const oklchAlpha = (value: string) => {
+  const alpha = value.match(/\/\s*([\d.]+)(%?)\s*\)/);
+  if (!alpha) return 1;
+  return alpha[2] === '%' ? Number(alpha[1]) / 100 : Number(alpha[1]);
+};
+
+const toSrgb = (lightness: number) => {
+  const linear = lightness ** 3;
+  return linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055;
+};
+
+const fromSrgb = (channel: number) =>
+  (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4) ** (1 / 3);
+
+// A translucent edge has no lightness of its own: it composites in sRGB over
+// whatever it sits on, so its contrast has to be measured per surface.
+const compositeLightness = (value: string, backgroundLightness: number) => {
+  const alpha = oklchAlpha(value);
+  if (alpha === 1) return oklchLightness(value);
+
+  return fromSrgb(toSrgb(oklchLightness(value)) * alpha + toSrgb(backgroundLightness) * (1 - alpha));
+};
+
 const luminance = (lightness: number) => lightness ** 3;
 
 const wcagContrast = (foreground: number, background: number) => {
@@ -143,7 +167,7 @@ describe('theme.css export', () => {
     expect(themeCss).toMatch(/@theme\s*\{/);
     expect(themeCss).toMatch(/:root\s*\{/);
     expect(themeCss).not.toMatch(/^\/\*!\s*tailwindcss/);
-    expect(themeCss).not.toMatch(/\.bg-surface1\b/);
+    expect(themeCss).not.toMatch(/\.bg-sidebar\b/);
   });
 
   it('overrides the green palette the native v4 way (initial + remap)', () => {
@@ -231,7 +255,7 @@ describe('theme.css export', () => {
   it('declares one interaction ladder for both themes, flipped by the tint alone', () => {
     const [darkTheme, lightTheme] = themeCss.split('html.light');
     const ladder = ['fill-subtle', 'fill', 'fill-hover', 'fill-active', 'fill-strong'];
-    const boundaries = ['border', 'border-strong', 'border-hover', 'border-focus'];
+    const boundaries = ['border', 'border-strong', 'border-hover'];
 
     for (const token of [...ladder, ...boundaries]) {
       expect(darkTheme).toContain(`--${token}: oklch(var(--fill-tint)`);
@@ -240,6 +264,37 @@ describe('theme.css export', () => {
 
     expect(darkTheme).toContain('--fill-tint: 100%');
     expect(lightTheme).toContain('--fill-tint: 20.5%');
+
+    // Focus is the one rung that may not follow the tint: it is pinned to a
+    // contrast floor, and shade at dark's alpha falls under it (see below).
+    expect(darkTheme).toContain('--border-focus: oklch(var(--fill-tint) 0 0 / 40%)');
+    expect(lightTheme).toContain('--border-focus: oklch(var(--fill-tint) 0 0 / 50%)');
+  });
+
+  // The rim has to be assembled by the utility, on the element. A custom property
+  // holding `var(--surface-rim)` is substituted once where it is declared — the
+  // root — so every descendant inherits a finished string and a focused field
+  // could never repaint its own edge.
+  it('assembles both elevations on the element, rim from its own token', async () => {
+    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
+    const output = compiler.build(['shadow-raised', 'shadow-overlay']);
+    const [darkTheme, lightTheme] = themeCss.split('html.light');
+
+    for (const elevation of ['raised', 'overlay']) {
+      const rim = 'inset 0 0 0 1px var(--surface-rim)';
+      expect(output).toContain(`box-shadow: var(--elevation-lip), ${rim}, var(--elevation-${elevation});`);
+      for (const theme of [darkTheme, lightTheme]) {
+        expect(theme).toMatch(new RegExp(`--elevation-${elevation}:`));
+      }
+    }
+
+    // The rim sits below the divider in both themes: a boundary between two
+    // surfaces needs less than a line drawn inside one.
+    for (const theme of [darkTheme, lightTheme]) {
+      expect(theme).toMatch(/--surface-rim:/);
+      expect(theme).toMatch(/--surface-rim-hover:/);
+      expect(theme).toMatch(/--elevation-lip:/);
+    }
   });
 
   it('exports semantic tokens to TypeScript consumers', () => {
@@ -299,24 +354,55 @@ describe('theme.css export', () => {
 
   it('registers semantic utilities and their :root defaults in the shared bundle', async () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
-    const output = compiler.build(['bg-surface3', ...semanticTokens.map(token => `bg-${token}`)]);
+    const output = compiler.build(semanticTokens.map(token => `bg-${token}`));
 
-    expect(output).toContain('.bg-surface3');
     for (const token of semanticTokens) {
       expect(output).toContain(`.bg-${token} {`);
       expect(output).toContain(`--${token}:`);
     }
   });
 
-  it('keeps the focus ring visible on every neutral product surface', () => {
+  it('keeps the focus ring over its 3:1 floor on every neutral product surface', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
-      const ringLightness = oklchLightness(resolveToken('ring', variables));
+      const ring = resolveToken('ring', variables);
       for (const background of ['sidebar', 'background', 'card', 'muted']) {
         const backgroundLightness = oklchLightness(resolveToken(background, variables));
+        const ringLightness = compositeLightness(ring, backgroundLightness);
         expect(wcagContrast(ringLightness, backgroundLightness)).toBeGreaterThanOrEqual(3);
       }
+    }
+  });
+
+  // `sizes.ts` is the TypeScript mirror of the size namespaces, and
+  // `tw-merge-config.ts` uses it as the whole named spacing scale: a rung
+  // missing here silently stops `h-<rung>` from merging. Nothing derived the
+  // two from one another, which is how `form-lg` came to say 1.75rem while the
+  // CSS said 2rem, and how `icon-smd` existed only in CSS.
+  it('mirrors every size token between theme.css and the TypeScript scale', () => {
+    const namespaces = [
+      'height',
+      'min-height',
+      'max-height',
+      'width',
+      'min-width',
+      'max-width',
+      'spacing',
+      'container',
+    ];
+    const themeBlock = themeCss.slice(themeCss.indexOf('@theme'));
+
+    for (const [token, value] of Object.entries(Sizes)) {
+      const namespace = namespaces.find(space => themeBlock.includes(`--${space}-${token}:`));
+      expect(namespace, `${token} is in sizes.ts but no size namespace declares it`).toBeDefined();
+      expect(themeBlock).toContain(`--${namespace}-${token}: ${value};`);
+    }
+
+    const namedDeclarations = themeBlock.matchAll(new RegExp(`--(?:${namespaces.join('|')})-([a-z][\\w-]*):`, 'g'));
+
+    for (const [, token = ''] of namedDeclarations) {
+      expect(Object.hasOwn(Sizes, token), `--*-${token} is declared but missing from sizes.ts`).toBe(true);
     }
   });
 

@@ -245,7 +245,7 @@ export const AllAppUsages: Story = {
  */
 export const ControlAlignment: Story = {
   render: () => (
-    <div className="bg-surface2 flex items-center gap-1 rounded-lg p-2">
+    <div className="bg-background flex items-center gap-1 rounded-lg p-2">
       <Breadcrumb label="Breadcrumb">
         <Crumb as="span" isCurrent>
           Span

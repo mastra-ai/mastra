@@ -123,21 +123,6 @@ describe('Select', () => {
     expect(screen.getByRole('combobox').classList.contains('custom-trigger')).toBe(true);
   });
 
-  it('shares the filled control surface with Input for the default variant', () => {
-    renderSelect();
-
-    const trigger = screen.getByRole('combobox');
-    expect(trigger.classList.contains('bg-fill')).toBe(true);
-    expect(trigger.classList.contains('border-border')).toBe(true);
-    expect(trigger.classList.contains('text-foreground')).toBe(true);
-    expect(trigger.classList.contains('data-[placeholder]:text-muted-foreground')).toBe(true);
-    expect(trigger.classList.contains('data-[popup-open]:bg-fill-hover')).toBe(true);
-
-    const chevron = trigger.querySelector('svg');
-    expect(chevron?.classList.contains('text-muted-foreground')).toBe(true);
-    expect(chevron?.className.baseVal).not.toContain('opacity');
-  });
-
   it('keeps the outline and ghost variants on the Button recipe', () => {
     render(
       <>

@@ -31,7 +31,7 @@ export function Message({ from, avatar, footer, pending, children, className, ..
           className={cn(
             'max-w-full min-w-0 text-body break-words',
             isUser && 'rounded-xl border border-transparent bg-fill-subtle px-4 py-2 text-text1',
-            isUser && pending && 'border-dashed border-border1',
+            isUser && pending && 'border-dashed border-border',
             !isUser && footer && '[&>:last-child]:mb-0',
           )}
         >

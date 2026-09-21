@@ -25,7 +25,7 @@ export const Default: Story = {
           <ChevronDown className="size-4" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-border1 bg-surface2 mt-2 rounded-md border p-4">
+      <CollapsibleContent className="border-border bg-background mt-2 rounded-md border p-4">
         <p className="text-foreground text-body">This is the collapsible content. It can contain any elements.</p>
       </CollapsibleContent>
     </Collapsible>
@@ -41,7 +41,7 @@ export const DefaultOpen: Story = {
           <ChevronDown className="size-4" />
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-border1 bg-surface2 mt-2 rounded-md border p-4">
+      <CollapsibleContent className="border-border bg-background mt-2 rounded-md border p-4">
         <p className="text-foreground text-body">This section is open by default.</p>
       </CollapsibleContent>
     </Collapsible>
@@ -121,15 +121,15 @@ export const FillsConstrainedPanel: Story = {
   render: () => (
     <Collapsible
       defaultOpen
-      className="border-border1 bg-surface2 flex h-64 w-[350px] flex-col overflow-hidden rounded-md border"
+      className="border-border bg-background flex h-64 w-[350px] flex-col overflow-hidden rounded-md border"
     >
       <CollapsibleTrigger className="text-foreground text-subheading flex w-full shrink-0 items-center justify-between px-4 py-2">
         Recent runs
         <ChevronDown className="size-4" />
       </CollapsibleTrigger>
       <CollapsibleContent fill className="flex min-h-0 flex-col">
-        <ScrollArea className="border-border1 min-h-0 flex-1 border-t">
-          <ul className="divide-border1 divide-y">
+        <ScrollArea className="border-border min-h-0 flex-1 border-t">
+          <ul className="divide-border divide-y">
             {Array.from({ length: 20 }, (_, index) => (
               <li key={index} className="text-foreground text-body px-4 py-2">
                 Run {index + 1}

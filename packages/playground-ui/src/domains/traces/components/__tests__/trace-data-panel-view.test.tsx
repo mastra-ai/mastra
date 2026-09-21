@@ -619,7 +619,7 @@ describe('TraceDataPanelView — what the timeline shows as selected', () => {
   const isMarked = (name: string) => {
     let node: HTMLElement | null = screen.getByText(name);
     while (node) {
-      if (node.classList.contains('bg-surface4')) return true;
+      if (node.classList.contains('bg-fill-hover')) return true;
       node = node.parentElement;
     }
     return false;
@@ -758,7 +758,7 @@ describe('TraceDataPanelView — following the URL to another span', () => {
   const isMarked = (name: string) => {
     let node: HTMLElement | null = screen.getByText(name);
     while (node) {
-      if (node.classList.contains('bg-surface4')) return true;
+      if (node.classList.contains('bg-fill-hover')) return true;
       node = node.parentElement;
     }
     return false;
@@ -917,7 +917,7 @@ describe('TraceDataPanelView — timeline view', () => {
     expect(onSpanSelect).toHaveBeenLastCalledWith('child');
 
     fireEvent.click(screen.getByRole('button', { name: 'Span tree' }));
-    expect(screen.getByLabelText('View details for span weather tool').className).toContain('bg-surface4');
+    expect(screen.getByLabelText('View details for span weather tool').className).toContain('bg-fill-hover');
   });
 });
 

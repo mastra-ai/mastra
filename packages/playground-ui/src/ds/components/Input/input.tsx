@@ -5,7 +5,6 @@ import * as React from 'react';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   disabledOutlineSurfaceStyle,
-  disabledFilledSurfaceStyle,
   inputOutlineAndFocusStyle,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
@@ -20,7 +19,7 @@ const inputVariants = cva(
   cn(
     // A text field is a block control: it fills its field. Content-sized controls (a
     // Select or Combobox trigger, a Button) do the opposite and let the call site grow them.
-    'flex w-full border bg-transparent text-ellipsis text-foreground',
+    'flex w-full text-ellipsis text-foreground',
     controlStateColorTransition,
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
@@ -38,12 +37,7 @@ const inputVariants = cva(
   {
     variants: {
       variant: {
-        default: cn(
-          inputSurfaceAndFocusStyle,
-          'rounded-full',
-          sharedFormElementDisabledStyle,
-          disabledFilledSurfaceStyle,
-        ),
+        default: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
         outline: cn(
           inputOutlineAndFocusStyle,
           'rounded-full',

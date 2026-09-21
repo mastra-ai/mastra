@@ -19,7 +19,7 @@ const meta = {
     toolName: 'write_file',
     onApprove: fn(),
     onDecline: fn(),
-    children: <pre className="bg-surface1 text-caption overflow-auto rounded p-2">{JSON.stringify(toolArguments)}</pre>,
+    children: <pre className="bg-sidebar text-caption overflow-auto rounded p-2">{JSON.stringify(toolArguments)}</pre>,
   },
   argTypes: {
     toolName: { description: 'Tool name shown in the heading and accessible action names.' },

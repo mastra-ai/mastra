@@ -59,7 +59,7 @@ export function CodeBlock({
       // A scrolling `pre` still reports its longest line as an intrinsic width, which
       // grows every ancestor; containment keeps the block inside the width it is given.
       className={cn(
-        'group relative flex w-full flex-col overflow-hidden rounded-2xl border border-border2/40 bg-surface2 [contain:inline-size]',
+        'group relative flex w-full flex-col overflow-hidden rounded-2xl border border-border-strong/40 bg-background [contain:inline-size]',
         className,
       )}
     >
@@ -75,13 +75,13 @@ export function CodeBlock({
                 ))}
               </TabList>
             </div>
-            {actions && <div className="border-border1 flex shrink-0 items-center border-b pr-2 pl-3">{actions}</div>}
+            {actions && <div className="border-border flex shrink-0 items-center border-b pr-2 pl-3">{actions}</div>}
           </div>
         </Tabs>
       )}
 
       {useSelect && options && (
-        <div className="border-border2/40 flex items-center border-b px-2 py-1.5">
+        <div className="border-border-strong/40 flex items-center border-b px-2 py-1.5">
           <Select value={activeValue} onValueChange={onValueChange}>
             <SelectTrigger size="sm" variant="ghost">
               <SelectValue />
@@ -99,14 +99,14 @@ export function CodeBlock({
       )}
 
       {!hasOptions && fileName && (
-        <div className="border-border2/40 flex items-center border-b px-4 py-2">
+        <div className="border-border-strong/40 flex items-center border-b px-4 py-2">
           <figcaption className="text-caption text-muted-foreground font-mono">{fileName}</figcaption>
           {actions && <div className="ml-auto flex items-center">{actions}</div>}
         </div>
       )}
 
       {!hasOptions && !fileName && actions && (
-        <div className="border-border2/40 flex items-center justify-end border-b px-2 py-1.5">{actions}</div>
+        <div className="border-border-strong/40 flex items-center justify-end border-b px-2 py-1.5">{actions}</div>
       )}
 
       <div className="relative">

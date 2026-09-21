@@ -146,7 +146,7 @@ function TraceSignalSettingsContent() {
             <Notice.Message>Archive an active definition before creating or restoring another.</Notice.Message>
           </Notice>
         ) : null}
-        <div className="divide-border1 divide-y">
+        <div className="divide-border divide-y">
           {active.map(definition => (
             <div key={definition.id} className="flex min-h-16 items-center justify-between gap-4 py-2">
               <div className="min-w-0">
@@ -203,7 +203,7 @@ function TraceSignalSettingsContent() {
           <summary className="text-caption text-muted-foreground cursor-pointer">
             Archived definitions ({archived.length})
           </summary>
-          <div className="divide-border1 mt-2 divide-y">
+          <div className="divide-border mt-2 divide-y">
             {archived.map(definition => (
               <div key={definition.id} className="flex min-h-12 items-center justify-between gap-3 py-2">
                 <span className="text-caption text-muted-foreground">{definition.displayLabel}</span>

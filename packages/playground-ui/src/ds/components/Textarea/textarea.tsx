@@ -4,7 +4,6 @@ import * as React from 'react';
 
 import {
   disabledOutlineSurfaceStyle,
-  disabledFilledSurfaceStyle,
   inputOutlineAndFocusStyle,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
@@ -17,7 +16,7 @@ import { cn } from '@/lib/utils';
 
 const textareaVariants = cva(
   cn(
-    'flex w-full border bg-transparent text-foreground',
+    'flex w-full text-foreground',
     controlStateColorTransition,
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
@@ -27,12 +26,7 @@ const textareaVariants = cva(
   {
     variants: {
       variant: {
-        default: cn(
-          inputSurfaceAndFocusStyle,
-          'rounded-xl',
-          sharedFormElementDisabledStyle,
-          disabledFilledSurfaceStyle,
-        ),
+        default: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
         outline: cn(
           inputOutlineAndFocusStyle,
           'rounded-xl',

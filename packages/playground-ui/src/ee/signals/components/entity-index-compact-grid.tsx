@@ -34,7 +34,7 @@ function EntityIndexCompactCard({
         href={getEntityHref(entity)}
         aria-label={`Open ${entity.entityId}`}
         aria-describedby={detailsId}
-        className="group-focus-within/entity:bg-surface4 group-hover/entity:bg-surface4 absolute inset-0"
+        className="group-focus-within/entity:bg-fill-subtle group-hover/entity:bg-fill-subtle absolute inset-0"
       />
       <CardContent density="compact" className="pointer-events-none relative grid h-full min-w-0 gap-3">
         <div className="flex min-w-0 items-start justify-between gap-3">

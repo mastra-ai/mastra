@@ -39,7 +39,7 @@ export function ThreadTraceDetailsHeader({ className, children, ...props }: Thre
   return (
     <div ref={detailsHeaderRef} data-slot="thread-trace-details-header" className={className} {...props}>
       {/* Sole child of the measured wrapper, so the header's own `not-last:border-b` never applies. */}
-      <DataPanel.Header className="border-border1 border-b">{children}</DataPanel.Header>
+      <DataPanel.Header className="border-border border-b">{children}</DataPanel.Header>
     </div>
   );
 }

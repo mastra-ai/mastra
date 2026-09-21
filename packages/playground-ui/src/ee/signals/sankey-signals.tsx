@@ -442,12 +442,12 @@ export function SankeySignals({
               />
             ) : null}
             {isDrilledEmpty ? (
-              <section className="border-border1 bg-surface2 text-muted-foreground text-body rounded-lg border p-6">
+              <section className="border-border bg-background text-muted-foreground text-body rounded-lg border p-6">
                 This theme is not present in the selected snapshot. Use the clear filter action above to return to the
                 full flow.
               </section>
             ) : graphSummary.records.length === 0 ? (
-              <section className="border-border1 bg-surface2 text-muted-foreground text-body rounded-lg border p-6">
+              <section className="border-border bg-background text-muted-foreground text-body rounded-lg border p-6">
                 No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
                 Pick another snapshot from the timeline below.
               </section>

@@ -149,17 +149,7 @@ describe('InputGroup', () => {
       </InputGroup>,
     );
     expect(getInput().getAttribute('aria-invalid')).toBe('true');
-    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:border-destructive');
-  });
-
-  it('still renders the filled surface for a call site on the removed filled variant', () => {
-    render(
-      <InputGroup variant="filled">
-        <InputGroupInput placeholder="x" />
-      </InputGroup>,
-    );
-
-    expect(getWrapper().classList.contains('bg-fill')).toBe(true);
+    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:[--surface-rim:var(--destructive)]');
   });
 
   it('supports an outline variant without an initial filled background', () => {
@@ -201,33 +191,5 @@ describe('InputGroup', () => {
     // is guarded so it cannot override focus when the group is focused and hovered.
     expectOnlyGuardedHoverBorder(cls);
     expect(cls).not.toContain('ring-accent1');
-  });
-
-  it('carries the default variant hover in the fill, leaving its border alone', () => {
-    render(
-      <InputGroup>
-        <InputGroupInput placeholder="default" />
-      </InputGroup>,
-    );
-    const cls = getWrapper().className;
-
-    expect(cls.split(/\s+/)).toContain('not-has-[:disabled]:hover:bg-fill-hover');
-    expect(cls).toContain('focus-within:border-border-focus');
-    expect(cls.split(/\s+/).filter(token => token.includes('hover') && token.includes('border-'))).toEqual([]);
-  });
-
-  it('leaves a group muted on hover while it wraps a disabled control', () => {
-    render(
-      <InputGroup>
-        <InputGroupInput placeholder="disabled" disabled />
-      </InputGroup>,
-    );
-    const cls = getWrapper().className;
-
-    // The wrapper is a div, so `:disabled` never matches it. Both hover surfaces
-    // have to ask about descendants or they repaint over the disabled treatment.
-    expect(cls.split(/\s+/)).toContain('has-[:disabled]:bg-fill-subtle');
-    expect(cls.split(/\s+/)).toContain('not-has-[:disabled]:hover:bg-fill-hover');
-    expect(cls.split(/\s+/)).not.toContain('hover:bg-fill-hover');
   });
 });

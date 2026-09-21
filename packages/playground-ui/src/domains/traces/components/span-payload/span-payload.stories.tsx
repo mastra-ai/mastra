@@ -24,7 +24,7 @@ export default meta;
 
 function Cell({ title, tag, children }: { title: string; tag: string | undefined; children: ReactNode }) {
   return (
-    <div className="border-border1 flex min-w-0 flex-col gap-2 rounded-lg border p-3">
+    <div className="border-border flex min-w-0 flex-col gap-2 rounded-lg border p-3">
       <div className="text-meta text-placeholder flex items-center justify-between tracking-widest uppercase">
         <span>{title}</span>
         <code className="text-muted-foreground font-mono normal-case">{tag ?? 'undefined'}</code>

@@ -3,6 +3,7 @@ import { Fragment } from 'react';
 import { Button } from '../Button/Button';
 import { Txt } from '../Txt/Txt';
 import { Input } from './input';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof Input> = {
   title: 'Elements/Input',
@@ -161,7 +162,7 @@ export const OnDifferentSurfaces: Story = {
         </Txt>
         <Input aria-label="Search agents on the main canvas" placeholder="Search agents..." />
       </div>
-      <div className="border-border bg-card rounded-lg border p-4">
+      <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
         <Txt variant="caption" className="text-muted-foreground mb-2">
           Card
         </Txt>

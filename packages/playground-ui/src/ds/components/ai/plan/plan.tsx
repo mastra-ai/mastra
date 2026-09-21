@@ -55,7 +55,7 @@ export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, cla
 
   return (
     <PlanContext.Provider value={contextValue}>
-      <div data-slot="plan" className={cn('w-full overflow-hidden rounded-xl bg-surface3', className)} {...props}>
+      <div data-slot="plan" className={cn('w-full overflow-hidden rounded-xl bg-card', className)} {...props}>
         {children}
       </div>
     </PlanContext.Provider>
@@ -250,7 +250,7 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
     >
       <div
         ref={contentRef}
-        className="[&_code]:bg-surface4 [&_h1]:text-title [&_h2]:text-heading [&_h3]:text-subheading [&_p]:text-body"
+        className="[&_code]:bg-muted [&_h1]:text-title [&_h2]:text-heading [&_h3]:text-subheading [&_p]:text-body"
       >
         <MarkdownRenderer className="text-foreground">{children}</MarkdownRenderer>
       </div>

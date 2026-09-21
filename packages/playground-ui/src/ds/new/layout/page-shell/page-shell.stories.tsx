@@ -4,13 +4,15 @@ import { BotIcon } from 'lucide-react';
 import { PageShell } from './page-shell';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 /** Body long enough to make the content area scroll, for the loaded stories. */
 function ExampleContent() {
   return (
     <div className="grid gap-4">
       {Array.from({ length: 8 }, (_, index) => (
-        <article key={index} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
+        <article key={index} className={cn(raisedSurfaceStyle, 'rounded-studio-panel p-4')}>
           <p className="text-column text-foreground">Activity {index + 1}</p>
           <p className="text-meta text-muted-foreground mt-1">
             A representative row that makes the content area scroll.
@@ -26,7 +28,7 @@ function SkeletonContent() {
   return (
     <div className="grid gap-4">
       {Array.from({ length: 4 }, (_, index) => (
-        <div key={index} className="rounded-studio-panel border-border1 bg-surface3 h-16 animate-pulse border" />
+        <div key={index} className={cn(raisedSurfaceStyle, 'rounded-studio-panel h-16 animate-pulse')} />
       ))}
     </div>
   );

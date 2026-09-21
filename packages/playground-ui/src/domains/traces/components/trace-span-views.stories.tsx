@@ -39,12 +39,12 @@ function Views({ view }: { view: 'tree' | 'timeline' | 'both' }) {
   return (
     <div className="grid gap-6" style={{ gridTemplateColumns: view === 'both' ? '1fr 1fr' : '1fr' }}>
       {view !== 'timeline' && (
-        <div className="bg-surface3 rounded-md p-2">
+        <div className="bg-card rounded-md p-2">
           <TraceSpanTree {...shared} />
         </div>
       )}
       {view !== 'tree' && (
-        <div className="bg-surface3 rounded-md p-2">
+        <div className="bg-card rounded-md p-2">
           <TraceSpanTimeline {...shared} />
         </div>
       )}

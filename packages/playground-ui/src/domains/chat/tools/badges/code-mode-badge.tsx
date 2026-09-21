@@ -73,7 +73,7 @@ export const CodeModeBadge = ({
             <SectionLabel>Error</SectionLabel>
             <pre
               data-testid="code-mode-error"
-              className="bg-surface4 text-error text-caption rounded-md px-3 py-2 font-mono break-words whitespace-pre-wrap"
+              className="bg-muted text-error text-caption rounded-md px-3 py-2 font-mono break-words whitespace-pre-wrap"
             >
               {error.name ? `${error.name}: ` : ''}
               {error.message}
@@ -87,7 +87,7 @@ export const CodeModeBadge = ({
             <SectionLabel>Result</SectionLabel>
             {typeof resultValue === 'string' ? (
               <pre
-                className="bg-surface4 text-caption max-h-60 overflow-auto rounded-md px-3 py-2 font-mono break-words whitespace-pre-wrap"
+                className="bg-muted text-caption max-h-60 overflow-auto rounded-md px-3 py-2 font-mono break-words whitespace-pre-wrap"
                 data-testid="code-mode-result"
               >
                 {resultValue}

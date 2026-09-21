@@ -77,7 +77,7 @@ export function ProcessStepListItem({ step, isActive, position, variant = 'defau
         transitions.colors,
         {
           'border border-transparent': variant === 'default',
-          'border-dashed border-neutral2 bg-surface3': isActive && variant === 'default',
+          'border-dashed border-neutral2 bg-card': isActive && variant === 'default',
         },
       )}
     >

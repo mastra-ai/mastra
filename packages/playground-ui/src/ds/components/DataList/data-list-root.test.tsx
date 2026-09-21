@@ -306,7 +306,7 @@ describe('DataListRoot', () => {
       expect(defaultRow.dataset.variant).toBe('default');
     });
 
-    it('exposes featured rows as data-featured with the featured fill', () => {
+    it('exposes featured rows as data-featured', () => {
       const { container } = render(
         <DataList columns="1fr">
           <DataList.RowButton featured>
@@ -316,8 +316,6 @@ describe('DataListRoot', () => {
       );
       const row = container.querySelector<HTMLButtonElement>('.data-list-row');
       expect(row?.dataset.featured).toBe('true');
-      expect(row?.classList.contains('before:bg-background')).toBe(true);
-      expect(row?.classList.contains('data-featured:before:bg-card')).toBe(true);
     });
 
     it('does not leak the variant prop onto the DOM element', () => {

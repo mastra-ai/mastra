@@ -325,7 +325,7 @@ export function TraceDataPanelView({
       <div data-trace-side-column className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         {/* Same chrome as the trace column's Spans/Timeline header, so the two tab rows line up. */}
         <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
-          <DataPanel.Header className="border-border1 border-b">
+          <DataPanel.Header className="border-border border-b">
             <TabList variant="pill-ghost" size="sm">
               {sideViews.map(view => (
                 <Tab key={view.value} value={view.value}>
@@ -413,7 +413,7 @@ export function TraceDataPanelView({
                 // filtered `hierarchicalSpans`, so one query drives both.
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
-                  <DataPanel.Header className="border-border1 gap-2 border-b">
+                  <DataPanel.Header className="border-border gap-2 border-b">
                     <SearchFieldBlock
                       name={searchFieldName}
                       label="Search spans"
@@ -543,7 +543,7 @@ function TracePanelColumns({
             : 'grid-cols-[0px_1fr_0fr]',
       )}
     >
-      <div className={cn('flex min-h-0 min-w-0 flex-col overflow-hidden', sideColumnSlot && 'border-r border-border1')}>
+      <div className={cn('flex min-h-0 min-w-0 flex-col overflow-hidden', sideColumnSlot && 'border-r border-border')}>
         {sideColumnSlot}
       </div>
       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{children}</div>
@@ -553,7 +553,7 @@ function TracePanelColumns({
         data-highlight
         className={cn(
           'flex min-h-0 min-w-0 flex-col overflow-hidden',
-          spanPanelSlot && 'animate-in border-l border-border1 duration-300 fade-in-0',
+          spanPanelSlot && 'animate-in border-l border-border duration-300 fade-in-0',
         )}
       >
         {spanPanelSlot}

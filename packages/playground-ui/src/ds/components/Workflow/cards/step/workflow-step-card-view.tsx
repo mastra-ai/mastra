@@ -10,7 +10,7 @@ import { WorkflowTypeBadge } from '../workflow-type-badge';
 import { ActivityWick } from '@/ds/components/Activity';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { Shimmer } from '@/ds/components/Shimmer';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/utils/cn';
 
 type ReportedStatus = NonNullable<WorkflowCardDisplayStatus>;
@@ -84,7 +84,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
         'relative isolate w-[274px]',
         isBodyExpanded && 'w-[688px]',
         isStacked &&
-          'pb-3 before:absolute before:inset-x-1.5 before:top-2 before:bottom-1.5 before:-z-10 before:rounded-xl before:border before:border-border1 before:bg-surface3 after:absolute after:inset-x-3 after:top-3.5 after:bottom-0 after:-z-20 after:rounded-xl after:border after:border-border1 after:bg-surface3',
+          'pb-3 before:absolute before:inset-x-1.5 before:top-2 before:bottom-1.5 before:-z-10 before:rounded-xl before:border before:border-border before:bg-card after:absolute after:inset-x-3 after:top-3.5 after:bottom-0 after:-z-20 after:rounded-xl after:border after:border-border after:bg-card',
       )}
     >
       <Collapsible
@@ -122,13 +122,13 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
             aria-pressed={onSelect ? Boolean(isSelected) : undefined}
             onClick={onSelect}
           >
-            <span className="group-hover:bg-surface4 flex items-start justify-between gap-2.5 rounded-(--card-radius) px-3.5 py-3">
+            <span className="group-hover:bg-fill-subtle flex items-start justify-between gap-2.5 rounded-(--card-radius) px-3.5 py-3">
               <span className="text-column text-foreground min-w-0 wrap-anywhere" title={label}>
                 <Shimmer active={isRunning}>{label}</Shimmer>
               </span>
               <WorkflowTypeBadge {...props} />
             </span>
-            <span className="bg-surface3 flex flex-col gap-2 rounded-t-(--card-radius) px-3.5 py-3 empty:py-1.5">
+            <span className="bg-card flex flex-col gap-2 rounded-t-(--card-radius) px-3.5 py-3 empty:py-1.5">
               {description && <span className="text-caption text-muted-foreground wrap-anywhere">{description}</span>}
               <WorkflowTiming duration={props.duration} date={props.date} />
               {isWaiting && <span className="text-meta text-accent3">Next step in debug</span>}
@@ -139,7 +139,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                   </span>
                   {foreachProgress.totalCount > 0 ? (
                     <progress
-                      className="bg-surface4 accent-positive1 [&::-moz-progress-bar]:bg-positive1 [&::-webkit-progress-bar]:bg-surface4 [&::-webkit-progress-value]:bg-positive1 h-1 w-full appearance-none border-0"
+                      className="bg-muted accent-positive1 [&::-moz-progress-bar]:bg-positive1 [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-positive1 h-1 w-full appearance-none border-0"
                       aria-label={`${label} completed items`}
                       value={foreachProgress.completedCount}
                       max={foreachProgress.totalCount}
@@ -156,7 +156,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
           </Summary>
           <div
             className={cn(
-              'nodrag nopan flex min-h-7 items-center justify-between gap-2 bg-surface3 px-3.5 pb-2.5 text-meta text-muted-foreground',
+              'nodrag nopan flex min-h-7 items-center justify-between gap-2 bg-card px-3.5 pb-2.5 text-meta text-muted-foreground',
               displayStatus && footerStatusClasses[displayStatus],
             )}
           >
@@ -178,13 +178,18 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
 
           {body && (
             <>
-              <CollapsibleTrigger className="nodrag nopan border-border1 bg-surface3 text-caption hover:bg-surface4 flex min-h-11 w-full items-center justify-between border-t px-3.5 py-2.5 focus-visible:shadow-none focus-visible:ring-0">
+              <CollapsibleTrigger
+                className={cn(
+                  surfaceStateLayerStyle,
+                  'nodrag nopan border-border bg-card text-caption flex min-h-11 w-full items-center justify-between border-t px-3.5 py-2.5 focus-visible:shadow-none focus-visible:ring-0',
+                )}
+              >
                 <span>
                   {expanded ? 'Collapse' : 'Expand'} {isForEach ? 'loop' : 'workflow'}
                 </span>
                 <ChevronRight aria-hidden size={14} />
               </CollapsibleTrigger>
-              <CollapsibleContent className="border-border1 h-[620px] overflow-hidden border-t border-dashed">
+              <CollapsibleContent className="border-border h-[620px] overflow-hidden border-t border-dashed">
                 {body}
               </CollapsibleContent>
             </>

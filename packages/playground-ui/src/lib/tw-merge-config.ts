@@ -14,8 +14,9 @@ export const twMerge = extendTailwindMerge({
     theme: {
       color: colorKeys,
       // Numeric rungs come off one multiplier, which tailwind-merge already
-      // understands; only the named rungs (`form-md`, `avatar-lg`) need listing,
-      // or `h-auto h-form-md` would both survive a merge.
+      // understands; the named rungs (`form-md`, `avatar-lg`) are the spacing
+      // scale, so registering them here covers every utility that reads it —
+      // h/w/size/min-*/max-* as well as p/m/gap.
       spacing: sizeKeys,
       radius: borderRadiusKeys,
       leading: lineHeightKeys,
@@ -26,13 +27,6 @@ export const twMerge = extendTailwindMerge({
       // Named durations are `@utility` rules, so tailwind-merge cannot infer them and
       // would otherwise let `duration-fast` and `duration-slow` both survive a merge.
       duration: [{ duration: durationKeys }],
-      h: [{ h: sizeKeys }],
-      w: [{ w: sizeKeys }],
-      size: [{ size: sizeKeys }],
-      'min-h': [{ 'min-h': sizeKeys }],
-      'min-w': [{ 'min-w': sizeKeys }],
-      'max-h': [{ 'max-h': sizeKeys }],
-      'max-w': [{ 'max-w': sizeKeys }],
     },
   },
 });

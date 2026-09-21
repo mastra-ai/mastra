@@ -269,7 +269,7 @@
     linear-gradient(
       color-mix(in oklab, var(--belt-hue) calc(var(--wick-fill) * 62% * var(--wick-lit)), transparent) 0 0
     ),
-    linear-gradient(color-mix(in oklab, var(--border1) 50%, transparent) 0 0);
+    linear-gradient(color-mix(in oklab, var(--border) 50%, transparent) 0 0);
   mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);

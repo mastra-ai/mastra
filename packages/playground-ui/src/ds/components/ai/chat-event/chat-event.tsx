@@ -59,7 +59,7 @@ export function ChatEvent({ label, detail, icon, children, defaultOpen, ...props
         {header}
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div className="before:bg-border1 relative ml-[14px] max-w-full min-w-0 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']">
+        <div className="before:bg-border relative ml-[14px] max-w-full min-w-0 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']">
           {children}
         </div>
       </CollapsibleContent>

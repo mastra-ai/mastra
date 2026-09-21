@@ -1,7 +1,7 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +14,10 @@ const cardVariants = cva(
         raised: '',
       },
       interactive: {
-        true: 'cursor-pointer hover:bg-muted focus-visible:bg-muted focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring active:scale-99',
+        true: cn(
+          surfaceStateLayerStyle,
+          'cursor-pointer focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring active:scale-99',
+        ),
         false: '',
       },
     },

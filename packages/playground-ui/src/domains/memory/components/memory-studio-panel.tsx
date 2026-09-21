@@ -94,7 +94,7 @@ export function MemoryStudioPanel({
 
   return (
     <div className="flex size-full flex-col overflow-hidden">
-      <div className="border-border1 flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
+      <div className="border-border flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
         <Button type="button" variant="ghost" size="icon-sm" tooltip="Back to memory" onClick={() => onClose?.()}>
           <ArrowLeftIcon />
         </Button>
@@ -122,7 +122,7 @@ export function MemoryStudioPanel({
               isLoading={isLoading}
             />
           </div>
-          <div className="border-border1 border-t">
+          <div className="border-border border-t">
             <ThreadContextProgress
               messageTokens={contextWindow?.messageTokens ?? windowState.messageTokens}
               messageThreshold={contextWindow?.messageThreshold ?? windowState.messageThreshold}

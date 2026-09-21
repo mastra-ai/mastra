@@ -6,7 +6,12 @@ import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
-import { inputFocusBorderWithin, inputHoverBorderWithin, resolveFieldVariant } from '@/ds/primitives/form-element';
+import {
+  inputFocusBorderWithin,
+  inputHoverBorderWithin,
+  inputSurfaceAndFocusWithinStyle,
+  resolveFieldVariant,
+} from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
@@ -23,9 +28,10 @@ const inputGroupBaseClassName = cn(
   // The wrapper owns its control's width — a bare control has no width of its own,
   // so the group is the one that decides the input fills the remaining space.
   '[&>[data-slot=input-group-control]]:min-w-0 [&>[data-slot=input-group-control]]:flex-1',
-  'border border-border text-foreground',
-  'has-[:disabled]:cursor-not-allowed has-[:disabled]:border-border has-[:disabled]:bg-fill-subtle has-[:disabled]:text-muted-foreground',
-  'has-[[aria-invalid=true]]:border-destructive',
+  'text-foreground',
+  'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-muted-foreground',
+  // Invalid is per variant: the field material has no border to recolour, and the
+  // outline variant has no rim.
   // Height is on the root (border-box) so the group matches a same-size sibling control.
   // Auto height when vertical (block-* addon) or wrapping a textarea.
   'has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col',
@@ -46,16 +52,14 @@ const inputGroupRoundedTextareaClassName = cn(
   'has-[textarea]:rounded-xl',
 );
 
-// The default look is the filled surface: a fill inside the box, as opposed to
-// `outline`, which leaves the inside transparent and lets the border draw the shape.
-// Focus brightens the border (inputFocusBorderWithin) for WCAG-visible focus.
+// The default look is the field material — the same `bg-card` plus rim an Input
+// wears — so a group and a bare field beside it are one surface. Its states move
+// the rim, and they read the nested control's focus (`focus-within`) because the
+// wrapper never takes focus itself.
 const inputGroupFilledVariant = cn(
-  'rounded-full bg-fill',
-  // Guarded on descendants, not the wrapper: a div is never `:disabled`, so an
-  // unguarded hover fill paints over the recessed surface of a disabled group.
-  'not-has-[:disabled]:hover:bg-fill-hover',
-  'outline-hidden focus-within:bg-fill-hover focus-within:outline-hidden',
-  inputFocusBorderWithin,
+  'rounded-full',
+  inputSurfaceAndFocusWithinStyle,
+  'has-[[aria-invalid=true]]:[--surface-rim:var(--destructive)]',
   inputGroupRoundedTextareaClassName,
 );
 
@@ -64,7 +68,8 @@ const inputGroupVariants = cva(inputGroupBaseClassName, {
     variant: {
       default: inputGroupFilledVariant,
       outline: cn(
-        'rounded-full border-border-strong bg-transparent',
+        'rounded-full border border-border-strong bg-transparent',
+        'has-[[aria-invalid=true]]:border-destructive',
         inputHoverBorderWithin,
         'outline-hidden focus-within:outline-hidden',
         inputFocusBorderWithin,

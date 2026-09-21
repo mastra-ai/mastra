@@ -39,9 +39,9 @@ export function ComposerSuggestions({
   return (
     <Collapsible.Root open={items.length > 0}>
       <Collapsible.Panel className="duration-normal ease-out-custom h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] data-[ending-style]:h-0 data-[starting-style]:h-0 motion-reduce:transition-none">
-        <div className="border-border1/60 border-b" role="region" aria-label={label}>
+        <div className="border-border/60 border-b" role="region" aria-label={label}>
           {contextLabel && onBack && (
-            <div className="border-border1/60 border-b px-1.5 py-1">
+            <div className="border-border/60 border-b px-1.5 py-1">
               <button
                 type="button"
                 className="text-icon3 hover:text-icon6 text-caption duration-normal ease-out-custom hover:bg-fill-subtle flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-colors motion-reduce:transition-none"

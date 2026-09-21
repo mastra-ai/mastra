@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
+import { frameSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 export interface AppShellFrameProps {
@@ -29,7 +30,8 @@ export function AppShell({
     <div
       data-slot="app-shell-frame"
       className={cn(
-        'relative m-1.5 ml-0 grid min-h-0 flex-1 overflow-hidden rounded-studio-frame bg-background shadow-raised lg:m-2 lg:ml-0',
+        'relative m-1.5 ml-0 grid min-h-0 flex-1 overflow-hidden rounded-studio-frame lg:m-2 lg:ml-0',
+        frameSurfaceStyle,
         routeHeader ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
       )}
     >

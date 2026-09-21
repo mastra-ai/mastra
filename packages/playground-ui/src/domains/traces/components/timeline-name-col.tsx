@@ -59,9 +59,9 @@ export function TimelineNameCol({
       aria-selected={isSelected}
       // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
       onClick={() => onSpanClick?.(span.id)}
-      className={cn('flex min-h-8 cursor-pointer items-stretch rounded-md opacity-80 hover:bg-surface4', {
+      className={cn('flex min-h-8 cursor-pointer items-stretch rounded-md opacity-80 hover:bg-fill-subtle', {
         'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
-        'bg-surface4': isSelected,
+        'bg-fill-hover': isSelected,
       })}
       style={{ paddingLeft: `${depth * 1}rem` }}
     >
@@ -112,7 +112,7 @@ export function TimelineNameCol({
             aria-expanded={isExpanded}
             className={cn(
               'flex size-5 cursor-pointer items-center justify-center rounded-md',
-              'hover:bg-surface5 [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
+              'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1',
             )}
           >

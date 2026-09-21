@@ -110,13 +110,13 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
     return (
       <tr
         className={cn(
-          'border-b border-border1',
+          'border-b border-border',
           // Smooth hover transition
           'transition-colors duration-normal ease-out-custom',
-          'hover:bg-surface3',
+          'hover:bg-fill-subtle',
           // Focus state
-          'focus:bg-surface3 focus:ring-1 focus:ring-accent1/50 focus:outline-hidden focus:ring-inset',
-          selected && 'bg-surface4',
+          'focus:bg-fill-subtle focus:ring-1 focus:ring-accent1/50 focus:outline-hidden focus:ring-inset',
+          selected && 'bg-fill-hover',
           onClick && 'cursor-pointer',
           className,
         )}

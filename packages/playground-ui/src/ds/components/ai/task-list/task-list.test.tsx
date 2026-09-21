@@ -34,7 +34,7 @@ describe('TaskList', () => {
       expect(bars).toHaveLength(3);
       expect(bars[0]).toContain('bg-positive1');
       expect(bars[1]).toContain('bg-warning1');
-      expect(bars[2]).toContain('bg-surface6');
+      expect(bars[2]).toContain('bg-fill-hover');
     });
 
     it('reveals the exact count on hover', async () => {

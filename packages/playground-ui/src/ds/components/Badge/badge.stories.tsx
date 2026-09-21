@@ -45,7 +45,7 @@ const comparisonGroups = [
   },
   {
     label: 'On a raised surface',
-    surfaceClassName: 'bg-surface3 rounded-md p-4',
+    surfaceClassName: 'bg-card rounded-md p-4',
     badges: [
       { variant: 'green', children: 'Connected', indicator: 'dot' },
       { variant: 'blue', children: 'Running', indicator: 'dot' },

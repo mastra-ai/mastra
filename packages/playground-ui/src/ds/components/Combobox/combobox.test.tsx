@@ -386,20 +386,6 @@ describe('Combobox', () => {
     expect(label().classList.contains('text-muted-foreground')).toBe(false);
   });
 
-  it('shares the filled control surface with Input for the default variant', () => {
-    render(<Combobox options={options} placeholder="Pick provider" />);
-
-    const trigger = screen.getByRole('combobox');
-    expect(trigger.classList.contains('bg-fill')).toBe(true);
-    expect(trigger.classList.contains('border-border')).toBe(true);
-    expect(trigger.classList.contains('data-[placeholder]:text-muted-foreground')).toBe(true);
-    expect(trigger.classList.contains('data-[popup-open]:bg-fill-hover')).toBe(true);
-
-    const chevron = trigger.querySelector('svg');
-    expect(chevron?.classList.contains('text-muted-foreground')).toBe(true);
-    expect(chevron?.className.baseVal).not.toContain('opacity');
-  });
-
   it('keeps up with a selection that changes from outside', () => {
     const { rerender } = render(<Combobox multiple options={options} value={['openai']} />);
     expect(screen.getByRole('combobox').textContent).toContain('1 selected');

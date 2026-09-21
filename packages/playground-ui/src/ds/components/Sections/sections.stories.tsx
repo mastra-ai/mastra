@@ -21,7 +21,7 @@ export const Default: Story = {
         <Section.Header>
           <Section.Heading>Section One</Section.Heading>
         </Section.Header>
-        <div className="border-border1 bg-surface2 rounded-md border p-4">
+        <div className="border-border bg-background rounded-md border p-4">
           <p className="text-foreground text-body">First section content</p>
         </div>
       </Section>
@@ -29,7 +29,7 @@ export const Default: Story = {
         <Section.Header>
           <Section.Heading>Section Two</Section.Heading>
         </Section.Header>
-        <div className="border-border1 bg-surface2 rounded-md border p-4">
+        <div className="border-border bg-background rounded-md border p-4">
           <p className="text-foreground text-body">Second section content</p>
         </div>
       </Section>
@@ -37,7 +37,7 @@ export const Default: Story = {
         <Section.Header>
           <Section.Heading>Section Three</Section.Heading>
         </Section.Header>
-        <div className="border-border1 bg-surface2 rounded-md border p-4">
+        <div className="border-border bg-background rounded-md border p-4">
           <p className="text-foreground text-body">Third section content</p>
         </div>
       </Section>
@@ -55,7 +55,7 @@ export const SettingsPage: Story = {
             Edit
           </Button>
         </Section.Header>
-        <div className="border-border1 bg-surface2 space-y-3 rounded-md border p-4">
+        <div className="border-border bg-background space-y-3 rounded-md border p-4">
           <div className="flex justify-between">
             <span className="text-muted-foreground text-body">Name</span>
             <span className="text-foreground text-body">John Doe</span>
@@ -70,7 +70,7 @@ export const SettingsPage: Story = {
         <Section.Header>
           <Section.Heading>Notifications</Section.Heading>
         </Section.Header>
-        <div className="border-border1 bg-surface2 space-y-3 rounded-md border p-4">
+        <div className="border-border bg-background space-y-3 rounded-md border p-4">
           <div className="flex justify-between">
             <span className="text-muted-foreground text-body">Email notifications</span>
             <span className="text-foreground text-body">Enabled</span>
@@ -108,7 +108,7 @@ export const DocumentationSections: Story = {
         <Section.Header>
           <Section.Heading>Installation</Section.Heading>
         </Section.Header>
-        <pre className="bg-surface2 text-foreground text-body overflow-x-auto rounded-md p-4 font-mono">
+        <pre className="bg-background text-foreground text-body overflow-x-auto rounded-md p-4 font-mono">
           npm install @mastra/core
         </pre>
       </Section>
@@ -116,7 +116,7 @@ export const DocumentationSections: Story = {
         <Section.Header>
           <Section.Heading>Usage</Section.Heading>
         </Section.Header>
-        <pre className="bg-surface2 text-foreground text-body overflow-x-auto rounded-md p-4 font-mono">
+        <pre className="bg-background text-foreground text-body overflow-x-auto rounded-md p-4 font-mono">
           {`import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({

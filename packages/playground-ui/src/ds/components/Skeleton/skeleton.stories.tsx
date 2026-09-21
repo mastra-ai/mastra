@@ -26,7 +26,7 @@ export const Circle: Story = {
 
 export const Card: Story = {
   render: () => (
-    <div className="w-75 border-border1 flex flex-col gap-3 rounded-lg border p-4">
+    <div className="w-75 border-border flex flex-col gap-3 rounded-lg border p-4">
       <Skeleton className="h-32 w-full rounded-lg" />
       <Skeleton className="h-4 w-3/4" />
       <Skeleton className="h-4 w-1/2" />
