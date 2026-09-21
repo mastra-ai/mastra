@@ -258,6 +258,7 @@ describe('Prompt Blocks page', () => {
             <PromptBlocksPage />
           </RouteHeaderActionsProvider>
         </TestLinkProvider>,
+        { router: { initialEntries: ['/prompt-blocks'] } },
       );
 
       await screen.findByText('No Prompts yet');
