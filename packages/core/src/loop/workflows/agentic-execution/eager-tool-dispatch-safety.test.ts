@@ -1339,17 +1339,22 @@ describe('eager tool dispatch — unsafe terminations', () => {
    * The backstop stops the coordinator *without* `cancelRunning`. That is a deliberate
    * tradeoff rather than a consequence of the bail being terminal — a caller abort is
    * terminal too and does cancel. Here nothing will re-issue the call, so there is no
-   * duplicate run to prevent, and cancelling would not un-run a side effect already
-   * underway, only tear it partway. This test locks the chosen behaviour in: the orphaned
-   * call is allowed to finish rather than being aborted.
+   * duplicate run to prevent; cancellation cannot undo effects already performed and may
+   * interrupt an in-progress operation, though it can prevent further ones. This test
+   * locks the chosen behaviour in: the orphaned call is allowed to finish, not aborted.
    */
   it('lets orphaned eager work finish when a stream tool-result tripwire bails the attempt', async () => {
     const { events, record } = createRecorder();
     let releaseSlow: (() => void) | undefined;
     let slowEntered: () => void;
-    const slowHasEntered = new Promise<void>(resolve => {
-      slowEntered = resolve;
-    });
+    const slowHasEntered = Promise.race([
+      new Promise<void>(resolve => {
+        slowEntered = resolve;
+      }),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('eager dispatch never entered slow-tool')), 1000),
+      ),
+    ]);
 
     const model = new MockLanguageModelV2({
       doStream: async () => ({
