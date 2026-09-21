@@ -83,6 +83,7 @@ const validParams = {
 };
 
 function mockTerminal(isTTY = true) {
+  vi.stubEnv('CI', '');
   const isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
   const stdoutIsTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
   const setRawModeDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'setRawMode');
@@ -99,6 +100,7 @@ function mockTerminal(isTTY = true) {
   return {
     setRawMode,
     restore() {
+      vi.unstubAllEnvs();
       if (isTTYDescriptor) Object.defineProperty(process.stdin, 'isTTY', isTTYDescriptor);
       else Reflect.deleteProperty(process.stdin, 'isTTY');
       if (stdoutIsTTYDescriptor) Object.defineProperty(process.stdout, 'isTTY', stdoutIsTTYDescriptor);
@@ -319,7 +321,6 @@ describe('login() server lifecycle', () => {
       expect(selectMock).not.toHaveBeenCalled();
     } finally {
       terminal.restore();
-      vi.unstubAllEnvs();
     }
   });
 
