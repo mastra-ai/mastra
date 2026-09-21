@@ -861,6 +861,82 @@ describe('AgentChannels', () => {
       ).resolves.not.toThrow();
       expect(consumeStream).not.toHaveBeenCalled();
     });
+
+    it('surfaces a stream-setup rejection instead of treating the message as sent', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      // `accepted` rejects when the agent throws before the run starts
+      // (workspace, instructions, tools, model resolution).
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: Promise.reject(new Error('instructions resolution failed')),
+      });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await expect(
+        (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext()),
+      ).rejects.toThrow('instructions resolution failed');
+    });
+
+    it('keeps a consume failure on an already-started run at debug', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const consumeStream = vi.fn().mockRejectedValue(new Error('mid-run failure'));
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: Promise.resolve({ action: 'wake', runId: 'run-1', output: { consumeStream } }),
+      });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await expect(
+        (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext()),
+      ).resolves.not.toThrow();
+      expect(consumeStream).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('resolveResourceId', () => {
