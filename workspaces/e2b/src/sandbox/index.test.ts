@@ -648,7 +648,10 @@ describe('E2BSandbox', () => {
       await sandbox._start();
 
       expect((Sandbox as any).getInfo).toHaveBeenCalledWith('sbx_preferred', expect.any(Object));
-      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_preferred', expect.any(Object));
+      expect(Sandbox.connect).toHaveBeenCalledWith(
+        'sbx_preferred',
+        expect.objectContaining({ timeoutMs: 300_000 }),
+      );
       expect(Sandbox.list).not.toHaveBeenCalled();
       expect(Sandbox.create).not.toHaveBeenCalled();
       expect(sandbox.sandboxId).toBe('sbx_preferred');
@@ -3152,6 +3155,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
       id: 'connect-test',
       domain: 'custom.dev',
       apiKey: 'test-key',
+      timeout: 900_000,
     });
 
     await sandbox._start();
@@ -3161,6 +3165,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
       expect.objectContaining({
         domain: 'custom.dev',
         apiKey: 'test-key',
+        timeoutMs: 900_000,
       }),
     );
 
