@@ -9,6 +9,6 @@ Hardened Harness terminal handoff recovery and fencing.
 - Durable terminal probes no longer require a locally registered finalizer; a live pending grant without one fails closed.
 - Duplicate and re-admission envelopes that carry a cancelled or fenced stored row surface the durable outcome instead of dispatching the provider.
 - A duplicate waiting on durable evidence surfaces a cancellation or fencing tombstone promptly.
-- Caller mutation of the terminal admission seed after the call starts no longer changes the persisted admission.
-- A cold settlement retry no longer double-counts tokens.
+- Changing the seed object you passed in after the call starts no longer changes what was recorded.
+- Retrying a message after a crash no longer counts token usage twice.
 - Pre-commit failures and already-terminal admissions drain retained terminal observers instead of stranding them.

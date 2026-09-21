@@ -97,6 +97,7 @@ import type {
   HarnessRunSummary,
   HarnessStorage,
   HarnessTerminalAdmissionReceipt,
+  HarnessTerminalAdmissionRecord,
   HarnessTerminalCancelReceipt,
   HarnessTerminalCommitReceipt,
   HarnessTerminalExecutionGrant,
@@ -3837,19 +3838,15 @@ export class Session {
                 candidate.pendingRequestedAt === parked.requestedAt &&
                 candidate.itemId === (parked.itemId ?? parked.toolCallId),
             );
-            const data = generationReceipt?.response as { approved?: boolean; transitionToMode?: string } | undefined;
-            if (data?.approved === true) {
-              const candidate = data.transitionToMode ?? parked.transitionModeId;
-              if (candidate && candidate !== this._record.modeId) {
-                try {
-                  this._harness._getMode(candidate);
-                  modeFlipTarget = candidate;
-                } catch {
-                  // The target mode vanished from config since admission —
-                  // recovery must stay total; skip the flip rather than brick
-                  // the session on a mode that no longer exists.
-                }
-              }
+            try {
+              modeFlipTarget = this._resolvePlanApprovalModeFlipTarget(
+                parked,
+                generationReceipt?.response as { approved?: boolean; transitionToMode?: string } | undefined,
+              );
+            } catch {
+              // The target mode vanished from config since admission —
+              // recovery must stay total; skip the flip rather than brick the
+              // session on a mode that no longer exists.
             }
           }
           await this._withActiveDeletedWaiter(async activeTurnWaiter => {
@@ -9412,23 +9409,7 @@ export class Session {
       return;
     }
     if (admission.status === 'committed') {
-      // The winner already sealed; replay its durable receipt to observers a
-      // crashed commit never reached. Missing intent is tolerable — the
-      // receipt still reports the sealed admission.
-      let intent: HarnessTerminalIntent | null = null;
-      try {
-        intent = await this._storage.loadTerminalIntent({
-          harnessName: admission.harnessName,
-          intentId: harnessTerminalIntentId(admission.id),
-        });
-      } catch {
-        intent = null;
-      }
-      this._drainTerminalObservers(pending.runId, {
-        status: 'duplicate',
-        admission,
-        ...(intent !== null ? { intent } : {}),
-      });
+      await this._drainCommittedTerminalReceipt(pending.runId, admission);
       return;
     }
     let receipt: HarnessTerminalCancelReceipt;
@@ -9448,15 +9429,74 @@ export class Session {
       // uncertain, so observers get the recoverable pending failure.
       throw this._terminalFailure(err, undefined, pending.runId);
     }
-    if (receipt.status === 'cancelled' || receipt.status === 'duplicate') {
+    // The stored admission row is the durable truth: a commit can win between
+    // our probe and this cancel, and a duplicate tombstone can coexist with a
+    // fenced row (session deletion raced the external cancel). Report what
+    // storage recorded rather than what the receipt's tombstone implies — a
+    // committing writer on another Session cannot reach our retained
+    // observers, so a 'committed' outcome must be replayed here.
+    const finalStatus = receipt.admission?.status ?? receipt.status;
+    if (finalStatus === 'committed') {
+      // `receipt.admission` is the sealed row when storage returned it; a
+      // committed receipt without the row still cannot be reported with the
+      // stale 'pending' probe result.
+      await this._drainCommittedTerminalReceipt(
+        pending.runId,
+        receipt.admission ?? { ...admission, status: 'committed' },
+      );
+    } else if (finalStatus === 'fenced') {
+      this._drainTerminalObservers(pending.runId, new HarnessTerminalHandoffFencedError(this.id));
+    } else {
       this._drainTerminalObservers(
         pending.runId,
         new HarnessTerminalHandoffCancelledError(admission.executionGrant.key),
       );
-    } else if (receipt.status === 'fenced') {
-      this._drainTerminalObservers(pending.runId, new HarnessTerminalHandoffFencedError(this.id));
     }
-    // 'committed' — a concurrent commit already drained observers with the receipt.
+  }
+
+  /**
+   * Replay a sealed admission's durable receipt to this Session's retained
+   * observers — used when the commit won on another caller/instance and never
+   * reached our drain set. Missing intent is tolerable: the receipt still
+   * reports the sealed admission.
+   */
+  private async _drainCommittedTerminalReceipt(
+    runId: string,
+    admission: HarnessTerminalAdmissionRecord,
+  ): Promise<void> {
+    let intent: HarnessTerminalIntent | null = null;
+    try {
+      intent = await this._storage.loadTerminalIntent({
+        harnessName: admission.harnessName,
+        intentId: harnessTerminalIntentId(admission.id),
+      });
+    } catch {
+      intent = null;
+    }
+    this._drainTerminalObservers(runId, {
+      status: 'duplicate',
+      admission,
+      ...(intent !== null ? { intent } : {}),
+    });
+  }
+
+  /**
+   * Resolve an approved plan-approval mode transition. A caller-supplied
+   * `transitionToMode` on the response overrides the submitting mode's
+   * declared `transitionsTo` (captured into `pending.transitionModeId` at
+   * suspend time); a same-mode or unapproved response flips nothing. Throws
+   * when the target mode no longer exists — recovery callers that must stay
+   * total catch and skip the flip.
+   */
+  private _resolvePlanApprovalModeFlipTarget(
+    pending: PendingResume,
+    data: { approved?: boolean; transitionToMode?: string } | undefined,
+  ): string | undefined {
+    if (data?.approved !== true) return undefined;
+    const candidate = data.transitionToMode ?? pending.transitionModeId;
+    if (!candidate || candidate === this._record.modeId) return undefined;
+    this._harness._getMode(candidate);
+    return candidate;
   }
 
   /**
@@ -9527,17 +9567,13 @@ export class Session {
     const pendingQueuedItemId = this._queuedItemIdForPendingResume(pending);
     const resumeModeId = this._modeIdForPendingResume(pending);
     const resumeRuntimeDependencies = this._runtimeDependenciesForPendingResume(pending);
-    let modeFlipTarget: string | undefined;
-    if (expectedKind === 'plan-approval') {
-      const data = resumeData as { approved: boolean; transitionToMode?: string };
-      if (data.approved) {
-        const candidate = data.transitionToMode ?? pending.transitionModeId;
-        if (candidate && candidate !== this._record.modeId) {
-          this._harness._getMode(candidate);
-          modeFlipTarget = candidate;
-        }
-      }
-    }
+    const modeFlipTarget =
+      expectedKind === 'plan-approval'
+        ? this._resolvePlanApprovalModeFlipTarget(
+            pending,
+            resumeData as { approved: boolean; transitionToMode?: string },
+          )
+        : undefined;
     const completingQueuedItemId = pendingQueuedItemId;
     await this._withActiveDeletedWaiter(async activeTurnWaiter => {
       try {
@@ -14706,27 +14742,16 @@ export class Session {
     // For plan-approval, resolve the active-mode flip before finalizing the
     // resumed turn. Queued terminal resumes persist this flip with the
     // completed receipt so crash recovery cannot observe "completed plan
-    // approval, old mode".
-    //
-    // Resolution order on approval:
-    //   1. Caller-supplied `transitionToMode` overrides everything.
-    //   2. Falls back to the submitting mode's declared `transitionsTo`
-    //      (captured into `pending.transitionModeId` at suspend time).
-    //   3. Otherwise no flip.
-    let modeFlipTarget: string | undefined;
-    if (expectedKind === 'plan-approval') {
-      const data = resumeData as { approved: boolean; transitionToMode?: string };
-      if (data.approved) {
-        const candidate = data.transitionToMode ?? pending.transitionModeId;
-        if (candidate && candidate !== this._record.modeId) {
-          // Validate the target mode exists before we hand off to the agent.
-          // (Caller-supplied `transitionToMode` is also validated up-front in
-          // `respondToPlanApproval`; this catches the pending-record path.)
-          this._harness._getMode(candidate);
-          modeFlipTarget = candidate;
-        }
-      }
-    }
+    // approval, old mode". Caller-supplied `transitionToMode` is also
+    // validated up-front in `respondToPlanApproval`; the resolver's `_getMode`
+    // check catches the pending-record path.
+    const modeFlipTarget =
+      expectedKind === 'plan-approval'
+        ? this._resolvePlanApprovalModeFlipTarget(
+            pending,
+            resumeData as { approved: boolean; transitionToMode?: string },
+          )
+        : undefined;
 
     const previousModeId = this._record.modeId;
     const resumeModeId = this._modeIdForPendingResume(pending);

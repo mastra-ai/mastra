@@ -5347,11 +5347,19 @@ describe('Session.message() — default path', () => {
     // gated on `resumedAt` so only the settle-time call (after the respond's
     // admission CAS stamped it) rejects, not the resume's pre-CAS probe.
     const originalByRun = storage.loadTerminalAdmissionByRun.bind(storage);
+    let probeFailed = false;
     vi.spyOn(storage, 'loadTerminalAdmissionByRun').mockImplementation(async (input: any) => {
-      if (session.getRecord().pendingResume?.resumedAt !== undefined) throw new Error('probe lost');
+      if (session.getRecord().pendingResume?.resumedAt !== undefined) {
+        probeFailed = true;
+        throw new Error('probe lost');
+      }
       return originalByRun(input);
     });
-    await expect(session.respondToToolApproval({ approved: true })).rejects.toThrow();
+    // The raw probe failure is wrapped in the typed indeterminate outcome.
+    await expect(session.respondToToolApproval({ approved: true })).rejects.toThrow(
+      'Native terminal finalization is indeterminate and requires reconciliation',
+    );
+    expect(probeFailed).toBe(true);
     expect(failures).toHaveLength(1);
     expect(receipts).toHaveLength(0);
     expect((session as any)._terminalObserversByRunId.size).toBe(0);
@@ -5508,6 +5516,8 @@ describe('Session.message() — default path', () => {
       }
       return originalSave(record, opts);
     });
+    // The raw flush failure is wrapped in the public internal error; the
+    // sabotage flags prove which write was lost.
     await expect(
       session.respondToPlanApproval({
         approved: true,
@@ -5517,7 +5527,9 @@ describe('Session.message() — default path', () => {
         toolCallId: pending.toolCallId,
         pendingRequestedAt: pending.requestedAt,
       } as any),
-    ).rejects.toThrow();
+    ).rejects.toThrow('An internal harness error occurred');
+    expect(commitSealed).toBe(true);
+    expect(failedOnce).toBe(true);
     expect(session.getCurrentMode().id).toBe('planner');
     const parked = session.getRecord().pendingResume!;
     expect(parked.resumedAt).toBeDefined();
@@ -5882,5 +5894,171 @@ describe('session.message admission phase marks (PF-2246)', () => {
 
     agent.releaseStream?.();
     await session.waitForIdle({ timeoutMs: 1_000 });
+  });
+
+  it('drains retained observers with the sealed receipt when a concurrent commit wins the cancel race', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-commit-race', generation: 1 };
+    const failures: unknown[] = [];
+    const receipts: Array<{ status?: string; admission?: { status?: string } }> = [];
+    const first = await session.message({
+      content: 'needs approval',
+      admissionId: 'commit-race-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      onTerminalCommit: receipt => receipts.push(receipt as (typeof receipts)[number]),
+      onTerminalCommitError: err => failures.push(err),
+    });
+    expect(first.finishReason).toBe('suspended');
+    await vi.waitFor(() => expect((session as any)._terminalObserversByRunId.size).toBe(1));
+
+    const stored = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'commit-race-admission',
+      executionGrant: grant,
+    });
+    const pendingEvidence = await storage.loadMessageResultEvidence({
+      harnessName: 'default',
+      sessionId: session.id,
+      resourceId: 'u1',
+      threadId: session.threadId,
+      signalId: stored!.signalId,
+    });
+    const originalCommit = storage.commitTerminalHandoff.bind(storage);
+    const originalCancel = storage.cancelTerminalHandoff.bind(storage);
+    // A concurrent worker seals the admission after the cancel path's probe
+    // read 'pending' but before its cancel write lands — the receipt reports
+    // 'committed' and THIS session's retained observers must still hear it.
+    vi.spyOn(storage, 'cancelTerminalHandoff').mockImplementation(async (input: any) => {
+      await originalCommit({
+        admission: stored!,
+        resultEvidence: {
+          ...pendingEvidence!,
+          status: 'completed',
+          result: { text: 'sealed by the winning worker' },
+          updatedAt: Date.now(),
+        },
+        terminalResult: { status: 'completed', runId: stored!.runId, completedAt: Date.now() },
+        projection: { projectionKind: 'chat.summary', projectionId: 'summary-race', payload: {} },
+      } as any);
+      return originalCancel(input);
+    });
+
+    await session.abortActiveWork();
+    expect(failures).toHaveLength(0);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]!.status).toBe('duplicate');
+    expect(receipts[0]!.admission?.status).toBe('committed');
+    expect((session as any)._terminalObserversByRunId.size).toBe(0);
+    expect(
+      (
+        await storage.loadTerminalAdmission({
+          harnessName: 'default',
+          sessionId: session.id,
+          admissionId: 'commit-race-admission',
+          executionGrant: grant,
+        })
+      )?.status,
+    ).toBe('committed');
+  });
+
+  it('drains retained observers with the fenced outcome when a duplicate cancel races a fence', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-fence-race', generation: 1 };
+    const failures: Array<{ name?: string }> = [];
+    const receipts: unknown[] = [];
+    const first = await session.message({
+      content: 'needs approval',
+      admissionId: 'fence-race-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      onTerminalCommit: receipt => receipts.push(receipt),
+      onTerminalCommitError: err => failures.push(err as (typeof failures)[number]),
+    });
+    expect(first.finishReason).toBe('suspended');
+    await vi.waitFor(() => expect((session as any)._terminalObserversByRunId.size).toBe(1));
+
+    const originalCancel = storage.cancelTerminalHandoff.bind(storage);
+    // Race inside the cancel window: an external cancel tombstones the grant
+    // and the row is fenced (e.g. session deletion on another worker) before
+    // our write lands — the receipt is 'duplicate' over a 'fenced' admission.
+    vi.spyOn(storage, 'cancelTerminalHandoff').mockImplementation(async (input: any) => {
+      await originalCancel(input);
+      for (const row of (storage as any).db.harnessTerminalAdmissions.values()) {
+        if (row.admissionId === input.admissionId) row.status = 'fenced';
+      }
+      return originalCancel(input);
+    });
+
+    await session.abortActiveWork();
+    expect(receipts).toHaveLength(0);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.name).toBe('HarnessTerminalHandoffError:harness.terminal_fenced');
+    expect((session as any)._terminalObserversByRunId.size).toBe(0);
+    expect(
+      (
+        await storage.loadTerminalAdmission({
+          harnessName: 'default',
+          sessionId: session.id,
+          admissionId: 'fence-race-admission',
+          executionGrant: grant,
+        })
+      )?.status,
+    ).toBe('fenced');
   });
 });
