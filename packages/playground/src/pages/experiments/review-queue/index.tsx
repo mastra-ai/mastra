@@ -86,7 +86,6 @@ function ReviewQueuePage() {
   return (
     <PageLayout height="full">
       <DatasetReview
-        key={`${targetType}:${targetId}:${selectedId ?? 'all'}`}
         datasetId={selected?.datasetId ?? undefined}
         experimentId={selectedId ?? undefined}
         targetType={targetType}

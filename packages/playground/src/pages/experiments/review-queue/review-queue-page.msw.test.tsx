@@ -206,6 +206,22 @@ describe('Review Queue page', () => {
     });
   });
 
+  describe('when the user narrows the experiment after picking a status', () => {
+    it('keeps the Status chip alongside the new Experiment chip', async () => {
+      renderPage();
+
+      await screen.findByText(/third question/);
+      await pickFilter('Status', 'Completed');
+      await screen.findByRole('group', { name: 'Status Completed' });
+
+      await pickExperiment(experiment.name);
+
+      await screen.findByRole('group', { name: `Experiment ${experiment.name}` });
+      expect(screen.getByRole('group', { name: 'Status Completed' })).toBeTruthy();
+      expect(getChips()).toHaveLength(2);
+    });
+  });
+
   describe('when the user picks a tag', () => {
     it('narrows the queue to items carrying that tag', async () => {
       server.use(
