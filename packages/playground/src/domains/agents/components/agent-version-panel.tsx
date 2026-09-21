@@ -42,7 +42,7 @@ export function AgentVersionPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-border1 border-b px-3 py-3">
+      <div className="border-border border-b px-3 py-3">
         <Txt variant="column" className="text-foreground">
           Version history
         </Txt>
@@ -72,8 +72,8 @@ export function AgentVersionPanel({
                       'w-full text-left px-3 py-2.5 text-body border-l-2',
                       controlStateColorTransition,
                       isSelected
-                        ? 'bg-surface2 text-foreground border-accent1'
-                        : `hover:bg-surface3 border-transparent ${quietTextHover}`,
+                        ? 'bg-fill-hover text-foreground border-accent1'
+                        : `hover:bg-fill-subtle border-transparent ${quietTextHover}`,
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">

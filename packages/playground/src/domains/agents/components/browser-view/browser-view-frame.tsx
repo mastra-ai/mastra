@@ -130,7 +130,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
     <div
       ref={containerRef}
       className={cn(
-        'relative w-full aspect-video bg-surface2 rounded-md overflow-hidden',
+        'relative w-full aspect-video bg-background rounded-md overflow-hidden',
         isInteractive && !isAgentBusy && 'ring-2 ring-accent1',
         isInteractive && isAgentBusy && 'ring-2 ring-amber-400',
         className,
@@ -167,7 +167,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
 
       {/* Reconnecting overlay - shown over last frame */}
       {isReconnecting && (
-        <div className="bg-surface1/80 absolute inset-0 flex items-center justify-center">
+        <div className="bg-sidebar/80 absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-2">
             <div className="border-neutral4 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
             <span className="text-muted-foreground text-body">Reconnecting...</span>

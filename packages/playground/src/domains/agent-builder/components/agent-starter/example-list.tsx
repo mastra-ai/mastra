@@ -21,7 +21,7 @@ export const ExampleList = ({ onExampleClick }: ExampleListProps) => {
             data-testid={`agent-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
             style={{ animationDelay: `${280 + i * 40}ms` }}
             className={cn(
-              'starter-chip group border-border1 text-caption hover:border-border2 hover:bg-surface2 inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2',
+              'starter-chip group border-border text-caption hover:border-border-strong hover:bg-fill-subtle inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2',
               quietTextHover,
               controlStateColorTransition,
             )}

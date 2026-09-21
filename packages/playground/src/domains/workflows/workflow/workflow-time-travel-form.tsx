@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
@@ -82,7 +83,7 @@ const JsonField = ({
   return (
     <>
       {isExampleOpen && (
-        <div className="border-border1 bg-surface3 space-y-2 rounded-lg border p-3">
+        <div className={cn(raisedSurfaceStyle, 'space-y-2 rounded-lg p-3')}>
           <div className="flex items-center gap-2">
             <Txt as="p" variant="caption" className="text-muted-foreground">
               Example {label}
@@ -113,7 +114,7 @@ const JsonField = ({
           />
         </div>
       )}
-      <Collapsible className="border-border1 bg-surface3 rounded-lg border" open={isOpen} onOpenChange={setIsOpen}>
+      <Collapsible className={cn(raisedSurfaceStyle, 'rounded-lg')} open={isOpen} onOpenChange={setIsOpen}>
         <div className="flex w-full items-center justify-between px-3">
           <div>
             <FieldBlock.Label name={fieldName} size="bigger">

@@ -134,7 +134,7 @@ export function ScorersPage() {
 
                 return (
                   <div key={scorer.value} className="flex flex-col">
-                    <Entity className="bg-surface2">
+                    <Entity className="bg-background">
                       <EntityContent>
                         <EntityName>{scorer.label}</EntityName>
                         <EntityDescription>
@@ -143,7 +143,7 @@ export function ScorersPage() {
                             disabled={isDisabled}
                             className={cn(
                               'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
-                              !isDisabled && 'border-border1 border-dashed ',
+                              !isDisabled && 'border-border border-dashed ',
                             )}
                             value={
                               isSelected

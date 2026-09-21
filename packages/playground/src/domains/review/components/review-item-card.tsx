@@ -88,7 +88,7 @@ export function ReviewItemCard({
   return (
     <div
       className={cn(
-        'border border-border1 rounded-lg p-3 transition-colors',
+        'border border-border rounded-lg p-3 transition-colors',
         isSelected && 'ring-1 ring-accent1',
         item.tags.length > 0 && 'border-l-2 border-l-accent1',
       )}
@@ -104,7 +104,7 @@ export function ReviewItemCard({
             type="checkbox"
             checked={isSelected}
             onChange={onToggleSelect}
-            className="border-border1 accent-accent1 h-3.5 w-3.5 rounded"
+            className="border-border accent-accent1 h-3.5 w-3.5 rounded"
           />
         )}
         <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
@@ -205,13 +205,13 @@ export function ReviewItemCard({
 
       {/* Expanded: full input/output + comment */}
       {isExpanded && (
-        <div className="border-border1 mt-3 space-y-3 border-t pt-3">
+        <div className="border-border mt-3 space-y-3 border-t pt-3">
           {item.experimentId && (
             <div className="flex items-center gap-1.5">
               <Txt variant="meta" className="text-muted-foreground">
                 Experiment:
               </Txt>
-              <code className="text-muted-foreground bg-surface2 text-meta rounded px-1.5 py-0.5 font-mono">
+              <code className="text-muted-foreground bg-background text-meta rounded px-1.5 py-0.5 font-mono">
                 {item.experimentId.slice(0, 8)}
               </code>
             </div>
@@ -220,7 +220,7 @@ export function ReviewItemCard({
             <Txt variant="meta" className="text-muted-foreground mb-1 block">
               Input
             </Txt>
-            <pre className="text-foreground bg-surface2 text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+            <pre className="text-foreground bg-background text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
               {formatUnknown(item.input)}
             </pre>
           </div>
@@ -229,7 +229,7 @@ export function ReviewItemCard({
               <Txt variant="meta" className="text-muted-foreground mb-1 block">
                 Output
               </Txt>
-              <pre className="text-foreground bg-surface2 text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="text-foreground bg-background text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.output)}
               </pre>
             </div>
@@ -239,7 +239,7 @@ export function ReviewItemCard({
               <Txt variant="meta" className="text-muted-foreground mb-1 block">
                 Error
               </Txt>
-              <pre className="text-negative1 bg-surface2 text-caption max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="text-negative1 bg-background text-caption max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.error)}
               </pre>
             </div>

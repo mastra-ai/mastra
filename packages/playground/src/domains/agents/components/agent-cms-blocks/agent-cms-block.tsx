@@ -191,7 +191,7 @@ const InlineBlockContent = ({
 
   return (
     <>
-      <div className="group hover:bg-surface2/50 relative rounded-md">
+      <div className="group hover:bg-fill-subtle relative rounded-md">
         {/* Left gutter — drag handle (visible on hover/focus-within) */}
         {!readOnly && (
           <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">

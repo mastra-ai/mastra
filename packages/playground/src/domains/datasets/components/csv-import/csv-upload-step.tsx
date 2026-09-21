@@ -99,7 +99,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
           'min-h-[160px] rounded-lg border-2 border-dashed p-4',
           'cursor-pointer transition-colors',
           // Default state
-          'border-surface4 bg-surface2',
+          'border-border bg-background',
           // Drag over state
           isDragOver && 'border-accent1/50 bg-accent1/5',
           // Error state

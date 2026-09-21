@@ -68,7 +68,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`min-h-header-default flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-surface4'} ${needsAttention ? 'border-warning bg-warning/5' : ''} `}
+                    className={`min-h-header-default flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-border'} ${needsAttention ? 'border-warning bg-warning/5' : ''} `}
                   >
                     {isEmpty && !snapshot.isDraggingOver && (
                       <span className="text-muted-foreground text-caption italic">
@@ -84,7 +84,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
-                              className={`bg-surface2 text-placeholder text-subheading inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 ${snapshot.isDragging ? 'ring-accent1/30 shadow-raised ring-2' : 'hover:bg-surface3'}`}
+                              className={`bg-background text-placeholder text-subheading inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 ${snapshot.isDragging ? 'ring-accent1/30 shadow-overlay ring-2' : 'hover:bg-fill-subtle'}`}
                             >
                               <span
                                 {...provided.dragHandleProps}

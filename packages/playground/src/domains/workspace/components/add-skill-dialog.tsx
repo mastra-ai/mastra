@@ -14,6 +14,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Search, Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder, X } from 'lucide-react';
@@ -219,7 +220,7 @@ export function AddSkillDialog({
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
               </div>
               <ScrollArea
-                className="border-border1 flex-1 rounded-lg border"
+                className="border-border flex-1 rounded-lg border"
                 viewPortClassName={
                   !isLoadingPopular && !isSearching && displaySkills.length === 0
                     ? 'flex flex-col [&>div]:flex [&>div]:flex-1 [&>div]:flex-col'
@@ -251,8 +252,8 @@ export function AddSkillDialog({
                           onClick={() => setSelectedSkill(skill)}
                           className={cn(
                             'w-full text-left px-3 py-2 rounded-md',
-                            'hover:bg-surface4',
-                            selectedSkillUniqueId === skillUniqueId && 'bg-surface5 border border-accent1',
+                            'hover:bg-fill-subtle',
+                            selectedSkillUniqueId === skillUniqueId && 'bg-fill-hover border border-accent1',
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -284,7 +285,7 @@ export function AddSkillDialog({
             {/* Preview Panel */}
             <div className="flex min-h-0 w-1/2 flex-col">
               <div className="text-muted-foreground text-column mb-2 tracking-wide uppercase">Preview</div>
-              <div className="border-border1 flex flex-1 flex-col overflow-hidden rounded-lg border">
+              <div className="border-border flex flex-1 flex-col overflow-hidden rounded-lg border">
                 {!selectedSkill ? (
                   <div className="text-muted-foreground flex h-full flex-col items-center justify-center">
                     <Package className="mb-2 h-8 w-8" />
@@ -293,9 +294,9 @@ export function AddSkillDialog({
                 ) : (
                   <>
                     {/* Skill Header */}
-                    <div className="border-border1 bg-surface3 border-b p-4">
+                    <div className="border-border bg-card border-b p-4">
                       <div className="flex items-start gap-3">
-                        <div className="bg-surface5 rounded-lg p-2">
+                        <div className="bg-muted rounded-lg p-2">
                           <SkillIcon className="text-muted-foreground h-5 w-5" />
                         </div>
                         <div className="min-w-0 flex-1">
@@ -360,10 +361,10 @@ export function AddSkillDialog({
 
           {/* Install Actions */}
           {selectedSkill && (
-            <div className="border-border1 flex flex-col gap-3 border-t pt-4">
+            <div className="border-border flex flex-col gap-3 border-t pt-4">
               {/* Mount picker - only shown when multiple writable mounts exist */}
               {writableMounts && writableMounts.length > 1 && (
-                <div className="bg-surface3 border-border1 flex items-center gap-3 rounded-lg border p-3">
+                <div className={cn(raisedSurfaceStyle, 'flex items-center gap-3 rounded-lg p-3')}>
                   <Folder className="text-icon4 h-4 w-4 shrink-0" />
                   <FieldBlock.Label name="mount-select" htmlFor="mount-select" className="whitespace-nowrap">
                     Install to
@@ -372,7 +373,7 @@ export function AddSkillDialog({
                     id="mount-select"
                     value={selectedMount ?? ''}
                     onChange={e => setSelectedMount(e.target.value)}
-                    className="border-border1 bg-surface2 text-icon6 text-body flex-1 rounded-md border px-3 py-1.5"
+                    className="border-border bg-background text-icon6 text-body flex-1 rounded-md border px-3 py-1.5"
                   >
                     {writableMounts.map(m => {
                       const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';

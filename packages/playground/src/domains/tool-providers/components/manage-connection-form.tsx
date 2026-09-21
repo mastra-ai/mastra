@@ -75,7 +75,7 @@ export const ManageConnectionForm = ({
           </Button>
         )}
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="bg-surface4 grid size-14 place-items-center overflow-hidden rounded-xl" aria-hidden>
+          <div className="bg-muted grid size-14 place-items-center overflow-hidden rounded-xl" aria-hidden>
             {iconUrl ? (
               <img src={iconUrl} alt="" className="size-8 object-contain" />
             ) : (

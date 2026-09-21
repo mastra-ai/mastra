@@ -20,7 +20,7 @@ export function WorkflowStepDetailContent() {
 
   return (
     <div className="flex h-full flex-col" data-testid="workflow-step-detail-panel">
-      <div className="border-border1 bg-surface1 flex items-center justify-between border-b px-4 py-3">
+      <div className="border-border bg-sidebar flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2">
           {stepDetail.type === 'map-config' && <List className="h-4 w-4" style={{ color: BADGE_COLORS.map }} />}
           {stepDetail.type === 'nested-graph' && (
@@ -37,7 +37,7 @@ export function WorkflowStepDetailContent() {
             )}
           </div>
         </div>
-        <button onClick={closeStepDetail} className="hover:bg-surface3 rounded p-1" aria-label="Close">
+        <button onClick={closeStepDetail} className="hover:bg-fill-subtle rounded p-1" aria-label="Close">
           <X className="text-muted-foreground h-4 w-4" />
         </button>
       </div>

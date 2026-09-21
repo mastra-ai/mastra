@@ -134,13 +134,13 @@ export default function AgentBuilderFavoritePage() {
           </div>
           <div className="flex items-center gap-4">
             {features.skills && (
-              <div className="border-border1 flex overflow-hidden rounded-lg border">
+              <div className="border-border flex overflow-hidden rounded-lg border">
                 <button
                   onClick={() => setTab('agents')}
                   className={cn(
                     'text-column px-3 py-1.5',
                     controlStateColorTransition,
-                    tab === 'agents' ? 'bg-surface4 text-foreground' : cn('bg-surface2', quietTextHover),
+                    tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                   )}
                 >
                   Agents
@@ -150,7 +150,7 @@ export default function AgentBuilderFavoritePage() {
                   className={cn(
                     'text-column px-3 py-1.5',
                     controlStateColorTransition,
-                    tab === 'skills' ? 'bg-surface4 text-foreground' : cn('bg-surface2', quietTextHover),
+                    tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                   )}
                 >
                   Skills

@@ -38,11 +38,11 @@ function TreeConnector({ guides, isLastChild }: { guides: boolean[]; isLastChild
   return (
     <span aria-hidden className="-my-6 flex shrink-0 self-stretch">
       {guides.map((show, index) => (
-        <span key={index} className={cn('w-6', show && 'border-l border-border1')} />
+        <span key={index} className={cn('w-6', show && 'border-l border-border')} />
       ))}
       <span className="relative w-6">
-        <span className={cn('absolute left-0 top-0 border-l border-border1', isLastChild ? 'h-1/2' : 'h-full')} />
-        <span className="border-border1 absolute top-1/2 left-0 w-3.5 border-b" />
+        <span className={cn('absolute left-0 top-0 border-l border-border', isLastChild ? 'h-1/2' : 'h-full')} />
+        <span className="border-border absolute top-1/2 left-0 w-3.5 border-b" />
       </span>
     </span>
   );

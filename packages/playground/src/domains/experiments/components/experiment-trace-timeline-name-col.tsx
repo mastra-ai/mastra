@@ -72,7 +72,7 @@ export function ExperimentTraceTimelineNameCol({
         'mt-4 xl:mt-0',
         {
           'opacity-30 [&:hover]:opacity-60': isFaded,
-          'bg-surface4': selectedSpanId === span.id,
+          'bg-fill-hover': selectedSpanId === span.id,
         },
       )}
       style={{ paddingLeft: `${depth * 1.5}rem`, border: '2px dashed cyan' }}
@@ -99,7 +99,7 @@ export function ExperimentTraceTimelineNameCol({
         className={cn(
           'text-body flex items-center text-left break-all gap-2 text-white rounded-lg h-full px-3 py-2 transition-colors',
           '[&>svg]:transition-all [&>svg]:shrink-0 [&>svg]:opacity-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:ml-auto',
-          'hover:bg-surface4 [&:hover>svg]:opacity-60',
+          'hover:bg-fill-subtle [&:hover>svg]:opacity-60',
         )}
         style={{ border: '2px dashed green' }}
       >

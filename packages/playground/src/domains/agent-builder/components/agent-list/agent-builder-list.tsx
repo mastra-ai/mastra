@@ -98,7 +98,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
   }
 
   return (
-    <div className="bg-surface2 border-border1 divide-border1 h-full content-start divide-y overflow-y-auto rounded-xl border">
+    <div className="bg-background border-border divide-border h-full content-start divide-y overflow-y-auto rounded-xl border">
       {filtered.map(agent => {
         const avatar = getAvatarUrl(agent);
 
@@ -106,7 +106,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
           <Link
             key={agent.id}
             href={`/agent-builder/agents/${agent.id}/view`}
-            className="hover:bg-surface3 flex items-start gap-4 px-4 py-3 md:items-center"
+            className="hover:bg-fill-subtle flex items-start gap-4 px-4 py-3 md:items-center"
             data-testid={rowTestId}
           >
             <Avatar name={agent.name ?? ''} src={avatar} size="lg" />
@@ -152,12 +152,12 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
 
 export function AgentBuilderListSkeleton({ rows = 4, rowTestId }: AgentBuilderListSkeletonProps) {
   return (
-    <div className="bg-surface2 border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
+    <div className="bg-background border-border divide-border divide-y overflow-hidden rounded-xl border">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-4 px-4 py-3" data-testid={rowTestId}>
           <div className="min-w-0 flex-1 space-y-2">
-            <div className="bg-surface3 h-3.5 w-48 animate-pulse rounded" />
-            <div className="bg-surface3 h-3 w-72 max-w-full animate-pulse rounded" />
+            <div className="bg-card h-3.5 w-48 animate-pulse rounded" />
+            <div className="bg-card h-3 w-72 max-w-full animate-pulse rounded" />
           </div>
         </div>
       ))}

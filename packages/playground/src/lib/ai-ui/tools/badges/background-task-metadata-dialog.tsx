@@ -62,21 +62,19 @@ const BackgroundTaskMetadata = ({
     const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
     argSlot = <CodeEditor data={formattedArgs} />;
   } catch {
-    argSlot = (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{args as unknown as string}</pre>
-    );
+    argSlot = <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{args as unknown as string}</pre>;
   }
 
   const resultSlot =
     typeof result === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{result}</pre>
+      <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{result}</pre>
     ) : (
       <CodeEditor data={result} />
     );
 
   const suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
     ) : (
       <CodeEditor data={suspendPayload as Record<string, unknown> | Record<string, unknown>[] | undefined} />
     );

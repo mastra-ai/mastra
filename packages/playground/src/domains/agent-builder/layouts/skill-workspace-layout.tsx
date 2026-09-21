@@ -1,3 +1,4 @@
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -42,7 +43,7 @@ export const SkillWorkspaceLayout = ({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
-      <div className="bg-surface1 flex min-w-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2">
+      <div className="bg-sidebar flex min-w-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -68,12 +69,15 @@ export const SkillWorkspaceLayout = ({
           <div
             role="tablist"
             aria-label="Workspace view"
-            className="border-border1 bg-surface3 h-form-lg relative mx-auto flex w-full max-w-sm items-center rounded-full border p-0.5"
+            className={cn(
+              raisedSurfaceStyle,
+              'h-form-lg relative mx-auto flex w-full max-w-sm items-center rounded-full p-0.5',
+            )}
           >
             <span
               aria-hidden="true"
               className={cn(
-                'absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full bg-surface4',
+                'absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full bg-fill-hover',
                 'transition-transform duration-200 ease-out',
                 activeTab === 'configure' && 'translate-x-full',
               )}
@@ -122,7 +126,7 @@ export const SkillWorkspaceLayout = ({
       >
         <div
           className={cn(
-            'min-w-0 min-h-0 overflow-hidden bg-surface1',
+            'min-w-0 min-h-0 overflow-hidden bg-sidebar',
             showForm && activeTab !== 'chat' ? 'hidden' : 'block',
             'md:block',
             'md:transition-[grid-column] md:duration-300 md:ease-out',
@@ -135,7 +139,7 @@ export const SkillWorkspaceLayout = ({
         {showForm && (
           <div
             className={cn(
-              'min-w-0 min-h-0 overflow-hidden bg-surface1',
+              'min-w-0 min-h-0 overflow-hidden bg-sidebar',
               activeTab === 'configure' ? 'block' : 'hidden',
               'md:block',
               // Mobile uses the same page-layout padding as the rest of the
@@ -151,12 +155,12 @@ export const SkillWorkspaceLayout = ({
             <div
               className={cn(
                 'skill-panel-slide-in flex h-full min-h-0 flex-col overflow-hidden',
-                'md:rounded-3xl md:border md:border-border1 md:bg-surface2',
+                'md:rounded-3xl md:border md:border-border md:bg-background',
               )}
             >
               <div className="min-h-0 flex-1 overflow-hidden">{form}</div>
               {deleteAction && (
-                <div className="border-border1 border-t px-4 pt-4 pb-4 md:px-4" data-testid="skill-edit-delete-action">
+                <div className="border-border border-t px-4 pt-4 pb-4 md:px-4" data-testid="skill-edit-delete-action">
                   {deleteAction}
                 </div>
               )}

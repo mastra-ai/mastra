@@ -54,7 +54,7 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
         )}
       </div>
       {hasChildren && (
-        <div className="border-border1 ml-1 border-l">
+        <div className="border-border ml-1 border-l">
           {Object.entries(prop.properties!).map(([childName, childProp]) => (
             <VariableProperty key={childName} name={childName} prop={childProp} depth={depth + 1} />
           ))}
@@ -160,7 +160,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     if (oldStr === newStr) {
       return (
-        <div className="border-border1 bg-surface2 relative rounded-md border p-3">
+        <div className="border-border bg-background relative rounded-md border p-3">
           {block && (
             <div className="absolute top-2 right-2">
               <BlockCopyButton block={block} />
@@ -175,7 +175,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     const diffLines = computeLineDiff(oldStr, newStr);
     return (
-      <div className="border-border1 text-body relative overflow-hidden rounded-md border font-mono">
+      <div className="border-border text-body relative overflow-hidden rounded-md border font-mono">
         {block && (
           <div className="absolute top-2 right-2 z-10">
             <BlockCopyButton block={block} />
@@ -245,7 +245,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (oldStr === newStr) {
           return (
-            <div key={idx} className="border-border1 bg-surface2 relative rounded-md border p-3">
+            <div key={idx} className="border-border bg-background relative rounded-md border p-3">
               {prevBlock && (
                 <div className="absolute top-2 right-2">
                   <BlockCopyButton block={prevBlock} />
@@ -260,7 +260,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         const diffLines = computeLineDiff(oldStr, newStr);
         return (
-          <div key={idx} className="border-border1 text-body relative overflow-hidden rounded-md border font-mono">
+          <div key={idx} className="border-border text-body relative overflow-hidden rounded-md border font-mono">
             {prevBlock && (
               <div className="absolute top-2 right-2 z-10">
                 <BlockCopyButton block={prevBlock} />
@@ -302,7 +302,7 @@ function RefBlockPreview({ promptBlockId }: { promptBlockId: string }) {
 
   const content = promptBlock?.content ?? '';
   return (
-    <div className="border-border1 bg-surface2 relative rounded-md border p-3">
+    <div className="border-border bg-background relative rounded-md border p-3">
       {content && (
         <div className="absolute top-2 right-2">
           <CopyButton content={content} tooltip="Copy prompt block text" size="sm" />
@@ -341,7 +341,7 @@ function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
 
         const content = typeof block.content === 'string' ? block.content : '';
         return (
-          <div key={(block.id as string) ?? idx} className="border-border1 bg-surface2 relative rounded-md border p-3">
+          <div key={(block.id as string) ?? idx} className="border-border bg-background relative rounded-md border p-3">
             {content && (
               <div className="absolute top-2 right-2">
                 <CopyButton content={content} tooltip="Copy prompt text" size="sm" />
@@ -387,7 +387,7 @@ function ToolsDiffView({
               'flex items-center gap-2 rounded-md border px-3 py-1.5',
               status === 'removed' && 'border-red-900/30 bg-red-950/10',
               status === 'added' && 'border-green-900/30 bg-green-950/10',
-              status === 'same' && 'border-border1 bg-surface2',
+              status === 'same' && 'border-border bg-background',
             )}
           >
             <Txt
@@ -432,7 +432,7 @@ function ReadOnlyTools({ tools }: { tools: Record<string, unknown> | undefined }
   return (
     <div className="flex flex-col gap-1.5">
       {entries.map(([id, config]) => (
-        <div key={id} className="border-border1 bg-surface2 rounded-md border px-3 py-1.5">
+        <div key={id} className="border-border bg-background rounded-md border px-3 py-1.5">
           <Txt variant="caption" className="text-foreground font-mono">
             {id}
           </Txt>
@@ -487,7 +487,7 @@ function VariablesDiffView({
               'flex items-center gap-2 rounded-md border px-3 py-1.5',
               status === 'removed' && 'border-red-900/30 bg-red-950/10',
               status === 'added' && 'border-green-900/30 bg-green-950/10',
-              status === 'same' && 'border-border1 bg-surface2',
+              status === 'same' && 'border-border bg-background',
             )}
           >
             <Txt
@@ -533,7 +533,7 @@ function ReadOnlyVariables({ variables }: { variables: Record<string, unknown> |
   return (
     <div className="flex flex-col gap-1.5">
       {entries.map(([name, schema]) => (
-        <div key={name} className="border-border1 bg-surface2 flex items-center gap-2 rounded-md border px-3 py-1.5">
+        <div key={name} className="border-border bg-background flex items-center gap-2 rounded-md border px-3 py-1.5">
           <Txt variant="caption" className="text-foreground font-mono">
             {`{{${name}}}`}
           </Txt>
@@ -685,7 +685,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
 
   return (
     <div className={cn('flex flex-col h-full')}>
-      <div className="border-border1 border-b px-4 py-3" />
+      <div className="border-border border-b px-4 py-3" />
 
       <ScrollArea className="min-h-0 flex-1">
         {showDiff ? (

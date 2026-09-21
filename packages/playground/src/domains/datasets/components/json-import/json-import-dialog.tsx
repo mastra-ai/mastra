@@ -124,12 +124,12 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="flex max-h-[90vh] w-[960px] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
-        <DialogHeader className="border-border1 border-b px-4 py-4">
+        <DialogHeader className="border-border border-b px-4 py-4">
           <DialogTitle>Import into dataset</DialogTitle>
           <DialogDescription className="text-caption text-muted-foreground not-sr-only">
             Add items to{' '}
             {datasetName ? (
-              <code className="bg-surface3 text-meta text-foreground rounded px-1 font-mono">{datasetName}</code>
+              <code className="bg-card text-meta text-foreground rounded px-1 font-mono">{datasetName}</code>
             ) : (
               'this dataset'
             )}{' '}
@@ -138,7 +138,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
         </DialogHeader>
 
         <DialogBody className="max-h-none min-h-0 flex-1 overflow-y-auto p-0">
-          <div className="divide-border1 grid divide-y md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
+          <div className="divide-border grid divide-y md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
             <div className="flex min-h-[360px] flex-col p-4">
               <JSONSourcePanel
                 tab={tab}
@@ -158,7 +158,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
           </div>
         </DialogBody>
 
-        <DialogFooter className="border-border1 items-center border-t px-4 py-3 sm:justify-between">
+        <DialogFooter className="border-border items-center border-t px-4 py-3 sm:justify-between">
           <JSONImportStatus validation={validation} />
           <div className="flex gap-2">
             <Button icon={<X />} onClick={handleClose} disabled={isImporting}>

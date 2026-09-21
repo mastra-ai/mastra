@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search, ExternalLink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -56,7 +57,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
         <span
           className={cn(
             'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
-            enabled ? 'border-border1 bg-surface4 text-foreground' : 'border-border1/40 text-muted-foreground/50',
+            enabled ? 'border-border bg-muted text-foreground' : 'border-border/40 text-muted-foreground/50',
           )}
         >
           <Icon className="h-3 w-3 shrink-0" />
@@ -259,10 +260,10 @@ export function MemorySidebarBody({
             ref={memoryCardShellRef}
             data-testid="memory-sidebar-overlay"
             className={cn(
-              'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden border',
+              'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden',
               showMemory
-                ? 'top-1 m-1 rounded-xl border-border1/40 bg-surface3 shadow-none'
-                : 'm-1 rounded-xl border-border1/40 bg-surface4 hover:bg-surface5 active:bg-surface4',
+                ? cn(raisedSurfaceStyle, 'top-1 m-1 rounded-xl')
+                : 'm-1 rounded-xl border border-border/40 bg-muted state-layer',
             )}
             style={{ height: showMemory ? undefined : collapsedCardSize.height || undefined }}
           >
@@ -333,7 +334,7 @@ export function MemorySidebarBody({
                 <span
                   data-testid="memory-card-observation-bar"
                   data-percent={observationPercent}
-                  className="bg-surface5 mt-2 block h-1 w-full overflow-hidden rounded-full"
+                  className="bg-fill mt-2 block h-1 w-full overflow-hidden rounded-full"
                 >
                   <span
                     className={cn(
@@ -347,7 +348,7 @@ export function MemorySidebarBody({
             </button>
 
             {showMemory && (
-              <div className="memory-card-content border-border1 min-h-0 flex-1 overflow-y-auto border-t">
+              <div className="memory-card-content border-border min-h-0 flex-1 overflow-y-auto border-t">
                 <AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />
               </div>
             )}

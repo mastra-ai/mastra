@@ -85,12 +85,12 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
   };
 
   return (
-    <div className="border-border1 border-b last:border-b-0">
+    <div className="border-border border-b last:border-b-0">
       <button
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}
         aria-expanded={isExpanded}
-        className="hover:bg-surface3 flex w-full items-center gap-2 px-3 py-0.5 text-left"
+        className="hover:bg-fill-subtle flex w-full items-center gap-2 px-3 py-0.5 text-left"
       >
         <ChevronRight
           className={cn('h-3 w-3 text-muted-foreground transition-transform shrink-0', isExpanded && 'rotate-90')}
@@ -114,7 +114,7 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
             <div>
               <p className="text-muted-foreground text-column pb-1">Result</p>
               {typeof entry.result === 'string' ? (
-                <pre className="bg-surface4 text-caption max-h-40 overflow-x-auto overflow-y-auto rounded-md p-2 whitespace-pre">
+                <pre className="bg-muted text-caption max-h-40 overflow-x-auto overflow-y-auto rounded-md p-2 whitespace-pre">
                   {entry.result}
                 </pre>
               ) : (

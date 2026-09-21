@@ -56,7 +56,7 @@ const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentPro
           <>
             <PanelSeparator className="pointer-events-auto" />
             <Panel id="workflow-step-detail" minSize={300} maxSize="60%" defaultSize={420} className="min-w-0">
-              <div className="rounded-studio-panel border-border1 bg-surface2 pointer-events-auto h-full min-h-0 overflow-hidden border">
+              <div className="rounded-studio-panel border-border bg-background pointer-events-auto h-full min-h-0 overflow-hidden border">
                 <WorkflowStepDetailContent />
               </div>
             </Panel>

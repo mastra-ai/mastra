@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -92,8 +93,8 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
   return (
     <div
       className={cn(
-        'bg-surface2 border border-border1 rounded-3xl overflow-hidden transition-all duration-200',
-        'hover:border-border2',
+        'bg-background border border-border rounded-3xl overflow-hidden transition-all duration-200',
+        'hover:border-border-strong',
       )}
     >
       {/* Collapsed header - always visible */}
@@ -102,12 +103,12 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         onClick={handleToggleExpand}
         className={cn(
           'group flex items-center gap-3 w-full px-4 py-3',
-          'hover:bg-surface3',
+          'hover:bg-fill-subtle',
           'focus:outline-none focus:ring-2 focus:ring-accent1 focus:ring-inset',
         )}
       >
         {/* Thumbnail preview */}
-        <div className="bg-surface3 border-border1 relative h-14 w-24 shrink-0 overflow-hidden rounded-md border">
+        <div className={cn(raisedSurfaceStyle, 'relative h-14 w-24 shrink-0 overflow-hidden rounded-md')}>
           {hasFrame ? (
             <img ref={imgRef} alt="Browser preview" className="h-full w-full object-cover" />
           ) : (
@@ -138,7 +139,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
 
       {/* Expanded content */}
       {isExpanded && (
-        <div className="border-border1 border-t">
+        <div className="border-border border-t">
           {/* Interactive screencast */}
           <div className="p-3">
             <div className="relative">
@@ -150,7 +151,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   size="icon-sm"
                   tooltip="Center view"
                   onClick={handleOpenModal}
-                  className="bg-surface1/80 backdrop-blur-sm"
+                  className="bg-sidebar/80 backdrop-blur-sm"
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
@@ -159,7 +160,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   size="icon-sm"
                   tooltip="Close browser"
                   onClick={handleClose}
-                  className="bg-surface1/80 backdrop-blur-sm"
+                  className="bg-sidebar/80 backdrop-blur-sm"
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>
@@ -169,7 +170,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
 
           {/* Browser actions (scrollable, max height) */}
           {toolCalls.length > 0 && (
-            <div ref={actionsRef} className="border-border1 max-h-40 overflow-y-auto border-t">
+            <div ref={actionsRef} className="border-border max-h-40 overflow-y-auto border-t">
               <div className="px-3 py-2">
                 <h4 className="text-muted-foreground text-subheading mb-2">Browser Actions</h4>
                 <div className="space-y-1">

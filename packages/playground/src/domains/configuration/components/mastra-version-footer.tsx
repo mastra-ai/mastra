@@ -65,7 +65,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
   if (isLoadingPackages) {
     return (
       <div className="flex h-9 items-center justify-end gap-2 px-3">
-        <div className="bg-surface4 h-[1.125rem] w-20 animate-pulse rounded-full" />
+        <div className="bg-muted h-[1.125rem] w-20 animate-pulse rounded-full" />
       </div>
     );
   }
@@ -202,10 +202,10 @@ const PackagesModalContent = ({
           />
         </div>
 
-        <div className="border-border1 max-h-64 overflow-y-auto rounded-md border">
+        <div className="border-border max-h-64 overflow-y-auto rounded-md border">
           <div className="text-body grid grid-cols-[1fr_auto_auto]">
             {packages.map((pkg, index) => (
-              <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border1')}>
+              <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border')}>
                 <div className="text-text1 min-w-0 truncate px-3 py-2 font-mono">
                   <a
                     href={`https://www.npmjs.com/package/${pkg.name}`}
@@ -254,7 +254,7 @@ const PackagesModalContent = ({
         </div>
 
         {hasUpdates && updateCommand && (
-          <div className="border-border1 space-y-2 border-t pt-2">
+          <div className="border-border space-y-2 border-t pt-2">
             <div className="flex items-center gap-2 pt-3">
               <Info className="text-muted-foreground h-4 w-4" />
               <Txt as="span" variant="caption" className="text-muted-foreground">

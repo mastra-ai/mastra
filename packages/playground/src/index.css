@@ -7,8 +7,8 @@
 @layer base {
   :root {
     --top-bar-height: 40px;
-    --color-thumb: var(--surface4);
-    --color-thumb-hover: var(--surface6);
+    --color-thumb: var(--fill);
+    --color-thumb-hover: var(--fill-hover);
     --color-track: transparent;
 
     /*

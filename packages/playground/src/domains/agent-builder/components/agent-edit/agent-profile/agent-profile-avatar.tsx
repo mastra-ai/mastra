@@ -38,7 +38,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
   };
 
   return (
-    <div className="bg-surface3 scale-[1.65] rounded-full p-1" style={{ viewTransitionName: 'agent-avatar' }}>
+    <div className="bg-card scale-[1.65] rounded-full p-1" style={{ viewTransitionName: 'agent-avatar' }}>
       {interactive ? (
         <>
           <button
@@ -57,7 +57,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
               color={avatarColor}
               textColor={avatarTextColor}
             />
-            <span className="bg-surface4 absolute inset-0 flex items-center justify-center rounded-full opacity-0 transition-opacity">
+            <span className="bg-muted absolute inset-0 flex items-center justify-center rounded-full opacity-0 transition-opacity">
               <Plus className="text-foreground h-5 w-5" />
             </span>
           </button>

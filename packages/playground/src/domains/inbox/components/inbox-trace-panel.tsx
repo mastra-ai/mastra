@@ -88,7 +88,7 @@ function FeedbackSummary({ feedback, onMarkReviewed, isMarkingReviewed }: Feedba
   const author = feedbackAuthorLabel(feedback) ?? feedback.feedbackUserId;
 
   return (
-    <section aria-label="Feedback" className="border-border1 flex max-h-[33vh] shrink-0 flex-col border-b">
+    <section aria-label="Feedback" className="border-border flex max-h-[33vh] shrink-0 flex-col border-b">
       <DataPanel.Header>
         <DataPanel.HeaderContent>
           <DataPanel.Heading>

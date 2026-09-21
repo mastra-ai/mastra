@@ -4,6 +4,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -87,13 +88,13 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       content={workingMemoryData || ''}
                       isCopied={isCopied}
                       onCopy={handleCopy}
-                      className="bg-surface3 border-border1 text-body min-h-[150px] rounded-lg border font-mono"
+                      className={cn(raisedSurfaceStyle, 'text-body min-h-[150px] rounded-lg font-mono')}
                     />
                   ) : (
                     <>
-                      <div className="bg-surface3 border-border1 rounded-lg border" style={{ height: '300px' }}>
+                      <div className={cn(raisedSurfaceStyle, 'rounded-lg')} style={{ height: '300px' }}>
                         <ScrollArea className="h-full">
-                          <div className="hover:bg-surface4/20 group text-meta relative cursor-pointer p-3">
+                          <div className="hover:bg-fill-subtle group text-meta relative cursor-pointer p-3">
                             <button
                               type="button"
                               onClick={handleCopy}
@@ -108,7 +109,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                                 Copied!
                               </span>
                             )}
-                            <span className="text-meta bg-surface3 text-muted-foreground pointer-events-none absolute top-2 right-2 z-20 rounded-full px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                            <span className="text-meta bg-card text-muted-foreground pointer-events-none absolute top-2 right-2 z-20 rounded-full px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                               Click to copy
                             </span>
                           </div>
@@ -125,7 +126,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             </>
           ) : (
             <textarea
-              className="border-border1 bg-surface3 text-foreground text-body min-h-[150px] w-full resize-none rounded-lg border p-3 font-mono"
+              className={cn(
+                raisedSurfaceStyle,
+                'text-foreground text-body min-h-[150px] w-full resize-none rounded-lg p-3 font-mono',
+              )}
               value={editState.value}
               onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
               disabled={isUpdating}
@@ -197,7 +201,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           </div>
         </>
       ) : (
-        <div className="bg-surface3 border-border1 rounded-lg border p-4">
+        <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
           <p className="text-muted-foreground text-body mb-3">
             Working memory is not enabled for this agent. Enable it to maintain context across conversations.
           </p>

@@ -34,7 +34,7 @@ function RecursiveFieldRenderer({
               labelIsHidden
               placeholder="Variable name"
               size="md"
-              className="[&_input]:bg-surface3 w-full"
+              className="[&_input]:bg-card w-full"
             />
 
             <JSONSchemaForm.FieldType placeholder="Type" />
@@ -145,7 +145,7 @@ export function PromptBlockEditSidebar({
         </div>
 
         {/* Variables */}
-        <div className="border-border1 flex flex-col gap-4 border-t p-4">
+        <div className="border-border flex flex-col gap-4 border-t p-4">
           <SectionHeader
             title="Variables"
             subtitle={
@@ -179,7 +179,7 @@ export function PromptBlockEditSidebar({
 
         {/* Used by */}
         {mode === 'edit' && blockId && (
-          <div className="border-border1 flex flex-col gap-3 border-t p-4">
+          <div className="border-border flex flex-col gap-3 border-t p-4">
             <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
             {usedByAgents.length > 0 ? (
               <div className="flex flex-col gap-1.5">
@@ -188,7 +188,7 @@ export function PromptBlockEditSidebar({
                     key={agent.id}
                     type="button"
                     onClick={() => navigate(paths.agentLink(agent.id))}
-                    className="hover:bg-surface3 flex items-center gap-2 rounded-md px-2 py-1.5 text-left"
+                    className="hover:bg-fill-subtle flex items-center gap-2 rounded-md px-2 py-1.5 text-left"
                   >
                     <Txt variant="caption" className="text-foreground truncate">
                       {agent.name || agent.id}

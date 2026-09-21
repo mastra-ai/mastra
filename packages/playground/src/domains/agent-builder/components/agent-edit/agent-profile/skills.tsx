@@ -48,7 +48,7 @@ interface SkillItemProps {
 
 const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => {
   return (
-    <label className="hover:bg-surface2 flex cursor-pointer items-start gap-3 px-4 py-4" aria-disabled={!editable}>
+    <label className="hover:bg-fill-subtle flex cursor-pointer items-start gap-3 px-4 py-4" aria-disabled={!editable}>
       <div className="mt-0.5">
         <Checkbox
           checked={isChecked}

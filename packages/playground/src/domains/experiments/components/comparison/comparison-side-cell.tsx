@@ -1,6 +1,8 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ClockIcon } from 'lucide-react';
 import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
 import { ComparisonScoreRow } from './comparison-score-row';
@@ -26,8 +28,10 @@ function formatDuration(side: ComparisonSide): string | null {
   return Number.isFinite(ms) ? `${(ms / 1000).toFixed(2)}s` : null;
 }
 
-const codeBoxClass =
-  'border-border1 bg-surface3 text-body text-muted-foreground max-h-[30vh] overflow-y-auto rounded-xl border p-4 font-mono break-all whitespace-pre-wrap dark:border-white/10 dark:bg-black/20';
+const codeBoxClass = cn(
+  raisedSurfaceStyle,
+  'text-body text-muted-foreground max-h-[30vh] overflow-y-auto rounded-xl p-4 font-mono break-all whitespace-pre-wrap',
+);
 
 /**
  * One side of a single item row. Baseline and contender render the exact same

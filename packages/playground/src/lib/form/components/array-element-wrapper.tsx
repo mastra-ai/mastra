@@ -36,7 +36,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="border-border1 bg-surface2 overflow-hidden rounded-lg border motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
+      className="border-border bg-background overflow-hidden rounded-lg border motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
     >
       <div className="flex min-w-0 items-center gap-1 pr-1">
         <CollapsibleTrigger
@@ -69,7 +69,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
           </Button>
         )}
       </div>
-      <CollapsibleContent keepMounted className="border-border1 border-t px-3 py-3">
+      <CollapsibleContent keepMounted className="border-border border-t px-3 py-3">
         {children}
         {!readOnly && (
           <div className="flex justify-end pt-2">

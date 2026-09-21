@@ -60,7 +60,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="skill-view-page">
       {/* Header */}
-      <div className="bg-surface1 flex min-w-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2">
+      <div className="bg-sidebar flex min-w-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -99,7 +99,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
       </div>
 
       {/* Body */}
-      <div className="bg-surface1 min-h-0 flex-1 overflow-y-auto">
+      <div className="bg-sidebar min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[80ch] px-4 pt-4 pb-10 md:px-10">
           <h1 className="text-heading text-foreground">{skill.name}</h1>
           {skill.description && (

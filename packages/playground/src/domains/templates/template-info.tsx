@@ -34,7 +34,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
           <PackageIcon />
           <h2
             className={cn({
-              'bg-surface4 flex rounded-lg min-w-[50%]': isLoading,
+              'bg-muted flex rounded-lg min-w-[50%]': isLoading,
             })}
           >
             {isLoading ? <>&nbsp;</> : title}
@@ -45,7 +45,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
         <div className="grid">
           <p
             className={cn('mb-4 text-body text-muted-foreground mt-2', {
-              'bg-surface4 rounded-lg ': isLoading,
+              'bg-muted rounded-lg ': isLoading,
             })}
           >
             {isLoading ? <>&nbsp;</> : description}
@@ -53,7 +53,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
 
           {/* Git Branch Notice */}
           {!isLoading && templateSlug && (
-            <div className={cn('bg-surface2 border border-surface4 rounded-lg p-4 mb-4', 'flex items-start gap-3')}>
+            <div className={cn('bg-background border border-border rounded-lg p-4 mb-4', 'flex items-start gap-3')}>
               <div className="mt-0.5 shrink-0">
                 <InfoIcon className="h-[1.1em] w-[1.1em] text-blue-500" />
               </div>
@@ -65,7 +65,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
                 <div className="text-caption text-muted-foreground space-y-1">
                   <div>
                     <span className="font-medium">Branch name:</span>{' '}
-                    <code className="bg-surface3 text-caption rounded px-1.5 py-0.5 font-mono">{branchName}</code>
+                    <code className="bg-card text-caption rounded px-1.5 py-0.5 font-mono">{branchName}</code>
                   </div>
                   <div>
                     This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.

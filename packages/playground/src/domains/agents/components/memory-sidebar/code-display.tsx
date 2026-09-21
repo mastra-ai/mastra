@@ -20,7 +20,7 @@ export function CodeDisplay({
   return (
     <div className={`rounded-md border ${className}`} style={{ height }}>
       <ScrollArea className="h-full">
-        <div className={`group relative p-2 ${onCopy ? 'hover:bg-surface4/50 cursor-pointer' : ''}`}>
+        <div className={`group relative p-2 ${onCopy ? 'hover:bg-fill-subtle cursor-pointer' : ''}`}>
           {onCopy && (
             <button
               type="button"
@@ -43,7 +43,7 @@ export function CodeDisplay({
             </span>
           )}
           {onCopy && (
-            <span className="text-meta bg-surface4 text-muted-foreground pointer-events-none absolute top-2 right-2 z-20 rounded-full px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="text-meta bg-muted text-muted-foreground pointer-events-none absolute top-2 right-2 z-20 rounded-full px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
               Click to copy
             </span>
           )}

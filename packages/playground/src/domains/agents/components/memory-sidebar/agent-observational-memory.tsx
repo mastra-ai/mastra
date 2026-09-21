@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -99,11 +100,11 @@ const ProgressBar = ({
 
   const showAdaptiveLabel = isAdaptive && percentage >= 100 && !isProcessing && baseThreshold && value < baseThreshold;
 
-  const containerBg = isProcessing ? 'bg-transparent' : 'bg-surface4';
+  const containerBg = isProcessing ? 'bg-transparent' : 'bg-muted';
   const fillColor = isProcessing ? 'bg-blue-500/10' : barColor;
   const textColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
   const textColorFilled = isProcessing ? 'text-blue-600' : 'text-white';
-  const tokenBg = isProcessing ? 'bg-blue-500/10' : 'bg-surface5';
+  const tokenBg = isProcessing ? 'bg-blue-500/10' : 'bg-fill';
   const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
 
   return (
@@ -220,7 +221,7 @@ const ObservationalMemoryDisabled = () => (
       <Brain className="text-muted-foreground h-4 w-4" />
       <h3 className="text-foreground text-subheading">Observational Memory</h3>
     </div>
-    <div className="bg-surface3 border-border1 rounded-lg border p-4">
+    <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
       <p className="text-muted-foreground text-body mb-3">
         Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
         from conversations.

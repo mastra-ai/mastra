@@ -354,7 +354,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             {validationErrors.length > 0 && <ValidationSummary errors={validationErrors} />}
 
             {/* Compact preview */}
-            <div className="border-border1 border-t pt-4">
+            <div className="border-border border-t pt-4">
               <div className="text-muted-foreground text-caption mb-2">Data Preview</div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>

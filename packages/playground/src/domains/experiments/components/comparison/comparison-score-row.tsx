@@ -18,7 +18,7 @@ export function ComparisonScoreRow({ scorerId, value, delta, reason }: Compariso
   const { Link, paths } = useLinkComponent();
 
   return (
-    <div className="bg-surface2 grid gap-1 rounded-lg px-3 py-2">
+    <div className="bg-background grid gap-1 rounded-lg px-3 py-2">
       <div className="flex items-center justify-between gap-4">
         <Link
           href={paths.scorerLink(scorerId)}

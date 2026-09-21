@@ -72,7 +72,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
     <div className="min-w-0 space-y-6 overflow-hidden">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <div className="bg-surface5 rounded-lg p-3">
+        <div className="bg-card rounded-lg p-3">
           <SkillIcon className="text-muted-foreground h-6 w-6" />
         </div>
         <div className="flex-1">
@@ -102,7 +102,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               setShowRawInstructions(!showRawInstructions);
             }}
             className={cn(
-              'hover:bg-surface4 text-caption flex items-center gap-1.5 rounded px-2 py-1',
+              'hover:bg-fill-subtle text-caption flex items-center gap-1.5 rounded px-2 py-1',
               quietTextHover,
               controlStateColorTransition,
             )}
@@ -145,7 +145,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               <button
                 key={ref}
                 onClick={() => onReferenceClick?.(ref)}
-                className="hover:bg-surface4 flex w-full items-center gap-2 rounded px-3 py-2 text-left"
+                className="hover:bg-fill-subtle flex w-full items-center gap-2 rounded px-3 py-2 text-left"
               >
                 <FileText className="text-muted-foreground h-4 w-4" />
                 <span className="text-foreground text-body">{ref}</span>
@@ -164,7 +164,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         >
           <div className="space-y-1">
             {skill.scripts.map(script => (
-              <div key={script} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
+              <div key={script} className="bg-card flex items-center gap-2 rounded px-3 py-2">
                 <Code className="text-muted-foreground h-4 w-4" />
                 <span className="text-foreground text-body">{script}</span>
               </div>
@@ -182,7 +182,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         >
           <div className="space-y-1">
             {skill.assets.map(asset => (
-              <div key={asset} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
+              <div key={asset} className="bg-card flex items-center gap-2 rounded px-3 py-2">
                 <Image className="text-muted-foreground h-4 w-4" />
                 <span className="text-foreground text-body">{asset}</span>
               </div>
@@ -192,9 +192,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
       )}
 
       {/* Path */}
-      <div className="border-border1 border-t pt-4">
+      <div className="border-border border-t pt-4">
         <p className="text-muted-foreground text-caption">
-          Path: <code className="bg-surface4 rounded px-1 py-0.5">{skill.path}</code>
+          Path: <code className="bg-muted rounded px-1 py-0.5">{skill.path}</code>
         </p>
       </div>
     </div>
@@ -234,7 +234,7 @@ function formatDisplayValue(value: unknown): string {
 function MetadataCard({ label, value, icon }: { label: string; value: unknown; icon?: React.ReactNode }) {
   const displayValue = formatDisplayValue(value);
   return (
-    <div className="bg-surface3 rounded-lg p-3">
+    <div className="bg-card rounded-lg p-3">
       <p className="text-muted-foreground text-caption mb-1">{label}</p>
       <div className="flex items-center gap-1.5">
         {icon && <span className="text-muted-foreground">{icon}</span>}
@@ -260,8 +260,8 @@ function CollapsibleSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-border1 min-w-0 overflow-hidden rounded-lg border">
-      <div className="bg-surface3 hover:bg-surface4 flex items-center">
+    <div className="border-border min-w-0 overflow-hidden rounded-lg border">
+      <div className="bg-card state-layer flex items-center">
         <button onClick={onToggle} className="flex flex-1 items-center gap-2 px-4 py-3">
           {isExpanded ? (
             <ChevronDown className="text-muted-foreground h-4 w-4" />
@@ -272,7 +272,7 @@ function CollapsibleSection({
         </button>
         {headerAction && <div className="pr-3">{headerAction}</div>}
       </div>
-      {isExpanded && <div className="bg-surface2 w-0 min-w-full overflow-x-auto p-4">{children}</div>}
+      {isExpanded && <div className="bg-background w-0 min-w-full overflow-x-auto p-4">{children}</div>}
     </div>
   );
 }

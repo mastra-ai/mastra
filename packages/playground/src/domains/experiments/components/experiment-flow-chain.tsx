@@ -53,7 +53,7 @@ function Stage({
           </TooltipTrigger>
           <TooltipContent>{typeLabel}</TooltipContent>
         </Tooltip>
-        {!isLast && <span aria-hidden className="bg-border1 mt-1 w-px flex-1" />}
+        {!isLast && <span aria-hidden className="bg-border mt-1 w-px flex-1" />}
       </div>
       <div className="grid min-w-0 gap-0.5">
         <div className="text-caption text-foreground flex min-h-5 items-center">{subject}</div>

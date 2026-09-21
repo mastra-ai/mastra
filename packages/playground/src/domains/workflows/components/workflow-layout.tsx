@@ -102,7 +102,7 @@ export const WorkflowLayout = ({ children, leftSlot }: WorkflowLayoutProps) => {
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="relative min-h-[180px] min-w-0 flex-1 overflow-hidden">{children}</div>
-        {leftSlot && <div className="bg-surface2 min-h-0 min-w-0 basis-[44%] overflow-hidden">{leftSlot}</div>}
+        {leftSlot && <div className="bg-background min-h-0 min-w-0 basis-[44%] overflow-hidden">{leftSlot}</div>}
       </div>
     );
   }

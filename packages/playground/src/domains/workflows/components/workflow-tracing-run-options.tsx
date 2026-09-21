@@ -88,7 +88,7 @@ export const WorkflowTracingRunOptions = ({
         onChange={handleChange}
         theme={theme}
         extensions={[jsonLanguage]}
-        className={cn('overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3', editorClassName)}
+        className={cn('overflow-y-scroll bg-card rounded-lg overflow-hidden p-3', editorClassName)}
       />
 
       <div className="flex items-center justify-end">

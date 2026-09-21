@@ -49,7 +49,7 @@ const ToolkitFilterRow = memo(
           data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
           data-checked={checked ? 'true' : 'false'}
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground hover:bg-surface4',
+            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground hover:bg-fill-subtle',
             disabled && 'cursor-not-allowed opacity-60',
           )}
         >
@@ -211,10 +211,10 @@ export const ToolkitFilterPane = ({
 
   return (
     <div
-      className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-4 py-4"
+      className="border-border flex h-full min-h-0 flex-col gap-3 border-r px-4 py-4"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
-      <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
+      <div className="bg-card shrink-0 rounded-full" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
         <InputGroup variant="outline" size="md">
           <InputGroupAddon align="inline-start">
             <SearchIcon />

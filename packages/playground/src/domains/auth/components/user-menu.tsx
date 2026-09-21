@@ -49,12 +49,12 @@ export function UserMenu({ user }: UserMenuProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="hover:bg-surface2 flex items-center gap-2 rounded-md p-1">
+        <button type="button" className="hover:bg-fill-subtle flex items-center gap-2 rounded-md p-1">
           <UserAvatar user={user} size="sm" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-0">
-        <div className="border-border1 border-b p-3">
+        <div className="border-border border-b p-3">
           <div className="flex items-center gap-3">
             <UserAvatar user={user} size="md" />
             <div className="flex flex-col overflow-hidden">
@@ -72,7 +72,7 @@ export function UserMenu({ user }: UserMenuProps) {
 
         {/* Preview as role section — only for admins with available roles */}
         {availableRoles && availableRoles.length > 0 && (
-          <div className="border-border1 border-b p-2">
+          <div className="border-border border-b p-2">
             <Txt variant="meta" className="text-muted-foreground px-2 py-1 tracking-wider uppercase">
               Preview as role
             </Txt>
@@ -92,7 +92,7 @@ export function UserMenu({ user }: UserMenuProps) {
                     setOpen(false);
                   }}
                   className={`text-body flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${
-                    isActive ? 'bg-surface2' : 'hover:bg-surface2'
+                    isActive ? 'bg-fill-hover' : 'hover:bg-fill-subtle'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
                   {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

@@ -4,6 +4,7 @@ import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
+import { raisedSurfaceStyle, surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { NetworkIcon, WorkflowIcon } from 'lucide-react';
 import { getRepoName } from './shared';
@@ -37,7 +38,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
     return (
       <div className={cn('grid gap-y-4', className)}>
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="bg-surface3 h-16 animate-pulse rounded-lg" />
+          <div key={index} className="bg-card h-16 animate-pulse rounded-lg" />
         ))}
       </div>
     );
@@ -52,7 +53,8 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
         return (
           <article
             className={cn(
-              'border border-border1 rounded-lg overflow-hidden w-full grid grid-cols-[1fr_auto] bg-surface3 hover:bg-surface4',
+              raisedSurfaceStyle,
+              'rounded-lg overflow-hidden w-full grid grid-cols-[1fr_auto] state-layer',
             )}
             key={template.slug}
           >
@@ -136,7 +138,8 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
             >
               <span
                 className={cn(
-                  'bg-surface1 group-hover:bg-surface2 flex items-center gap-2 rounded px-2 py-1',
+                  'bg-sidebar flex items-center gap-2 rounded px-2 py-1',
+                  surfaceGroupStateLayerStyle,
                   quietTextHoverInGroup,
                   controlStateColorTransition,
                 )}

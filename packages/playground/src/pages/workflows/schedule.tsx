@@ -106,7 +106,7 @@ export default function SchedulePage() {
 
       {schedule ? (
         <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-4 overflow-hidden">
-          <div className="border-border1 flex h-fit flex-col gap-4 rounded-md border p-4">
+          <div className="border-border flex h-fit flex-col gap-4 rounded-md border p-4">
             <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (
                 <Link to={paths.workflowLink(workflowId)} className="text-accent1 hover:underline">

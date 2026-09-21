@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLink, GitFork } from 'lucide-react';
@@ -82,9 +83,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         if (messageElement) {
           messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
           // Optionally highlight the message
-          messageElement.classList.add('bg-surface4');
+          messageElement.classList.add('bg-muted');
           setTimeout(() => {
-            messageElement.classList.remove('bg-surface4');
+            messageElement.classList.remove('bg-muted');
           }, 2000);
         }
       }
@@ -108,7 +109,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
     <div className="flex min-w-0 flex-col">
       {/* Clone Thread Section */}
       {threadId && (
-        <div className="border-border1 border-b p-4">
+        <div className="border-border border-b p-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-foreground text-subheading">Clone Thread</h3>
@@ -121,7 +122,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         </div>
       )}
 
-      <div className="border-border1 border-b p-4">
+      <div className="border-border border-b p-4">
         <h3 className="text-foreground text-subheading">Recent Messages</h3>
         <p className="text-muted-foreground text-caption mt-1">
           {getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}
@@ -130,14 +131,14 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
       {/* Observational Memory Section - moved above Semantic Recall */}
       {isOMEnabled && (
-        <div className="border-border1 min-w-0 overflow-hidden border-b">
+        <div className="border-border min-w-0 overflow-hidden border-b">
           <AgentObservationalMemory agentId={agentId} resourceId={effectiveResourceId} threadId={threadId} />
         </div>
       )}
 
       {/* Memory Search Section - hidden for gateway memory */}
       {!isGatewayMemory && (
-        <div className="border-border1 border-b p-4">
+        <div className="border-border border-b p-4">
           <div className="mb-2">
             <div className="mb-2 flex items-center gap-2">
               <h3 className="text-foreground text-subheading">Semantic Recall</h3>
@@ -165,7 +166,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               chatInputValue={chatInputValue}
             />
           ) : (
-            <div className="bg-surface3 border-border1 rounded-lg border p-4">
+            <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
               <p className="text-muted-foreground text-body mb-3">
                 Semantic recall is not enabled for this agent. Enable it to search through conversation history.
               </p>
@@ -195,8 +196,8 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
       {/* Gateway Memory indicator */}
       {isGatewayMemory && (
-        <div className="border-border1 border-b p-4">
-          <div className="bg-surface3 border-border1 rounded-lg border p-4">
+        <div className="border-border border-b p-4">
+          <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
             <div className="mb-1 flex items-center gap-2">
               <span className="text-column rounded bg-green-500/20 px-2 py-0.5 text-green-400">Remote</span>
               <h3 className="text-foreground text-subheading">Gateway</h3>

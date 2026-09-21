@@ -78,7 +78,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         </DialogHeader>
         <DialogBody>
           <div className="flex flex-col gap-3">
-            <div className="border-border1 bg-surface2 flex items-center gap-2 rounded-md border px-3 py-2">
+            <div className="border-border bg-background flex items-center gap-2 rounded-md border px-3 py-2">
               <Search className="text-muted-foreground h-4 w-4" />
               <input
                 type="text"
@@ -108,7 +108,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                     onClick={() => handleSelect(block.id)}
                     className={cn(
                       'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
-                      'hover:bg-surface4 active:bg-surface5',
+                      'hover:bg-fill-subtle active:bg-fill',
                     )}
                   >
                     <Txt variant="column" className="text-foreground">

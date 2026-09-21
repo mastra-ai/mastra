@@ -107,7 +107,7 @@ function LastMessagesEntity() {
       </div>
 
       {lastMessagesEnabled && (
-        <div className="bg-surface2 border-border1 border-t p-4">
+        <div className="bg-background border-border border-t p-4">
           <Controller
             name="memory.lastMessages"
             control={control}
@@ -123,7 +123,7 @@ function LastMessagesEntity() {
                   field.onChange(value === '' ? false : parseInt(value, 10));
                 }}
                 placeholder="40"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             )}
@@ -162,7 +162,7 @@ function SemanticRecallEntity() {
       </div>
 
       {semanticRecallEnabled && (
-        <div className="bg-surface2 border-border1 grid grid-cols-2 gap-4 border-t p-4">
+        <div className="bg-background border-border grid grid-cols-2 gap-4 border-t p-4">
           <Controller
             name="memory.vector"
             control={control}
@@ -173,7 +173,7 @@ function SemanticRecallEntity() {
                 </Label>
                 <span className="text-placeholder text-caption">Select a vector store for semantic search</span>
                 <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                  <SelectTrigger id="memory-vector" className="bg-surface3">
+                  <SelectTrigger id="memory-vector" className="bg-card">
                     <SelectValue placeholder="Select a vector store" />
                   </SelectTrigger>
                   <SelectContent>
@@ -198,7 +198,7 @@ function SemanticRecallEntity() {
                 </Label>
                 <span className="text-placeholder text-caption">Select an embedding model for semantic search</span>
                 <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                  <SelectTrigger id="memory-embedder" className="bg-surface3">
+                  <SelectTrigger id="memory-embedder" className="bg-card">
                     <SelectValue placeholder="Select an embedder model" />
                   </SelectTrigger>
                   <SelectContent>
@@ -275,7 +275,7 @@ function ObservationalMemoryEntity() {
       </div>
 
       {observationalMemoryEnabled && (
-        <div className="bg-surface2 border-border1 border-t p-4">
+        <div className="bg-background border-border border-t p-4">
           <ObservationalMemoryFields />
         </div>
       )}
@@ -339,7 +339,7 @@ function ObservationalMemoryFields() {
                 Whether observations are scoped per thread or shared across all threads for a resource
               </span>
               <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
-                <SelectTrigger id="memory-om-scope" className="bg-surface3">
+                <SelectTrigger id="memory-om-scope" className="bg-card">
                   <SelectValue placeholder="Select scope" />
                 </SelectTrigger>
                 <SelectContent>
@@ -373,10 +373,10 @@ function ObservationalMemoryFields() {
         />
       </div>
 
-      <div className="border-border1 mt-2 border-t pt-4">
+      <div className="border-border mt-2 border-t pt-4">
         <ObserverFields observerProvider={observerProvider} />
       </div>
-      <div className="border-border1 mt-2 border-t pt-4">
+      <div className="border-border mt-2 border-t pt-4">
         <ReflectorFields reflectorProvider={reflectorProvider} />
       </div>
     </div>
@@ -447,7 +447,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   field.onChange(v === '' ? undefined : parseInt(v, 10));
                 }}
                 placeholder="30000"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -476,7 +476,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   field.onChange(v === '' ? undefined : parseInt(v, 10));
                 }}
                 placeholder="10000"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -511,7 +511,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   }
                 }}
                 placeholder="0.2"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -541,7 +541,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   field.onChange(v === '' ? undefined : parseFloat(v));
                 }}
                 placeholder="0.8"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -570,7 +570,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                   field.onChange(v === '' ? undefined : parseFloat(v));
                 }}
                 placeholder="1.2"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -645,7 +645,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
                   field.onChange(v === '' ? undefined : parseInt(v, 10));
                 }}
                 placeholder="40000"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -674,7 +674,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
                   field.onChange(v === '' ? undefined : parseFloat(v));
                 }}
                 placeholder="1.2"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>
@@ -704,7 +704,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
                   field.onChange(v === '' ? undefined : parseFloat(v));
                 }}
                 placeholder="0.8"
-                className="bg-surface3"
+                className="bg-card"
                 disabled={readOnly}
               />
             </div>

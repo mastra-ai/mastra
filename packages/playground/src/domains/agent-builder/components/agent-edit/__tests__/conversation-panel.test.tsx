@@ -185,7 +185,7 @@ describe('ConversationPanel', () => {
       const { getByTestId } = renderPanel();
 
       const composer = getByTestId('agent-builder-conversation-composer');
-      expect(composer.className).toContain('border-border1');
+      expect(composer.className).toContain('border-border');
       expect(composer.className).not.toContain('border-accent5Dark');
       expect(composer.className).not.toContain('focus-within:border-accent5');
     });

@@ -29,13 +29,13 @@ interface AddBlockButtonProps {
 const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonProps) => {
   return (
     <div className={cn('group/add flex items-center gap-2 py-0.5', className)}>
-      <div className="bg-border1 h-px flex-1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
+      <div className="bg-border h-px flex-1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
             className={cn(
-              'hover:bg-surface4 focus-visible:ring-accent1 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:outline-hidden',
+              'hover:bg-fill-subtle focus-visible:ring-accent1 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:outline-hidden',
               quietTextHover,
             )}
           >
@@ -59,7 +59,7 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
-      <div className="bg-border1 h-px flex-1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
+      <div className="bg-border h-px flex-1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
     </div>
   );
 };

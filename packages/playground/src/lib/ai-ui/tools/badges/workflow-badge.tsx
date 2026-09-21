@@ -162,7 +162,7 @@ const WorkflowBadgeStepDetail = () => {
   const { stepDetail } = useWorkflowStepDetail();
   if (!stepDetail) return null;
   return (
-    <div className="border-border1 bg-surface2 mt-2 flex max-h-[60vh] flex-col overflow-hidden rounded-md border">
+    <div className="border-border bg-background mt-2 flex max-h-[60vh] flex-col overflow-hidden rounded-md border">
       <WorkflowStepDetailContent />
     </div>
   );

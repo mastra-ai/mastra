@@ -203,7 +203,7 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
     <div className="text-body flex items-center gap-1 overflow-x-auto">
       <button
         onClick={() => onNavigate('.')}
-        className="hover:bg-surface4 text-foreground rounded p-1"
+        className="hover:bg-fill-subtle text-foreground rounded p-1"
         aria-label="Workspace root"
       >
         <FolderOpen className="h-4 w-4" />
@@ -215,7 +215,7 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
             <ChevronRight className="text-muted-foreground h-4 w-4" />
             <button
               onClick={() => onNavigate(partPath)}
-              className="hover:bg-surface4 text-foreground max-w-[150px] truncate rounded px-2 py-1"
+              className="hover:bg-fill-subtle text-foreground max-w-[150px] truncate rounded px-2 py-1"
               title={part}
             >
               {part}
@@ -271,9 +271,9 @@ export function FileBrowser({
   };
 
   return (
-    <div className="border-border1 overflow-hidden rounded-lg border">
+    <div className="border-border overflow-hidden rounded-lg border">
       {/* Header */}
-      <div className="bg-surface3 border-border1 flex items-center justify-between border-b px-4 py-2">
+      <div className="bg-card border-border flex items-center justify-between border-b px-4 py-2">
         <Breadcrumb path={currentPath} onNavigate={onNavigate} />
         <div className="flex items-center gap-1">
           {onRefresh && (
@@ -335,7 +335,7 @@ export function FileBrowser({
                       const parentPath = currentPath.split('/').slice(0, -1).join('/') || '.';
                       onNavigate(parentPath);
                     }}
-                    className="hover:bg-surface4 flex w-full items-center gap-3 px-4 py-2 text-left"
+                    className="hover:bg-fill-subtle flex w-full items-center gap-3 px-4 py-2 text-left"
                   >
                     <FolderOpen className="h-4 w-4 text-amber-400" />
                     <span className="text-foreground text-body">..</span>
@@ -348,7 +348,7 @@ export function FileBrowser({
 
                 return (
                   <li key={entry.name} className="group">
-                    <div className="hover:bg-surface4 flex items-center">
+                    <div className="hover:bg-fill-subtle flex items-center">
                       <button
                         onClick={() => handleEntryClick(entry)}
                         className="flex flex-1 items-center gap-3 px-4 py-2 text-left"
@@ -376,7 +376,7 @@ export function FileBrowser({
                               <TooltipTrigger asChild>
                                 <span
                                   tabIndex={0}
-                                  className={`text-caption rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-muted-foreground bg-surface4'}`}
+                                  className={`text-caption rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-muted-foreground bg-muted'}`}
                                 >
                                   {mountLabel}
                                 </span>
@@ -385,7 +385,7 @@ export function FileBrowser({
                             </Tooltip>
                           ) : (
                             <span
-                              className={`text-caption rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-muted-foreground bg-surface4'}`}
+                              className={`text-caption rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-muted-foreground bg-muted'}`}
                             >
                               {mountLabel}
                             </span>
@@ -538,9 +538,9 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
   const language = getLanguageFromExtension(ext);
 
   return (
-    <div className="border-border1 overflow-hidden rounded-lg border">
+    <div className="border-border overflow-hidden rounded-lg border">
       {/* Header */}
-      <div className="bg-surface3 border-border1 flex items-center justify-between border-b px-4 py-2">
+      <div className="bg-card border-border flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-2">
           {getFileIcon({ name: fileName, type: 'file' })}
           <span className="text-foreground text-subheading">{fileName}</span>
@@ -556,7 +556,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       </div>
 
       {/* Content */}
-      <div className="bg-surface2 h-full max-h-[500px] overflow-auto">
+      <div className="bg-background h-full max-h-[500px] overflow-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />

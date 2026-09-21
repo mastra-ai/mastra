@@ -65,7 +65,7 @@ export const AgentStepContainer = ({
   ) : null;
 
   return (
-    <div className="border-border1 relative h-full min-h-0 w-full overflow-hidden rounded-3xl border p-4">
+    <div className="border-border relative h-full min-h-0 w-full overflow-hidden rounded-3xl border p-4">
       <div
         aria-hidden
         className={cn('agent-step-banner pointer-events-none', isStreaming && 'agent-step-banner-rotating')}
@@ -73,14 +73,14 @@ export const AgentStepContainer = ({
       />
       <div
         className={cn(
-          'relative h-full overflow-hidden bg-surface3 rounded-2xl grid min-h-0',
+          'relative h-full overflow-hidden bg-card rounded-2xl grid min-h-0',
           title ? 'grid-rows-[auto_minmax(0,1fr)_auto]' : 'grid-rows-[minmax(0,1fr)_auto]',
           panelClassName,
         )}
       >
         {panelOverlay}
         {title && (
-          <div className="border-border1 border-b px-4 pt-4 pb-4" data-testid="agent-step-title-section">
+          <div className="border-border border-b px-4 pt-4 pb-4" data-testid="agent-step-title-section">
             <h2 className="text-foreground text-display pb-1">{title}</h2>
             {description && <div className="text-muted-foreground w-1/2">{description}</div>}
           </div>
@@ -90,7 +90,7 @@ export const AgentStepContainer = ({
         </div>
         {showLastStepCtas ? (
           <div
-            className="border-border1 flex shrink-0 items-center justify-center gap-2 border-t pt-4 pb-4"
+            className="border-border flex shrink-0 items-center justify-center gap-2 border-t pt-4 pb-4"
             data-testid="agent-step-footer"
           >
             {backButton}
@@ -113,7 +113,7 @@ export const AgentStepContainer = ({
           </div>
         ) : (
           <div
-            className="border-border1 flex shrink-0 items-center justify-center gap-2 border-t pt-4 pb-4"
+            className="border-border flex shrink-0 items-center justify-center gap-2 border-t pt-4 pb-4"
             data-testid="agent-step-footer"
           >
             {backButton}

@@ -117,7 +117,7 @@ export function ScoresList({
             <ScoresDataList.RowButton
               key={score.id}
               onClick={() => handleScoreClick(score.id)}
-              className={selectedScoreId === score.id ? 'bg-surface4' : ''}
+              className={selectedScoreId === score.id ? 'bg-fill-hover' : ''}
               {...getRowProps(index)}
             >
               <ScoresDataList.DateCell timestamp={score.createdAt} />

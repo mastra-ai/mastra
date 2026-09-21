@@ -103,7 +103,7 @@ const SidebarLink = ({
         className={cn(
           'flex items-center gap-2.5 px-3 py-2 text-body border-r-2 border-transparent',
           controlStateColorTransition,
-          active ? 'bg-surface2 text-foreground border-accent1' : `hover:bg-surface3 ${quietTextHover}`,
+          active ? 'bg-fill-hover text-foreground border-accent1' : `hover:bg-fill-subtle ${quietTextHover}`,
         )}
       >
         {done ? (
@@ -130,7 +130,7 @@ const SidebarLink = ({
         </div>
       </Link>
 
-      {!isLast && <div className="bg-surface3 ml-6 inline-block h-2 w-0.5" />}
+      {!isLast && <div className="bg-card ml-6 inline-block h-2 w-0.5" />}
     </li>
   );
 };

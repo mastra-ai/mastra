@@ -34,7 +34,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr] overflow-hidden">
-      <div className="border-border1 border-b px-3 py-2.5">
+      <div className="border-border border-b px-3 py-2.5">
         <InputGroup variant="outline" size="sm">
           <InputGroupAddon align="inline-start">
             <SearchIcon />
@@ -86,9 +86,9 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
                       : undefined
                   }
                   className={cn(
-                    'flex items-start gap-3 rounded-md px-3 py-2.5',
-                    onToggle ? 'cursor-pointer hover:bg-surface4' : 'hover:bg-surface4',
-                    isSelected && 'bg-surface4',
+                    'state-layer flex items-start gap-3 rounded-md px-3 py-2.5',
+                    onToggle && 'cursor-pointer',
+                    isSelected && 'bg-fill-hover',
                   )}
                 >
                   {onToggle && (

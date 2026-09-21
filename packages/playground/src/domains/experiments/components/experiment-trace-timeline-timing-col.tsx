@@ -1,4 +1,5 @@
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import * as HoverCard from '@radix-ui/react-hover-card';
 import { format } from 'date-fns/format';
@@ -35,16 +36,14 @@ export function ExperimentTraceTimelineTimingCol({
     <HoverCard.Root openDelay={250}>
       <HoverCard.Trigger
         className={cn(
-          'h-12 p-2 grid grid-cols-[1fr_auto] gap-4 items-center cursor-help pr-3 rounded-r-lg col-span-2 xl:col-span-1 ',
-          '[&:hover>div]:bg-surface5',
+          'group col-span-2 grid h-12 cursor-help grid-cols-[1fr_auto] items-center gap-4 rounded-r-lg p-2 pr-3 xl:col-span-1',
           {
             'opacity-30 [&:hover]:opacity-60': isFaded,
-            'bg-surface4': selectedSpanId === span.id,
+            'bg-fill-hover': selectedSpanId === span.id,
           },
         )}
-        style={{ border: '2px dashed blue' }}
       >
-        <div className={cn('w-full p-2.5 rounded-lg bg-surface4 min-w-40')}>
+        <div className={cn('bg-muted w-full min-w-40 rounded-lg p-2.5', surfaceGroupStateLayerStyle)}>
           <div className="relative h-1.5 w-full rounded-sm">
             <div
               className={cn('bg-neutral1 absolute rounded-sm h-1.5 top-0')}
@@ -63,7 +62,7 @@ export function ExperimentTraceTimelineTimingCol({
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="bg-surface4 text-caption text-foreground border-border1 z-50 w-auto max-w-[25rem] rounded-md border p-2 px-4 pr-6 text-center"
+          className="bg-muted text-caption text-foreground border-border z-50 w-auto max-w-[25rem] rounded-md border p-2 px-4 pr-6 text-center"
           sideOffset={5}
           side="top"
         >
@@ -104,7 +103,7 @@ export function ExperimentTraceTimelineTimingCol({
               },
             ]}
           />
-          <HoverCard.Arrow className="fill-surface5" />
+          <HoverCard.Arrow className="fill-muted" />
         </HoverCard.Content>
       </HoverCard.Portal>
     </HoverCard.Root>

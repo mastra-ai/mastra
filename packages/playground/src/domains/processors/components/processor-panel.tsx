@@ -126,7 +126,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">
-      <div className="bg-surface2 border-border1 w-[22rem] overflow-y-auto border-r">
+      <div className="bg-background border-border w-[22rem] overflow-y-auto border-r">
         <ProcessorInformation processor={processor} />
 
         <div className="space-y-5 p-5">
@@ -196,7 +196,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           )}
 
           {result && (
-            <div className="border-border1 space-y-2 border-t pt-4">
+            <div className="border-border space-y-2 border-t pt-4">
               <Txt variant="caption" className="text-muted-foreground">
                 Status
               </Txt>
@@ -236,7 +236,7 @@ interface ProcessorInformationProps {
 
 function ProcessorInformation({ processor }: ProcessorInformationProps) {
   return (
-    <div className="border-border1 border-b px-5 pt-5 pb-4">
+    <div className="border-border border-b px-5 pt-5 pb-4">
       <Txt variant="heading" className="text-placeholder mb-2">
         {processor.name || processor.id}
       </Txt>

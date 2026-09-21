@@ -63,7 +63,7 @@ export function WorkflowTriggerForm({
 
   return (
     <>
-      {headingSlot && <div className="border-border1/50 border-b pb-3">{headingSlot}</div>}
+      {headingSlot && <div className="border-border/50 border-b pb-3">{headingSlot}</div>}
       <div className="flex items-center justify-between gap-1 pt-3">
         {leftActions ?? <div />}
         <div className="flex items-center gap-1">

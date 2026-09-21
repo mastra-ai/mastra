@@ -98,8 +98,8 @@ export function TemplateForm({
                 ))
               )}
             </div>
-            <div className="border-border1 relative mt-3.5 border-t pt-12">
-              <div className="bg-surface2 text-caption text-muted-foreground absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full">
+            <div className="border-border relative mt-3.5 border-t pt-12">
+              <div className="bg-background text-caption text-muted-foreground absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full">
                 And
               </div>
 
@@ -123,7 +123,7 @@ export function TemplateForm({
         {selectedProvider && !isLoadingEnvVars && (
           <Button
             className={cn(
-              'flex items-center gap-2 mt-4 justify-center text-body w-full bg-surface5 min-h-10 rounded-lg text-foreground hover:bg-surface6',
+              'flex items-center gap-2 mt-4 justify-center text-body w-full bg-card state-layer min-h-10 rounded-lg text-foreground',
               '[&>svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-foreground',
             )}
             onClick={handleInstallTemplate}

@@ -112,7 +112,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   return (
     <div className="flex flex-col gap-4">
       {appHtml && (
-        <div className="border-border1 border-b p-4">
+        <div className="border-border border-b p-4">
           <McpAppViewer html={appHtml} toolName={tool.name} onToolCall={handleToolCall} />
         </div>
       )}

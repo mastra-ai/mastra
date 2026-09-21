@@ -70,7 +70,7 @@ export function DatasetVersionsPanel({
   };
 
   return (
-    <div className="border-border1 grid w-64 grid-rows-[auto_1fr] gap-2 overflow-hidden border-l pt-3 pl-3">
+    <div className="border-border grid w-64 grid-rows-[auto_1fr] gap-2 overflow-hidden border-l pt-3 pl-3">
       <div className="flex items-center justify-between gap-2 pr-1 pl-2">
         <Txt as="h2" variant="body" className="text-muted-foreground">
           Versions

@@ -91,7 +91,7 @@ export function SkillsPage() {
         {filteredSkills.length > 0 && (
           <div className="flex flex-col gap-2">
             {filteredSkills.map(skill => (
-              <Entity key={skill.id} className="bg-surface2">
+              <Entity key={skill.id} className="bg-background">
                 <EntityContent>
                   <EntityName>{skill.name}</EntityName>
                   <EntityDescription>{skill.description || 'No description'}</EntityDescription>

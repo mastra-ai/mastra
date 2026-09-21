@@ -30,7 +30,7 @@ export function BrowserViewHeader({
   return (
     <div
       className={cn(
-        'flex items-center justify-between px-3 py-2 border-b border-border1 bg-surface1',
+        'flex items-center justify-between px-3 py-2 border-b border-border bg-sidebar',
         isCollapsed ? 'rounded-md' : 'rounded-t-md',
         className,
       )}
@@ -50,7 +50,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onTuck}
-            className={cn('hover:bg-surface3 rounded p-1', quietTextHover, controlStateColorTransition)}
+            className={cn('hover:bg-fill-subtle rounded p-1', quietTextHover, controlStateColorTransition)}
             title="Minimize to pill"
           >
             <Minus className="h-4 w-4" />
@@ -61,7 +61,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className={cn('hover:bg-surface3 rounded p-1', quietTextHover, controlStateColorTransition)}
+            className={cn('hover:bg-fill-subtle rounded p-1', quietTextHover, controlStateColorTransition)}
             title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
           >
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -72,7 +72,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onClose}
-            className={cn('hover:bg-surface3 rounded p-1', quietTextHover, controlStateColorTransition)}
+            className={cn('hover:bg-fill-subtle rounded p-1', quietTextHover, controlStateColorTransition)}
             title="Close browser session"
           >
             <X className="h-4 w-4" />

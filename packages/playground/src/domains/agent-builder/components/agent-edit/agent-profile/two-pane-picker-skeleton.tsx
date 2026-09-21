@@ -7,7 +7,7 @@ interface TwoPanePickerSkeletonProps {
 export const TwoPanePickerSkeleton = ({ testId }: TwoPanePickerSkeletonProps) => (
   <div className="h-full min-h-0 overflow-hidden">
     <div className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)] overflow-hidden" data-testid={testId}>
-      <div className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-4 py-4">
+      <div className="border-border flex h-full min-h-0 flex-col gap-3 border-r px-4 py-4">
         <Skeleton className="h-10 w-full rounded-md" />
         <Skeleton className="h-4 w-28" />
         <Skeleton className="h-7 w-full rounded-md" />

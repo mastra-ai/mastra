@@ -3,6 +3,8 @@ import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
 export function WorkflowGraphBoundary({
@@ -26,7 +28,7 @@ export function WorkflowGraphBoundary({
         const definition = safeStringify(stepGraph, 2);
         return (
           <div role="alert" className="nodrag nopan nowheel h-full overflow-auto p-4">
-            <div className="bg-surface3 border-border1 space-y-3 rounded-lg border p-4">
+            <div className={cn(raisedSurfaceStyle, 'space-y-3 rounded-lg p-4')}>
               <h3 className="text-subheading text-foreground">Graph unavailable</h3>
               <p className="text-caption text-muted-foreground">Studio could not display this workflow graph.</p>
               <p className="text-meta text-muted-foreground break-words">{error.message}</p>

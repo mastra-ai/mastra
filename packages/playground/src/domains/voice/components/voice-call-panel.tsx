@@ -1,3 +1,4 @@
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { VoiceAgentState, VoiceCallControls, VoiceCaptionSegment } from '../types';
 
@@ -29,7 +30,7 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
   return (
     <div
       data-testid="voice-call-panel"
-      className="border-border2/40 bg-surface3 mx-auto mb-2 w-full max-w-3xl rounded-[16px] border px-4 py-3"
+      className={cn(raisedSurfaceStyle, 'mx-auto mb-2 w-full max-w-3xl rounded-[16px] px-4 py-3')}
     >
       <div className="flex items-center gap-2">
         <span

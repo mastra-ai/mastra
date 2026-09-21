@@ -114,7 +114,7 @@ function WorkflowInformationTopSection({
         <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
           <ScrollArea
             data-testid="workflow-information-top-scroll-area"
-            className="border-border1/50 min-h-0 flex-1 border-t"
+            className="border-border/50 min-h-0 flex-1 border-t"
             viewPortClassName="h-full"
             mask={{ top: false, bottom: false }}
           >

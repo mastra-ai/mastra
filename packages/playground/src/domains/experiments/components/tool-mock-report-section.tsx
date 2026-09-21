@@ -55,7 +55,7 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
         </Notice>
       )}
 
-      <div className="border-border1 divide-border1 text-body divide-y rounded border">
+      <div className="border-border divide-border text-body divide-y rounded border">
         {rows.map((row, i) => (
           <div
             key={`${row.outcome}-${row.toolName}-${i}`}

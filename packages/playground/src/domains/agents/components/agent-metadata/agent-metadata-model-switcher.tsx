@@ -2,6 +2,8 @@ import type { UpdateModelParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
@@ -177,7 +179,7 @@ export const AgentMetadataModelSwitcher = ({
           : 'Locked by admin';
     return (
       <div
-        className="border-border1 bg-surface3 flex items-center gap-2 rounded-md border px-3 py-2"
+        className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
         data-testid="agent-metadata-model-locked"
       >
         <Lock className="text-muted-foreground h-4 w-4 shrink-0" />

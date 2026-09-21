@@ -147,7 +147,7 @@ export const FileTreeBadge = ({
         {wsMeta?.filesystem && (
           <Link
             href={wsMeta.id ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
-            className="text-foreground bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 text-caption flex items-center gap-1.5 rounded border px-1.5 py-0.5"
+            className="text-foreground bg-card border-border state-layer hover:border-border-strong text-caption flex items-center gap-1.5 rounded border px-1.5 py-0.5"
           >
             <HardDrive className="size-3" />
             <span>{wsMeta.name || wsMeta.filesystem.name}</span>
@@ -163,7 +163,7 @@ export const FileTreeBadge = ({
         <div className="pt-2">
           {/* Approval UI - styled like ToolBadge/BadgeWrapper when awaiting approval */}
           {toolApprovalMetadata && !toolCalled && (
-            <div className="bg-surface2 flex flex-col gap-4 rounded-lg p-4">
+            <div className="bg-background flex flex-col gap-4 rounded-lg p-4">
               <div>
                 <SectionLabel>Tool arguments</SectionLabel>
                 <CodeEditor data={parsedArgs as Record<string, unknown>} data-testid="tool-args" />
@@ -180,9 +180,9 @@ export const FileTreeBadge = ({
 
           {/* Tree output panel - custom UI after tool has been called */}
           {toolCalled && treeOutput && (
-            <div className="border-border1 bg-surface2 overflow-hidden rounded-md border">
+            <div className="border-border bg-background overflow-hidden rounded-md border">
               {/* Panel header with summary and copy button */}
-              <div className="border-border1 bg-surface3 flex items-center justify-between border-b px-3 py-1.5">
+              <div className="border-border bg-card flex items-center justify-between border-b px-3 py-1.5">
                 {summary && <span className="text-foreground text-caption">{summary}</span>}
                 <Button variant="default" size="icon-sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
@@ -211,7 +211,7 @@ export const FileTreeBadge = ({
 
           {/* Loading state */}
           {toolCalled && !hasResult && (
-            <div className="border-border1 bg-surface2 rounded-md border px-3 py-2">
+            <div className="border-border bg-background rounded-md border px-3 py-2">
               <span className="text-foreground text-caption">Loading...</span>
             </div>
           )}

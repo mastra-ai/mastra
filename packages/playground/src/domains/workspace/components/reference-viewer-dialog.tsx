@@ -41,7 +41,7 @@ export function ReferenceViewerDialog({
 
       {/* Dialog */}
       <div
-        className="bg-card shadow-raised relative mx-4 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl"
+        className="bg-card shadow-overlay relative mx-4 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="reference-viewer-title"
@@ -50,9 +50,9 @@ export function ReferenceViewerDialog({
         }}
       >
         {/* Header */}
-        <div className="border-border1 bg-surface3 flex items-center justify-between border-b px-4 py-4">
+        <div className="border-border bg-card flex items-center justify-between border-b px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="bg-surface5 rounded p-1.5">
+            <div className="bg-muted rounded p-1.5">
               <FileText className="text-muted-foreground h-4 w-4" />
             </div>
             <div>
@@ -72,7 +72,7 @@ export function ReferenceViewerDialog({
             <button
               onClick={() => onOpenChange(false)}
               aria-label="Close reference viewer"
-              className={cn('hover:bg-surface4 rounded-lg p-2', quietTextHover, controlStateColorTransition)}
+              className={cn('hover:bg-fill-subtle rounded-lg p-2', quietTextHover, controlStateColorTransition)}
             >
               <X className="h-4 w-4" />
             </button>
@@ -91,7 +91,7 @@ export function ReferenceViewerDialog({
               <p className="text-muted-foreground text-body">{error}</p>
             </div>
           ) : content ? (
-            <pre className="text-foreground bg-surface3 text-body overflow-auto rounded-lg p-4 font-mono whitespace-pre-wrap">
+            <pre className="text-foreground bg-card text-body overflow-auto rounded-lg p-4 font-mono whitespace-pre-wrap">
               {content}
             </pre>
           ) : (

@@ -56,7 +56,7 @@ export function BulkTagPicker({
           {filtered.map(tag => (
             <div
               key={tag}
-              className="hover:bg-surface3 text-caption flex items-center justify-between rounded px-2 py-1"
+              className="hover:bg-fill-subtle text-caption flex items-center justify-between rounded px-2 py-1"
             >
               <button type="button" onClick={() => onApplyTag(tag)} className="text-muted-foreground flex-1 text-left">
                 {tag}
@@ -77,7 +77,7 @@ export function BulkTagPicker({
                 onNewTag(search.trim());
                 setSearch('');
               }}
-              className="hover:bg-surface3 text-accent1 text-caption w-full rounded px-2 py-1 text-left"
+              className="hover:bg-fill-subtle text-accent1 text-caption w-full rounded px-2 py-1 text-left"
             >
               Create &amp; apply &quot;{search.trim()}&quot;
             </button>

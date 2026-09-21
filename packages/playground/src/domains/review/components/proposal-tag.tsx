@@ -33,7 +33,7 @@ export function ProposalTag({
 
   if (isEditing) {
     return (
-      <span className="bg-surface3 border-border1 inline-flex items-center gap-0.5 rounded-md border px-1">
+      <span className="bg-card border-border inline-flex items-center gap-0.5 rounded-md border px-1">
         <input
           ref={inputRef}
           value={editValue}
@@ -66,7 +66,7 @@ export function ProposalTag({
   }
 
   return (
-    <span className="bg-surface3 border-border1 text-muted-foreground group text-caption inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5">
+    <span className="bg-card border-border text-muted-foreground group text-caption inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5">
       {tag}
       <button
         type="button"

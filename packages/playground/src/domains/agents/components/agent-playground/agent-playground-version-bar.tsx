@@ -133,7 +133,7 @@ export function AgentPlaygroundVersionBar({
 
   return {
     versionSelector: (
-      <div className="border-border1 bg-surface3 flex items-center gap-2 border-b px-4 py-3">
+      <div className="border-border bg-card flex items-center gap-2 border-b px-4 py-3">
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}
@@ -176,7 +176,7 @@ export function AgentPlaygroundVersionBar({
       </div>
     ),
     actionBar: (
-      <div className="border-border1 bg-surface3 flex items-center justify-end border-t px-3 py-2">
+      <div className="border-border bg-card flex items-center justify-end border-t px-3 py-2">
         {showCodeModeActions ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="default" size="md" onClick={() => void onDownloadJson?.()} icon={<Download />}>

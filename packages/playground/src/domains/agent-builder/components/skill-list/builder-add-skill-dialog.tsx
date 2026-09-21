@@ -204,7 +204,7 @@ export function BuilderAddSkillDialog({
               <div className="text-muted-foreground text-column mb-2 tracking-wide uppercase">
                 {hasSearchResults ? 'Search results' : 'Popular skills'}
               </div>
-              <ScrollArea className="border-border1 flex-1 rounded-lg border">
+              <ScrollArea className="border-border flex-1 rounded-lg border">
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-5">
                     <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
@@ -226,8 +226,8 @@ export function BuilderAddSkillDialog({
                           onClick={() => setSelectedSkill(skill)}
                           className={cn(
                             'w-full text-left px-3 py-2 rounded-md',
-                            'hover:bg-surface4',
-                            selectedUniqueId === skillUniqueId && 'bg-surface5 border border-accent1',
+                            'hover:bg-fill-subtle',
+                            selectedUniqueId === skillUniqueId && 'bg-fill-hover border border-accent1',
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -257,7 +257,7 @@ export function BuilderAddSkillDialog({
             </div>
 
             {/* Preview pane */}
-            <div className="border-border1 flex min-h-0 w-1/2 flex-col overflow-hidden rounded-lg border">
+            <div className="border-border flex min-h-0 w-1/2 flex-col overflow-hidden rounded-lg border">
               {!selectedSkill ? (
                 <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center">
                   <Package className="mb-2 h-8 w-8" />
@@ -265,9 +265,9 @@ export function BuilderAddSkillDialog({
                 </div>
               ) : (
                 <>
-                  <div className="border-border1 bg-surface3 border-b p-4">
+                  <div className="border-border bg-card border-b p-4">
                     <div className="flex items-start gap-3">
-                      <div className="bg-surface5 rounded-lg p-2">
+                      <div className="bg-muted rounded-lg p-2">
                         <SkillIcon className="text-muted-foreground h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -319,7 +319,7 @@ export function BuilderAddSkillDialog({
           </div>
 
           {selectedSkill && (
-            <div className="border-border1 flex flex-col gap-3 border-t pt-4">
+            <div className="border-border flex flex-col gap-3 border-t pt-4">
               {installError && (
                 <div className="text-body rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-400">
                   {installError}

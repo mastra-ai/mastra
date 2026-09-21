@@ -102,10 +102,10 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
   }, [content]);
 
   return (
-    <div className="border-border1 overflow-hidden rounded-md border">
+    <div className="border-border overflow-hidden rounded-md border">
       {/* Terminal header with command */}
       {command && (
-        <div className="bg-surface3 border-border1 flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="bg-card border-border flex items-center justify-between gap-2 border-b px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="text-foreground text-caption shrink-0">$</span>
             <code className="text-foreground text-caption truncate font-mono">{command}</code>
@@ -263,7 +263,7 @@ export const SandboxExecutionBadge = ({
           {execMeta?.sandbox && (
             <Link
               href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
-              className="text-foreground bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 text-caption flex items-center gap-1.5 rounded border px-1.5 py-0.5"
+              className="text-foreground bg-card border-border state-layer hover:border-border-strong text-caption flex items-center gap-1.5 rounded border px-1.5 py-0.5"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               <span className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(execMeta.sandbox.status))} />

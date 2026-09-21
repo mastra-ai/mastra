@@ -104,8 +104,7 @@ export function SkillEditDialog({
 
   const builderDefaultWorkspaceId = useMemo(() => {
     const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+      { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -366,7 +365,7 @@ export function SkillEditDialog({
 
             {/* Form section — revealed after agent populates or user expands */}
             {showForm ? (
-              <div className="border-border1 border-t pt-4">
+              <div className="border-border border-t pt-4">
                 <button
                   onClick={() => setShowForm(false)}
                   className={cn(
@@ -464,7 +463,7 @@ export function SkillEditDialog({
                 )}
               </div>
             ) : (
-              <div className="border-border1 border-t pt-3">
+              <div className="border-border border-t pt-3">
                 <button
                   onClick={() => setShowForm(true)}
                   className={cn('text-caption flex items-center gap-1.5', quietTextHover, controlStateColorTransition)}

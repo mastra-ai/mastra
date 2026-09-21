@@ -43,7 +43,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
   };
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border">
+    <div className="border-border bg-background rounded-md border">
       <Controller
         name="scorers"
         control={control}
@@ -85,7 +85,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
           return (
             <>
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="bg-surface3 flex items-center justify-between p-3">
+                <div className="bg-card flex items-center justify-between p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
                     <ChevronRight className="text-muted-foreground h-4 w-4" />
                     <SectionTitle icon={<JudgeIcon className="text-muted-foreground" />}>
@@ -95,7 +95,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                 </div>
 
                 <CollapsibleContent>
-                  <div className="border-border1 border-t p-3">
+                  <div className="border-border border-t p-3">
                     <div className="flex flex-col gap-2">
                       <Combobox
                         multiple
@@ -198,7 +198,7 @@ function ScorerConfigPanel({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this scorer..."
-        className="bg-surface3 text-caption min-h-[40px] border-dashed px-2 py-1"
+        className="bg-card text-caption min-h-[40px] border-dashed px-2 py-1"
         size="sm"
         disabled={readOnly}
       />

@@ -39,16 +39,16 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
   const embedders = embeddersData?.embedders ?? [];
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border">
+    <div className="border-border bg-background rounded-md border">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="bg-surface3 flex w-full items-center gap-1 p-3">
+        <CollapsibleTrigger className="bg-card flex w-full items-center gap-1 p-3">
           <ChevronRight className="text-muted-foreground h-4 w-4" />
           <SectionTitle icon={<MemoryIcon className="text-muted-foreground" />}>
             Memory{isEnabled && <span className="text-accent1">(enabled)</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-border1 flex flex-col gap-4 border-t p-3">
+          <div className="border-border flex flex-col gap-4 border-t p-3">
             <Controller
               name="memory.enabled"
               control={control}
@@ -94,7 +94,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           field.onChange(value === '' ? false : parseInt(value, 10));
                         }}
                         placeholder="40"
-                        className="bg-surface3"
+                        className="bg-card"
                         disabled={readOnly}
                       />
                     </div>
@@ -136,7 +136,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             Select a vector store for semantic search
                           </span>
                           <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                            <SelectTrigger id="memory-vector" className="bg-surface3">
+                            <SelectTrigger id="memory-vector" className="bg-card">
                               <SelectValue placeholder="Select a vector store" />
                             </SelectTrigger>
                             <SelectContent>
@@ -163,7 +163,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             Select an embedding model for semantic search
                           </span>
                           <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                            <SelectTrigger id="memory-embedder" className="bg-surface3">
+                            <SelectTrigger id="memory-embedder" className="bg-card">
                               <SelectValue placeholder="Select an embedder model" />
                             </SelectTrigger>
                             <SelectContent>
@@ -227,7 +227,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                 />
 
                 {observationalMemoryEnabled && (
-                  <div className="border-border1 ml-2 flex flex-col gap-4 border-l-2 pl-3">
+                  <div className="border-border ml-2 flex flex-col gap-4 border-l-2 pl-3">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-muted-foreground">Provider</Label>
                       <span className="text-muted-foreground text-caption">
@@ -278,7 +278,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             Whether observations are scoped per thread or shared across all threads for a resource
                           </span>
                           <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
-                            <SelectTrigger id="memory-om-scope" className="bg-surface3">
+                            <SelectTrigger id="memory-om-scope" className="bg-card">
                               <SelectValue placeholder="Select scope" />
                             </SelectTrigger>
                             <SelectContent>
@@ -322,7 +322,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         <Label className="text-foreground cursor-pointer">Observer</Label>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="border-border1 mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
+                        <div className="border-border mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-muted-foreground">Provider Override</Label>
                             <span className="text-muted-foreground text-caption">
@@ -387,7 +387,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseInt(v, 10));
                                   }}
                                   placeholder="30000"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
                               </div>
@@ -416,7 +416,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseInt(v, 10));
                                   }}
                                   placeholder="10000"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
                               </div>
@@ -451,7 +451,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     }
                                   }}
                                   placeholder="0.2"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
                               </div>
@@ -481,7 +481,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseFloat(v));
                                   }}
                                   placeholder="0.8"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
                               </div>
@@ -510,7 +510,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseFloat(v));
                                   }}
                                   placeholder="1.2"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
                               </div>
@@ -529,7 +529,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         <Label className="text-foreground cursor-pointer">Reflector</Label>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="border-border1 mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
+                        <div className="border-border mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-muted-foreground">Provider Override</Label>
                             <span className="text-muted-foreground text-caption">
@@ -594,7 +594,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseInt(v, 10));
                                   }}
                                   placeholder="40000"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
                               </div>
@@ -623,7 +623,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseFloat(v));
                                   }}
                                   placeholder="1.2"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
                               </div>
@@ -653,7 +653,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseFloat(v));
                                   }}
                                   placeholder="0.8"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
                               </div>

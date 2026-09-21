@@ -237,7 +237,7 @@ export const MemorySearch = ({
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder="Search memory..."
-          className="bg-surface3 border-border1 pr-10 pl-10"
+          className="bg-card border-border pr-10 pl-10"
         />
         {query && (
           <Button onClick={clearSearch} className="absolute top-1/2 right-1 h-6 w-6 -translate-y-1/2 transform p-0">
@@ -274,7 +274,7 @@ export const MemorySearch = ({
                   key={result.id}
                   onClick={() => handleResultClick(result.id, result.threadId)}
                   className={cn(
-                    'w-full px-4 py-3 hover:bg-surface4 text-left border-b border-border1 last:border-b-0',
+                    'w-full px-4 py-3 hover:bg-fill-subtle text-left border-b border-border last:border-b-0',
                     result.threadId !== currentThreadId && 'border-l-2 border-l-blue-400',
                   )}
                 >

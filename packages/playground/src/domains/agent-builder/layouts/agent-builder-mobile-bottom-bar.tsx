@@ -63,7 +63,7 @@ export function AgentBuilderMobileBottomBar() {
   return (
     <nav
       aria-label="Primary"
-      className="border-border1 bg-surface1/95 fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
+      className="border-border bg-sidebar/95 fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
     >
       <ul className="grid" style={{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }}>
         {links.map(link => {

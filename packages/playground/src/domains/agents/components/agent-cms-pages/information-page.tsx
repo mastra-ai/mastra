@@ -41,7 +41,7 @@ export function InformationPage() {
           disabled={readOnly}
         />
 
-        <div className="border-border1 border-t pt-8">
+        <div className="border-border border-t pt-8">
           <SubSectionRoot>
             <SubSectionHeader title="Model Configuration" />
             <div className="grid grid-cols-2 gap-4">

@@ -63,8 +63,7 @@ export const SkillBuilderStarter = () => {
 
   const builderDefaultWorkspaceId = useMemo(() => {
     const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+      { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -111,7 +110,7 @@ export const SkillBuilderStarter = () => {
   };
 
   return (
-    <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-4 py-16">
+    <div className="starter-aurora bg-sidebar flex min-h-full flex-col items-center justify-center px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
         <h1 className="starter-heading text-foreground text-title md:text-display text-center font-serif tracking-tight">
           What skill do you want to build?
@@ -119,7 +118,7 @@ export const SkillBuilderStarter = () => {
 
         <form onSubmit={handleSubmit}>
           <div
-            className="starter-prompt border-border1 bg-surface2 duration-normal ease-out-custom focus-within:border-neutral3 rounded-2xl border transition-colors"
+            className="starter-prompt border-border bg-background duration-normal ease-out-custom focus-within:border-neutral3 rounded-2xl border transition-colors"
             style={{ viewTransitionName: 'skill-chat-composer' }}
           >
             <Textarea
@@ -168,7 +167,7 @@ export const SkillBuilderStarter = () => {
                 data-testid={`skill-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + i * 40}ms` }}
                 className={cn(
-                  'starter-chip group border-border1 text-caption hover:border-border2 hover:bg-surface2 inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2',
+                  'starter-chip group border-border text-caption hover:border-border-strong hover:bg-fill-subtle inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2',
                   quietTextHover,
                   controlStateColorTransition,
                 )}

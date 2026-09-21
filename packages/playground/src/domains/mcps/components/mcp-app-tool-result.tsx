@@ -44,7 +44,7 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
 
   if (isLoading || !html) {
     return (
-      <div className="border-border1 bg-surface2 text-text2 text-body rounded-md border p-4">Loading MCP App UI…</div>
+      <div className="border-border bg-background text-text2 text-body rounded-md border p-4">Loading MCP App UI…</div>
     );
   }
 
@@ -56,7 +56,7 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
       toolResult={toolResult}
       onToolCall={readOnly ? undefined : handleToolCall}
       onSendMessage={readOnly ? undefined : onSendMessage}
-      className="border-border1 rounded-md border"
+      className="border-border rounded-md border"
     />
   );
 }

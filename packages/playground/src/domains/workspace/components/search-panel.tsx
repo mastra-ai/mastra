@@ -1,6 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import type { SearchResult, SearchResponse, SkillSearchResult } from '../types';
@@ -75,7 +77,7 @@ export function SearchWorkspacePanel({
   ];
 
   return (
-    <div className="bg-surface4 rounded-lg">
+    <div className="bg-muted rounded-lg">
       {/* Search Form */}
       <form onSubmit={handleSearch} className="p-4">
         <div className="flex items-center gap-3">
@@ -100,7 +102,7 @@ export function SearchWorkspacePanel({
               max={50}
               value={topK}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopK(parseInt(e.target.value) || 5)}
-              className="bg-surface2 border-border1 w-14 text-center"
+              className="bg-background border-border w-14 text-center"
               title="Number of results"
             />
           </div>
@@ -122,7 +124,7 @@ export function SearchWorkspacePanel({
                   key={m}
                   type="button"
                   onClick={() => setMode(m)}
-                  className={`text-column inline-flex items-center gap-1.5 rounded border px-2.5 py-1 ${isActive ? config.color : 'bg-surface2 text-muted-foreground hover:bg-surface3 border-transparent'}`}
+                  className={`text-column inline-flex items-center gap-1.5 rounded border px-2.5 py-1 ${isActive ? config.color : 'bg-background text-muted-foreground state-layer border-transparent'}`}
                 >
                   {config.icon}
                   {config.label}
@@ -135,7 +137,7 @@ export function SearchWorkspacePanel({
 
       {/* Results */}
       {searchResults && (
-        <div className="border-border1 border-t">
+        <div className="border-border border-t">
           <div className="text-caption flex items-center justify-between px-4 py-2">
             <span className="text-muted-foreground">
               {searchResults.results.length} result{searchResults.results.length !== 1 ? 's' : ''} for "
@@ -179,15 +181,15 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
   const fileId = getWorkspaceSearchResultFileId(result);
 
   return (
-    <li className="border-border1 border-t first:border-t-0">
-      <button onClick={onClick} className="hover:bg-surface5 flex w-full gap-3 px-4 py-3 text-left">
+    <li className="border-border border-t first:border-t-0">
+      <button onClick={onClick} className="hover:bg-fill-subtle flex w-full gap-3 px-4 py-3 text-left">
         <span className="text-muted-foreground text-caption w-4 shrink-0 tabular-nums">{rank}</span>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <FolderOpen className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
             <span className="text-foreground text-body truncate font-mono">{fileId}</span>
             <div className="flex shrink-0 items-center gap-1.5">
-              <div className="bg-surface2 h-1 w-12 overflow-hidden rounded-full">
+              <div className="bg-background h-1 w-12 overflow-hidden rounded-full">
                 <div className="bg-accent1 h-full rounded-full" style={{ width: `${scorePercent}%` }} />
               </div>
               <span className="text-meta text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
@@ -239,7 +241,10 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search across skills..."
-              className="bg-surface3 border-border1 text-foreground placeholder:text-muted-foreground focus:ring-accent1 text-body w-full rounded-lg border py-2 pr-4 pl-10 focus:ring-2 focus:outline-hidden"
+              className={cn(
+                raisedSurfaceStyle,
+                'text-foreground placeholder:text-muted-foreground focus:ring-accent1 text-body w-full rounded-lg py-2 pr-4 pl-10 focus:ring-2 focus:outline-hidden',
+              )}
             />
           </div>
           <Button type="submit" disabled={!query.trim() || isSearching}>
@@ -253,7 +258,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
             <select
               value={topK}
               onChange={e => setTopK(Number(e.target.value))}
-              className="bg-surface3 border-border1 text-foreground rounded border px-2 py-1"
+              className={cn(raisedSurfaceStyle, 'text-foreground rounded px-2 py-1')}
             >
               <option value={3}>3</option>
               <option value={5}>5</option>
@@ -267,7 +272,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
               type="checkbox"
               checked={includeReferences}
               onChange={e => setIncludeReferences(e.target.checked)}
-              className="border-border1 bg-surface3 rounded"
+              className="border-border bg-card rounded"
             />
             <span>Include references</span>
           </label>
@@ -301,10 +306,10 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
   return (
     <button
       onClick={onClick}
-      className="bg-surface3 border-border1 hover:border-accent1/50 w-full rounded-lg border p-4 text-left transition-colors"
+      className={cn(raisedSurfaceStyle, surfaceStateLayerStyle, 'w-full rounded-lg p-4 text-left')}
     >
       <div className="flex items-start gap-3">
-        <div className="bg-surface5 mt-0.5 shrink-0 rounded p-1.5">
+        <div className="bg-muted mt-0.5 shrink-0 rounded p-1.5">
           {isReference ? (
             <FileText className="text-muted-foreground h-3.5 w-3.5" />
           ) : (

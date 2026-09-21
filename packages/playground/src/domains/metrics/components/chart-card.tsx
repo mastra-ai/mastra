@@ -17,7 +17,7 @@ export function ChartCard({
   className?: string;
 }) {
   return (
-    <div className={`border-border1 bg-surface2 flex flex-col rounded-lg border ${className}`}>
+    <div className={`border-border bg-background flex flex-col rounded-lg border ${className}`}>
       <div className="flex shrink-0 items-start justify-between px-4 py-3">
         <div>
           <h3 className="text-icon6 text-subheading">{title}</h3>

@@ -43,7 +43,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
       >
         {hasInstructions ? (
           <div className="group/prompt relative min-w-0 pointer-coarse:pt-12">
-            <div className="bg-surface2 absolute top-0 right-0 z-10 flex items-center gap-1 rounded-md opacity-0 group-focus-within/prompt:opacity-100 group-hover/prompt:opacity-100 pointer-coarse:opacity-100">
+            <div className="bg-background absolute top-0 right-0 z-10 flex items-center gap-1 rounded-md opacity-0 group-focus-within/prompt:opacity-100 group-hover/prompt:opacity-100 pointer-coarse:opacity-100">
               {activeTab === 'source' && (
                 <Button
                   variant="ghost"
@@ -51,7 +51,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                   aria-label="Wrap lines"
                   aria-pressed={wrapSource}
                   tooltip="Wrap lines"
-                  className="aria-pressed:bg-surface3 aria-pressed:text-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                  className="aria-pressed:bg-fill-hover aria-pressed:text-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                   onClick={() => setWrapSource(wrapped => !wrapped)}
                 >
                   <WrapText />

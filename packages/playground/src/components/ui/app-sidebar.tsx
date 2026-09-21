@@ -245,14 +245,14 @@ export function AppSidebar() {
                 type="button"
                 onClick={openNavigationCommand}
                 aria-label="Search and navigate"
-                className="border-border1 bg-surface3 text-foreground hover:bg-surface4 active:bg-surface5 [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground border"
+                className="bg-card shadow-raised text-foreground state-layer [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground"
               >
                 <Search />
                 <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
                 {state !== 'collapsed' && (
                   <kbd
                     aria-hidden="true"
-                    className="border-border1 bg-surface4 text-muted-foreground text-meta ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                    className="border-border bg-muted text-muted-foreground text-meta ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                   >
                     {commandShortcutLabel}
                   </kbd>
@@ -336,7 +336,7 @@ export function AppSidebar() {
         )}
         {state !== 'collapsed' && (
           <>
-            <hr className="bg-border1 mx-3 my-2 h-px border-0" />
+            <hr className="bg-border mx-3 my-2 h-px border-0" />
             <MastraVersionFooter collapsed={false} />
           </>
         )}

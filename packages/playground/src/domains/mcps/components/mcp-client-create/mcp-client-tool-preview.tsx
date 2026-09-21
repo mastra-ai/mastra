@@ -113,7 +113,7 @@ function ToolList({
   return (
     <div className="overflow-y-auto p-5">
       <div className="text-foreground flex items-center gap-2">
-        <Icon size="lg" className="bg-surface4 rounded-md p-1">
+        <Icon size="lg" className="bg-muted rounded-md p-1">
           <McpServerIcon />
         </Icon>
         <Txt variant="heading" as="h2">
@@ -139,7 +139,7 @@ function ToolList({
                     disabled={isDisabled}
                     className={cn(
                       'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
-                      !isDisabled && 'border-border1 border-dashed',
+                      !isDisabled && 'border-border border-dashed',
                     )}
                     value={
                       isSelected

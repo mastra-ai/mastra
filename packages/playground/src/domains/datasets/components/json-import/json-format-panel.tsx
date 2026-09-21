@@ -27,7 +27,7 @@ export function JSONFormatPanel() {
     <div className="flex flex-col gap-4">
       <p className="text-column text-foreground flex h-8 items-center">Each item looks like this</p>
 
-      <dl className="border-border1 divide-border1 divide-y rounded-lg border">
+      <dl className="border-border divide-border divide-y rounded-lg border">
         {FIELDS.map(field => (
           <div key={field.name} className="grid grid-cols-[7rem_1fr] gap-3 px-3 py-2.5">
             <dt className="text-meta text-foreground font-mono">{field.name}</dt>
@@ -47,8 +47,8 @@ export function JSONFormatPanel() {
         ))}
       </dl>
 
-      <div className="border-border1 overflow-hidden rounded-lg border">
-        <div className="border-border1 bg-surface3 flex items-center justify-between border-b py-1.5 pr-1.5 pl-3">
+      <div className="border-border overflow-hidden rounded-lg border">
+        <div className="border-border bg-card flex items-center justify-between border-b py-1.5 pr-1.5 pl-3">
           <span className="text-meta text-muted-foreground font-mono">example.json</span>
           <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="xs" onClick={handleCopy}>
             {isCopied ? 'Copied' : 'Copy'}

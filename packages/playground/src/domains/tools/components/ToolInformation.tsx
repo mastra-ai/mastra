@@ -15,7 +15,7 @@ export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInfor
 
   return (
     <div className="text-foreground flex gap-2">
-      <Icon size="lg" className="bg-surface4 shrink-0 self-start rounded-md p-1">
+      <Icon size="lg" className="bg-muted shrink-0 self-start rounded-md p-1">
         <ToolIconComponent />
       </Icon>
 

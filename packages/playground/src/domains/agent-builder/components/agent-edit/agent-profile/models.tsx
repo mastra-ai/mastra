@@ -1,5 +1,7 @@
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { LockIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -136,7 +138,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
         )}
 
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
-          <div data-testid="model-card-picker-search" className="bg-surface3 max-w-[30ch] shrink-0 rounded-full">
+          <div data-testid="model-card-picker-search" className="bg-card max-w-[30ch] shrink-0 rounded-full">
             <InputGroup variant="outline" size="md">
               <InputGroupAddon align="inline-start">
                 <SearchIcon />
@@ -264,7 +266,7 @@ interface LockedModelChipProps {
 
 const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
   <div
-    className="border-border1 bg-surface3 flex items-center gap-2 rounded-md border px-3 py-2"
+    className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
     data-testid="model-detail-locked-chip"
   >
     <LockIcon className="text-muted-foreground h-4 w-4 shrink-0" />

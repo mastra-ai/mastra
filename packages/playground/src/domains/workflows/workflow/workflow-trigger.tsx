@@ -192,7 +192,7 @@ export function WorkflowTrigger({
     <div className="pt-3">
       <div>
         {isSuspendedSteps && isStreamingWorkflow && (
-          <div className="bg-surface5 border-border1 -mt-5 flex items-center gap-2 border-b px-5 py-2">
+          <div className="bg-card border-border -mt-5 flex items-center gap-2 border-b px-5 py-2">
             <Icon>
               <Loader2 className="text-foreground animate-spin" />
             </Icon>

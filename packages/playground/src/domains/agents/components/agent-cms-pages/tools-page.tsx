@@ -151,7 +151,7 @@ export function ToolsPage() {
 
   const renderToolEntity = (tool: (typeof options)[number]) => {
     return (
-      <Entity key={tool.value} className="bg-surface2">
+      <Entity key={tool.value} className="bg-background">
         <EntityContent>
           <EntityName className="text-subheading! !">{tool.label}</EntityName>
           <EntityDescription>
@@ -161,7 +161,7 @@ export function ToolsPage() {
               disabled={!canEditToolDescriptions}
               className={cn(
                 'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent rounded px-1 -mx-1 focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
-                canEditToolDescriptions && 'hover:bg-surface4 focus:bg-surface4',
+                canEditToolDescriptions && 'hover:bg-fill-subtle focus:bg-fill-subtle',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
               onChange={e => handleDescriptionChange(tool.value, e.target.value)}

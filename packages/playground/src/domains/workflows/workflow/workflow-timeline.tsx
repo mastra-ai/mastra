@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChartNoAxesGantt, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -41,11 +42,14 @@ export function WorkflowTimeline() {
       <Collapsible
         open={!isCollapsed}
         onOpenChange={open => setIsCollapsed(!open)}
-        className="border-border1 bg-surface3 @container/workflow-timeline pointer-events-auto overflow-hidden rounded-xl border"
+        className={cn(
+          raisedSurfaceStyle,
+          '@container/workflow-timeline pointer-events-auto overflow-hidden rounded-xl',
+        )}
       >
         <div className="flex items-center">
           <CollapsibleTrigger
-            className="hover:bg-surface4 text-caption text-foreground flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3.5 py-2.5"
+            className="hover:bg-fill-subtle text-caption text-foreground flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3.5 py-2.5"
             aria-label={isCollapsed ? 'Expand timeline' : 'Collapse timeline'}
           >
             <span>

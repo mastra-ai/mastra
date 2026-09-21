@@ -38,16 +38,16 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
   };
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border">
+    <div className="border-border bg-background rounded-md border">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="bg-surface3 flex w-full items-center gap-1 p-3">
+        <CollapsibleTrigger className="bg-card flex w-full items-center gap-1 p-3">
           <ChevronRight className="text-muted-foreground h-4 w-4" />
           <SectionTitle icon={<WorkflowIcon className="text-accent3" />}>
             Workflows{count > 0 && <span className="text-muted-foreground">({count})</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-border1 border-t p-3">
+          <div className="border-border border-t p-3">
             <Controller
               name="workflows"
               control={control}

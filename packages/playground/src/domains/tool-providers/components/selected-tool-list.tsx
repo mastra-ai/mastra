@@ -52,7 +52,7 @@ export function SelectedToolList({ providerId, selectedTools, onToggle }: Select
                   }
                 : undefined
             }
-            className={cn('flex items-start gap-3 rounded-md px-3 py-2.5 bg-surface4', onToggle && 'cursor-pointer')}
+            className={cn('flex items-start gap-3 rounded-md px-3 py-2.5 bg-muted', onToggle && 'cursor-pointer')}
           >
             {onToggle && (
               <div className="pt-0.5">

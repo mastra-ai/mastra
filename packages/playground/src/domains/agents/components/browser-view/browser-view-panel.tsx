@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { overlaySurfaceStyle, raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, Minimize2, ExternalLink, Globe } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -70,15 +71,16 @@ export function BrowserViewPanel() {
         tabIndex={-1}
         className={cn(
           'flex flex-col w-full max-w-5xl max-h-full',
-          'bg-card shadow-raised overflow-hidden rounded-xl',
+          overlaySurfaceStyle,
+          'overflow-hidden rounded-xl',
           'transition-transform duration-200 outline-none',
           isModal ? 'scale-100' : 'scale-95',
         )}
         onClick={e => e.stopPropagation()}
       >
-        <div className="border-border1 flex shrink-0 items-center gap-3 border-b px-4 py-3">
+        <div className="border-border flex shrink-0 items-center gap-3 border-b px-4 py-3">
           <Globe className="text-muted-foreground h-4 w-4 shrink-0" />
-          <div className="bg-surface3 border-border1 min-w-0 flex-1 rounded-md border px-3 py-1.5">
+          <div className={cn(raisedSurfaceStyle, 'min-w-0 flex-1 rounded-md px-3 py-1.5')}>
             <span
               className={cn(
                 'text-body truncate block',

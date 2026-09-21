@@ -78,7 +78,7 @@ export function SkillFolder({
 
   return (
     <div className="grid h-full grid-cols-[300px_1fr]">
-      <div className="border-border1 h-full overflow-y-auto border-r p-4">
+      <div className="border-border h-full overflow-y-auto border-r p-4">
         {workspaceOptions.length > 0 && (
           <div className="flex flex-col gap-1.5 pb-4">
             <FieldBlock.Label name="skill-workspace">Workspace</FieldBlock.Label>
@@ -107,7 +107,7 @@ export function SkillFolder({
         {isFileSelected ? (
           <>
             {isImage ? (
-              <div className="bg-surface2 flex flex-1 items-center justify-center p-4">
+              <div className="bg-background flex flex-1 items-center justify-center p-4">
                 <img
                   src={selectedFileContent}
                   alt={selectedFileName}

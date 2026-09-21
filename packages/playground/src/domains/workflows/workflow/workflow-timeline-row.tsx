@@ -68,7 +68,7 @@ export function WorkflowTimelineRow({
       className={cn(
         'grid grid-cols-[minmax(130px,1fr)_minmax(64px,1fr)_56px_64px] items-center gap-3 rounded-md px-2 py-1',
         '@max-[540px]/workflow-timeline:grid-cols-[minmax(0,1fr)_48px_64px] @max-[540px]/workflow-timeline:gap-x-1.5 @max-[540px]/workflow-timeline:gap-y-1 @max-[540px]/workflow-timeline:py-2',
-        (isSelected || isHovered) && 'bg-surface4',
+        (isSelected || isHovered) && 'bg-fill-subtle',
       )}
     >
       <button
@@ -85,7 +85,7 @@ export function WorkflowTimelineRow({
         <span
           aria-label={status.label}
           className={cn(
-            'border-border1 bg-surface2 grid size-6 flex-none place-items-center rounded-md border',
+            'border-border bg-background grid size-6 flex-none place-items-center rounded-md border',
             status.color,
           )}
         >
@@ -102,7 +102,7 @@ export function WorkflowTimelineRow({
         </span>
       </button>
       <div
-        className="bg-surface4 relative h-5 min-w-0 overflow-hidden rounded-sm @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-[34px]"
+        className="bg-muted relative h-5 min-w-0 overflow-hidden rounded-sm @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-[34px]"
         aria-hidden
       >
         {row.timing && (

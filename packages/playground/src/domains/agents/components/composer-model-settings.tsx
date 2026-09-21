@@ -284,7 +284,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               {showSamplingBanner && (
                 <div
-                  className="text-muted-foreground bg-surface3 text-caption flex items-center gap-2 rounded px-3 py-2"
+                  className="text-muted-foreground bg-card text-caption flex items-center gap-2 rounded px-3 py-2"
                   data-testid="sampling-restriction-banner"
                 >
                   <Info className="h-3.5 w-3.5 shrink-0" />

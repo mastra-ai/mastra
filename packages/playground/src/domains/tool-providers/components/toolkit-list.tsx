@@ -38,8 +38,8 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
             'text-left px-3 py-2 rounded-md text-caption',
             controlStateColorTransition,
             selectedToolkit === undefined
-              ? 'bg-surface4 text-foreground font-medium'
-              : cn(quietTextHover, 'hover:bg-surface4'),
+              ? 'bg-fill-hover text-foreground font-medium'
+              : cn(quietTextHover, 'hover:bg-fill-subtle'),
           )}
         >
           All
@@ -52,13 +52,13 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
             'text-left px-3 py-2 rounded-md text-caption flex items-center justify-between gap-2',
             controlStateColorTransition,
             selectedToolkit === SELECTED_TOOLKIT_SENTINEL
-              ? 'bg-surface4 text-foreground font-medium'
-              : cn(quietTextHover, 'hover:bg-surface4'),
+              ? 'bg-fill-hover text-foreground font-medium'
+              : cn(quietTextHover, 'hover:bg-fill-subtle'),
           )}
         >
           Selected
           {selectedCount > 0 && (
-            <span className="text-meta bg-surface3 min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center tabular-nums">
+            <span className="text-meta bg-card min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center tabular-nums">
               {selectedCount}
             </span>
           )}
@@ -73,8 +73,8 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
               'text-left px-3 py-2 rounded-md text-caption truncate',
               controlStateColorTransition,
               selectedToolkit === toolkit.slug
-                ? 'bg-surface4 text-foreground font-medium'
-                : cn(quietTextHover, 'hover:bg-surface4'),
+                ? 'bg-fill-hover text-foreground font-medium'
+                : cn(quietTextHover, 'hover:bg-fill-subtle'),
             )}
             title={toolkit.name}
           >

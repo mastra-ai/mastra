@@ -40,9 +40,7 @@ export interface WorkflowInputDataProps {
 }
 
 type InputDraft =
-  | { type: 'json'; value: string }
-  | { type: 'form'; value: unknown }
-  | { type: 'simple'; value: ProcessorDraft };
+  { type: 'json'; value: string } | { type: 'form'; value: unknown } | { type: 'simple'; value: ProcessorDraft };
 
 type DraftValue = { ok: true; value: unknown } | { ok: false; error: string };
 
@@ -230,7 +228,7 @@ export const WorkflowInputData = ({
   if (!collapsible) {
     return (
       <>
-        {!hideHeading && <div className="border-border1/50 border-b pb-3">{headingSlot ?? defaultHeading}</div>}
+        {!hideHeading && <div className="border-border/50 border-b pb-3">{headingSlot ?? defaultHeading}</div>}
         <div>{body}</div>
       </>
     );

@@ -128,7 +128,7 @@ export function AgentsPage() {
                 const isDisabled = readOnly || !isSelected;
 
                 return (
-                  <Entity key={agent.value} className="bg-surface2">
+                  <Entity key={agent.value} className="bg-background">
                     <EntityContent>
                       <EntityName>{agent.label}</EntityName>
                       <EntityDescription>
@@ -137,7 +137,7 @@ export function AgentsPage() {
                           disabled={isDisabled}
                           className={cn(
                             'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
-                            !isDisabled && 'border-border1 border-dashed ',
+                            !isDisabled && 'border-border border-dashed ',
                           )}
                           value={
                             isSelected

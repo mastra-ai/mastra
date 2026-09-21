@@ -102,7 +102,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       rel="noopener noreferrer"
       className={cn(
         'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-meta',
-        'hover:bg-surface4/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border2',
+        'hover:bg-fill-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border-strong',
         quietTextHover,
         controlStateColorTransition,
       )}
@@ -305,13 +305,13 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-      <div className="border-border1/50 shrink-0 border-t">
+      <div className="border-border/50 shrink-0 border-t">
         <CollapsibleTrigger asChild aria-label={isExpanded ? 'Hide capability details' : 'Show capability details'}>
           <button
             type="button"
             data-testid="agent-capabilities-footer"
             className={cn(
-              'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70 flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left focus-visible:ring-1 focus-visible:outline-none focus-visible:ring-inset',
+              'hover:bg-fill-subtle focus-visible:bg-fill-subtle focus-visible:ring-border-strong active:bg-fill aria-expanded:bg-fill-hover data-[panel-open]:bg-fill-hover flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left focus-visible:ring-1 focus-visible:outline-none focus-visible:ring-inset',
               quietTextHover,
               controlStateColorTransition,
             )}

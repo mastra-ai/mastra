@@ -37,7 +37,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
         }
       }}
     >
-      <header className="border-border1/50 bg-surface2 flex shrink-0 items-start gap-3 border-b px-5 py-4">
+      <header className="border-border/50 bg-background flex shrink-0 items-start gap-3 border-b px-5 py-4">
         <div className="min-w-0 flex-1 space-y-2">
           <Badge variant="neutral" emphasis="muted" icon={<DirectionIcon />}>
             {DIRECTION_LABELS[direction]}
@@ -61,12 +61,12 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
             value={safeStringify(value, 2)}
             editable={false}
             lineNumbers={false}
-            className="bg-surface2 min-w-0 rounded-lg p-3"
+            className="bg-background min-w-0 rounded-lg p-3"
           />
         )}
       </div>
       {result?.status === 'suspended' && (
-        <div className="border-border1/50 shrink-0 border-t p-2">
+        <div className="border-border/50 shrink-0 border-t p-2">
           <Button variant="ghost" className="text-warning1 w-full justify-start" onClick={closeStepDetail}>
             <CirclePause />
             Return to suspended step

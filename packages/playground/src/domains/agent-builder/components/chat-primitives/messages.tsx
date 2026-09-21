@@ -83,7 +83,7 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   };
 
   return (
-    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-surface4 border-transparent">
+    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-muted border-transparent">
       <Txt variant="caption" className="text-foreground pb-2" as="div">
         Approval required for <span className="text-foreground font-mono">{toolName}</span>
       </Txt>
@@ -343,7 +343,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <pre
-              className="text-muted-foreground bg-surface1 text-caption max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
+              className="text-muted-foreground bg-sidebar text-caption max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
@@ -405,7 +405,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
           className="group flex w-full items-center gap-2 text-left"
           data-testid="agent-builder-chat-generic-tool-trigger"
         >
-          <span className="border-border1/60 bg-surface1 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
+          <span className="border-border/60 bg-sidebar inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
             <Wrench className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
             <Txt variant="caption" className="text-foreground" as="span">
               Executing <span className="text-foreground font-mono">{toolName}</span>
@@ -418,8 +418,8 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
-            <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
-              <div className="border-border1/60 border-b px-2 py-1">
+            <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
+              <div className="border-border/60 border-b px-2 py-1">
                 <Txt variant="caption" className="text-muted-foreground" as="div">
                   Input
                 </Txt>
@@ -429,8 +429,8 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
               </pre>
             </div>
             {hasOutput ? (
-              <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
-                <div className="border-border1/60 border-b px-2 py-1">
+              <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
+                <div className="border-border/60 border-b px-2 py-1">
                   <Txt variant="caption" className="text-muted-foreground" as="div">
                     Output
                   </Txt>
@@ -459,7 +459,7 @@ export const ToolCard = ({
   <Card
     data-testid={testId}
     className={cn(
-      'max-w-[80%] p-3 bg-surface2/60 border-border1/60 animate-in fade-in slide-in-from-left-2 duration-300',
+      'max-w-[80%] p-3 bg-background/60 border-border/60 animate-in fade-in slide-in-from-left-2 duration-300',
       className,
     )}
   >

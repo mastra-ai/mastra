@@ -100,7 +100,7 @@ const RefBlockContent = ({
   }, [storedAgentsData?.agents, block.promptBlockId]);
 
   return (
-    <div className="group hover:bg-surface2/50 relative rounded-md">
+    <div className="group hover:bg-fill-subtle relative rounded-md">
       {/* Left gutter — drag handle (visible on hover/focus-within) */}
       {!readOnly && (
         <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
@@ -151,7 +151,7 @@ const RefBlockContent = ({
                       type="button"
                       aria-label={`Open actions for ${promptBlock.name}`}
                       className={cn(
-                        'hover:bg-surface4/50 ml-auto rounded p-0.5',
+                        'hover:bg-fill-subtle ml-auto rounded p-0.5',
                         quietTextHover,
                         controlStateColorTransition,
                       )}
@@ -162,7 +162,7 @@ const RefBlockContent = ({
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-[280px] p-0">
-                    <div className="border-border1 border-b p-3">
+                    <div className="border-border border-b p-3">
                       <Txt variant="column" className="text-foreground">
                         {promptBlock.name}
                       </Txt>
@@ -175,7 +175,7 @@ const RefBlockContent = ({
                     <div className="p-1">
                       <button
                         type="button"
-                        className="hover:bg-surface4/50 text-foreground text-meta flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
+                        className="hover:bg-fill-subtle text-foreground text-meta flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
                         onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
                       >
                         <Icon className="text-muted-foreground h-3.5! w-3.5!">
@@ -186,7 +186,7 @@ const RefBlockContent = ({
                       {onDereference && (
                         <button
                           type="button"
-                          className="hover:bg-surface4/50 text-foreground text-meta flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
+                          className="hover:bg-fill-subtle text-foreground text-meta flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
                           onClick={() => {
                             debouncedSave.flush();
                             onDereference(localContent);
@@ -201,7 +201,7 @@ const RefBlockContent = ({
                       {onDelete && (
                         <button
                           type="button"
-                          className="hover:bg-surface4/50 text-error text-meta flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
+                          className="hover:bg-fill-subtle text-error text-meta flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
@@ -212,7 +212,7 @@ const RefBlockContent = ({
                       )}
                     </div>
                     {usedByAgents.length > 0 && (
-                      <div className="border-border1 border-t p-3">
+                      <div className="border-border border-t p-3">
                         <Txt variant="meta" className="text-muted-foreground mb-1.5">
                           Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
                         </Txt>

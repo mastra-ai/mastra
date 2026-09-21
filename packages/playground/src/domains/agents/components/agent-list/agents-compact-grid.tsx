@@ -11,7 +11,7 @@ export interface AgentsCompactGridProps {
   hasSearch: boolean;
 }
 
-const compactGridClassName = 'grid grid-cols-1 gap-2 md:grid-cols-2';
+const compactGridClassName = 'grid grid-cols-1 gap-2 p-1 md:grid-cols-2';
 
 function AgentsCompactGridSkeleton() {
   return (
