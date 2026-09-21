@@ -56,11 +56,11 @@ export function comboboxTriggerClass({
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`). Icon sizes are a fixed square
     // showing only the chevron, so they keep Button's centering.
-    !isIconButtonSize(size) && 'w-full justify-between',
+    !isIconButtonSize(size) && 'w-full justify-between font-normal',
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant === 'default' ? 'field' : visualVariant],
-    'data-[placeholder]:text-neutral2',
-    error && 'border-error hover:border-error focus-visible:border-error',
+    'data-[placeholder]:text-muted-foreground',
+    error && 'border-destructive hover:border-destructive focus-visible:border-destructive',
     className,
   );
 }
@@ -86,10 +86,10 @@ export const comboboxStyles = {
   root: 'flex flex-col gap-1.5',
 
   /** Chevron icon in trigger — decorative icon token shared by every field. */
-  chevron: 'ml-2 h-4 w-4 shrink-0 text-neutral3',
+  chevron: 'ml-2 h-4 w-4 shrink-0 text-muted-foreground',
 
   /** Placeholder text color */
-  placeholder: 'text-neutral2',
+  placeholder: 'text-muted-foreground',
 
   /**
    * Popup container — shared menu popup, but the search row sits edge-to-edge
@@ -141,7 +141,7 @@ export const comboboxStyles = {
   optionLabel: 'truncate',
 
   /** Option description */
-  optionDescription: 'text-ui-sm text-neutral3 truncate',
+  optionDescription: 'text-ui-sm text-muted-foreground truncate',
 
   /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
   optionEnd: 'ml-auto flex items-center shrink-0',

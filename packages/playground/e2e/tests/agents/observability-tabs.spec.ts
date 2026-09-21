@@ -85,7 +85,10 @@ test.describe('Agent observability tabs', () => {
       await mockSystemPackages(page, false);
 
       await page.goto('/agents/weather-agent/overview');
-      await page.getByRole('tab', { name: 'Traces' }).hover();
+      await page
+        .locator('[data-base-ui-tooltip-trigger]')
+        .filter({ has: page.getByRole('tab', { name: 'Traces' }) })
+        .hover();
       await expect(page.getByRole('tooltip').getByText('Add @mastra/observability to enable this tab.')).toBeVisible();
     });
   });

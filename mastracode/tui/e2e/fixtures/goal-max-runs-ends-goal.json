@@ -1,0 +1,35 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Goal: Complete the max-runs goal e2e objective.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "{\"decision\":\"waiting\",\"reason\":\"Waiting for the user to review the first max-runs turn.\"}"
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Complete the max-runs goal e2e objective."
+      },
+      "response": {
+        "content": "First max-runs goal turn completed."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Looks good, please keep going."
+      },
+      "response": {
+        "content": "Follow-up turn after max runs completed."
+      }
+    }
+  ]
+}

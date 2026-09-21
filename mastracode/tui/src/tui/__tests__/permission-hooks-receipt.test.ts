@@ -52,6 +52,7 @@ function createHarness(hookManager: unknown) {
         return vi.fn();
       }),
     },
+    options: { backgroundToolsEnabled: false },
     hookManager,
   } as any;
 

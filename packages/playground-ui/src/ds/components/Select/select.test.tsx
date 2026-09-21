@@ -131,24 +131,26 @@ describe('Select', () => {
     // its default size.
     expect(trigger.classList.contains('text-ui-smd')).toBe(true);
     expect(trigger.classList.contains('text-ui-md')).toBe(false);
+    expect(trigger.classList.contains('font-normal')).toBe(true);
+    expect(trigger.className).toContain('aria-invalid:border-destructive');
     // Focus is the unified neutral border (from `buttonVariants`), not the old
-    // bespoke `focus-visible:border-border2`.
-    expect(trigger.className).toContain('focus-visible:border-neutral5/50');
+    // bespoke focus border.
+    expect(trigger.className).toContain('focus-visible:border-foreground/60');
   });
 
   it('uses the Input overlay surface (not the Button surface) for the default variant', () => {
     renderSelect();
 
     const trigger = screen.getByRole('combobox');
-    expect(trigger.classList.contains('bg-surface-overlay-soft')).toBe(true);
-    expect(trigger.classList.contains('border-border1')).toBe(true);
-    expect(trigger.classList.contains('text-neutral6')).toBe(true);
-    expect(trigger.classList.contains('data-[placeholder]:text-neutral2')).toBe(true);
-    expect(trigger.classList.contains('data-[popup-open]:bg-surface-overlay-strong')).toBe(true);
+    expect(trigger.classList.contains('bg-foreground/10')).toBe(true);
+    expect(trigger.classList.contains('border-border')).toBe(true);
+    expect(trigger.classList.contains('text-foreground')).toBe(true);
+    expect(trigger.classList.contains('data-[placeholder]:text-muted-foreground')).toBe(true);
+    expect(trigger.classList.contains('data-[popup-open]:bg-foreground/14')).toBe(true);
     expect(trigger.className).not.toContain('button-default');
 
     const chevron = trigger.querySelector('svg');
-    expect(chevron?.classList.contains('text-neutral3')).toBe(true);
+    expect(chevron?.classList.contains('text-muted-foreground')).toBe(true);
     expect(chevron?.className.baseVal).not.toContain('opacity');
   });
 
@@ -175,11 +177,11 @@ describe('Select', () => {
     );
 
     const outline = screen.getByRole('combobox', { name: 'outline' });
-    expect(outline.classList.contains('bg-surface3')).toBe(true);
-    expect(outline.classList.contains('bg-surface-overlay-soft')).toBe(false);
+    expect(outline.classList.contains('bg-transparent')).toBe(true);
+    expect(outline.classList.contains('bg-foreground/10')).toBe(false);
 
     const ghost = screen.getByRole('combobox', { name: 'ghost' });
     expect(ghost.classList.contains('bg-transparent')).toBe(true);
-    expect(ghost.classList.contains('bg-surface-overlay-soft')).toBe(false);
+    expect(ghost.classList.contains('bg-foreground/10')).toBe(false);
   });
 });

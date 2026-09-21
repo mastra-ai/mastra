@@ -1,6 +1,6 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { useState, useCallback, useMemo } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
@@ -81,10 +81,10 @@ export function SkillFolder({
       <div className="border-border1 h-full overflow-y-auto border-r p-4">
         {workspaceOptions.length > 0 && (
           <div className="flex flex-col gap-1.5 pb-4">
-            <Txt as="label" variant="ui-sm" className="text-neutral3">
-              Workspace
-            </Txt>
+            <FieldBlock.Label name="skill-workspace">Workspace</FieldBlock.Label>
             <Combobox
+              id="input-skill-workspace"
+              name="skill-workspace"
               options={workspaceOptions}
               value={workspaceId}
               onValueChange={setWorkspaceId}
@@ -127,7 +127,7 @@ export function SkillFolder({
             )}
           </>
         ) : (
-          <div className="text-neutral3 text-ui-sm flex h-full items-center justify-center">
+          <div className="text-muted-foreground text-ui-sm flex h-full items-center justify-center">
             Select a file to edit its content
           </div>
         )}

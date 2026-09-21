@@ -5,6 +5,8 @@ import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combo
 import type { ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
+import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
+import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
@@ -34,7 +36,10 @@ type ComboboxSharedProps = {
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   error?: string;
+  id?: string;
+  name?: string;
   'aria-label'?: string;
+  'aria-describedby'?: string;
   /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
   align?: 'start' | 'center' | 'end';
   allowCustomValue?: boolean;
@@ -92,13 +97,20 @@ export function Combobox(props: ComboboxProps) {
     onOpenChange,
     container,
     error,
+    id,
+    name,
     'aria-label': ariaLabel,
+    'aria-describedby': ariaDescribedBy,
     align = 'start',
     allowCustomValue = false,
     onInputValueChange,
   } = props;
   const multiple = isMultipleCombobox(props);
   const clearLabel = multiple ? props.clearLabel : undefined;
+  const generatedName = React.useId();
+  const errorName = name ?? generatedName;
+  const describedBy =
+    [ariaDescribedBy, error ? fieldErrorId(errorName) : undefined].filter(Boolean).join(' ') || undefined;
   const [inputValue, setInputValue] = React.useState('');
   const customValue = inputValue.trim();
   const customOption =
@@ -123,7 +135,10 @@ export function Combobox(props: ComboboxProps) {
   const comboboxContent = (
     <>
       <BaseCombobox.Trigger
-        aria-label={ariaLabel}
+        id={id}
+        aria-label={ariaLabel ?? (id ? undefined : multiple ? 'Select options' : 'Select option')}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
         className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}
       >
         {iconOnly ? (
@@ -201,7 +216,7 @@ export function Combobox(props: ComboboxProps) {
               </FluidMenuItems>
             </div>
             {selectedValues.length > 0 && clearLabel ? (
-              <div className={cn('border-t', 'border-border1', 'p-1')}>
+              <div className={cn('border-t', 'border-border', 'p-1')}>
                 <Button
                   type="button"
                   variant="destructive-ghost"
@@ -235,7 +250,7 @@ export function Combobox(props: ComboboxProps) {
         >
           {comboboxContent}
         </BaseCombobox.Root>
-        {error && <span className={comboboxStyles.error}>{error}</span>}
+        {error && <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>}
       </div>
     );
   }
@@ -264,7 +279,7 @@ export function Combobox(props: ComboboxProps) {
       >
         {comboboxContent}
       </BaseCombobox.Root>
-      {error && <span className={comboboxStyles.error}>{error}</span>}
+      {error && <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>}
     </div>
   );
 }

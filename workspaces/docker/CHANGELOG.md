@@ -1,5 +1,51 @@
 # @mastra/docker
 
+## 0.9.0-alpha.2
+
+### Minor Changes
+
+- Added AbortSignal cancellation for Docker template builds, repository template resolution, and lazy sandbox starts. Cancelling startup stops local template-preparation streams and sessions, rejects with `SandboxAbortError` while preserving the signal's custom reason as the error cause, and leaves the template retryable. ([#24451](https://github.com/mastra-ai/mastra/pull/24451))
+
+  ```typescript
+  const startController = new AbortController();
+  const start = sandbox.start({ abortSignal: startController.signal });
+  startController.abort(new Error('request cancelled'));
+  try {
+    await start;
+  } catch (error) {
+    if (!(error instanceof SandboxAbortError)) throw error;
+  }
+
+  const buildController = new AbortController();
+  const build = template.build({ abortSignal: buildController.signal });
+  buildController.abort(new Error('request cancelled'));
+  try {
+    await build;
+  } catch (error) {
+    if (!(error instanceof SandboxAbortError)) throw error;
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`d21aa84`](https://github.com/mastra-ai/mastra/commit/d21aa84aac0dc61bbc43434af7a3b3180373a8a7), [`a0fbeab`](https://github.com/mastra-ai/mastra/commit/a0fbeabf6298854bcc6d64c8b31530bedd1ea934), [`79385bb`](https://github.com/mastra-ai/mastra/commit/79385bbd8a52ed5e5536b16190dd8b8ac1ee0840), [`5014bf6`](https://github.com/mastra-ai/mastra/commit/5014bf6a52f04304c30b4e572df4052085e3ac02), [`58c88c4`](https://github.com/mastra-ai/mastra/commit/58c88c4e58504176ccb06d52df9440105aca788d), [`fc1e4f2`](https://github.com/mastra-ai/mastra/commit/fc1e4f2d4e0c1caa9d29de02f7be6a7d69ee2ea2), [`aee580d`](https://github.com/mastra-ai/mastra/commit/aee580d98976560e68e401c36790ce0cc6443aad), [`7c73bac`](https://github.com/mastra-ai/mastra/commit/7c73baccc8336a4fb0db92614bf778bae5459e24)]:
+  - @mastra/core@1.68.0-alpha.8
+
+## 0.9.0-alpha.1
+
+### Patch Changes
+
+- Fixed Docker sandbox process kills keeping helper response streams open. ([#24448](https://github.com/mastra-ai/mastra/pull/24448))
+
+- **Fixed commands that read stdin hanging until timeout** ([#24336](https://github.com/mastra-ai/mastra/pull/24336))
+
+  Commands that read standard input without being given anything to read — a bare `cat`, or `grep`/`rg` with no path argument — blocked until the command timeout expired. The exec no longer attaches stdin unless something will feed it, so these commands see end-of-input and exit immediately.
+
+  `processes.spawn()` is unchanged: it still attaches stdin by default so long-running processes can be driven with `sendStdin()`.
+
+- Updated dependencies [[`11560f5`](https://github.com/mastra-ai/mastra/commit/11560f54627055f5ae541a6825669778983a23c9), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`15d3e76`](https://github.com/mastra-ai/mastra/commit/15d3e7647636c7286650ef517953c9885806c3dd), [`3c86726`](https://github.com/mastra-ai/mastra/commit/3c867260be59d3cd8337bc0af9a76bac517fe16f), [`0a989ab`](https://github.com/mastra-ai/mastra/commit/0a989abf37c409040ee2ce9a9ccfcfb5a700508e), [`ed24c7f`](https://github.com/mastra-ai/mastra/commit/ed24c7f654bb193a0c503469f4f19dda9d687ecb), [`0894a0e`](https://github.com/mastra-ai/mastra/commit/0894a0e6ede48058b547aab5bb8a2a3d71c3878a), [`5968b71`](https://github.com/mastra-ai/mastra/commit/5968b718044f8dd21bab6ce4ae7da3590729842b), [`dafabf2`](https://github.com/mastra-ai/mastra/commit/dafabf22e4f4b0aabecb09839de5abe54e03151a), [`150a670`](https://github.com/mastra-ai/mastra/commit/150a67086539eea91cac3550fc068e6ac5c7e79b), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`c6999e2`](https://github.com/mastra-ai/mastra/commit/c6999e2b4ab805301e66723ca8ba9fe30faa82ca)]:
+  - @mastra/core@1.68.0-alpha.7
+
 ## 0.9.0-alpha.0
 
 ### Minor Changes

@@ -98,7 +98,7 @@ export function MemoryStudioPanel({
         <Button type="button" variant="ghost" size="icon-sm" tooltip="Back to memory" onClick={() => onClose?.()}>
           <ArrowLeftIcon />
         </Button>
-        <span className="text-neutral6 flex min-w-0 items-center gap-1.5">
+        <span className="text-foreground flex min-w-0 items-center gap-1.5">
           <MemoryIcon className="size-4 shrink-0" />
           <Txt as="span" variant="ui-sm" className="font-medium">
             Observational memory

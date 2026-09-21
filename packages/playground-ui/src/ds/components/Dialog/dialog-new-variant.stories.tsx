@@ -64,7 +64,7 @@ function ConfirmationExample({
 
   return (
     <div className="flex max-w-sm flex-col gap-4">
-      <p className="text-ui-sm text-neutral4">Factory confirmation preview. No data is deleted.</p>
+      <p className="text-ui-sm text-muted-foreground">Factory confirmation preview. No data is deleted.</p>
       <Dialog variant="new" intent={intent} pending={pending} open={open} onOpenChange={setOpen}>
         <DialogTrigger render={<Button>Open dialog</Button>} />
         <DialogContent>
@@ -97,7 +97,7 @@ function ConfirmationExample({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <p role="status" className="text-ui-sm text-neutral4">
+      <p role="status" className="text-ui-sm text-muted-foreground">
         {confirmed ? 'Confirmed. Preview complete.' : 'Waiting for confirmation.'}
       </p>
     </div>
@@ -241,7 +241,7 @@ function FactoryForm() {
           </form>
         </DialogContent>
       </Dialog>
-      <p role="status" className="text-ui-sm text-neutral4">
+      <p role="status" className="text-ui-sm text-muted-foreground">
         {saved ? `Factory renamed to ${saved}.` : 'No changes saved.'}
       </p>
     </div>

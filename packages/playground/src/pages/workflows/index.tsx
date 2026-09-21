@@ -56,8 +56,8 @@ function Workflows() {
             <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
           </div>
           <Button
-            as={Link}
-            to="/workflows/schedules"
+            render={<Link to="/workflows/schedules" />}
+
             variant="primary"
             className="shrink-0"
             icon={<CalendarClockIcon />}

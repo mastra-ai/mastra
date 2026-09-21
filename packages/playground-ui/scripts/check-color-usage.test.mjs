@@ -36,7 +36,7 @@ test('reports legacy, foundation, and achromatic usage by source group', () => {
   track(
     repository,
     'src/Button/button.tsx',
-    "const classes = 'hover:bg-surface2/50 text-neutral3 border-border1 bg-gray-1 bg-card text-muted-foreground'; const css = 'var(--surface3) var(--sidebar)'; const values = [Colors.surface1, Colors['neutral2'], BorderColors.border2, Colors.card, BorderColors['sidebar-border'], Colors.accent3, 'var(--sidebar-nav-hover)', '#fff', 'rgb(0 0 0 / 50%)', 'oklch(0.2 0 0)'];",
+    "const classes = 'hover:bg-surface2/50 text-neutral3 border-border1 bg-gray-1 bg-card text-muted-foreground border-sidebar-divider'; const css = 'var(--surface3) var(--sidebar)'; const values = [Colors.surface1, Colors['neutral2'], BorderColors.border2, Colors.card, BorderColors['sidebar-border'], Colors.accent3, 'var(--sidebar-nav-hover)', '#fff', 'rgb(0 0 0 / 50%)', 'oklch(0.2 0 0)'];",
   );
   track(repository, 'src/__tests__/button.test.tsx', "const value = 'bg-surface2';");
   track(repository, 'src/.storybook/button.stories.tsx', "const value = 'text-neutral3';");
@@ -58,6 +58,7 @@ test('reports legacy, foundation, and achromatic usage by source group', () => {
   assert.equal(report.groups.production.find(record => record.token === 'gray-1')?.kind, 'foundation');
   assert.equal(report.groups.production.find(record => record.token === 'card')?.kind, 'semantic');
   assert.equal(report.groups.production.find(record => record.token === 'sidebar-border')?.form, 'typescript');
+  assert.equal(report.groups.production.find(record => record.token === 'sidebar-divider')?.kind, 'semantic');
   assert.equal(
     report.groups.production.some(record => record.token === 'accent'),
     false,

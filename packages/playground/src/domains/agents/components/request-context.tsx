@@ -101,7 +101,7 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
     setSelectedPreset(getMatchingPresetKey(presets, requestContextStr));
   };
 
-  const buttonClass = 'text-neutral3 hover:text-neutral6';
+  const buttonClass = 'text-muted-foreground hover:text-foreground';
 
   const formatRequestContext = async () => {
     if (!isValidJson(requestContextValue)) {
@@ -225,7 +225,7 @@ export const RequestContextWrapper = ({ children }: { children: ReactNode }) => 
         title="Request context"
         className="mb-5"
         action={
-          <Notice.Button as={Link} to="https://mastra.ai/docs/server/request-context" target="_blank">
+          <Notice.Button render={<Link href="https://mastra.ai/docs/server/request-context" target="_blank" />}>
             <Icon>
               <ExternalLink />
             </Icon>

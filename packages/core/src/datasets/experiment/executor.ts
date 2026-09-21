@@ -87,6 +87,7 @@ async function executeScorer(
       output: {
         score,
         reason: typeof result.reason === 'string' ? result.reason : null,
+        ...(result.notScorable ? { notScorable: result.notScorable } : {}),
       },
       error: null,
       traceId: null, // Scorers don't produce traces

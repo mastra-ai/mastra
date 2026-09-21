@@ -143,10 +143,11 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           visualVariant === 'default' && fieldTriggerSurfaceStyle,
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
-          'w-full justify-between',
+          'w-full justify-between font-normal',
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant === 'default' ? 'field' : visualVariant],
-          'data-[placeholder]:text-neutral2',
+          'data-[placeholder]:text-muted-foreground',
+          'aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive',
           '[&>span]:truncate',
           className,
         )}
@@ -163,7 +164,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
-              <ChevronDown className={cn('size-4 text-neutral3', transitions.colors)} />
+              <ChevronDown className={cn('size-4 text-muted-foreground', transitions.colors)} />
             </span>
           }
         />

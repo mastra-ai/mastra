@@ -116,6 +116,31 @@ describe('Workflow processor input views', () => {
     });
   });
 
+  describe('when simple input is invalid', () => {
+    it('associates the shared error message with both processor controls', () => {
+      render(
+        <WorkflowInputData
+          schema={z.object({ phase: z.literal('never'), messages: z.array(z.unknown()) })}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={vi.fn()}
+          isProcessorWorkflow
+        />,
+      );
+
+      const phase = screen.getByRole('combobox', { name: 'Phase' });
+      const message = screen.getByRole('textbox', { name: 'Test Message' });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+      const error = screen.getByRole('alert');
+      expect(error.id).toBe('error-workflow-processor-input');
+      expect(phase.getAttribute('aria-invalid')).toBe('true');
+      expect(phase.getAttribute('aria-describedby')).toBe(error.id);
+      expect(message.getAttribute('aria-invalid')).toBe('true');
+      expect(message.getAttribute('aria-describedby')).toBe(error.id);
+    });
+  });
+
   describe('when a processor phase changes', () => {
     it('shares the matching author role with JSON before either view submits', async () => {
       const onSubmit = vi.fn();

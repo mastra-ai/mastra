@@ -172,6 +172,21 @@ export type StorageListWorkflowRunsInput = {
    */
   page?: number;
   resourceId?: string;
+  /**
+   * Best-effort narrowing filter on the thread id embedded in the snapshot JSON.
+   *
+   * Unlike `resourceId`, the thread id is not a column — it lives inside the
+   * snapshot at one of two locations (see `getSnapshotMemoryInfo` in
+   * `domains/workflows/snapshot-memory-info.ts` for the canonical extraction):
+   * 1. agentic-loop: `context.<suspended step>.suspendPayload.__streamState.messageList.memoryInfo.threadId`
+   * 2. durable loop: `context.input.messageListState.memoryInfo.threadId`
+   *
+   * Adapters MAY ignore this field entirely (returning a superset), but MUST
+   * NOT exclude rows the canonical extraction would match. Callers must
+   * re-verify the thread id on returned rows; most adapters currently ignore
+   * the field and only jsonb/json-capable stores (e.g. pg, libsql) push it down.
+   */
+  threadId?: string;
   status?: WorkflowRunStatus;
 };
 

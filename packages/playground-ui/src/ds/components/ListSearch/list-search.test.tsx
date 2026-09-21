@@ -27,18 +27,12 @@ describe('ListSearch surface', () => {
     const { container } = renderListSearch();
 
     const input = screen.getByRole('textbox', { name: 'Filter agents' });
-    expect(input.className).toContain('bg-surface-overlay-soft');
-    expect(input.className).toContain('text-neutral6');
+    expect(input.className).toContain('bg-foreground/10');
+    expect(input.className).toContain('text-foreground');
 
     const icon = container.querySelector('svg');
-    expect(icon?.getAttribute('class')).toContain('text-neutral3');
+    expect(icon?.getAttribute('class')).toContain('text-muted-foreground');
     expect(icon?.getAttribute('class')).not.toContain('opacity-50');
-  });
-
-  it('still supports the outline variant', () => {
-    renderListSearch({ variant: 'outline' });
-
-    expect(screen.getByRole('textbox', { name: 'Filter agents' }).className).toContain('bg-transparent');
   });
 });
 

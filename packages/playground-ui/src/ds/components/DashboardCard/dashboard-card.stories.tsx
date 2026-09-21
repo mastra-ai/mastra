@@ -11,7 +11,7 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
     <div className={`border-border1 rounded-2xl border p-6 ${className}`}>
-      <p className="text-ui-xs text-neutral3 mb-4 tracking-wide uppercase">{label}</p>
+      <p className="text-ui-xs text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
   );
@@ -38,7 +38,7 @@ type Story = StoryObj<typeof DashboardCard>;
 export const Default: Story = {
   render: () => (
     <DashboardCard>
-      <p className="text-neutral3">Default dashboard card content</p>
+      <p className="text-muted-foreground">Default dashboard card content</p>
     </DashboardCard>
   ),
 };
@@ -46,7 +46,7 @@ export const Default: Story = {
 export const WithCustomClass: Story = {
   render: () => (
     <DashboardCard className="min-w-80">
-      <p className="text-neutral3">Card with custom min-width</p>
+      <p className="text-muted-foreground">Card with custom min-width</p>
     </DashboardCard>
   ),
 };
@@ -55,13 +55,13 @@ export const MultipleCards: Story = {
   render: () => (
     <div className="flex gap-4">
       <DashboardCard className="min-w-60">
-        <p className="text-neutral3">Card 1</p>
+        <p className="text-muted-foreground">Card 1</p>
       </DashboardCard>
       <DashboardCard className="min-w-60">
-        <p className="text-neutral3">Card 2</p>
+        <p className="text-muted-foreground">Card 2</p>
       </DashboardCard>
       <DashboardCard className="min-w-60">
-        <p className="text-neutral3">Card 3</p>
+        <p className="text-muted-foreground">Card 3</p>
       </DashboardCard>
     </div>
   ),
@@ -75,7 +75,7 @@ export const OnSurfaces: Story = {
       {SURFACES.map(({ token, label, className }) => (
         <SurfaceFrame key={token} className={className} label={label}>
           <DashboardCard>
-            <p className="text-neutral3">Same card, rendered on each surface token.</p>
+            <p className="text-muted-foreground">Same card, rendered on each surface token.</p>
           </DashboardCard>
         </SurfaceFrame>
       ))}

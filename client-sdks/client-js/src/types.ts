@@ -160,6 +160,13 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface AbortAgentThreadParams extends SubscribeAgentThreadParams {
+  expectedRunId?: string;
+}
+
 export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
 
 /**
@@ -785,8 +792,12 @@ export interface SemanticRecallConfig {
 export type TitleGenerationConfig =
   | boolean
   | {
-      model: string; // Model ID in format provider/model-name
+      model?: string; // Model ID in format provider/model-name; defaults to the agent's own model
       instructions?: string;
+      /** Minimum number of thread messages required before a title is generated */
+      minMessages?: number;
+      /** Emit the generated title as a transient `data-thread-title` chunk on the run stream, before `finish` */
+      emitEvent?: boolean;
     };
 
 /**

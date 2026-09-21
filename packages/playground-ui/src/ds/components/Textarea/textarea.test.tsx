@@ -16,15 +16,15 @@ describe('Textarea', () => {
     const textarea = screen.getByPlaceholderText('Description');
     expect(textarea.className).toContain('bg-transparent');
     expect(textarea.className).toContain('rounded-xl');
-    expect(textarea.className).not.toContain('bg-surface-overlay-soft');
+    expect(textarea.className).not.toContain('bg-foreground/10');
   });
 
-  it('uses the shared neutral6 text color at rest', () => {
+  it('uses the shared foreground text color at rest', () => {
     render(<Textarea placeholder="Description" />);
 
     const cls = screen.getByPlaceholderText('Description').className;
-    expect(cls).toContain('text-neutral6');
-    expect(cls).not.toContain('text-neutral5');
+    expect(cls).toContain('text-foreground');
+    expect(cls).not.toContain('text-neutral');
   });
 
   it.each([
@@ -55,13 +55,13 @@ describe('Textarea', () => {
 
     const textarea = screen.getByPlaceholderText('Description');
     expect(textarea.getAttribute('aria-invalid')).toBe('true');
-    expect(textarea.className).toContain('border-error');
+    expect(textarea.className).toContain('border-destructive');
   });
 
   it('carries no error outline when it is valid', () => {
     render(<Textarea placeholder="Description" />);
 
-    expect(screen.getByPlaceholderText('Description').className).not.toContain('border-error');
+    expect(screen.getByPlaceholderText('Description').className).not.toContain('border-destructive');
   });
 
   it('keeps a caller class alongside its own', () => {

@@ -25,9 +25,9 @@ export default meta;
 function Cell({ title, tag, children }: { title: string; tag: string | undefined; children: ReactNode }) {
   return (
     <div className="border-border1 flex min-w-0 flex-col gap-2 rounded-lg border p-3">
-      <div className="text-ui-xs text-neutral2 flex items-center justify-between tracking-widest uppercase">
+      <div className="text-ui-xs text-placeholder flex items-center justify-between tracking-widest uppercase">
         <span>{title}</span>
-        <code className="text-neutral4 font-mono normal-case">{tag ?? 'undefined'}</code>
+        <code className="text-muted-foreground font-mono normal-case">{tag ?? 'undefined'}</code>
       </div>
       {children}
     </div>
@@ -172,7 +172,7 @@ export const FullSpanPanel: StoryObj<FixtureArgs> = {
     const span = ALL_SPAN_FIXTURES[fixture];
     return (
       <div className="h-[80vh] max-w-3xl">
-        <SpanDataPanelView traceId={span.traceId} spanId={span.spanId} span={span} onClose={() => {}} />
+        <SpanDataPanelView traceId={span.traceId} spanId={span.spanId} span={span} />
       </div>
     );
   },

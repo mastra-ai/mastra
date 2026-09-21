@@ -113,7 +113,7 @@ export function useFluidMenu<T extends HTMLElement = HTMLDivElement>({
 
 /**
  * Provides the item registry to the rows and renders the travelling surface.
- * Popups are `bg-surface3`; the highlight sits two steps up at `bg-surface5`.
+ * Popups are `bg-popover`; the highlight is the control hover surface on top of it.
  * `-z-1` keeps it under the row content while the container's `isolate`
  * keeps it above the popup background.
  */
@@ -128,7 +128,7 @@ export function FluidMenuItems({
 }) {
   return (
     <FluidMenuContext.Provider value={menu.context}>
-      <FluidHoverHighlight hover={menu.hover} className={cn('-z-1 rounded-lg bg-surface5', className)} />
+      <FluidHoverHighlight hover={menu.hover} className={cn('-z-1 rounded-lg bg-foreground/10', className)} />
       {children}
     </FluidMenuContext.Provider>
   );
