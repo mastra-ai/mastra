@@ -37,6 +37,19 @@ const boundaryLadder: { token: BoundaryToken; use: string }[] = [
   { token: 'border-focus', use: 'Focus, at 3:1 against its fill' },
 ];
 
+const overlayWashes: { token: FillToken; use: string }[] = [
+  { token: 'surface-overlay-soft', use: 'A hovered row inside a popover' },
+  { token: 'surface-overlay-strong', use: 'The selected one, and a menu separator band' },
+];
+
+const rimTokens = ['--surface-rim', '--surface-rim-focus'];
+const tintTokens = ['--fill-tint'];
+
+const tintValues = [
+  { theme: 'Dark', value: '100%', use: 'Light catching a dark surface' },
+  { theme: 'Light', value: '20.5%', use: 'Shade landing on a light one' },
+];
+
 const FillLadderRow = () => (
   <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
     {fillLadder.map(rung => (
@@ -66,12 +79,12 @@ export const SurfaceFoundations: Story = {
   name: 'Surface foundations',
   render: (_args, context) => (
     <FoundationPage
-      eyebrow={`Surface / ${fillLadder.length + boundaryLadder.length + 2} tokens`}
+      eyebrow={`Surface / ${fillLadder.length + boundaryLadder.length + overlayWashes.length + rimTokens.length + tintTokens.length + 2} tokens`}
       title="Surface foundations"
       description="A fill is the body of anything raised above its parent surface; a boundary is its 1px edge. Rungs are alphas, so the same rung holds on any surface — read each ladder twice below, once on the canvas and once on the sidebar."
       aside={
         <Txt variant="meta" font="mono" tone="muted" className="uppercase">
-          Mode / {context.globals.backgrounds?.value === 'light' ? 'Light' : 'Dark'}
+          Mode / {context.globals.theme === 'light' ? 'Light' : 'Dark'}
         </Txt>
       }
       note="Light uses its own, much shallower alphas — a lightness step has to be large on near-black and small on near-white."
@@ -109,6 +122,45 @@ export const SurfaceFoundations: Story = {
       </FoundationSection>
 
       <FoundationSection
+        label="Overlay wash"
+        description="Row states inside a popover. The fill ladder cannot serve here — a rung tuned to read above the canvas disappears on a surface that is itself lifted."
+      >
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <SpecimenGroup label="The two washes, on a popover">
+            <div className="bg-popover shadow-overlay grid grid-cols-2 gap-3 rounded-xl p-3">
+              {overlayWashes.map(wash => (
+                <Specimen key={wash.token} name={`--${wash.token}`} note={wash.use}>
+                  <div
+                    role="img"
+                    aria-label={`${wash.token} wash`}
+                    className="h-16 rounded-md"
+                    style={{ background: Colors[wash.token] }}
+                  />
+                </Specimen>
+              ))}
+            </div>
+          </SpecimenGroup>
+          <SpecimenGroup label="In a menu">
+            <div className="bg-popover shadow-overlay flex flex-col rounded-xl p-1">
+              <Txt variant="body-sm" className="rounded-md px-3 py-1.5">
+                Rest
+              </Txt>
+              <Txt variant="body-sm" className="bg-surface-overlay-soft rounded-md px-3 py-1.5">
+                Hovered
+              </Txt>
+              <Txt variant="body-sm" className="bg-surface-overlay-strong rounded-md px-3 py-1.5">
+                Selected
+              </Txt>
+            </div>
+          </SpecimenGroup>
+        </div>
+        <Txt variant="caption" tone="muted">
+          These two alias the gray-alpha ramp rather than the tint: --surface-overlay-soft is --fill-subtle,
+          --surface-overlay-strong is --gray-alpha-2.
+        </Txt>
+      </FoundationSection>
+
+      <FoundationSection
         label="Boundary ladder"
         description="The four states of a control's 1px edge, shown on a filled body and on a transparent one."
       >
@@ -124,6 +176,26 @@ export const SurfaceFoundations: Story = {
             <BoundaryLadderRow filled />
           </div>
         </SpecimenGroup>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Rim"
+        description="The 1px inset edge shadow-raised draws, and the one edge focus moves on a field."
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-160">
+          <Specimen name="--surface-rim" note="Rest — every raised and overlay surface">
+            <div className="bg-card shadow-raised h-20 rounded-md" />
+          </Specimen>
+          <Specimen name="--surface-rim-focus" note="Focus — the same edge, never a second line beside it">
+            <div className="bg-card shadow-raised h-20 rounded-md [--surface-rim:var(--surface-rim-focus)]" />
+          </Specimen>
+        </div>
+        <Txt variant="caption" tone="muted">
+          It is not --border. A divider has the whole surface behind it and needs that weight; the rim sits on the
+          boundary between two surfaces that already differ in fill and elevation, so the same alpha overshoots and the
+          surface reads as framed. Hover leaves it alone — the rim is the loudest part of a borderless surface, so a
+          pointer wash goes through --surface-tint instead.
+        </Txt>
       </FoundationSection>
 
       <FoundationSection
@@ -147,6 +219,33 @@ export const SurfaceFoundations: Story = {
             </Specimen>
           </div>
         </div>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Tint"
+        description="One value per theme, and the whole light/dark flip. Every rung of both ladders above is an alpha of it."
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-160">
+          {tintValues.map(tint => (
+            <Specimen key={tint.theme} name={`--fill-tint: ${tint.value}`} note={`${tint.theme} — ${tint.use}`}>
+              <div className="bg-card h-20 rounded-md p-3">
+                <div
+                  role="img"
+                  aria-label={`${tint.theme} tint at the --fill-hover alpha`}
+                  className="h-full rounded-sm"
+                  style={{ background: `oklch(${tint.value} 0 0 / 9%)` }}
+                />
+              </div>
+            </Specimen>
+          ))}
+        </div>
+        <Txt variant="caption" tone="muted">
+          Both swatches are --fill-hover's 9%, drawn on the same card: only the tint changes, and only one of the two
+          belongs to the theme you are reading. A theme switch re-resolves nine tokens by moving this one — 100% in
+          dark, 20.5% in light. Alpha compositing is linear in sRGB, which is what lets a single alpha be a single step
+          in both directions: white over near-black spans 242 levels, near-black over near-white 233. Nothing reads it
+          directly; it exists so nothing else is authored twice.
+        </Txt>
       </FoundationSection>
     </FoundationPage>
   ),

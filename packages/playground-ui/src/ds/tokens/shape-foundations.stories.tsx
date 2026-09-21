@@ -35,6 +35,12 @@ const radiusNotes: Record<RadiusToken, string> = {
 // every step between and beyond these.
 const spacingRungs = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32] as const;
 
+const breakpoints = [
+  { token: '--breakpoint-2xl', width: '1536px', use: 'A laptop on an external display — Tailwind stops here' },
+  { token: '--breakpoint-3xl', width: '1700px', use: 'Where the container stops growing and gets capped' },
+  { token: '--breakpoint-4xl', width: '2000px', use: 'Ultrawide and 5K, where two panes can become three' },
+];
+
 const sizeKeys = Object.keys(Sizes) as SizeToken[];
 const iconKeys = sizeKeys.filter(key => key.startsWith('icon-'));
 const controlKeys = sizeKeys.filter(key => key.startsWith('control-'));
@@ -61,7 +67,7 @@ export const ShapeFoundations: Story = {
   name: 'Shape foundations',
   render: () => (
     <FoundationPage
-      eyebrow={`Shape / ${Object.keys(BorderRadius).length + 1 + sizeKeys.length} tokens`}
+      eyebrow={`Shape / ${Object.keys(BorderRadius).length + 1 + sizeKeys.length + breakpoints.length} tokens`}
       title="Shape foundations"
       description="Radius carries how solid a surface is meant to feel, spacing is a single multiplier, and the control sizes are named so a button, a field and a row agree on one height."
       note="Spacing rungs are multipliers of --spacing, so p-13 and max-w-140 resolve like any other step."
@@ -142,6 +148,30 @@ export const ShapeFoundations: Story = {
             ))}
           </div>
         </SpecimenGroup>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Breakpoints"
+        description="Tailwind's ladder ends at 2xl, which assumes the widest reader is on a laptop. A studio is left open on a desk monitor all day, so two rungs are added above it — and they are the only non-standard ones, so a sm: or lg: in this codebase means exactly what it means anywhere else."
+      >
+        <div className="min-w-0">
+          {breakpoints.map(breakpoint => (
+            <div
+              key={breakpoint.token}
+              className="border-border grid grid-cols-[minmax(0,10rem)_5rem_minmax(0,1fr)] items-baseline gap-4 border-b py-2 last:border-b-0"
+            >
+              <Txt variant="meta" font="mono" tone="muted">
+                {breakpoint.token}
+              </Txt>
+              <Txt variant="meta" font="mono" tone="faint">
+                {breakpoint.width}
+              </Txt>
+              <Txt variant="caption" tone="muted" className="min-w-0">
+                {breakpoint.use}
+              </Txt>
+            </div>
+          ))}
+        </div>
       </FoundationSection>
     </FoundationPage>
   ),

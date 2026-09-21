@@ -63,7 +63,32 @@ const accentKeys = Object.keys(Colors).filter(key => /^accent\d$/.test(key)) as 
 const accentDarkKeys = Object.keys(Colors).filter(key => /^accent\dDark$/.test(key)) as ColorToken[];
 const accentDarkerKeys = Object.keys(Colors).filter(key => /^accent\dDarker$/.test(key)) as ColorToken[];
 
-const chartSeries = [1, 2, 3, 4, 5] as const;
+const chartSeriesTokens = [
+  { token: 'chart-blue', note: 'Primary series: p50 latency, input tokens, completed runs' },
+  { token: 'chart-blue-deep', note: 'Lower segment of a stack topped by --chart-blue' },
+  { token: 'chart-yellow', note: 'Second series beside blue: p95 latency, output tokens' },
+  { token: 'chart-green', note: 'First scorer series' },
+  { token: 'chart-purple', note: 'Cost, in tokens and in currency' },
+  { token: 'chart-orange', note: 'Scorer datasets, fourth scorer series' },
+  { token: 'chart-pink', note: 'Errors, stacked on --chart-blue-deep' },
+  { token: 'chart-red', note: 'Errors, stacked on --chart-blue' },
+];
+
+const chartSoftSteps = [1, 2, 3, 4, 5];
+
+const spanTypeTokens = [
+  { token: 'span-type-agent', label: 'Agent' },
+  { token: 'span-type-workflow', label: 'Workflow' },
+  { token: 'span-type-model', label: 'Model' },
+  { token: 'span-type-mcp', label: 'MCP' },
+  { token: 'span-type-tool', label: 'Tool' },
+  { token: 'span-type-provider', label: 'Provider Tool' },
+  { token: 'span-type-memory', label: 'Memory' },
+  { token: 'span-type-workspace', label: 'Workspace' },
+  { token: 'span-type-skill', label: 'Skill' },
+  { token: 'span-type-scorer', label: 'Scorer' },
+  { token: 'span-type-other', label: 'Other' },
+];
 
 const tokenCount =
   backgrounds.length +
@@ -75,7 +100,9 @@ const tokenCount =
   accentKeys.length +
   accentDarkKeys.length +
   accentDarkerKeys.length +
-  chartSeries.length * 2;
+  chartSeriesTokens.length +
+  chartSoftSteps.length +
+  spanTypeTokens.length;
 
 const Swatch = ({ value, height = 'h-16' }: { value: string; height?: string }) => (
   <div
@@ -119,6 +146,18 @@ const AccentRow = ({ label, tokens }: { label: string; tokens: ColorToken[] }) =
   </SpecimenGroup>
 );
 
+const SeriesSwatch = ({ value }: { value: string }) => (
+  <div role="img" aria-label={`${value} swatch`} className="border-border flex flex-col border">
+    <div className="bg-background p-1.5">
+      <span className="block h-8 rounded-sm" style={{ background: value }} />
+    </div>
+    <div className="bg-sidebar flex h-8 items-center gap-1.5 px-1.5">
+      <span className="size-2 shrink-0 rounded-full" style={{ background: value }} />
+      <span className="h-0.5 flex-1 rounded-full" style={{ background: value }} />
+    </div>
+  </div>
+);
+
 export const ColorFoundations: Story = {
   name: 'Color foundations',
   render: (_args, context) => (
@@ -128,7 +167,7 @@ export const ColorFoundations: Story = {
       description="Backgrounds encode nesting. Gray encodes contrast. Semantic roles name what a component is asking for, so the same markup holds in both themes."
       aside={
         <Txt variant="meta" font="mono" tone="muted" className="uppercase">
-          Mode / {context.globals.backgrounds?.value === 'light' ? 'Light' : 'Dark'}
+          Mode / {context.globals.theme === 'light' ? 'Light' : 'Dark'}
         </Txt>
       }
       note="Foundation CSS properties. Components reference the semantic roles, never the ramp."
@@ -229,22 +268,31 @@ export const ColorFoundations: Story = {
 
       <FoundationSection
         label="Charts"
-        description="Two series palettes for recharts: categorical, where neighbouring series must be told apart, and soft, one hue stepped by lightness for an ordered series."
+        description="Series colour picked by role, one hue stepped by lightness for an ordered measure, and an identity colour per span type. Every specimen paints its token as a fill on the canvas and as a dot and a line on the sidebar, the three marks these colours ship as."
       >
-        <SpecimenGroup label="Categorical">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {chartSeries.map(series => (
-              <Specimen key={series} name={`--chart-${series}`}>
-                <Swatch value={`var(--chart-${series})`} />
+        <SpecimenGroup label="Categorical, by role">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {chartSeriesTokens.map(series => (
+              <Specimen key={series.token} name={`--${series.token}`} note={series.note}>
+                <SeriesSwatch value={`var(--${series.token})`} />
               </Specimen>
             ))}
           </div>
         </SpecimenGroup>
-        <SpecimenGroup label="Soft, ordered by lightness">
+        <SpecimenGroup label="Ordered by lightness">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {chartSeries.map(series => (
-              <Specimen key={series} name={`--chart-soft-${series}`}>
-                <Swatch value={`var(--chart-soft-${series})`} />
+            {chartSoftSteps.map(step => (
+              <Specimen key={step} name={`--chart-soft-${step}`}>
+                <SeriesSwatch value={`var(--chart-soft-${step})`} />
+              </Specimen>
+            ))}
+          </div>
+        </SpecimenGroup>
+        <SpecimenGroup label="Span types, trace timeline">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+            {spanTypeTokens.map(span => (
+              <Specimen key={span.token} name={`--${span.token}`} note={span.label}>
+                <SeriesSwatch value={`var(--${span.token})`} />
               </Specimen>
             ))}
           </div>
