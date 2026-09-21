@@ -57,7 +57,7 @@ import type { ModelItem } from './components/model-selector.js';
 import { GradientAnimator } from './components/obi-loader.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
-import { dispatchEvent } from './event-dispatch.js';
+import { dispatchEvent, getThreadLifecycleGeneration } from './event-dispatch.js';
 import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
@@ -881,8 +881,9 @@ export class MastraTUI {
     }, 60_000);
   }
 
-  private async renderExistingMessagesAndSeedIdleCounter(): Promise<void> {
-    await renderExistingMessages(this.state);
+  private async renderExistingMessagesAndSeedIdleCounter(isCurrent?: () => boolean): Promise<void> {
+    await renderExistingMessages(this.state, isCurrent);
+    if (isCurrent && !isCurrent()) return;
 
     if (this.state.session.run.isRunning()) {
       this.clearStatusTimingTicker();
@@ -941,15 +942,27 @@ export class MastraTUI {
     }
 
     try {
+      const lifecycleGeneration = getThreadLifecycleGeneration(this.state);
+      const lifecycleThreadId =
+        event.type === 'thread_created'
+          ? event.thread.id
+          : event.type === 'thread_changed'
+            ? event.threadId
+            : undefined;
+      const lifecycleIsCurrent = () =>
+        lifecycleThreadId === undefined ||
+        (getThreadLifecycleGeneration(this.state) === lifecycleGeneration + 1 &&
+          this.state.session.thread.getId() === lifecycleThreadId);
+
       this.fireLifecycleHooksForEvent(event);
       await dispatchEvent(event, this.getEventContext(), this.state);
       this.captureAgentControllerAnalytics(event);
 
-      if (event.type === 'thread_created') {
-        await this.syncThreadActivePackMetadata(event.thread);
-      } else if (event.type === 'thread_changed') {
+      if (event.type === 'thread_created' && lifecycleIsCurrent()) {
+        await this.syncThreadActivePackMetadata(event.thread, lifecycleIsCurrent);
+      } else if (event.type === 'thread_changed' && lifecycleIsCurrent()) {
         this.refreshBackgroundActivity();
-        await this.syncThreadActivePackMetadata();
+        await this.syncThreadActivePackMetadata(undefined, lifecycleIsCurrent);
       }
 
       if (event.type === 'agent_start' && this.state.agentRunStartedAt !== undefined) {
@@ -1123,13 +1136,17 @@ export class MastraTUI {
     return access;
   }
 
-  private async syncThreadActivePackMetadata(thread?: {
-    id: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<void> {
+  private async syncThreadActivePackMetadata(
+    thread?: {
+      id: string;
+      metadata?: Record<string, unknown>;
+    },
+    isCurrent: () => boolean = () => true,
+  ): Promise<void> {
     const settings = loadSettings();
     const currentThreadId = this.state.session.thread.getId();
-    if (!currentThreadId) return;
+    if (!currentThreadId || !isCurrent()) return;
+    const ownsUpdate = () => isCurrent() && this.state.session.thread.getId() === currentThreadId;
 
     const resolvedThread =
       thread?.id === currentThreadId
@@ -1138,18 +1155,18 @@ export class MastraTUI {
     const access = await this.buildProviderAccess();
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
     const metadata = resolvedThread?.metadata as Record<string, unknown> | undefined;
-    if (this.state.session.thread.getId() !== currentThreadId) return;
+    if (!ownsUpdate()) return;
     const resolvedPackId = resolveThreadActiveModelPackId(settings, packs, metadata);
     const fallbackStatus = fallbackStatusFromMetadata(metadata);
     const updates = {
       activeModelPackId: resolvedPackId,
     };
     const applied = this.state.session.state.setIf
-      ? await this.state.session.state.setIf(updates, () => this.state.session.thread.getId() === currentThreadId)
-      : this.state.session.thread.getId() === currentThreadId
-        ? (await this.state.session.state.set(updates), true)
+      ? await this.state.session.state.setIf(updates, ownsUpdate)
+      : ownsUpdate()
+        ? (await this.state.session.state.set(updates), ownsUpdate())
         : false;
-    if (!applied || this.state.session.thread.getId() !== currentThreadId) return;
+    if (!applied || !ownsUpdate()) return;
     this.state.fallbackStatus = fallbackStatus;
     updateStatusLine(this.state);
   }
@@ -1394,7 +1411,7 @@ export class MastraTUI {
       startGoal: (objective, cancelMessage) =>
         startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
-      renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
+      renderExistingMessages: isCurrent => this.renderExistingMessagesAndSeedIdleCounter(isCurrent),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
       renderCompletedTasksInline: (completedTasks, insertIndex) =>

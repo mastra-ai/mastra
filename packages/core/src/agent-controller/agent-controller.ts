@@ -1740,7 +1740,7 @@ export class AgentController<TState = {}> {
    * Load observational memory progress for the current thread.
    * Reconstructs status from the durable OM record, then emits an `om_status` event for the UI.
    */
-  async loadOMProgress(session: Session<TState>): Promise<void> {
+  async loadOMProgress(session: Session<TState>, isCurrent: () => boolean = () => true): Promise<void> {
     const threadId = session.thread.getId();
     if (!threadId) return;
 
@@ -1824,6 +1824,7 @@ export class AgentController<TState = {}> {
       // and picks up the real step number from the next live status update.
       const stepNumber = 0;
 
+      if (!isCurrent()) return;
       session.emit({
         type: 'om_status',
         windows: {

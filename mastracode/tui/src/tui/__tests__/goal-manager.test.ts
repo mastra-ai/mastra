@@ -167,6 +167,27 @@ describe('GoalManager adapter', () => {
     expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
   });
 
+  it('does not commit a loaded objective after its owner becomes stale', async () => {
+    const agent = createAgent();
+    let resolveObjective!: (record: ReturnType<typeof makeRecord>) => void;
+    agent.getObjective.mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveObjective = resolve;
+      }),
+    );
+    const manager = new GoalManager();
+    manager.persistOnNextThreadCreate();
+    let isCurrent = true;
+
+    const loading = manager.loadFromThread(createState(agent), () => isCurrent);
+    isCurrent = false;
+    resolveObjective(makeRecord({ objective: 'stale goal' }));
+    await loading;
+
+    expect(manager.getGoal()).toBeNull();
+    expect(manager.consumePersistOnNextThreadCreate()).toBe(true);
+  });
+
   it('loads an old record without active duration as zero without writing', async () => {
     const agent = createAgent();
     const oldRecord = makeRecord();
