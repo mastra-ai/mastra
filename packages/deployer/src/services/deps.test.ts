@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
@@ -166,9 +166,7 @@ describe('writePnpmConfig patch handling', () => {
 
     expect(output).toContain(`patchedDependencies:\n  "foo@1.0.0": "pnpm-patches/foo.patch"`);
     expect(output).toContain('allowUnusedPatches: true');
-    expect(await readFile(join(outputDir, 'pnpm-patches', 'foo.patch'), 'utf-8')).toBe(
-      'PATCH CONTENTS',
-    );
+    expect(await readFile(join(outputDir, 'pnpm-patches', 'foo.patch'), 'utf-8')).toBe('PATCH CONTENTS');
   });
 
   it('keeps patches with colliding file names distinct', async () => {
@@ -184,9 +182,7 @@ describe('writePnpmConfig patch handling', () => {
     expect(output).toContain(`"foo@1.0.0": "pnpm-patches/foo.patch"`);
     expect(output).toContain(`"bar@2.0.0": "pnpm-patches/bar_2.0.0-foo.patch"`);
     expect(await readFile(join(outputDir, 'pnpm-patches', 'foo.patch'), 'utf-8')).toBe('FIRST');
-    expect(await readFile(join(outputDir, 'pnpm-patches', 'bar_2.0.0-foo.patch'), 'utf-8')).toBe(
-      'SECOND',
-    );
+    expect(await readFile(join(outputDir, 'pnpm-patches', 'bar_2.0.0-foo.patch'), 'utf-8')).toBe('SECOND');
   });
 
   it('skips declarations whose patch file is missing instead of failing the build', async () => {
@@ -202,6 +198,18 @@ describe('writePnpmConfig patch handling', () => {
     const outsidePatch = join(sourceRoot, '..', 'outside.patch');
     await writeFile(outsidePatch, 'OUTSIDE');
     await writeWorkspace(`patchedDependencies:\n  foo@1.0.0: ../outside.patch\n`);
+
+    const output = await run();
+
+    expect(output).not.toContain('patchedDependencies');
+    expect(fs.existsSync(join(outputDir, 'pnpm-patches'))).toBe(false);
+  });
+
+  it('skips an in-workspace symlink whose target resolves outside the workspace', async () => {
+    const outsidePatch = join(sourceRoot, '..', 'outside.patch');
+    await writeFile(outsidePatch, 'OUTSIDE');
+    await symlink(outsidePatch, join(sourceRoot, 'patches', 'escape.patch'));
+    await writeWorkspace(`patchedDependencies:\n  foo@1.0.0: patches/escape.patch\n`);
 
     const output = await run();
 

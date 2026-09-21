@@ -316,6 +316,46 @@ export class Deps extends MastraBase {
   }
 
   /**
+   * Resolves a declared patch path against the source workspace and verifies that, once symlinks
+   * are followed, it still resolves inside the workspace. Returns the real path to copy from, or
+   * `undefined` when the patch escapes the workspace or its file cannot be resolved.
+   */
+  private async resolvePatchSource(
+    resolvedWorkspaceRoot: string,
+    declaredPath: string,
+    { key, label }: { key: string; label: string },
+  ): Promise<string | undefined> {
+    const sourcePath = path.resolve(resolvedWorkspaceRoot, declaredPath);
+    if (!sourcePath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)) {
+      this.logger.warn(`Skipping ${label} patch for "${key}": patch file is outside the workspace at ${sourcePath}`);
+      return undefined;
+    }
+
+    // A patch path can stay lexically under the workspace while traversing a symlink whose target
+    // lives outside it. copyFile follows symlinks, so compare the resolved real paths before copying.
+    let realWorkspaceRoot: string;
+    let realSourcePath: string;
+    try {
+      [realWorkspaceRoot, realSourcePath] = await Promise.all([
+        fsPromises.realpath(resolvedWorkspaceRoot),
+        fsPromises.realpath(sourcePath),
+      ]);
+    } catch {
+      this.logger.warn(`Skipping ${label} patch for "${key}": patch file not found at ${sourcePath}`);
+      return undefined;
+    }
+
+    if (!realSourcePath.startsWith(`${realWorkspaceRoot}${path.sep}`)) {
+      this.logger.warn(
+        `Skipping ${label} patch for "${key}": patch file is outside the workspace at ${realSourcePath}`,
+      );
+      return undefined;
+    }
+
+    return realSourcePath;
+  }
+
+  /**
    * Copies the patch files declared by the source workspace into the output directory and returns
    * the patch map rewritten to output-relative paths, so the patches survive the output install.
    */
@@ -330,15 +370,11 @@ export class Deps extends MastraBase {
     const resolvedWorkspaceRoot = path.resolve(sourceWorkspaceRoot);
 
     for (const [key, declaredPath] of Object.entries(declared)) {
-      const sourcePath = path.resolve(resolvedWorkspaceRoot, declaredPath);
-      if (!sourcePath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)) {
-        this.logger.warn(`Skipping pnpm patch for "${key}": patch file is outside the workspace at ${sourcePath}`);
-        continue;
-      }
-      if (!fs.existsSync(sourcePath)) {
-        this.logger.warn(`Skipping pnpm patch for "${key}": patch file not found at ${sourcePath}`);
-        continue;
-      }
+      const sourcePath = await this.resolvePatchSource(resolvedWorkspaceRoot, declaredPath, {
+        key,
+        label: 'pnpm',
+      });
+      if (!sourcePath) continue;
 
       let fileName = path.basename(sourcePath);
       if (usedFileNames.has(fileName)) {
