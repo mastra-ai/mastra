@@ -38,4 +38,18 @@ describe('DynamicForm value reporting', () => {
       await waitFor(() => expect(onValuesChange).toHaveBeenLastCalledWith({ city: 'Lyon' }));
     });
   });
+
+  describe('when the listener only appears after the form is mounted', () => {
+    it('starts reporting instead of staying silent for the rest of the form life', async () => {
+      const onValuesChange = vi.fn();
+      const { rerender } = render(<DynamicForm schema={z.object({ city: z.string() })} />);
+
+      await screen.findByRole('textbox');
+      rerender(<DynamicForm schema={z.object({ city: z.string() })} onValuesChange={onValuesChange} />);
+
+      fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'Lyon' } });
+
+      await waitFor(() => expect(onValuesChange).toHaveBeenLastCalledWith({ city: 'Lyon' }));
+    });
+  });
 });
