@@ -557,17 +557,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       }))
     : undefined;
   const startCoordinator = transitionService
-    ? new FactoryStartCoordinator(
-        deps.controller,
-        deps.domains.workItems,
-        transitionService,
-        request =>
-          resolveFactorySourceControl({
-            sourceControls,
-            orgId: request.orgId,
-            factoryProjectId: request.factoryProjectId,
-            sessionId: request.sessionId,
-          }),
+    ? new FactoryStartCoordinator(deps.controller, deps.domains.workItems, transitionService, request =>
+        resolveFactorySourceControl({
+          sourceControls,
+          orgId: request.orgId,
+          factoryProjectId: request.factoryProjectId,
+          sessionId: request.sessionId,
+        }),
       )
     : undefined;
   if (transitionService && startCoordinator) {
