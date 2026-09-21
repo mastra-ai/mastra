@@ -54,6 +54,7 @@ const PROXY_CONTEXT_METHODS = new Set([
   'getConnection',
   'getMetadata',
   'updateMetadata',
+  'zodValidateInput',
   'ActionError',
   'log',
 ]);
@@ -259,10 +260,28 @@ async function formatGeneratedFiles(directory: string): Promise<void> {
   );
 }
 
+/**
+ * Actions excluded by hand, keyed by provider and action slug. Use this for
+ * templates that generate uncompilable or unsafe code that the automated
+ * checks can't detect; record why so the exclusion can be dropped once the
+ * upstream template is fixed.
+ */
+const EXCLUDED_ACTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  'google-calendar': {
+    'import-event':
+      'upstream type bug: provider response schema widens attendee responseStatus to string while the output schema keeps the strict enum, so the generated module does not compile',
+  },
+};
+
 function extractAction(
   project: Project,
   candidate: ActionCandidate,
 ): { kind: 'ok'; value: ExtractedAction } | { kind: 'skip'; reason: string } {
+  const exclusionReason = Object.prototype.hasOwnProperty.call(EXCLUDED_ACTIONS, candidate.providerId)
+    ? EXCLUDED_ACTIONS[candidate.providerId]?.[candidate.actionSlug]
+    : undefined;
+  if (exclusionReason) return { kind: 'skip', reason: `excluded: ${exclusionReason}` };
+
   const source = project.addSourceFileAtPath(candidate.file);
   const importReason = unsupportedImportReason(source);
   if (importReason) return { kind: 'skip', reason: importReason };
@@ -309,6 +328,16 @@ function extractAction(
   const unsupportedMethods = [...usedContextMethods].filter(method => !PROXY_CONTEXT_METHODS.has(method));
   if (unsupportedMethods.length > 0) {
     return { kind: 'skip', reason: `exec uses unsupported template SDK helpers: ${unsupportedMethods.join(', ')}` };
+  }
+  // Templates that read `connection.credentials` need the raw credential the
+  // platform proxy deliberately leaves out of `getConnection()`. Their calls
+  // are rewritten below to `getConnectionWithCredentials()`, which fetches it
+  // from the platform's credential endpoint, so only these execs ever see a
+  // secret. A credential read without a getConnection call has no rewrite
+  // point and cannot work.
+  const readsCredentials = /\.credentials\b/.test(originalExecBody);
+  if (readsCredentials && !usedContextMethods.has('getConnection')) {
+    return { kind: 'skip', reason: 'exec reads connection credentials without calling getConnection' };
   }
   const usesProviderProxy = [...PROXY_REQUEST_METHODS].some(method =>
     new RegExp(`\\bnango\\.${method}\\s*\\(`).test(source.getFullText()),
@@ -378,7 +407,7 @@ function extractAction(
 
   const renamedExecBodyNode = execInitializer.getBody();
   const inputSchemaText = inputDeclaration.getText();
-  const execBody = simplifyScalarQuerySerialization(
+  let execBody = simplifyScalarQuerySerialization(
     replaceProxyRequestType(
       sanitizeVendoredSource(
         Node.isBlock(renamedExecBodyNode)
@@ -389,6 +418,9 @@ function extractAction(
     ),
     inputSchemaText,
   );
+  if (readsCredentials) {
+    execBody = execBody.replace(/\bplatformProxy\.getConnection\(\)/g, 'platformProxy.getConnectionWithCredentials()');
+  }
 
   const moduleStatements = widenResponseEnums(
     source

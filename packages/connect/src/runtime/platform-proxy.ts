@@ -13,10 +13,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import {
   getConnectionContext,
+  getCredential,
   proxyRequestWithResponse,
   resolveClient,
   type ConnectClientOptions,
   type ConnectionContext,
+  type ConnectionCredential,
   type ProxyRequestOptions,
 } from '../client.js';
 import { MastraConnectError } from '../errors.js';
@@ -59,6 +61,35 @@ export interface TemplateConnectionContext {
   metadata: Record<string, ProviderResponseData> | null;
 }
 
+/**
+ * Connection context extended with the raw credential in the upstream SDK's
+ * wire shape. Only handed to exec bodies whose template reads
+ * `connection.credentials`; the generator rewrites their `getConnection()`
+ * calls to `getConnectionWithCredentials()` so the common path never fetches
+ * a secret it doesn't use. Never log this value.
+ */
+export interface TemplateConnectionContextWithCredentials extends TemplateConnectionContext {
+  credentials: Record<string, ProviderResponseData>;
+}
+
+/** Maps the platform credential to the field names templates are written against. */
+function toTemplateCredentials(credential: ConnectionCredential): Record<string, ProviderResponseData> {
+  return credential.type === 'oauth2'
+    ? { type: 'OAUTH2', access_token: credential.accessToken, expires_at: credential.expiresAt }
+    : { type: 'API_KEY', apiKey: credential.apiKey };
+}
+
+/**
+ * Structural view of a zod schema as `zodValidateInput` consumes it. Typed
+ * structurally instead of against `ZodType` so the runtime works with any
+ * zod major the host app resolves (the package's zod peer spans 3 and 4).
+ */
+export interface ZodLikeSchema<T> {
+  safeParse(
+    input: unknown,
+  ): { success: true; data: T } | { success: false; error: { issues?: unknown; message?: string } };
+}
+
 /** Mirrors the upstream response shape closely enough for the templates we vendor. */
 export interface PlatformProxyResponse<T = ProviderResponseData> {
   data: T;
@@ -91,6 +122,11 @@ export interface PlatformProxy {
   delete<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   getConnection(): Promise<TemplateConnectionContext>;
   /**
+   * `getConnection()` plus the raw connection credential fetched from the
+   * platform. Generated only for templates that read `connection.credentials`.
+   */
+  getConnectionWithCredentials(): Promise<TemplateConnectionContextWithCredentials>;
+  /**
    * Mirrors the upstream SDK contract templates are written against: always
    * resolves to an object (empty when the connection has no metadata).
    */
@@ -104,6 +140,13 @@ export interface PlatformProxy {
    * simply re-derives the values on its first call.
    */
   updateMetadata(update: Record<string, unknown>): Promise<void>;
+  /**
+   * Mirrors the upstream SDK's input-validation helper. Generated tools
+   * already validate inputs through their tool input schema, so this mostly
+   * re-parses, but templates rely on it for defaults/coercion and for the
+   * `{ data }` result shape.
+   */
+  zodValidateInput<T>(args: { zodSchema: ZodLikeSchema<T>; input: unknown }): Promise<{ data: T }>;
   ActionError: typeof ToolActionError;
   log: (...args: unknown[]) => void;
   /**
@@ -215,6 +258,13 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     return { connection_config: connection_config ?? {}, metadata };
   };
   const metadataOverlay = context.metadataOverlay ?? {};
+  const getConnectionWithCredentials = async (): Promise<TemplateConnectionContextWithCredentials> => {
+    const [connection, credential] = await Promise.all([
+      getConnection(),
+      getCredential(resolveClient(context.client), requireConnectionId(context.connectionId)),
+    ]);
+    return { ...connection, credentials: toTemplateCredentials(credential) };
+  };
   return {
     get: bind('GET'),
     post: bind('POST'),
@@ -222,12 +272,24 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     patch: bind('PATCH'),
     delete: bind('DELETE'),
     getConnection,
+    getConnectionWithCredentials,
     getMetadata: async <T = Record<string, ProviderResponseData>>() => {
       const metadata = (await loadConnection()).metadata;
       return { ...(metadata ?? {}), ...metadataOverlay } as T;
     },
     updateMetadata: async update => {
       Object.assign(metadataOverlay, update);
+    },
+    zodValidateInput: async <T>({ zodSchema, input }: { zodSchema: ZodLikeSchema<T>; input: unknown }) => {
+      const result = zodSchema.safeParse(input);
+      if (!result.success) {
+        throw new ToolActionError({
+          type: 'invalid_input',
+          message: 'Invalid input provided to tool action.',
+          details: result.error.issues ?? result.error.message,
+        });
+      }
+      return { data: result.data };
     },
     ActionError: ToolActionError,
     // Upstream template logs may contain request or provider data. Keep the
