@@ -14,7 +14,7 @@ import { formatDate } from 'date-fns';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
-import { getRunTimestamp } from '../utils';
+import { getRunResourceId, getRunTimestamp } from '../utils';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
@@ -112,6 +112,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                     {runList.map(run => {
                       const isActiveRun = run.runId === runId;
                       const runInput = isActiveRun ? formatRunInput(run.snapshot) : null;
+                      const runResourceId = getRunResourceId(run);
                       const runTimestamp =
                         run?.snapshot && typeof run.snapshot === 'object'
                           ? getRunTimestamp(run.snapshot.timestamp)
@@ -139,13 +140,19 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                                   {run.runId}
                                 </span>
                               </span>
-                              {runTimestamp !== undefined && (
-                                <time
-                                  className="text-muted-foreground text-ui-xs"
-                                  dateTime={new Date(runTimestamp).toISOString()}
-                                >
-                                  {formatDate(runTimestamp, 'MMM d, yyyy · h:mm a')}
-                                </time>
+                              {(runTimestamp !== undefined || runResourceId) && (
+                                <span className="text-muted-foreground text-ui-xs flex w-full min-w-0 items-center gap-1.5">
+                                  {runTimestamp !== undefined && (
+                                    <time className="shrink-0" dateTime={new Date(runTimestamp).toISOString()}>
+                                      {formatDate(runTimestamp, 'MMM d, yyyy · h:mm a')}
+                                    </time>
+                                  )}
+                                  {runResourceId && (
+                                    <span className="min-w-0 truncate" title={`Resource ${runResourceId}`}>
+                                      · {runResourceId}
+                                    </span>
+                                  )}
+                                </span>
                               )}
                               {runInput && (
                                 <span className="text-muted-foreground text-ui-sm block w-full min-w-0 truncate">

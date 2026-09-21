@@ -74,18 +74,29 @@ export function RunWorkflowHeader({
   status,
   result,
   timestamp,
+  resourceId,
 }: {
   runId: string;
   status?: WorkflowRunStatus;
   result: WorkflowRunStreamResult | null;
   timestamp?: number;
+  resourceId?: string;
 }) {
   const runSpan = getRunSpan(result, status);
 
   return (
     <div className="flex w-full flex-col gap-2 px-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <WorkflowRunStatusBadge status={status} />
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <WorkflowRunStatusBadge status={status} />
+          {resourceId && (
+            <Badge size="md" variant="neutral" emphasis="muted" className="min-w-0">
+              <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
+                {resourceId}
+              </span>
+            </Badge>
+          )}
+        </div>
         {runSpan && <RunDuration span={runSpan} />}
       </div>
       <div className="text-ui-xs text-muted-foreground flex min-w-0 items-center gap-1">

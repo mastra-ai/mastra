@@ -12,7 +12,7 @@ import { WorkflowRequestContextDialog } from '../components/workflow-request-con
 import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
 import type { WorkflowRunContextType } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { isWorkflowRunFinished } from '../utils';
+import { getRunResourceId, isWorkflowRunFinished } from '../utils';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
 import { WorkflowDebugModeSwitch } from './workflow-debug-mode-switch';
@@ -182,6 +182,7 @@ export function WorkflowTrigger({
       status={runStatus}
       result={streamResultToUse}
       timestamp={runSnapshot?.timestamp}
+      resourceId={getRunResourceId(runSnapshot)}
     />
   ) : (
     <InitialWorkflowHeader workflow={workflow} workflowId={workflowId} />
