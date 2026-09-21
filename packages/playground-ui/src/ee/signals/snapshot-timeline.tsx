@@ -47,7 +47,7 @@ export function TimelineTrack({
             aria-current={marker === 'selected' ? 'true' : undefined}
             aria-label={snapshotTickLabel(snapshot, totalCount)}
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
-            className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 transition-colors ${
+            className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 ${
               marker ? MARKER_TICK_CLASSES[marker] : 'border-surface2 bg-surface4 hover:bg-accent1/60'
             } ${grabbed ? 'ring-accent1/70 ring-2' : ''}`}
             data-marker={marker}
@@ -62,7 +62,7 @@ export function TimelineTrack({
           <span
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
-            className="text-ui-xs text-muted-foreground absolute top-7 -translate-x-1/2 font-mono tabular-nums"
+            className="text-meta text-muted-foreground absolute top-7 -translate-x-1/2 font-mono tabular-nums"
             style={{ left: `${positions[index]}%` }}
           >
             {dayLabels[index]}
@@ -131,7 +131,7 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <p className="text-ui-sm text-muted-foreground font-mono tabular-nums" data-testid="snapshot-summary">
+        <p className="text-caption text-muted-foreground font-mono tabular-nums" data-testid="snapshot-summary">
           {summary}
         </p>
       </div>

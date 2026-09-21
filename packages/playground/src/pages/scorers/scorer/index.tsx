@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -203,7 +202,7 @@ export default function Scorer() {
       <PageLayout width="wide" height="full" className={hasError || !scorerActionsMenu ? 'grid-rows-[1fr]' : undefined}>
         {!hasError && scorerActionsMenu && (
           <PageLayout.TopArea>
-            <ButtonsGroup className="ml-auto">{scorerActionsMenu}</ButtonsGroup>
+            <div className="ml-auto flex items-center gap-2">{scorerActionsMenu}</div>
           </PageLayout.TopArea>
         )}
         <PageLayout.MainArea isCentered>
@@ -239,13 +238,13 @@ export default function Scorer() {
             }}
             isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
           />
-          <ButtonsGroup>
+          <div className="flex items-center gap-2">
             <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
             <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Play />}>
               Run Experiment
             </Button>
             {scorerActionsMenu}
-          </ButtonsGroup>
+          </div>
         </div>
       </PageLayout.TopArea>
 

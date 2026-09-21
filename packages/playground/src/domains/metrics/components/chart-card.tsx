@@ -1,3 +1,4 @@
+import { ChartTooltip } from '@mastra/playground-ui/components/ChartTooltip';
 import type { ReactNode } from 'react';
 
 export function ChartCard({
@@ -19,13 +20,13 @@ export function ChartCard({
     <div className={`border-border1 bg-surface2 flex flex-col rounded-lg border ${className}`}>
       <div className="flex shrink-0 items-start justify-between px-4 py-3">
         <div>
-          <h3 className="text-icon6 text-ui-md font-semibold">{title}</h3>
-          {description && <p className="text-icon2 text-ui-sm mt-0.5">{description}</p>}
+          <h3 className="text-icon6 text-subheading">{title}</h3>
+          {description && <p className="text-icon2 text-caption mt-0.5">{description}</p>}
         </div>
         {summary && (
           <div className="text-right">
-            <span className="text-icon6 text-ui-md font-mono font-semibold">{summary}</span>
-            {summaryLabel && <p className="text-icon2 text-ui-sm">{summaryLabel}</p>}
+            <span className="text-icon6 text-subheading font-mono">{summary}</span>
+            {summaryLabel && <p className="text-icon2 text-caption">{summaryLabel}</p>}
           </div>
         )}
       </div>
@@ -47,7 +48,7 @@ export function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="border-border1 bg-surface2 text-ui-sm rounded-md border px-3 py-2 shadow-lg">
+    <ChartTooltip>
       <p className="text-icon6 mb-1 font-medium">{label}</p>
       {payload.map(entry => (
         <p key={entry.name} className="text-icon2">
@@ -59,6 +60,6 @@ export function CustomTooltip({
           </span>
         </p>
       ))}
-    </div>
+    </ChartTooltip>
   );
 }

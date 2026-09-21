@@ -64,7 +64,6 @@ function LockedTokenPill({ field, value, tooltipContent }: LockedTokenPillProps)
       <Tooltip>
         <TooltipTrigger asChild>
           <ButtonsGroup
-            spacing="close"
             data-locked-field-id={field.id}
             data-property-filter-pill="locked"
             tabIndex={0}
@@ -110,7 +109,7 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
   }, [autoFocus]);
 
   return (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
       <ButtonsGroupText size="md">is</ButtonsGroupText>
       <Input
@@ -165,7 +164,7 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
   const [open, setOpen] = useState(false);
 
   return (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
       <ButtonsGroupText size="md">is</ButtonsGroupText>
       <Popover open={open} onOpenChange={setOpen}>
@@ -271,7 +270,7 @@ export function PropertyFilterApplied({
         }
 
         return (
-          <ButtonsGroup spacing="close" key={`${token.fieldId}-${index}`}>
+          <ButtonsGroup key={`${token.fieldId}-${index}`}>
             <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
             <ButtonsGroupText size="md">is</ButtonsGroupText>
             <ButtonsGroupText size="md">{stringifyTokenValue(token.value)}</ButtonsGroupText>

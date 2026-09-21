@@ -59,7 +59,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
             ))
           ) : tools.length === 0 ? (
             <div className="flex items-center justify-center py-8">
-              <Txt variant="ui-sm" className="text-muted-foreground">
+              <Txt variant="caption" className="text-muted-foreground">
                 No tools found
               </Txt>
             </div>
@@ -103,13 +103,13 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
                   <div className="flex min-w-0 flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <Txt variant="ui-sm" className="text-foreground font-medium">
+                      <Txt variant="column" className="text-foreground">
                         {tool.name}
                       </Txt>
                       {toolkit === undefined && tool.toolkit && <Badge>{tool.toolkit}</Badge>}
                     </div>
                     {tool.description && (
-                      <Txt variant="ui-sm" className="text-muted-foreground line-clamp-2">
+                      <Txt variant="caption" className="text-muted-foreground line-clamp-2">
                         {tool.description}
                       </Txt>
                     )}

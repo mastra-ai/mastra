@@ -85,19 +85,19 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                 value={search}
                 onChange={e => handleSearchChange(e.target.value)}
                 placeholder="Search prompt blocks..."
-                className="text-ui-sm text-foreground placeholder:text-muted-foreground flex-1 bg-transparent outline-hidden"
+                className="text-caption text-foreground placeholder:text-muted-foreground flex-1 bg-transparent outline-hidden"
               />
             </div>
 
             {isLoading ? (
               <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-5">
                 <Spinner className="h-6 w-6" />
-                <Txt variant="ui-sm">Loading prompt blocks...</Txt>
+                <Txt variant="caption">Loading prompt blocks...</Txt>
               </div>
             ) : filtered.length === 0 ? (
               <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-5">
                 <FileText className="h-8 w-8" />
-                <Txt variant="ui-sm">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
+                <Txt variant="caption">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
               </div>
             ) : (
               <div className="max-h-dropdown-max-height flex flex-col gap-1 overflow-y-auto">
@@ -108,14 +108,14 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                     onClick={() => handleSelect(block.id)}
                     className={cn(
                       'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
-                      'hover:bg-surface4 active:bg-surface5 transition-colors',
+                      'hover:bg-surface4 active:bg-surface5',
                     )}
                   >
-                    <Txt variant="ui-sm" className="text-foreground font-medium">
+                    <Txt variant="column" className="text-foreground">
                       {block.name}
                     </Txt>
                     {block.description && (
-                      <Txt variant="ui-xs" className="text-muted-foreground line-clamp-1">
+                      <Txt variant="meta" className="text-muted-foreground line-clamp-1">
                         {block.description}
                       </Txt>
                     )}

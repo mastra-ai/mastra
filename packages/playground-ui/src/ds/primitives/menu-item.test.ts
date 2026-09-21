@@ -4,7 +4,7 @@ import { menuItemClass, menuItemDestructiveClass, menuPopupClass, menuSearchClas
 describe('menuItemClass', () => {
   it('inherits the Button ghost/md size rhythm', () => {
     expect(menuItemClass).toContain('h-form-md');
-    expect(menuItemClass).toContain('text-ui-smd');
+    expect(menuItemClass).toContain('text-label');
     expect(menuItemClass).toContain('px-[.9em]');
     expect(menuItemClass).toContain('gap-[.75em]');
   });
@@ -35,7 +35,7 @@ describe('menuItemClass', () => {
 
 describe('menuSearchClasses', () => {
   it('shows focus on the search row without boxing the input', () => {
-    expect(menuSearchClasses.container).toContain('focus-within:bg-foreground/4');
+    expect(menuSearchClasses.container).toContain('focus-within:bg-fill-subtle');
     expect(menuSearchClasses.container).toContain('border-b border-border');
     expect(menuSearchClasses.container).not.toContain('focus-within:border');
     expect(menuSearchClasses.input).not.toContain('focus-visible:outline');
@@ -44,7 +44,7 @@ describe('menuSearchClasses', () => {
 
 describe('menuPopupClass', () => {
   it('uses the shared surface and dropdown max-height token', () => {
-    expect(menuPopupClass).toContain('bg-popover');
+    expect(menuPopupClass).toContain('bg-card');
     expect(menuPopupClass).toContain('z-50');
     expect(menuPopupClass).toContain('var(--max-height-dropdown-max-height)');
   });

@@ -103,7 +103,7 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
       data={items.map(item => ({
         key: item.label,
         label: (
-          <Txt as="span" variant="ui-smd">
+          <Txt as="span" variant="body-sm">
             {item.label}
           </Txt>
         ),
@@ -129,7 +129,9 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
   if (isError && !data) {
     return (
       <div role="alert" className="flex flex-col items-start gap-2">
-        <Txt variant="caption">Unable to load memory configuration</Txt>
+        <Txt variant="caption" tone="muted">
+          Unable to load memory configuration
+        </Txt>
         <Button size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
           Retry
         </Button>
@@ -137,7 +139,12 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
     );
   }
 
-  if (!data?.config) return <Txt variant="caption">No memory configuration available</Txt>;
+  if (!data?.config)
+    return (
+      <Txt variant="caption" tone="muted">
+        No memory configuration available
+      </Txt>
+    );
 
   return (
     <div className="flex flex-col gap-3">
@@ -147,7 +154,7 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
         ) : (
           <Collapsible key={section.title} defaultOpen={section.title !== 'Observational Memory'}>
             <CollapsibleTrigger className="flex w-full items-center justify-between gap-2">
-              <Txt as="span" variant="ui-smd">
+              <Txt as="span" variant="body-sm">
                 {section.title}
               </Txt>
               <ChevronRight className="size-4" />

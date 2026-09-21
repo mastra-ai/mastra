@@ -4,7 +4,8 @@ import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export type TabProps = {
@@ -68,13 +69,12 @@ export const Tab = ({
         )
       : cn(
           // `sm` mirrors the `sm` button box so tabs sit level with sibling `size="sm"` controls.
-          size === 'sm' ? controlSizeClasses.sm : 'text-ui-smd',
-          'font-normal text-muted-foreground',
+          size === 'sm' ? controlSizeClasses.sm : 'text-label',
+          quietTextHover,
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
-          transitions.colors,
+          controlStateColorTransition,
           focusRing.visible,
-          'hover:text-muted-foreground',
           'data-[active]:text-foreground',
           'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground',
           'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-muted-foreground',

@@ -9,7 +9,7 @@ export function SideDialogTop({ children, className }: SideDialogTopProps) {
   return (
     <div
       className={cn(
-        `text-ui-md text-foreground relative flex h-11 items-center gap-3 pl-4`,
+        `text-body text-foreground relative flex h-11 items-center gap-3 pl-4`,
         '[&:after]:absolute [&:after]:inset-x-6 [&:after]:bottom-0 [&:after]:border-b [&:after]:border-border1 [&:after]:content-[""]',
         className,
       )}

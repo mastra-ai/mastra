@@ -1,44 +1,25 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
-  // Base styles
-  'duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none',
+  cn(raisedSurfaceStyle, 'duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none'),
   {
     variants: {
-      appearance: {
-        outlined: 'border border-border1 bg-surface2',
-        surface: 'bg-surface3',
-      },
       elevation: {
-        flat: '',
-        raised: 'shadow-card',
-        elevated: 'shadow-elevated',
+        flat: 'shadow-none',
+        raised: '',
       },
       interactive: {
-        true: 'cursor-pointer active:scale-99',
+        true: 'cursor-pointer hover:bg-muted focus-visible:bg-muted focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring active:scale-99',
         false: '',
       },
     },
-    compoundVariants: [
-      {
-        appearance: 'outlined',
-        interactive: true,
-        className: 'hover:border-border2 hover:bg-surface3',
-      },
-      {
-        appearance: 'surface',
-        interactive: true,
-        className:
-          'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border2 active:bg-surface5',
-      },
-    ],
     defaultVariants: {
-      appearance: 'outlined',
-      elevation: 'flat',
+      elevation: 'raised',
       interactive: false,
     },
   },
@@ -50,14 +31,14 @@ export type CardProps = React.HTMLAttributes<HTMLDivElement> &
   };
 
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, appearance, elevation, interactive, as, ...props }, ref) => {
+  ({ className, elevation, interactive, as, ...props }, ref) => {
     const Component = as || (interactive ? 'button' : 'div');
 
     return (
       <Component
         ref={ref}
         type={Component === 'button' ? 'button' : undefined}
-        className={cn(cardVariants({ appearance, elevation, interactive }), className)}
+        className={cn(cardVariants({ elevation, interactive }), className)}
         {...props}
       />
     );
@@ -71,8 +52,8 @@ export type CardLinkProps = Omit<React.ComponentPropsWithoutRef<'a'>, 'href'> &
     LinkComponent?: LinkComponent;
   };
 
-export function CardLink({ className, appearance, elevation, LinkComponent: Link = 'a', ...props }: CardLinkProps) {
-  return <Link className={cn(cardVariants({ appearance, elevation, interactive: true }), className)} {...props} />;
+export function CardLink({ className, elevation, LinkComponent: Link = 'a', ...props }: CardLinkProps) {
+  return <Link className={cn(cardVariants({ elevation, interactive: true }), className)} {...props} />;
 }
 
 // Card Header component
@@ -87,11 +68,7 @@ CardHeader.displayName = 'CardHeader';
 export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement>;
 
 export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ className, ...props }, ref) => (
-  <h3
-    ref={ref}
-    className={cn('text-ui-md leading-none font-semibold tracking-tight text-foreground', className)}
-    {...props}
-  />
+  <h3 ref={ref} className={cn('text-subheading text-foreground', className)} {...props} />
 ));
 CardTitle.displayName = 'CardTitle';
 
@@ -100,7 +77,7 @@ export type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
 
 export const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescriptionProps>(
   ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn('text-ui-sm text-muted-foreground', className)} {...props} />
+    <p ref={ref} className={cn('text-caption text-muted-foreground', className)} {...props} />
   ),
 );
 CardDescription.displayName = 'CardDescription';

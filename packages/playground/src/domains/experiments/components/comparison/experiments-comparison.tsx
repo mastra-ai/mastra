@@ -114,7 +114,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
   }
 
   if (!comparison || comparison.items.length === 0) {
-    return <div className="text-muted-foreground text-ui-md py-5 text-center">No comparison data</div>;
+    return <div className="text-muted-foreground text-body py-5 text-center">No comparison data</div>;
   }
 
   return (
@@ -125,7 +125,11 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
           role="row"
           className="border-border1 grid border-y xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border1)]"
         >
-          <div role="columnheader" aria-label="Items" className={`${cell} text-muted-foreground text-ui-sm uppercase`}>
+          <div
+            role="columnheader"
+            aria-label="Items"
+            className={`${cell} text-muted-foreground text-caption uppercase`}
+          >
             Items
           </div>
           <div role="columnheader" aria-label="Baseline" className={cell}>
@@ -162,7 +166,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
                   href={paths.datasetItemLink(datasetId, row.itemId)}
                   aria-label={`Open item ${row.itemId}`}
                   className={cn(
-                    'text-ui-sm flex items-start gap-1.5 font-mono break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
+                    'text-caption flex items-start gap-1.5 font-mono break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
                     row.baseline.present && row.contender.present ? 'text-muted-foreground' : 'text-placeholder',
                   )}
                 >

@@ -7,5 +7,5 @@ export function MetricsKpiCardNoChange({
   message?: string;
   className?: string;
 }) {
-  return <span className={cn('text-ui-md text-placeholder', className)}>{message}</span>;
+  return <span className={cn('text-body text-placeholder', className)}>{message}</span>;
 }

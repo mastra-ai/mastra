@@ -17,7 +17,7 @@ function AgentsCompactGridSkeleton() {
   return (
     <div className={compactGridClassName}>
       {Array.from({ length: 6 }, (_, index) => (
-        <Card key={index} appearance="surface" className="min-h-24">
+        <Card key={index} className="min-h-24">
           <CardContent density="compact" className="grid gap-2">
             <Skeleton className="h-4 w-36" />
             <Skeleton className="h-3 w-full max-w-72" />

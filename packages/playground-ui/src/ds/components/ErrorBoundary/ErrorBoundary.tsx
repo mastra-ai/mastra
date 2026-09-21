@@ -1,6 +1,7 @@
 import { AlertTriangle, Bug, RefreshCw, RotateCcw } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '../Button';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export type ErrorBoundaryVariant = 'section' | 'inline';
@@ -158,19 +159,19 @@ function DefaultErrorFallback({
         </div>
         <h3
           className={cn(
-            'font-medium text-foreground',
-            isInline ? 'text-ui-md' : 'text-ui-md @md:text-header-md @lg:text-header-lg',
+            'text-foreground',
+            isInline ? 'text-subheading' : 'text-subheading @md:text-heading @lg:text-title',
           )}
         >
           {title ?? 'Something went wrong'}
         </h3>
-        <p className={cn('text-muted-foreground', isInline ? 'text-ui-sm' : 'text-ui-md')}>
+        <p className={cn('text-muted-foreground', isInline ? 'text-caption' : 'text-body')}>
           {description ?? 'An unexpected error occurred while rendering this part of the page.'}
         </p>
         <p
           className={cn(
             'rounded-md bg-surface3 px-3 py-2 font-mono break-words text-muted-foreground',
-            isInline ? 'text-ui-xs' : 'text-ui-sm',
+            isInline ? 'text-meta' : 'text-caption',
           )}
         >
           {error.message}
@@ -198,10 +199,8 @@ function DefaultErrorFallback({
         </div>
         {stack ? (
           <details className={cn('w-full text-left', isInline ? 'mt-1' : 'mt-2')}>
-            <summary className="text-ui-sm text-muted-foreground hover:text-muted-foreground cursor-pointer">
-              Show error details
-            </summary>
-            <pre className="bg-surface3 text-ui-xs text-muted-foreground mt-2 max-h-64 overflow-auto rounded-md p-3 break-words whitespace-pre-wrap">
+            <summary className={cn('text-caption cursor-pointer', quietTextHover)}>Show error details</summary>
+            <pre className="bg-surface3 text-meta text-muted-foreground mt-2 max-h-64 overflow-auto rounded-md p-3 break-words whitespace-pre-wrap">
               {stack}
             </pre>
           </details>

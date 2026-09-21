@@ -99,23 +99,23 @@ export function ThemeCompare({
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <p className="border-border1 text-muted-foreground text-ui-sm rounded-md border px-2 py-1 font-mono tabular-nums">
+        <p className="border-border1 text-muted-foreground text-caption rounded-md border px-2 py-1 font-mono tabular-nums">
           {snapshotSummaryLabel(fromSnapshot, flows[fromIndex])}
         </p>
-        <span aria-hidden="true" className="text-muted-foreground text-ui-sm">
+        <span aria-hidden="true" className="text-muted-foreground text-caption">
           →
         </span>
-        <p className="border-border1 text-muted-foreground text-ui-sm rounded-md border px-2 py-1 font-mono tabular-nums">
+        <p className="border-border1 text-muted-foreground text-caption rounded-md border px-2 py-1 font-mono tabular-nums">
           {snapshotSummaryLabel(toSnapshot, flows[toIndex])}
         </p>
-        <p className="text-muted-foreground text-ui-sm">
+        <p className="text-muted-foreground text-caption">
           {grabbedPoint === undefined
             ? 'Click a landmark to move the nearest point · click a point to grab it.'
             : 'Point grabbed — click a landmark to place it.'}
         </p>
       </div>
       {fromIndex === toIndex ? (
-        <p className="border-border1 bg-surface2 text-muted-foreground text-ui-md rounded-lg border p-6">
+        <p className="border-border1 bg-surface2 text-muted-foreground text-body rounded-lg border p-6">
           Pick two different landmarks on the timeline to compare them.
         </p>
       ) : !fromFlow || !toFlow ? (

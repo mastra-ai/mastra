@@ -2,7 +2,6 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
@@ -14,6 +13,7 @@ import {
 } from '@mastra/playground-ui/components/Composer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import {
   buildThreadRailTurns,
   getClientMessageKey,
@@ -369,13 +369,13 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
 
   return (
     <Button
-      variant="default"
+      variant="ghost"
       size="icon-md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="text-muted-foreground hover:text-foreground h-5 w-5" />}
+      {isListening ? <CircleStopIcon /> : <Mic />}
     </Button>
   );
 };
@@ -411,9 +411,7 @@ const ComposerActionRow = ({
         <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
-                <ComposerModelSwitcher />
-              </div>
+              <ComposerModelSwitcher />
               <ComposerModelSettings agentId={agentId} />
             </>
           )}
@@ -422,11 +420,11 @@ const ComposerActionRow = ({
       )}
 
       <div className="flex shrink-0 items-center gap-1.5">
-        <ButtonsGroup spacing="close">
+        <div className="flex items-center gap-2">
           {canExecute && <AttachFilePopover />}
           {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
           {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
-        </ButtonsGroup>
+        </div>
         <ComposerSendButton
           canExecute={canExecute}
           isEmpty={isEmpty}
@@ -470,10 +468,9 @@ const ComposerSendButton = ({
         variant="default"
         size="icon-md"
         tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="border-border1 bg-surface5 rounded-full border"
         disabled={!canExecute || isEmpty}
       >
-        <ArrowUp className="text-muted-foreground hover:text-foreground h-6 w-6" />
+        <ArrowUp />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
@@ -496,7 +493,7 @@ const CircleStopIcon = () => {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-muted-foreground hover:text-foreground"
+      className={quietTextHover}
     >
       <circle cx="12" cy="12" r="10" />
       <rect width="6" height="6" x="9" y="9" rx="1" />

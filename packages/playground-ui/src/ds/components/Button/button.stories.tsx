@@ -170,16 +170,16 @@ export const IconButtonDisabled: Story = {
 
 export const VariantSizeMatrix: Story = {
   render: () => (
-    <div className="new-theme grid grid-cols-[6rem_repeat(4,max-content)_max-content] items-center gap-3">
+    <div className="grid grid-cols-[6rem_repeat(4,max-content)_max-content] items-center gap-3">
       <span />
       {['xs', 'sm', 'default', 'lg', 'with icon'].map(label => (
-        <Txt key={label} as="span" variant="ui-xs" className="text-muted-foreground text-center">
+        <Txt key={label} as="span" variant="meta" className="text-muted-foreground text-center">
           {label}
         </Txt>
       ))}
       {ALL_VARIANTS.map(variant => (
         <Fragment key={variant}>
-          <Txt as="span" variant="ui-xs" className="text-muted-foreground">
+          <Txt as="span" variant="meta" className="text-muted-foreground">
             {variant}
           </Txt>
           <Button variant={variant} size="xs">

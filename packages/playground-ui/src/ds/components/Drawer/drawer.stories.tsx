@@ -45,7 +45,7 @@ export const Default: Story = {
           <DrawerDescription>You are all caught up. Good job!</DrawerDescription>
         </DrawerHeader>
         <DrawerBody>
-          <p className="text-ui-sm text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             Swipe down or press the close button to dismiss this sheet.
           </p>
         </DrawerBody>
@@ -104,7 +104,7 @@ export const Sides: Story = {
               <DrawerDescription>{description}</DrawerDescription>
             </DrawerHeader>
             <DrawerBody>
-              <p className="text-ui-sm text-muted-foreground">{body}</p>
+              <p className="text-caption text-muted-foreground">{body}</p>
             </DrawerBody>
             <DrawerFooter>
               <DrawerClose asChild>
@@ -163,10 +163,10 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-surface1 min-h-140 p-4 sm:p-6">
       <div className="mx-auto grid max-w-6xl gap-4">
-        <div className="border-border1 bg-surface2 flex flex-col gap-4 rounded-lg border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="border-border bg-fill flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="grid gap-1">
-            <h2 className="text-ui-lg text-foreground font-medium">Deployments</h2>
-            <p className="text-ui-sm text-muted-foreground">{deployments} active preview environments</p>
+            <h2 className="text-heading text-foreground">Deployments</h2>
+            <p className="text-caption text-muted-foreground">{deployments} active preview environments</p>
           </div>
           <div className="flex flex-wrap gap-2">{children}</div>
         </div>
@@ -175,8 +175,8 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
           <div className="border-border1 bg-surface2 rounded-lg border p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-ui-md text-foreground font-medium">Recent runs</h3>
-                <p className="text-ui-sm text-muted-foreground">Production checks across connected branches</p>
+                <h3 className="text-subheading text-foreground">Recent runs</h3>
+                <p className="text-caption text-muted-foreground">Production checks across connected branches</p>
               </div>
               <Button variant="outline" onClick={() => setDeployments(count => count + 1)}>
                 Queue run
@@ -188,23 +188,23 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
                   key={branch}
                   className="border-border1 bg-surface3 flex items-center justify-between rounded-md border px-3 py-2"
                 >
-                  <span className="text-ui-sm text-foreground font-medium">{branch}</span>
-                  <span className="text-ui-xs text-muted-foreground">{index === 0 ? 'Ready' : 'Building'}</span>
+                  <span className="text-column text-foreground">{branch}</span>
+                  <span className="text-meta text-muted-foreground">{index === 0 ? 'Ready' : 'Building'}</span>
                 </div>
               ))}
             </div>
           </div>
 
           <div className="border-border1 bg-surface2 rounded-lg border p-4">
-            <h3 className="text-ui-md text-foreground font-medium">Environment</h3>
+            <h3 className="text-subheading text-foreground">Environment</h3>
             <div className="mt-3 grid gap-3">
               <div className="bg-surface3 rounded-md p-3">
-                <p className="text-ui-xs text-muted-foreground">Region</p>
-                <p className="text-ui-sm text-foreground">eu-west-1</p>
+                <p className="text-meta text-muted-foreground">Region</p>
+                <p className="text-caption text-foreground">eu-west-1</p>
               </div>
               <div className="bg-surface3 rounded-md p-3">
-                <p className="text-ui-xs text-muted-foreground">Runtime</p>
-                <p className="text-ui-sm text-foreground">Node.js 22</p>
+                <p className="text-meta text-muted-foreground">Runtime</p>
+                <p className="text-caption text-foreground">Node.js 22</p>
               </div>
             </div>
           </div>
@@ -261,7 +261,7 @@ function ControlledExample() {
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <p className="text-ui-sm text-muted-foreground">
+      <p className="text-caption text-muted-foreground">
         Drawer is <span className="text-foreground">{open ? 'open' : 'closed'}</span>
       </p>
       <Button onClick={() => setOpen(true)}>Open from outside</Button>
@@ -342,7 +342,7 @@ export const Nested: Story = {
                 <DrawerDescription>Review sign-in activity and update your preferences.</DrawerDescription>
               </DrawerHeader>
               <DrawerBody>
-                <ul className="text-ui-sm text-muted-foreground list-disc pl-5">
+                <ul className="text-caption text-muted-foreground list-disc pl-5">
                   <li>Passkeys enabled</li>
                   <li>2FA via authenticator app</li>
                   <li>3 signed-in devices</li>
@@ -453,7 +453,7 @@ function SwipeToOpenExample() {
       <Drawer side="right" modal={false}>
         <DrawerSwipeArea className="border-border2 bg-surface4/40 absolute inset-y-0 right-0 z-10 w-10 border-l border-dashed" />
         <div className="flex h-full items-center justify-center px-12 text-center">
-          <p className="text-ui-sm text-muted-foreground">Swipe from the right edge to open the drawer.</p>
+          <p className="text-caption text-muted-foreground">Swipe from the right edge to open the drawer.</p>
         </div>
         <DrawerPortal container={container}>
           <DrawerBackdrop className="absolute" />
@@ -590,7 +590,7 @@ const profileDrawer = createDrawerHandle<ProfilePayload>();
 function DetachedTriggersExample() {
   return (
     <div className="flex flex-col items-center gap-3">
-      <p className="text-ui-sm text-muted-foreground">Triggers live outside the drawer and pass it a payload.</p>
+      <p className="text-caption text-muted-foreground">Triggers live outside the drawer and pass it a payload.</p>
       <div className="flex gap-2">
         <DrawerTrigger
           handle={profileDrawer}

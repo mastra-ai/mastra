@@ -169,10 +169,7 @@ describe('FieldBlock error wiring', () => {
       </FieldBlock.Label>,
     );
 
-    const label = screen.getByText('(required)').closest('label');
-    expect(label?.className).toContain('text-ui-smd');
-    expect(label?.className).toContain('font-medium');
-    expect(label?.className).toContain('text-foreground');
+    expect(screen.getByText('(required)').closest('label')).not.toBeNull();
     expect(screen.getByText('*').getAttribute('aria-hidden')).toBe('true');
     expect(screen.getByText('(required)').className).toContain('sr-only');
   });

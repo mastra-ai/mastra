@@ -33,7 +33,7 @@ export function WorkflowGraphGroups({ nodes, groups }: { nodes: Node[]; groups: 
             className="border-neutral3/25 bg-neutral3/3 absolute rounded-xl border border-dashed"
             style={{ transform: `translate(${left}px, ${top}px)`, width: right - left, height: bottom - top }}
           >
-            <div className="text-ui-xs text-muted-foreground flex items-center gap-2 px-5 py-4">
+            <div className="text-meta text-muted-foreground flex items-center gap-2 px-5 py-4">
               <Badge size="xs" variant="blue" emphasis="muted" icon={<GitFork aria-hidden />}>
                 {group.label}
               </Badge>

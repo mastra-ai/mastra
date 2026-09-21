@@ -32,7 +32,7 @@ export function SidebarNewNavHeader({
       {showTitle ? (
         <header
           {...props}
-          className={cn('max-w-full min-w-0 truncate pl-3 text-ui-sm font-medium', {
+          className={cn('max-w-full min-w-0 truncate pl-3 text-column', {
             'text-foreground': isActive,
             'text-muted-foreground': !isActive,
           })}
@@ -56,7 +56,7 @@ export function SidebarNewNavHeader({
           <VisuallyHidden asChild>
             <header {...props}>{children}</header>
           </VisuallyHidden>
-          <div aria-hidden="true" className="bg-sidebar-divider mx-3 h-px flex-1" />
+          <div aria-hidden="true" className="bg-border mx-3 h-px flex-1" />
         </>
       )}
     </div>

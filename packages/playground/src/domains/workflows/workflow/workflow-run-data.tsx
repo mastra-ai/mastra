@@ -12,7 +12,7 @@ type RunDataTab = 'input' | 'output' | 'execution';
 function RunDataValue({ value }: { value: unknown }) {
   if (value === undefined) {
     return (
-      <Txt className="text-muted-foreground block p-4" variant="ui-sm">
+      <Txt className="text-muted-foreground block p-4" variant="caption">
         No input recorded
       </Txt>
     );
@@ -35,7 +35,7 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
 
   return (
     <Collapsible className="border-border1/50 border-t" data-testid="workflow-run-data">
-      <CollapsibleTrigger className="text-ui-sm text-muted-foreground flex min-h-11 w-full items-center gap-2 px-5 py-3">
+      <CollapsibleTrigger className="text-caption text-muted-foreground flex min-h-11 w-full items-center gap-2 px-5 py-3">
         <Database aria-hidden className="text-muted-foreground size-3.5" />
         <span>Run data</span>
         <ChevronRight aria-hidden className="text-muted-foreground ml-auto size-4" />

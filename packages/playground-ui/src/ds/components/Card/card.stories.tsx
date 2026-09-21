@@ -9,13 +9,11 @@ const meta: Meta<typeof Card> = {
   component: Card,
   parameters: { layout: 'centered' },
   args: {
-    appearance: 'outlined',
-    elevation: 'flat',
+    elevation: 'raised',
     interactive: false,
   },
   argTypes: {
-    appearance: { control: 'inline-radio', options: ['outlined', 'surface'] },
-    elevation: { control: 'inline-radio', options: ['flat', 'raised', 'elevated'] },
+    elevation: { control: 'inline-radio', options: ['flat', 'raised'] },
     interactive: { control: 'boolean' },
   },
 };
@@ -34,7 +32,7 @@ export const Default: Story = {
         <CardDescription>Searches trusted sources and returns a cited summary.</CardDescription>
       </CardHeader>
       <CardContent>
-        <p className="text-ui-sm text-muted-foreground">Last run completed 4 minutes ago with 12 sources.</p>
+        <p className="text-caption text-muted-foreground">Last run completed 4 minutes ago with 12 sources.</p>
       </CardContent>
       <CardFooter className="gap-2">
         <Button variant="primary">Open agent</Button>
@@ -44,22 +42,22 @@ export const Default: Story = {
   ),
 };
 
-export const AppearancesAndElevation: Story = {
+export const Elevation: Story = {
   render: () => (
     <div className="grid w-[min(44rem,calc(100vw-2rem))] grid-cols-1 gap-5 sm:grid-cols-2">
-      {(['outlined', 'surface'] as const).flatMap(appearance =>
-        (['flat', 'raised', 'elevated'] as const).map(elevation => (
-          <Card key={`${appearance}-${elevation}`} appearance={appearance} elevation={elevation}>
-            <CardHeader>
-              <CardTitle className="capitalize">{elevation}</CardTitle>
-              <CardDescription>{appearance} appearance</CardDescription>
-            </CardHeader>
-            <CardContent density="compact">
-              <p className="text-ui-sm text-muted-foreground">Card content</p>
-            </CardContent>
-          </Card>
-        )),
-      )}
+      {(['flat', 'raised'] as const).map(elevation => (
+        <Card key={elevation} elevation={elevation}>
+          <CardHeader>
+            <CardTitle className="capitalize">{elevation}</CardTitle>
+            <CardDescription>
+              {elevation === 'raised' ? 'Rim and shadow from --shadow-raised' : 'Nested inside another raised surface'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent density="compact">
+            <p className="text-caption text-muted-foreground">Card content</p>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   ),
 };

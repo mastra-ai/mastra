@@ -116,7 +116,7 @@ function ToolList({
         <Icon size="lg" className="bg-surface4 rounded-md p-1">
           <McpServerIcon />
         </Icon>
-        <Txt variant="header-md" as="h2" className="font-medium">
+        <Txt variant="heading" as="h2">
           Available Tools ({selectedCount}/{tools.length} selected)
         </Txt>
       </div>

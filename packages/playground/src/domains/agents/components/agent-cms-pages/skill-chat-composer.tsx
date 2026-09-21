@@ -136,10 +136,10 @@ export function SkillChatComposer({
         <Sparkles className="text-accent5 h-6 w-6" />
       </div>
       <div className="flex flex-col gap-1">
-        <Txt variant="ui-md" className="text-foreground font-medium" as="p">
+        <Txt variant="subheading" className="text-foreground" as="p">
           {hasFields ? 'Refine your skill' : 'Describe your skill'}
         </Txt>
-        <Txt variant="ui-sm" className="text-muted-foreground" as="p">
+        <Txt variant="caption" className="text-muted-foreground" as="p">
           {hasFields
             ? 'Ask the agent to adjust the name, description, or instructions.'
             : 'Tell the agent what this skill should do and it will fill in the details for you.'}

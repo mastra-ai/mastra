@@ -38,9 +38,9 @@ export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
       {showSplit && (
         <div className="mb-2">
           <div className="text-placeholder flex items-baseline gap-3">
-            <span className="text-ui-md">Tokens Used</span>
-            <span className="text-ui-md text-muted-foreground font-semibold">{total.toLocaleString()}</span>
-            <span className="text-ui-sm ml-auto">
+            <span className="text-body">Tokens Used</span>
+            <span className="text-subheading text-muted-foreground">{total.toLocaleString()}</span>
+            <span className="text-caption ml-auto">
               {Math.round(inputPct)}% Input vs {Math.round(outputPct)}% Output
             </span>
           </div>
@@ -81,10 +81,10 @@ function UsageColumn({
   return (
     <div>
       <div className="text-placeholder mb-2 flex items-baseline gap-3">
-        <span className="text-ui-md">{label}</span>
+        <span className="text-body">{label}</span>
         {typeof value === 'number' && (
           <span className="flex items-baseline gap-1.5">
-            <span className="text-ui-md text-muted-foreground font-semibold">{value.toLocaleString()}</span>
+            <span className="text-subheading text-muted-foreground">{value.toLocaleString()}</span>
             <span className="size-2 self-center rounded-full" style={{ backgroundColor: color }} />
           </span>
         )}

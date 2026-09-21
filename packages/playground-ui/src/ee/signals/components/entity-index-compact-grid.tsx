@@ -32,7 +32,6 @@ function EntityIndexCompactCard({
       <CardLink
         LinkComponent={LinkComponent}
         href={getEntityHref(entity)}
-        appearance="surface"
         aria-label={`Open ${entity.entityId}`}
         aria-describedby={detailsId}
         className="group-focus-within/entity:bg-surface4 group-hover/entity:bg-surface4 absolute inset-0"
@@ -51,16 +50,16 @@ function EntityIndexCompactCard({
         </div>
         <dl id={detailsId} className="grid grid-cols-3 gap-3">
           <div>
-            <dt className="text-ui-xs text-muted-foreground">Traces</dt>
-            <dd className="text-ui-sm text-foreground">{metadata.traceCount}</dd>
+            <dt className="text-meta text-muted-foreground">Traces</dt>
+            <dd className="text-caption text-foreground">{metadata.traceCount}</dd>
           </div>
           <div>
-            <dt className="text-ui-xs text-muted-foreground">Signals set</dt>
-            <dd className="text-ui-sm text-foreground">{metadata.signalsSet}</dd>
+            <dt className="text-meta text-muted-foreground">Signals set</dt>
+            <dd className="text-caption text-foreground">{metadata.signalsSet}</dd>
           </div>
           <div>
-            <dt className="text-ui-xs text-muted-foreground">Updated</dt>
-            <dd className="text-ui-sm text-foreground" title={entity.updatedAt}>
+            <dt className="text-meta text-muted-foreground">Updated</dt>
+            <dd className="text-caption text-foreground" title={entity.updatedAt}>
               {metadata.updatedAt}
             </dd>
           </div>
@@ -77,7 +76,7 @@ export function EntityIndexCompactGrid({
   LinkComponent,
 }: EntityIndexCompactGridProps) {
   if (entities.length === 0 && hasSearch) {
-    return <p className="text-ui-sm text-muted-foreground py-8 text-center">No entities match your search</p>;
+    return <p className="text-caption text-muted-foreground py-8 text-center">No entities match your search</p>;
   }
   return (
     <ScrollArea className="h-full">

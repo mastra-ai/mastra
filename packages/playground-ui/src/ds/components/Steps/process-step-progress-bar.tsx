@@ -24,7 +24,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
             >
               <div
                 className={cn(
-                  'absolute right-0 z-10 flex size-8 translate-x-1/2 items-center justify-center self-center rounded-full bg-surface3 text-ui-sm font-bold text-muted-foreground motion-reduce:transition-none',
+                  'absolute right-0 z-10 flex size-8 translate-x-1/2 items-center justify-center self-center rounded-full bg-surface3 text-column text-muted-foreground motion-reduce:transition-none',
                   transitions.colors,
                   transitions.transform,
                   transitions.shadow,
@@ -41,7 +41,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
           );
         })}
       </div>
-      <div className={cn('text-center text-ui-sm text-muted-foreground', transitions.colors)}>
+      <div className={cn('text-center text-caption text-muted-foreground', transitions.colors)}>
         {completedSteps} of {totalSteps} steps completed
       </div>
     </div>

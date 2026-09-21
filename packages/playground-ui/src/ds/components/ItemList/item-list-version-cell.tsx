@@ -20,10 +20,8 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
           'text-muted-foreground': isLatest,
         })}
       >
-        <strong className="font-normal">v. {version}</strong>
-        <em className={cn('text-ui-sm', 'font-normal', 'text-placeholder')}>
-          {date ? format(new Date(date), 'MMM d, yyyy HH:mm') : null}
-        </em>
+        <strong className="text-body-sm">v. {version}</strong>
+        <em className="text-caption text-placeholder">{date ? format(new Date(date), 'MMM d, yyyy HH:mm') : null}</em>
       </div>
       {(isLatest || isDeleted) && (
         <div className="flex items-center gap-1">

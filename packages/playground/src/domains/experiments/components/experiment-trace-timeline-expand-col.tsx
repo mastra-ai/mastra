@@ -1,4 +1,5 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { ChevronDownIcon, ChevronsDownIcon, ChevronsUpIcon, ChevronUpIcon } from 'lucide-react';
 
 type ExperimentTraceTimelineExpandColProps = {
@@ -58,7 +59,8 @@ function ExpandButton({ onClick, children, className }: ExpandButtonProps) {
     <button onClick={onClick} className={cn('h-full', className)}>
       <div
         className={cn(
-          'flex items-center gap-[0.1rem] text-ui-sm text-foreground border border-border1 pl-2 pr-1 rounded-lg transition-all',
+          'flex items-center gap-[0.1rem] text-caption text-foreground border border-border1 pl-2 pr-1 rounded-lg',
+          controlStateColorTransition,
           'hover:text-yellow-500',
           '[&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:w-4 [&>svg]:h-4 [&>svg]:transition-all',
         )}

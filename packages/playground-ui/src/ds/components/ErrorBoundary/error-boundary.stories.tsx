@@ -33,13 +33,13 @@ function ScopedBoundaryDemo() {
   return (
     <div className="border-border1 grid h-105 w-180 grid-cols-[200px_1fr] gap-4 rounded-lg border p-3">
       <aside className="bg-surface3 flex flex-col gap-2 rounded-md p-3">
-        <p className="text-ui-sm text-foreground font-medium">Sidebar</p>
-        <p className="text-ui-xs text-muted-foreground">Still interactive — the crash is scoped to the editor panel.</p>
+        <p className="text-column text-foreground">Sidebar</p>
+        <p className="text-meta text-muted-foreground">Still interactive — the crash is scoped to the editor panel.</p>
       </aside>
       <main className="flex flex-col gap-3">
         <div className="bg-surface3 rounded-md p-3">
-          <p className="text-ui-sm text-foreground font-medium">Header</p>
-          <p className="text-ui-xs text-muted-foreground">Unaffected by the failing panel below.</p>
+          <p className="text-column text-foreground">Header</p>
+          <p className="text-meta text-muted-foreground">Unaffected by the failing panel below.</p>
         </div>
         <div className="border-border1 bg-surface2 flex-1 overflow-hidden rounded-md border">
           <ErrorBoundary
@@ -119,7 +119,7 @@ export const CustomFallback: Story = {
     <ErrorBoundary
       fallback={({ error, reset }) => (
         <div className="border-border1 flex flex-col items-center gap-3 rounded-md border p-6">
-          <p className="text-ui-md text-foreground">Custom fallback: {error.message}</p>
+          <p className="text-body text-foreground">Custom fallback: {error.message}</p>
           <Button onClick={reset}>Retry</Button>
         </div>
       )}

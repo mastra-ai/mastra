@@ -5,6 +5,7 @@ import { WorkflowCodeContent } from './workflow-code-dialog-content';
 import { Button } from '@/ds/components/Button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { Txt } from '@/ds/components/Txt';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 export interface WorkflowEdgeDataButtonProps {
   previousStepId?: string;
@@ -32,10 +33,11 @@ export const WorkflowEdgeDataButton = ({
     <>
       <Button
         size="sm"
+        variant="ghost"
         onClick={onInspect ?? (() => setIsOpen(true))}
         aria-label={`View ${dataLabel}`}
         aria-pressed={selected}
-        className="border-border1 bg-surface3 text-foreground shadow-panel hover:bg-surface4 aria-pressed:border-neutral3 aria-pressed:bg-surface4 h-7 rounded-lg border px-2"
+        className={`${raisedSurfaceStyle} text-foreground not-disabled:hover:bg-muted aria-pressed:border-neutral3 aria-pressed:bg-muted h-7 rounded-lg px-2`}
         icon={<Database className="text-accent1" />}
       >
         Data
@@ -48,7 +50,7 @@ export const WorkflowEdgeDataButton = ({
           </DialogHeader>
           <DialogBody className="overflow-auto" style={{ maxHeight: 700 }}>
             <div className="border-border1 bg-surface2 min-w-0 rounded-lg border p-3">
-              <Txt variant="ui-sm" className="text-foreground mb-2 block">
+              <Txt variant="caption" className="text-foreground mb-2 block">
                 {dataLabel}
               </Txt>
               <WorkflowCodeContent data={output} />

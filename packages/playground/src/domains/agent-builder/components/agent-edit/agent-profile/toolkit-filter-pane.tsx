@@ -1,3 +1,5 @@
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -47,7 +49,7 @@ const ToolkitFilterRow = memo(
           data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
           data-checked={checked ? 'true' : 'false'}
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-foreground transition-colors hover:bg-surface4',
+            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground hover:bg-surface4',
             disabled && 'cursor-not-allowed opacity-60',
           )}
         >
@@ -144,7 +146,7 @@ const ProviderToolkitSection = ({
   return (
     <div className="flex flex-col gap-0.5">
       <Txt
-        variant="ui-xs"
+        variant="meta"
         data-testid={`tools-provider-section-${provider.providerId}`}
         className="text-muted-foreground px-2 pt-1 tracking-wide uppercase"
       >
@@ -226,13 +228,13 @@ export const ToolkitFilterPane = ({
         </InputGroup>
       </div>
 
-      <div className="text-ui-xs flex shrink-0 items-center gap-2">
+      <div className="text-meta flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-select-all`}
-          className="text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           Select all
         </button>
@@ -244,7 +246,7 @@ export const ToolkitFilterPane = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-clear-all`}
-          className="text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           Clear all
         </button>

@@ -43,7 +43,7 @@ export function TemplateForm({
       <div className="mx-auto my-4 grid max-w-[40rem] gap-5 p-4 lg:p-5">
         <h2
           className={cn(
-            'text-muted-foreground text-header-sm font-semibold flex items-center gap-2',
+            'text-muted-foreground text-heading flex items-center gap-2',
             '[&>svg]:w-[1.2em] [&_svg]:h-[1.2em] [&_svg]:opacity-70',
           )}
         >
@@ -61,12 +61,12 @@ export function TemplateForm({
 
         {selectedProvider && Object.entries(variables || {}).length > 0 && (
           <>
-            <h3 className="text-muted-foreground text-ui-md">Set required Environmental Variables</h3>
+            <h3 className="text-muted-foreground text-body">Set required Environmental Variables</h3>
             <div className="grid grid-cols-[1fr_1fr] items-start gap-4">
               {isLoadingEnvVars ? (
                 <div
                   className={cn(
-                    'flex items-center justify-center col-span-2 text-muted-foreground text-ui-sm gap-4',
+                    'flex items-center justify-center col-span-2 text-muted-foreground text-caption gap-4',
                     '[&_svg]:opacity-50 [&_svg]:w-[1.1em] [&_svg]:h-[1.1em]',
                     'animate-in fade-in duration-300',
                   )}
@@ -99,12 +99,12 @@ export function TemplateForm({
               )}
             </div>
             <div className="border-border1 relative mt-3.5 border-t pt-12">
-              <div className="bg-surface2 text-ui-sm text-muted-foreground absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full">
+              <div className="bg-surface2 text-caption text-muted-foreground absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full">
                 And
               </div>
 
-              <h3 className="text-muted-foreground text-ui-md">Set AI Model for Template Installation</h3>
-              <p className="text-muted-foreground text-ui-md mt-2 mb-5">
+              <h3 className="text-muted-foreground text-body">Set AI Model for Template Installation</h3>
+              <p className="text-muted-foreground text-body mt-2 mb-5">
                 This model will be used by the workflow to process and install the template
               </p>
 
@@ -123,7 +123,7 @@ export function TemplateForm({
         {selectedProvider && !isLoadingEnvVars && (
           <Button
             className={cn(
-              'flex items-center gap-2 mt-4 justify-center text-ui-md w-full bg-surface5 min-h-10 rounded-lg text-foreground hover:bg-surface6 transition-colors',
+              'flex items-center gap-2 mt-4 justify-center text-body w-full bg-surface5 min-h-10 rounded-lg text-foreground hover:bg-surface6',
               '[&>svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-foreground',
             )}
             onClick={handleInstallTemplate}

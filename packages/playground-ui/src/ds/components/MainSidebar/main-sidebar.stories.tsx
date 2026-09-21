@@ -64,8 +64,8 @@ const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, chi
 
 const HelperCopy = () => (
   <>
-    <p className="text-ui-md text-foreground font-medium">Main content area</p>
-    <p className="text-ui-sm text-muted-foreground mt-2 max-w-[40ch]">
+    <p className="text-subheading text-foreground">Main content area</p>
+    <p className="text-caption text-muted-foreground mt-2 max-w-[40ch]">
       Hover the sidebar edge to reveal the handle. Drag to resize, or click to toggle.
     </p>
   </>
@@ -86,14 +86,12 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
     <main className="flex min-w-0 flex-1 flex-col">
       <header className="mx-2 mt-1.5 flex h-12 shrink-0 items-center justify-between px-3">
         <div className="min-w-0">
-          <p className="text-ui-lg text-foreground truncate font-semibold">Traces</p>
-          <p className="text-ui-xs text-muted-foreground truncate">Observability / Traces</p>
+          <p className="text-heading text-foreground truncate">Traces</p>
+          <p className="text-meta text-muted-foreground truncate">Observability / Traces</p>
         </div>
-        <span className="border-border1 bg-surface3 text-ui-xs text-foreground rounded-md border px-2.5 py-1 font-medium">
-          Live
-        </span>
+        <span className="border-border1 bg-surface3 text-meta text-foreground rounded-md border px-2.5 py-1">Live</span>
       </header>
-      <section className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
+      <section className="rounded-studio-frame border-border bg-card shadow-raised mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
         <div className="grid min-h-full grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
           <div className="grid grid-cols-3 gap-3">
             {[
@@ -102,16 +100,16 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
               ['Error rate', '0.8%'],
             ].map(([label, value]) => (
               <div key={label} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
-                <p className="text-ui-xs text-muted-foreground font-medium uppercase">{label}</p>
-                <p className="text-foreground text-header-lg mt-2 font-semibold">{value}</p>
+                <p className="text-meta text-muted-foreground uppercase">{label}</p>
+                <p className="text-foreground text-title mt-2">{value}</p>
               </div>
             ))}
           </div>
           <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_280px] gap-4">
             <div className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
               <div className="mb-4 flex items-center justify-between">
-                <p className="text-ui-md text-foreground font-semibold">Recent spans</p>
-                <p className="text-ui-xs text-muted-foreground">Updated now</p>
+                <p className="text-subheading text-foreground">Recent spans</p>
+                <p className="text-meta text-muted-foreground">Updated now</p>
               </div>
               <div className="grid gap-2">
                 {['agent.generate', 'tool.weather.lookup', 'workflow.evaluate', 'llm.call'].map((name, index) => (
@@ -119,18 +117,18 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
                     key={name}
                     className="border-border1 bg-surface2 grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border px-3 py-2"
                   >
-                    <span className="text-ui-sm text-foreground truncate">{name}</span>
-                    <span className="text-ui-xs text-muted-foreground text-right">
+                    <span className="text-caption text-foreground truncate">{name}</span>
+                    <span className="text-meta text-muted-foreground text-right">
                       {index === 1 ? '91ms' : `${220 + index * 56}ms`}
                     </span>
-                    <span className="text-ui-xs text-accent1 text-right font-medium">ok</span>
+                    <span className="text-meta text-accent1 text-right">ok</span>
                   </div>
                 ))}
               </div>
             </div>
             <aside className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
-              <p className="text-ui-md text-foreground font-semibold">Trace detail</p>
-              <dl className="text-ui-sm mt-4 grid gap-3">
+              <p className="text-subheading text-foreground">Trace detail</p>
+              <dl className="text-caption mt-4 grid gap-3">
                 <div>
                   <dt className="text-muted-foreground">Service</dt>
                   <dd className="text-foreground mt-1">studio</dd>
@@ -156,12 +154,12 @@ const MobileFrame = ({ children }: { children: React.ReactNode }) => (
   <div className="bg-surface1 flex h-screen w-screen flex-col overflow-hidden">
     <header className="border-border1 flex h-12 shrink-0 items-center gap-3 border-b px-3">
       <MainSidebar.MobileTrigger />
-      <span className="text-foreground text-ui-md font-medium">Mastra Studio</span>
+      <span className="text-foreground text-subheading">Mastra Studio</span>
     </header>
     {children}
     <div className="min-w-0 flex-1 p-4">
-      <p className="text-ui-md text-foreground font-medium">Mobile viewport</p>
-      <p className="text-ui-sm text-muted-foreground mt-2 max-w-[34ch]">
+      <p className="text-subheading text-foreground">Mobile viewport</p>
+      <p className="text-caption text-muted-foreground mt-2 max-w-[34ch]">
         Switch viewports in the toolbar. The sidebar auto-detects via <code>matchMedia</code> against the iframe
         viewport — no manual prop needed.
       </p>
@@ -246,7 +244,7 @@ const StudioSidebarBody = () => {
           <span className="flex items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="size-[1.5rem] shrink-0" />
-              <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
+              <span className="font-display text-subheading truncate tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -269,7 +267,7 @@ const StudioSidebarBody = () => {
               {state !== 'collapsed' && (
                 <kbd
                   aria-hidden="true"
-                  className="border-border1 bg-surface4 text-muted-foreground text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                  className="border-border1 bg-surface4 text-muted-foreground text-meta ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                 >
                   ⌘K
                 </kbd>
@@ -303,7 +301,7 @@ const StudioSidebarBody = () => {
         {state !== 'collapsed' && (
           <>
             <hr className="bg-border1 mx-6 my-2 h-px border-0" />
-            <span className="bg-sidebar-nav-active text-ui-xs dark:text-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none font-semibold text-black/80">
+            <span className="bg-sidebar-nav-active text-meta dark:text-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none text-black/80">
               v0.0.0
             </span>
           </>
@@ -572,13 +570,13 @@ export const Floating: Story = {
     docs: {
       description: {
         story:
-          'Floating variant via pure composition: parent gets `m-3` and `gap-3`, the `MainSidebar` gets `rounded-xl border shadow-lg`. Works with resize, collapse, and mobile drawer exactly like the default variant.',
+          'Floating variant via pure composition: parent gets `m-3` and `gap-3`, the `MainSidebar` gets `rounded-2xl border shadow-raised`. Works with resize, collapse, and mobile drawer exactly like the default variant.',
       },
     },
   },
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1/30 bg-surface2 m-1 rounded-2xl border shadow-xl">
+      <MainSidebar className="border-border bg-card shadow-raised m-1 rounded-2xl border">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -707,7 +705,7 @@ export const AsChild: Story = {
                       <DialogTitle>Contact support</DialogTitle>
                       <DialogDescription>asChild lets a NavLink act as a Dialog trigger.</DialogDescription>
                     </DialogHeader>
-                    <p className="text-ui-sm text-muted-foreground">
+                    <p className="text-caption text-muted-foreground">
                       Anything that can be clicked can be a sidebar item.
                     </p>
                   </DialogContent>

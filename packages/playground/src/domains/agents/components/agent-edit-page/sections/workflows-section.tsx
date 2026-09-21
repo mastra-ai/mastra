@@ -43,7 +43,7 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
         <CollapsibleTrigger className="bg-surface3 flex w-full items-center gap-1 p-3">
           <ChevronRight className="text-muted-foreground h-4 w-4" />
           <SectionTitle icon={<WorkflowIcon className="text-accent3" />}>
-            Workflows{count > 0 && <span className="text-muted-foreground font-normal">({count})</span>}
+            Workflows{count > 0 && <span className="text-muted-foreground">({count})</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>

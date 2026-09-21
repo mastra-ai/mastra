@@ -58,7 +58,7 @@ export const ConversationTimeline: Story = {
   render: args => (
     <div className="border-border1 bg-surface2 flex h-80 w-112 items-center rounded-xl border px-10">
       <ThreadRail {...args} maxHeight="16rem" />
-      <p className="text-ui-sm text-muted-foreground ml-10">Hover or focus a rail stop to preview that turn.</p>
+      <p className="text-caption text-muted-foreground ml-10">Hover or focus a rail stop to preview that turn.</p>
     </div>
   ),
 };

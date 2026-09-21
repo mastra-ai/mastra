@@ -70,7 +70,7 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
   const done = steps.filter(step => step.status !== 'running').length;
   if (done < steps.length) {
     return (
-      <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0 tabular-nums">
+      <Txt as="span" variant="meta" className="text-icon3 shrink-0 tabular-nums">
         {done}/{steps.length}
       </Txt>
     );
@@ -94,7 +94,7 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
   return (
     <>
       {errorIndicator}
-      <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0 tabular-nums">
+      <Txt as="span" variant="meta" className="text-icon3 shrink-0 tabular-nums">
         {summary}
       </Txt>
     </>

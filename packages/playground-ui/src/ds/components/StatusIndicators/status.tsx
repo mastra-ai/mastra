@@ -13,7 +13,7 @@ export function Status({ presentation, children, className, ...props }: StatusPr
     <span className={cn('inline-flex items-center gap-2 text-foreground', className)} {...props}>
       <span className={statusDotClass(presentation)} aria-hidden />
       {children ?? (
-        <Txt as="span" variant="ui-xs">
+        <Txt as="span" variant="meta">
           {presentation.label}
         </Txt>
       )}

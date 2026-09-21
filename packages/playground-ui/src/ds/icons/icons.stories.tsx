@@ -109,7 +109,7 @@ const IconGrid = ({ size = 'default' }: { size?: 'sm' | 'default' | 'lg' }) => (
         <Icon size={size} className="text-foreground">
           <IconComponent />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm text-center">{name.replace('Icon', '')}</span>
+        <span className="text-muted-foreground text-caption text-center">{name.replace('Icon', '')}</span>
       </div>
     ))}
   </div>
@@ -146,19 +146,19 @@ export const IconSizes: Story = {
         <Icon size="sm" className="text-foreground">
           <AgentIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">Small</span>
+        <span className="text-muted-foreground text-caption">Small</span>
       </div>
       <div className="flex flex-col items-center gap-2">
         <Icon size="default" className="text-foreground">
           <AgentIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">Default</span>
+        <span className="text-muted-foreground text-caption">Default</span>
       </div>
       <div className="flex flex-col items-center gap-2">
         <Icon size="lg" className="text-foreground">
           <AgentIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">Large</span>
+        <span className="text-muted-foreground text-caption">Large</span>
       </div>
     </div>
   ),
@@ -196,19 +196,19 @@ export const AgentIcons: Story = {
         <Icon size="lg" className="text-foreground">
           <AgentIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">Agent</span>
+        <span className="text-muted-foreground text-caption">Agent</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-foreground">
           <AgentCoinIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">AgentCoin</span>
+        <span className="text-muted-foreground text-caption">AgentCoin</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-foreground">
           <AgentNetworkCoinIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">AgentNetworkCoin</span>
+        <span className="text-muted-foreground text-caption">AgentNetworkCoin</span>
       </div>
     </div>
   ),
@@ -221,13 +221,13 @@ export const WorkflowIcons: Story = {
         <Icon size="lg" className="text-foreground">
           <WorkflowIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">Workflow</span>
+        <span className="text-muted-foreground text-caption">Workflow</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-foreground">
           <WorkflowCoinIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">WorkflowCoin</span>
+        <span className="text-muted-foreground text-caption">WorkflowCoin</span>
       </div>
     </div>
   ),
@@ -240,13 +240,13 @@ export const ToolIcons: Story = {
         <Icon size="lg" className="text-foreground">
           <ToolsIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">Tools</span>
+        <span className="text-muted-foreground text-caption">Tools</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-foreground">
           <ToolCoinIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">ToolCoin</span>
+        <span className="text-muted-foreground text-caption">ToolCoin</span>
       </div>
     </div>
   ),
@@ -259,25 +259,25 @@ export const BrandIcons: Story = {
         <Icon size="lg" className="text-foreground">
           <GithubIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">Github</span>
+        <span className="text-muted-foreground text-caption">Github</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-foreground">
           <GithubCoinIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">GithubCoin</span>
+        <span className="text-muted-foreground text-caption">GithubCoin</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-foreground">
           <GoogleIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">Google</span>
+        <span className="text-muted-foreground text-caption">Google</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-foreground">
           <OpenAIIcon />
         </Icon>
-        <span className="text-muted-foreground text-ui-sm">OpenAI</span>
+        <span className="text-muted-foreground text-caption">OpenAI</span>
       </div>
     </div>
   ),

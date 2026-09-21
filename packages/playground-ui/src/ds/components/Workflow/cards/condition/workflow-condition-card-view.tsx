@@ -6,8 +6,9 @@ import { WorkflowConditionSource } from './workflow-condition-source';
 import { Badge } from '@/ds/components/Badge';
 import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const surfaceClasses = 'rounded-[calc(var(--radius-xl)-2px)] bg-surface3 text-ui-xs';
+const surfaceClasses = 'rounded-[calc(var(--radius-xl)-2px)] bg-surface3 text-meta';
 
 export function WorkflowConditionCardView({
   type,
@@ -32,12 +33,12 @@ export function WorkflowConditionCardView({
 
   return (
     <div
-      className="border-border1 bg-surface2 shadow-panel has-focus-visible:outline-accent3 w-[274px] overflow-hidden rounded-xl border p-0.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-4"
+      className={`${raisedSurfaceStyle} has-focus-visible:outline-accent3 w-[274px] overflow-hidden rounded-xl p-0.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-4`}
       data-workflow-node
       data-testid="workflow-condition-node"
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}
     >
-      <div className="text-ui-xs text-muted-foreground flex h-[46px] items-center gap-2 px-2.5">
+      <div className="text-meta text-muted-foreground flex h-[46px] items-center gap-2 px-2.5">
         <Badge size="xs" variant={type === 'else' ? 'neutral' : 'yellow'} emphasis="muted" icon={<Icon aria-hidden />}>
           {label}
         </Badge>

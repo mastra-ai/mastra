@@ -21,13 +21,13 @@ function ObjectGroup({ label, children }: Pick<ObjectWrapperProps, 'label' | 'ch
       onOpenChange={setExpanded}
       className="motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
     >
-      <CollapsibleTrigger className="text-ui-sm text-muted-foreground flex min-h-11 w-full items-center gap-2 text-left">
+      <CollapsibleTrigger className="text-caption text-muted-foreground flex min-h-11 w-full items-center gap-2 text-left">
         <ChevronRight aria-hidden className="size-3.5 shrink-0" />
         <span className="flex min-w-0 items-center gap-1.5">
           <Braces aria-hidden className="size-3.5" />
           {label}
         </span>
-        {invalid && <span className="text-ui-xs text-accent2 ml-auto shrink-0">Needs input</span>}
+        {invalid && <span className="text-meta text-accent2 ml-auto shrink-0">Needs input</span>}
       </CollapsibleTrigger>
       <CollapsibleContent keepMounted className="border-border1 border-l pt-2 pl-4">
         {children}

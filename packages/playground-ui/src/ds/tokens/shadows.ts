@@ -1,28 +1,9 @@
 export const Shadows = {
-  // Elevation shadows
-  sm: '0 1px 2px rgba(0, 0, 0, 0.3)',
-  md: '0 4px 6px rgba(0, 0, 0, 0.3)',
-  lg: '0 10px 15px rgba(0, 0, 0, 0.4)',
-
-  // Inner shadow for pressed states
-  inner: 'inset 0 2px 4px rgba(0, 0, 0, 0.3)',
-
-  // Card/elevated surface shadows
-  card: '0 2px 8px rgba(0, 0, 0, 0.4)',
-  elevated: '0 8px 24px rgba(0, 0, 0, 0.5)',
-
-  // Dialog/modal shadows
-  dialog: '0 16px 48px rgba(0, 0, 0, 0.6)',
-
-  // Panel resting on the page, below dialog
-  panel: '0 1px 2px -1px oklch(0% 0 0deg / 8%), 0 10px 26px -18px oklch(0% 0 0deg / 16%)',
+  raised: 'var(--shadow-raised)',
 };
 
-// Glow effects for interactive elements (focus states, etc.)
 export const Glows = {
-  accent1: '0 0 20px rgba(34, 197, 94, 0.25)',
-  accent2: '0 0 20px rgba(239, 68, 68, 0.25)',
-
-  // Subtle glow for focus rings
-  focusRing: '0 0 0 3px rgba(34, 197, 94, 0.12)',
+  'glow-accent1': 'var(--shadow-glow-accent1)',
+  'glow-accent2': 'var(--shadow-glow-accent2)',
+  'focus-ring': 'var(--shadow-focus-ring)',
 };

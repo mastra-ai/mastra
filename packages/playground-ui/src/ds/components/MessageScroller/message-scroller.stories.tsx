@@ -84,7 +84,7 @@ function MessageScrollerDemo({ autoScroll = false }: { autoScroll?: boolean }) {
                   scrollAnchor={message.role === 'user'}
                   className={message.role === 'user' ? 'bg-surface4 ml-12 rounded-xl p-3' : 'mr-12 p-3'}
                 >
-                  <p className="text-ui-sm text-foreground">{message.text}</p>
+                  <p className="text-caption text-foreground">{message.text}</p>
                 </MessageScrollerItem>
               ))}
             </MessageScrollerContent>

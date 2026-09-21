@@ -84,7 +84,7 @@ export function PlanLabel({ children = 'Plan', className, ...props }: PlanLabelP
       <Icon size="sm" className="text-icon3">
         <ClipboardList />
       </Icon>
-      <Txt as="span" variant="ui-sm" className="text-muted-foreground">
+      <Txt as="span" variant="caption" className="text-muted-foreground">
         {children}
       </Txt>
     </div>
@@ -166,7 +166,7 @@ export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 
 
 export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
   return (
-    <Txt {...props} as="h3" variant="header-sm" className={cn('text-neutral7 font-semibold', className)}>
+    <Txt {...props} as="h3" variant="heading" className={cn('text-neutral7 ', className)}>
       {children}
     </Txt>
   );
@@ -189,7 +189,7 @@ export function PlanPath({ children, className, ...props }: PlanPathProps) {
     <Txt
       {...props}
       as="p"
-      variant="ui-xs"
+      variant="meta"
       font="mono"
       title={children}
       className={cn('max-w-full truncate overflow-hidden text-muted-foreground', className)}
@@ -250,7 +250,7 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
     >
       <div
         ref={contentRef}
-        className="[&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-md [&_h3]:leading-ui-md [&_p]:text-ui-md [&_p]:leading-ui-md"
+        className="[&_code]:bg-surface4 [&_h1]:text-title [&_h2]:text-heading [&_h3]:text-subheading [&_p]:text-body"
       >
         <MarkdownRenderer className="text-foreground">{children}</MarkdownRenderer>
       </div>
@@ -265,10 +265,10 @@ export interface PlanFileProps extends Omit<ComponentProps<'div'>, 'children'> {
 export function PlanFile({ children, className, ...props }: PlanFileProps) {
   return (
     <div data-slot="plan-file" className={className} {...props}>
-      <Txt as="p" variant="ui-xs" className="text-muted-foreground mb-2">
+      <Txt as="p" variant="meta" className="text-muted-foreground mb-2">
         Plan file
       </Txt>
-      <Txt as="p" variant="ui-sm" className="text-foreground font-mono break-all">
+      <Txt as="p" variant="caption" className="text-foreground font-mono break-all">
         {children}
       </Txt>
     </div>

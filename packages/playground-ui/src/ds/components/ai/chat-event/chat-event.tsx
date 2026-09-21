@@ -20,7 +20,7 @@ interface ChatEventProps {
 function ChatEventDetail({ children }: { children: string }) {
   const arriving = useArriving();
   return (
-    <Txt as="span" variant="ui-xs" font="mono" className={cn('text-icon3 min-w-0 truncate', arriving)}>
+    <Txt as="span" variant="meta" font="mono" className={cn('text-icon3 min-w-0 truncate', arriving)}>
       {children}
     </Txt>
   );
@@ -30,7 +30,7 @@ export function ChatEvent({ label, detail, icon, children, defaultOpen, ...props
   const header = (
     <span className="flex w-full min-w-0 items-center gap-2 px-1.5 py-1">
       <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
-      <Txt as="span" variant="ui-sm" className="text-icon3 max-w-[55%] shrink-0 truncate">
+      <Txt as="span" variant="caption" className="text-icon3 max-w-[55%] shrink-0 truncate">
         {label}
       </Txt>
       {detail && <ChatEventDetail>{detail}</ChatEventDetail>}

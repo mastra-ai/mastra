@@ -10,29 +10,21 @@ import type { TabMeasurement } from './tabs-context';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-const tabListVariants = cva('relative flex items-center text-ui-md', {
+const tabListVariants = cva('relative flex items-center text-body', {
   variants: {
     variant: {
-      line: 'w-max min-w-full border-b border-border1',
-      pill: 'w-fit gap-1 rounded-full bg-surface2 p-1',
+      pill: 'w-fit gap-1 rounded-full bg-fill-subtle p-1',
       'pill-ghost': 'w-fit gap-0.5 rounded-full',
     },
   },
   defaultVariants: {
-    variant: 'line',
+    variant: 'pill',
   },
 });
 
 type TabListVariantsProps = VariantProps<typeof tabListVariants>;
-type TabListVariantValue = NonNullable<TabListVariantsProps['variant']>;
 
-/**
- * @deprecated `line` remains the omitted fallback for backward compatibility.
- * Pass `variant="pill"` or `variant="pill-ghost"` for new tabs.
- */
-export type DeprecatedLineTabListVariant = Extract<TabListVariantValue, 'line'>;
-
-export type TabListVariant = DeprecatedLineTabListVariant | Exclude<TabListVariantValue, DeprecatedLineTabListVariant>;
+export type TabListVariant = NonNullable<TabListVariantsProps['variant']>;
 
 export type TabListSize = 'sm' | 'md';
 
@@ -42,12 +34,7 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   sticky?: boolean;
   /** Control height of each tab; `sm` lines up with `size="sm"` buttons (e.g. inside a `DataPanel.Header`). */
   size?: TabListSize;
-  /**
-   * Visual treatment for the tab list.
-   *
-   * Defaults to `line` only for backward compatibility. New tabs should pass
-   * `variant="pill"` or `variant="pill-ghost"` explicitly.
-   */
+  /** `pill` sits the selected tab on a track; `pill-ghost` drops the track. */
   variant?: TabListVariant | null;
   /**
    * Optional inline styles applied to the underlying tab list element.
@@ -58,7 +45,7 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
 };
 
 export const TabList = ({ children, className, variant, size = 'md', sticky, style }: TabListProps) => {
-  const resolvedVariant = variant ?? 'line';
+  const resolvedVariant = variant ?? 'pill';
   const tabs = useContext(TabsContext);
   const scrollRef = useRef<HTMLDivElement>(null);
   const closeRefs = useRef(new Map<string, HTMLDivElement>());
@@ -184,7 +171,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
         <div
           ref={scrollRef}
           data-slot="tabs-list-scroll"
-          className={cn('relative w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-surface2')}
+          className={cn('relative w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-background')}
         >
           <BaseTabs.List
             data-slot="tabs-list"
@@ -195,29 +182,16 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
             style={style}
           >
             {children}
-            {resolvedVariant === 'line' && (
-              <BaseTabs.Indicator
-                className={cn(
-                  'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--neutral3))]',
-                  'h-0.5 w-[var(--active-tab-width)]',
-                  'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
-                )}
-                data-slot="tabs-indicator"
-                style={{ transform: 'translateX(var(--active-tab-left))' }}
-              />
-            )}
-            {(resolvedVariant === 'pill' || resolvedVariant === 'pill-ghost') && (
-              <BaseTabs.Indicator
-                className={cn(
-                  'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--surface4))]',
-                  resolvedVariant === 'pill' ? 'h-[calc(100%-0.5rem)]' : 'h-full',
-                  'w-[var(--active-tab-width)]',
-                  'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
-                )}
-                data-slot="tabs-indicator"
-                style={{ transform: 'translateY(var(--tabs-indicator-y, -50%)) translateX(var(--active-tab-left))' }}
-              />
-            )}
+            <BaseTabs.Indicator
+              className={cn(
+                'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--fill-hover))]',
+                resolvedVariant === 'pill' ? 'h-[calc(100%-0.5rem)]' : 'h-full',
+                'w-[var(--active-tab-width)]',
+                'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
+              )}
+              data-slot="tabs-indicator"
+              style={{ transform: 'translateY(var(--tabs-indicator-y, -50%)) translateX(var(--active-tab-left))' }}
+            />
           </BaseTabs.List>
           <div data-slot="tabs-close-actions">
             {visibleClosableTabs.map(tab => (
@@ -238,7 +212,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                         tabIndex={tabs?.value === tab.value ? 0 : -1}
                         data-slot="tab-close"
                         onClick={tab.onClose}
-                        className={cn('rounded p-0.5 hover:bg-surface4 hover:text-accent2', transitions.colors)}
+                        className={cn('rounded p-0.5 hover:bg-fill-hover hover:text-accent2', transitions.colors)}
                       />
                     }
                   >

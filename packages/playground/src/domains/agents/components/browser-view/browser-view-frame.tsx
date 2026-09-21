@@ -170,7 +170,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
         <div className="bg-surface1/80 absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-2">
             <div className="border-neutral4 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
-            <span className="text-muted-foreground text-ui-md">Reconnecting...</span>
+            <span className="text-muted-foreground text-body">Reconnecting...</span>
           </div>
         </div>
       )}
@@ -195,8 +195,8 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
               </svg>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-header-sm font-medium text-white">Connection Error</span>
-              <span className="text-ui-md text-white/70">Failed to connect to browser</span>
+              <span className="text-heading text-white">Connection Error</span>
+              <span className="text-body text-white/70">Failed to connect to browser</span>
             </div>
           </div>
         </div>

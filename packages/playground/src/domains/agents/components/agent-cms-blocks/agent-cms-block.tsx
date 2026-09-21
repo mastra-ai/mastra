@@ -15,6 +15,8 @@ import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
@@ -189,13 +191,13 @@ const InlineBlockContent = ({
 
   return (
     <>
-      <div className="group hover:bg-surface2/50 relative rounded-md transition-colors duration-150">
+      <div className="group hover:bg-surface2/50 relative rounded-md">
         {/* Left gutter — drag handle (visible on hover/focus-within) */}
         {!readOnly && (
           <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
             <div
               {...dragHandleProps}
-              className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
+              className={cn('cursor-grab active:cursor-grabbing', quietTextHover, controlStateColorTransition)}
             >
               <Tooltip>
                 <TooltipTrigger asChild>

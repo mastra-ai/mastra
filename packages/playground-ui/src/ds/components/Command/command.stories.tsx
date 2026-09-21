@@ -45,15 +45,15 @@ const InlineResult = ({
       {icon}
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-ui-sm leading-ui-sm text-foreground truncate font-medium">{title}</span>
-      <span className="text-ui-xs leading-ui-xs text-muted-foreground truncate">{subtitle}</span>
+      <span className="text-column text-foreground truncate">{title}</span>
+      <span className="text-meta text-muted-foreground truncate">{subtitle}</span>
     </span>
   </CommandItem>
 );
 
 export const Default: Story = {
   render: () => (
-    <Command className="border-border1 shadow-elevated w-100 rounded-lg border">
+    <Command className="border-border shadow-raised w-100 rounded-lg border">
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -96,12 +96,12 @@ export const Default: Story = {
 
 export const InlineVercelStyle: Story = {
   render: () => (
-    <div className="border-border1 bg-surface2 shadow-dialog w-sm overflow-hidden rounded-xl border">
+    <div className="border-border bg-card shadow-raised w-sm overflow-hidden rounded-xl border">
       <Command className="bg-surface2 rounded-none">
         <CommandInput
           placeholder="Find..."
           rightSlot={
-            <Kbd className="border-border1 bg-surface4 text-muted-foreground text-ui-xs min-w-0 rounded px-1.5 py-0">
+            <Kbd className="border-border1 bg-surface4 text-muted-foreground text-meta min-w-0 rounded px-1.5 py-0">
               Esc
             </Kbd>
           }
@@ -177,10 +177,10 @@ export const WithDialog: Story = {
 
     return (
       <>
-        <p className="text-muted-foreground text-ui-md mb-4">
+        <p className="text-muted-foreground text-body mb-4">
           Press{' '}
-          <kbd className="border-border1 bg-surface4 text-foreground text-ui-xs pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono font-medium select-none">
-            <span className="text-ui-sm">⌘</span>K
+          <kbd className="border-border1 bg-surface4 text-foreground text-meta pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono select-none">
+            <span className="text-caption">⌘</span>K
           </kbd>{' '}
           or click the button below
         </p>
@@ -230,7 +230,7 @@ export const WithDialog: Story = {
 
 export const Empty: Story = {
   render: () => (
-    <Command className="border-border1 shadow-elevated w-100 rounded-lg border">
+    <Command className="border-border shadow-raised w-100 rounded-lg border">
       <CommandInput placeholder="Search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -241,7 +241,7 @@ export const Empty: Story = {
 
 export const WithShortcuts: Story = {
   render: () => (
-    <Command className="border-border1 shadow-elevated w-100 rounded-lg border">
+    <Command className="border-border shadow-raised w-100 rounded-lg border">
       <CommandInput placeholder="Type a command..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -300,7 +300,7 @@ export const SearchOnly: Story = {
     const filteredItems = items.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
     return (
-      <Command className="border-border1 shadow-elevated w-100 rounded-lg border">
+      <Command className="border-border shadow-raised w-100 rounded-lg border">
         <CommandInput placeholder="Search fruits..." value={search} onValueChange={setSearch} />
         <CommandList>
           <CommandEmpty>No fruits found.</CommandEmpty>

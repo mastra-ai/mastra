@@ -32,7 +32,7 @@ export const WithDescription: Story = {
   render: () => (
     <div className="flex flex-col gap-1">
       <Label htmlFor="username">Username</Label>
-      <span className="text-muted-foreground text-ui-sm">Choose a unique username</span>
+      <span className="text-muted-foreground text-caption">Choose a unique username</span>
       <Input id="username" placeholder="@username" />
     </div>
   ),

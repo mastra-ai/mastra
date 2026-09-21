@@ -1,3 +1,6 @@
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import {
@@ -73,8 +76,8 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
           <SkillIcon className="text-muted-foreground h-6 w-6" />
         </div>
         <div className="flex-1">
-          <h1 className="text-foreground text-header-md font-semibold">{skill.name}</h1>
-          <p className="text-muted-foreground text-ui-md mt-1">{skill.description}</p>
+          <h1 className="text-foreground text-heading">{skill.name}</h1>
+          <p className="text-muted-foreground text-body mt-1">{skill.description}</p>
         </div>
       </div>
 
@@ -98,7 +101,11 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               e.stopPropagation();
               setShowRawInstructions(!showRawInstructions);
             }}
-            className="text-muted-foreground hover:text-foreground hover:bg-surface4 text-ui-sm flex items-center gap-1.5 rounded px-2 py-1 transition-colors"
+            className={cn(
+              'hover:bg-surface4 text-caption flex items-center gap-1.5 rounded px-2 py-1',
+              quietTextHover,
+              controlStateColorTransition,
+            )}
             title={showRawInstructions ? 'Show rendered' : 'Show source'}
           >
             {showRawInstructions ? <Eye className="h-3.5 w-3.5" /> : <FileCode2 className="h-3.5 w-3.5" />}
@@ -115,7 +122,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
                 margin: 0,
                 padding: '1rem',
                 backgroundColor: 'transparent',
-                fontSize: 'var(--text-ui-md)',
+                fontSize: 'var(--text-body)',
               }}
             >
               {rawSkillMd ?? skill.instructions}
@@ -138,10 +145,10 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               <button
                 key={ref}
                 onClick={() => onReferenceClick?.(ref)}
-                className="hover:bg-surface4 flex w-full items-center gap-2 rounded px-3 py-2 text-left transition-colors"
+                className="hover:bg-surface4 flex w-full items-center gap-2 rounded px-3 py-2 text-left"
               >
                 <FileText className="text-muted-foreground h-4 w-4" />
-                <span className="text-foreground text-ui-md">{ref}</span>
+                <span className="text-foreground text-body">{ref}</span>
               </button>
             ))}
           </div>
@@ -159,7 +166,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
             {skill.scripts.map(script => (
               <div key={script} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
                 <Code className="text-muted-foreground h-4 w-4" />
-                <span className="text-foreground text-ui-md">{script}</span>
+                <span className="text-foreground text-body">{script}</span>
               </div>
             ))}
           </div>
@@ -177,7 +184,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
             {skill.assets.map(asset => (
               <div key={asset} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
                 <Image className="text-muted-foreground h-4 w-4" />
-                <span className="text-foreground text-ui-md">{asset}</span>
+                <span className="text-foreground text-body">{asset}</span>
               </div>
             ))}
           </div>
@@ -186,7 +193,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
 
       {/* Path */}
       <div className="border-border1 border-t pt-4">
-        <p className="text-muted-foreground text-ui-sm">
+        <p className="text-muted-foreground text-caption">
           Path: <code className="bg-surface4 rounded px-1 py-0.5">{skill.path}</code>
         </p>
       </div>
@@ -228,10 +235,10 @@ function MetadataCard({ label, value, icon }: { label: string; value: unknown; i
   const displayValue = formatDisplayValue(value);
   return (
     <div className="bg-surface3 rounded-lg p-3">
-      <p className="text-muted-foreground text-ui-sm mb-1">{label}</p>
+      <p className="text-muted-foreground text-caption mb-1">{label}</p>
       <div className="flex items-center gap-1.5">
         {icon && <span className="text-muted-foreground">{icon}</span>}
-        <p className="text-foreground text-ui-md truncate font-medium" title={displayValue}>
+        <p className="text-foreground text-subheading truncate" title={displayValue}>
           {displayValue}
         </p>
       </div>
@@ -254,14 +261,14 @@ function CollapsibleSection({
 }) {
   return (
     <div className="border-border1 min-w-0 overflow-hidden rounded-lg border">
-      <div className="bg-surface3 hover:bg-surface4 flex items-center transition-colors">
+      <div className="bg-surface3 hover:bg-surface4 flex items-center">
         <button onClick={onToggle} className="flex flex-1 items-center gap-2 px-4 py-3">
           {isExpanded ? (
             <ChevronDown className="text-muted-foreground h-4 w-4" />
           ) : (
             <ChevronRight className="text-muted-foreground h-4 w-4" />
           )}
-          <span className="text-foreground text-ui-md font-medium">{title}</span>
+          <span className="text-foreground text-subheading">{title}</span>
         </button>
         {headerAction && <div className="pr-3">{headerAction}</div>}
       </div>

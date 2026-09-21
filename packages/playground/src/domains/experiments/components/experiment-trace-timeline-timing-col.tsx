@@ -44,7 +44,7 @@ export function ExperimentTraceTimelineTimingCol({
         )}
         style={{ border: '2px dashed blue' }}
       >
-        <div className={cn('w-full p-2.5 rounded-lg bg-surface4 transition-colors duration-1000 min-w-40')}>
+        <div className={cn('w-full p-2.5 rounded-lg bg-surface4 min-w-40')}>
           <div className="relative h-1.5 w-full rounded-sm">
             <div
               className={cn('bg-neutral1 absolute rounded-sm h-1.5 top-0')}
@@ -57,26 +57,26 @@ export function ExperimentTraceTimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-muted-foreground text-ui-sm')}>
+        <div className={cn('flex justify-end text-muted-foreground text-caption')}>
           {(span.latency / 1000).toFixed(3)}&nbsp;s
         </div>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="bg-surface4 text-ui-sm text-foreground border-border1 z-50 w-auto max-w-[25rem] rounded-md border p-2 px-4 pr-6 text-center"
+          className="bg-surface4 text-caption text-foreground border-border1 z-50 w-auto max-w-[25rem] rounded-md border p-2 px-4 pr-6 text-center"
           sideOffset={5}
           side="top"
         >
           <div
             className={cn(
-              'text-ui-md flex items-center gap-2 mb-4',
+              'text-body flex items-center gap-2 mb-4',
               '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
             )}
           >
             <TimerIcon /> Span Timing
           </div>
           <KeyValueList
-            className="[&>dd]:text-ui-md [&>dt]:text-ui-md [&>dd]:min-h-0 [&>dt]:min-h-0"
+            className="[&>dd]:text-body [&>dt]:text-body [&>dd]:min-h-0 [&>dt]:min-h-0"
             data={[
               {
                 key: 'Latency',

@@ -27,7 +27,7 @@ describe('ListSearch surface', () => {
     const { container } = renderListSearch();
 
     const input = screen.getByRole('textbox', { name: 'Filter agents' });
-    expect(input.className).toContain('bg-foreground/10');
+    expect(input.classList.contains('bg-fill')).toBe(true);
     expect(input.className).toContain('text-foreground');
 
     const icon = container.querySelector('svg');

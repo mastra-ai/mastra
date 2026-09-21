@@ -80,7 +80,7 @@ export const AgentBuilderStarter = () => {
   return (
     <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <h1 className="starter-heading text-foreground text-header-lg md:text-header-xl text-center font-serif tracking-tight">
+        <h1 className="starter-heading text-foreground text-title md:text-display text-center font-serif tracking-tight">
           What should we build today?
         </h1>
 
@@ -99,7 +99,7 @@ export const AgentBuilderStarter = () => {
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isCreating}
-            className="text-ui-md placeholder:text-muted-foreground min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
+            className="text-body placeholder:text-muted-foreground min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
             rows={3}
           />
 

@@ -12,7 +12,7 @@ import { normalizePromptIndentation } from './normalize-prompt-indentation';
 import { cn } from '@/lib/utils';
 
 const promptTabClassName =
-  'h-form-sm px-1 text-ui-sm font-medium underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+  'h-form-sm px-1 text-column underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';
 
 export function AgentSystemPrompt({ instructions, children }: { instructions: string; children?: ReactNode }) {
   const [activeTab, setActiveTab] = useState('read');
@@ -76,14 +76,16 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                 aria-label="System prompt source"
                 tabIndex={0}
                 className={cn(
-                  'text-ui-sm text-foreground min-w-0 overflow-x-auto font-mono leading-relaxed focus-visible:outline-neutral3 focus-visible:outline-1 focus-visible:outline-offset-2',
+                  'text-caption text-foreground min-w-0 overflow-x-auto font-mono leading-relaxed focus-visible:outline-neutral3 focus-visible:outline-1 focus-visible:outline-offset-2',
                   wrapSource ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'whitespace-pre',
                 )}
               />
             </TabContent>
           </div>
         ) : (
-          <Txt variant="caption">No system prompt configured</Txt>
+          <Txt variant="caption" tone="muted">
+            No system prompt configured
+          </Txt>
         )}
         {children}
       </AgentMetadataSection>

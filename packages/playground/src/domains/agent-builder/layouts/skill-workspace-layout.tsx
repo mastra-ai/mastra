@@ -1,3 +1,5 @@
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeftIcon } from 'lucide-react';
@@ -52,7 +54,7 @@ export const SkillWorkspaceLayout = ({
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="text-ui-md text-foreground min-w-0 truncate">{title}</div>
+          <div className="text-body text-foreground min-w-0 truncate">{title}</div>
           {rightAside && <div className="shrink-0">{rightAside}</div>}
         </div>
         {primaryAction && <div className="shrink-0">{primaryAction}</div>}
@@ -83,9 +85,9 @@ export const SkillWorkspaceLayout = ({
               data-testid="skill-edit-tab-chat"
               onClick={() => setActiveTab('chat')}
               className={cn(
-                'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
-                'transition-colors duration-200',
-                activeTab === 'chat' ? 'text-foreground' : 'text-muted-foreground hover:text-muted-foreground',
+                'relative z-10 flex-1 rounded-full text-subheading outline-none',
+                controlStateColorTransition,
+                activeTab === 'chat' ? 'text-foreground' : quietTextHover,
               )}
             >
               Chat
@@ -97,9 +99,9 @@ export const SkillWorkspaceLayout = ({
               data-testid="skill-edit-tab-configure"
               onClick={() => setActiveTab('configure')}
               className={cn(
-                'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
-                'transition-colors duration-200',
-                activeTab === 'configure' ? 'text-foreground' : 'text-muted-foreground hover:text-muted-foreground',
+                'relative z-10 flex-1 rounded-full text-subheading outline-none',
+                controlStateColorTransition,
+                activeTab === 'configure' ? 'text-foreground' : quietTextHover,
               )}
             >
               Configuration

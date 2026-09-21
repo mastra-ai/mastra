@@ -18,7 +18,7 @@ export type DataListFit = 'content' | 'container';
 /**
  * Surface treatment of the list.
  *
- * - `default`: rows sit on a rounded `surface4` panel.
+ * - `default`: rows sit on a rounded `--surface-panel` panel.
  * - `light`: no panel behind the rows; rows sit directly on the page.
  */
 export type DataListVariant = 'default' | 'light';
@@ -28,7 +28,7 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   columns: string;
   /** Grid width behavior; defaults to `content` (existing horizontal-scroll sizing). */
   fit?: DataListFit;
-  /** Surface treatment; defaults to `default` (rows on a `surface4` panel). */
+  /** Surface treatment; defaults to `default` (rows on a `--surface-panel` panel). */
   variant?: DataListVariant;
   /**
    * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
@@ -82,24 +82,25 @@ const dataListGridStyles = [
   '[&:has(.data-list-subheader+.data-list-row[data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:rounded-t-lg',
   '[&:has(.data-list-row[data-fluid-hover-active]+.data-list-subheader)_[data-slot=fluid-hover-highlight]]:rounded-b-lg',
   '[&_.data-list-top]:bg-(--data-list-background)',
-  '[&_.data-list-row>.data-list-sticky-start]:bg-surface2',
+  '[&_.data-list-row>.data-list-sticky-start]:bg-background',
   // A sticky cell must stay opaque over horizontally scrolled cells, so it
-  // cannot show the fluid highlight through; it takes the hover color instead.
-  '[&_.data-list-row[data-fluid-hover-active]>.data-list-sticky-start]:bg-surface3',
+  // cannot show the fluid highlight through; it takes the nearest opaque level
+  // above the row well instead.
+  '[&_.data-list-row[data-fluid-hover-active]>.data-list-sticky-start]:bg-card',
   '[&_.data-list-row>.data-list-sticky-start]:after:right-0',
   '[&_.data-list-top>.data-list-sticky-start]:after:right-0',
 ] as const;
 
 const dataListVariantClasses: Record<DataListVariant, string> = {
-  default: 'bg-surface4',
+  default: 'bg-surface-panel',
   light: '',
 };
 
 // The sticky header reads this so it stays opaque while scrolling: the panel
 // color by default, the page surface when there is no panel.
 const dataListVariantBackground: Record<DataListVariant, string> = {
-  default: 'var(--surface4)',
-  light: 'var(--surface1)',
+  default: 'var(--surface-panel)',
+  light: 'var(--background)',
 };
 
 const dataListFitClasses: Record<DataListFit, string> = {
@@ -136,7 +137,7 @@ export function DataListRoot({
     >
       {/* The highlight is the old row hover color. It sits between each row's
           `before` surface (-z-2) and the row content (see `dataListRowOuterStyles`). */}
-      <FluidMenuItems menu={menu} className="bg-surface3 rounded-none">
+      <FluidMenuItems menu={menu} className="bg-fill-subtle rounded-none">
         {children}
       </FluidMenuItems>
     </div>

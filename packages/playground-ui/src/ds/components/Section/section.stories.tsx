@@ -68,7 +68,7 @@ export const Default: Story = {
         <Section.Heading>Section Title</Section.Heading>
       </Section.Header>
       <div className="border-border1 bg-surface2 rounded-md border p-4">
-        <p className="text-foreground text-ui-md">Section content goes here</p>
+        <p className="text-foreground text-body">Section content goes here</p>
       </div>
     </Section>
   ),
@@ -89,7 +89,7 @@ export const WithAction: Story = {
         </Button>
       </Section.Header>
       <div className="border-border1 bg-surface2 rounded-md border p-4">
-        <p className="text-foreground text-ui-md">List of agents would go here</p>
+        <p className="text-foreground text-body">List of agents would go here</p>
       </div>
     </Section>
   ),
@@ -110,16 +110,16 @@ export const ConfigurationSection: Story = {
       </Section.Header>
       <div className="border-border1 bg-surface2 space-y-3 rounded-md border p-4">
         <div className="flex justify-between">
-          <span className="text-muted-foreground text-ui-md">Model</span>
-          <span className="text-foreground text-ui-md">GPT-4</span>
+          <span className="text-muted-foreground text-body">Model</span>
+          <span className="text-foreground text-body">GPT-4</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground text-ui-md">Temperature</span>
-          <span className="text-foreground text-ui-md">0.7</span>
+          <span className="text-muted-foreground text-body">Temperature</span>
+          <span className="text-foreground text-body">0.7</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground text-ui-md">Max Tokens</span>
-          <span className="text-foreground text-ui-md">4096</span>
+          <span className="text-muted-foreground text-body">Max Tokens</span>
+          <span className="text-foreground text-body">4096</span>
         </div>
       </div>
     </Section>

@@ -1,9 +1,9 @@
-import '../../../../new-theme.css';
 import { PreviewCard as PreviewCardPrimitive } from '@base-ui/react/preview-card';
 import type { PreviewCardPopupProps, PreviewCardPositionerProps } from '@base-ui/react/preview-card';
 import * as React from 'react';
 
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 const HoverCard = PreviewCardPrimitive.Root;
@@ -72,7 +72,8 @@ const HoverCardContent = React.forwardRef<HTMLDivElement, HoverCardContentProps>
           <PreviewCardPrimitive.Popup
             ref={ref}
             className={cn(
-              'new-theme max-w-100 w-auto origin-[var(--transform-origin)] rounded-xl border border-border bg-popover px-3 py-2.5 text-ui-sm text-foreground shadow-dialog',
+              'max-w-100 w-auto origin-[var(--transform-origin)] rounded-xl px-3 py-2.5 text-caption text-foreground',
+              raisedSurfaceStyle,
               'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               'motion-reduce:data-[open]:animate-none motion-reduce:data-[closed]:animate-none',

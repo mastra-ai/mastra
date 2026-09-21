@@ -1,4 +1,3 @@
-import '../../../../../new-theme.css';
 import { cn } from '@/lib/utils';
 
 export type FieldBlockLabelProps = {
@@ -24,9 +23,9 @@ export function FieldBlockLabel({
     <label
       htmlFor={htmlFor}
       className={cn(
-        'new-theme inline-flex items-center text-ui-smd font-medium',
+        'inline-flex items-center text-label',
         {
-          'text-ui-md': size === 'bigger',
+          'text-body': size === 'bigger',
           'text-foreground': !disabled,
           'text-muted-foreground': disabled,
         },

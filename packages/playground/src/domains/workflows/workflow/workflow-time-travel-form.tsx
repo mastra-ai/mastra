@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
@@ -17,7 +18,7 @@ import { WorkflowInputData } from './workflow-input-data';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
-const buttonClass = 'text-muted-foreground hover:text-foreground';
+const buttonClass = quietTextHover;
 
 export type WorkflowTimeTravelFormProps = {
   stepKey: string;
@@ -83,7 +84,7 @@ const JsonField = ({
       {isExampleOpen && (
         <div className="border-border1 bg-surface3 space-y-2 rounded-lg border p-3">
           <div className="flex items-center gap-2">
-            <Txt as="p" variant="ui-sm" className="text-muted-foreground">
+            <Txt as="p" variant="caption" className="text-muted-foreground">
               Example {label}
             </Txt>
             <Tooltip>
@@ -119,7 +120,7 @@ const JsonField = ({
               {label}
             </FieldBlock.Label>
             {helperText && (
-              <Txt variant="ui-xs" className="text-muted-foreground">
+              <Txt variant="meta" className="text-muted-foreground">
                 {helperText}
               </Txt>
             )}
@@ -287,10 +288,10 @@ export const WorkflowTimeTravelForm = ({
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Txt as="p" variant="ui-lg" className="text-muted-foreground">
+          <Txt as="p" variant="heading" className="text-muted-foreground">
             Input data
           </Txt>
-          <Txt variant="ui-xs" className="text-muted-foreground">
+          <Txt variant="meta" className="text-muted-foreground">
             Step: {stepKey}
           </Txt>
         </div>

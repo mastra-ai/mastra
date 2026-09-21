@@ -33,7 +33,7 @@ export const WithChildren: Story = {
   render: () => (
     <div className="bg-surface3 w-100 rounded-lg">
       <EntityHeader icon={<Workflow />} title="Data Processing Pipeline">
-        <p className="text-muted-foreground text-ui-md">Processes incoming data and transforms it for analysis</p>
+        <p className="text-muted-foreground text-body">Processes incoming data and transforms it for analysis</p>
       </EntityHeader>
     </div>
   ),
@@ -68,8 +68,8 @@ export const WithRichContent: Story = {
     <div className="bg-surface3 w-[450px] rounded-lg">
       <EntityHeader icon={<Bot />} title="AI Assistant">
         <div className="space-y-2">
-          <p className="text-muted-foreground text-ui-md">An intelligent assistant for customer support tasks</p>
-          <div className="text-muted-foreground text-ui-sm flex items-center gap-4">
+          <p className="text-muted-foreground text-body">An intelligent assistant for customer support tasks</p>
+          <div className="text-muted-foreground text-caption flex items-center gap-4">
             <span>Model: GPT-4</span>
             <span>Temperature: 0.7</span>
             <span>Max Tokens: 4096</span>

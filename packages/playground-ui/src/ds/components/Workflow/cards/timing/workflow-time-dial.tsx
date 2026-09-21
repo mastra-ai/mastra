@@ -78,10 +78,10 @@ export function DurationDial({ amount, unit }: { amount: number; unit: DurationU
         className="stroke-neutral6 stroke-2"
         strokeLinecap="round"
       />
-      <text x={DIAL_CENTER} y={94} textAnchor="middle" className="fill-neutral3 text-ui-xs font-sans">
+      <text x={DIAL_CENTER} y={94} textAnchor="middle" className="fill-neutral3 text-meta font-sans">
         {scale} {unit}
       </text>
-      <text x={DIAL_CENTER} y={106} textAnchor="middle" className="fill-neutral2 text-ui-xs font-sans">
+      <text x={DIAL_CENTER} y={106} textAnchor="middle" className="fill-neutral2 text-meta font-sans">
         scale
       </text>
     </DialFace>

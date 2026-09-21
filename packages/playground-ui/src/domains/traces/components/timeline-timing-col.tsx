@@ -38,7 +38,7 @@ export function TimelineTimingCol({
           },
         )}
       >
-        <div className={cn('w-full rounded-md bg-surface4 p-1.5 transition-colors duration-1000')}>
+        <div className={cn('w-full rounded-md bg-surface4 p-1.5')}>
           <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
             <div
               className={cn('absolute top-0 h-1.5 rounded-sm bg-neutral1')}
@@ -51,7 +51,7 @@ export function TimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-ui-xs text-muted-foreground')}>
+        <div className={cn('flex justify-end text-meta text-muted-foreground')}>
           {(span.latency / 1000).toFixed(3)}&nbsp;s
         </div>
       </HoverCardTrigger>

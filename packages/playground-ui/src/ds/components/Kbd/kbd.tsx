@@ -15,9 +15,9 @@ const themeClasses: Record<NonNullable<KbdProps['theme']>, string> = {
 
 // Fixed heights, not padding — `font-mono` normal leading varies per glyph set and desyncs the scale
 const sizeClasses: Record<NonNullable<KbdProps['size']>, string> = {
-  default: 'h-6 min-w-6 rounded-md px-1.5 text-ui-sm',
-  sm: 'h-5 min-w-5 rounded-md px-1 text-ui-xs',
-  xs: 'h-4 min-w-4 rounded px-1 text-ui-xs leading-none',
+  default: 'h-6 min-w-6 rounded-md px-1.5 text-caption',
+  sm: 'h-5 min-w-5 rounded-md px-1 text-meta',
+  xs: 'h-4 min-w-4 rounded px-1 text-meta leading-none',
 };
 
 export const Kbd = ({ children, theme = 'dark', size = 'default', className }: KbdProps) => {

@@ -15,7 +15,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
   return (
     <div className="my-3 w-fit max-w-full min-w-0">
       <div className="flex justify-end">
-        <ButtonsGroup spacing="close" aria-label="Table actions">
+        <ButtonsGroup aria-label="Table actions">
           <Button
             type="button"
             size="xs"

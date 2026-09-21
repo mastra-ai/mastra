@@ -44,7 +44,7 @@ describe('DataListRoot', () => {
       expect(grid).not.toBe(container.firstElementChild);
       expect(grid?.className).not.toContain('overflow-auto');
       expect(container.firstElementChild?.className).toContain('rounded-xl');
-      expect(container.firstElementChild?.className).toContain('bg-surface4');
+      expect(container.firstElementChild?.className).toContain('bg-surface-panel');
       expect(container.firstElementChild?.className).toContain('self-start');
       expect(container.firstElementChild?.className).toContain('max-h-full');
       expect(grid?.className).toContain('gap-y-px');
@@ -63,10 +63,10 @@ describe('DataListRoot', () => {
 
       const root = container.firstElementChild as HTMLElement;
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(root.className).not.toContain('bg-surface4');
+      expect(root.className).not.toContain('bg-surface-panel');
       expect(root.className).toContain('rounded-xl');
       expect(root.getAttribute('variant')).toBeNull();
-      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface1)');
+      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--background)');
       expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
     });
 
@@ -78,12 +78,10 @@ describe('DataListRoot', () => {
       );
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface4)');
+      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface-panel)');
       expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
-      expect(grid?.className).toContain('[&_.data-list-row>.data-list-sticky-start]:bg-surface2');
+      expect(grid?.className).toContain('[&_.data-list-row>.data-list-sticky-start]:bg-background');
       expect(grid?.className).not.toMatch(/hover:bg-|focus-within\]:bg-/);
-      expect(grid?.className).not.toContain('surface-header');
-      expect(grid?.className).not.toContain('surface-overlay');
       expect(grid?.style.getPropertyValue('--data-list-border')).toBe('');
       expect(grid?.className).not.toMatch(/border-|ring-|--data-list-border/);
     });
@@ -300,11 +298,11 @@ describe('DataListRoot', () => {
       );
       const [errorRow, defaultRow] = container.querySelectorAll<HTMLButtonElement>('.data-list-row');
       expect(errorRow.dataset.variant).toBe('error');
-      expect(errorRow.className).toContain('before:bg-surface2');
+      expect(errorRow.classList.contains('before:bg-background')).toBe(true);
       expect(errorRow.className).toContain('data-[variant=error]:bg-notice-destructive/10');
       // Hover is the root's fluid highlight, not a per-row fill.
-      expect(errorRow.className).not.toContain('hover:bg-surface3');
-      expect(errorRow.className).toContain('active:bg-surface4');
+      expect(errorRow.className).not.toContain('hover:bg-');
+      expect(errorRow.classList.contains('active:bg-fill')).toBe(true);
       expect(errorRow.className).toContain('focus-visible:ring-accent1');
       expect(defaultRow.dataset.variant).toBe('default');
     });
@@ -319,8 +317,8 @@ describe('DataListRoot', () => {
       );
       const row = container.querySelector<HTMLButtonElement>('.data-list-row');
       expect(row?.dataset.featured).toBe('true');
-      expect(row?.className).toContain('before:bg-surface2');
-      expect(row?.className).toContain('data-featured:before:bg-surface3');
+      expect(row?.classList.contains('before:bg-background')).toBe(true);
+      expect(row?.classList.contains('data-featured:before:bg-card')).toBe(true);
     });
 
     it('does not leak the variant prop onto the DOM element', () => {

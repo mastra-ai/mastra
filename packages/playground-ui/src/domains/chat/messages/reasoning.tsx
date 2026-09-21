@@ -42,7 +42,7 @@ export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
 
       <div id={contentId} hidden={isCollapsed} className="border-border1 min-w-0 border-l-2 pl-2.5 italic [&_p]:my-0.5">
         {!isCollapsed && (
-          <MarkdownRenderer className="text-icon3 text-ui-sm" streaming={streaming && !redacted}>
+          <MarkdownRenderer className="text-icon3 text-caption" streaming={streaming && !redacted}>
             {body}
           </MarkdownRenderer>
         )}

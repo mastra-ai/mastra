@@ -36,7 +36,7 @@ function SidebarBrand() {
   return (
     <div className="flex items-center gap-2 px-3 py-2">
       <Boxes className="size-5 shrink-0" />
-      <span className="text-ui-md text-foreground font-semibold">Workspace</span>
+      <span className="text-subheading text-foreground">Workspace</span>
       {!isMobile && <MainSidebar.Trigger />}
     </div>
   );
@@ -68,7 +68,7 @@ function MobileHeader() {
     <div className="border-border1 bg-surface1 flex h-12 shrink-0 items-center justify-between border-b px-3 lg:hidden">
       <span className="flex items-center gap-3">
         <MainSidebar.MobileTrigger />
-        <span className="text-ui-md text-foreground font-semibold">Workspace</span>
+        <span className="text-subheading text-foreground">Workspace</span>
       </span>
       <button type="button" aria-label="Search">
         <Search className="size-5" />
@@ -101,8 +101,8 @@ function MainContent() {
       </PageHeader>
       {Array.from({ length: 14 }, (_, index) => (
         <article key={index} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
-          <p className="text-ui-sm text-foreground font-medium">Activity {index + 1}</p>
-          <p className="text-ui-xs text-muted-foreground mt-1">
+          <p className="text-column text-foreground">Activity {index + 1}</p>
+          <p className="text-meta text-muted-foreground mt-1">
             A representative row that makes the content area scroll.
           </p>
         </article>
@@ -117,8 +117,8 @@ function FrameWithPanel({ children, className }: AppShellFrameProps) {
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">{children}</div>
         <aside className="border-border1 bg-surface1 hidden w-72 shrink-0 border-l p-4 xl:block">
-          <p className="text-ui-sm text-foreground font-medium">Details panel</p>
-          <p className="text-ui-xs text-muted-foreground mt-1">
+          <p className="text-column text-foreground">Details panel</p>
+          <p className="text-meta text-muted-foreground mt-1">
             A consumer-owned panel rendered outside the framed content.
           </p>
         </aside>

@@ -26,7 +26,7 @@ export const Default: Story = {
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="border-border1 bg-surface2 mt-2 rounded-md border p-4">
-        <p className="text-foreground text-ui-md">This is the collapsible content. It can contain any elements.</p>
+        <p className="text-foreground text-body">This is the collapsible content. It can contain any elements.</p>
       </CollapsibleContent>
     </Collapsible>
   ),
@@ -42,7 +42,7 @@ export const DefaultOpen: Story = {
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="border-border1 bg-surface2 mt-2 rounded-md border p-4">
-        <p className="text-foreground text-ui-md">This section is open by default.</p>
+        <p className="text-foreground text-body">This section is open by default.</p>
       </CollapsibleContent>
     </Collapsible>
   ),
@@ -53,23 +53,23 @@ export const SettingsSection: Story = {
     <div className="w-100 space-y-2">
       <Collapsible>
         <CollapsibleTrigger asChild>
-          <button className="text-foreground text-ui-md flex w-full items-center justify-between py-2 font-medium hover:text-white">
+          <button className="text-foreground text-subheading flex w-full items-center justify-between py-2 hover:text-white">
             Advanced Settings
             <ChevronDown className="size-4" />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-3 pt-2">
           <div className="flex items-center justify-between">
-            <span className="text-foreground text-ui-md">Debug mode</span>
-            <span className="text-muted-foreground text-ui-md">Disabled</span>
+            <span className="text-foreground text-body">Debug mode</span>
+            <span className="text-muted-foreground text-body">Disabled</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-foreground text-ui-md">Verbose logging</span>
-            <span className="text-muted-foreground text-ui-md">Off</span>
+            <span className="text-foreground text-body">Verbose logging</span>
+            <span className="text-muted-foreground text-body">Off</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-foreground text-ui-md">Cache timeout</span>
-            <span className="text-muted-foreground text-ui-md">300s</span>
+            <span className="text-foreground text-body">Cache timeout</span>
+            <span className="text-muted-foreground text-body">300s</span>
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -88,7 +88,7 @@ export const MultipleCollapsibles: Story = {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
-          <p className="text-foreground text-ui-md">Content for section 1</p>
+          <p className="text-foreground text-body">Content for section 1</p>
         </CollapsibleContent>
       </Collapsible>
       <Collapsible>
@@ -99,7 +99,7 @@ export const MultipleCollapsibles: Story = {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
-          <p className="text-foreground text-ui-md">Content for section 2</p>
+          <p className="text-foreground text-body">Content for section 2</p>
         </CollapsibleContent>
       </Collapsible>
       <Collapsible>
@@ -110,7 +110,7 @@ export const MultipleCollapsibles: Story = {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
-          <p className="text-foreground text-ui-md">Content for section 3</p>
+          <p className="text-foreground text-body">Content for section 3</p>
         </CollapsibleContent>
       </Collapsible>
     </div>
@@ -123,7 +123,7 @@ export const FillsConstrainedPanel: Story = {
       defaultOpen
       className="border-border1 bg-surface2 flex h-64 w-[350px] flex-col overflow-hidden rounded-md border"
     >
-      <CollapsibleTrigger className="text-foreground text-ui-md flex w-full shrink-0 items-center justify-between px-4 py-2 font-medium">
+      <CollapsibleTrigger className="text-foreground text-subheading flex w-full shrink-0 items-center justify-between px-4 py-2">
         Recent runs
         <ChevronDown className="size-4" />
       </CollapsibleTrigger>
@@ -131,7 +131,7 @@ export const FillsConstrainedPanel: Story = {
         <ScrollArea className="border-border1 min-h-0 flex-1 border-t">
           <ul className="divide-border1 divide-y">
             {Array.from({ length: 20 }, (_, index) => (
-              <li key={index} className="text-foreground text-ui-md px-4 py-2">
+              <li key={index} className="text-foreground text-body px-4 py-2">
                 Run {index + 1}
               </li>
             ))}

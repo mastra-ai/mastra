@@ -75,11 +75,11 @@ export const AgentSelectableCard = ({
       >
         {icon}
         <div className="flex min-w-0 flex-1 flex-col">
-          <Txt variant="ui-md" className="text-foreground truncate font-medium">
+          <Txt variant="subheading" className="text-foreground truncate">
             {title}
           </Txt>
           {subtitle && (
-            <Txt variant="ui-sm" className="text-muted-foreground truncate">
+            <Txt variant="caption" className="text-muted-foreground truncate">
               {subtitle}
             </Txt>
           )}

@@ -87,7 +87,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
                     <ChevronRight className="text-muted-foreground h-4 w-4" />
                     <SectionTitle icon={<AgentIcon className="text-accent1" />}>
-                      Sub-Agents{count > 0 && <span className="text-muted-foreground font-normal">({count})</span>}
+                      Sub-Agents{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
                 </div>

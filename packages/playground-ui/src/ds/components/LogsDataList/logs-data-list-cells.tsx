@@ -26,7 +26,7 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
 
   return (
     <DataListCell>
-      <span className="text-ui-sm font-semibold uppercase" style={{ color: config.color }}>
+      <span className="text-column uppercase" style={{ color: config.color }}>
         {config.label}
       </span>
     </DataListCell>
@@ -65,7 +65,7 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   return (
     <DataListCell className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
+      {entityName ? <span className="text-body-sm min-w-0 truncate">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -80,7 +80,7 @@ export interface LogsDataListMessageCellProps {
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
   return (
-    <DataListCell className="text-ui-smd text-muted-foreground min-w-0 truncate font-mono">{message}</DataListCell>
+    <DataListCell className="text-body-sm text-muted-foreground min-w-0 truncate font-mono">{message}</DataListCell>
   );
 }
 

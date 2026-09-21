@@ -27,15 +27,15 @@ export interface AskUserResult {
 }
 
 export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>) => (
-  <div className={cn('rounded-lg border border-border1 bg-surface2 p-3 text-ui-md', className)} {...props} />
+  <div className={cn('rounded-lg border border-border1 bg-surface2 p-3 text-body', className)} {...props} />
 );
 
 export const AskUserQuestion = ({ className, ...props }: ComponentProps<'legend'>) => (
-  <legend className={cn('mb-3 font-medium text-foreground', className)} {...props} />
+  <legend className={cn('mb-3 text-subheading text-foreground', className)} {...props} />
 );
 
 export const AskUserOptionDescription = ({ className, ...props }: ComponentProps<'span'>) => (
-  <span className={cn('block text-ui-xs font-normal text-muted-foreground', className)} {...props} />
+  <span className={cn('block text-meta text-muted-foreground', className)} {...props} />
 );
 
 interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'> {
@@ -66,7 +66,7 @@ export const AskUserSubmit = ({ children = 'Submit answer', ...props }: Componen
 );
 
 export const AskUserPending = ({ children = 'Submitting…', className, ...props }: ComponentProps<'span'>) => (
-  <span role="status" className={cn('text-ui-xs text-muted-foreground', className)} {...props}>
+  <span role="status" className={cn('text-meta text-muted-foreground', className)} {...props}>
     {children}
   </span>
 );
@@ -123,7 +123,7 @@ const AskUserInput = ({
   if (result || isAnswered) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <p className="text-foreground mb-2 font-medium">{payload.question}</p>
+        <p className="text-foreground text-subheading mb-2">{payload.question}</p>
         {result ? <AskUserOutput result={result} /> : <Badge variant="green">Answered</Badge>}
       </AskUserContainer>
     );

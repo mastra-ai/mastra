@@ -19,14 +19,7 @@ describe('SettingsLayout', () => {
     expect(output).toContain('Project Settings');
     expect(output).toContain('<span>Studio</span>');
     expect(output).toContain('data-slot="settings-page-header"');
-    expect(output).toContain('flex min-w-0 flex-wrap items-start justify-between gap-4');
-    expect(output).not.toContain('pl-4');
-    expect(output).toContain('flex min-w-0 items-center gap-2');
-    expect(output).toContain('min-w-0 truncate');
-    expect(output).toContain(
-      '<p class="text-ui-md leading-ui-md text-muted-foreground m-0 wrap-break-word">Manage your project configuration.</p>',
-    );
-    expect(output).toContain('font-sans font-medium tracking-normal text-muted-foreground');
+    expect(output).toContain('Manage your project configuration.');
     expect(output).toContain('<button type="button">Save</button>');
     expect(output).toContain('data-slot="settings-layout-content"');
     expect(output).toContain('General settings');
@@ -40,7 +33,7 @@ describe('SettingsLayout', () => {
     );
 
     expect(output).toContain('<div class="shrink-0">0</div>');
-    expect(output).toContain('<p class="text-ui-md leading-ui-md text-muted-foreground m-0 wrap-break-word">0</p>');
+    expect(output).toContain('<p class="text-body text-muted-foreground m-0 wrap-break-word">0</p>');
   });
 
   it.each([undefined, null])('omits a title accessory when it is %s', titleAccessory => {

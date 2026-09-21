@@ -1,6 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ClipboardCheck, MoreVertical, Pencil, Trash2 } from 'lucide-react';
@@ -34,7 +33,7 @@ export function ExperimentTopArea({ experiment, onDeleteClick, children }: Exper
   return (
     <PageLayout.TopArea>
       <PageLayout.Row className="items-center justify-start gap-2">
-        <ButtonsGroup className="whitespace-nowrap">
+        <div className="flex items-center gap-2 whitespace-nowrap">
           <RerunExperimentButton experiment={experiment} />
           <Button render={<LinkComponent href={experimentReviewQueueLink(experiment.id)} />} icon={<ClipboardCheck />}>
             Review queue
@@ -60,7 +59,7 @@ export function ExperimentTopArea({ experiment, onDeleteClick, children }: Exper
               </DropdownMenu.Content>
             </DropdownMenu>
           )}
-        </ButtonsGroup>
+        </div>
         {children}
       </PageLayout.Row>
 

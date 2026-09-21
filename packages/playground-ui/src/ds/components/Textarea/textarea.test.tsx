@@ -28,10 +28,10 @@ describe('Textarea', () => {
   });
 
   it.each([
-    ['xs', 'text-ui-xs'],
-    ['sm', 'text-ui-sm'],
-    ['md', 'text-ui-smd'],
-    ['lg', 'text-ui-md'],
+    ['xs', 'text-meta'],
+    ['sm', 'text-caption'],
+    ['md', 'text-body-sm'],
+    ['lg', 'text-body'],
   ] as const)('reads at the %s size', (size, expected) => {
     render(<Textarea size={size} placeholder="Description" />);
 
@@ -41,7 +41,7 @@ describe('Textarea', () => {
   it('reads at the medium size by default', () => {
     render(<Textarea placeholder="Description" />);
 
-    expect(screen.getByPlaceholderText('Description').className).toContain('text-ui-smd');
+    expect(screen.getByPlaceholderText('Description').className).toContain('text-body-sm');
   });
 
   it('drops its own chrome in the unstyled variant', () => {

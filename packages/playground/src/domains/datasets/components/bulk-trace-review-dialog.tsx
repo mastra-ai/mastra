@@ -145,7 +145,7 @@ export function BulkTraceReviewDialog({
             >
               <ChevronLeftIcon />
             </Button>
-            <Txt variant="ui-sm" className="text-icon3 tabular-nums">
+            <Txt variant="caption" className="text-icon3 tabular-nums">
               {currentIndex + 1} / {total}
             </Txt>
             <Button

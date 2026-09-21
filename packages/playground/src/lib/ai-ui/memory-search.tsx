@@ -2,6 +2,7 @@ import type { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Search, X, ExternalLink } from 'lucide-react';
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -247,22 +248,22 @@ export const MemorySearch = ({
 
       {/* Search results dropdown */}
       {(isOpen || (query && (isSearching || results.length === 0))) && (
-        <div className="bg-surface3 border-border1 mt-2 flex-1 overflow-y-auto rounded-lg border shadow-lg">
+        <div className={cn(raisedSurfaceStyle, 'mt-2 flex-1 overflow-y-auto rounded-lg')}>
           {error ? (
             <div className="p-4 text-center">
-              <Txt variant="ui-sm" className="text-red-500">
+              <Txt variant="caption" className="text-red-500">
                 {error}
               </Txt>
             </div>
           ) : isSearching && results.length === 0 ? (
             <div className="p-4 text-center">
-              <Txt variant="ui-sm" className="text-muted-foreground">
+              <Txt variant="caption" className="text-muted-foreground">
                 Searching...
               </Txt>
             </div>
           ) : results.length === 0 ? (
             <div className="p-4 text-center">
-              <Txt variant="ui-sm" className="text-muted-foreground">
+              <Txt variant="caption" className="text-muted-foreground">
                 No results found for "{query}"
               </Txt>
             </div>
@@ -273,14 +274,14 @@ export const MemorySearch = ({
                   key={result.id}
                   onClick={() => handleResultClick(result.id, result.threadId)}
                   className={cn(
-                    'w-full px-4 py-3 hover:bg-surface4 transition-colors duration-150 text-left border-b border-border1 last:border-b-0',
+                    'w-full px-4 py-3 hover:bg-surface4 text-left border-b border-border1 last:border-b-0',
                     result.threadId !== currentThreadId && 'border-l-2 border-l-blue-400',
                   )}
                 >
                   <div className="flex flex-col gap-2">
                     {/* Context before */}
                     {result.context?.before && result.context.before.length > 0 && (
-                      <div className="text-ui-sm space-y-1 opacity-50">
+                      <div className="text-caption space-y-1 opacity-50">
                         {result.context.before.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>
@@ -296,7 +297,7 @@ export const MemorySearch = ({
                         <div className="mb-1 flex items-center gap-2">
                           <span
                             className={cn(
-                              'text-ui-sm font-medium px-2 py-0.5 rounded',
+                              'text-column px-2 py-0.5 rounded',
                               result.role === 'user'
                                 ? 'bg-blue-500/20 text-blue-400'
                                 : 'bg-green-500/20 text-green-400',
@@ -304,18 +305,16 @@ export const MemorySearch = ({
                           >
                             {result.role}
                           </span>
-                          <Txt variant="ui-xs" className="text-muted-foreground">
+                          <Txt variant="meta" className="text-muted-foreground">
                             {formatRelativeTime(new Date(result.createdAt))}
                           </Txt>
                           {result.threadTitle && (
                             <div className="flex items-center gap-1">
                               <Txt
-                                variant="ui-xs"
+                                variant="meta"
                                 className={cn(
                                   'truncate max-w-[150px]',
-                                  result.threadId !== currentThreadId
-                                    ? 'text-blue-400 font-medium'
-                                    : 'text-muted-foreground',
+                                  result.threadId !== currentThreadId ? 'text-blue-400 ' : 'text-muted-foreground',
                                 )}
                                 title={result.threadTitle}
                               >
@@ -327,7 +326,7 @@ export const MemorySearch = ({
                             </div>
                           )}
                         </div>
-                        <Txt variant="ui-sm" className="text-foreground wrap-break-word">
+                        <Txt variant="caption" className="text-foreground wrap-break-word">
                           {truncateContent(result.content)}
                         </Txt>
                       </div>
@@ -335,7 +334,7 @@ export const MemorySearch = ({
 
                     {/* Context after */}
                     {result.context?.after && result.context.after.length > 0 && (
-                      <div className="text-ui-sm space-y-1 opacity-50">
+                      <div className="text-caption space-y-1 opacity-50">
                         {result.context.after.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>

@@ -24,11 +24,11 @@ const getInput = () => {
 const expectOnlyGuardedHoverBorder = (className: string) => {
   const hoverBorderTokens = className
     .split(/\s+/)
-    .filter(token => token.includes('hover') && token.includes('border-foreground/45'));
+    .filter(token => token.includes('hover') && token.includes('border-border-hover'));
 
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within):not(:has(:disabled))]:border-foreground/45']);
-  expect(className).toContain('focus-within:border-foreground/60');
-  expect(className).not.toContain('hover:border-foreground/45');
+  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within):not(:has(:disabled))]:border-border-hover']);
+  expect(className).toContain('focus-within:border-border-focus');
+  expect(className).not.toContain('hover:border-border-focus');
 };
 
 describe('InputGroup', () => {
@@ -90,7 +90,7 @@ describe('InputGroup', () => {
     // Root fills via `flex-1` + `w-full` and keeps its `min-width:auto` content floor.
     const cls = getWrapper().className;
     expect(cls).toContain('flex-1');
-    expect(cls).not.toContain('min-w-0');
+    expect(cls.split(/\s+/)).not.toContain('min-w-0');
   });
 
   it('wrapper has the flex-col + flex-none + w-full overrides needed for block-start mode', () => {
@@ -159,7 +159,7 @@ describe('InputGroup', () => {
       </InputGroup>,
     );
 
-    expect(getWrapper().className).toContain('bg-foreground/10');
+    expect(getWrapper().classList.contains('bg-fill')).toBe(true);
   });
 
   it('supports an outline variant without an initial filled background', () => {
@@ -169,10 +169,10 @@ describe('InputGroup', () => {
       </InputGroup>,
     );
 
-    const wrapperClass = getWrapper().className;
-    expect(wrapperClass).toContain('bg-transparent');
-    expect(wrapperClass).toContain('rounded-full');
-    expect(wrapperClass).not.toContain('bg-foreground/10');
+    const wrapper = getWrapper();
+    expect(wrapper.className).toContain('bg-transparent');
+    expect(wrapper.className).toContain('rounded-full');
+    expect(wrapper.classList.contains('bg-fill')).toBe(false);
   });
 
   it('suppresses both native number spinners (WebKit + Firefox) and the WebKit search clear button', () => {
@@ -211,8 +211,8 @@ describe('InputGroup', () => {
     );
     const cls = getWrapper().className;
 
-    expect(cls).toContain('not-has-[:disabled]:hover:bg-foreground/14');
-    expect(cls).toContain('focus-within:border-foreground/60');
+    expect(cls.split(/\s+/)).toContain('not-has-[:disabled]:hover:bg-fill-hover');
+    expect(cls).toContain('focus-within:border-border-focus');
     expect(cls.split(/\s+/).filter(token => token.includes('hover') && token.includes('border-'))).toEqual([]);
   });
 
@@ -226,8 +226,8 @@ describe('InputGroup', () => {
 
     // The wrapper is a div, so `:disabled` never matches it. Both hover surfaces
     // have to ask about descendants or they repaint over the disabled treatment.
-    expect(cls).toContain('has-[:disabled]:bg-muted');
-    expect(cls).toContain('not-has-[:disabled]:hover:bg-foreground/14');
-    expect(cls).not.toContain(' hover:bg-foreground/14');
+    expect(cls.split(/\s+/)).toContain('has-[:disabled]:bg-fill-subtle');
+    expect(cls.split(/\s+/)).toContain('not-has-[:disabled]:hover:bg-fill-hover');
+    expect(cls.split(/\s+/)).not.toContain('hover:bg-fill-hover');
   });
 });

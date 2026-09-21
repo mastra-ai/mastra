@@ -100,7 +100,7 @@ function PipelineStep({
         <span
           aria-hidden="true"
           className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full border text-ui-xs font-medium',
+            'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
             done ? 'border-accent1 bg-accent1 text-white' : 'border-border1 text-muted-foreground',
           )}
         >
@@ -253,7 +253,7 @@ export function ExperimentTriggerDialog({
       >
         <DialogHeader className="border-border1 border-b px-4 py-4">
           <DialogTitle>Run experiment</DialogTitle>
-          <DialogDescription className="text-ui-sm text-muted-foreground not-sr-only">
+          <DialogDescription className="text-caption text-muted-foreground not-sr-only">
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
@@ -305,7 +305,7 @@ export function ExperimentTriggerDialog({
                 )}
               </div>
               {datasetId && itemCount !== undefined && (
-                <p className="text-ui-xs text-muted-foreground">
+                <p className="text-meta text-muted-foreground">
                   {itemCount} {itemCount === 1 ? 'item' : 'items'}
                 </p>
               )}
@@ -320,7 +320,7 @@ export function ExperimentTriggerDialog({
                 container={contentRef}
               />
               {targetType && !targetId && (
-                <p className="text-ui-xs text-muted-foreground">
+                <p className="text-meta text-muted-foreground">
                   Choose {targetType === 'agent' ? 'an' : 'a'} {targetType} to run
                 </p>
               )}
@@ -342,7 +342,7 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger className="text-ui-sm flex items-center gap-2">
+            <CollapsibleTrigger className="text-caption flex items-center gap-2">
               <ChevronRight className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
@@ -374,7 +374,7 @@ export function ExperimentTriggerDialog({
                 <Badge variant="green" indicator="dot">
                   Ready
                 </Badge>
-                <span className="text-ui-xs text-muted-foreground">
+                <span className="text-meta text-muted-foreground">
                   {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
                 </span>
               </>

@@ -1,6 +1,5 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
@@ -53,7 +52,7 @@ export function DatasetHeader({
         </MainHeader.Description>
       </MainHeader.Column>
       <MainHeader.Column>
-        <ButtonsGroup>
+        <div className="flex items-center gap-2">
           {experimentTriggerSlot ? (
             disableExperimentTrigger ? (
               <Tooltip>
@@ -105,7 +104,7 @@ export function DatasetHeader({
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
-        </ButtonsGroup>
+        </div>
       </MainHeader.Column>
     </MainHeader>
   );

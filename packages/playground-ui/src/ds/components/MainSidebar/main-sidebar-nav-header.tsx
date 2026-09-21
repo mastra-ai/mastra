@@ -32,7 +32,7 @@ export function MainSidebarNavHeader({
       {showTitle ? (
         <header
           {...props}
-          className={cn('max-w-full min-w-0 truncate pl-3 text-ui-sm font-medium', {
+          className={cn('max-w-full min-w-0 truncate pl-3 text-column', {
             'text-foreground': isActive,
             'text-muted-foreground/70': !isActive,
           })}

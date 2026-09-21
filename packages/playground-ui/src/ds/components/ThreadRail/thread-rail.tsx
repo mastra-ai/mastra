@@ -5,6 +5,7 @@ import type { ThreadRailTurn } from './thread-rail-turns';
 
 import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '@/ds/components/MessageScroller';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
@@ -330,7 +331,8 @@ function ThreadRailPreview({
       data-testid="thread-rail-preview"
       data-visible={containerVisible ? 'true' : undefined}
       className={cn(
-        'pointer-events-none absolute top-0 left-full z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
+        'pointer-events-none absolute top-0 left-full z-30 ml-3 w-72 overflow-hidden rounded-xl text-left transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
+        raisedSurfaceStyle,
         containerVisible ? 'opacity-100' : 'opacity-0',
       )}
       style={{ ...previewHeightStyle, translate: `0 calc(${top}px - 50%)` }}
@@ -370,21 +372,21 @@ function ThreadRailPreviewContent({
 }: React.HTMLAttributes<HTMLDivElement> & { turn: ThreadRailTurn }) {
   return (
     <div className={className} {...props}>
-      <div className="text-ui-md leading-ui-md text-foreground truncate font-medium">{turn.prompt}</div>
-      {turn.reply && <p className="text-ui-sm leading-ui-sm text-muted-foreground mt-1.5 line-clamp-3">{turn.reply}</p>}
+      <div className="text-subheading text-foreground truncate">{turn.prompt}</div>
+      {turn.reply && <p className="text-caption text-muted-foreground mt-1.5 line-clamp-3">{turn.reply}</p>}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
         <div className="border-border1/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
           {turn.files.map(file => (
             <span
               key={file}
-              className="text-ui-sm text-muted-foreground inline-flex max-w-44 items-center gap-1.5 truncate"
+              className="text-caption text-muted-foreground inline-flex max-w-44 items-center gap-1.5 truncate"
             >
               <FileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
               {file}
             </span>
           ))}
           {turn.hiddenFileCount > 0 && (
-            <span className="text-ui-sm text-muted-foreground font-medium">+{turn.hiddenFileCount}</span>
+            <span className="text-column text-muted-foreground">+{turn.hiddenFileCount}</span>
           )}
         </div>
       )}

@@ -73,7 +73,7 @@ export function WorkflowTimelineRow({
     >
       <button
         type="button"
-        className="text-ui-xs text-foreground focus-visible:outline-neutral3 flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-default"
+        className="text-meta text-foreground focus-visible:outline-neutral3 flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-default"
         aria-disabled={row.isNestedEntry}
         aria-pressed={isSelected}
         onClick={() => {
@@ -94,7 +94,7 @@ export function WorkflowTimelineRow({
         <span className="min-w-0">
           <span className="block truncate">{label}</span>
           {row.isNestedEntry && (
-            <span className="text-muted-foreground text-ui-xs flex min-w-0 items-center gap-1">
+            <span className="text-muted-foreground text-meta flex min-w-0 items-center gap-1">
               <CornerDownRight aria-hidden className="size-3 shrink-0" />
               <span className="truncate">{parentPath}</span>
             </span>
@@ -116,7 +116,7 @@ export function WorkflowTimelineRow({
         )}
       </div>
       <span
-        className="text-muted-foreground text-ui-xs text-right whitespace-nowrap tabular-nums"
+        className="text-muted-foreground text-meta text-right whitespace-nowrap tabular-nums"
         title={row.timing && row.spansSuspension ? 'Includes time spent suspended waiting for input' : undefined}
       >
         {row.timing ? formatDuration(row.timing.durationMs) : <span aria-label="Timing unavailable">—</span>}

@@ -11,7 +11,7 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
     <div className={`border-border1 rounded-2xl border p-6 ${className}`}>
-      <p className="text-ui-xs text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
+      <p className="text-meta text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
   );

@@ -20,7 +20,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeadi
   return (
     <div className="space-y-4">
       {showHeading && (
-        <Txt as="h2" variant="header-xs" className="text-foreground">
+        <Txt as="h2" variant="body" className="text-foreground">
           Headers
         </Txt>
       )}

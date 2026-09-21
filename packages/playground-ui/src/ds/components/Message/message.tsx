@@ -29,8 +29,8 @@ export function Message({ from, avatar, footer, pending, children, className, ..
         <div
           data-slot="message-content"
           className={cn(
-            'max-w-full min-w-0 text-ui-md leading-ui-md break-words',
-            isUser && 'rounded-xl border border-transparent bg-neutral6/5 px-4 py-2 text-text1',
+            'max-w-full min-w-0 text-body break-words',
+            isUser && 'rounded-xl border border-transparent bg-fill-subtle px-4 py-2 text-text1',
             isUser && pending && 'border-dashed border-border1',
             !isUser && footer && '[&>:last-child]:mb-0',
           )}
@@ -66,5 +66,5 @@ export function MessageActions({ visibility = 'hover', children, className, ...p
 }
 
 export function MessageMetadata({ className, ...props }: ComponentProps<'span'>) {
-  return <span {...props} className={cn('text-icon3 inline-flex items-center gap-1 text-ui-xs', className)} />;
+  return <span {...props} className={cn('text-icon3 inline-flex items-center gap-1 text-meta', className)} />;
 }

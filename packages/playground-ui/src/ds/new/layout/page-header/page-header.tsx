@@ -10,7 +10,7 @@ export type { PageHeaderDescriptionProps } from './page-header-description';
 export type { PageHeaderIconProps } from './page-header-icon';
 export type { PageHeaderMetaProps } from './page-header-meta';
 export type { PageHeaderRootProps } from './page-header-root';
-export type { PageHeaderTitleProps, PageHeaderTitleSize } from './page-header-title';
+export type { PageHeaderTitleProps } from './page-header-title';
 
 export const PageHeader = Object.assign(PageHeaderRoot, {
   Icon: PageHeaderIcon,

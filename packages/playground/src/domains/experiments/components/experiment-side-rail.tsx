@@ -19,7 +19,7 @@ export interface ExperimentSideRailProps {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-3">
-      <h2 className="text-ui-md text-placeholder tracking-widest uppercase">{title}</h2>
+      <h2 className="text-body text-placeholder tracking-widest uppercase">{title}</h2>
       {children}
     </section>
   );

@@ -8,7 +8,7 @@ export interface ReasoningStreamingLineProps {
 
 export const ReasoningStreamingLine = ({ text }: ReasoningStreamingLineProps) => (
   <Txt
-    variant="ui-md"
+    variant="body"
     className="text-muted-foreground flex max-w-[80%] items-center gap-2 leading-relaxed whitespace-pre-wrap"
     as="div"
   >

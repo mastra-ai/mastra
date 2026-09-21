@@ -1,4 +1,6 @@
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
@@ -71,11 +73,13 @@ export function AgentBuilderMobileBottomBar() {
               <Link
                 href={link.url}
                 aria-current={isActive ? 'page' : undefined}
-                className={`duration-normal ease-out-custom text-ui-sm relative flex flex-col items-center justify-center gap-1 py-2 transition-colors ${
+                className={cn(
+                  'text-caption relative flex flex-col items-center justify-center gap-1 py-2',
+                  controlStateColorTransition,
                   isActive
                     ? 'text-icon6 before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
-                    : 'text-icon3 hover:text-icon6'
-                }`}
+                    : 'text-icon3 hover:text-icon6',
+                )}
               >
                 <span className="flex size-6 items-center justify-center" aria-hidden="true">
                   {link.icon}

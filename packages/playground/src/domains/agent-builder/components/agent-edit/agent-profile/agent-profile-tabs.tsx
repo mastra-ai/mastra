@@ -63,7 +63,7 @@ export const AgentProfileTabs = ({
   return (
     <div className="h-full min-h-0 overflow-hidden" data-testid="agent-profile-tabs">
       <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <TabList variant="line" sticky className="!bg-surface3 px-4" style={tabListStyle}>
+        <TabList sticky className="px-4" style={tabListStyle}>
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
           <Tab value="instructions">Instructions</Tab>

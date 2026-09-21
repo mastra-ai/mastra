@@ -20,10 +20,10 @@ export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInfor
       </Icon>
 
       <div className="flex min-w-0 flex-col">
-        <Txt variant="header-md" as="h2" className="truncate font-medium">
+        <Txt variant="heading" as="h2" className="truncate">
           {toolId}
         </Txt>
-        <ClampedText variant="ui-sm" className="text-muted-foreground">
+        <ClampedText variant="caption" className="text-muted-foreground">
           {toolDescription}
         </ClampedText>
       </div>

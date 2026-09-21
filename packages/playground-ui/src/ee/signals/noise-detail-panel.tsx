@@ -80,20 +80,18 @@ export function NoiseDetailPanel({
               <section aria-labelledby="noise-summary-heading">
                 <h2
                   id="noise-summary-heading"
-                  className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase"
+                  className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
                 >
                   Summary
                 </h2>
-                <p className="text-foreground text-ui-md mt-3">
+                <p className="text-foreground text-body mt-3">
                   Noise contains trace signal summaries that did not consistently match a recurring theme in this
                   snapshot.
                 </p>
-                {noiseQuery.isPending && (
-                  <p className="text-muted-foreground text-ui-md mt-4">Loading noise details…</p>
-                )}
-                {noiseQuery.isError && <p className="text-ui-md mt-4 text-red-500">Unable to load noise details.</p>}
+                {noiseQuery.isPending && <p className="text-muted-foreground text-body mt-4">Loading noise details…</p>}
+                {noiseQuery.isError && <p className="text-body mt-4 text-red-500">Unable to load noise details.</p>}
                 {noiseQuery.data && (
-                  <p className="text-foreground text-ui-md mt-4 font-mono tabular-nums">
+                  <p className="text-foreground text-body mt-4 font-mono tabular-nums">
                     {shareSentence(
                       filteredStats?.traceCount ?? noiseQuery.data.noise.traceCount,
                       filteredStats?.stageShare ?? noiseQuery.data.noise.coverage,
@@ -105,16 +103,16 @@ export function NoiseDetailPanel({
               <section aria-labelledby="noise-examples-heading">
                 <h2
                   id="noise-examples-heading"
-                  className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase"
+                  className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
                 >
                   Example summaries
                 </h2>
-                {examplesQuery.isPending && <p className="text-muted-foreground text-ui-md mt-3">Loading examples…</p>}
-                {examplesQuery.isError && <p className="text-ui-md mt-3 text-red-500">Unable to load examples.</p>}
+                {examplesQuery.isPending && <p className="text-muted-foreground text-body mt-3">Loading examples…</p>}
+                {examplesQuery.isError && <p className="text-body mt-3 text-red-500">Unable to load examples.</p>}
                 {examplesQuery.data && (
                   <>
                     {examplesQuery.data.examples.length === 0 ? (
-                      <p className="text-muted-foreground text-ui-md mt-3">No noise examples in this snapshot.</p>
+                      <p className="text-muted-foreground text-body mt-3">No noise examples in this snapshot.</p>
                     ) : (
                       <ul className="mt-3 space-y-3">
                         {examplesQuery.data.examples.map(example => (
@@ -122,7 +120,7 @@ export function NoiseDetailPanel({
                             <button
                               type="button"
                               aria-label={`View trace insight for ${example.signalText}`}
-                              className="border-border1 bg-surface3 text-foreground hover:bg-surface5 text-ui-md w-full cursor-pointer rounded-md border p-3 text-left"
+                              className="border-border1 bg-surface3 text-foreground hover:bg-surface5 text-body w-full cursor-pointer rounded-md border p-3 text-left"
                               onClick={() => setInsightTraceId(example.traceId)}
                             >
                               {example.signalText}

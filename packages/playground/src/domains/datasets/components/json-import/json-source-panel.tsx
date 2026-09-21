@@ -64,7 +64,7 @@ export function JSONSourcePanel({
       <TabContent value="paste" className={tabContentClassName}>
         <Textarea
           aria-label="JSON items"
-          className="text-ui-sm min-h-[200px] flex-1 resize-none font-mono"
+          className="text-caption min-h-[200px] flex-1 resize-none font-mono"
           placeholder={PASTE_PLACEHOLDER}
           spellCheck={false}
           value={pastedText}
@@ -125,7 +125,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        'border-border1 bg-surface3 relative flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-4 py-6 text-center transition-colors',
+        'border-border1 bg-surface3 relative flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-4 py-6 text-center',
         'hover:border-accent1/50 hover:bg-accent1/5',
         isDragOver && 'border-accent1/50 bg-accent1/5',
         disabled && 'cursor-wait opacity-60',
@@ -143,12 +143,12 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
         <Upload className="size-4" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-ui-md text-foreground">Drop a JSON file here</p>
-        <p className="text-ui-sm text-muted-foreground">
+        <p className="text-body text-foreground">Drop a JSON file here</p>
+        <p className="text-caption text-muted-foreground">
           or <span className="underline">choose a file</span> from your computer
         </p>
       </div>
-      <p className="text-ui-xs text-muted-foreground">.json · an array of items · up to {MAX_IMPORT_LABEL}</p>
+      <p className="text-meta text-muted-foreground">.json · an array of items · up to {MAX_IMPORT_LABEL}</p>
     </div>
   );
 }
@@ -181,8 +181,8 @@ function FileCard({
     <div data-testid="json-file-card" className="border-border1 rounded-lg border">
       <div className="flex items-center gap-2 px-3 py-2">
         <FileJson className="text-muted-foreground size-4 shrink-0" />
-        <span className="text-ui-sm text-foreground min-w-0 flex-1 truncate font-mono">{file.name}</span>
-        <span className="text-ui-xs text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
+        <span className="text-caption text-foreground min-w-0 flex-1 truncate font-mono">{file.name}</span>
+        <span className="text-meta text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
         <Button icon={<RefreshCw />} variant="ghost" size="xs" onClick={onReplace} disabled={isImporting}>
           Replace
         </Button>
@@ -193,8 +193,8 @@ function FileCard({
           key={row.index}
           className="border-border1 grid grid-cols-[2rem_1fr_auto] items-center gap-2 border-t px-3 py-1.5"
         >
-          <span className="text-ui-xs text-muted-foreground">{row.index}</span>
-          <span className="text-ui-sm text-foreground truncate font-mono">{formatInput(row.input)}</span>
+          <span className="text-meta text-muted-foreground">{row.index}</span>
+          <span className="text-caption text-foreground truncate font-mono">{formatInput(row.input)}</span>
           {!row.hasInput ? (
             <Badge variant="red" size="xs">
               no input
@@ -208,7 +208,7 @@ function FileCard({
       ))}
 
       {total > PREVIEW_ROW_COUNT && (
-        <div className="border-border1 text-ui-xs text-muted-foreground border-t px-3 py-1.5">
+        <div className="border-border1 text-meta text-muted-foreground border-t px-3 py-1.5">
           + {total - PREVIEW_ROW_COUNT} more
         </div>
       )}

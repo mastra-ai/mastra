@@ -41,23 +41,23 @@ export const WithCopyMessage: Story = {
 };
 
 // export const SmallIcon: Story = {
-//   args: {
-//     content: 'some-text',
-//     iconSize: 'sm',
-//   },
+// args: {
+// content: 'some-text',
+// iconSize: 'sm',
+// },
 // };
 
 // export const LargeIcon: Story = {
-//   args: {
-//     content: 'some-text',
-//     iconSize: 'lg',
-//   },
+// args: {
+// content: 'some-text',
+// iconSize: 'lg',
+// },
 // };
 
 export const InContext: Story = {
   render: () => (
     <div className="bg-surface4 flex items-center gap-2 rounded-md p-3">
-      <code className="text-foreground text-ui-md font-mono">npm install @mastra/core</code>
+      <code className="text-foreground text-body font-mono">npm install @mastra/core</code>
       <CopyButton content="npm install @mastra/core" />
     </div>
   ),
@@ -67,7 +67,7 @@ export const CodeBlock: Story = {
   render: () => (
     <div className="w-dropdown-max-height bg-surface4 relative rounded-md p-4">
       <CopyButton content="const agent = new Agent()" className="absolute top-2 right-2" />
-      <pre className="text-foreground text-ui-md font-mono">const agent = new Agent()</pre>
+      <pre className="text-foreground text-body font-mono">const agent = new Agent()</pre>
     </div>
   ),
 };

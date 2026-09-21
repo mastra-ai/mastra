@@ -12,7 +12,7 @@ export type SectionHeaderProps = {
 export function SectionHeader({ title, subtitle, icon, className }: SectionHeaderProps) {
   return (
     <header className={cn('flex flex-col w-fit', className)}>
-      <Txt as="h2" variant="header-md" className="flex items-center gap-2">
+      <Txt as="h2" variant="heading" className="flex items-center gap-2">
         {icon && (
           <Icon size="lg" className="text-accent1">
             {icon}
@@ -20,14 +20,14 @@ export function SectionHeader({ title, subtitle, icon, className }: SectionHeade
         )}
         {title}
       </Txt>
-      {subtitle && <Txt className="text-ui-md text-muted-foreground !font-light">{subtitle}</Txt>}
+      {subtitle && <Txt className="text-body text-muted-foreground">{subtitle}</Txt>}
     </header>
   );
 }
 
 export function SubSectionHeader({ title, icon }: SectionHeaderProps) {
   return (
-    <Txt as="h4" variant="ui-sm" className="text-placeholder flex items-center gap-1 uppercase">
+    <Txt as="h4" variant="caption" className="text-placeholder flex items-center gap-1 uppercase">
       {icon && (
         <Icon size="sm" className="text-placeholder">
           {icon}

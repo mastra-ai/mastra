@@ -1,4 +1,3 @@
-import '../../../../new-theme.css';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
@@ -9,7 +8,6 @@ import { controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { inputFocusBorderWithin, inputHoverBorderWithin, resolveFieldVariant } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
-import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // No React context: size flows via `data-size` on the named group root
@@ -21,10 +19,12 @@ const inputGroupBaseClassName = cn(
   // so it never collapses to 0. `items-center` centres the control: it carries its own
   // h-form-* (2px taller than the root's content box), so stretch would push its text low
   // / overflow the bottom border, while centring overlaps the (transparent) borders cleanly.
-  'new-theme group/input-group relative flex w-full flex-1 items-center',
+  'group/input-group relative flex w-full flex-1 items-center',
+  // The wrapper owns its control's width — a bare control has no width of its own,
+  // so the group is the one that decides the input fills the remaining space.
+  '[&>[data-slot=input-group-control]]:min-w-0 [&>[data-slot=input-group-control]]:flex-1',
   'border border-border text-foreground',
-  transitions.all,
-  'has-[:disabled]:cursor-not-allowed has-[:disabled]:border-border has-[:disabled]:bg-muted has-[:disabled]:text-muted-foreground',
+  'has-[:disabled]:cursor-not-allowed has-[:disabled]:border-border has-[:disabled]:bg-fill-subtle has-[:disabled]:text-muted-foreground',
   'has-[[aria-invalid=true]]:border-destructive',
   // Height is on the root (border-box) so the group matches a same-size sibling control.
   // Auto height when vertical (block-* addon) or wrapping a textarea.
@@ -50,11 +50,11 @@ const inputGroupRoundedTextareaClassName = cn(
 // `outline`, which leaves the inside transparent and lets the border draw the shape.
 // Focus brightens the border (inputFocusBorderWithin) for WCAG-visible focus.
 const inputGroupFilledVariant = cn(
-  'rounded-full bg-foreground/10',
+  'rounded-full bg-fill',
   // Guarded on descendants, not the wrapper: a div is never `:disabled`, so an
-  // unguarded hover fill paints over the muted surface of a disabled group.
-  'not-has-[:disabled]:hover:bg-foreground/14',
-  'outline-hidden focus-within:bg-foreground/14 focus-within:outline-hidden',
+  // unguarded hover fill paints over the recessed surface of a disabled group.
+  'not-has-[:disabled]:hover:bg-fill-hover',
+  'outline-hidden focus-within:bg-fill-hover focus-within:outline-hidden',
   inputFocusBorderWithin,
   inputGroupRoundedTextareaClassName,
 );
@@ -64,7 +64,7 @@ const inputGroupVariants = cva(inputGroupBaseClassName, {
     variant: {
       default: inputGroupFilledVariant,
       outline: cn(
-        'rounded-full border-foreground/30 bg-transparent',
+        'rounded-full border-border-strong bg-transparent',
         inputHoverBorderWithin,
         'outline-hidden focus-within:outline-hidden',
         inputFocusBorderWithin,
@@ -99,9 +99,17 @@ const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(
 );
 InputGroup.displayName = 'InputGroup';
 
+const inputGroupControlTextBySize = cn(
+  'group-data-[size=xs]/input-group:text-meta',
+  'group-data-[size=sm]/input-group:text-caption',
+  'group-data-[size=md]/input-group:text-body-sm',
+  'group-data-[size=lg]/input-group:text-body',
+);
+
 const inputGroupAddonVariants = cva(
   cn(
     'flex items-center justify-center gap-2 text-muted-foreground select-none',
+    inputGroupControlTextBySize,
     'group-has-[:disabled]/input-group:text-muted-foreground',
     "[&>svg:not([class*='size-'])]:size-4",
   ),
@@ -162,13 +170,6 @@ const inputGroupControlHeightBySize = cn(
   'group-data-[size=md]/input-group:h-[calc(var(--spacing-form-md)-2px)]',
   'group-data-[size=lg]/input-group:h-[calc(var(--spacing-form-lg)-2px)]',
 );
-const inputGroupControlTextBySize = cn(
-  'group-data-[size=xs]/input-group:text-ui-xs',
-  'group-data-[size=sm]/input-group:text-ui-sm',
-  'group-data-[size=md]/input-group:text-ui-smd',
-  'group-data-[size=lg]/input-group:text-ui-md',
-);
-
 export type InputGroupInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
   testId?: string;
   error?: boolean;
@@ -244,7 +245,7 @@ const InputGroupText = React.forwardRef<HTMLSpanElement, InputGroupTextProps>(({
     <span
       ref={ref}
       className={cn(
-        'flex items-center gap-2 text-ui-sm text-muted-foreground [&_svg]:pointer-events-none',
+        'flex items-center gap-2 text-caption text-muted-foreground [&_svg]:pointer-events-none',
         "[&_svg:not([class*='size-'])]:size-4",
         className,
       )}

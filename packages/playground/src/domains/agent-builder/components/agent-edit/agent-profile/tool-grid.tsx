@@ -60,7 +60,7 @@ export const ToolGrid = ({
         <label
           data-testid="tools-only-selected-filter"
           className={cn(
-            'inline-flex items-center gap-2 text-ui-xs text-muted-foreground select-none cursor-pointer',
+            'inline-flex items-center gap-2 text-meta text-muted-foreground select-none cursor-pointer',
             !editable && 'cursor-not-allowed opacity-60',
           )}
         >
@@ -96,7 +96,7 @@ interface ToolListEmptyStateProps {
 export const ToolListEmptyState = ({ details }: ToolListEmptyStateProps) => {
   return (
     <div className="flex min-h-0 items-center justify-center px-3 py-4">
-      <Txt variant="ui-md" className="text-muted-foreground">
+      <Txt variant="body" className="text-muted-foreground">
         {details}
       </Txt>
     </div>

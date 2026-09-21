@@ -6,6 +6,8 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { PlusIcon, XIcon } from 'lucide-react';
@@ -151,14 +153,14 @@ export function ToolsPage() {
     return (
       <Entity key={tool.value} className="bg-surface2">
         <EntityContent>
-          <EntityName className="text-ui-md! leading-ui-md! font-medium">{tool.label}</EntityName>
+          <EntityName className="text-subheading! !">{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"
               aria-label={`Description for ${tool.label}`}
               disabled={!canEditToolDescriptions}
               className={cn(
-                'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent rounded px-1 -mx-1 transition-colors focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
+                'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent rounded px-1 -mx-1 focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
                 canEditToolDescriptions && 'hover:bg-surface4 focus:bg-surface4',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
@@ -180,7 +182,11 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className="text-muted-foreground hover:text-foreground rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
+            className={cn(
+              'rounded-sm focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden',
+              quietTextHover,
+              controlStateColorTransition,
+            )}
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="sm">
@@ -228,10 +234,10 @@ export function ToolsPage() {
                       key={tool.value}
                       type="button"
                       onClick={() => handleAddTool(tool.value)}
-                      className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left transition-colors hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
+                      className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
                     >
-                      <span className="text-ui-md text-foreground font-normal">{tool.label}</span>
-                      {tool.description && <span className="text-ui-xs text-muted-foreground">{tool.description}</span>}
+                      <span className="text-body text-foreground">{tool.label}</span>
+                      {tool.description && <span className="text-meta text-muted-foreground">{tool.description}</span>}
                     </button>
                   ))}
                 </PopoverContent>

@@ -92,7 +92,7 @@ const BackgroundTaskMetadata = ({
         <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Txt className="text-muted-foreground">Background Task Duration</Txt>
-            <Txt className="text-foreground text-ui-md">{toSigFigs(timeDiff, 3)}ms</Txt>
+            <Txt className="text-foreground text-body">{toSigFigs(timeDiff, 3)}ms</Txt>
           </div>
 
           <div className="space-y-2">

@@ -93,7 +93,7 @@ export function SearchWorkspacePanel({
 
           {/* Top K */}
           <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground text-ui-sm">Top</span>
+            <span className="text-muted-foreground text-caption">Top</span>
             <Input
               type="number"
               min={1}
@@ -122,7 +122,7 @@ export function SearchWorkspacePanel({
                   key={m}
                   type="button"
                   onClick={() => setMode(m)}
-                  className={`text-ui-sm inline-flex items-center gap-1.5 rounded border px-2.5 py-1 font-medium transition-colors ${isActive ? config.color : 'bg-surface2 text-muted-foreground hover:bg-surface3 border-transparent'} `}
+                  className={`text-column inline-flex items-center gap-1.5 rounded border px-2.5 py-1 ${isActive ? config.color : 'bg-surface2 text-muted-foreground hover:bg-surface3 border-transparent'}`}
                 >
                   {config.icon}
                   {config.label}
@@ -136,7 +136,7 @@ export function SearchWorkspacePanel({
       {/* Results */}
       {searchResults && (
         <div className="border-border1 border-t">
-          <div className="text-ui-sm flex items-center justify-between px-4 py-2">
+          <div className="text-caption flex items-center justify-between px-4 py-2">
             <span className="text-muted-foreground">
               {searchResults.results.length} result{searchResults.results.length !== 1 ? 's' : ''} for "
               <span className="text-foreground">{searchResults.query}</span>"
@@ -147,7 +147,7 @@ export function SearchWorkspacePanel({
           </div>
 
           {searchResults.results.length === 0 ? (
-            <div className="text-muted-foreground text-ui-md px-4 py-5 text-center">
+            <div className="text-muted-foreground text-body px-4 py-5 text-center">
               No results found. Try a different query.
             </div>
           ) : (
@@ -180,22 +180,22 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
 
   return (
     <li className="border-border1 border-t first:border-t-0">
-      <button onClick={onClick} className="hover:bg-surface5 flex w-full gap-3 px-4 py-3 text-left transition-colors">
-        <span className="text-muted-foreground text-ui-sm w-4 shrink-0 tabular-nums">{rank}</span>
+      <button onClick={onClick} className="hover:bg-surface5 flex w-full gap-3 px-4 py-3 text-left">
+        <span className="text-muted-foreground text-caption w-4 shrink-0 tabular-nums">{rank}</span>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <FolderOpen className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-            <span className="text-foreground text-ui-md truncate font-mono">{fileId}</span>
+            <span className="text-foreground text-body truncate font-mono">{fileId}</span>
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="bg-surface2 h-1 w-12 overflow-hidden rounded-full">
                 <div className="bg-accent1 h-full rounded-full" style={{ width: `${scorePercent}%` }} />
               </div>
-              <span className="text-ui-xs text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
+              <span className="text-meta text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
             </div>
           </div>
-          <p className="text-muted-foreground text-ui-sm line-clamp-2">{result.content}</p>
+          <p className="text-muted-foreground text-caption line-clamp-2">{result.content}</p>
           {result.lineRange && (
-            <p className="text-muted-foreground text-ui-sm mt-1">
+            <p className="text-muted-foreground text-caption mt-1">
               Lines {result.lineRange.start}–{result.lineRange.end}
             </p>
           )}
@@ -239,7 +239,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search across skills..."
-              className="bg-surface3 border-border1 text-foreground placeholder:text-muted-foreground focus:ring-accent1 text-ui-md w-full rounded-lg border py-2 pr-4 pl-10 focus:ring-2 focus:outline-hidden"
+              className="bg-surface3 border-border1 text-foreground placeholder:text-muted-foreground focus:ring-accent1 text-body w-full rounded-lg border py-2 pr-4 pl-10 focus:ring-2 focus:outline-hidden"
             />
           </div>
           <Button type="submit" disabled={!query.trim() || isSearching}>
@@ -247,8 +247,8 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
           </Button>
         </div>
 
-        <div className="text-ui-md flex items-center gap-4">
-          <label className="text-ui-sm text-muted-foreground flex items-center gap-2">
+        <div className="text-body flex items-center gap-4">
+          <label className="text-caption text-muted-foreground flex items-center gap-2">
             <span>Results:</span>
             <select
               value={topK}
@@ -262,7 +262,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
             </select>
           </label>
 
-          <label className="text-ui-sm text-muted-foreground flex cursor-pointer items-center gap-2">
+          <label className="text-caption text-muted-foreground flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               checked={includeReferences}
@@ -277,7 +277,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
       {/* Results */}
       {results.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-foreground text-ui-md font-medium">
+          <h3 className="text-foreground text-subheading">
             Found {results.length} result{results.length !== 1 ? 's' : ''}
           </h3>
           <div className="space-y-2">
@@ -314,15 +314,15 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <span className="text-foreground font-medium">{result.skillName}</span>
-            <span className="text-muted-foreground text-ui-sm">{result.source}</span>
-            <span className="text-muted-foreground text-ui-sm ml-auto">Score: {result.score.toFixed(3)}</span>
+            <span className="text-muted-foreground text-caption">{result.source}</span>
+            <span className="text-muted-foreground text-caption ml-auto">Score: {result.score.toFixed(3)}</span>
           </div>
-          <p className="text-muted-foreground text-ui-md line-clamp-3 whitespace-pre-wrap">
+          <p className="text-muted-foreground text-body line-clamp-3 whitespace-pre-wrap">
             {result.content.slice(0, 300)}
             {result.content.length > 300 && '...'}
           </p>
           {result.lineRange && (
-            <p className="text-muted-foreground text-ui-sm mt-2">
+            <p className="text-muted-foreground text-caption mt-2">
               Lines {result.lineRange.start}–{result.lineRange.end}
             </p>
           )}

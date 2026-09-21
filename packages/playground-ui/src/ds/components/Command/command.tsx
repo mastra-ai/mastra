@@ -78,7 +78,7 @@ const CommandDialog = ({
           filter={filter}
           onKeyDown={handleKeyDown}
           className={cn(
-            '[&_[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:text-muted-foreground',
+            '**:[[cmdk-group-heading]]:text-column **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:text-muted-foreground',
             '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 **:[[cmdk-group]]:px-2',
             '[&_[data-slot=command-input-wrapper]_svg]:size-5',
             '**:[[cmdk-input]]:h-12',
@@ -109,7 +109,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
-          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-foreground',
+          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-body-sm text-foreground',
           'placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50',
           'outline-none focus:outline-none focus-visible:outline-none',
           transitions.colors,
@@ -187,7 +187,7 @@ const CommandEmpty = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Empty>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
 >((props, ref) => (
-  <CommandPrimitive.Empty ref={ref} className="text-ui-smd text-muted-foreground py-6 text-center" {...props} />
+  <CommandPrimitive.Empty ref={ref} className="text-body-sm text-muted-foreground py-6 text-center" {...props} />
 ));
 CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
 
@@ -199,7 +199,7 @@ const CommandGroup = React.forwardRef<
     ref={ref}
     className={cn(
       'overflow-hidden p-1 text-muted-foreground',
-      '[&_[cmdk-group-heading]]:text-ui-xs [&_[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:tracking-wider **:[[cmdk-group-heading]]:text-muted-foreground **:[[cmdk-group-heading]]:uppercase',
+      '[&_[cmdk-group-heading]]:text-meta **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:tracking-wider **:[[cmdk-group-heading]]:text-muted-foreground **:[[cmdk-group-heading]]:uppercase',
       className,
     )}
     {...props}
@@ -222,7 +222,7 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={useFluidMenuItemRef(ref)}
     className={cn(
-      'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-muted-foreground select-none',
+      'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-body-sm text-muted-foreground select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
       // The row background is the travelling FluidMenuItems highlight in CommandList.
@@ -238,10 +238,7 @@ CommandItem.displayName = CommandPrimitive.Item.displayName;
 
 const CommandShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
-    <span
-      className={cn('ml-auto text-ui-xs tracking-wider text-muted-foreground tabular-nums', className)}
-      {...props}
-    />
+    <span className={cn('ml-auto text-meta tracking-wider text-muted-foreground tabular-nums', className)} {...props} />
   );
 };
 CommandShortcut.displayName = 'CommandShortcut';

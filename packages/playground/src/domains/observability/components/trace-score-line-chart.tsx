@@ -35,7 +35,7 @@ export function TraceScoreLineChart({
   if (data.length === 0) return null;
 
   return (
-    <Card appearance="surface" className={className}>
+    <Card className={className}>
       <CardContent>
         <MetricsLineChart
           data={data}

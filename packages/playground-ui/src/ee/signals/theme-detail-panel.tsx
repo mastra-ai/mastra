@@ -97,7 +97,7 @@ export function ThemeDetailPanel({
         <DrawerHeader className="border-border1 border-b">
           {signalName !== undefined && (
             <span
-              className="text-ui-sm font-mono font-semibold tracking-widest"
+              className="text-column font-mono tracking-widest"
               style={{ color: nodeColor(getSignalHue(signalName)) }}
             >
               {signalDisplayDescription ? (
@@ -123,12 +123,12 @@ export function ThemeDetailPanel({
           )}
           {insightTraceId === undefined && (
             <>
-              {detailQuery.isPending && <p className="text-muted-foreground text-ui-md">Loading theme details…</p>}
-              {detailQuery.isError && <p className="text-ui-md text-red-500">Unable to load theme details.</p>}
+              {detailQuery.isPending && <p className="text-muted-foreground text-body">Loading theme details…</p>}
+              {detailQuery.isError && <p className="text-body text-red-500">Unable to load theme details.</p>}
               {detailQuery.data && !detailQuery.data.theme && (
                 <section>
-                  <h2 className="text-foreground text-ui-md font-semibold">Not present in this snapshot</h2>
-                  <p className="text-muted-foreground text-ui-md mt-2">
+                  <h2 className="text-foreground text-subheading">Not present in this snapshot</h2>
+                  <p className="text-muted-foreground text-body mt-2">
                     This theme has no data in the selected snapshot.
                   </p>
                 </section>
@@ -138,14 +138,14 @@ export function ThemeDetailPanel({
                   <section aria-labelledby="theme-summary-heading">
                     <h2
                       id="theme-summary-heading"
-                      className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase"
+                      className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
                     >
                       Summary
                     </h2>
-                    <p className="text-foreground text-ui-md mt-3">
+                    <p className="text-foreground text-body mt-3">
                       {detailQuery.data.theme.description ?? 'No description available.'}
                     </p>
-                    <p className="text-foreground text-ui-md mt-3 font-mono tabular-nums">
+                    <p className="text-foreground text-body mt-3 font-mono tabular-nums">
                       {shareSentence(
                         filteredStats?.traceCount ?? detailQuery.data.theme.traceCount,
                         filteredStats?.stageShare ?? detailQuery.data.theme.coverage,
@@ -156,18 +156,18 @@ export function ThemeDetailPanel({
                   <section aria-labelledby="theme-examples-heading">
                     <h2
                       id="theme-examples-heading"
-                      className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase"
+                      className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
                     >
                       Examples
                     </h2>
                     {examplesQuery.isPending && (
-                      <p className="text-muted-foreground text-ui-md mt-3">Loading examples…</p>
+                      <p className="text-muted-foreground text-body mt-3">Loading examples…</p>
                     )}
-                    {examplesQuery.isError && <p className="text-ui-md mt-3 text-red-500">Unable to load examples.</p>}
+                    {examplesQuery.isError && <p className="text-body mt-3 text-red-500">Unable to load examples.</p>}
                     {examplesQuery.data && (
                       <>
                         {examplesQuery.data.examples.length === 0 ? (
-                          <p className="text-muted-foreground text-ui-md mt-3">No examples in this snapshot.</p>
+                          <p className="text-muted-foreground text-body mt-3">No examples in this snapshot.</p>
                         ) : (
                           <ul className="mt-3 space-y-3">
                             {examplesQuery.data.examples.map(example => (
@@ -175,7 +175,7 @@ export function ThemeDetailPanel({
                                 <button
                                   type="button"
                                   aria-label={`View trace insight for ${example.signalText}`}
-                                  className="border-border1 bg-surface3 text-foreground hover:bg-surface5 text-ui-md w-full cursor-pointer rounded-md border p-3 text-left"
+                                  className="border-border1 bg-surface3 text-foreground hover:bg-surface5 text-body w-full cursor-pointer rounded-md border p-3 text-left"
                                   onClick={() => setInsightTraceId(example.traceId)}
                                 >
                                   {example.signalText}
@@ -197,19 +197,15 @@ export function ThemeDetailPanel({
                     <section aria-labelledby="theme-trend-heading">
                       <h2
                         id="theme-trend-heading"
-                        className="text-muted-foreground text-ui-sm font-mono tracking-wider uppercase"
+                        className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
                       >
                         Trend
                       </h2>
-                      {historyQuery.isPending && (
-                        <p className="text-muted-foreground text-ui-md mt-3">Loading trend…</p>
-                      )}
-                      {historyQuery.isError && (
-                        <p className="text-ui-md mt-3 text-red-500">Unable to load the trend.</p>
-                      )}
+                      {historyQuery.isPending && <p className="text-muted-foreground text-body mt-3">Loading trend…</p>}
+                      {historyQuery.isError && <p className="text-body mt-3 text-red-500">Unable to load the trend.</p>}
                       {oldestHistoryPoint !== undefined && (
                         <>
-                          <p className="text-foreground text-ui-md mt-3">
+                          <p className="text-foreground text-body mt-3">
                             {/* A nextCursor means older points exist beyond the fetched window,
                                 so the oldest loaded point is a lower bound, not the true origin. */}
                             {historyQuery.data?.nextCursor

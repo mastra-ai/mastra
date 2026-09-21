@@ -1,3 +1,6 @@
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -38,7 +41,7 @@ export function ReferenceViewerDialog({
 
       {/* Dialog */}
       <div
-        className="bg-surface2 border-border1 relative mx-4 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border shadow-2xl"
+        className="border-border bg-card shadow-raised relative mx-4 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border"
         role="dialog"
         aria-modal="true"
         aria-labelledby="reference-viewer-title"
@@ -53,10 +56,10 @@ export function ReferenceViewerDialog({
               <FileText className="text-muted-foreground h-4 w-4" />
             </div>
             <div>
-              <h2 id="reference-viewer-title" className="text-foreground text-ui-md font-medium">
+              <h2 id="reference-viewer-title" className="text-foreground text-subheading">
                 {referencePath}
               </h2>
-              <p className="text-muted-foreground text-ui-sm">from {skillName}</p>
+              <p className="text-muted-foreground text-caption">from {skillName}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -69,7 +72,7 @@ export function ReferenceViewerDialog({
             <button
               onClick={() => onOpenChange(false)}
               aria-label="Close reference viewer"
-              className="hover:bg-surface4 text-muted-foreground hover:text-foreground rounded-lg p-2 transition-colors"
+              className={cn('hover:bg-surface4 rounded-lg p-2', quietTextHover, controlStateColorTransition)}
             >
               <X className="h-4 w-4" />
             </button>
@@ -85,10 +88,10 @@ export function ReferenceViewerDialog({
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <p className="mb-2 text-red-400">Failed to load reference</p>
-              <p className="text-muted-foreground text-ui-md">{error}</p>
+              <p className="text-muted-foreground text-body">{error}</p>
             </div>
           ) : content ? (
-            <pre className="text-foreground bg-surface3 text-ui-md overflow-auto rounded-lg p-4 font-mono whitespace-pre-wrap">
+            <pre className="text-foreground bg-surface3 text-body overflow-auto rounded-lg p-4 font-mono whitespace-pre-wrap">
               {content}
             </pre>
           ) : (

@@ -126,10 +126,10 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
       <DialogContent className="flex max-h-[90vh] w-[960px] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
         <DialogHeader className="border-border1 border-b px-4 py-4">
           <DialogTitle>Import into dataset</DialogTitle>
-          <DialogDescription className="text-ui-sm text-muted-foreground not-sr-only">
+          <DialogDescription className="text-caption text-muted-foreground not-sr-only">
             Add items to{' '}
             {datasetName ? (
-              <code className="bg-surface3 text-ui-xs text-foreground rounded px-1 font-mono">{datasetName}</code>
+              <code className="bg-surface3 text-meta text-foreground rounded px-1 font-mono">{datasetName}</code>
             ) : (
               'this dataset'
             )}{' '}
@@ -227,7 +227,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   }
 
   return (
-    <div role="status" className="text-ui-sm text-muted-foreground flex min-w-0 items-center gap-2">
+    <div role="status" className="text-caption text-muted-foreground flex min-w-0 items-center gap-2">
       <span className={dotClassName} />
       <span className="truncate">{message}</span>
     </div>

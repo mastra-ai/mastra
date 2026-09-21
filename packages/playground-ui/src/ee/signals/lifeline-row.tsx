@@ -5,6 +5,9 @@ import { lifelineConnectors, lifelineSegments } from './theme-lifelines-data';
 import type { ThemeLifeline, ThemeLifelinePoint } from './theme-lifelines-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
 import { nodeColor } from '@/ds/components/SankeyChart';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHoverInGroup } from '@/ds/primitives/typography';
+import { cn } from '@/lib/utils';
 
 const TRACK_HEIGHT = 28;
 const MAX_BAR_HEIGHT = 22;
@@ -57,10 +60,14 @@ export function LifelineRow({
   return (
     <li
       aria-label={`${row.label}: present in ${row.points.length} of ${snapshots.length} landmarks`}
-      className={`group hover:bg-surface3 flex items-center gap-3 rounded-md transition-colors ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
+      className={`group hover:bg-surface3 flex items-center gap-3 rounded-md ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
     >
       <span
-        className="text-muted-foreground group-hover:text-foreground text-ui-sm w-52 shrink-0 truncate text-right"
+        className={cn(
+          quietTextHoverInGroup,
+          controlStateColorTransition,
+          'text-caption w-52 shrink-0 truncate text-right',
+        )}
         title={row.label}
       >
         {row.label}
@@ -112,7 +119,7 @@ export function LifelineRow({
           );
         })}
       </div>
-      <span className="text-muted-foreground text-ui-sm w-9 shrink-0 font-mono tabular-nums">
+      <span className="text-muted-foreground text-caption w-9 shrink-0 font-mono tabular-nums">
         {row.points.length}/{snapshots.length}
       </span>
     </li>

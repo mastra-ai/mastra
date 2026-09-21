@@ -16,6 +16,10 @@ import type { TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/lib/utils';
 
 const DRAG_SENSORS = [useMouseSensor, useTouchSensor, useKeyboardSensor];
 
@@ -134,14 +138,14 @@ export function SortableSignalHeaders({
                         >
                           <div
                             className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass(anchor)} ${
-                              dragSnapshot.isDragging ? 'scale-1.03 border-border2 bg-surface4 shadow-lg' : ''
+                              dragSnapshot.isDragging ? `scale-1.03 ${raisedSurfaceStyle}` : ''
                             }`}
                             data-header-anchor={anchor}
                             data-testid="signal-column-header-content"
                           >
                             <Tooltip>
                               <TooltipTrigger
-                                className="text-ui-sm cursor-default font-mono font-semibold tracking-wider"
+                                className="text-column cursor-default font-mono tracking-wider"
                                 data-testid="signal-column-header"
                                 style={{ color: nodeColor(getSignalHue(signalName)) }}
                               >
@@ -153,7 +157,11 @@ export function SortableSignalHeaders({
                               {...dragProvided.dragHandleProps}
                               aria-disabled={reorderDisabled}
                               aria-label={`Reorder ${label}`}
-                              className="text-muted-foreground hover:text-foreground absolute top-1/2 ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+                              className={cn(
+                                quietTextHover,
+                                controlStateColorTransition,
+                                'absolute top-1/2 ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50',
+                              )}
                               style={{ left: '100%' }}
                               title={`Drag to reorder the ${label} column`}
                             >

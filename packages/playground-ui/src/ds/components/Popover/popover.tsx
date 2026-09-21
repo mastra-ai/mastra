@@ -4,6 +4,7 @@ import * as React from 'react';
 
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { resolveTriggerRender } from '@/ds/primitives/trigger-button';
 import type { TriggerButtonProps } from '@/ds/primitives/trigger-button';
 import { cn } from '@/lib/utils';
@@ -85,7 +86,8 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
             ref={ref}
             data-slot="popover-content"
             className={cn(
-              'z-50 w-72 origin-[var(--transform-origin)] rounded-xl border border-border1 bg-surface3 text-foreground shadow-dialog focus-visible:outline-hidden',
+              'z-50 w-72 origin-[var(--transform-origin)] rounded-xl text-foreground focus-visible:outline-hidden',
+              raisedSurfaceStyle,
               'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               classNameString && /\bp[trblxy]?-\S+/.test(classNameString) ? false : `px-3 py-3.5`,

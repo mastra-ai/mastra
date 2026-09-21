@@ -58,7 +58,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
       // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
       onClick={() => onSpanClick?.(span.id)}
       className={cn(
-        'col-span-2 grid h-7 cursor-pointer grid-cols-subgrid items-stretch rounded-md opacity-80 transition-colors hover:bg-surface4',
+        'col-span-2 grid h-7 cursor-pointer grid-cols-subgrid items-stretch rounded-md opacity-80 hover:bg-surface4',
         {
           'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
           'bg-surface4': isSelected,
@@ -71,7 +71,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
         <button
           type="button"
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-ui-sm text-foreground',
+            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-caption text-foreground',
             'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
           )}
         >
@@ -105,7 +105,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               aria-label={toggleLabel}
               aria-expanded={isExpanded}
               className={cn(
-                'flex size-5 cursor-pointer items-center justify-center rounded-md transition-colors',
+                'flex size-5 cursor-pointer items-center justify-center rounded-md',
                 'hover:bg-surface5 [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
                 'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1',
               )}
@@ -132,7 +132,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               }}
             />
           </div>
-          <div className="text-ui-xs text-muted-foreground w-12 text-right tabular-nums">
+          <div className="text-meta text-muted-foreground w-12 text-right tabular-nums">
             {formatDuration(span.latency)}
           </div>
         </HoverCardTrigger>

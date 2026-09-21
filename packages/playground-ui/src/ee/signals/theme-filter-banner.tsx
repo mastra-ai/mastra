@@ -77,7 +77,7 @@ export function ThemeFilterBanner({
                 ? `Clear ${selection.kind} filter`
                 : `Clear filter ${selectionLabel(signalCatalog, selection)}`
             }
-            className="border-border1 bg-surface2 text-ui-sm text-foreground hover:bg-surface4 flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5 font-medium transition-colors"
+            className="border-border1 bg-surface2 text-column text-foreground hover:bg-surface4 flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5"
             onClick={() => onRemove(selection.signalName)}
             type="button"
           >
@@ -87,7 +87,7 @@ export function ThemeFilterBanner({
           </button>
         );
       })}
-      <span className="text-ui-sm text-muted-foreground">
+      <span className="text-caption text-muted-foreground">
         {filterSummary({ selections, filteredTraceCount, totalTraceCount, isUnavailable })}
       </span>
       {!isUnavailable && filteredTraceCount !== undefined && latestSelection ? (

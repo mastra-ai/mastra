@@ -108,7 +108,7 @@ export const ToolCallIcon = ({ className, ...props }: ComponentProps<'span'>) =>
 );
 
 export const ToolCallLabel = ({ className, ...props }: ComponentProps<typeof Txt>) => (
-  <Txt as="span" variant="ui-sm" className={cn('text-icon3 max-w-[55%] shrink-0 truncate', className)} {...props} />
+  <Txt as="span" variant="caption" className={cn('text-icon3 max-w-[55%] shrink-0 truncate', className)} {...props} />
 );
 
 export const ToolCallDetail = ({ className, ...props }: ComponentProps<typeof Txt>) => {
@@ -117,7 +117,7 @@ export const ToolCallDetail = ({ className, ...props }: ComponentProps<typeof Tx
   return (
     <Txt
       as="span"
-      variant="ui-xs"
+      variant="meta"
       font="mono"
       className={cn('text-icon3 min-w-0 truncate', arriving, className)}
       {...props}
@@ -230,7 +230,7 @@ export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCa
   <div className="group/block relative max-w-full min-w-0">
     <pre
       className={cn(
-        'm-0 max-h-60 max-w-full overflow-auto rounded-md bg-neutral6/5 px-3 py-2 font-mono text-ui-sm break-words whitespace-pre-wrap',
+        'm-0 max-h-60 max-w-full overflow-auto rounded-md bg-neutral6/5 px-3 py-2 font-mono text-caption break-words whitespace-pre-wrap',
         className,
       )}
       {...props}

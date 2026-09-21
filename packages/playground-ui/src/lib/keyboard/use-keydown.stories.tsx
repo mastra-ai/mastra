@@ -28,7 +28,7 @@ const useLog = () => {
 };
 
 const LogConsole = ({ entries, onClear }: { entries: LogEntry[]; onClear: () => void }) => (
-  <div className="border-border1 bg-surface2 text-ui-sm rounded-lg border font-mono">
+  <div className="border-border1 bg-surface2 text-caption rounded-lg border font-mono">
     <div className="border-border1 flex items-center justify-between border-b px-3 py-2">
       <span className="text-muted-foreground">console ({entries.length})</span>
       <button type="button" onClick={onClear} className="text-muted-foreground hover:text-foreground">
@@ -64,7 +64,7 @@ const Keys = ({ keys }: { keys: string }) => (
 );
 
 const Legend = ({ items }: { items: Array<[string, string]> }) => (
-  <ul className="text-ui-sm text-muted-foreground flex flex-col gap-2">
+  <ul className="text-caption text-muted-foreground flex flex-col gap-2">
     {items.map(([keys, label]) => (
       <li key={keys} className="flex items-center gap-3">
         <Keys keys={keys} />
@@ -84,7 +84,7 @@ const Layout = ({
   log: ReturnType<typeof useLog>;
 }) => (
   <div className="flex max-w-3xl flex-col gap-4">
-    <p className="text-ui-md text-foreground">{title}</p>
+    <p className="text-body text-foreground">{title}</p>
     {children}
     <LogConsole entries={log.entries} onClear={log.clear} />
   </div>
@@ -207,13 +207,13 @@ const ScopedTargetDemo = () => {
         <div
           ref={ref}
           tabIndex={0}
-          className="border-border1 bg-surface3 text-ui-sm text-muted-foreground focus:border-accent1 flex-1 rounded-lg border p-6 outline-none"
+          className="border-border1 bg-surface3 text-caption text-muted-foreground focus:border-accent1 flex-1 rounded-lg border p-6 outline-none"
         >
           Focus me, then press <Keys keys="g then a" /> or <Keys keys="Enter" />.
         </div>
         <div
           tabIndex={0}
-          className="border-border1 text-ui-sm text-muted-foreground focus:border-accent1 flex-1 rounded-lg border border-dashed p-6 outline-none"
+          className="border-border1 text-caption text-muted-foreground focus:border-accent1 flex-1 rounded-lg border border-dashed p-6 outline-none"
         >
           Keys pressed here are ignored.
         </div>
@@ -243,7 +243,7 @@ const TypingInFieldsDemo = () => {
     >
       <input
         placeholder="Type g, a or ? here — they are typed, not intercepted. Try mod+k."
-        className="border-border1 bg-surface3 text-ui-sm text-foreground focus:border-accent1 rounded-md border px-3 py-2 outline-none"
+        className="border-border1 bg-surface3 text-caption text-foreground focus:border-accent1 rounded-md border px-3 py-2 outline-none"
       />
     </Layout>
   );
@@ -258,7 +258,7 @@ const EnabledToggleDemo = () => {
 
   return (
     <Layout title="enabled: detaching the listener also cancels any armed sequence." log={out}>
-      <label className="text-ui-sm text-muted-foreground flex items-center gap-2">
+      <label className="text-caption text-muted-foreground flex items-center gap-2">
         <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
         listener enabled
       </label>
@@ -298,13 +298,13 @@ const ScopedOverrideDemo = () => {
             ['g then t', 'layout, or agent page when mounted'],
           ]}
         />
-        <label className="text-ui-sm text-muted-foreground flex items-center gap-2">
+        <label className="text-caption text-muted-foreground flex items-center gap-2">
           <input type="checkbox" checked={agentPageMounted} onChange={e => setAgentPageMounted(e.target.checked)} />
           mount the agent page
         </label>
         {agentPageMounted && (
           <KeyboardScope>
-            <div className="border-accent1 text-ui-sm text-muted-foreground rounded-lg border border-dashed p-3">
+            <div className="border-accent1 text-caption text-muted-foreground rounded-lg border border-dashed p-3">
               agent page mounted — <Keys keys="g then t" /> now targets the agent's traces
             </div>
             <AgentPageShortcuts log={out.log} />
@@ -326,7 +326,7 @@ const Level = ({ index, maxDepth, log }: { index: number; maxDepth: number; log:
   if (index > maxDepth) return null;
   return (
     <KeyboardScope>
-      <div className="border-border1 text-ui-sm text-muted-foreground rounded-lg border p-3">
+      <div className="border-border1 text-caption text-muted-foreground rounded-lg border p-3">
         scope depth {index}
         <LevelShortcuts level={`depth ${index}`} log={log} />
         <div className="mt-3">
@@ -345,7 +345,7 @@ const NestedScopesDemo = () => {
     <KeyboardShortcutsProvider>
       <LevelShortcuts level="root (depth 0)" log={out.log} />
       <Layout title="Every level binds k and g then a; the deepest mounted scope wins." log={out}>
-        <label className="text-ui-sm text-muted-foreground flex items-center gap-2">
+        <label className="text-caption text-muted-foreground flex items-center gap-2">
           mounted depth
           <input type="range" min={0} max={3} value={levels} onChange={e => setLevels(Number(e.target.value))} />
           {levels}
@@ -387,7 +387,7 @@ const TableNavigationDemo = () => {
               getRowProps(index).onKeyDown(event);
               if (event.key === 'Enter') activate(index);
             }}
-            className={`text-ui-sm cursor-pointer px-3 py-1.5 outline-none ${
+            className={`text-caption cursor-pointer px-3 py-1.5 outline-none ${
               index === activeIndex ? 'bg-surface4 text-foreground' : 'text-muted-foreground hover:bg-surface3'
             }`}
           >

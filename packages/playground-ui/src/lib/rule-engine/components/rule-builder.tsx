@@ -8,6 +8,8 @@ import { RuleRow } from './rule-row';
 import type { RuleBuilderProps, RuleGroupViewProps } from './types';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_MAX_DEPTH = 3;
@@ -57,7 +59,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       {/* Non-root group header */}
       {!isRoot && (
         <div className="border-border1 flex items-center justify-between border-b border-dashed py-1.5 pr-4 pl-3">
-          <span className="text-ui-xs text-muted-foreground">Group</span>
+          <span className="text-meta text-muted-foreground">Group</span>
           {onRemove && (
             <Button type="button" onClick={onRemove} tooltip="Remove group" size="icon-sm" variant="ghost">
               <X />
@@ -74,7 +76,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
                 type="button"
                 onClick={handleToggleOperator}
                 className={cn(
-                  'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5 text-ui-xs',
+                  'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5 text-meta',
                   group.operator === 'OR'
                     ? 'bg-accent6Dark text-accent6 hover:bg-accent6Dark/70'
                     : 'bg-accent3Dark text-accent3 hover:bg-accent3Dark/70',
@@ -148,7 +150,11 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
       <button
         type="button"
         onClick={handleAddFirstRule}
-        className="border-border1 text-ui-sm text-muted-foreground hover:text-foreground flex w-full items-center justify-center gap-2 rounded-md border border-dashed p-2"
+        className={cn(
+          quietTextHover,
+          controlStateColorTransition,
+          'border-border1 text-caption flex w-full items-center justify-center gap-2 rounded-md border border-dashed p-2',
+        )}
       >
         <Icon>
           <Plus />

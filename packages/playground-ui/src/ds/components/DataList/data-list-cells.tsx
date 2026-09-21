@@ -27,7 +27,7 @@ export function DataListCell({ children, className, as, sticky, ...rest }: DataL
   return (
     <Component
       className={cn(
-        'relative grid max-w-full min-w-0 items-center overflow-hidden text-ui-md whitespace-nowrap text-muted-foreground empty:before:text-placeholder empty:before:content-["—"]',
+        'relative grid max-w-full min-w-0 items-center overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground empty:before:text-placeholder empty:before:content-["—"]',
         sticky === 'start' && dataListStickyStartStyles,
         className,
       )}
@@ -98,7 +98,7 @@ export type DataListTextCellProps = DataListCellProps & {
 
 export function DataListTextCell({ children, className, font = 'sans', ...rest }: DataListTextCellProps) {
   return (
-    <DataListCell className={cn(font === 'mono' && 'font-mono text-ui-smd', className)} {...rest}>
+    <DataListCell className={cn(font === 'mono' && 'font-mono text-body-sm', className)} {...rest}>
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
@@ -108,7 +108,7 @@ export function DataListTextCell({ children, className, font = 'sans', ...rest }
 
 export function DataListNameCell({ children, className }: DataListCellProps) {
   return (
-    <DataListCell className={cn('text-left font-medium text-muted-foreground', className)}>
+    <DataListCell className={cn('text-left text-label text-foreground', className)}>
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
@@ -118,7 +118,7 @@ export function DataListNameCell({ children, className }: DataListCellProps) {
 
 export function DataListDescriptionCell({ children, className }: DataListCellProps) {
   return (
-    <DataListCell className={cn('text-placeholder', className)}>
+    <DataListCell className={cn('text-muted-foreground', className)}>
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
@@ -133,7 +133,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
     <DataListCell
       sticky="start"
       className={cn(
-        'data-list-row-header -mr-3 -ml-3 w-auto max-w-none pr-3 pl-3 text-left text-ui-sm font-medium text-placeholder',
+        'data-list-row-header -mr-3 -ml-3 w-auto max-w-none pr-3 pl-3 text-left text-label text-foreground',
         className,
       )}
       {...rest}
@@ -147,7 +147,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
 
 export type DataListNumberCellProps = DataListCellProps & {
   /**
-   * Emphasizes the value with a brighter tone and semibold weight — use for the
+   * Emphasizes the value with the ink tone and the label role — use for the
    * primary metric in a row (e.g. a total or headline number).
    */
   highlight?: boolean;
@@ -161,8 +161,8 @@ export function DataListNumberCell({ children, className, highlight, ...rest }: 
   return (
     <DataListCell
       className={cn(
-        'justify-items-end text-right text-ui-sm text-muted-foreground tabular-nums',
-        highlight && 'font-semibold',
+        'justify-items-end text-right text-muted-foreground tabular-nums',
+        highlight && 'text-label text-foreground',
         className,
       )}
       {...rest}
@@ -181,7 +181,7 @@ export interface DataListIdCellProps {
 }
 
 export function DataListIdCell({ id }: DataListIdCellProps) {
-  return <DataListCell className="text-ui-smd text-muted-foreground tracking-wide">{getShortId(id)}</DataListCell>;
+  return <DataListCell className="text-muted-foreground tracking-wide">{getShortId(id)}</DataListCell>;
 }
 
 export interface DataListSelectCellProps {
@@ -234,7 +234,7 @@ export interface DataListDateCellProps {
 export function DataListDateCell({ timestamp }: DataListDateCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell className="text-ui-smd text-placeholder">
+    <DataListCell className="text-muted-foreground">
       {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : null}
     </DataListCell>
   );
@@ -248,7 +248,7 @@ export interface DataListCreatedCellProps {
 export function DataListCreatedCell({ timestamp }: DataListCreatedCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell className="text-ui-smd text-muted-foreground tabular-nums">
+    <DataListCell className="text-muted-foreground tabular-nums">
       {date ? format(date, 'MMM dd h:mm:ss aaa') : null}
     </DataListCell>
   );
@@ -261,7 +261,7 @@ export interface DataListTimeCellProps {
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell className="text-ui-smd text-muted-foreground flex tabular-nums">
+    <DataListCell className="text-muted-foreground flex tabular-nums">
       {date ? (
         <>
           {format(date, 'h:mm:ss')}

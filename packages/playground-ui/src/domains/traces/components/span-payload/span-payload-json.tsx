@@ -14,7 +14,7 @@ export function SpanPayloadJson({ value, className }: SpanPayloadJsonProps) {
       lang="json"
       data-slot="span-payload-json"
       className={cn(
-        'max-h-[30vh] overflow-y-auto rounded-lg border border-border1 bg-surface3 p-3 font-mono text-ui-sm text-wrap break-all text-muted-foreground ',
+        'max-h-[30vh] overflow-y-auto rounded-lg border border-border1 bg-surface3 p-3 font-mono text-caption text-wrap break-all text-muted-foreground',
         className,
       )}
     />

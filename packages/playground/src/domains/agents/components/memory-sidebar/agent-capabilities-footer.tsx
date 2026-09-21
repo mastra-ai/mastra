@@ -2,6 +2,8 @@ import type { GetAgentResponse, GetMemoryStatusResponse } from '@mastra/client-j
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -99,13 +101,16 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-ui-xs text-muted-foreground transition-colors duration-normal',
-        'hover:bg-surface4/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border2',
+        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-meta',
+        'hover:bg-surface4/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border2',
+        quietTextHover,
+        controlStateColorTransition,
       )}
     >
       <span
         className={cn(
-          'mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-colors duration-normal [&>svg]:size-3.5',
+          'mt-0.5 size-3.5 shrink-0 text-muted-foreground [&>svg]:size-3.5',
+          controlStateColorTransition,
           enabled ? toneIcon : 'group-hover/capability-row:text-foreground',
         )}
       >
@@ -116,11 +121,14 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
           <span className="text-foreground min-w-0 truncate font-medium">{label}</span>
           <span className="text-muted-foreground shrink-0 tabular-nums">{status}</span>
         </span>
-        <span className="text-muted-foreground duration-normal group-hover/capability-row:text-muted-foreground mt-0.5 block transition-colors">
-          {description}
-        </span>
+        <span className="text-muted-foreground mt-0.5 block">{description}</span>
       </span>
-      <ExternalLink className="text-muted-foreground duration-normal group-hover/capability-row:text-foreground mt-0.5 size-3 shrink-0 transition-colors" />
+      <ExternalLink
+        className={cn(
+          'text-muted-foreground group-hover/capability-row:text-foreground mt-0.5 size-3 shrink-0',
+          controlStateColorTransition,
+        )}
+      />
     </a>
   );
 }
@@ -286,7 +294,7 @@ function CapabilitiesSummary({ agentId }: { agentId: string }) {
   const enabledCount = enabledFlags.filter(Boolean).length;
 
   return (
-    <Txt as="span" variant="ui-xs" className="text-muted-foreground shrink-0">
+    <Txt as="span" variant="meta" className="text-muted-foreground shrink-0">
       {enabledCount}/{enabledFlags.length}
     </Txt>
   );
@@ -302,7 +310,11 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
           <button
             type="button"
             data-testid="agent-capabilities-footer"
-            className="text-muted-foreground duration-normal hover:!text-muted-foreground hover:bg-surface4 focus-visible:!text-muted-foreground focus-visible:bg-surface4 focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70 flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left transition-colors focus-visible:ring-1 focus-visible:outline-none focus-visible:ring-inset"
+            className={cn(
+              'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70 flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left focus-visible:ring-1 focus-visible:outline-none focus-visible:ring-inset',
+              quietTextHover,
+              controlStateColorTransition,
+            )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               <MemoryCapability agentId={agentId} view="chip" />

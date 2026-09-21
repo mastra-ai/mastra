@@ -1,6 +1,9 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, Plus } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
@@ -57,7 +60,11 @@ export function TagPicker({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground hover:bg-surface3 text-ui-xs inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors"
+            className={cn(
+              quietTextHover,
+              controlStateColorTransition,
+              'hover:bg-surface3 text-meta inline-flex items-center gap-0.5 rounded px-1 py-0.5',
+            )}
           >
             <Plus className="h-3 w-3" />
             tag
@@ -70,7 +77,7 @@ export function TagPicker({
             onChange={e => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or create tag..."
-            className="text-ui-sm mb-1 h-7"
+            className="text-caption mb-1 h-7"
             autoFocus
           />
           <div className="max-h-32 space-y-0.5 overflow-y-auto">
@@ -79,7 +86,7 @@ export function TagPicker({
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="hover:bg-surface3 text-muted-foreground text-ui-sm w-full rounded px-2 py-1 text-left"
+                className="hover:bg-surface3 text-muted-foreground text-caption w-full rounded px-2 py-1 text-left"
               >
                 {tag}
               </button>
@@ -88,13 +95,13 @@ export function TagPicker({
               <button
                 type="button"
                 onClick={() => addTag(search.trim())}
-                className="hover:bg-surface3 text-accent1 text-ui-sm w-full rounded px-2 py-1 text-left"
+                className="hover:bg-surface3 text-accent1 text-caption w-full rounded px-2 py-1 text-left"
               >
                 Create &quot;{search.trim()}&quot;
               </button>
             )}
             {filtered.length === 0 && !canCreate && (
-              <Txt variant="ui-xs" className="text-muted-foreground block px-2 py-1">
+              <Txt variant="meta" className="text-muted-foreground block px-2 py-1">
                 No tags available
               </Txt>
             )}

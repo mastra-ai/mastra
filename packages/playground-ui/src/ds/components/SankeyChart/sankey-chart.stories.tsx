@@ -58,7 +58,7 @@ function UserLandControls() {
           <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-wrap items-center gap-2">
             {controlColumns.map(column => {
               const checkbox = (
-                <label className="text-ui-sm flex items-center gap-2">
+                <label className="text-caption flex items-center gap-2">
                   <Checkbox
                     checked={column.visible}
                     onCheckedChange={() => toggleColumn(column.id)}
@@ -72,7 +72,7 @@ function UserLandControls() {
                 return (
                   <div
                     key={column.id}
-                    className="border-border1 bg-surface2 text-ui-sm text-foreground rounded-md border px-2.5 py-1.5"
+                    className="border-border1 bg-surface2 text-caption text-foreground rounded-md border px-2.5 py-1.5"
                   >
                     {checkbox}
                   </div>
@@ -86,7 +86,7 @@ function UserLandControls() {
                     <div
                       ref={dragProvided.innerRef}
                       {...dragProvided.draggableProps}
-                      className="border-border1 bg-surface2 text-ui-sm text-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5"
+                      className="border-border1 bg-surface2 text-caption text-foreground flex items-center gap-2 rounded-md border px-2.5 py-1.5"
                     >
                       {checkbox}
                       <button
@@ -132,7 +132,7 @@ export const ClickableCurves: Story = {
         <Sankey data={data} columns={columns}>
           <SankeyChart onCurveClick={setSelection} />
         </Sankey>
-        <div className="border-border1 bg-surface2 text-ui-sm text-muted-foreground rounded-md border p-3">
+        <div className="border-border1 bg-surface2 text-caption text-muted-foreground rounded-md border p-3">
           {selection
             ? `${selection.source.column.label}: ${selection.source.value} → ${selection.target.column.label}: ${selection.target.value} (${selection.records.length} records)`
             : 'Select a curve to inspect its records.'}

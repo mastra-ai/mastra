@@ -8,7 +8,7 @@ export function ViewModeTab({ value, icon, label }: { value: SignalsViewMode; ic
   return (
     <Tab value={value}>
       <Icon size="sm">{icon}</Icon>
-      <Txt variant="ui-sm" className="text-inherit">
+      <Txt variant="caption" className="text-inherit">
         {label}
       </Txt>
     </Tab>

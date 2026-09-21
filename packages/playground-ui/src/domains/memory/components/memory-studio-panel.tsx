@@ -100,7 +100,7 @@ export function MemoryStudioPanel({
         </Button>
         <span className="text-foreground flex min-w-0 items-center gap-1.5">
           <MemoryIcon className="size-4 shrink-0" />
-          <Txt as="span" variant="ui-sm" className="font-medium">
+          <Txt as="span" variant="column">
             Observational memory
           </Txt>
         </span>

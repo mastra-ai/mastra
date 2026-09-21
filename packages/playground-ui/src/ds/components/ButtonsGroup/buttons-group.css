@@ -1,0 +1,115 @@
+/* ButtonsGroup seam. Plain CSS rather than `[&>*]` class strings: every rule keys off the
+ * same four negations, and Tailwind only emits a utility whose class string appears
+ * literally in the source — composing those selectors from constants silently emits
+ * nothing at all.
+ *
+ * `@layer utilities`, NOT `components`: layer order outranks specificity, and a segment's
+ * own look is plain utilities (`ghost` ships `border-transparent`, `icon-md` ships
+ * `rounded-full`). From a lower layer these rules would lose every one of those contests.
+ * Inside `utilities` the extra attribute selector wins them instead.
+ *
+ * A component stylesheet can load before the app's Tailwind entry, and the first sheet to
+ * name a layer fixes its rank. Restating the full order keeps preflight from winning over
+ * these rules whichever one lands first. */
+@layer properties, theme, base, components, utilities;
+
+/* A real segment. Everything a framework injects around the authored children is not one
+ * and takes no seam rule: Base UI's trailing `<input aria-hidden>` (Select), and the focus
+ * guards plus positioner anchor a Menu or Popover inserts while OPEN — a split button must
+ * not lose its seam the moment its menu opens. */
+@layer utilities {
+  [data-slot='buttons-group'] > input {
+    flex: 1;
+  }
+
+  /* Lift the hovered/focused segment so its ring paints over its neighbours instead of
+     under them. `:focus-visible`, not `:focus-within`: a mouse click leaves a plain
+     `:focus` on a button, which would keep that segment lifted until blur.
+     `:has(:focus-visible)` covers a nested focusable — the input inside an InputGroup. */
+  [data-slot='buttons-group'] > *:is(:hover, :focus-visible, :has(:focus-visible)) {
+    position: relative;
+    z-index: 10;
+  }
+
+  /* Every real segment paints the ring, transparent variants (`ghost`, `ghostLight`)
+     included: a group mixing a selected filled segment with unselected ghosts has to read
+     as one track, not half a capsule. `primary` and `destructive` are opaque and
+     borderless, and take a shadow divider below instead. */
+  [data-slot='buttons-group']
+    > :not(
+      [data-slot='buttons-group-separator'],
+      [aria-hidden='true'],
+      [data-base-ui-focus-guard],
+      [aria-owns],
+      [data-variant='primary'],
+      [data-variant='destructive']
+    ) {
+    border-color: var(--border);
+  }
+
+  /* One border per seam, and no overlap. A border is a translucent alpha of the
+     foreground, so two 1px edges collapsed onto the same pixel (the `-ml-px` trick) stack
+     to double the alpha and out-read the ring around the group. The left segment owns the
+     seam with its right border; the segment after it drops its left edge entirely. */
+  [data-slot='buttons-group'][data-orientation='horizontal']
+    > :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :first-child
+    ) {
+    border-left-width: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  /* `:has(~ …)` rather than `:not(:last-child)`, for the injected children above. */
+  [data-slot='buttons-group'][data-orientation='horizontal']
+    > *:has(
+      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  /* A borderless filled segment cannot own its seam, so it draws one inside its own box. */
+  [data-slot='buttons-group'][data-orientation='horizontal']
+    > :is([data-variant='primary'], [data-variant='destructive']):has(
+      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ) {
+    box-shadow: inset -1px 0 0 0 var(--border);
+  }
+
+  /* Vertical mirrors it: the top segment owns the seam. The children are capsules, so the
+     outer ends are re-rounded to the container radius. */
+  [data-slot='buttons-group'][data-orientation='vertical']
+    > :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :first-child
+    ) {
+    border-top-width: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  [data-slot='buttons-group'][data-orientation='vertical']
+    > *:has(
+      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  [data-slot='buttons-group'][data-orientation='vertical'] > :first-child {
+    border-top-left-radius: var(--radius-xl);
+    border-top-right-radius: var(--radius-xl);
+  }
+
+  [data-slot='buttons-group'][data-orientation='vertical'] > :last-child {
+    border-bottom-left-radius: var(--radius-xl);
+    border-bottom-right-radius: var(--radius-xl);
+  }
+
+  [data-slot='buttons-group'][data-orientation='vertical']
+    > :is([data-variant='primary'], [data-variant='destructive']):has(
+      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ) {
+    box-shadow: inset 0 -1px 0 0 var(--border);
+  }
+}

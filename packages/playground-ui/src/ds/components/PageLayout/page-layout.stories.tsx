@@ -43,7 +43,7 @@ export const FullPage: Story = {
               {resources.map(resource => (
                 <div
                   key={resource}
-                  className="border-border1 bg-surface2 text-ui-md text-foreground rounded-xl border p-5"
+                  className="border-border1 bg-surface2 text-body text-foreground rounded-xl border p-5"
                 >
                   {resource}
                 </div>

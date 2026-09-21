@@ -68,7 +68,7 @@ export function ChatNotification({
       aria-label={`Notification: ${label}`}
     >
       <div className="flex flex-col gap-2">
-        <Txt variant="ui-sm">{message}</Txt>
+        <Txt variant="caption">{message}</Txt>
         {link && <NotificationLink link={link} message={message} />}
       </div>
     </ChatEvent>
@@ -82,7 +82,7 @@ function NotificationLink({ link, message }: { link: NonNullable<ChatNotificatio
       target="_blank"
       rel="noreferrer"
       aria-label={`Open notification target: ${message}`}
-      className="text-icon3 hover:text-icon5 text-ui-xs flex w-fit items-center gap-1"
+      className="text-icon3 hover:text-icon5 text-meta flex w-fit items-center gap-1"
     >
       {link.label}
       <ExternalLink size={12} aria-hidden />

@@ -1,32 +1,50 @@
+// Text roles, mirroring the `--text-*` tokens in theme.css for consumers that
+// cannot read CSS (canvas, SVG, docs tables) and for `lib/tw-merge-config.ts`,
+// which turns these keys into the `font-size` conflict group so one role class
+// cleanly replaces another in `cn()`.
+//
+// A role is a complete text style: the size here travels with the weight, line
+// height and tracking declared beside it in theme.css. Components pick a role;
+// they never assemble one.
 export const FontSizes = {
-  // UI text sizes
-  'ui-xs': '0.625rem', // 10px - small labels, badges
-  'ui-sm': '0.75rem', // 12px - secondary text
-  'ui-smd': '0.8125rem', // 13px - special font size for e.g. form field labels
-  'ui-md': '0.875rem', // 14px - default text
-  'ui-lg': '1rem', // 16px - emphasized text
-
-  // Header sizes
-  'header-xs': '0.875rem', // 14px
-  'header-sm': '0.9375rem', // 15px
-  'header-md': '1rem', // 16px
-  'header-lg': '1.125rem', // 18px
-  'header-xl': '1.375rem', // 22px
+  display: '1.375rem', // 22px / 500 — onboarding hero
+  title: '1.125rem', // 18px / 500 — page title
+  heading: '1rem', // 16px / 500 — page and panel headings
+  subheading: '0.875rem', // 14px / 500 — sections and cards
+  body: '0.875rem', // 14px / 400 — prose and descriptions
+  label: '0.8125rem', // 13px / 500 — control labels, nav items, buttons
+  'body-sm': '0.8125rem', // 13px / 400 — table cells, menus, field values
+  column: '0.75rem', // 12px / 500 — column headers, small strong labels
+  caption: '0.75rem', // 12px / 400 — secondary copy
+  meta: '0.625rem', // 10px / 500 — badges, keycaps, micro labels
 };
 
 export const LineHeights = {
-  'ui-xs': '160%', // 16px
-  'ui-sm': '150%', // 18px
-  'ui-smd': '150%', // 20px
-  'ui-md': '143%', // 20px
-  'ui-lg': '150%', // 24px
-  'header-xs': '143%', // 20px
-  'header-sm': '133%', // 20px
-  'header-md': '150%', // 24px
-  'header-lg': '133%', // 24px
-  'header-xl': '127%', // 28px
+  display: '127%',
+  title: '133%',
+  heading: '150%',
+  subheading: '143%',
+  body: '143%',
+  label: '150%',
+  'body-sm': '150%',
+  column: '150%',
+  caption: '150%',
+  meta: '160%',
 };
 
-/** SVG/canvas text can't read CSS tokens; these mirror `ui-xs` (10px) and `ui-sm` (12px). */
+export const FontWeights = {
+  display: 500,
+  title: 500,
+  heading: 500,
+  subheading: 500,
+  body: 400,
+  label: 500,
+  'body-sm': 400,
+  column: 500,
+  caption: 400,
+  meta: 500,
+};
+
+/** SVG/canvas text can't read CSS tokens; these mirror `meta` (10px) and `caption` (12px). */
 export const CHART_TICK_FONT_SIZE = 10;
 export const CHART_LABEL_FONT_SIZE = 12;

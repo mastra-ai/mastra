@@ -163,7 +163,7 @@ function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; cr
         ? formatDay(createdAt)
         : `Thread ${id ? id.substring(id.length - 5) : ''}`;
 
-  return <span className="block truncate">{titleText}</span>;
+  return <span className="text-body-sm block truncate">{titleText}</span>;
 }
 
 const formatDay = (date: Date) => {

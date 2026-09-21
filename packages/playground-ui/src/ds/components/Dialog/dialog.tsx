@@ -9,6 +9,7 @@ import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { asChildRenderProps } from '@/lib/as-child';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 import './dialog.css';
@@ -115,7 +116,8 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
             initialFocus={initialFocus ?? (intent === 'destructive' ? closeRef : true)}
             aria-busy={pending || undefined}
             className={cn(
-              'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col overflow-y-auto overscroll-contain rounded-xl border border-border2 bg-surface2 shadow-dialog outline-hidden',
+              'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col overflow-y-auto overscroll-contain rounded-xl outline-hidden',
+              raisedSurfaceStyle,
               'data-[ending-style]:scale-0.98 data-[starting-style]:scale-0.98 transition-[opacity,scale] duration-normal ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none',
               className,
             )}
@@ -148,7 +150,8 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
             'dialog-content-anim',
             'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
             'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-            'rounded-xl border border-border1/40 bg-surface2/96 shadow-dialog backdrop-blur-md',
+            'rounded-xl backdrop-blur-md',
+            raisedSurfaceStyle,
             'focus-visible:outline-hidden',
             className,
           )}
@@ -210,7 +213,7 @@ const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
           <div
             ref={ref}
             className={cn(
-              'flex flex-col gap-3 px-4 py-2 text-ui-md [overflow-wrap:anywhere] text-muted-foreground',
+              'flex flex-col gap-3 px-4 py-2 text-body [overflow-wrap:anywhere] text-muted-foreground',
               className,
             )}
             {...props}
@@ -238,11 +241,7 @@ const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(({ cl
   return (
     <DialogPrimitive.Title
       ref={ref}
-      className={cn(
-        'text-header-xs font-medium',
-        variant === 'new' && 'pr-8 [overflow-wrap:anywhere] text-foreground',
-        className,
-      )}
+      className={cn('text-subheading text-foreground', variant === 'new' && 'pr-8 [overflow-wrap:anywhere]', className)}
       {...props}
     />
   );
@@ -260,7 +259,7 @@ const DialogDescription = React.forwardRef<HTMLParagraphElement, DialogDescripti
       <DialogPrimitive.Description
         ref={ref}
         className={cn(
-          variant === 'new' ? 'text-ui-md [overflow-wrap:anywhere] text-muted-foreground' : 'sr-only',
+          variant === 'new' ? cn('text-caption text-muted-foreground', '[overflow-wrap:anywhere]') : 'sr-only',
           className,
         )}
         {...props}

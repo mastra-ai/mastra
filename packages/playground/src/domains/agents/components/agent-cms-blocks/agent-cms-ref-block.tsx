@@ -7,6 +7,8 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { GripVertical, X, ExternalLink, ChevronDown, TriangleAlert } from 'lucide-react';
@@ -98,13 +100,13 @@ const RefBlockContent = ({
   }, [storedAgentsData?.agents, block.promptBlockId]);
 
   return (
-    <div className="group hover:bg-surface2/50 relative rounded-md transition-colors duration-150">
+    <div className="group hover:bg-surface2/50 relative rounded-md">
       {/* Left gutter — drag handle (visible on hover/focus-within) */}
       {!readOnly && (
         <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
           <div
             {...dragHandleProps}
-            className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
+            className={cn('cursor-grab active:cursor-grabbing', quietTextHover, controlStateColorTransition)}
           >
             <Tooltip>
               <TooltipTrigger asChild>
@@ -123,13 +125,13 @@ const RefBlockContent = ({
         {isLoading ? (
           <div className="text-muted-foreground flex items-center gap-2 py-3">
             <Spinner className="h-4 w-4" />
-            <Txt variant="ui-sm">Loading prompt block...</Txt>
+            <Txt variant="caption">Loading prompt block...</Txt>
           </div>
         ) : promptBlock ? (
           <>
             {/* Sync-block header — always visible, with Popover on caret */}
             <div className="-ml-1 flex items-center gap-1.5 px-1 py-1">
-              <Txt variant="ui-xs" className="text-muted-foreground truncate">
+              <Txt variant="meta" className="text-muted-foreground truncate">
                 {promptBlock.name}
               </Txt>
               {isDraft && (
@@ -148,7 +150,11 @@ const RefBlockContent = ({
                     <button
                       type="button"
                       aria-label={`Open actions for ${promptBlock.name}`}
-                      className="hover:bg-surface4/50 text-muted-foreground hover:text-foreground ml-auto rounded p-0.5 transition-colors duration-150"
+                      className={cn(
+                        'hover:bg-surface4/50 ml-auto rounded p-0.5',
+                        quietTextHover,
+                        controlStateColorTransition,
+                      )}
                     >
                       <Icon className="h-3! w-3!">
                         <ChevronDown />
@@ -157,11 +163,11 @@ const RefBlockContent = ({
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-[280px] p-0">
                     <div className="border-border1 border-b p-3">
-                      <Txt variant="ui-sm" className="text-foreground font-medium">
+                      <Txt variant="column" className="text-foreground">
                         {promptBlock.name}
                       </Txt>
                       {promptBlock.description && (
-                        <Txt variant="ui-xs" className="text-muted-foreground mt-0.5 line-clamp-2">
+                        <Txt variant="meta" className="text-muted-foreground mt-0.5 line-clamp-2">
                           {promptBlock.description}
                         </Txt>
                       )}
@@ -169,7 +175,7 @@ const RefBlockContent = ({
                     <div className="p-1">
                       <button
                         type="button"
-                        className="hover:bg-surface4/50 text-foreground text-ui-xs flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors"
+                        className="hover:bg-surface4/50 text-foreground text-meta flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
                         onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
                       >
                         <Icon className="text-muted-foreground h-3.5! w-3.5!">
@@ -180,7 +186,7 @@ const RefBlockContent = ({
                       {onDereference && (
                         <button
                           type="button"
-                          className="hover:bg-surface4/50 text-foreground text-ui-xs flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors"
+                          className="hover:bg-surface4/50 text-foreground text-meta flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
                           onClick={() => {
                             debouncedSave.flush();
                             onDereference(localContent);
@@ -195,7 +201,7 @@ const RefBlockContent = ({
                       {onDelete && (
                         <button
                           type="button"
-                          className="hover:bg-surface4/50 text-error text-ui-xs flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors"
+                          className="hover:bg-surface4/50 text-error text-meta flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
@@ -207,12 +213,12 @@ const RefBlockContent = ({
                     </div>
                     {usedByAgents.length > 0 && (
                       <div className="border-border1 border-t p-3">
-                        <Txt variant="ui-xs" className="text-muted-foreground mb-1.5">
+                        <Txt variant="meta" className="text-muted-foreground mb-1.5">
                           Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
                         </Txt>
                         <div className="flex flex-col gap-1">
                           {usedByAgents.map(agent => (
-                            <Txt key={agent.id} variant="ui-xs" className="text-foreground truncate">
+                            <Txt key={agent.id} variant="meta" className="text-foreground truncate">
                               {agent.name}
                             </Txt>
                           ))}
@@ -225,7 +231,7 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <div className="text-warning text-ui-xs flex items-start gap-1.5 px-1 pb-1">
+              <div className="text-warning text-meta flex items-start gap-1.5 px-1 pb-1">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {isDraft
@@ -252,7 +258,7 @@ const RefBlockContent = ({
           </>
         ) : (
           <div className="text-warning flex items-center gap-2 py-3">
-            <Txt variant="ui-sm">Prompt block not found (ID: {block.promptBlockId})</Txt>
+            <Txt variant="caption">Prompt block not found (ID: {block.promptBlockId})</Txt>
           </div>
         )}
       </div>

@@ -1,5 +1,3 @@
-import '../../../../new-theme.css';
-
 import { createContext, useContext, useId } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Txt } from '@/ds/components/Txt';
@@ -14,7 +12,7 @@ export function SettingsGroup({ className, ...props }: ComponentProps<'section'>
     <SettingsTitleIdContext.Provider value={titleId}>
       <section
         aria-labelledby={titleId}
-        className={cn('new-theme flex min-w-0 scroll-mt-4 flex-col gap-2', className)}
+        className={cn('flex min-w-0 scroll-mt-4 flex-col gap-2', className)}
         {...props}
       />
     </SettingsTitleIdContext.Provider>
@@ -46,19 +44,13 @@ export function SettingsTitle({
   const titleId = useContext(SettingsTitleIdContext);
 
   return (
-    <div className="new-theme flex min-w-0 flex-wrap items-center gap-2">
-      <Txt
-        as="h2"
-        id={titleId}
-        variant="header-sm"
-        className={cn('font-medium text-foreground', className)}
-        {...props}
-      />
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <Txt as="h2" id={titleId} variant="heading" tone="default" className={className} {...props} />
       {accessory}
     </div>
   );
 }
 
 export function SettingsDescription({ className, ...props }: ComponentProps<'p'>) {
-  return <Txt as="p" variant="ui-sm" className={cn('new-theme text-muted-foreground', className)} {...props} />;
+  return <Txt as="p" variant="caption" tone="muted" className={className} {...props} />;
 }

@@ -1,4 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
@@ -34,7 +36,7 @@ export function BrowserViewHeader({
       )}
     >
       <div className="mr-3 min-w-0 flex-1">
-        <span className={cn('text-ui-md text-muted-foreground truncate block', !url && 'text-muted-foreground italic')}>
+        <span className={cn('text-body text-muted-foreground truncate block', !url && 'text-muted-foreground italic')}>
           {url || 'No URL'}
         </span>
       </div>
@@ -48,7 +50,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onTuck}
-            className="hover:bg-surface3 text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+            className={cn('hover:bg-surface3 rounded p-1', quietTextHover, controlStateColorTransition)}
             title="Minimize to pill"
           >
             <Minus className="h-4 w-4" />
@@ -59,7 +61,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="hover:bg-surface3 text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+            className={cn('hover:bg-surface3 rounded p-1', quietTextHover, controlStateColorTransition)}
             title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
           >
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -70,7 +72,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onClose}
-            className="hover:bg-surface3 text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+            className={cn('hover:bg-surface3 rounded p-1', quietTextHover, controlStateColorTransition)}
             title="Close browser session"
           >
             <X className="h-4 w-4" />

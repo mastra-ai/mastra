@@ -49,7 +49,7 @@ export function UserMenu({ user }: UserMenuProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="hover:bg-surface2 flex items-center gap-2 rounded-md p-1 transition-colors">
+        <button type="button" className="hover:bg-surface2 flex items-center gap-2 rounded-md p-1">
           <UserAvatar user={user} size="sm" />
         </button>
       </PopoverTrigger>
@@ -58,11 +58,11 @@ export function UserMenu({ user }: UserMenuProps) {
           <div className="flex items-center gap-3">
             <UserAvatar user={user} size="md" />
             <div className="flex flex-col overflow-hidden">
-              <Txt variant="ui-md" className="truncate font-medium">
+              <Txt variant="subheading" className="truncate">
                 {displayName}
               </Txt>
               {user.email && (
-                <Txt variant="ui-sm" className="text-muted-foreground truncate">
+                <Txt variant="caption" className="text-muted-foreground truncate">
                   {user.email}
                 </Txt>
               )}
@@ -73,7 +73,7 @@ export function UserMenu({ user }: UserMenuProps) {
         {/* Preview as role section — only for admins with available roles */}
         {availableRoles && availableRoles.length > 0 && (
           <div className="border-border1 border-b p-2">
-            <Txt variant="ui-xs" className="text-muted-foreground px-2 py-1 tracking-wider uppercase">
+            <Txt variant="meta" className="text-muted-foreground px-2 py-1 tracking-wider uppercase">
               Preview as role
             </Txt>
             {availableRoles.map(role => {
@@ -91,13 +91,13 @@ export function UserMenu({ user }: UserMenuProps) {
                     }
                     setOpen(false);
                   }}
-                  className={`text-ui-md flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                  className={`text-body flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${
                     isActive ? 'bg-surface2' : 'hover:bg-surface2'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
                   {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   <span className="flex-1 capitalize">{role.name}</span>
-                  {isActive && <X className="text-muted-foreground hover:text-placeholder h-3.5 w-3.5" />}
+                  {isActive && <X className="text-muted-foreground h-3.5 w-3.5" />}
                 </button>
               );
             })}

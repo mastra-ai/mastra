@@ -8,13 +8,11 @@
   ],
   "files": [
     "dist",
-    "theme.css",
-    "new-theme.css"
+    "theme.css"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
-    "./new-theme.css": "./new-theme.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",

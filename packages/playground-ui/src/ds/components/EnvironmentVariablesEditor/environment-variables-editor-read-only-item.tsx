@@ -58,7 +58,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
         </DataList.Cell>
       )}
 
-      <DataList.TextCell font="mono" className="text-ui-sm text-foreground">
+      <DataList.TextCell font="mono" className="text-caption text-foreground">
         {name}
       </DataList.TextCell>
 
@@ -77,7 +77,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
             <span className="group relative flex min-w-0 flex-1 items-center">
               <span
                 className={cn(
-                  'block min-w-0 flex-1 truncate font-mono text-ui-xs text-muted-foreground',
+                  'block min-w-0 flex-1 truncate font-mono text-meta text-muted-foreground',
                   canCopyValue && 'pr-7',
                 )}
               >
@@ -101,7 +101,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
         )}
       </DataList.Cell>
 
-      <DataList.Cell className="text-ui-xs text-muted-foreground min-w-0 justify-items-end">
+      <DataList.Cell className="text-meta text-muted-foreground min-w-0 justify-items-end">
         {(updatedAt || actor) && (
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate">{updatedAt}</span>

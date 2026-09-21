@@ -23,8 +23,8 @@ export const Default: Story = {
       <PopoverContent>
         <div className="grid gap-4">
           <div className="space-y-2">
-            <h4 className="leading-none font-medium">Dimensions</h4>
-            <p className="text-ui-md text-muted-foreground">Set the dimensions for the layer.</p>
+            <h4 className="text-subheading">Dimensions</h4>
+            <p className="text-body text-muted-foreground">Set the dimensions for the layer.</p>
           </div>
           <div className="grid gap-2">
             <div className="grid grid-cols-3 items-center gap-4">
@@ -54,7 +54,7 @@ export const Variants: Story = {
                 {variant} / {size}
               </PopoverTrigger>
               <PopoverContent>
-                <p className="text-ui-md">Popover content.</p>
+                <p className="text-body">Popover content.</p>
               </PopoverContent>
             </Popover>
           ))}
@@ -63,7 +63,7 @@ export const Variants: Story = {
               <Settings />
             </PopoverTrigger>
             <PopoverContent>
-              <p className="text-ui-md">Popover content.</p>
+              <p className="text-body">Popover content.</p>
             </PopoverContent>
           </Popover>
         </div>
@@ -84,7 +84,7 @@ export const CustomRender: Story = {
         }
       />
       <PopoverContent>
-        <p className="text-ui-md">Popover content.</p>
+        <p className="text-body">Popover content.</p>
       </PopoverContent>
     </Popover>
   ),
@@ -101,8 +101,8 @@ export const WithIconTrigger: Story = {
       <PopoverContent className="w-80">
         <div className="grid gap-4">
           <div className="space-y-2">
-            <h4 className="leading-none font-medium">Settings</h4>
-            <p className="text-ui-md text-muted-foreground">Manage your preferences.</p>
+            <h4 className="text-subheading">Settings</h4>
+            <p className="text-body text-muted-foreground">Manage your preferences.</p>
           </div>
         </div>
       </PopoverContent>
@@ -117,7 +117,7 @@ export const AlignStart: Story = {
         <Button variant="outline">Align Start</Button>
       </PopoverTrigger>
       <PopoverContent align="start">
-        <p className="text-ui-md">This popover is aligned to the start.</p>
+        <p className="text-body">This popover is aligned to the start.</p>
       </PopoverContent>
     </Popover>
   ),
@@ -130,7 +130,7 @@ export const AlignEnd: Story = {
         <Button variant="outline">Align End</Button>
       </PopoverTrigger>
       <PopoverContent align="end">
-        <p className="text-ui-md">This popover is aligned to the end.</p>
+        <p className="text-body">This popover is aligned to the end.</p>
       </PopoverContent>
     </Popover>
   ),
@@ -143,7 +143,7 @@ export const SideTop: Story = {
         <Button variant="outline">Open Above</Button>
       </PopoverTrigger>
       <PopoverContent side="top">
-        <p className="text-ui-md">This popover opens above the trigger.</p>
+        <p className="text-body">This popover opens above the trigger.</p>
       </PopoverContent>
     </Popover>
   ),
@@ -156,7 +156,7 @@ export const SideRight: Story = {
         <Button variant="outline">Open Right</Button>
       </PopoverTrigger>
       <PopoverContent side="right">
-        <p className="text-ui-md">This popover opens to the right.</p>
+        <p className="text-body">This popover opens to the right.</p>
       </PopoverContent>
     </Popover>
   ),
@@ -169,7 +169,7 @@ export const SimpleText: Story = {
         <Button variant="ghost">?</Button>
       </PopoverTrigger>
       <PopoverContent className="w-60">
-        <p className="text-ui-md text-foreground">This is helpful information about the feature.</p>
+        <p className="text-body text-foreground">This is helpful information about the feature.</p>
       </PopoverContent>
     </Popover>
   ),

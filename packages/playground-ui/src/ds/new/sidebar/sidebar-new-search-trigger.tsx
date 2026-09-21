@@ -1,6 +1,8 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { Kbd } from '@/ds/components/Kbd';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { quietTextHover, quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export type SidebarNewSearchTriggerProps = ComponentPropsWithoutRef<'button'> & {
@@ -15,8 +17,10 @@ export const SidebarNewSearchTrigger = forwardRef<HTMLButtonElement, SidebarNewS
         data-slot="sidebar-new-search-trigger"
         type={type}
         className={cn(
-          'group inline-flex size-form-md shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent text-muted-foreground transition-colors hover:bg-sidebar-nav-hover hover:text-foreground',
-          'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+          'group inline-flex size-form-md shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent hover:bg-fill-subtle',
+          quietTextHover,
+          controlStateColorTransition,
+          focusRing.visible,
           '[&_svg]:size-4 [&_svg]:shrink-0',
           shortcut && 'w-auto px-2',
           className,
@@ -27,7 +31,7 @@ export const SidebarNewSearchTrigger = forwardRef<HTMLButtonElement, SidebarNewS
         {shortcut ? (
           <Kbd
             size="xs"
-            className="border-border bg-surface-overlay-soft text-muted-foreground group-hover:text-foreground active:scale-100"
+            className={cn('border-border bg-surface-overlay-soft active:scale-100', quietTextHoverInGroup)}
           >
             {shortcut}
           </Kbd>

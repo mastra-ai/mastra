@@ -34,7 +34,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
   return (
     <>
       <div className="mb-4">
-        <h3 className="text-header-sm flex items-center gap-2 font-medium">
+        <h3 className="text-heading flex items-center gap-2">
           <FileInputIcon className="h-5 w-5" /> Dataset Item
         </h3>
         <TextAndIcon>

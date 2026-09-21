@@ -1,10 +1,11 @@
-import '../../../../new-theme.css';
 import { MenuIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
+import { quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
@@ -196,10 +197,10 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
           finalFocus={mobileTriggerRef}
           showCloseButton={mobileMode === 'drawer'}
           className={cn(
-            'new-theme border-0 bg-sidebar text-foreground',
+            'border-0 bg-sidebar text-foreground',
             mobileMode === 'takeover'
-              ? 'w-[calc(100%-3.5rem)] max-w-none overflow-visible rounded-l-none rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-xl'
-              : 'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none shadow-xl',
+              ? 'w-[calc(100%-3.5rem)] max-w-none overflow-visible rounded-l-none rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-raised'
+              : 'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none shadow-raised',
             className,
           )}
         >
@@ -210,7 +211,13 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
                 aria-label="Close"
                 className="group duration-fast absolute top-2 -right-12 z-10 inline-flex size-11 touch-manipulation items-center justify-center transition-opacity group-data-[ending-style]/popup:opacity-0 focus-visible:outline-hidden motion-reduce:duration-0"
               >
-                <span className="border-border bg-card/95 text-muted-foreground group-hover:bg-card group-hover:text-foreground group-focus-visible:ring-accent1 inline-flex size-9 items-center justify-center rounded-full border shadow-lg backdrop-blur-sm group-focus-visible:ring-1">
+                <span
+                  className={cn(
+                    raisedSurfaceStyle,
+                    quietTextHoverInGroup,
+                    'group-hover:bg-muted group-focus-visible:ring-accent1 inline-flex size-9 items-center justify-center rounded-full backdrop-blur-sm group-focus-visible:ring-1',
+                  )}
+                >
                   <MenuIcon className="size-4" />
                 </span>
               </button>
@@ -240,7 +247,7 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
   return (
     <div
       className={cn(
-        'new-theme sidebar-layout group/sidebar t-resize relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
+        'sidebar-layout group/sidebar t-resize relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
         'w-(--sidebar-width)',
         'in-data-[sidebar-gesture=active]:transition-none',
         className,

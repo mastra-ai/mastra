@@ -90,7 +90,7 @@ function SidebarSearchDialog() {
           <Search />
         </SidebarNew.SearchTrigger>
       </DialogTrigger>
-      <DialogContent className="new-theme border-border bg-popover text-foreground">
+      <DialogContent className="border-border bg-popover text-foreground">
         <DialogHeader>
           <DialogTitle>Search</DialogTitle>
           <DialogDescription>Find projects, pages, and settings.</DialogDescription>
@@ -112,7 +112,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
   }
 
   return (
-    <div className="new-theme bg-background flex h-dvh w-dvw">
+    <div className="bg-background flex h-dvh w-dvw">
       <SidebarNew className="border-border border-r">
         {header === 'command' ? (
           <SidebarNew.CommandHeader>
@@ -126,7 +126,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
                 title={
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">Mastra</span>
-                    <span className="bg-muted text-ui-xs text-muted-foreground inline-flex h-5 items-center rounded px-1.5 font-medium">
+                    <span className="bg-muted text-meta text-muted-foreground inline-flex h-5 items-center rounded px-1.5">
                       Beta
                     </span>
                   </span>
@@ -153,7 +153,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
                 >
                   <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
                 </a>
-                <span className="bg-muted text-ui-xs text-muted-foreground inline-flex h-5 items-center rounded-full px-2">
+                <span className="bg-muted text-meta text-muted-foreground inline-flex h-5 items-center rounded-full px-2">
                   Staging
                 </span>
                 <SidebarNew.Trigger />
@@ -273,9 +273,9 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
             <DropdownMenu.Content
               align="start"
               sideOffset={8}
-              className="new-theme border-border bg-popover text-foreground w-64"
+              className="border-border bg-popover text-foreground w-64"
             >
-              <div className="text-ui-xs text-muted-foreground px-2 py-1">justin@mastra.ai</div>
+              <div className="text-meta text-muted-foreground px-2 py-1">justin@mastra.ai</div>
               <DropdownMenu.Separator />
               <DropdownMenu.Item onSelect={() => openView('gateway')}>
                 <Workflow />
@@ -290,7 +290,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
                 Settings
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
-              <div className="text-ui-xs text-muted-foreground px-2 py-1">Mastra</div>
+              <div className="text-meta text-muted-foreground px-2 py-1">Mastra</div>
               <DropdownMenu.Item>
                 <Users />
                 Organization settings
@@ -311,8 +311,8 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
 
       <main className="min-w-0 flex-1 p-6">
         <SidebarNew.MobileTrigger className="mb-4" />
-        <h1 className="text-header-md text-foreground font-medium">Main content</h1>
-        <p className="text-ui-md text-muted-foreground mt-2">
+        <h1 className="text-heading text-foreground">Main content</h1>
+        <p className="text-body text-muted-foreground mt-2">
           Product navigation stays compact while route-derived views take over the sidebar body.
         </p>
       </main>

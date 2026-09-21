@@ -64,7 +64,7 @@ export function EditModeContent({
   return (
     <>
       <div className="mb-4">
-        <h3 className="text-header-sm flex items-center gap-2 font-medium">
+        <h3 className="text-heading flex items-center gap-2">
           <Pencil className="h-5 w-5" /> Edit Item
         </h3>
       </div>
@@ -117,7 +117,7 @@ export function EditModeContent({
 
         <div className="space-y-2">
           <FieldBlock.Label name="item-tool-mocks">Tool Mocks (JSON array, optional)</FieldBlock.Label>
-          <p className="text-muted-foreground text-ui-sm">
+          <p className="text-muted-foreground text-caption">
             Ordered static mocks served in place of executing the tool. Each entry is{' '}
             <code>{`{ "toolName", "args", "output" }`}</code>. Calling a mocked tool with non-matching args fails the
             item; unmocked tools run live.

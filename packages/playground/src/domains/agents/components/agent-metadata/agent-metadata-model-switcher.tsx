@@ -140,7 +140,7 @@ export const AgentMetadataModelSwitcher = ({
     return (
       <div className="flex items-center gap-2">
         <Spinner />
-        <span className="text-ui-md text-gray-500">Loading providers...</span>
+        <span className="text-body text-gray-500">Loading providers...</span>
       </div>
     );
   }
@@ -181,8 +181,8 @@ export const AgentMetadataModelSwitcher = ({
         data-testid="agent-metadata-model-locked"
       >
         <Lock className="text-muted-foreground h-4 w-4 shrink-0" />
-        <span className="text-ui-sm text-foreground truncate">{lockedLabel}</span>
-        <span className="text-ui-xs text-muted-foreground ml-auto shrink-0">Set by admin</span>
+        <span className="text-caption text-foreground truncate">{lockedLabel}</span>
+        <span className="text-meta text-muted-foreground ml-auto shrink-0">Set by admin</span>
       </div>
     );
   }
@@ -220,7 +220,7 @@ export const AgentMetadataModelSwitcher = ({
           size="md"
           onClick={handleReset}
           disabled={loading}
-          className="text-ui-sm flex items-center gap-1.5 border-0! whitespace-nowrap"
+          className="text-caption flex items-center gap-1.5 border-0! whitespace-nowrap"
           title="Reset to original model"
         >
           <RotateCcw className="h-3.5 w-3.5" />

@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
@@ -110,8 +111,8 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-border1 border-b p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-foreground text-ui-md font-medium">Clone Thread</h3>
-              <p className="text-muted-foreground text-ui-sm mt-1">Create a copy of this conversation</p>
+              <h3 className="text-foreground text-subheading">Clone Thread</h3>
+              <p className="text-muted-foreground text-caption mt-1">Create a copy of this conversation</p>
             </div>
             <Button onClick={handleCloneThread} disabled={isCloning} icon={<GitFork />}>
               {isCloning ? 'Cloning...' : 'Clone'}
@@ -121,8 +122,8 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
       )}
 
       <div className="border-border1 border-b p-4">
-        <h3 className="text-foreground text-ui-md font-medium">Recent Messages</h3>
-        <p className="text-muted-foreground text-ui-sm mt-1">
+        <h3 className="text-foreground text-subheading">Recent Messages</h3>
+        <p className="text-muted-foreground text-caption mt-1">
           {getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}
         </p>
       </div>
@@ -139,11 +140,11 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-border1 border-b p-4">
           <div className="mb-2">
             <div className="mb-2 flex items-center gap-2">
-              <h3 className="text-foreground text-ui-md font-medium">Semantic Recall</h3>
+              <h3 className="text-foreground text-subheading">Semantic Recall</h3>
               {searchMemoryData?.searchScope && (
                 <span
                   className={cn(
-                    'text-ui-sm font-medium px-2 py-0.5 rounded',
+                    'text-column px-2 py-0.5 rounded',
                     searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
                   )}
                   title={
@@ -165,14 +166,17 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
             />
           ) : (
             <div className="bg-surface3 border-border1 rounded-lg border p-4">
-              <p className="text-muted-foreground text-ui-md mb-3">
+              <p className="text-muted-foreground text-body mb-3">
                 Semantic recall is not enabled for this agent. Enable it to search through conversation history.
               </p>
               <a
                 href="https://mastra.ai/en/docs/memory/semantic-recall"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-ui-md inline-flex items-center gap-2 text-blue-400 transition-colors hover:text-blue-300"
+                className={cn(
+                  'text-body inline-flex items-center gap-2 text-blue-400 hover:text-blue-300',
+                  controlStateColorTransition,
+                )}
               >
                 Learn about semantic recall
                 <ExternalLink className="h-3 w-3" />
@@ -194,10 +198,10 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-border1 border-b p-4">
           <div className="bg-surface3 border-border1 rounded-lg border p-4">
             <div className="mb-1 flex items-center gap-2">
-              <span className="text-ui-sm rounded bg-green-500/20 px-2 py-0.5 font-medium text-green-400">Remote</span>
-              <h3 className="text-foreground text-ui-md font-medium">Gateway</h3>
+              <span className="text-column rounded bg-green-500/20 px-2 py-0.5 text-green-400">Remote</span>
+              <h3 className="text-foreground text-subheading">Gateway</h3>
             </div>
-            <p className="text-muted-foreground text-ui-sm">
+            <p className="text-muted-foreground text-caption">
               Memory is managed by the Gateway. Threads and observations are stored remotely.
             </p>
           </div>

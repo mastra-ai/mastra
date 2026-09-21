@@ -108,7 +108,7 @@ export function ReviewItemCard({
           />
         )}
         <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
-          <Txt variant="ui-xs" className="text-muted-foreground block truncate">
+          <Txt variant="meta" className="text-muted-foreground block truncate">
             {inputPreview}
           </Txt>
         </button>
@@ -116,7 +116,7 @@ export function ReviewItemCard({
 
       {/* Error indicator */}
       {Boolean(item.error) && (
-        <Txt variant="ui-xs" className="text-negative1 mt-1 block truncate">
+        <Txt variant="meta" className="text-negative1 mt-1 block truncate">
           Error: {typeof item.error === 'string' ? item.error : String(item.error)}
         </Txt>
       )}
@@ -208,38 +208,38 @@ export function ReviewItemCard({
         <div className="border-border1 mt-3 space-y-3 border-t pt-3">
           {item.experimentId && (
             <div className="flex items-center gap-1.5">
-              <Txt variant="ui-xs" className="text-muted-foreground">
+              <Txt variant="meta" className="text-muted-foreground">
                 Experiment:
               </Txt>
-              <code className="text-muted-foreground bg-surface2 text-ui-xs rounded px-1.5 py-0.5 font-mono">
+              <code className="text-muted-foreground bg-surface2 text-meta rounded px-1.5 py-0.5 font-mono">
                 {item.experimentId.slice(0, 8)}
               </code>
             </div>
           )}
           <div>
-            <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
+            <Txt variant="meta" className="text-muted-foreground mb-1 block">
               Input
             </Txt>
-            <pre className="text-foreground bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+            <pre className="text-foreground bg-surface2 text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
               {formatUnknown(item.input)}
             </pre>
           </div>
           {item.output !== undefined && item.output !== null && (
             <div>
-              <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
+              <Txt variant="meta" className="text-muted-foreground mb-1 block">
                 Output
               </Txt>
-              <pre className="text-foreground bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="text-foreground bg-surface2 text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.output)}
               </pre>
             </div>
           )}
           {Boolean(item.error) && (
             <div>
-              <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
+              <Txt variant="meta" className="text-muted-foreground mb-1 block">
                 Error
               </Txt>
-              <pre className="text-negative1 bg-surface2 text-ui-sm max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="text-negative1 bg-surface2 text-caption max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.error)}
               </pre>
             </div>
@@ -247,7 +247,7 @@ export function ReviewItemCard({
           {/* Comment */}
           {!isCompleted && (
             <div>
-              <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
+              <Txt variant="meta" className="text-muted-foreground mb-1 block">
                 Comment
               </Txt>
               <Textarea
@@ -265,10 +265,10 @@ export function ReviewItemCard({
                 }}
                 placeholder="Add a note about this item..."
                 rows={2}
-                className="text-ui-sm"
+                className="text-caption"
               />
               {commentSaved && (
-                <Txt variant="ui-xs" className="text-positive1 mt-0.5">
+                <Txt variant="meta" className="text-positive1 mt-0.5">
                   Saved
                 </Txt>
               )}
@@ -276,10 +276,10 @@ export function ReviewItemCard({
           )}
           {isCompleted && item.comment && (
             <div>
-              <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
+              <Txt variant="meta" className="text-muted-foreground mb-1 block">
                 Comment
               </Txt>
-              <Txt variant="ui-xs" className="text-muted-foreground block">
+              <Txt variant="meta" className="text-muted-foreground block">
                 {item.comment}
               </Txt>
             </div>

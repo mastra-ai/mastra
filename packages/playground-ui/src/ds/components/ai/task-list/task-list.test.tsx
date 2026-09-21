@@ -73,15 +73,14 @@ describe('TaskList', () => {
       expect(new Set(icons).size).toBe(3);
     });
 
-    it('strikes a completed task through and leans on the one in progress', () => {
+    it('strikes only the completed task through', () => {
       render(<TaskList tasks={mixedTasks} />);
 
       const labelOf = (status: string) => screen.getByLabelText(status).nextElementSibling as HTMLElement;
 
       expect(labelOf('Completed').classList.contains('line-through')).toBe(true);
-      expect(labelOf('In progress').classList.contains('font-medium')).toBe(true);
+      expect(labelOf('In progress').classList.contains('line-through')).toBe(false);
       expect(labelOf('Pending').classList.contains('line-through')).toBe(false);
-      expect(labelOf('Pending').classList.contains('font-medium')).toBe(false);
     });
 
     it('brings the active task no further into view than it needs', () => {

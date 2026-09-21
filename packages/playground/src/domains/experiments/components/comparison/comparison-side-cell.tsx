@@ -27,7 +27,7 @@ function formatDuration(side: ComparisonSide): string | null {
 }
 
 const codeBoxClass =
-  'border-border1 bg-surface3 text-ui-md text-muted-foreground max-h-[30vh] overflow-y-auto rounded-xl border p-4 font-mono break-all whitespace-pre-wrap dark:border-white/10 dark:bg-black/20';
+  'border-border1 bg-surface3 text-body text-muted-foreground max-h-[30vh] overflow-y-auto rounded-xl border p-4 font-mono break-all whitespace-pre-wrap dark:border-white/10 dark:bg-black/20';
 
 /**
  * One side of a single item row. Baseline and contender render the exact same
@@ -46,7 +46,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
   }
 
   if (!data.present) {
-    return <p className="text-muted-foreground text-ui-md py-5 text-center">Not present in this experiment</p>;
+    return <p className="text-muted-foreground text-body py-5 text-center">Not present in this experiment</p>;
   }
 
   const outputStr = formatValue(data.output);
@@ -57,7 +57,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <Tooltip>
           <TooltipTrigger
             render={
-              <p className="text-muted-foreground text-ui-md flex items-center justify-end gap-1.5 [&>svg]:size-3.5">
+              <p className="text-muted-foreground text-body flex items-center justify-end gap-1.5 [&>svg]:size-3.5">
                 <ClockIcon />
                 {duration}
               </p>
@@ -69,7 +69,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.error ? (
         <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={data.error.message} />}>
-          <p className="border-negative1/40 bg-negative1/5 text-ui-md text-muted-foreground rounded-xl border p-4 break-words">
+          <p className="border-negative1/40 bg-negative1/5 text-body text-muted-foreground rounded-xl border p-4 break-words">
             {data.error.message}
           </p>
         </ComparisonSection>
@@ -97,7 +97,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.comment && (
         <ComparisonSection title="Comment" defaultOpen={false}>
-          <p className="text-muted-foreground text-ui-md">{data.comment}</p>
+          <p className="text-muted-foreground text-body">{data.comment}</p>
         </ComparisonSection>
       )}
 
@@ -105,7 +105,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <ComparisonSection title="Metadata" defaultOpen={false}>
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
-              <div key={key} className="text-ui-md flex items-start justify-between gap-4">
+              <div key={key} className="text-body flex items-start justify-between gap-4">
                 <dt className="text-muted-foreground">{key}</dt>
                 <dd className="text-foreground font-mono break-all">{formatValue(value)}</dd>
               </div>

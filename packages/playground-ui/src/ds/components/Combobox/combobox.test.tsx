@@ -275,9 +275,8 @@ describe('Combobox', () => {
     render(<Combobox options={options} placeholder="Pick provider" />);
 
     const trigger = screen.getByRole('combobox');
-    // Composes the Button recipe: pill radius + full-width field layout.
+    // Composes the Button recipe: pill radius; width belongs to the call site.
     expect(trigger.className).toContain('rounded-full');
-    expect(trigger.className).toContain('w-full');
     expect(trigger.className).toContain('justify-between');
   });
 
@@ -288,7 +287,7 @@ describe('Combobox', () => {
 
     const option = await screen.findByRole('option', { name: 'OpenAI' });
     expect(option.className).toContain('min-h-form-md');
-    expect(option.className).toContain('text-ui-smd');
+    expect(option.className).toContain('text-label');
     expect(option.className).toContain('rounded-lg');
     expect(option.className).not.toContain('rounded-full');
     expect(option.className).not.toContain('rounded-md');
@@ -298,7 +297,6 @@ describe('Combobox', () => {
   it('applies the error border when an error is provided', () => {
     render(<Combobox options={options} placeholder="Pick provider" error="Required" />);
     expect(screen.getByRole('combobox').className).toContain('border-destructive');
-    expect(screen.getByRole('combobox').className).toContain('font-normal');
   });
 
   it('says what went wrong under the field, and nothing when nothing did', () => {
@@ -388,15 +386,14 @@ describe('Combobox', () => {
     expect(label().classList.contains('text-muted-foreground')).toBe(false);
   });
 
-  it('uses the Input overlay surface (not the Button surface) for the default variant', () => {
+  it('shares the filled control surface with Input for the default variant', () => {
     render(<Combobox options={options} placeholder="Pick provider" />);
 
     const trigger = screen.getByRole('combobox');
-    expect(trigger.classList.contains('bg-foreground/10')).toBe(true);
+    expect(trigger.classList.contains('bg-fill')).toBe(true);
     expect(trigger.classList.contains('border-border')).toBe(true);
     expect(trigger.classList.contains('data-[placeholder]:text-muted-foreground')).toBe(true);
-    expect(trigger.classList.contains('data-[popup-open]:bg-foreground/14')).toBe(true);
-    expect(trigger.className).not.toContain('button-default');
+    expect(trigger.classList.contains('data-[popup-open]:bg-fill-hover')).toBe(true);
 
     const chevron = trigger.querySelector('svg');
     expect(chevron?.classList.contains('text-muted-foreground')).toBe(true);

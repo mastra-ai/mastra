@@ -111,7 +111,7 @@ function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-ui-sm)',
+      fontSize: 'var(--text-caption)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -126,7 +126,7 @@ function buildLightTheme(): Extension {
     '&': {
       backgroundColor: 'transparent',
       color: 'var(--neutral6)',
-      fontSize: 'var(--text-ui-sm)',
+      fontSize: 'var(--text-caption)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',
@@ -327,7 +327,7 @@ export function DataCodeSection({
         </div>
       </div>
 
-      <div className="border-border1 bg-surface3 text-ui-sm text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div className="border-border1 bg-surface3 text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
         {usePlainTextView ? (
           <div className="text-muted-foreground font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
@@ -346,7 +346,7 @@ export function DataCodeSection({
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
         <DialogContent className="grid h-[calc(100vh-6rem)]! max-w-[90vw]! grid-rows-[auto_1fr] [&>.absolute]:hidden">
           <DialogHeader className="flex-row items-center justify-between">
-            <DialogTitle className="text-ui-sm flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
+            <DialogTitle className="text-caption flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
               {dialogTitle ?? (
                 <>
                   {icon}
@@ -390,7 +390,7 @@ export function DataCodeSection({
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="border-border1 bg-surface3 text-ui-sm text-muted-foreground overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+              <div className="border-border1 bg-surface3 text-caption text-muted-foreground overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
                 <div className="text-muted-foreground font-mono break-all">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>

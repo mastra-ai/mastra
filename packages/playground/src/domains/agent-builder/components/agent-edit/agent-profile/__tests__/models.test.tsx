@@ -123,7 +123,7 @@ describe('Models', () => {
       expect(openaiTitle.textContent).toBe('OpenAI');
       expect(openaiTitle.className).toContain('text-muted-foreground');
       expect(openaiTitle.className).toContain('uppercase');
-      expect(openaiTitle.className).toContain('text-ui-sm');
+      expect(openaiTitle.className).toContain('text-caption');
 
       const anthropicTitle = getByTestId('model-provider-section-title-anthropic');
       expect(anthropicTitle.textContent).toBe('Anthropic');

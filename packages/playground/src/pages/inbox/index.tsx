@@ -117,7 +117,7 @@ export default function InboxPage() {
                   <Icon size="sm">
                     <MessageSquare />
                   </Icon>
-                  <Txt variant="ui-sm" className="text-inherit">
+                  <Txt variant="caption" className="text-inherit">
                     Feedback
                   </Txt>
                   {feedbackCount > 0 && (
@@ -130,7 +130,7 @@ export default function InboxPage() {
                   <Icon size="sm">
                     <ClipboardCheck />
                   </Icon>
-                  <Txt variant="ui-sm" className="text-inherit">
+                  <Txt variant="caption" className="text-inherit">
                     Dataset items
                   </Txt>
                   {datasetItems.length > 0 && (

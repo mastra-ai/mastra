@@ -70,12 +70,29 @@
   --popover: var(--background-3);
   --muted: var(--gray-1);
   --foreground: var(--gray-10);
-  --muted-foreground: var(--gray-9);
+  /* Supporting text, measured against Linear's sidebar label: `lch(37.78)` light,
+     `oklch(0.647)` dark. `--gray-8` is 0.4459 / 0.65 — the rung the ramp already
+     had. `--gray-9` sat one rung from the ink (0.309 vs 0.129), so supporting
+     text read as a second ink instead of stepping back. */
+  --muted-foreground: var(--gray-8);
   --placeholder: var(--gray-7);
+  /*
+   * Boundary ladder — the four states of a control's 1px edge, as alphas of
+   * `--foreground` so an edge reads the same on any surface.
+   *
+   * border         rim of a filled control, divider
+   * border-strong  the only affordance of a transparent control (outline
+   *                button/field at rest, selection control at rest)
+   * border-hover   hover on either of those
+   * border-focus   focus. Authored at the lowest alpha still clearing WCAG
+   *                1.4.11 (3:1 against the fill it sits on) — 3.3:1 here,
+   *                3.2:1 in light. Brighter reads as a highlight, not a focus.
+   */
   --border: var(--gray-alpha-2);
-  --ring: var(--gray-8);
-  --sidebar-accent: var(--gray-alpha-1);
-  --selected: var(--gray-alpha-2);
+  --border-strong: oklch(94.51% 0 0deg / 18%);
+  --border-hover: oklch(94.51% 0 0deg / 30%);
+  --border-focus: oklch(94.51% 0 0deg / 40%);
+  --ring: var(--border-focus);
   --destructive: oklch(0.637 0.237 25.331);
   --destructive-foreground: oklch(0 0 0);
 
@@ -85,19 +102,51 @@
   --overlay: oklch(0% 0 0deg / 75%);
   --border1: oklch(100% 0 0deg / 7%);
   --border2: oklch(100% 0 0deg / 11%);
-  --surface-overlay-soft: oklch(100% 0 0deg / 4%);
-  --surface-overlay-strong: oklch(100% 0 0deg / 7%);
-  --button-default-bg: var(--surface5);
-  --button-default-bg-hover: var(--surface6);
-  --button-default-bg-active: var(--surface4);
-  --button-default-border: var(--border1);
-  --surface-header: oklch(15% 0 0deg);
-  --surface-header-hover: oklch(19% 0 0deg);
-  --surface-row-featured: oklch(100% 0 0deg / 12%);
-  --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
-  --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
-  --sidebar-nav-active: oklch(100% 0 0deg / 11%);
-  --sidebar-divider: oklch(100% 0 0deg / 11%);
+
+  /*
+   * Fill ladder — one language for anything sitting ABOVE its parent surface.
+   * Rungs are `--foreground` alphas, so a rung is a relative step and reads the
+   * same on the sidebar, the canvas and a card; `--border` stays a notch below
+   * `--fill` to keep its rim on a filled control.
+   *
+   * The light theme uses its own, much shallower alphas — roughly 45% of these.
+   * A lightness step has to be large to register on a near-black surface and
+   * small to register on a near-white one; matching the dark alphas in light
+   * turns every field into a grey box floating on white. There the hairline
+   * border carries the edge and the fill only tints.
+   *
+   * fill         rest of a filled control (input, button, trigger, chip) and of
+   *              a raised container; also press on a transparent base
+   * fill-hover   hover on a rest fill; rest of a selection control (checkbox,
+   *              switch, radio), which sits one rung up from field-sized surfaces
+   * fill-active  press / open / selected; selection-control hover
+   * fill-subtle  state layer on a transparent base: ghost hover, row hover, and
+   *              disabled fills
+   * fill-strong  selection-control press
+   */
+  --fill-subtle: var(--gray-alpha-1);
+  --fill: var(--gray-alpha-3);
+  --fill-hover: var(--gray-alpha-4);
+  --fill-active: var(--gray-alpha-5);
+  --fill-strong: var(--gray-alpha-6);
+
+  /* Opaque twin of `--fill` over `--background`, for a scrolling panel whose
+   * sticky parts cannot let rows show through. Keep the two in sync: a panel and
+   * a resting control side by side on the canvas must read as one material. */
+  --surface-panel: oklch(0.2645 0 0);
+
+  --surface-overlay-soft: var(--fill-subtle);
+  --surface-overlay-strong: var(--gray-alpha-2);
+  /*
+   * The one elevation recipe, shared by every raised surface: app frame, card,
+   * popover, dropdown, dialog, floating panel. It carries the rim as well as
+   * the shadow — a 1px ring plus, in dark, a top inset highlight reading as
+   * light catching the edge — so a raised surface never draws its own border.
+   * Stacked drops at 2/4/8px give the falloff a single large blur cannot.
+   */
+  --shadow-raised:
+    inset 0 1px 0 oklch(100% 0 0deg / 4%), inset 0 0 0 1px oklch(100% 0 0deg / 3%), 0 0 0 1px oklch(0% 0 0deg / 40%),
+    0 2px 2px oklch(0% 0 0deg / 10%), 0 4px 4px oklch(0% 0 0deg / 10%), 0 8px 8px oklch(0% 0 0deg / 10%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -224,6 +273,9 @@ html.light {
   --neutral6: oklch(0.13 0 0);
 
   --border: var(--gray-alpha-3);
+  --border-strong: oklch(20.5% 0 0deg / 20%);
+  --border-hover: oklch(20.5% 0 0deg / 32%);
+  --border-focus: oklch(20.5% 0 0deg / 50%);
   --destructive: oklch(0.47 0.19 27.325);
   --destructive-foreground: oklch(1 0 0);
 
@@ -232,19 +284,18 @@ html.light {
   --overlay: oklch(20.8% 0 0deg / 45%);
   --border1: oklch(20.8% 0 0deg / 10%);
   --border2: oklch(20.8% 0 0deg / 16%);
-  --surface-overlay-soft: oklch(20.8% 0 0deg / 4%);
-  --surface-overlay-strong: oklch(20.8% 0 0deg / 7%);
-  --button-default-bg: var(--surface2);
-  --button-default-bg-hover: var(--surface5);
-  --button-default-bg-active: var(--surface5);
-  --button-default-border: var(--border2);
-  --surface-header: oklch(92.6% 0 0deg);
-  --surface-header-hover: oklch(90% 0 0deg);
-  --surface-row-featured: oklch(20.8% 0 0deg / 11%);
-  --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
-  --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
-  --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
-  --sidebar-divider: oklch(20.8% 0 0deg / 16%);
+  /* Shallow light rungs: a field must stay near-white on a near-white canvas,
+   * or it reads as a grey box. Same roles, ~45% of the dark alphas. */
+  --fill-subtle: oklch(20.5% 0 0deg / 2.5%);
+  --fill: oklch(20.5% 0 0deg / 4.5%);
+  --fill-hover: oklch(20.5% 0 0deg / 7%);
+  --fill-active: oklch(20.5% 0 0deg / 10%);
+  --fill-strong: oklch(20.5% 0 0deg / 16%);
+  /* Opaque twin of the light `--fill` over `--background`. */
+  --surface-panel: oklch(0.9545 0 0);
+  /* No inset highlight in light: the edge reads from the ring and the drops. */
+  --shadow-raised:
+    0 0 0 1px oklch(0% 0 0deg / 6%), 0 1px 2px -1px oklch(0% 0 0deg / 6%), 0 2px 4px oklch(0% 0 0deg / 4%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -304,98 +355,70 @@ html.light {
 }
 
 @theme {
-  --spacing-*: initial;
-  --spacing-0: 0rem;
-  --spacing-1: 0.25rem;
-  --spacing-2: 0.5rem;
-  --spacing-3: 0.75rem;
-  --spacing-4: 1rem;
-  --spacing-5: 1.25rem;
-  --spacing-6: 1.5rem;
-  --spacing-7: 1.75rem;
-  --spacing-8: 2rem;
-  --spacing-9: 2.25rem;
-  --spacing-10: 2.5rem;
-  --spacing-11: 2.75rem;
-  --spacing-12: 3rem;
-  --spacing-14: 3.5rem;
-  --spacing-16: 4rem;
-  --spacing-20: 5rem;
-  --spacing-24: 6rem;
-  --spacing-28: 7rem;
-  --spacing-32: 8rem;
-  --spacing-36: 9rem;
-  --spacing-40: 10rem;
-  --spacing-44: 11rem;
-  --spacing-48: 12rem;
-  --spacing-52: 13rem;
-  --spacing-56: 14rem;
-  --spacing-60: 15rem;
-  --spacing-64: 16rem;
-  --spacing-72: 18rem;
-  --spacing-80: 20rem;
-  --spacing-96: 24rem;
-  --spacing-px: 0.0625rem;
-  --spacing-0_5: 0.125rem;
-  --spacing-1_5: 0.375rem;
-  --spacing-2_5: 0.625rem;
-  --spacing-3_5: 0.875rem;
+  /* One multiplier, every step: `--spacing-<n>` was enumerated up to 96, which
+     silently dropped every larger utility in the codebase (`max-w-120` on the
+     list filters, `max-w-140` on page descriptions, `w-150`…). The enumeration
+     was exactly this multiplier, so nothing moves — the missing rungs just
+     start resolving. Named rungs (`--spacing-form-*`) are declared below. */
+  --spacing: 0.25rem;
 
   --breakpoint-2xl: 1536px;
   --breakpoint-3xl: 1700px;
   --breakpoint-4xl: 2000px;
 
-  --text-ui-xs: 0.625rem;
-  --text-ui-sm: 0.75rem;
-  --text-ui-smd: 0.8125rem;
-  --text-ui-md: 0.875rem;
-  --text-ui-lg: 1rem;
-  --text-header-xs: 0.875rem;
-  --text-header-sm: 0.9375rem;
-  --text-header-md: 1rem;
-  --text-header-lg: 1.125rem;
-  --text-header-xl: 1.375rem;
+  /* Text roles. A role is a complete text style — size, line height, weight and
+     tracking arrive together in one utility — so no component assembles text out
+     of `text-<size> + font-<weight> + leading-<x>` and no two components drift
+     apart while claiming the same role.
 
-  --leading-ui-xs: 160%;
-  --leading-ui-sm: 150%;
-  --leading-ui-smd: 150%;
-  --leading-ui-md: 143%;
-  --leading-ui-lg: 150%;
-  --leading-header-xs: 143%;
-  --leading-header-sm: 133%;
-  --leading-header-md: 150%;
-  --leading-header-lg: 133%;
-  --leading-header-xl: 127%;
+     They are Tailwind font-size tokens, so `text-label` lands in the same
+     conflict group as `text-body` in `cn()` (see `lib/tw-merge-config.ts`, which
+     reads these names off `ds/tokens/fonts.ts`) and a later role cleanly replaces
+     an earlier one.
 
-  /* Paired line-heights: `text-ui-md` alone yields the DS line-height. */
-  --text-ui-xs--line-height: var(--leading-ui-xs);
-  --text-ui-sm--line-height: var(--leading-ui-sm);
-  --text-ui-smd--line-height: var(--leading-ui-smd);
-  --text-ui-md--line-height: var(--leading-ui-md);
-  --text-ui-lg--line-height: var(--leading-ui-lg);
-  --text-header-xs--line-height: var(--leading-header-xs);
-  --text-header-sm--line-height: var(--leading-header-sm);
-  --text-header-md--line-height: var(--leading-header-md);
-  --text-header-lg--line-height: var(--leading-header-lg);
-  --text-header-xl--line-height: var(--leading-header-xl);
+     500 is the weight ceiling: a role marks what a piece of text IS, and nothing
+     in an application shell needs to shout louder than a page title. */
+  --text-display: 1.375rem; /* 22px — onboarding hero */
+  --text-display--line-height: 127%;
+  --text-display--font-weight: 500;
+  --text-display--letter-spacing: -0.01em;
 
-  /* Tailwind default scale aliased onto DS tokens (safety net; prefer text-ui-* / text-header-*). */
-  --text-xs: var(--text-ui-sm);
-  --text-xs--line-height: var(--leading-ui-sm);
-  --text-sm: var(--text-ui-md);
-  --text-sm--line-height: var(--leading-ui-md);
-  --text-base: var(--text-ui-lg);
-  --text-base--line-height: var(--leading-ui-lg);
-  --text-lg: var(--text-header-sm);
-  --text-lg--line-height: var(--leading-header-sm);
-  --text-xl: var(--text-header-md);
-  --text-xl--line-height: var(--leading-header-md);
-  --text-2xl: var(--text-header-lg);
-  --text-2xl--line-height: var(--leading-header-lg);
-  --text-3xl: var(--text-header-xl);
-  --text-3xl--line-height: var(--leading-header-xl);
-  --text-4xl: var(--text-header-xl);
-  --text-4xl--line-height: var(--leading-header-xl);
+  --text-title: 1.125rem; /* 18px — page title */
+  --text-title--line-height: 133%;
+  --text-title--font-weight: 500;
+
+  --text-heading: 1rem; /* 16px — page and panel headings */
+  --text-heading--line-height: 150%;
+  --text-heading--font-weight: 500;
+
+  --text-subheading: 0.875rem; /* 14px — sections and cards inside a page */
+  --text-subheading--line-height: 143%;
+  --text-subheading--font-weight: 500;
+
+  --text-body: 0.875rem; /* 14px — prose and descriptions */
+  --text-body--line-height: 143%;
+  --text-body--font-weight: 400;
+
+  --text-label: 0.8125rem; /* 13px — control labels, nav items, buttons */
+  --text-label--line-height: 150%;
+  --text-label--font-weight: 500;
+
+  --text-body-sm: 0.8125rem; /* 13px — dense body: table cells, menus, field values */
+  --text-body-sm--line-height: 150%;
+  --text-body-sm--font-weight: 400;
+
+  --text-column: 0.75rem; /* 12px — column headers and small strong labels */
+  --text-column--line-height: 150%;
+  --text-column--font-weight: 500;
+
+  --text-caption: 0.75rem; /* 12px — secondary and supporting copy */
+  --text-caption--line-height: 150%;
+  --text-caption--font-weight: 400;
+
+  --text-meta: 0.625rem; /* 10px — badges, keycaps, micro labels */
+  --text-meta--line-height: 160%;
+  --text-meta--font-weight: 500;
+  --text-meta--letter-spacing: 0.02em;
 
   --radius-none: 0px;
   --radius-sm: 4px;
@@ -499,12 +522,6 @@ html.light {
   --color-border2: var(--border2);
   --color-surface-overlay-soft: var(--surface-overlay-soft);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
-  --color-button-default-bg: var(--button-default-bg);
-  --color-button-default-bg-hover: var(--button-default-bg-hover);
-  --color-button-default-bg-active: var(--button-default-bg-active);
-  --color-button-default-border: var(--button-default-border);
-  --color-surface-row-featured: var(--surface-row-featured);
-  --color-sidebar-divider: var(--sidebar-divider);
 
   /* Semantic color aliases */
   --color-text1: var(--text1);
@@ -571,19 +588,13 @@ html.light {
   --font-sans: var(--font-body);
   --font-serif: var(--font-display);
 
+  /* State colour on a control — the only thing a hover is allowed to animate. */
+  --duration-fast: 150ms;
   --duration-normal: 200ms;
   --duration-slow: 300ms;
 
   --ease-out-custom: cubic-bezier(0.33, 1, 0.68, 1);
 
-  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.3);
-  --shadow-md: 0 4px 6px oklch(0 0 0 / 0.3);
-  --shadow-lg: 0 10px 15px oklch(0 0 0 / 0.4);
-  --shadow-inner: inset 0 2px 4px oklch(0 0 0 / 0.3);
-  --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
-  --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
-  --shadow-dialog: 0 1px 2px -1px oklch(0% 0 0deg / 12%), 0 16px 40px -20px oklch(0% 0 0deg / 22%);
-  --shadow-panel: 0 1px 2px -1px oklch(0% 0 0deg / 8%), 0 10px 26px -18px oklch(0% 0 0deg / 16%);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
@@ -613,6 +624,10 @@ html.light {
   }
 }
 
+@utility duration-fast {
+  transition-duration: var(--duration-fast);
+}
+
 @utility duration-normal {
   transition-duration: var(--duration-normal);
 }
@@ -622,20 +637,27 @@ html.light {
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled
-   element and honor scoped overrides such as `.new-theme`. */
+   element and honor per-element overrides. */
 @theme inline {
   --color-background: var(--background);
   --color-sidebar: var(--sidebar);
   --color-card: var(--card);
   --color-popover: var(--popover);
+  --color-surface-panel: var(--surface-panel);
+  --color-fill-subtle: var(--fill-subtle);
+  --color-fill: var(--fill);
+  --color-fill-hover: var(--fill-hover);
+  --color-fill-active: var(--fill-active);
+  --color-fill-strong: var(--fill-strong);
   --color-muted: var(--muted);
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
   --color-placeholder: var(--placeholder);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-hover: var(--border-hover);
+  --color-border-focus: var(--border-focus);
   --color-ring: var(--ring);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-selected: var(--selected);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
 }

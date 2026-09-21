@@ -56,7 +56,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
   if (platforms.length === 0) {
     return (
       <div className="flex justify-center px-4 py-5" data-testid="integrations-detail-picker">
-        <Txt variant="ui-md" className="text-muted-foreground">
+        <Txt variant="body" className="text-muted-foreground">
           No integrations configured for this project
         </Txt>
       </div>
@@ -67,10 +67,10 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
     <div className="flex justify-center px-4 py-5" data-testid="integrations-detail-picker">
       <div className="flex w-full max-w-[48rem] flex-col items-center gap-4 text-center">
         <div className="flex flex-col gap-2">
-          <Txt variant="header-sm" className="text-foreground font-semibold">
+          <Txt variant="heading" className="text-foreground">
             Channel integrations
           </Txt>
-          <Txt variant="ui-md" className="text-muted-foreground">
+          <Txt variant="body" className="text-muted-foreground">
             Publish this agent to external platforms. Each connection installs a bot in the platform that runs this
             agent.
           </Txt>
@@ -121,18 +121,18 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       onClick={() => onSelect(installation)}
       disabled={disabled}
       data-testid={`integration-card-${platform.id}`}
-      className="border-border1 bg-surface3 hover:bg-surface4 focus-visible:ring-accent1 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4 text-center transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+      className="border-border1 bg-surface3 hover:bg-surface4 focus-visible:ring-accent1 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4 text-center focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
     >
       <div className="bg-surface4 grid size-14 place-items-center rounded-xl">
         <PlatformIcon platform={platform.id} className="h-7 w-7" />
       </div>
 
       <div className="flex flex-col items-center gap-1">
-        <Txt variant="ui-md" className="text-foreground font-semibold">
+        <Txt variant="subheading" className="text-foreground">
           {platform.name}
         </Txt>
         {description ? (
-          <Txt variant="ui-xs" className="text-muted-foreground">
+          <Txt variant="meta" className="text-muted-foreground">
             {description}
           </Txt>
         ) : null}

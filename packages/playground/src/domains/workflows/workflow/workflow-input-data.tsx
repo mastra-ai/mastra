@@ -133,7 +133,7 @@ export const WorkflowInputData = ({
   }
 
   const defaultHeading = (
-    <Txt as="span" variant="ui-md" className="text-foreground font-semibold">
+    <Txt as="span" variant="subheading" className="text-foreground">
       Trigger a run
     </Txt>
   );
@@ -153,7 +153,7 @@ export const WorkflowInputData = ({
     <>
       {!hideInputTypeLabel && (
         <div className="flex justify-between gap-3 px-5 py-3">
-          <Txt as="p" variant="ui-sm" className="text-muted-foreground">
+          <Txt as="p" variant="caption" className="text-muted-foreground">
             {inputTypeLabel}
           </Txt>
           {toggleSitsInLabelRow && <div className="shrink-0">{inputTypeToggle}</div>}

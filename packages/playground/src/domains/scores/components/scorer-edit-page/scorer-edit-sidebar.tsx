@@ -129,7 +129,7 @@ export function ScorerEditSidebar({
                   />
                 )}
               />
-              <span className="text-muted-foreground text-ui-sm">to</span>
+              <span className="text-muted-foreground text-caption">to</span>
               <Controller
                 name="scoreRange.max"
                 control={control}

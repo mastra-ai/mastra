@@ -2,6 +2,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { X } from 'lucide-react';
 import { useState } from 'react';
@@ -97,7 +99,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className="text-muted-foreground hover:text-accent1 text-ui-sm transition-colors"
+          className={cn('text-muted-foreground hover:text-accent1 text-caption', controlStateColorTransition)}
           onClick={() => setShowCustomSchema(true)}
         >
           + Custom schema

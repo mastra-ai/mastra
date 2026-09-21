@@ -56,8 +56,8 @@ function Stage({
         {!isLast && <span aria-hidden className="bg-border1 mt-1 w-px flex-1" />}
       </div>
       <div className="grid min-w-0 gap-0.5">
-        <div className="text-ui-sm text-foreground flex min-h-5 items-center">{subject}</div>
-        <p className="text-ui-xs text-placeholder">{description}</p>
+        <div className="text-caption text-foreground flex min-h-5 items-center">{subject}</div>
+        <p className="text-meta text-placeholder">{description}</p>
       </div>
     </li>
   );

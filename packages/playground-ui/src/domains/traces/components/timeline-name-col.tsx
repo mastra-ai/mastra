@@ -59,13 +59,10 @@ export function TimelineNameCol({
       aria-selected={isSelected}
       // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
       onClick={() => onSpanClick?.(span.id)}
-      className={cn(
-        'flex min-h-8 cursor-pointer items-stretch rounded-md opacity-80 transition-colors hover:bg-surface4',
-        {
-          'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
-          'bg-surface4': isSelected,
-        },
-      )}
+      className={cn('flex min-h-8 cursor-pointer items-stretch rounded-md opacity-80 hover:bg-surface4', {
+        'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
+        'bg-surface4': isSelected,
+      })}
       style={{ paddingLeft: `${depth * 1}rem` }}
     >
       {!isRootSpan && <TimelineStructureSign isLastChild={isLastChild} />}
@@ -73,7 +70,7 @@ export function TimelineNameCol({
       <button
         type="button"
         className={cn(
-          'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-ui-sm text-foreground',
+          'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-caption text-foreground',
           'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
         )}
       >
@@ -98,7 +95,7 @@ export function TimelineNameCol({
           >
             {span.name}
           </span>
-          {meta && <span className="text-ui-xs text-muted-foreground shrink-0 lg:tabular-nums">{meta}</span>}
+          {meta && <span className="text-meta text-muted-foreground shrink-0 lg:tabular-nums">{meta}</span>}
         </span>
       </button>
 
@@ -114,7 +111,7 @@ export function TimelineNameCol({
             aria-label={toggleLabel}
             aria-expanded={isExpanded}
             className={cn(
-              'flex size-5 cursor-pointer items-center justify-center rounded-md transition-colors',
+              'flex size-5 cursor-pointer items-center justify-center rounded-md',
               'hover:bg-surface5 [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1',
             )}

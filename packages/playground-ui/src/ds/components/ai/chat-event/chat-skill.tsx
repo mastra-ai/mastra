@@ -21,7 +21,7 @@ export function ChatSkill({ name, arguments: args, instructions, defaultOpen }: 
       defaultOpen={defaultOpen}
     >
       <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
-        <MarkdownRenderer className="text-ui-sm">{instructions}</MarkdownRenderer>
+        <MarkdownRenderer className="text-caption">{instructions}</MarkdownRenderer>
       </ScrollArea>
     </ChatEvent>
   );

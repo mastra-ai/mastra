@@ -1,6 +1,5 @@
 import type { DatasetExperiment, ExperimentTargetType } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
   Dialog,
@@ -406,7 +405,7 @@ export function DatasetReview({
 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2">
-      <ButtonsGroup>
+      <div className="flex items-center gap-2">
         {toolbarStart}
         <SelectFieldBlock
           label="Status"
@@ -436,7 +435,7 @@ export function DatasetReview({
             Reset
           </Button>
         )}
-      </ButtonsGroup>
+      </div>
 
       {(hasSelection || toolbarEnd || showCreateScorer) && (
         <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -558,7 +557,7 @@ export function DatasetReview({
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
-            <Txt variant="ui-xs" className="text-muted-foreground">
+            <Txt variant="meta" className="text-muted-foreground">
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
@@ -568,7 +567,7 @@ export function DatasetReview({
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-ui-sm mt-1"
+                className="text-caption mt-1"
               />
             </div>
           </div>
@@ -608,7 +607,7 @@ export function DatasetReview({
                       }
                     />
                     <div className="min-w-0 flex-1">
-                      <Txt variant="ui-xs" className="text-muted-foreground block truncate">
+                      <Txt variant="meta" className="text-muted-foreground block truncate">
                         {item
                           ? typeof item.input === 'string'
                             ? item.input.slice(0, 100)
@@ -636,7 +635,7 @@ export function DatasetReview({
                         ))}
                       </div>
                       {proposal.reason && (
-                        <Txt variant="ui-xs" className="text-muted-foreground mt-1 block italic">
+                        <Txt variant="meta" className="text-muted-foreground mt-1 block italic">
                           {proposal.reason}
                         </Txt>
                       )}

@@ -28,22 +28,29 @@ export const Default: Story = {
   ),
 };
 
-export const DefaultSpacing: Story = {
-  render: () => (
-    <ButtonsGroup>
-      <Button>Cancel</Button>
-      <Button>Save</Button>
-    </ButtonsGroup>
-  ),
-};
-
-export const CloseSpacing: Story = {
-  render: () => (
-    <ButtonsGroup spacing="close">
-      <Button>Cancel</Button>
-      <Button>Save</Button>
-    </ButtonsGroup>
-  ),
+/**
+ * A segmented view toggle: the selected segment is `default` (filled), the rest are `ghost`.
+ * The group draws one continuous ring whether or not a segment is filled, and the seam between
+ * two segments is a single pixel — never two stacked borders.
+ */
+export const AsSegmentedControl: Story = {
+  render: function Render() {
+    const [view, setView] = useState('list');
+    return (
+      <ButtonsGroup aria-label="View">
+        {['list', 'board', 'calendar'].map(value => (
+          <Button
+            key={value}
+            variant={view === value ? 'default' : 'ghost'}
+            aria-pressed={view === value}
+            onClick={() => setView(value)}
+          >
+            {value}
+          </Button>
+        ))}
+      </ButtonsGroup>
+    );
+  },
 };
 
 /**
@@ -55,7 +62,7 @@ export const CloseSpacing: Story = {
  */
 export const AsSplitButton: Story = {
   render: () => (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <Button>Save</Button>
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
@@ -83,9 +90,9 @@ export const Vertical: Story = {
   ),
 };
 
-export const VerticalCloseSpacing: Story = {
+export const VerticalOutline: Story = {
   render: () => (
-    <ButtonsGroup orientation="vertical" spacing="close">
+    <ButtonsGroup orientation="vertical">
       <Button variant="outline">
         <CopyIcon />
         Copy
@@ -151,7 +158,7 @@ export const VerticalWithSeparator: Story = {
  */
 export const Stepper: Story = {
   render: () => (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <Button variant="outline" aria-label="Decrement">
         −
       </Button>
@@ -166,7 +173,7 @@ export const Stepper: Story = {
 /** `ButtonsGroupText` as an actual text label segment (e.g. a unit) next to a control. */
 export const WithText: Story = {
   render: () => (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <ButtonsGroupText>https://</ButtonsGroupText>
       <Button variant="outline">example.com</Button>
     </ButtonsGroup>
@@ -193,7 +200,7 @@ export const SearchWithDropdown: Story = {
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState('recent');
     return (
-      <ButtonsGroup spacing="close" className="w-105">
+      <ButtonsGroup className="w-105">
         <InputGroup variant="outline" size="md">
           <InputGroupAddon align="inline-start">
             <SearchIcon />

@@ -22,15 +22,17 @@ export const controlHeight: Record<ControlSize, string> = {
 // and its paired leading token carry this. Revisit only if a label moves to a
 // block-level wrapper.
 
-// Height + matching text size — the common pairing for text-bearing controls.
-// Heights: xs 20px / sm 24px / md 28px / lg 32px; text 10/12/13/14px.
-// Every step gains height, so `lg` is a genuinely larger control and an icon-only
-// `lg` matches a labelled one in the same row.
+// Height + text role. Heights: xs 20px / sm 24px / md 28px / lg 32px.
+// A control's label is a label at every height — `lg` grows the box, not the
+// type, which is why it shares `text-label` with `md` (13px/500, measured from
+// Linear, whose buttons are 13px regardless of height). Only the compact sizes
+// step the type down, because their box cannot hold 13px.
+// The role carries the weight, so no control adds `font-medium` on top.
 export const controlSizeClasses: Record<ControlSize, string> = {
-  xs: 'h-form-xs text-ui-xs',
-  sm: 'h-form-sm text-ui-sm',
-  md: 'h-form-md text-ui-smd',
-  lg: 'h-form-lg text-ui-md',
+  xs: 'h-form-xs text-meta',
+  sm: 'h-form-sm text-column',
+  md: 'h-form-md text-label',
+  lg: 'h-form-lg text-label',
 };
 
 // Icon geometry for a bare `<svg>` child, keyed by control size so it matches what
@@ -51,10 +53,10 @@ export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';
 // (for Button-shaped triggers: DropdownMenu, Popover, DateTimePicker); `field`
 // is the Input-family overlay used by the filled Select/Combobox triggers.
 export const controlTriggerOpenState: Record<ControlTriggerVisualVariant | 'field', string> = {
-  default: 'data-[popup-open]:bg-foreground/14 data-[popup-open]:text-foreground',
-  field: 'data-[popup-open]:bg-foreground/14 data-[popup-open]:text-foreground',
-  outline: 'data-[popup-open]:bg-foreground/4 data-[popup-open]:text-foreground data-[popup-open]:border-foreground/45',
-  ghost: 'data-[popup-open]:bg-foreground/4 data-[popup-open]:text-foreground',
+  default: 'data-[popup-open]:bg-fill-hover data-[popup-open]:text-foreground',
+  field: 'data-[popup-open]:bg-fill-hover data-[popup-open]:text-foreground',
+  outline: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground data-[popup-open]:border-border-hover',
+  ghost: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground',
 };
 
 // Open-state classes for a trigger rendered with any Button variant; only the

@@ -17,7 +17,7 @@ function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-ui-sm)',
+      fontSize: 'var(--text-caption)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -32,7 +32,7 @@ function buildLightTheme(): Extension {
     '&': {
       backgroundColor: 'transparent',
       color: 'var(--neutral6)',
-      fontSize: 'var(--text-ui-sm)',
+      fontSize: 'var(--text-caption)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',
@@ -118,7 +118,7 @@ export function DataDetailsPanelCodeSection({
       <div className="flex items-center justify-between">
         <div
           className={cn(
-            'flex items-center gap-1.5 text-ui-xs tracking-widest text-placeholder uppercase',
+            'flex items-center gap-1.5 text-meta tracking-widest text-placeholder uppercase',
             '[&>svg]:size-3.5',
           )}
         >
@@ -141,7 +141,7 @@ export function DataDetailsPanelCodeSection({
           </ButtonsGroup>
         </div>
       </div>
-      <div className="border-border1 bg-surface3 text-ui-sm text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div className="border-border1 bg-surface3 text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
         {usePlainTextView ? (
           <div className="text-muted-foreground font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>

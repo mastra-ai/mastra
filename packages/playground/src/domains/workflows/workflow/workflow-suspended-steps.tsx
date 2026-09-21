@@ -13,6 +13,8 @@ import type { CSSProperties } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
+import { panelSurfaceStyle } from '../components/workflow-layout';
+
 import type { SuspendedStep } from './use-workflow-trigger';
 import { WorkflowInputData } from './workflow-input-data';
 
@@ -63,13 +65,13 @@ export function WorkflowSuspendedSteps({
 
   return (
     <section
-      className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto relative isolate border"
+      className={cn(panelSurfaceStyle, 'pointer-events-auto relative isolate')}
       data-testid="workflow-suspended-steps"
       aria-label="Step suspended"
     >
       <div className="max-h-[calc(100cqh-64px)] overflow-y-auto overscroll-contain rounded-[inherit]">
         <div className="border-border1/50 bg-surface2 flex items-center justify-between gap-3 border-b px-5 py-4">
-          <Txt as="h2" variant="ui-sm" className="text-foreground flex items-center gap-2 font-medium">
+          <Txt as="h2" variant="column" className="text-foreground flex items-center gap-2">
             <Icon>
               <CirclePause />
             </Icon>
@@ -129,11 +131,11 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
   return (
     <div className="[&+&]:border-border1/50 space-y-5 p-5 [&+&]:border-t">
       <div className="space-y-2">
-        <Txt as="p" variant="ui-md" className="text-foreground font-medium break-words">
+        <Txt as="p" variant="subheading" className="text-foreground break-words">
           {step.stepId}
         </Txt>
         {description && (
-          <Txt as="p" variant="ui-sm" className="text-muted-foreground">
+          <Txt as="p" variant="caption" className="text-muted-foreground">
             {description}
           </Txt>
         )}
@@ -141,7 +143,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
 
       {step.suspendPayload !== undefined && (
         <div className="space-y-2">
-          <Txt as="p" variant="ui-sm" className="text-muted-foreground flex items-center gap-2">
+          <Txt as="p" variant="caption" className="text-muted-foreground flex items-center gap-2">
             <Icon>
               <MoveDownLeft />
             </Icon>
@@ -158,11 +160,11 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
                     })}
                   />
                 </Icon>
-                <Txt as="span" variant="ui-md" className="text-foreground truncate">
+                <Txt as="span" variant="body" className="text-foreground truncate">
                   {getPayloadLabel(step.suspendPayload, step.stepId)}
                 </Txt>
               </span>
-              <Txt as="span" variant="ui-sm" className="text-muted-foreground shrink-0">
+              <Txt as="span" variant="caption" className="text-muted-foreground shrink-0">
                 {formatPayloadSize(step.suspendPayload)}
               </Txt>
             </CollapsibleTrigger>
@@ -181,7 +183,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
       )}
 
       <div className="space-y-3">
-        <Txt as="p" variant="ui-sm" className="text-muted-foreground flex items-center gap-2">
+        <Txt as="p" variant="caption" className="text-muted-foreground flex items-center gap-2">
           <Icon>
             <MoveUpRight />
           </Icon>

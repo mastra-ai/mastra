@@ -21,7 +21,7 @@ export const Cell = ({ className, children, ...props }: CellProps) => {
 export const TxtCell = ({ className, children }: CellProps) => {
   return (
     <Cell className={className}>
-      <Txt as="span" variant="ui-smd" className="w-full truncate">
+      <Txt as="span" variant="body-sm" className="w-full truncate">
         {children}
       </Txt>
     </Cell>
@@ -38,10 +38,10 @@ export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
   return (
     <Cell {...props}>
       <div className="shrink-0">
-        <Txt as="span" variant="ui-sm" className="text-muted-foreground">
+        <Txt as="span" variant="caption" className="text-muted-foreground">
           {day}
         </Txt>{' '}
-        <Txt as="span" variant="ui-md">
+        <Txt as="span" variant="body">
           {time}
         </Txt>
       </div>
@@ -67,13 +67,13 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
         )}
 
         <div className="flex flex-col gap-0">
-          <Txt as="span" variant="ui-md" className="text-foreground">
+          <Txt as="span" variant="body" className="text-foreground">
             {name}
           </Txt>
           {description && (
             <Txt
               as="span"
-              variant="ui-xs"
+              variant="meta"
               className="max-w-dropdown-max-height text-muted-foreground w-full truncate pt-1"
             >
               {description}

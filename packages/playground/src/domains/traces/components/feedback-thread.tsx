@@ -240,11 +240,11 @@ export function FeedbackThread({
 
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (
-          <Txt variant="ui-md" className="text-muted-foreground">
+          <Txt variant="body" className="text-muted-foreground">
             Loading feedback...
           </Txt>
         ) : feedbackItems.length === 0 ? (
-          <Txt variant="ui-md" className="text-muted-foreground text-center">
+          <Txt variant="body" className="text-muted-foreground text-center">
             No feedback yet
           </Txt>
         ) : (

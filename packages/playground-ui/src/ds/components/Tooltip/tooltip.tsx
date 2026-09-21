@@ -1,11 +1,11 @@
 'use client';
 
-import '../../../../new-theme.css';
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import type { TooltipPopupProps, TooltipPositionerProps } from '@base-ui/react/tooltip';
 import * as React from 'react';
 
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 type TooltipProviderProps = Omit<TooltipPrimitive.Provider.Props, 'delay' | 'timeout'> & {
@@ -98,7 +98,8 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
             // Base UI omits the tooltip role queried by existing consumers.
             role="tooltip"
             className={cn(
-              'new-theme relative z-100 flex origin-(--transform-origin) flex-col rounded-lg border border-border bg-popover px-2.5 py-1.5 text-ui-sm leading-ui-sm text-foreground shadow-dialog transition-[transform,scale,opacity] duration-150',
+              'relative z-100 flex origin-(--transform-origin) flex-col rounded-lg px-2.5 py-1.5 text-caption text-foreground transition-[transform,scale,opacity] duration-150',
+              raisedSurfaceStyle,
               'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
               'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
               'data-[instant]:transition-none motion-reduce:transition-none',

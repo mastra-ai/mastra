@@ -92,7 +92,7 @@ export function ComposerPreview({
                 </SelectContent>
               </Select>
             ) : (
-              <ButtonsGroup spacing="close" aria-label="Input controls">
+              <ButtonsGroup aria-label="Input controls">
                 <Button type="button" size="icon-md" aria-label="Attach file" disabled={disabled}>
                   <Paperclip />
                 </Button>

@@ -14,7 +14,7 @@ import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowRecentRuns } from '../runs/workflow-run-list';
 import { WorkflowRunStatusBadge } from '../workflow/workflow-run-header';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
-import { WorkflowPanelResizeHandle } from './workflow-layout';
+import { panelSurfaceStyle, WorkflowPanelResizeHandle } from './workflow-layout';
 
 import { useWorkflow } from '@/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -45,8 +45,7 @@ type RunWorkflowSidebarProps = InitialWorkflowSidebarProps & {
   observeWorkflowStream?: ContextType<typeof WorkflowRunContext>['observeWorkflowStream'];
 };
 
-const FLOATING_PANEL_SURFACE =
-  'rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto border';
+const FLOATING_PANEL_SURFACE = cn(panelSurfaceStyle, 'pointer-events-auto');
 
 function FloatingPanel({ className, children }: { className: string; children: ReactNode }) {
   return (
@@ -97,7 +96,7 @@ function WorkflowInformationTopSection({
         className={cn(FLOATING_PANEL_SURFACE, 'flex min-h-0 min-w-0 flex-col overflow-hidden')}
       >
         <div className="flex shrink-0 items-center gap-1 pr-2">
-          <CollapsibleTrigger className="text-ui-sm text-muted-foreground flex min-w-0 flex-1 items-center gap-2 px-4 py-3 font-medium">
+          <CollapsibleTrigger className="text-column text-muted-foreground flex min-w-0 flex-1 items-center gap-2 px-4 py-3">
             <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0 motion-reduce:transition-none" />
             <span>Workflow run</span>
             {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}

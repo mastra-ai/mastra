@@ -13,10 +13,10 @@ import { cn } from '@/lib/utils';
  *
  * Usage inside a popup component:
  *
- *   const menu = useFluidMenu();
- *   <Popup {...menu.getContainerProps(props, ref)} className={cn(menuPopupClass, menu.containerClassName, className)}>
- *     <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
- *   </Popup>
+ * const menu = useFluidMenu();
+ * <Popup {...menu.getContainerProps(props, ref)} className={cn(menuPopupClass, menu.containerClassName, className)}>
+ * <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+ * </Popup>
  *
  * and on each row: `ref={useFluidMenuItemRef(forwardedRef)}`.
  *
@@ -148,7 +148,7 @@ export function FluidMenuItems({
 }) {
   return (
     <FluidMenuContext.Provider value={menu.context}>
-      <FluidHoverHighlight hover={menu.hover} className={cn('-z-1 rounded-lg bg-foreground/10', className)} />
+      <FluidHoverHighlight hover={menu.hover} className={cn('-z-1 rounded-lg bg-fill', className)} />
       {children}
     </FluidMenuContext.Provider>
   );

@@ -1,6 +1,7 @@
 import { ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { FileText, PenLine, PlusIcon } from 'lucide-react';
@@ -33,7 +34,10 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground hover:bg-surface4 focus-visible:ring-accent1 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:outline-hidden"
+            className={cn(
+              'hover:bg-surface4 focus-visible:ring-accent1 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:outline-hidden',
+              quietTextHover,
+            )}
           >
             <Icon>
               <PlusIcon />

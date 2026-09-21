@@ -145,9 +145,7 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       >
         <Bloom tone={tone} />
         {href ? <Link href={href} className="absolute inset-0 rounded-lg" aria-label={linkLabel} /> : null}
-        <span className="text-ui-xs text-foreground pointer-events-none relative font-semibold tabular-nums">
-          {value}
-        </span>
+        <span className="text-meta text-foreground pointer-events-none relative tabular-nums">{value}</span>
       </div>
     );
   }
@@ -172,14 +170,14 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       <div className="pointer-events-none relative">
         <div className="flex items-center gap-1.5">
           {tone === 'neutral' ? null : icon}
-          <span className="text-ui-sm text-muted-foreground font-medium">{label}</span>
+          <span className="text-column text-muted-foreground">{label}</span>
           {action ? <span className="pointer-events-auto">{action}</span> : null}
         </div>
 
-        <p className="text-ui-lg text-foreground mt-0.5 leading-tight font-semibold tabular-nums">{value}</p>
+        <p className="text-heading text-foreground mt-0.5 leading-tight tabular-nums">{value}</p>
 
         {status ? (
-          <div className="text-ui-xs mt-1">
+          <div className="text-meta mt-1">
             <p className={cn('truncate', current.text)}>{status}</p>
           </div>
         ) : null}

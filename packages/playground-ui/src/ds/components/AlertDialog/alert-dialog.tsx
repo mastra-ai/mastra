@@ -5,6 +5,7 @@ import { buttonVariants } from '@/ds/components/Button/Button';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import '@/ds/components/Dialog/dialog.css';
 
 const AlertDialogRoot = AlertDialogPrimitive.Root;
@@ -70,7 +71,8 @@ const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentPr
         'dialog-content-anim',
         'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
         'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-        'rounded-xl border border-border1/40 bg-surface2/96 shadow-dialog backdrop-blur-md',
+        'rounded-xl backdrop-blur-md',
+        raisedSurfaceStyle,
         className,
       )}
       {...props}
@@ -99,7 +101,7 @@ type AlertDialogTitleProps = Omit<AlertDialogPrimitive.Title.Props, 'className'>
 };
 
 const AlertDialogTitle = React.forwardRef<HTMLHeadingElement, AlertDialogTitleProps>(({ className, ...props }, ref) => (
-  <AlertDialogPrimitive.Title ref={ref} className={cn('text-ui-md font-medium', className)} {...props} />
+  <AlertDialogPrimitive.Title ref={ref} className={cn('text-subheading', className)} {...props} />
 ));
 AlertDialogTitle.displayName = 'AlertDialogTitle';
 
@@ -111,7 +113,7 @@ const AlertDialogDescription = React.forwardRef<HTMLParagraphElement, AlertDialo
   ({ className, ...props }, ref) => (
     <AlertDialogPrimitive.Description
       ref={ref}
-      className={cn('text-ui-sm text-muted-foreground', className)}
+      className={cn('text-caption text-muted-foreground', className)}
       {...props}
     />
   ),

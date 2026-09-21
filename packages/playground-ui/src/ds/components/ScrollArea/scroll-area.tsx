@@ -2,6 +2,8 @@ import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import * as React from 'react';
 
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { cn } from '@/lib/utils';
 
@@ -123,7 +125,9 @@ const ScrollButton = ({ direction, label, onStartScrolling, onStopScrolling, onK
       type="button"
       aria-label={label}
       className={cn(
-        'absolute inset-y-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground transition-colors duration-normal ease-out-custom hover:bg-neutral6/5 hover:text-foreground active:bg-neutral6/10',
+        'absolute inset-y-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent hover:bg-fill-subtle active:bg-fill',
+        quietTextHover,
+        controlStateColorTransition,
         'outline-hidden focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
         direction === 'left'
           ? 'left-1 group-data-[overflow-x-start]/scroll-area:flex'
@@ -327,7 +331,7 @@ const ScrollBar = React.forwardRef<
     )}
     {...props}
   >
-    <ScrollAreaPrimitive.Thumb className="bg-neutral4/30 duration-normal hover:bg-neutral4/60 relative flex-1 rounded-full transition-colors" />
+    <ScrollAreaPrimitive.Thumb className="bg-neutral4/30 hover:bg-neutral4/60 relative flex-1 rounded-full" />
   </ScrollAreaPrimitive.Scrollbar>
 ));
 ScrollBar.displayName = 'ScrollBar';

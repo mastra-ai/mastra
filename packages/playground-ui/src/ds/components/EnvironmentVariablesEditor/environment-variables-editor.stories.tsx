@@ -180,8 +180,8 @@ function EnvironmentVariablesPage({ children }: { children?: ReactNode }) {
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-ui-xl text-foreground font-semibold">Environment Variables</h2>
-            <p className="text-ui-sm text-muted-foreground mt-1">Store API keys, tokens, and config securely.</p>
+            <h2 className="text-title text-foreground">Environment Variables</h2>
+            <p className="text-caption text-muted-foreground mt-1">Store API keys, tokens, and config securely.</p>
           </div>
           {children}
         </div>

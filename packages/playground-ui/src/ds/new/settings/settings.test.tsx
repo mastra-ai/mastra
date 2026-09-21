@@ -27,13 +27,13 @@ describe('Settings', () => {
       </SettingsGroup>,
     );
 
-    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-header-sm');
+    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-heading');
     expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-foreground');
-    expect(screen.getByText('Stored in this browser.').classList).toContain('text-ui-sm');
+    expect(screen.getByText('Stored in this browser.').classList).toContain('text-caption');
     expect(screen.getByText('Stored in this browser.').classList).toContain('text-muted-foreground');
-    expect(screen.getByText('Theme').classList).toContain('text-ui-md');
+    expect(screen.getByText('Theme').classList).toContain('text-subheading');
     expect(screen.getByText('Theme').classList).toContain('text-foreground');
-    expect(screen.getByText('Color scheme for the interface').classList).toContain('text-ui-sm');
+    expect(screen.getByText('Color scheme for the interface').classList).toContain('text-caption');
     expect(screen.getByText('Color scheme for the interface').classList).toContain('text-muted-foreground');
     expect(document.querySelector('[data-slot="settings-container"]')?.classList).toContain('bg-card');
     expect(document.querySelector('[data-slot="settings-container"]')?.classList).toContain('border-border');

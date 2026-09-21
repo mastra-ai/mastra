@@ -425,7 +425,7 @@ export function TraceDataPanelView({
                       size="sm"
                       className="w-full"
                     />
-                    <ButtonsGroup spacing="close" className="shrink-0">
+                    <ButtonsGroup className="shrink-0">
                       <Button
                         size="sm"
                         variant={isTimeline ? 'default' : 'primary'}

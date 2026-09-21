@@ -19,10 +19,10 @@ import { useLinkComponent } from '@/lib/framework';
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <Txt variant="ui-xs" className="text-muted-foreground tracking-wide uppercase">
+      <Txt variant="meta" className="text-muted-foreground tracking-wide uppercase">
         {label}
       </Txt>
-      <div className="text-ui-md">{children}</div>
+      <div className="text-body">{children}</div>
     </div>
   );
 }
@@ -121,9 +121,9 @@ export default function SchedulePage() {
               )}
             </MetaItem>
             <MetaItem label="Cron">
-              <code className="text-ui-md font-mono">{schedule.cron}</code>
+              <code className="text-body font-mono">{schedule.cron}</code>
               {schedule.timezone ? (
-                <span className="text-muted-foreground text-ui-sm ml-2">{schedule.timezone}</span>
+                <span className="text-muted-foreground text-caption ml-2">{schedule.timezone}</span>
               ) : null}
             </MetaItem>
             <MetaItem label="Status">
@@ -137,7 +137,7 @@ export default function SchedulePage() {
           </div>
 
           <div className="overflow-y-auto" data-testid="schedule-triggers-panel">
-            <Txt variant="ui-md" className="mb-3">
+            <Txt variant="body" className="mb-3">
               Trigger history
             </Txt>
             {triggersError ? (

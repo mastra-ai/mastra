@@ -1,6 +1,5 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { format, isThisYear, isToday } from 'date-fns';
@@ -150,7 +149,7 @@ export function DatasetItemsList({
                 </DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   {item.expectedTrajectory ? (
-                    <span className="text-ui-smd text-muted-foreground">
+                    <span className="text-body-sm text-muted-foreground">
                       {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
                         ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
                         : 'Yes'}
@@ -160,7 +159,7 @@ export function DatasetItemsList({
                   )}
                 </DataList.Cell>
                 <DataList.Cell className="min-w-0">
-                  <span className="text-ui-smd text-placeholder block truncate">{formatDate(createdAtDate)}</span>
+                  <span className="text-body-sm text-placeholder block truncate">{formatDate(createdAtDate)}</span>
                 </DataList.Cell>
               </>
             );
@@ -229,7 +228,7 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
         }
         actionSlot={
           <div className="flex flex-col items-center gap-2">
-            <ButtonsGroup>
+            <div className="flex items-center gap-2">
               <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
                 New item
               </CreateButton>
@@ -243,7 +242,7 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
                   Import JSON
                 </Button>
               )}
-            </ButtonsGroup>
+            </div>
             <Button
               variant="ghost"
               render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}

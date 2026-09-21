@@ -193,11 +193,11 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
             <div className="flex items-start gap-3">
               <div className="w-12 shrink-0 pt-2 text-right">
                 {item.time && (
-                  <span className={`text-ui-xs font-mono ${styles.time}`}>{formatObservationTime(item.time)}</span>
+                  <span className={`text-meta font-mono ${styles.time}`}>{formatObservationTime(item.time)}</span>
                 )}
               </div>
               <div className={cn('min-w-0 flex-1 rounded-md border px-3 py-2', styles.card)}>
-                <p className={cn('text-ui-md break-words whitespace-pre-wrap', styles.text)}>{item.text}</p>
+                <p className={cn('text-body break-words whitespace-pre-wrap', styles.text)}>{item.text}</p>
                 {item.children.length > 0 && (
                   <div className="mt-3">
                     <ObservationItems items={item.children} nested />
@@ -215,7 +215,7 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
 function ObservationContent({ observations }: { observations: string }) {
   const sections = useMemo(() => parseObservations(observations), [observations]);
   if (sections.length === 0) {
-    return <p className="text-icon3 text-ui-sm italic">Initialized</p>;
+    return <p className="text-icon3 text-caption italic">Initialized</p>;
   }
   return (
     <div className="space-y-5">
@@ -223,8 +223,8 @@ function ObservationContent({ observations }: { observations: string }) {
         <section key={`${section.title}-${i}`} className="space-y-3">
           <div className="border-border1 flex items-baseline justify-between gap-3 border-b pb-2">
             <div className="min-w-0">
-              <h3 className="text-ui-sm text-foreground font-medium">{section.title}</h3>
-              {section.relativeTime && <p className="text-icon3 text-ui-xs">{section.relativeTime}</p>}
+              <h3 className="text-column text-foreground">{section.title}</h3>
+              {section.relativeTime && <p className="text-icon3 text-meta">{section.relativeTime}</p>}
             </div>
           </div>
           <ObservationItems items={section.items} />
@@ -248,7 +248,7 @@ function ObservationHistoryPanel({
   return (
     <div className="border-border1 flex w-50 min-w-45 flex-col overflow-hidden border-l">
       <div className="border-border1 border-b px-4 py-2">
-        <p className="text-ui-md text-foreground font-normal">History</p>
+        <p className="text-body text-foreground">History</p>
       </div>
       <div className="flex-1 overflow-y-auto">
         {records.map(record => {
@@ -258,7 +258,7 @@ function ObservationHistoryPanel({
               key={record.id}
               type="button"
               className={cn(
-                'text-icon3 w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-ui-sm transition-all hover:bg-surface3/50',
+                'text-icon3 w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption hover:bg-surface3/50',
                 isSelected && 'border-l-accent1 bg-surface3/50',
               )}
               onClick={() => onSelectRecord(record.id)}
@@ -338,9 +338,9 @@ export function ObservationDetailView({
         {previousRecord && (
           <div className="border-border1 border-b px-4 py-2">
             <div className="flex items-start justify-end gap-3">
-              <label className="text-ui-sm flex cursor-pointer items-center gap-1.5">
+              <label className="text-caption flex cursor-pointer items-center gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
-                <span className="text-icon3 text-ui-sm">Show diff</span>
+                <span className="text-icon3 text-caption">Show diff</span>
               </label>
             </div>
           </div>
@@ -355,7 +355,7 @@ export function ObservationDetailView({
           ) : activeObservations ? (
             <ObservationContent observations={activeObservations} />
           ) : (
-            <p className="text-icon3 text-ui-sm italic">
+            <p className="text-icon3 text-caption italic">
               {selected.isObserving || selected.isReflecting ? 'Processing…' : 'Initialized'}
             </p>
           )}

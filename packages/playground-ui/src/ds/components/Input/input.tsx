@@ -1,4 +1,3 @@
-import '../../../../new-theme.css';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
@@ -14,12 +13,15 @@ import {
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(
-    'new-theme flex w-full border bg-transparent text-foreground',
-    'transition-[background-color,border-color,color] duration-normal ease-out-custom motion-reduce:transition-none',
+    // A text field is a block control: it fills its field. Content-sized controls (a
+    // Select or Combobox trigger, a Button) do the opposite and let the call site grow them.
+    'flex w-full border bg-transparent text-ellipsis text-foreground',
+    controlStateColorTransition,
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
     // type="number": hide native browser spinner arrows (they clip the pill).

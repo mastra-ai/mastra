@@ -69,7 +69,7 @@ export const Creator: Story = {
     return (
       <div className="flex items-center gap-2">
         <PropertyFilterCreator fields={FIELDS} tokens={tokens} onTokensChange={setTokens} />
-        <span className="text-ui-sm text-muted-foreground">{tokens.length} token(s)</span>
+        <span className="text-caption text-muted-foreground">{tokens.length} token(s)</span>
       </div>
     );
   },

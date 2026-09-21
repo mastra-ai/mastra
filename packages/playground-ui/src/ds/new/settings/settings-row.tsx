@@ -1,5 +1,3 @@
-import '../../../../new-theme.css';
-
 import { LockKeyholeIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Label } from '@/ds/components/Label/label';
@@ -47,7 +45,6 @@ export function SettingsRowLayout({
     <div
       data-slot={isSectionLayout ? 'section-row' : 'settings-row'}
       className={cn(
-        'new-theme',
         isSectionLayout
           ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'flex min-w-0 flex-col',
@@ -61,7 +58,7 @@ export function SettingsRowLayout({
         <LabelElement
           htmlFor={htmlFor}
           className={cn(
-            'text-ui-md font-medium text-foreground',
+            'text-subheading text-foreground',
             viewOnly && 'text-muted-foreground',
             tone === 'destructive' && 'text-destructive',
           )}
@@ -71,7 +68,7 @@ export function SettingsRowLayout({
         {description != null && (
           <DescriptionElement
             className={cn(
-              'text-ui-sm text-muted-foreground',
+              'text-caption text-muted-foreground',
               isSectionLayout ? 'mt-1 max-w-[62ch] text-pretty' : 'flex flex-col gap-0.5',
             )}
           >
@@ -86,7 +83,7 @@ export function SettingsRowLayout({
             className={cn(
               'min-w-0',
               isSectionLayout && 'sm:justify-self-end',
-              viewOnly && 'flex items-center gap-2 text-ui-md text-muted-foreground',
+              viewOnly && 'flex items-center gap-2 text-body text-muted-foreground',
             )}
           >
             {control}

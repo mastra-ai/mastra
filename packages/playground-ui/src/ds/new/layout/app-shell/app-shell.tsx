@@ -29,7 +29,7 @@ export function AppShell({
     <div
       data-slot="app-shell-frame"
       className={cn(
-        'relative m-1.5 ml-0 grid min-h-0 flex-1 overflow-hidden rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:m-2 lg:ml-0',
+        'relative m-1.5 ml-0 grid min-h-0 flex-1 overflow-hidden rounded-studio-frame bg-background shadow-raised lg:m-2 lg:ml-0',
         routeHeader ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
       )}
     >

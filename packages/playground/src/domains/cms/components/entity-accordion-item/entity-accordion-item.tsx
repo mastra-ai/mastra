@@ -46,7 +46,7 @@ export function EntityAccordionItem({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon size="sm">{icon}</Icon>
-            <span className="text-foreground text-ui-sm font-medium">{name}</span>
+            <span className="text-foreground text-column">{name}</span>
           </div>
           {onRemove && (
             <Button tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -60,7 +60,7 @@ export function EntityAccordionItem({
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
           placeholder="Custom description for this entity..."
-          className="bg-surface3 text-ui-sm min-h-[40px] border-dashed px-2 py-1"
+          className="bg-surface3 text-caption min-h-[40px] border-dashed px-2 py-1"
           size="sm"
           disabled={isReadOnly}
         />
@@ -79,9 +79,9 @@ export function EntityAccordionItem({
             <Icon>
               <Ruler className="text-accent6" />
             </Icon>
-            <span className="text-foreground text-ui-sm">Display Conditions</span>
+            <span className="text-foreground text-caption">Display Conditions</span>
             {ruleCount > 0 && (
-              <span className="text-muted-foreground text-ui-sm">
+              <span className="text-muted-foreground text-caption">
                 ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
               </span>
             )}

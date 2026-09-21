@@ -58,7 +58,6 @@ export function AgentCompactCard({ agent }: AgentCompactCardProps) {
       <CardLink
         LinkComponent={Link}
         href={paths.agentLink(agent.id)}
-        appearance="surface"
         aria-label={`Open ${agent.name}`}
         aria-describedby={`${accessibleId}-instructions ${accessibleId}-metadata`}
         className="group-focus-within/agent:bg-surface4 group-hover/agent:bg-surface4 absolute inset-0"

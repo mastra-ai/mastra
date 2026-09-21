@@ -2,7 +2,6 @@
 @import 'tw-animate-css';
 
 @import '../theme.css';
-@reference '../new-theme.css';
 
 @plugin '@tailwindcss/typography';
 
@@ -19,12 +18,8 @@
   }
 }
 
-@utility shadow-main-frame {
-  box-shadow: var(--shadow-main-frame);
-}
-
-@utility shadow-dialog {
-  box-shadow: var(--shadow-dialog);
+@utility shadow-raised {
+  box-shadow: var(--shadow-raised);
 }
 
 @utility rounded-studio-frame {
@@ -37,14 +32,6 @@
 
 @utility rounded-tr-studio-panel {
   border-top-right-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
-}
-
-@utility bg-sidebar-nav-hover {
-  background-color: var(--sidebar-nav-hover);
-}
-
-@utility bg-sidebar-nav-active {
-  background-color: var(--sidebar-nav-active);
 }
 
 @layer utilities {

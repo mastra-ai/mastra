@@ -60,7 +60,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   if (!server)
     return (
       <MainContentContent>
-        <Txt as="h1" variant="header-md" className="text-muted-foreground py-20 text-center font-medium">
+        <Txt as="h1" variant="heading" className="text-muted-foreground py-20 text-center">
           Server not found
         </Txt>
       </MainContentContent>
@@ -71,7 +71,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   return (
     <MainContentContent isDivided={true}>
       <div className="mx-auto w-full max-w-2xl px-5 py-8">
-        <Txt as="h1" variant="header-md" className="text-foreground pb-4 font-medium">
+        <Txt as="h1" variant="heading" className="text-foreground pb-4">
           {server.name}
         </Txt>
 
@@ -161,7 +161,7 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
           <McpServerIcon />
         </Icon>
 
-        <Txt variant="header-md" as="h2" className="font-medium">
+        <Txt variant="heading" as="h2">
           Available Tools
         </Txt>
       </div>

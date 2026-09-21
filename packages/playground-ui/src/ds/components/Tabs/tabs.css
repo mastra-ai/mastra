@@ -41,19 +41,6 @@
   }
 
   &[data-appearance='default'] {
-    [data-variant='line'] [data-slot='tab'] {
-      padding: 8px 20px;
-      border-bottom: 2px solid transparent;
-    }
-
-    [data-variant='line'] [data-slot='tab'][data-active][data-closable] {
-      padding-right: 42px;
-    }
-
-    [data-variant='line'] [data-slot='tab-close'] {
-      right: 20px;
-    }
-
     [data-variant='pill'] [data-slot='tab'] {
       position: relative;
       z-index: 10;

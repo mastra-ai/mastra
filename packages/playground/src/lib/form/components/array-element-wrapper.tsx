@@ -42,7 +42,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
         <CollapsibleTrigger
           ref={triggerRef}
           aria-label={invalid ? `${itemLabel}, Needs input` : itemLabel}
-          className="text-ui-sm flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left focus-visible:shadow-none focus-visible:ring-inset"
+          className="text-caption flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left focus-visible:shadow-none focus-visible:ring-inset"
         >
           <ChevronRight aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
           <span className="text-muted-foreground shrink-0">Item {index + 1}</span>
@@ -51,7 +51,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
               {summary}
             </span>
           )}
-          {invalid && <span className="text-ui-xs text-accent2 ml-auto shrink-0">Needs input</span>}
+          {invalid && <span className="text-meta text-accent2 ml-auto shrink-0">Needs input</span>}
         </CollapsibleTrigger>
         {!readOnly && (
           <Button

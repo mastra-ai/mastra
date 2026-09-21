@@ -4,6 +4,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLink, GitBranch, MessageSquare } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
@@ -25,7 +27,10 @@ function DocsLink({ href, children }: { href: string; children: React.ReactNode 
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-inherit underline hover:text-white"
+      className={cn(
+        'inline-flex items-center gap-1 text-inherit underline hover:text-foreground',
+        controlStateColorTransition,
+      )}
     >
       {children}
       <ExternalLink className="size-3" />
@@ -49,7 +54,7 @@ function AgentTab({
   const tabContent = (
     <>
       <Icon size="sm">{icon}</Icon>
-      <Txt variant="ui-sm" className="text-inherit">
+      <Txt variant="caption" className="text-inherit">
         {label}
       </Txt>
     </>

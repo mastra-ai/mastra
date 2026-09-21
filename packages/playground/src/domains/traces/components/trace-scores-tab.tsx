@@ -5,6 +5,9 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { getShortId } from '@mastra/playground-ui/components/Text';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, isToday } from 'date-fns';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -72,7 +75,7 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
       >
         <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
         <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
-        <span className="text-ui-xs text-muted-foreground font-mono">
+        <span className="text-meta text-muted-foreground font-mono">
           {getShortId(score.id)} · {isToday(createdAt) ? 'Today' : format(createdAt, 'MMM dd')}{' '}
           {format(createdAt, 'h:mm:ss aaa')}
         </span>
@@ -98,7 +101,7 @@ function TraceScoreReason({ reason }: { reason: string }) {
   const text = isLong && !expanded ? `${reason.slice(0, REASON_PREVIEW_LENGTH).trimEnd()}…` : reason;
 
   return (
-    <p className="text-ui-sm text-placeholder">
+    <p className="text-caption text-placeholder">
       {text}
       {isLong && (
         <>
@@ -106,7 +109,7 @@ function TraceScoreReason({ reason }: { reason: string }) {
           <button
             type="button"
             onClick={() => setExpanded(value => !value)}
-            className="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+            className={cn(quietTextHover, controlStateColorTransition, 'underline underline-offset-2')}
           >
             {expanded ? 'Read less' : 'Read more'}
           </button>

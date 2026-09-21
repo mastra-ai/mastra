@@ -5,6 +5,7 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDownToLine, ArrowUpFromLine, ChevronRight, CirclePause, X } from 'lucide-react';
 import { useContext, useEffect, useRef } from 'react';
+import { panelSurfaceStyle } from '../../components/workflow-layout';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../../context/workflow-step-detail-context';
 import type { WorkflowDataSelection } from '../../context/workflow-step-detail-context';
@@ -28,7 +29,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
   return (
     <section
       aria-label="Data inspector"
-      className="workflow-data-inspector rounded-studio-panel border-border1/50 bg-surface3 shadow-panel flex min-h-0 flex-col overflow-hidden border"
+      className={`workflow-data-inspector ${panelSurfaceStyle} flex min-h-0 flex-col overflow-hidden`}
       onKeyDown={event => {
         if (event.key === 'Escape' && !event.defaultPrevented) {
           event.stopPropagation();
@@ -41,7 +42,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
           <Badge variant="neutral" emphasis="muted" icon={<DirectionIcon />}>
             {DIRECTION_LABELS[direction]}
           </Badge>
-          <Txt as="h2" variant="ui-sm" className="text-foreground font-medium break-words">
+          <Txt as="h2" variant="column" className="text-foreground break-words">
             {name}
           </Txt>
         </div>
@@ -51,7 +52,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
       </header>
       <div className="min-h-0 overflow-auto overscroll-contain p-3">
         {value === undefined ? (
-          <Txt as="p" variant="ui-sm" className="text-muted-foreground p-2">
+          <Txt as="p" variant="caption" className="text-muted-foreground p-2">
             No {direction} recorded for this selection.
           </Txt>
         ) : (

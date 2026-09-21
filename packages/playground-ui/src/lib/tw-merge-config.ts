@@ -8,6 +8,7 @@ const lineHeightKeys = Object.keys(Tokens.LineHeights);
 const borderRadiusKeys = Object.keys(Tokens.BorderRadius);
 const sizeKeys = Object.keys(Tokens.Sizes);
 const shadowKeys = Object.keys(Tokens.Shadows).concat(Object.keys(Tokens.Glows));
+const durationKeys = Object.keys(Tokens.Durations);
 
 export const twMerge = extendTailwindMerge({
   extend: {
@@ -20,6 +21,9 @@ export const twMerge = extendTailwindMerge({
     },
     classGroups: {
       'font-size': [{ text: fontSizeKeys }],
+      // Named durations are `@utility` rules, so tailwind-merge cannot infer them and
+      // would otherwise let `duration-fast` and `duration-slow` both survive a merge.
+      duration: [{ duration: durationKeys }],
       h: [{ h: sizeKeys }],
       w: [{ w: sizeKeys }],
       size: [{ size: sizeKeys }],

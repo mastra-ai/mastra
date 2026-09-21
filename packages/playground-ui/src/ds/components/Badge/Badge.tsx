@@ -61,19 +61,19 @@ export type BadgeVariant = keyof typeof badgeToneStyles;
 
 const badgeSizeStyles = {
   xs: {
-    badge: 'h-[18px] gap-0.5 text-ui-xs',
+    badge: 'h-[18px] gap-0.5 text-meta',
     withoutLeadingVisual: 'px-1.5',
     withLeadingVisual: 'pl-1 pr-1.5',
     indicator: 'size-1',
   },
   sm: {
-    badge: 'h-5 gap-1 text-ui-xs',
+    badge: 'h-5 gap-1 text-meta',
     withoutLeadingVisual: 'px-1.5',
     withLeadingVisual: 'px-1.5',
     indicator: 'size-1',
   },
   md: {
-    badge: 'h-5 gap-1 text-ui-sm',
+    badge: 'h-5 gap-1 text-column',
     withoutLeadingVisual: 'px-2',
     withLeadingVisual: 'pl-1.5 pr-2',
     indicator: 'size-1.5',
@@ -110,7 +110,7 @@ export const Badge = ({
   return (
     <span
       className={cn(
-        'inline-flex w-fit max-w-full shrink-0 items-center rounded-[7px] font-medium',
+        'inline-flex w-fit max-w-full shrink-0 items-center rounded-[7px]',
         'inset-ring-1 inset-ring-current/5',
         'inset-shadow-xs inset-shadow-white/5 dark:inset-shadow-[0_3px_10px_-2px_white] dark:inset-shadow-white/7',
         'dark:bg-linear-to-b dark:from-white/3 dark:to-white/0',

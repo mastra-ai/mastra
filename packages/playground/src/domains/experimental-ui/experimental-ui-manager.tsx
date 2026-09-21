@@ -33,7 +33,7 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
         <div className="grid gap-4">
           {visibleExperiments.map(experiment => (
             <div key={experiment.key}>
-              <span className="text-ui-md text-muted-foreground">{experiment.name}</span>
+              <span className="text-body text-muted-foreground">{experiment.name}</span>
               <RadioGroup
                 value={getVariant(experiment.key)}
                 onValueChange={(v: string) => setVariant(experiment.key, v)}
@@ -42,7 +42,7 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
                 {experiment.variants.map(option => (
                   <label
                     key={option.value}
-                    className="text-ui-sm text-muted-foreground flex cursor-pointer items-center gap-3"
+                    className="text-caption text-muted-foreground flex cursor-pointer items-center gap-3"
                   >
                     <RadioGroupItem value={option.value} />
                     {option.label}

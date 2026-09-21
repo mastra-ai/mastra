@@ -241,7 +241,7 @@ export function FilterBarInput({
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
             comboboxTriggerClass({ variant: 'default', size: 'sm' }),
             'w-auto cursor-text',
-            'focus-within:bg-foreground/14',
+            'focus-within:bg-fill-hover',
             inputFocusBorderWithin,
             step === 'field' ? 'min-w-40' : 'min-w-28',
             className,
@@ -262,7 +262,7 @@ export function FilterBarInput({
             className={cn(
               unstyledFormElementStyle,
               'min-w-0 flex-1 bg-transparent',
-              'placeholder:text-placeholder placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
+              'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             )}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
@@ -332,7 +332,7 @@ export function FilterBarInput({
               )}
               {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
-                  <Txt variant="ui-sm" className="text-muted-foreground">
+                  <Txt variant="caption" className="text-muted-foreground">
                     Type a value
                   </Txt>
                   <Button

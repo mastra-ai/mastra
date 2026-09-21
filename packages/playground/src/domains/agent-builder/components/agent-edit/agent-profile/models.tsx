@@ -152,7 +152,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
 
           {groups.length === 0 ? (
             <div className="flex min-h-0 items-center justify-center">
-              <Txt variant="ui-md" className="text-muted-foreground">
+              <Txt variant="body" className="text-muted-foreground">
                 {search.trim()
                   ? `No models match "${search.trim()}"`
                   : allProvidersUnchecked
@@ -201,7 +201,7 @@ const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChan
           className="flex flex-col gap-3"
         >
           <Txt
-            variant="ui-sm"
+            variant="caption"
             as="h3"
             className="text-muted-foreground tracking-wide uppercase"
             data-testid={`model-provider-section-title-${group.providerId}`}
@@ -247,7 +247,7 @@ const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
       role="alert"
     >
       <TriangleAlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
-      <Txt variant="ui-xs">
+      <Txt variant="meta">
         <span className="font-medium">
           {provider}/{modelId}
         </span>{' '}
@@ -268,10 +268,10 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
     data-testid="model-detail-locked-chip"
   >
     <LockIcon className="text-muted-foreground h-4 w-4 shrink-0" />
-    <Txt variant="ui-sm" className="text-foreground truncate font-medium">
+    <Txt variant="column" className="text-foreground truncate">
       {provider && modelId ? `${provider}/${modelId}` : 'Locked by admin'}
     </Txt>
-    <Txt variant="ui-xs" className="text-muted-foreground ml-auto shrink-0">
+    <Txt variant="meta" className="text-muted-foreground ml-auto shrink-0">
       Set by admin
     </Txt>
   </div>

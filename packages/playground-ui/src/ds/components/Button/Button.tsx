@@ -1,4 +1,3 @@
-import '../../../../new-theme.css';
 import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
@@ -12,6 +11,7 @@ import {
   disabledOutlineSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Adornments for text-mode buttons: gap between icon+label and larger radius.
@@ -34,34 +34,32 @@ const TEXT_MODE_ADORNMENTS = cn(
 // Filled variants opt out because there the glyph colour carries the meaning.
 const NEUTRAL_ICON_STATE = cn(
   '[&_svg]:text-muted-foreground not-disabled:hover:[&_svg]:text-foreground aria-disabled:[&_svg]:text-muted-foreground',
-  '[&_svg]:transition-colors [&_svg]:duration-normal [&_svg]:ease-out-custom',
-  'motion-reduce:[&_svg]:transition-none',
 );
 
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
-    'new-theme inline-flex cursor-pointer items-center justify-center',
-    'transition-[background-color,border-color,color] duration-normal ease-out-custom motion-reduce:transition-none',
+    'inline-flex cursor-pointer items-center justify-center',
+    controlStateColorTransition,
     sharedFormElementDisabledStyle,
-    'aria-disabled:pointer-events-none aria-disabled:text-muted-foreground',
+    'aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground',
     controlFocusBorderVisible,
   ),
   {
     variants: {
       variant: {
         default: cn(
-          'border border-border bg-foreground/10 font-medium text-foreground not-disabled:hover:bg-foreground/14 not-disabled:active:bg-foreground/18',
+          'border border-border bg-fill text-foreground not-disabled:hover:bg-fill-hover not-disabled:active:bg-fill-active',
           NEUTRAL_ICON_STATE,
           disabledFilledSurfaceStyle,
-          'aria-disabled:border-border aria-disabled:bg-muted',
+          'aria-disabled:border-border aria-disabled:bg-fill-subtle',
         ),
         primary: cn(
-          'border border-transparent bg-foreground font-medium text-background not-disabled:hover:bg-foreground/75 not-disabled:active:bg-foreground/60',
+          'border border-transparent bg-foreground text-background not-disabled:hover:bg-foreground/75 not-disabled:active:bg-foreground/60',
           'disabled:bg-foreground/45 disabled:text-background/75 aria-disabled:bg-foreground/45 aria-disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-destructive font-medium text-destructive-foreground not-disabled:hover:bg-destructive/80 not-disabled:active:bg-destructive/70',
+          'border border-transparent bg-destructive text-destructive-foreground not-disabled:hover:bg-destructive/80 not-disabled:active:bg-destructive/70',
           'disabled:bg-destructive/45 disabled:text-destructive-foreground/75 aria-disabled:bg-destructive/45 aria-disabled:text-destructive-foreground/75',
         ),
         'destructive-ghost': cn(
@@ -69,11 +67,11 @@ export const buttonVariants = cva(
           'disabled:bg-transparent disabled:text-destructive/50 aria-disabled:bg-transparent aria-disabled:text-destructive/50',
         ),
         ghost: cn(
-          'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-foreground/4 not-disabled:hover:text-foreground not-disabled:active:bg-foreground/10',
+          'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
           'disabled:bg-transparent aria-disabled:bg-transparent',
         ),
         outline: cn(
-          'border border-foreground/18 bg-transparent text-foreground not-disabled:hover:border-foreground/30 not-disabled:hover:bg-foreground/4 not-disabled:active:bg-foreground/10',
+          'border border-border-strong bg-transparent text-foreground not-disabled:hover:border-border-hover not-disabled:hover:bg-fill-subtle not-disabled:active:bg-fill',
           NEUTRAL_ICON_STATE,
           disabledOutlineSurfaceStyle,
           'aria-disabled:border-border aria-disabled:bg-transparent',
@@ -85,8 +83,8 @@ export const buttonVariants = cva(
         md: cn(controlSizeClasses.md, controlIconClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
         lg: cn(controlSizeClasses.lg, controlIconClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
-        // so icon-mode and text-mode use the same press feedback. Every size comes off the shared
-        // scale, so an icon-only button matches a labelled one at the same size in the same row.
+        // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
+        // wrapper the component puts around an icon-mode child, keyed off the same scale.
         'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
         'icon-sm': cn(controlHeight.sm, 'w-form-sm rounded-full'),
         'icon-md': cn(controlHeight.md, 'w-form-md rounded-full'),

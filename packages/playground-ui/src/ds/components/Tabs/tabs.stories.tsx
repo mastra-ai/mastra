@@ -105,14 +105,14 @@ function ContainedExample({
               <Tab value="activity" onClose={closeHandler('activity')}>
                 <Activity aria-hidden="true" className="size-4" />
                 Activity
-                <span className="bg-surface-overlay-strong text-ui-xs rounded-full px-2 py-0.5 tabular-nums">12</span>
+                <span className="bg-surface-overlay-strong text-meta rounded-full px-2 py-0.5 tabular-nums">12</span>
               </Tab>
             )}
             {visibleTabs.includes('traces') && (
               <Tab value="traces" attention={attention} onClose={closeHandler('traces')}>
                 <ChartNoAxesColumnIncreasing aria-hidden="true" className="size-4" />
                 Traces
-                <span className="bg-surface-overlay-strong text-ui-xs rounded-full px-2 py-0.5 tabular-nums">248</span>
+                <span className="bg-surface-overlay-strong text-meta rounded-full px-2 py-0.5 tabular-nums">248</span>
               </Tab>
             )}
             {visibleTabs.includes('settings') && (
@@ -133,33 +133,33 @@ function ContainedExample({
           <TabContent value="activity">
             <div className="grid gap-6">
               <div className="grid gap-1">
-                <h2 className="text-ui-lg text-foreground font-semibold">Recent activity</h2>
-                <p className="text-ui-md text-muted-foreground">Runs and deployments from the last seven days.</p>
+                <h2 className="text-heading text-foreground">Recent activity</h2>
+                <p className="text-body text-muted-foreground">Runs and deployments from the last seven days.</p>
               </div>
               <div className="divide-border1 border-border1 bg-surface2 divide-y overflow-hidden rounded-lg border">
                 <div className="flex items-center justify-between gap-4 p-4">
-                  <span className="text-ui-md text-foreground">Production deployment</span>
-                  <span className="text-ui-sm text-muted-foreground">2 minutes ago</span>
+                  <span className="text-body text-foreground">Production deployment</span>
+                  <span className="text-caption text-muted-foreground">2 minutes ago</span>
                 </div>
                 <div className="flex items-center justify-between gap-4 p-4">
-                  <span className="text-ui-md text-foreground">Evaluation run completed</span>
-                  <span className="text-ui-sm text-muted-foreground">18 minutes ago</span>
+                  <span className="text-body text-foreground">Evaluation run completed</span>
+                  <span className="text-caption text-muted-foreground">18 minutes ago</span>
                 </div>
               </div>
             </div>
           </TabContent>
           <TabContent value="traces">
-            <p className="text-ui-md text-muted-foreground">Trace content</p>
+            <p className="text-body text-muted-foreground">Trace content</p>
           </TabContent>
           <TabContent value="settings">
-            <p className="text-ui-md text-muted-foreground">Settings content</p>
+            <p className="text-body text-muted-foreground">Settings content</p>
           </TabContent>
           {moreTabs &&
             extraTabs
               .filter(label => visibleTabs.includes(label))
               .map(label => (
                 <TabContent key={label} value={label}>
-                  <p className="text-ui-md text-muted-foreground">{label} content</p>
+                  <p className="text-body text-muted-foreground">{label} content</p>
                 </TabContent>
               ))}
         </Tabs>

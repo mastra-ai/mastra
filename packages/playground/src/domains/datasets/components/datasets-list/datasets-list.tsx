@@ -68,7 +68,7 @@ function TagsCell({ tags: rawTags }: { tags: DatasetRecord['tags'] }) {
           {tags.slice(0, 2).map(tag => (
             <ComputedTag key={tag} value={tag} className="shrink-0" />
           ))}
-          {tags.length > 2 && <span className="text-placeholder text-ui-xs shrink-0">+{tags.length - 2}</span>}
+          {tags.length > 2 && <span className="text-placeholder text-meta shrink-0">+{tags.length - 2}</span>}
         </div>
       ) : (
         <span className="text-placeholder">—</span>

@@ -33,20 +33,20 @@ import { cn } from '@/lib/utils';
 
 // `filter-bar-segment` carries the left-to-right entrance (see filter-bar-chip.css).
 export const segmentClass = cn(
-  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-ui-sm leading-ui-sm whitespace-nowrap outline-none',
+  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-caption whitespace-nowrap outline-none',
   'first:rounded-l-full last:rounded-r-full',
 );
 
 // A chip shares the `sm` control height (border-box, like the typeahead pill beside it).
 export const chipClass = cn(
-  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface5 text-foreground',
+  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border rounded-full border border-border bg-fill text-foreground',
   controlHeight.sm,
 );
 
 export const editableSegmentClass = cn(
   segmentClass,
-  'cursor-pointer transition-colors hover:bg-neutral6/5 hover:text-foreground',
-  'focus-visible:bg-neutral6/10 focus-visible:text-foreground data-[popup-open]:bg-neutral6/10 data-[popup-open]:text-foreground',
+  'cursor-pointer hover:bg-fill-subtle hover:text-foreground',
+  'focus-visible:bg-fill-hover focus-visible:text-foreground data-[popup-open]:bg-fill-hover data-[popup-open]:text-foreground',
 );
 
 /** Field label with its optional leading icon — used by chips, the draft chip and field option lists. */

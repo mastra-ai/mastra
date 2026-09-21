@@ -1,5 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -100,7 +102,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         onClick={handleToggleExpand}
         className={cn(
           'group flex items-center gap-3 w-full px-4 py-3',
-          'hover:bg-surface3 transition-colors',
+          'hover:bg-surface3',
           'focus:outline-none focus:ring-2 focus:ring-accent1 focus:ring-inset',
         )}
       >
@@ -120,16 +122,16 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         {/* Info section */}
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
-            <span className="text-foreground text-ui-md truncate font-medium">{agentName}&apos;s browser</span>
+            <span className="text-foreground text-subheading truncate">{agentName}&apos;s browser</span>
             <Badge variant={isLive ? 'green' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
             </Badge>
           </div>
-          <p className="text-muted-foreground text-ui-sm mt-0.5 truncate">{displayUrl}</p>
+          <p className="text-muted-foreground text-caption mt-0.5 truncate">{displayUrl}</p>
         </div>
 
         {/* Expand/collapse indicator */}
-        <div className="text-muted-foreground group-hover:text-foreground shrink-0 transition-colors">
+        <div className={cn('shrink-0', quietTextHoverInGroup, controlStateColorTransition)}>
           {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
         </div>
       </button>
@@ -169,7 +171,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
           {toolCalls.length > 0 && (
             <div ref={actionsRef} className="border-border1 max-h-40 overflow-y-auto border-t">
               <div className="px-3 py-2">
-                <h4 className="text-muted-foreground text-ui-md mb-2 font-medium">Browser Actions</h4>
+                <h4 className="text-muted-foreground text-subheading mb-2">Browser Actions</h4>
                 <div className="space-y-1">
                   {toolCalls.slice(-5).map(entry => (
                     <BrowserToolCallItem key={entry.toolCallId} entry={entry} />

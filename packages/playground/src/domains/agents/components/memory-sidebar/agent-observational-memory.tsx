@@ -1,6 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Brain, ExternalLink, Info } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
@@ -106,15 +109,15 @@ const ProgressBar = ({
   return (
     <div className="min-w-0 flex-1">
       <div className="mb-1 flex h-4 items-center gap-1">
-        <span className="text-muted-foreground text-ui-xs font-normal tracking-wider uppercase">{label}</span>
+        <span className="text-muted-foreground text-meta tracking-wider uppercase">{label}</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" className="inline-flex items-center justify-center">
-              <Info className="text-muted-foreground hover:text-muted-foreground h-2.5 w-2.5 cursor-help" />
+              <Info className={cn('h-2.5 w-2.5 cursor-help', quietTextHover, controlStateColorTransition)} />
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
-            <div className="text-ui-sm space-y-1.5">
+            <div className="text-caption space-y-1.5">
               <div className="text-foreground font-medium">
                 {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
               </div>
@@ -157,7 +160,7 @@ const ProgressBar = ({
         <div className={`relative h-5 flex-1 ${containerBg} overflow-hidden rounded-l`}>
           <div className={`h-full ${fillColor} transition-all`} style={{ width: `${percentage}%` }} />
           <span
-            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-ui-xs font-medium ${textColor} pointer-events-none`}
+            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColor} pointer-events-none`}
           >
             {isProcessing
               ? `${activeText} ${elapsed.toFixed(1)}s`
@@ -166,7 +169,7 @@ const ProgressBar = ({
                 : `${Math.round(percentage)}%`}
           </span>
           <span
-            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-ui-xs font-medium ${textColorFilled} pointer-events-none`}
+            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColorFilled} pointer-events-none`}
             style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
           >
             {isProcessing
@@ -178,7 +181,7 @@ const ProgressBar = ({
         </div>
 
         <span
-          className={`text-ui-xs ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
+          className={`text-meta ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
           {formatTokens(value)}
           <span className={isProcessing ? 'text-blue-500' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
@@ -188,7 +191,7 @@ const ProgressBar = ({
                 <span className="cursor-help text-amber-400">({formatTokens(baseThreshold)})</span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
-                <div className="text-ui-sm">
+                <div className="text-caption">
                   <span className="text-amber-400">{formatTokens(baseThreshold)}</span>
                   <span className="text-muted-foreground"> is the configured threshold. </span>
                   <span className="text-foreground">
@@ -207,7 +210,7 @@ const ProgressBar = ({
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
     <Brain className="h-4 w-4 text-purple-400" />
-    <h3 className="text-foreground text-ui-md font-medium">Observational Memory</h3>
+    <h3 className="text-foreground text-subheading">Observational Memory</h3>
   </div>
 );
 
@@ -215,10 +218,10 @@ const ObservationalMemoryDisabled = () => (
   <div className="p-4">
     <div className="mb-3 flex items-center gap-2">
       <Brain className="text-muted-foreground h-4 w-4" />
-      <h3 className="text-foreground text-ui-md font-medium">Observational Memory</h3>
+      <h3 className="text-foreground text-subheading">Observational Memory</h3>
     </div>
     <div className="bg-surface3 border-border1 rounded-lg border p-4">
-      <p className="text-muted-foreground text-ui-md mb-3">
+      <p className="text-muted-foreground text-body mb-3">
         Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
         from conversations.
       </p>
@@ -226,7 +229,10 @@ const ObservationalMemoryDisabled = () => (
         href="https://mastra.ai/en/docs/memory/observational-memory"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-ui-md inline-flex items-center gap-2 text-blue-400 transition-colors hover:text-blue-300"
+        className={cn(
+          'text-body inline-flex items-center gap-2 text-blue-400 hover:text-blue-300',
+          controlStateColorTransition,
+        )}
       >
         Learn about Observational Memory
         <ExternalLink className="h-3 w-3" />

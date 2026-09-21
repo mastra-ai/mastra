@@ -78,7 +78,7 @@ export function PublishChannelContent({
       </DialogHeader>
 
       <DialogBody>
-        <Txt variant="ui-sm" className="text-muted-foreground">
+        <Txt variant="caption" className="text-muted-foreground">
           {!platform.isConfigured ? (
             copy.notConfigured(platform.name)
           ) : activeInstallation ? (

@@ -74,7 +74,7 @@ export function ModelUsageCostCardView({
                 const href = getRowHref?.(row);
                 const rowCells = (
                   <>
-                    <DataList.RowHeaderCell className="text-ui-sm">{row.model}</DataList.RowHeaderCell>
+                    <DataList.RowHeaderCell className="text-caption">{row.model}</DataList.RowHeaderCell>
                     <DataList.NumberCell>{row.input}</DataList.NumberCell>
                     <DataList.NumberCell>{row.output}</DataList.NumberCell>
                     <DataList.NumberCell>{row.cacheRead}</DataList.NumberCell>

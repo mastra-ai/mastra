@@ -18,6 +18,9 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save, X } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
@@ -141,7 +144,7 @@ export function AgentPlaygroundVersionBar({
             className="min-w-0 flex-1"
           />
         ) : (
-          <Txt variant="ui-xs" className="text-muted-foreground">
+          <Txt variant="meta" className="text-muted-foreground">
             {isCodeSourceAgent ? 'No filesystem saves yet' : 'No versions yet'}
           </Txt>
         )}
@@ -151,7 +154,11 @@ export function AgentPlaygroundVersionBar({
         <Tooltip>
           <TooltipTrigger
             aria-label="Version information"
-            className="text-muted-foreground hover:text-foreground shrink-0 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
+            className={cn(
+              'shrink-0 rounded-sm focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden',
+              quietTextHover,
+              controlStateColorTransition,
+            )}
           >
             <Icon size="sm">
               <Info />
@@ -171,7 +178,7 @@ export function AgentPlaygroundVersionBar({
     actionBar: (
       <div className="border-border1 bg-surface3 flex items-center justify-end border-t px-3 py-2">
         {showCodeModeActions ? (
-          <ButtonsGroup className="flex-wrap justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="default" size="md" onClick={() => void onDownloadJson?.()} icon={<Download />}>
               Download JSON
             </Button>
@@ -202,10 +209,10 @@ export function AgentPlaygroundVersionBar({
                 )}
               </Button>
             )}
-          </ButtonsGroup>
+          </div>
         ) : readOnly && !isViewingPreviousVersion ? null : (
-          <ButtonsGroup className="flex-wrap justify-end">
-            <ButtonsGroup spacing="close">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ButtonsGroup>
               <Button variant="default" size="md" onClick={() => onSaveDraft()} disabled={saveDisabled}>
                 {isSavingDraft ? (
                   <>
@@ -262,7 +269,7 @@ export function AgentPlaygroundVersionBar({
                 </>
               )}
             </Button>
-          </ButtonsGroup>
+          </div>
         )}
 
         {/* Change message dialog */}

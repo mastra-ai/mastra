@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { Txt } from '../Txt';
-import { transitions } from '@/ds/primitives/transitions';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type AvatarSize = 'sm' | 'md' | 'lg';
@@ -31,10 +31,10 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false, color, tex
     <div
       className={cn(
         sizeClasses[size],
-        'flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border1',
-        !showFallbackTint && 'bg-surface3',
-        transitions.all,
-        interactive && 'cursor-pointer hover:scale-105 hover:border-neutral2 hover:shadow-sm',
+        'flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border',
+        !showFallbackTint && 'bg-fill',
+        controlStateColorTransition,
+        interactive && 'cursor-pointer hover:border-border-hover',
       )}
       style={showFallbackTint ? { backgroundColor: color } : undefined}
     >
@@ -42,7 +42,7 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false, color, tex
         <img src={src} alt={name} className="size-full object-cover" onError={() => setDidError(true)} />
       ) : (
         <Txt
-          variant="ui-md"
+          variant="body"
           className={cn('text-center', !showFallbackTint && 'text-muted-foreground')}
           style={showFallbackTint && textColor ? { color: textColor } : undefined}
         >

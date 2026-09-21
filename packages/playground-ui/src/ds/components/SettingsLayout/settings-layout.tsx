@@ -42,8 +42,8 @@ export function SettingsLayout({
             <div className="flex min-w-0 items-center gap-2">
               <Txt
                 as="h1"
-                variant="header-md"
-                className={cn('min-w-0 truncate', 'font-sans font-medium tracking-normal text-muted-foreground')}
+                variant="heading"
+                className={cn('min-w-0 truncate', 'font-sans tracking-normal text-muted-foreground')}
               >
                 {title}
               </Txt>
@@ -52,7 +52,7 @@ export function SettingsLayout({
               ) : null}
             </div>
             {description !== undefined && description !== null ? (
-              <Txt as="p" variant="ui-md" className="text-muted-foreground m-0 wrap-break-word">
+              <Txt as="p" variant="body" className="text-muted-foreground m-0 wrap-break-word">
                 {description}
               </Txt>
             ) : null}

@@ -51,7 +51,7 @@ const SubmitButton = ({ children }: { children: ReactNode }) => {
 const uiComponents = { SubmitButton };
 
 const formComponents = {
-  Label: ({ value }: { value: string }) => <Label className="font-normal">{value}</Label>,
+  Label: ({ value }: { value: string }) => <Label className="text-body-sm">{value}</Label>,
 };
 
 export function DynamicForm({

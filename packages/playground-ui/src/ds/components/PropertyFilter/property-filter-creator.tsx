@@ -15,10 +15,12 @@ import type { ButtonProps } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 // Plain <button>s navigated with roving focus (not Base UI), so the highlight rides on `:focus`.
-const filterItemFocusClass = 'focus:bg-neutral6/5 focus:text-foreground';
+const filterItemFocusClass = 'focus:bg-fill-subtle focus:text-foreground';
 
 export type PropertyFilterCreatorProps = {
   fields: PropertyFilterField[];
@@ -181,13 +183,13 @@ export function PropertyFilterCreator({
               <button
                 type="button"
                 aria-label="Back to properties"
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className={cn(quietTextHover, controlStateColorTransition)}
                 onClick={reset}
               >
                 <ArrowLeftIcon className="size-4" />
               </button>
               <FilterIcon className="text-muted-foreground size-4 shrink-0" />
-              <span className="text-ui-sm text-muted-foreground">{`${selectedField.label} · is`}</span>
+              <span className="text-caption text-muted-foreground">{`${selectedField.label} · is`}</span>
             </div>
           )}
 

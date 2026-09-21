@@ -9,9 +9,10 @@ export function MainHeaderDescription({ children, isLoading }: MainHeaderDescrip
   return (
     <p
       className={cn(
-        'max-w-140 mt-1 ml-1 flex flex-wrap gap-x-4 gap-y-1 text-ui-sm text-muted-foreground first-of-type:mt-3',
+        'max-w-140 mt-1 ml-1 flex flex-wrap gap-x-4 gap-y-1 first-of-type:mt-3',
+        'text-caption text-muted-foreground',
         {
-          'bg-surface4 w-[40rem] max-w-[80%] rounded-md animate-pulse': isLoading,
+          'w-[40rem] max-w-[80%] animate-pulse rounded-md bg-fill': isLoading,
         },
       )}
     >

@@ -99,7 +99,7 @@ function LeftPanel({
       {versionSelector}
 
       <div className="px-4 pt-3">
-        <Txt variant="ui-sm" className="text-muted-foreground">
+        <Txt variant="caption" className="text-muted-foreground">
           Edit your agent's system prompt, tools, and variables below.
         </Txt>
       </div>

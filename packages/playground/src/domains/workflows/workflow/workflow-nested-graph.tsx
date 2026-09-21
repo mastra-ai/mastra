@@ -56,7 +56,7 @@ function WorkflowNestedGraphContent({ stepGraph, workflowName, isForEach, embedd
     <div className="relative flex h-full w-full flex-col">
       {activeIteration && (
         <div className="nodrag nopan border-border1 flex items-center gap-3 border-b px-4 py-2">
-          <span className="text-ui-sm text-muted-foreground">Iteration</span>
+          <span className="text-caption text-muted-foreground">Iteration</span>
           <Select value={activeIteration.value} onValueChange={setSelectedIteration} items={iterations}>
             <SelectTrigger aria-label="Loop item" size="sm" className="w-36">
               <SelectValue />

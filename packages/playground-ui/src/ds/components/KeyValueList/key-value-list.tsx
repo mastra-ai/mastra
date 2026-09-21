@@ -46,7 +46,7 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
 
         return (
           <React.Fragment key={key ?? index}>
-            <dt className={cn('flex min-h-9 items-center justify-between gap-8 text-ui-md text-muted-foreground')}>
+            <dt className={cn('flex min-h-9 items-center justify-between gap-8 text-body text-muted-foreground')}>
               <span
                 className={cn(
                   'flex items-center gap-2',
@@ -66,8 +66,8 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
             </dt>
             <dd
               className={cn(
-                'flex min-h-9 flex-wrap items-center gap-2 py-1 text-ui-md text-wrap text-foreground',
-                'truncate [&>a]:flex [&>a]:min-h-7 [&>a]:w-auto [&>a]:max-w-full [&>a]:items-center [&>a]:gap-2 [&>a]:rounded-md [&>a]:bg-surface4 [&>a]:px-2 [&>a]:py-0.5 [&>a]:text-ui-md [&>a]:leading-none [&>a]:text-foreground [&>a]:transition-colors',
+                'flex min-h-9 flex-wrap items-center gap-2 py-1 text-body text-wrap text-foreground',
+                'truncate [&>a]:flex [&>a]:min-h-7 [&>a]:w-auto [&>a]:max-w-full [&>a]:items-center [&>a]:gap-2 [&>a]:rounded-md [&>a]:bg-surface4 [&>a]:px-2 [&>a]:py-0.5 [&>a]:text-body [&>a]:leading-none [&>a]:text-foreground [&>a]:transition-colors',
                 '[&>a:hover]:bg-surface6 [&>a:hover]:text-foreground',
                 '[&>a>svg]:ml-[-0.5em] [&>a>svg]:size-[1em] [&>a>svg]:text-muted-foreground',
               )}
@@ -102,7 +102,7 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                   return <span key={item.id}>{item?.name}</span>;
                 })
               ) : (
-                <>{value ? value : <span className="text-ui-sm text-muted-foreground">n/a</span>}</>
+                <>{value ? value : <span className="text-caption text-muted-foreground">n/a</span>}</>
               )}
             </dd>
           </React.Fragment>

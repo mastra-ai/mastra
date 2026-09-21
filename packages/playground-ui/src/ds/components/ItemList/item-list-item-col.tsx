@@ -8,7 +8,7 @@ export type ItemListItemTextProps = {
 
 export function ItemListItemText({ children, isLoading }: ItemListItemTextProps) {
   return (
-    <div className="text-ui-md text-muted-foreground truncate">
+    <div className="text-body text-muted-foreground truncate">
       {isLoading ? (
         <div className="bg-surface4 h-4 animate-pulse rounded-md text-transparent select-none"></div>
       ) : (
@@ -33,7 +33,7 @@ export function ItemListItemStatus({ status }: ItemListItemStatusProps) {
           })}
         ></div>
       ) : (
-        <div className="text-ui-sm text-placeholder leading-none">-</div>
+        <div className="text-caption text-placeholder leading-none">-</div>
       )}
       <VisuallyHidden>Status: {status ? status : 'not provided'}</VisuallyHidden>
     </div>

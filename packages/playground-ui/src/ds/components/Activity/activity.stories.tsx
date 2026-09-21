@@ -18,7 +18,7 @@ export const Wick: Story = {
   render: args => (
     <div className="bg-surface2 relative w-64 rounded-xl border border-transparent p-6">
       <ActivityWick {...args} />
-      <span className="text-ui-sm text-foreground">Session activity</span>
+      <span className="text-caption text-foreground">Session activity</span>
     </div>
   ),
 };
@@ -26,15 +26,15 @@ export const Wick: Story = {
 export const Belts: Story = {
   render: () => (
     <div className="flex w-64 flex-col gap-2">
-      <div className="bg-surface2 text-ui-sm text-foreground relative rounded-lg py-3 pl-6">
+      <div className="bg-surface2 text-caption text-foreground relative rounded-lg py-3 pl-6">
         <ActivityBelt status="initializing" label="Preparing workspace" />
         Preparing workspace
       </div>
-      <div className="bg-surface2 text-ui-sm text-foreground relative rounded-lg py-3 pl-6">
+      <div className="bg-surface2 text-caption text-foreground relative rounded-lg py-3 pl-6">
         <ActivityBelt status="working" label="Processing request" />
         Processing request
       </div>
-      <div className="bg-surface2 text-ui-sm text-foreground relative rounded-lg py-3 pl-6">
+      <div className="bg-surface2 text-caption text-foreground relative rounded-lg py-3 pl-6">
         <ActivityBelt status="ready" label="Waiting for approval" />
         Waiting for approval
       </div>
@@ -49,7 +49,7 @@ export const StateTransitions: Story = {
       <div className="flex flex-col items-start gap-4">
         <div className="bg-surface2 relative w-64 rounded-xl border border-transparent p-6">
           <ActivityWick status={status} />
-          <span className="text-ui-sm text-foreground">Session activity</span>
+          <span className="text-caption text-foreground">Session activity</span>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setStatus('initializing')}>Initialize</Button>

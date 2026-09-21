@@ -5,6 +5,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAgentSettings } from '@/domains/agents/context/agent-context';
@@ -69,7 +72,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
     }
   };
 
-  const buttonClass = 'text-muted-foreground hover:text-foreground';
+  const buttonClass = cn(quietTextHover, controlStateColorTransition);
 
   return (
     <TooltipProvider>

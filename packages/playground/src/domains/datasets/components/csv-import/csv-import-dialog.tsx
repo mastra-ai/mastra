@@ -337,7 +337,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'preview':
         return parsedCSV ? (
           <div className="flex flex-col gap-4">
-            <div className="text-muted-foreground text-ui-md">Preview of your CSV data. Click Next to map columns.</div>
+            <div className="text-muted-foreground text-body">Preview of your CSV data. Click Next to map columns.</div>
             <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={5} />
           </div>
         ) : null;
@@ -355,7 +355,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* Compact preview */}
             <div className="border-border1 border-t pt-4">
-              <div className="text-muted-foreground text-ui-sm mb-2">Data Preview</div>
+              <div className="text-muted-foreground text-caption mb-2">Data Preview</div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
           </div>
@@ -364,7 +364,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'validation':
         return schemaValidation ? (
           <div className="flex flex-col gap-4">
-            <div className="text-muted-foreground text-ui-md">
+            <div className="text-muted-foreground text-body">
               {dataset?.inputSchema || dataset?.groundTruthSchema
                 ? 'Rows have been validated against the dataset schema.'
                 : 'Ready to import. No schema validation required.'}
@@ -374,17 +374,17 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             {schemaValidation.invalidCount > 0 ? (
               <div className="bg-warning/10 border-warning/30 rounded-md border p-3">
                 <div className="text-warning flex items-center gap-2 font-medium">
-                  <span className="text-header-sm">⚠</span>
+                  <span className="text-heading">⚠</span>
                   {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
                 </div>
-                <p className="text-muted-foreground text-ui-md mt-1">
+                <p className="text-muted-foreground text-body mt-1">
                   {schemaValidation.validCount} of {schemaValidation.totalRows} rows will be imported
                 </p>
               </div>
             ) : (
               <div className="bg-success/10 border-success/30 rounded-md border p-3">
                 <div className="text-success flex items-center gap-2 font-medium">
-                  <span className="text-header-sm">✓</span>
+                  <span className="text-heading">✓</span>
                   All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
                 </div>
               </div>
@@ -409,8 +409,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
           <div className="flex flex-col items-center gap-4 py-5">
             <Spinner />
             <div className="text-center">
-              <div className="text-placeholder text-header-sm font-medium">Importing items...</div>
-              <div className="text-muted-foreground text-ui-md mt-1">
+              <div className="text-placeholder text-heading">Importing items...</div>
+              <div className="text-muted-foreground text-body mt-1">
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
@@ -420,10 +420,10 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'complete':
         return (
           <div className="flex flex-col items-center gap-4 py-5">
-            <div className="text-header-xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
+            <div className="text-display">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
             <div className="text-center">
-              <div className="text-placeholder text-header-sm font-medium">Import Complete</div>
-              <div className="text-muted-foreground text-ui-md mt-1">
+              <div className="text-placeholder text-heading">Import Complete</div>
+              <div className="text-muted-foreground text-body mt-1">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
                   <span className="text-accent2">

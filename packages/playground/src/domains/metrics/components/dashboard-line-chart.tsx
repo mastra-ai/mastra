@@ -30,12 +30,12 @@ export function DashboardLineChart({
             <div key={s.dataKey}>
               <div className="flex items-center gap-2">
                 <div className="h-0.5 w-3 rounded-full" style={{ backgroundColor: s.color }} />
-                <span className="text-ui-xs text-muted-foreground uppercase">{s.label}</span>
+                <span className="text-meta text-muted-foreground uppercase">{s.label}</span>
               </div>
               {aggregated && (
-                <p className="text-ui-md text-muted-foreground pl-5">
+                <p className="text-body text-muted-foreground pl-5">
                   {aggregated.value}
-                  {aggregated.suffix && <span className="text-ui-sm text-placeholder"> {aggregated.suffix}</span>}
+                  {aggregated.suffix && <span className="text-caption text-placeholder"> {aggregated.suffix}</span>}
                 </p>
               )}
             </div>

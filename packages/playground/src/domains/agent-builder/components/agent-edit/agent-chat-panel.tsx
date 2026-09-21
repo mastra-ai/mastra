@@ -1,5 +1,8 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
@@ -157,18 +160,14 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <Avatar name={agentName ?? 'Agent'} src={agentAvatarUrl} size="lg" />
             </div>
             <div className="starter-chip" style={{ animationDelay: '150ms' }}>
-              <Txt
-                variant="ui-lg"
-                className="text-foreground font-semibold"
-                style={{ viewTransitionName: 'agent-name' }}
-              >
+              <Txt variant="heading" className="text-foreground" style={{ viewTransitionName: 'agent-name' }}>
                 {agentName ?? 'your agent'}
               </Txt>
             </div>
             {agentDescription ? (
               <div className="starter-chip" style={{ animationDelay: '220ms' }}>
                 <Txt
-                  variant="ui-sm"
+                  variant="caption"
                   className="text-muted-foreground max-w-[40ch]"
                   style={{ viewTransitionName: 'agent-description' }}
                 >
@@ -186,22 +185,22 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 onClick={() => onStarterPromptSelect(starterPrompt.prompt)}
                 data-testid={`agent-builder-agent-chat-starter-${starterPrompt.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + index * 40}ms` }}
-                className="starter-chip group border-border1 bg-surface2 duration-normal ease-out-custom hover:border-border2 hover:bg-surface3 focus-visible:ring-accent1 flex gap-3 rounded-3xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                className="starter-chip group border-border1 bg-surface2 hover:border-border2 hover:bg-surface3 focus-visible:ring-accent1 flex gap-3 rounded-3xl border p-4 text-left focus-visible:ring-2 focus-visible:outline-none"
               >
-                <span className="bg-surface3 text-muted-foreground group-hover:text-foreground mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors">
+                <span
+                  className={cn(
+                    'bg-surface3 mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md',
+                    quietTextHoverInGroup,
+                    controlStateColorTransition,
+                  )}
+                >
                   <starterPrompt.Icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                  <Txt
-                    variant="ui-sm"
-                    className="text-foreground group-hover:text-foreground font-medium transition-colors"
-                  >
+                  <Txt variant="column" className="text-foreground">
                     {starterPrompt.title}
                   </Txt>
-                  <Txt
-                    variant="ui-xs"
-                    className="text-muted-foreground group-hover:text-foreground mt-1 transition-colors"
-                  >
+                  <Txt variant="meta" className={cn('mt-1', quietTextHoverInGroup, controlStateColorTransition)}>
                     {starterPrompt.description}
                   </Txt>
                 </span>

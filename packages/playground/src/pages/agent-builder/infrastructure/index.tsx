@@ -20,7 +20,7 @@ const InfrastructureStatus = ({ ok, label }: { ok: boolean; label: string }) => 
 );
 
 const EmptyRow = ({ message }: { message: string }) => (
-  <Txt variant="ui-sm" className="text-muted-foreground">
+  <Txt variant="caption" className="text-muted-foreground">
     {message}
   </Txt>
 );
@@ -35,10 +35,10 @@ const titleCase = (value: string | number | null | undefined) => {
 
 const Detail = ({ label, value }: { label: string; value: string | number | null | undefined }) => (
   <div className="flex flex-col gap-0.5">
-    <Txt variant="ui-xs" className="text-muted-foreground">
+    <Txt variant="meta" className="text-muted-foreground">
       {label}
     </Txt>
-    <Txt variant="ui-sm" className="text-icon6">
+    <Txt variant="caption" className="text-icon6">
       {value ?? 'Not set'}
     </Txt>
   </div>
@@ -75,25 +75,23 @@ export const AgentBuilderInfrastructure = () => {
           description="Deployment-level defaults Agent Builder applies when users create or run builder agents."
         >
           {!canViewInfrastructure ? (
-            <Txt variant="ui-sm" className="text-muted-foreground">
+            <Txt variant="caption" className="text-muted-foreground">
               You do not have permission to view Agent Builder infrastructure.
             </Txt>
           ) : isLoading ? (
-            <Txt variant="ui-sm" className="text-muted-foreground">
+            <Txt variant="caption" className="text-muted-foreground">
               Loading infrastructure configuration…
             </Txt>
           ) : error || !data ? (
-            <Txt variant="ui-sm" className="text-muted-foreground">
+            <Txt variant="caption" className="text-muted-foreground">
               Infrastructure configuration unavailable.
             </Txt>
           ) : (
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-1">
-                  <Txt variant="ui-md" className="font-medium">
-                    Channels
-                  </Txt>
-                  <Txt variant="ui-xs" className="text-muted-foreground">
+                  <Txt variant="subheading">Channels</Txt>
+                  <Txt variant="meta" className="text-muted-foreground">
                     Configured channel providers available to Agent Builder publish/share flows. Unconfigured providers
                     are omitted until their required environment/config is present.
                   </Txt>
@@ -106,10 +104,8 @@ export const AgentBuilderInfrastructure = () => {
                       <li key={provider.id} className="border-border1 rounded-md border px-3 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex flex-col gap-1">
-                            <Txt variant="ui-sm" className="font-medium">
-                              {titleCase(provider.name)}
-                            </Txt>
-                            <Txt variant="ui-xs" className="text-muted-foreground">
+                            <Txt variant="column">{titleCase(provider.name)}</Txt>
+                            <Txt variant="meta" className="text-muted-foreground">
                               Provider ID: {provider.id}
                             </Txt>
                           </div>
@@ -130,10 +126,8 @@ export const AgentBuilderInfrastructure = () => {
 
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-1">
-                  <Txt variant="ui-md" className="font-medium">
-                    Browser
-                  </Txt>
-                  <Txt variant="ui-xs" className="text-muted-foreground">
+                  <Txt variant="subheading">Browser</Txt>
+                  <Txt variant="meta" className="text-muted-foreground">
                     Browser automation provider configured for builder agents. The card shows the selected provider and
                     only non-default options explicitly passed in configuration.
                   </Txt>
@@ -144,9 +138,7 @@ export const AgentBuilderInfrastructure = () => {
                   <div className="border-border1 rounded-md border px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex flex-col gap-1">
-                        <Txt variant="ui-sm" className="font-medium">
-                          {titleCase(data.browser.provider)}
-                        </Txt>
+                        <Txt variant="column">{titleCase(data.browser.provider)}</Txt>
                       </div>
                       <InfrastructureStatus
                         ok={data.browser.registered}
@@ -165,20 +157,16 @@ export const AgentBuilderInfrastructure = () => {
 
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-1">
-                  <Txt variant="ui-md" className="font-medium">
-                    Registries
-                  </Txt>
-                  <Txt variant="ui-xs" className="text-muted-foreground">
+                  <Txt variant="subheading">Registries</Txt>
+                  <Txt variant="meta" className="text-muted-foreground">
                     External skill registries available to import skills into the workspace.
                   </Txt>
                 </div>
                 <div className="border-border1 rounded-md border px-3 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-col gap-1">
-                      <Txt variant="ui-sm" className="font-medium">
-                        skills.sh
-                      </Txt>
-                      <Txt variant="ui-xs" className="text-muted-foreground">
+                      <Txt variant="column">skills.sh</Txt>
+                      <Txt variant="meta" className="text-muted-foreground">
                         GitHub-backed public skills registry.
                       </Txt>
                     </div>
@@ -192,10 +180,8 @@ export const AgentBuilderInfrastructure = () => {
 
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-1">
-                  <Txt variant="ui-md" className="font-medium">
-                    Workspace
-                  </Txt>
-                  <Txt variant="ui-xs" className="text-muted-foreground">
+                  <Txt variant="subheading">Workspace</Txt>
+                  <Txt variant="meta" className="text-muted-foreground">
                     Workspace config used for generated files and sandbox execution. This reports the builder workspace
                     only, not agent-specific runtime workspaces.
                   </Txt>
@@ -205,7 +191,7 @@ export const AgentBuilderInfrastructure = () => {
                 ) : (
                   <div className="border-border1 rounded-md border px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
-                      <Txt variant="ui-sm" className="font-medium">
+                      <Txt variant="column">
                         {data.workspace.workspaceId ?? data.workspace.name ?? 'Inline workspace'}
                       </Txt>
                       <div className="flex gap-2">

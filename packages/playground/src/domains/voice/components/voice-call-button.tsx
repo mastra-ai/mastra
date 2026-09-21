@@ -12,39 +12,38 @@ export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
   if (voiceCall.status === 'idle') {
     return (
       <Button
-        variant="default"
+        variant="ghost"
         size="icon-md"
         type="button"
         aria-label="Start voice call"
         aria-disabled={!isLiveKitAvailable || undefined}
-        className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         tooltip={isLiveKitAvailable ? 'Start voice call' : 'Configure @mastra/livekit to start voice calls.'}
         data-testid="voice-call-button"
         onClick={() => voiceCall.start()}
       >
-        <Phone className="text-muted-foreground hover:text-foreground h-5 w-5" />
+        <Phone />
       </Button>
     );
   }
 
   if (voiceCall.status === 'connecting') {
     return (
-      <Button variant="default" size="icon-md" type="button" tooltip="Connecting…" data-testid="voice-call-button">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      <Button variant="ghost" size="icon-md" type="button" tooltip="Connecting…" data-testid="voice-call-button">
+        <Loader2 className="animate-spin" />
       </Button>
     );
   }
 
   return (
     <Button
-      variant="default"
+      variant="destructive-ghost"
       size="icon-md"
       type="button"
       tooltip="End voice call"
       data-testid="voice-call-button"
       onClick={() => voiceCall.stop()}
     >
-      <PhoneOff className="h-5 w-5 text-red-500" />
+      <PhoneOff />
     </Button>
   );
 };

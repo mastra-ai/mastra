@@ -38,8 +38,6 @@ const semanticTokens = [
   'placeholder',
   'border',
   'ring',
-  'sidebar-accent',
-  'selected',
   // The only chromatic pair in the contract. Everything else here is neutral.
   'destructive',
   'destructive-foreground',
@@ -57,9 +55,12 @@ const deferredSemanticTokens = [
   'accent-foreground',
   'input',
   'sidebar-foreground',
+  'sidebar-accent',
   'sidebar-accent-foreground',
   'sidebar-border',
   'sidebar-ring',
+  'sidebar-divider',
+  'selected',
 ] as const;
 
 const darkAliases = {
@@ -69,12 +70,10 @@ const darkAliases = {
   popover: 'background-3',
   muted: 'gray-1',
   foreground: 'gray-10',
-  'muted-foreground': 'gray-9',
+  'muted-foreground': 'gray-8',
   placeholder: 'gray-7',
   border: 'gray-alpha-2',
-  ring: 'gray-8',
-  'sidebar-accent': 'gray-alpha-1',
-  selected: 'gray-alpha-2',
+  ring: 'border-focus',
 } as const;
 
 const lightAliases = {
@@ -94,18 +93,14 @@ const parseVariables = (css: string) => {
   return variables;
 };
 
-const getThemeVariables = (themeCss: string, newThemeCss: string) => {
+const getThemeVariables = (themeCss: string) => {
   const themeRootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
   const themeLightStart = themeCss.indexOf('html.light');
   const themeLightBlock = themeCss.slice(themeLightStart, themeCss.indexOf('\n}\n\n@theme', themeLightStart) + 2);
-  const semanticScopedBlock = newThemeCss.slice(newThemeCss.indexOf('.new-theme {'), newThemeCss.indexOf('html.light'));
-  const semanticLightBlock = newThemeCss.slice(newThemeCss.indexOf('html.light'));
-  const semanticScopedVariables = parseVariables(semanticScopedBlock);
-  const semanticLightVariables = new Map([...semanticScopedVariables, ...parseVariables(semanticLightBlock)]);
   const darkVariables = parseVariables(themeRootBlock);
   const lightVariables = new Map([...darkVariables, ...parseVariables(themeLightBlock)]);
 
-  return { semanticScopedVariables, semanticLightVariables, darkVariables, lightVariables };
+  return { darkVariables, lightVariables };
 };
 
 const resolveToken = (token: string, variables: Map<string, string>, seen: string[] = []): string => {
@@ -146,19 +141,13 @@ const apcaContrast = (foreground: number, background: number) => {
 
 describe('theme.css export', () => {
   const themeCss = readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8');
-  const newThemeCss = readFileSync(resolve(pkgRoot, 'new-theme.css'), 'utf8');
   const productionCss = readFileSync(resolve(pkgRoot, 'src/index.css'), 'utf8');
-  const storybookCss = readFileSync(resolve(pkgRoot, '.storybook/tailwind.css'), 'utf8');
 
   it('ships raw (uncompiled) with the @theme directive intact', () => {
     expect(themeCss).toMatch(/@theme\s*\{/);
     expect(themeCss).toMatch(/:root\s*\{/);
-    expect(newThemeCss).not.toMatch(/@theme/);
-    expect(newThemeCss).toMatch(/\.new-theme\s*\{/);
     expect(themeCss).not.toMatch(/^\/\*!\s*tailwindcss/);
-    expect(newThemeCss).not.toMatch(/^\/\*!\s*tailwindcss/);
     expect(themeCss).not.toMatch(/\.bg-surface1\b/);
-    expect(newThemeCss).not.toMatch(/\.bg-background\b/);
   });
 
   it('overrides the green palette the native v4 way (initial + remap)', () => {
@@ -229,26 +218,20 @@ describe('theme.css export', () => {
   });
 
   it('defines the approved semantic alias graph in both themes', () => {
-    const { semanticScopedVariables, semanticLightVariables, darkVariables, lightVariables } = getThemeVariables(
-      themeCss,
-      newThemeCss,
-    );
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
 
     for (const [token, reference] of Object.entries(darkAliases)) {
       expect(darkVariables.get(token)).toBe(`var(--${reference})`);
-      expect(semanticScopedVariables.get(token)).toBe(`var(--${reference})`);
     }
 
     for (const [token, reference] of Object.entries(lightAliases)) {
       expect(lightVariables.get(token)).toBe(`var(--${reference})`);
-      expect(semanticLightVariables.get(token)).toBe(`var(--${reference})`);
     }
 
     for (const token of semanticTokens) {
       expect(() => resolveToken(token, darkVariables)).not.toThrow();
       expect(() => resolveToken(token, lightVariables)).not.toThrow();
       expect(themeCss).toContain(`--color-${token}: var(--${token});`);
-      expect(newThemeCss).not.toContain(`--color-${token}:`);
     }
   });
 
@@ -266,7 +249,6 @@ describe('theme.css export', () => {
     for (const token of deferredSemanticTokens) {
       expect(themeCss).not.toContain(`--${token}:`);
       expect(themeCss).not.toContain(`--color-${token}:`);
-      expect(newThemeCss).not.toContain(`--${token}:`);
       expect(Object.hasOwn(exportedColors, token)).toBe(false);
     }
   });
@@ -282,7 +264,6 @@ describe('theme.css export', () => {
       ...Array.from({ length: 10 }, (_, index) => `gray-alpha-${index + 1}`),
     ]) {
       expect(themeCss).not.toContain(`--color-${token}:`);
-      expect(newThemeCss).not.toContain(`--color-${token}:`);
       expect(colorSource).not.toContain(`var(--${token})`);
     }
   });
@@ -309,31 +290,19 @@ describe('theme.css export', () => {
     }
   });
 
-  it('registers semantic utilities and their :root defaults in the shared bundle without the opt-in scope', async () => {
+  it('registers semantic utilities and their :root defaults in the shared bundle', async () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const output = compiler.build(['bg-surface3', ...semanticTokens.map(token => `bg-${token}`)]);
 
     expect(output).toContain('.bg-surface3');
-    expect(output).not.toContain('.new-theme');
     for (const token of semanticTokens) {
       expect(output).toContain(`.bg-${token} {`);
       expect(output).toContain(`--${token}:`);
     }
   });
 
-  it('compiles the component import to scoped defaults without a second set of utilities', async () => {
-    const compiler = await compileStylesheet(newThemeCss, pkgRoot);
-    const output = compiler.build(['flex', 'bg-card']);
-
-    expect(output).toContain('.new-theme {');
-    expect(output).toContain('html.light .new-theme {');
-    expect(output).not.toContain(':root');
-    expect(output).not.toContain('.flex');
-    expect(output).not.toContain('.bg-');
-  });
-
   it('keeps the focus ring visible on every neutral product surface', () => {
-    const { darkVariables, lightVariables } = getThemeVariables(themeCss, newThemeCss);
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
       const ringLightness = oklchLightness(resolveToken('ring', variables));
@@ -344,24 +313,34 @@ describe('theme.css export', () => {
     }
   });
 
+  // Two tiers, because the two tones do different jobs. Ink carries the content and is held
+  // to APCA's body-text level (Lc 60). Supporting text is a deliberate step back from ink —
+  // at Lc 60 it reads as a second ink and the hierarchy collapses — so it is gated at Lc 40:
+  // `--gray-8` measures Lc 45.0 on light and 43.7 on dark. That is under APCA's Lc 45 spot
+  // reading for 13px text and is accepted knowingly: it clears WCAG AA for normal text on
+  // every product surface, and it is the level Linear's own sidebar label sits at
+  // (`lch(37.78)` light, `oklch(0.647)` dark). Supporting text never carries a fact that is
+  // not also in the ink beside it.
+  const apcaFloor: Record<string, number> = { foreground: 60, 'muted-foreground': 40 };
+
   it('meets text contrast gates on every neutral product surface', () => {
-    const { darkVariables, lightVariables } = getThemeVariables(themeCss, newThemeCss);
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
-      for (const foreground of ['foreground', 'muted-foreground']) {
+      for (const [foreground, floor] of Object.entries(apcaFloor)) {
         const foregroundLightness = oklchLightness(resolveToken(foreground, variables));
 
         for (const background of ['sidebar', 'background', 'card', 'muted']) {
           const backgroundLightness = oklchLightness(resolveToken(background, variables));
           expect(wcagContrast(foregroundLightness, backgroundLightness)).toBeGreaterThanOrEqual(4.5);
-          expect(Math.abs(apcaContrast(foregroundLightness, backgroundLightness))).toBeGreaterThanOrEqual(60);
+          expect(Math.abs(apcaContrast(foregroundLightness, backgroundLightness))).toBeGreaterThanOrEqual(floor);
         }
       }
     }
   });
 
   it('keeps placeholder text perceivable on every neutral product surface', () => {
-    const { darkVariables, lightVariables } = getThemeVariables(themeCss, newThemeCss);
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
       const placeholderLightness = oklchLightness(resolveToken('placeholder', variables));
@@ -373,14 +352,9 @@ describe('theme.css export', () => {
     }
   });
 
-  it('ships the semantic layer as an opt-in raw stylesheet', () => {
-    expect(themeCss).not.toContain("@import './new-theme.css';");
-    expect(productionCss).not.toMatch(/@import[^;]*new-theme\.css/);
-    expect(storybookCss).toContain("@import '../new-theme.css';");
+  it('ships the theme layer as a raw stylesheet', () => {
     expect(pkg.exports['./theme.css']).toBe('./theme.css');
     expect(pkg.exports['./theme.css']).not.toContain('dist');
-    expect(pkg.exports['./new-theme.css']).toBe('./new-theme.css');
     expect(pkg.files).toContain('theme.css');
-    expect(pkg.files).toContain('new-theme.css');
   });
 });

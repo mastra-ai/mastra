@@ -235,51 +235,53 @@ export function Combobox(props: ComboboxProps) {
     </>
   );
 
-  if (multiple) {
-    return (
-      <div className={comboboxStyles.root}>
-        <BaseCombobox.Root
-          multiple
-          autoHighlight
-          items={displayedOptions}
-          value={selectedOptions}
-          onValueChange={items => props.onValueChange?.((items ?? []).map(item => item.value))}
-          disabled={disabled}
-          open={open}
-          onOpenChange={onOpenChange}
-        >
-          {comboboxContent}
-        </BaseCombobox.Root>
-        {error && <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>}
-      </div>
-    );
-  }
+  const root = multiple ? (
+    <BaseCombobox.Root
+      multiple
+      autoHighlight
+      items={displayedOptions}
+      value={selectedOptions}
+      onValueChange={items => props.onValueChange?.((items ?? []).map(item => item.value))}
+      disabled={disabled}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      {comboboxContent}
+    </BaseCombobox.Root>
+  ) : (
+    <BaseCombobox.Root
+      autoHighlight
+      items={displayedOptions}
+      value={selectedOption}
+      inputValue={inputValue}
+      onInputValueChange={value => {
+        setInputValue(value);
+        onInputValueChange?.(value);
+      }}
+      onValueChange={item => {
+        if (item) {
+          props.onValueChange?.(item.value);
+          setInputValue('');
+          onInputValueChange?.('');
+        }
+      }}
+      disabled={disabled}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      {comboboxContent}
+    </BaseCombobox.Root>
+  );
+
+  // Without an error there is nothing to stack, so the trigger is the root: a wrapper
+  // here would hide the trigger from a parent that styles its own children — a
+  // ButtonsGroup seam, an InputGroup control, a flex row.
+  if (!error) return root;
 
   return (
     <div className={comboboxStyles.root}>
-      <BaseCombobox.Root
-        autoHighlight
-        items={displayedOptions}
-        value={selectedOption}
-        inputValue={inputValue}
-        onInputValueChange={value => {
-          setInputValue(value);
-          onInputValueChange?.(value);
-        }}
-        onValueChange={item => {
-          if (item) {
-            props.onValueChange?.(item.value);
-            setInputValue('');
-            onInputValueChange?.('');
-          }
-        }}
-        disabled={disabled}
-        open={open}
-        onOpenChange={onOpenChange}
-      >
-        {comboboxContent}
-      </BaseCombobox.Root>
-      {error && <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>}
+      {root}
+      <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>
     </div>
   );
 }

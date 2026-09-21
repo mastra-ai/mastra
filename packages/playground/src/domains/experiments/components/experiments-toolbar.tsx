@@ -74,7 +74,7 @@ export function ExperimentsToolbar({
           onSearch={onSearchChange}
         />
       </div>
-      <ButtonsGroup>
+      <div className="flex items-center gap-2">
         <SelectFieldBlock
           label="Status"
           labelIsHidden
@@ -104,7 +104,7 @@ export function ExperimentsToolbar({
             Reset
           </Button>
         )}
-      </ButtonsGroup>
+      </div>
       {selection ? (
         <ButtonsGroup className="ml-auto shrink-0 whitespace-nowrap">
           <ButtonsGroupText className="gap-2">
@@ -124,7 +124,7 @@ export function ExperimentsToolbar({
           </Button>
         </ButtonsGroup>
       ) : (
-        <ButtonsGroup className="ml-auto shrink-0">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {onCompareClick && (
             <Button
               onClick={onCompareClick}
@@ -139,7 +139,7 @@ export function ExperimentsToolbar({
               Run Experiment
             </Button>
           )}
-        </ButtonsGroup>
+        </div>
       )}
     </div>
   );

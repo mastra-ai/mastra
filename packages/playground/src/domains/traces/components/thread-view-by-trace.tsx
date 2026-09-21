@@ -57,7 +57,7 @@ export function ThreadViewByTrace({ threadId, onSelectedSpanChange }: ThreadView
   if (traceIds.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <Txt variant="ui-md" className="text-muted-foreground">
+        <Txt variant="body" className="text-muted-foreground">
           No traces found for this thread.
         </Txt>
       </div>

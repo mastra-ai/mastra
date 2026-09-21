@@ -138,10 +138,8 @@ export const FileTreeBadge = ({
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
           <Badge icon={<FolderTree className="text-accent6" size={16} />}>
-            List Files <span className="text-foreground ml-1 font-normal">{path}</span>
-            {argsDisplay.length > 0 && (
-              <span className="text-muted-foreground ml-1 font-normal">({argsDisplay.join(', ')})</span>
-            )}
+            List Files <span className="text-foreground ml-1">{path}</span>
+            {argsDisplay.length > 0 && <span className="text-muted-foreground ml-1">({argsDisplay.join(', ')})</span>}
           </Badge>
         </button>
 
@@ -149,7 +147,7 @@ export const FileTreeBadge = ({
         {wsMeta?.filesystem && (
           <Link
             href={wsMeta.id ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
-            className="text-foreground bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 text-ui-sm flex items-center gap-1.5 rounded border px-1.5 py-0.5 transition-colors"
+            className="text-foreground bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 text-caption flex items-center gap-1.5 rounded border px-1.5 py-0.5"
           >
             <HardDrive className="size-3" />
             <span>{wsMeta.name || wsMeta.filesystem.name}</span>
@@ -157,7 +155,7 @@ export const FileTreeBadge = ({
         )}
 
         {/* Summary - show in header when collapsed */}
-        {isCollapsed && hasResult && summary && <span className="text-foreground text-ui-sm">{summary}</span>}
+        {isCollapsed && hasResult && summary && <span className="text-foreground text-caption">{summary}</span>}
       </div>
 
       {/* Content area */}
@@ -185,7 +183,7 @@ export const FileTreeBadge = ({
             <div className="border-border1 bg-surface2 overflow-hidden rounded-md border">
               {/* Panel header with summary and copy button */}
               <div className="border-border1 bg-surface3 flex items-center justify-between border-b px-3 py-1.5">
-                {summary && <span className="text-foreground text-ui-sm">{summary}</span>}
+                {summary && <span className="text-foreground text-caption">{summary}</span>}
                 <Button variant="default" size="icon-sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
                     <span
@@ -205,7 +203,7 @@ export const FileTreeBadge = ({
               </div>
 
               {/* Tree content */}
-              <pre className="text-mastra-el-6 max-h-dropdown-max-height text-ui-sm overflow-x-auto overflow-y-auto p-3 font-mono whitespace-pre">
+              <pre className="text-mastra-el-6 max-h-dropdown-max-height text-caption overflow-x-auto overflow-y-auto p-3 font-mono whitespace-pre">
                 {treeOutput}
               </pre>
             </div>
@@ -214,7 +212,7 @@ export const FileTreeBadge = ({
           {/* Loading state */}
           {toolCalled && !hasResult && (
             <div className="border-border1 bg-surface2 rounded-md border px-3 py-2">
-              <span className="text-foreground text-ui-sm">Loading...</span>
+              <span className="text-foreground text-caption">Loading...</span>
             </div>
           )}
         </div>

@@ -24,7 +24,7 @@ function MetricsColumn({ title }: { title: string }) {
   return (
     <Column className="p-5" withRightSeparator>
       <Column.Toolbar>
-        <h2 className="text-foreground text-header-sm">{title}</h2>
+        <h2 className="text-foreground text-heading">{title}</h2>
         <Button size="sm" variant="ghost">
           <SlidersHorizontalIcon />
           Configure
@@ -32,11 +32,11 @@ function MetricsColumn({ title }: { title: string }) {
       </Column.Toolbar>
       <Column.Content className="gap-3">
         {columnContent.map(([label, value]) => (
-          <Card key={label} appearance="surface">
+          <Card key={label}>
             <CardHeader>
               <CardTitle>{value}</CardTitle>
             </CardHeader>
-            <CardContent density="compact" className="text-ui-sm text-muted-foreground">
+            <CardContent density="compact" className="text-caption text-muted-foreground">
               {label}
             </CardContent>
           </Card>

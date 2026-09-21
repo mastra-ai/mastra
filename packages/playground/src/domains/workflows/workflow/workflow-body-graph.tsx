@@ -18,7 +18,7 @@ export function WorkflowBodyGraph({
       {isForEach && (
         <div className="text-muted-foreground flex shrink-0 items-start gap-2 px-4 py-3">
           <Repeat2 aria-hidden className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-          <Txt variant="ui-xs">Runs for every item. All items finish before the workflow continues.</Txt>
+          <Txt variant="meta">Runs for every item. All items finish before the workflow continues.</Txt>
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-hidden">

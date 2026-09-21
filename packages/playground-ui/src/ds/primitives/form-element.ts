@@ -5,11 +5,13 @@
 export const sharedFormElementDisabledStyle = 'disabled:cursor-not-allowed disabled:text-muted-foreground';
 
 // Surface half of the disabled language, for neutral controls that carry a fill.
-// Variants with their own hue (primary, destructive) keep that hue at reduced
-// emphasis instead, so a disabled destructive action still reads as destructive.
-// Transparent variants (ghost) opt out entirely: a disabled icon button in a
-// toolbar should stay invisible rather than resolve into a muted pill.
-export const disabledFilledSurfaceStyle = 'disabled:border-border disabled:bg-muted';
+// It recesses to the lowest rung of the fill ladder, one step below the resting
+// `--fill`, so a disabled field reads quieter than an enabled one on every
+// surface. Variants with their own hue (primary, destructive) keep that hue at
+// reduced emphasis instead, so a disabled destructive action still reads as
+// destructive. Transparent variants (ghost) opt out entirely: a disabled icon
+// button in a toolbar should stay invisible rather than resolve into a pill.
+export const disabledFilledSurfaceStyle = 'disabled:border-border disabled:bg-fill-subtle';
 export const disabledOutlineSurfaceStyle = 'disabled:border-border disabled:bg-transparent';
 
 // Focus indicator for the (green-less) input family. Instead of a heavy ring we
@@ -18,8 +20,8 @@ export const disabledOutlineSurfaceStyle = 'disabled:border-border disabled:bg-t
 // WCAG 1.4.11 non-text contrast (3:1) on any surface, where the resting `border`
 // token alone does not. `focus-visible` for the bare control, `focus-within` for
 // wrapper variants (InputGroup) whose focus lives on a nested input.
-export const inputFocusBorderVisible = 'focus-visible:border-foreground/60';
-export const inputFocusBorderWithin = 'focus-within:border-foreground/60';
+export const inputFocusBorderVisible = 'focus-visible:border-border-focus';
+export const inputFocusBorderWithin = 'focus-within:border-border-focus';
 
 // Canonical focus indicator for a bare interactive control (Button, etc.) in the
 // non-accent input/border language: suppress the browser outline and let the 1px
@@ -31,11 +33,11 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 // Hover borders are guarded so they can never clobber the focus border. Tailwind
 // can emit focus variants before hover variants, so an unguarded `hover:border-*`
 // of equal specificity may win on a field that is focused AND hovered.
-export const inputHoverBorderVisible = '[&:hover:not(:focus-visible):not(:disabled)]:border-foreground/45';
+export const inputHoverBorderVisible = '[&:hover:not(:focus-visible):not(:disabled)]:border-border-hover';
 // The wrapper itself is never `:disabled` — the control it wraps is — so the guard
 // has to ask about descendants. Without it, hovering a group that contains a
 // disabled input repaints the enabled border over the muted disabled one.
-export const inputHoverBorderWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:border-foreground/45';
+export const inputHoverBorderWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:border-border-hover';
 
 // Background-agnostic surface + focus recipe shared by Input, Textarea and the
 // filled field triggers (Select/Combobox `default`). Reads on any underlying
@@ -44,15 +46,15 @@ export const inputHoverBorderWithin = '[&:hover:not(:focus-within):not(:has(:dis
 // Filled fields carry their affordance in the fill, exactly like a default Button:
 // the resting `border` stays put on hover and only the surface steps up.
 export const inputSurfaceAndFocusStyle =
-  'bg-foreground/10 border border-border text-foreground ' +
-  'not-disabled:hover:bg-foreground/14 ' +
-  'outline-hidden focus-visible:outline-hidden focus-visible:bg-foreground/14 ' +
+  'bg-fill border border-border text-foreground ' +
+  'not-disabled:hover:bg-fill-hover ' +
+  'outline-hidden focus-visible:outline-hidden focus-visible:bg-fill-hover ' +
   inputFocusBorderVisible;
 
 // Outline fields share Button's outline ladder exactly: a visible resting border
 // (`foreground/30`), brightening on hover, then the shared focus border.
 export const inputOutlineAndFocusStyle =
-  'bg-transparent border border-foreground/30 text-foreground ' +
+  'bg-transparent border border-border-strong text-foreground ' +
   inputHoverBorderVisible +
   ' ' +
   'outline-hidden focus-visible:outline-hidden ' +
@@ -63,9 +65,9 @@ export const inputOutlineAndFocusStyle =
 // and border with the field overlay — a field is not a button. Like every filled
 // control it carries hover in the fill and leaves the resting border alone.
 export const fieldTriggerSurfaceStyle =
-  'bg-foreground/10 border-border text-foreground ' +
-  'not-disabled:hover:bg-foreground/14 not-disabled:active:bg-foreground/14 ' +
-  'focus-visible:bg-foreground/14 ' +
+  'bg-fill border-border text-foreground ' +
+  'not-disabled:hover:bg-fill-hover not-disabled:active:bg-fill-hover ' +
+  'focus-visible:bg-fill-hover ' +
   inputFocusBorderVisible;
 
 // `filled` was an alias for `default` (both render the filled surface) and has been

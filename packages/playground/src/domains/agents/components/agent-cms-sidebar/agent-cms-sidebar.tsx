@@ -1,5 +1,7 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check } from 'lucide-react';
 import { useMemo } from 'react';
@@ -99,10 +101,9 @@ const SidebarLink = ({
       <Link
         href={href}
         className={cn(
-          'flex items-center gap-2.5 px-3 py-2 text-ui-md transition-colors border-r-2 border-transparent',
-          active
-            ? 'bg-surface2 text-foreground border-accent1'
-            : 'text-muted-foreground hover:bg-surface3 hover:text-foreground',
+          'flex items-center gap-2.5 px-3 py-2 text-body border-r-2 border-transparent',
+          controlStateColorTransition,
+          active ? 'bg-surface2 text-foreground border-accent1' : `hover:bg-surface3 ${quietTextHover}`,
         )}
       >
         {done ? (
@@ -112,18 +113,18 @@ const SidebarLink = ({
         ) : (
           <Txt
             className="border-neutral2 text-placeholder flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
-            variant="ui-sm"
+            variant="caption"
           >
             {index + 1}
           </Txt>
         )}
 
         <div>
-          <Txt variant="ui-sm" className="text-foreground">
+          <Txt variant="caption" className="text-foreground">
             {name}
           </Txt>
 
-          <Txt variant="ui-xs" className="text-placeholder">
+          <Txt variant="meta" className="text-placeholder">
             {description}
           </Txt>
         </div>

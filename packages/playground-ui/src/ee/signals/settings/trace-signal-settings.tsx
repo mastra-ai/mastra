@@ -124,10 +124,10 @@ function TraceSignalSettingsContent() {
       <section aria-labelledby="custom-signals-heading">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 id="custom-signals-heading" className="text-ui-md text-muted-foreground font-medium">
+            <h3 id="custom-signals-heading" className="text-subheading text-muted-foreground">
               Custom signals
             </h3>
-            <p className="text-ui-xs text-muted-foreground">
+            <p className="text-meta text-muted-foreground">
               {active.length} of {limit} active organization definitions
             </p>
           </div>
@@ -151,12 +151,12 @@ function TraceSignalSettingsContent() {
             <div key={definition.id} className="flex min-h-16 items-center justify-between gap-4 py-2">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-ui-sm text-muted-foreground truncate">{definition.displayLabel}</span>
+                  <span className="text-caption text-muted-foreground truncate">{definition.displayLabel}</span>
                   <Badge variant="neutral" size="sm">
                     v{definition.version}
                   </Badge>
                 </div>
-                <p className="text-ui-xs text-muted-foreground truncate">{definition.description || definition.name}</p>
+                <p className="text-meta text-muted-foreground truncate">{definition.description || definition.name}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Button
@@ -195,18 +195,18 @@ function TraceSignalSettingsContent() {
             </div>
           ))}
         </div>
-        {active.length === 0 ? <p className="text-ui-sm text-muted-foreground py-3">No custom signals yet.</p> : null}
+        {active.length === 0 ? <p className="text-caption text-muted-foreground py-3">No custom signals yet.</p> : null}
       </section>
 
       {archived.length > 0 ? (
         <details>
-          <summary className="text-ui-sm text-muted-foreground cursor-pointer">
+          <summary className="text-caption text-muted-foreground cursor-pointer">
             Archived definitions ({archived.length})
           </summary>
           <div className="divide-border1 mt-2 divide-y">
             {archived.map(definition => (
               <div key={definition.id} className="flex min-h-12 items-center justify-between gap-3 py-2">
-                <span className="text-ui-sm text-muted-foreground">{definition.displayLabel}</span>
+                <span className="text-caption text-muted-foreground">{definition.displayLabel}</span>
                 <Button
                   icon={<ArchiveRestore />}
                   size="sm"
@@ -226,7 +226,7 @@ function TraceSignalSettingsContent() {
         </details>
       ) : null}
 
-      <p className="text-ui-xs text-muted-foreground">
+      <p className="text-meta text-muted-foreground">
         Enabling a signal starts collection for new traces. Entity status shows when enough generated data has been
         processed and clustered.
       </p>

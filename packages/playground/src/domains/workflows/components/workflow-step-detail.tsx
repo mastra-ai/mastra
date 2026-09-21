@@ -27,21 +27,17 @@ export function WorkflowStepDetailContent() {
             <WorkflowIcon className="h-4 w-4" style={{ color: BADGE_COLORS.workflow }} />
           )}
           <div className="flex flex-col">
-            <Txt variant="ui-md" className="text-foreground font-medium">
+            <Txt variant="subheading" className="text-foreground">
               {stepDetail.type === 'map-config' ? `${stepDetail.stepName} Config` : `${stepDetail.stepName} Workflow`}
             </Txt>
             {stepDetail.type === 'map-config' && stepDetail.stepId && stepDetail.stepId !== stepDetail.stepName && (
-              <Txt variant="ui-xs" className="text-muted-foreground">
+              <Txt variant="meta" className="text-muted-foreground">
                 {stepDetail.stepId}
               </Txt>
             )}
           </div>
         </div>
-        <button
-          onClick={closeStepDetail}
-          className="hover:bg-surface3 rounded p-1 transition-colors"
-          aria-label="Close"
-        >
+        <button onClick={closeStepDetail} className="hover:bg-surface3 rounded p-1" aria-label="Close">
           <X className="text-muted-foreground h-4 w-4" />
         </button>
       </div>

@@ -63,10 +63,8 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
-        Time
-      </p>
-      <div className="text-icon3 text-ui-xs flex justify-between px-1 py-1.5 font-mono">
+      <p className="text-icon3 border-border1/50 text-meta flex items-center self-stretch border-r pl-3">Time</p>
+      <div className="text-icon3 text-meta flex justify-between px-1 py-1.5 font-mono">
         {ticks.map(t => (
           <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
         ))}
@@ -93,7 +91,7 @@ export function FlameTooltip({
 
   if (showValue) {
     return (
-      <div className="border-border1 bg-surface3 text-ui-xs flex flex-col gap-0.5 rounded border px-2 py-1.5 font-mono shadow">
+      <div className="border-border1 bg-surface3 text-meta flex flex-col gap-0.5 rounded border px-2 py-1.5 font-mono shadow">
         {time && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-icon3">time</span>
@@ -113,7 +111,7 @@ export function FlameTooltip({
   }
 
   return (
-    <div className="border-border1 bg-surface3 text-ui-xs rounded border px-2 py-1 font-mono shadow">
+    <div className="border-border1 bg-surface3 text-meta rounded border px-2 py-1 font-mono shadow">
       {time && <span className="text-foreground">{time}</span>}
     </div>
   );
@@ -135,9 +133,7 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
 
   return (
     <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
-        {label}
-      </p>
+      <p className="text-icon3 border-border1/50 text-meta flex items-center self-stretch border-r pl-3">{label}</p>
       <div>
         <ResponsiveContainer width="100%" height={32}>
           <AreaChart data={data} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -184,9 +180,7 @@ interface EventRowProps {
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
     <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
-        {label}
-      </p>
+      <p className="text-icon3 border-border1/50 text-meta flex items-center self-stretch border-r pl-3">{label}</p>
       <div>
         <ResponsiveContainer width="100%" height={height}>
           <ScatterChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -245,9 +239,7 @@ function CombinedRow({
 
   return (
     <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
-        {label}
-      </p>
+      <p className="text-icon3 border-border1/50 text-meta flex items-center self-stretch border-r pl-3">{label}</p>
       <div>
         <ResponsiveContainer width="100%" height={height}>
           <ComposedChart
@@ -354,7 +346,7 @@ function ZoomTrack({
   return (
     <div className="border-border1/50 grid grid-cols-[6rem_1fr] items-center border-b">
       <div className="border-border1/50 flex items-center gap-1 self-stretch border-r pl-3">
-        <p className="text-icon3 text-ui-xs font-medium">Zoom</p>
+        <p className="text-icon3 text-meta">Zoom</p>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
         </Button>
@@ -385,7 +377,7 @@ function ZoomTrack({
         />
         <div
           data-zoom-part="band"
-          className="border-border1/30 bg-neutral6/5 absolute inset-y-0 border-y"
+          className="border-border1/30 bg-fill-subtle absolute inset-y-0 border-y"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
         <div

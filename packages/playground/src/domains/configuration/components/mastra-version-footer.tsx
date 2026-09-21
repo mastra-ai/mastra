@@ -13,6 +13,7 @@ import {
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
@@ -38,7 +39,7 @@ const packageManagerCommands: Record<PackageManager, string> = {
 };
 
 const versionBadgeClassName =
-  'inline-flex h-[1.375rem] items-center rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs font-semibold leading-none tracking-normal text-black/80 tabular-nums whitespace-nowrap dark:text-foreground';
+  'inline-flex h-[1.375rem] items-center rounded-full bg-fill px-2.5 font-sans text-meta leading-none tracking-normal text-foreground tabular-nums whitespace-nowrap';
 
 export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => {
   const { data, isLoading: isLoadingPackages } = useMastraPackages();
@@ -83,10 +84,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
     <Dialog>
       <div className="flex px-3 py-1.5">
         <DialogTrigger asChild>
-          <button
-            type="button"
-            className="hover:bg-sidebar-nav-hover focus-visible:ring-accent1 focus-visible:shadow-focus-ring flex rounded-lg p-1 transition-colors focus-visible:ring-1 focus-visible:outline-hidden"
-          >
+          <button type="button" className={cn('hover:bg-fill-subtle flex rounded-lg p-1', focusRing.visible)}>
             <span className="relative inline-flex">
               {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
                 <span className="absolute -top-1.5 -right-1.5 flex items-center gap-1">
@@ -171,7 +169,7 @@ const PackagesModalContent = ({
       </DialogHeader>
 
       <DialogBody>
-        <div className="text-muted-foreground text-ui-md flex items-center justify-between gap-3 py-2">
+        <div className="text-muted-foreground text-body flex items-center justify-between gap-3 py-2">
           {isLoadingUpdates ? (
             <span className="text-muted-foreground">Checking for updates...</span>
           ) : !hasUpdates ? (
@@ -205,7 +203,7 @@ const PackagesModalContent = ({
         </div>
 
         <div className="border-border1 max-h-64 overflow-y-auto rounded-md border">
-          <div className="text-ui-md grid grid-cols-[1fr_auto_auto]">
+          <div className="text-body grid grid-cols-[1fr_auto_auto]">
             {packages.map((pkg, index) => (
               <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border1')}>
                 <div className="text-text1 min-w-0 truncate px-3 py-2 font-mono">
@@ -259,7 +257,7 @@ const PackagesModalContent = ({
           <div className="border-border1 space-y-2 border-t pt-2">
             <div className="flex items-center gap-2 pt-3">
               <Info className="text-muted-foreground h-4 w-4" />
-              <Txt as="span" variant="ui-sm" className="text-muted-foreground">
+              <Txt as="span" variant="caption" className="text-muted-foreground">
                 Use the command below to update your packages
               </Txt>
             </div>

@@ -70,7 +70,7 @@ export function BrowserViewPanel() {
         tabIndex={-1}
         className={cn(
           'flex flex-col w-full max-w-5xl max-h-full',
-          'bg-surface2 rounded-xl border border-border1 shadow-2xl overflow-hidden',
+          'bg-card shadow-raised overflow-hidden rounded-xl',
           'transition-transform duration-200 outline-none',
           isModal ? 'scale-100' : 'scale-95',
         )}
@@ -81,7 +81,7 @@ export function BrowserViewPanel() {
           <div className="bg-surface3 border-border1 min-w-0 flex-1 rounded-md border px-3 py-1.5">
             <span
               className={cn(
-                'text-ui-md truncate block',
+                'text-body truncate block',
                 currentUrl ? 'text-foreground' : 'text-muted-foreground italic',
               )}
             >

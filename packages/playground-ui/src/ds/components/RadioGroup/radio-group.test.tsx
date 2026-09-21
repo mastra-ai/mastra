@@ -123,8 +123,8 @@ describe('RadioGroup', () => {
     const className = screen.getByLabelText('Option 1').className;
 
     expect(className).toContain('cursor-pointer');
-    expect(className).toContain('bg-neutral6/[0.12]');
-    expect(className).toContain('data-[checked]:bg-neutral6');
+    expect(className.split(/\s+/)).toContain('bg-fill-hover');
+    expect(className).toContain('data-[checked]:bg-foreground');
     expect(className).not.toContain('accent1');
     expect(className).not.toContain('shadow-glow');
   });

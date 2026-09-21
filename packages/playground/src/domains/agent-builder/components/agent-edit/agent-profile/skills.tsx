@@ -48,10 +48,7 @@ interface SkillItemProps {
 
 const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => {
   return (
-    <label
-      className="hover:bg-surface2 flex cursor-pointer items-start gap-3 px-4 py-4 transition-colors"
-      aria-disabled={!editable}
-    >
+    <label className="hover:bg-surface2 flex cursor-pointer items-start gap-3 px-4 py-4" aria-disabled={!editable}>
       <div className="mt-0.5">
         <Checkbox
           checked={isChecked}
@@ -60,11 +57,11 @@ const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => 
         />
       </div>
       <div className="flex min-w-0 flex-col">
-        <Txt variant="ui-sm" className="text-foreground font-medium">
+        <Txt variant="column" className="text-foreground">
           {skill.name}
         </Txt>
         {skill.description && (
-          <Txt variant="ui-xs" className="text-muted-foreground mt-0.5 truncate" title={skill.description}>
+          <Txt variant="meta" className="text-muted-foreground mt-0.5 truncate" title={skill.description}>
             {skill.description}
           </Txt>
         )}
@@ -76,7 +73,7 @@ const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => 
 const SkillEmptyState = () => {
   return (
     <div className="flex items-center justify-center py-8">
-      <Txt variant="ui-sm" className="text-muted-foreground">
+      <Txt variant="caption" className="text-muted-foreground">
         No skills available in this project.
       </Txt>
     </div>

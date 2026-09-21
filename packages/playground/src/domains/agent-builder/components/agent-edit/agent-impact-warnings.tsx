@@ -48,7 +48,7 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
   const overflow = dependents.length - visible.length;
 
   return (
-    <div data-testid="agent-impact-warnings" className="text-ui-sm text-muted-foreground">
+    <div data-testid="agent-impact-warnings" className="text-caption text-muted-foreground">
       {dependents.length > 0 && (
         <div data-testid="agent-impact-dependents-warning">
           <p className="font-medium">{copy.dependents}</p>

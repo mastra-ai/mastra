@@ -21,25 +21,13 @@ export function SaveButton() {
 }
 ```
 
-### Opt-in semantic theme
+### Semantic color tokens
 
-`new-theme.css` provides scoped semantic color tokens. Import it and apply `new-theme` to the root of the content using those tokens. Keep importing `style.css` once in the app for the compiled utilities.
+`theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.
 
-```tsx
-import '@mastra/playground-ui/new-theme.css';
+Semantic values follow the existing `html.light` mode; dark mode is the default. Override `--card`, `--foreground`, or another semantic variable on an element to recolor its subtree.
 
-export function SummaryCard() {
-  return <div className="new-theme bg-card text-foreground">Summary</div>;
-}
-```
-
-The scope limits token defaults, not utility selectors. Classes such as `bg-card` remain global and share the host app's token contract. Audit existing uses before adopting these utilities; a previously ineffective class can start affecting the cascade.
-
-Semantic values follow the existing `html.light` mode; dark mode is the default. Override `--card`, `--foreground`, or another semantic variable on the themed element to customize it.
-
-Portalled content using semantic colors also needs `new-theme` on its portal root, since it renders outside the themed DOM subtree. Apply custom overrides to that root too; values inherited from the trigger's ancestors do not cross the portal.
-
-If your app generates additional semantic utilities, import `@mastra/playground-ui/new-theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
+If your app generates additional semantic utilities, import `@mastra/playground-ui/theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
 
 ## Documentation
 

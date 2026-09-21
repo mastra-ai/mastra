@@ -12,7 +12,7 @@ export function DataListPagination({ currentPage, hasMore, onNextPage, onPrevPag
   const showNavigation = (typeof currentPage === 'number' && currentPage > 0) || hasMore;
 
   return (
-    <div className="text-ui-md text-muted-foreground col-span-full flex items-center justify-center gap-4 py-3">
+    <div className="text-body text-muted-foreground col-span-full flex items-center justify-center gap-4 py-3">
       <span>
         Page <b>{currentPage ? currentPage + 1 : '1'}</b>
       </span>

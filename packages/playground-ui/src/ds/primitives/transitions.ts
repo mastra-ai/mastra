@@ -1,6 +1,18 @@
-// Transition utility classes for consistent animations across components
+// Motion policy for interactive state (hover / press / open / focus)
+//
+// A control's BACKGROUND switches instantly; only its COLOUR fades, over
+// 150ms. Hover fires more than any other interaction — sweeping a cursor
+// across a nav crosses ten rows a second — and fading the fill leaves the
+// surface trailing the pointer, while the colour crossfade is what stops the
+// label from snapping. This is measured from Linear, whose rows carry exactly
+// `transition: color 0.15s` and no background transition.
+//
+// Animate what moves or arrives instead: overlays entering, panels collapsing,
+// a switch thumb travelling. Those happen once per intent, not ten times a
+// second. https://craft.gustavofior.com/hover-restraint
+export const controlStateColorTransition =
+  'transition-[color] duration-fast ease-out-custom motion-reduce:transition-none';
 
-// Base transition presets (Tailwind classes)
 export const transitions = {
   // For color changes (background, text, border)
   colors: 'transition-colors duration-normal ease-out-custom',

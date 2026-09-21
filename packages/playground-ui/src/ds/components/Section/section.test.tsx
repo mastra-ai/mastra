@@ -20,7 +20,7 @@ describe('Section', () => {
     const heading = screen.getByRole('heading', { name: 'Overview' });
     const headerClasses = heading.closest('[data-slot="section-header"]')?.className.split(' ');
 
-    expect(heading.className).toContain('group-data-[variant=default]/section:font-medium');
+    expect(heading.className).toContain('group-data-[variant=default]/section:text-subheading');
     expect(headerClasses).toContain('group-data-[variant=default]/section:grid');
     expect(headerClasses).not.toContain('px-4');
     expect(screen.getByText('Section content').closest('[data-slot="section"]')?.dataset.variant).toBe('default');
@@ -89,8 +89,8 @@ describe('Section', () => {
     const factory = factoryHeading.closest('[data-slot="section"]');
     const flat = flatHeading.closest('[data-slot="section"]');
 
-    expect(factoryHeading.className).toContain('group-data-[variant=factory]/section:font-medium');
-    expect(flatHeading.className).toContain('group-data-[variant=flat]/section:font-medium');
+    expect(factoryHeading.className).toContain('group-data-[variant=factory]/section:text-subheading');
+    expect(flatHeading.className).toContain('group-data-[variant=flat]/section:text-subheading');
     expect(factory?.className).toContain('w-full');
     expect(flat?.className).toContain('w-full');
     const factoryHeaderClasses = factory?.querySelector('[data-slot="section-header"]')?.className.split(' ');
@@ -158,9 +158,9 @@ describe('Section', () => {
     );
 
     expect(screen.getByText('Auto-approve tools').closest('[data-slot="section"]')?.dataset.variant).toBe('factory');
-    expect(screen.getByRole('heading', { name: 'Behavior' }).className).toContain('text-ui-md');
-    expect(screen.getByText('Choose how agents handle tools.').className).toContain('text-ui-sm');
-    expect(screen.getByText('Run tool calls without asking.').className).toContain('text-ui-sm');
+    expect(screen.getByRole('heading', { name: 'Behavior' }).className).toContain('text-subheading');
+    expect(screen.getByText('Choose how agents handle tools.').className).toContain('text-caption');
+    expect(screen.getByText('Run tool calls without asking.').className).toContain('text-caption');
     expect(screen.getAllByRole('separator')).toHaveLength(1);
   });
 });

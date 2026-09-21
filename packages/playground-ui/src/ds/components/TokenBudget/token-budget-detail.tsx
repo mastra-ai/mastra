@@ -36,7 +36,7 @@ export function TokenBudgetDetail({
 
   return (
     <div className={cn('flex flex-col gap-1.5', toneClass[tone])}>
-      <p className="text-ui-xs flex items-center justify-between gap-3">
+      <p className="text-meta flex items-center justify-between gap-3">
         <span className="inline-flex items-center gap-1.5">
           {icon && (
             <span aria-hidden className="[&_svg]:size-3.5">
@@ -55,7 +55,7 @@ export function TokenBudgetDetail({
         <div className="bg-current" style={{ width: `${used - freed}%` }} />
         <div className="token-budget-hatch" style={{ width: `${freed}%` }} />
       </div>
-      {description && <p className="text-ui-xs text-icon2">{description}</p>}
+      {description && <p className="text-meta text-icon2">{description}</p>}
     </div>
   );
 }

@@ -44,7 +44,7 @@ export function SignalDeltaColumn({
   return (
     <section aria-label={`${label} changes`} className="min-w-0">
       <h3
-        className="text-ui-sm font-mono font-semibold tracking-widest uppercase"
+        className="text-column font-mono tracking-widest uppercase"
         style={{ color: nodeColor(getSignalHue(signalName)) }}
       >
         <Tooltip>
@@ -56,21 +56,21 @@ export function SignalDeltaColumn({
       </h3>
       <ul className="mt-2 space-y-1.5">
         {deltas.length === 0 ? (
-          <li className="text-muted-foreground text-ui-sm">No themes in either snapshot.</li>
+          <li className="text-muted-foreground text-caption">No themes in either snapshot.</li>
         ) : null}
         {deltas.map(delta => {
           const themeId = delta.themeId;
           const card = (
             <>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-foreground text-ui-sm truncate font-medium" title={delta.label}>
+                <span className="text-foreground text-column truncate" title={delta.label}>
                   {delta.label}
                 </span>
-                <span className="text-foreground text-ui-sm shrink-0 font-mono font-semibold tabular-nums">
+                <span className="text-foreground text-column shrink-0 font-mono tabular-nums">
                   {deltaLabel(delta.delta)}
                 </span>
               </div>
-              <p className="text-muted-foreground text-ui-sm font-mono tabular-nums">
+              <p className="text-muted-foreground text-caption font-mono tabular-nums">
                 {percent(delta.fromShare)} → {percent(delta.toShare)}
               </p>
               <ThemeCompareSparkline
@@ -92,7 +92,7 @@ export function SignalDeltaColumn({
               ) : (
                 <button
                   aria-label={`View theme details for ${delta.label}`}
-                  className="hover:border-border2 block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.03]"
+                  className="hover:border-border2 block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left hover:bg-white/[0.03]"
                   onClick={() =>
                     onThemeSelect({ kind: 'theme', signalName, themeId, label: delta.label }, detailIndexFor(delta))
                   }

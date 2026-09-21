@@ -14,26 +14,26 @@ afterEach(() => {
 const expectOnlyGuardedHoverBorder = (className: string) => {
   const hoverBorderTokens = className
     .split(/\s+/)
-    .filter(token => token.includes('hover') && token.includes('border-foreground/45'));
+    .filter(token => token.includes('hover') && token.includes('border-border-hover'));
 
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-visible):not(:disabled)]:border-foreground/45']);
-  expect(className).toContain('focus-visible:border-foreground/60');
-  expect(className).not.toContain('hover:border-foreground/60');
+  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-visible):not(:disabled)]:border-border-hover']);
+  expect(className).toContain('focus-visible:border-border-focus');
+  expect(className).not.toContain('hover:border-border-focus');
 };
 
 describe('Input', () => {
   it('keeps the filled surface as the default variant', () => {
     render(<Input placeholder="Name" />);
 
-    expect(screen.getByPlaceholderText('Name').className).toContain('bg-foreground/10');
+    expect(screen.getByPlaceholderText('Name').classList.contains('bg-fill')).toBe(true);
   });
 
   it('still renders the filled surface for a call site on the removed filled variant', () => {
     render(<Input variant="filled" placeholder="Legacy" />);
 
-    const cls = screen.getByPlaceholderText('Legacy').className;
-    expect(cls).toContain('bg-foreground/10');
-    expect(cls).toContain('border-border');
+    const input = screen.getByPlaceholderText('Legacy');
+    expect(input.classList.contains('bg-fill')).toBe(true);
+    expect(input.className).toContain('border-border');
   });
 
   it.each(['default', 'outline'] as const)(
@@ -53,14 +53,14 @@ describe('Input', () => {
     const input = screen.getByPlaceholderText('Name');
     expect(input.className).toContain('bg-transparent');
     expect(input.className).toContain('rounded-full');
-    expect(input.className).not.toContain('bg-foreground/10');
+    expect(input.classList.contains('bg-fill')).toBe(false);
   });
 
   it('brightens the border on focus so focus clears WCAG non-text contrast (no green accent)', () => {
     render(<Input placeholder="Name" />);
 
     const cls = screen.getByPlaceholderText('Name').className;
-    expect(cls).toContain('focus-visible:border-foreground/60');
+    expect(cls).toContain('focus-visible:border-border-focus');
     expect(cls).not.toContain('ring-accent1');
     expect(cls).not.toContain('focus-visible:border-accent1');
   });
@@ -75,7 +75,7 @@ describe('Input', () => {
     render(<Input placeholder="default" />);
 
     const cls = screen.getByPlaceholderText('default').className;
-    expect(cls).toContain('not-disabled:hover:bg-foreground/14');
+    expect(cls.split(/\s+/)).toContain('not-disabled:hover:bg-fill-hover');
     expect(cls.split(/\s+/).filter(token => token.includes('hover') && token.includes('border-'))).toEqual([]);
   });
 });

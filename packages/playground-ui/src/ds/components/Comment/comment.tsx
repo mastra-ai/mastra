@@ -139,15 +139,15 @@ export const CommentItemHeader = forwardRef<HTMLDivElement, CommentItemHeaderPro
 CommentItemHeader.displayName = 'CommentItemHeader';
 
 const commentItemAuthorSize: Record<CommentVariant, TxtProps['variant']> = {
-  default: 'ui-md',
-  embed: 'ui-md',
-  thread: 'ui-sm',
+  default: 'subheading',
+  embed: 'subheading',
+  thread: 'column',
 };
 
 const commentItemAuthorTone: Record<CommentVariant, string> = {
-  default: 'font-medium text-foreground',
-  embed: 'font-medium text-foreground',
-  thread: 'truncate font-medium text-foreground',
+  default: 'text-foreground',
+  embed: 'text-foreground',
+  thread: 'truncate text-foreground',
 };
 
 export type CommentItemAuthorProps = ComponentPropsWithoutRef<'span'>;
@@ -169,9 +169,9 @@ export const CommentItemAuthor = forwardRef<HTMLElement, CommentItemAuthorProps>
 CommentItemAuthor.displayName = 'CommentItemAuthor';
 
 const commentItemTimestampTone: Record<CommentVariant, string> = {
-  default: 'text-ui-sm leading-ui-sm text-muted-foreground',
-  embed: 'text-ui-sm leading-ui-sm text-muted-foreground',
-  thread: 'text-ui-xs leading-ui-xs text-placeholder shrink-0',
+  default: 'text-caption text-muted-foreground',
+  embed: 'text-caption text-muted-foreground',
+  thread: 'text-meta text-placeholder shrink-0',
 };
 
 export type CommentItemTimestampProps = ComponentPropsWithoutRef<'time'>;
@@ -193,9 +193,9 @@ export const CommentItemTimestamp = forwardRef<HTMLTimeElement, CommentItemTimes
 CommentItemTimestamp.displayName = 'CommentItemTimestamp';
 
 const commentItemBodySize: Record<CommentVariant, TxtProps['variant']> = {
-  default: 'ui-md',
-  embed: 'ui-md',
-  thread: 'ui-sm',
+  default: 'body',
+  embed: 'body',
+  thread: 'caption',
 };
 
 const commentItemBodyTone: Record<CommentVariant, string> = {

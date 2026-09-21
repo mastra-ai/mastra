@@ -48,7 +48,7 @@ const diffOverrides = EditorView.theme({
     backgroundColor: 'var(--surface4)',
     backgroundImage: 'none',
     color: 'var(--neutral3)',
-    fontSize: 'var(--text-ui-sm)',
+    fontSize: 'var(--text-caption)',
     padding: '4px 12px',
     cursor: 'pointer',
   },
@@ -64,7 +64,7 @@ function buildDiffDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-ui-smd)',
+      fontSize: 'var(--text-body-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -79,7 +79,7 @@ function buildDiffLightTheme(): Extension {
     '&': {
       backgroundColor: 'transparent',
       color: 'var(--neutral6)',
-      fontSize: 'var(--text-ui-smd)',
+      fontSize: 'var(--text-body-sm)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',

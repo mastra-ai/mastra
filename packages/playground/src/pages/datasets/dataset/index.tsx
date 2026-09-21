@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
@@ -127,12 +126,12 @@ function DatasetPage() {
               onAddItemClick={() => setAddItemDialogOpen(true)}
               belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
               leftSlot={
-                <span className="text-ui-sm text-muted-foreground mr-3 whitespace-nowrap">
+                <span className="text-caption text-muted-foreground mr-3 whitespace-nowrap">
                   {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
                 </span>
               }
               rightSlot={
-                <ButtonsGroup>
+                <div className="flex items-center gap-2">
                   <Button render={<Link to={`/experiments?dataset=${datasetId}`} />} icon={<FlaskConical />}>
                     View experiments
                   </Button>
@@ -182,7 +181,7 @@ function DatasetPage() {
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
                   </DropdownMenu>
-                </ButtonsGroup>
+                </div>
               }
             />
           </PageLayout.MainArea>

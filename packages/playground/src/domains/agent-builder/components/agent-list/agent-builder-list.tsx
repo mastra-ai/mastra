@@ -47,7 +47,7 @@ function AuthorBadge({ agent, className }: { agent: StoredAgentResponse; classNa
   return (
     <div className={cn('flex items-center gap-1.5 min-w-0', className)} data-testid="agent-builder-row-author">
       <Avatar name={label} src={avatarUrl} size="sm" />
-      <span className="text-ui-xs text-muted-foreground truncate">{label}</span>
+      <span className="text-meta text-muted-foreground truncate">{label}</span>
     </div>
   );
 }
@@ -106,18 +106,18 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
           <Link
             key={agent.id}
             href={`/agent-builder/agents/${agent.id}/view`}
-            className="hover:bg-surface3 flex items-start gap-4 px-4 py-3 transition-colors md:items-center"
+            className="hover:bg-surface3 flex items-start gap-4 px-4 py-3 md:items-center"
             data-testid={rowTestId}
           >
             <Avatar name={agent.name ?? ''} src={avatar} size="lg" />
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="text-ui-md text-foreground truncate">{agent.name}</div>
+                <div className="text-body text-foreground truncate">{agent.name}</div>
                 {agent.visibility === 'private' && <PrivateVisibilityIcon />}
               </div>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="text-ui-sm text-muted-foreground line-clamp-1">
+                <span className="text-caption text-muted-foreground line-clamp-1">
                   {agent.description || 'No description'}
                 </span>
               </div>

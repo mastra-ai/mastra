@@ -211,7 +211,7 @@ export function AppSidebar() {
           <span className="flex h-7 items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
+              <span className="font-display text-subheading truncate tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -221,7 +221,7 @@ export function AppSidebar() {
         ) : (
           <span className="flex h-7 items-center gap-2 pr-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
+            <span className="font-display text-subheading truncate tracking-tight whitespace-nowrap">
               Mastra Studio
             </span>
             {!isMobile && <MainSidebar.Trigger />}
@@ -245,14 +245,14 @@ export function AppSidebar() {
                 type="button"
                 onClick={openNavigationCommand}
                 aria-label="Search and navigate"
-                className="border-border1 bg-surface3 text-foreground hover:bg-surface4 hover:text-foreground active:bg-surface5 [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground border"
+                className="border-border1 bg-surface3 text-foreground hover:bg-surface4 active:bg-surface5 [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground border"
               >
                 <Search />
                 <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
                 {state !== 'collapsed' && (
                   <kbd
                     aria-hidden="true"
-                    className="border-border1 bg-surface4 text-muted-foreground text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                    className="border-border1 bg-surface4 text-muted-foreground text-meta ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                   >
                     {commandShortcutLabel}
                   </kbd>

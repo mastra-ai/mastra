@@ -61,7 +61,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
         >
           <Icon className="h-3 w-3 shrink-0" />
           {value !== undefined && (
-            <Txt as="span" variant="ui-xs" className="leading-none font-medium tabular-nums">
+            <Txt as="span" variant="meta" className="leading-none tabular-nums">
               {value}
             </Txt>
           )}
@@ -277,7 +277,7 @@ export function MemorySidebarBody({
               <span className="flex items-center justify-between gap-2">
                 <span className="text-foreground flex min-w-0 items-center gap-1.5">
                   <MemoryIcon className="h-4 w-4 shrink-0" />
-                  <Txt as="span" variant="ui-sm" className="font-medium">
+                  <Txt as="span" variant="column">
                     Memory
                   </Txt>
                 </span>

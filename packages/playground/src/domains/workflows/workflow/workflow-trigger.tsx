@@ -151,7 +151,7 @@ export function WorkflowTrigger({
 
   if (isLoading) {
     return (
-      <ScrollArea className="text-ui-sm h-[calc(100vh-126px)] px-4 pt-2 pb-4">
+      <ScrollArea className="text-caption h-[calc(100vh-126px)] px-4 pt-2 pb-4">
         <div className="space-y-4">
           <Skeleton className="h-10" />
           <Skeleton className="h-10" />
@@ -228,7 +228,7 @@ export function WorkflowTrigger({
         )}
 
         {!canExecuteWorkflow && (
-          <Txt variant="ui-sm" className="text-muted-foreground px-5 py-2">
+          <Txt variant="caption" className="text-muted-foreground px-5 py-2">
             You don't have permission to execute workflows.
           </Txt>
         )}

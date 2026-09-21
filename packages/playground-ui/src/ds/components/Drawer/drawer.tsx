@@ -5,6 +5,7 @@ import { XIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // Swipe/stack transforms live in drawer.css — unreadable as Tailwind arbitrary values.
@@ -71,7 +72,8 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
 const drawerPopupVariants = cva(
   cn(
     'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
-    'border-border1 bg-surface3 text-foreground shadow-dialog',
+    'text-foreground',
+    raisedSurfaceStyle,
     'data-[swiping]:select-none',
     "after:pointer-events-none after:absolute after:inset-0 after:bg-transparent after:transition-[background-color] after:duration-[450ms] after:content-['']",
     'data-[nested-drawer-open]:after:bg-black/25',
@@ -378,7 +380,7 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
         side === 'right' ? '-left-2' : '-right-2',
       )}
     >
-      <div className="bg-surface5/80 h-10 w-1 rounded-full shadow-sm" />
+      <div className="bg-border-strong h-10 w-1 rounded-full" />
     </div>
   );
 };
@@ -456,7 +458,7 @@ type DrawerTitleProps = Omit<DrawerPrimitive.Title.Props, 'className'> & {
 };
 
 const DrawerTitle = React.forwardRef<HTMLHeadingElement, DrawerTitleProps>(({ className, ...props }, ref) => (
-  <DrawerPrimitive.Title ref={ref} className={cn('text-ui-md font-medium text-foreground', className)} {...props} />
+  <DrawerPrimitive.Title ref={ref} className={cn('text-subheading text-foreground', className)} {...props} />
 ));
 DrawerTitle.displayName = 'DrawerTitle';
 
@@ -466,7 +468,7 @@ type DrawerDescriptionProps = Omit<DrawerPrimitive.Description.Props, 'className
 
 const DrawerDescription = React.forwardRef<HTMLParagraphElement, DrawerDescriptionProps>(
   ({ className, ...props }, ref) => (
-    <DrawerPrimitive.Description ref={ref} className={cn('text-ui-sm text-muted-foreground', className)} {...props} />
+    <DrawerPrimitive.Description ref={ref} className={cn('text-caption text-muted-foreground', className)} {...props} />
   ),
 );
 DrawerDescription.displayName = 'DrawerDescription';

@@ -21,9 +21,7 @@ export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeMod
             : 'after:top-0 after:h-1 after:border-y after:border-neutral3',
         )}
       >
-        <Txt variant="ui-xs" className="font-medium">
-          {data.label}
-        </Txt>
+        <Txt variant="meta">{data.label}</Txt>
       </div>
       {isStart && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}
     </>

@@ -1,0 +1,148 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Txt } from '../components/Txt/Txt';
+import { BorderColors, Colors } from './colors';
+import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
+
+const meta: Meta = {
+  title: 'Foundations/Surface',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Two ladders cover everything that sits above a surface: a fill for the body of a control and a 1px boundary for its edge. Both are alphas of the foreground, so a rung is a relative step and reads the same on the sidebar, the canvas and a card.',
+      },
+    },
+  },
+};
+
+export default meta;
+type Story = StoryObj;
+
+type FillToken = keyof typeof Colors;
+type BoundaryToken = keyof typeof BorderColors;
+
+const fillLadder: { token: FillToken; use: string }[] = [
+  { token: 'fill-subtle', use: 'Ghost hover, row hover, disabled' },
+  { token: 'fill', use: 'Rest of a filled control' },
+  { token: 'fill-hover', use: 'Hover; rest of a selection control' },
+  { token: 'fill-active', use: 'Press, open, selected' },
+  { token: 'fill-strong', use: 'Selection-control press' },
+];
+
+const boundaryLadder: { token: BoundaryToken; use: string }[] = [
+  { token: 'border', use: 'Rim of a filled control, divider' },
+  { token: 'border-strong', use: 'Edge of a transparent control at rest' },
+  { token: 'border-hover', use: 'Hover on either of those' },
+  { token: 'border-focus', use: 'Focus, at 3:1 against its fill' },
+];
+
+const FillLadderRow = () => (
+  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+    {fillLadder.map(rung => (
+      <Specimen key={rung.token} name={`--${rung.token}`} note={rung.use}>
+        <div role="img" aria-label={`${rung.token} fill`} className="h-16" style={{ background: Colors[rung.token] }} />
+      </Specimen>
+    ))}
+  </div>
+);
+
+const BoundaryLadderRow = ({ filled }: { filled: boolean }) => (
+  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    {boundaryLadder.map(rung => (
+      <Specimen key={rung.token} name={`--${rung.token}`} note={filled ? undefined : rung.use}>
+        <div
+          role="img"
+          aria-label={`${rung.token} edge`}
+          className="h-14 rounded-md border"
+          style={{ borderColor: BorderColors[rung.token], background: filled ? Colors.fill : 'transparent' }}
+        />
+      </Specimen>
+    ))}
+  </div>
+);
+
+export const SurfaceFoundations: Story = {
+  name: 'Surface foundations',
+  render: (_args, context) => (
+    <FoundationPage
+      eyebrow={`Surface / ${fillLadder.length + boundaryLadder.length + 2} tokens`}
+      title="Surface foundations"
+      description="A fill is the body of anything raised above its parent surface; a boundary is its 1px edge. Rungs are alphas, so the same rung holds on any surface — read each ladder twice below, once on the canvas and once on the sidebar."
+      aside={
+        <Txt variant="meta" font="mono" tone="muted" className="uppercase">
+          Mode / {context.globals.backgrounds?.value === 'light' ? 'Light' : 'Dark'}
+        </Txt>
+      }
+      note="Light uses its own, much shallower alphas — a lightness step has to be large on near-black and small on near-white."
+      noteAside="Utilities: bg-fill-*, border-border-*."
+    >
+      <FoundationSection
+        label="Fill ladder"
+        description="One language for anything sitting above its parent surface, from a state layer to a pressed selection control."
+      >
+        <SpecimenGroup label="On the canvas">
+          <FillLadderRow />
+        </SpecimenGroup>
+        <SpecimenGroup label="Inside a sidebar card">
+          <div className="bg-sidebar rounded-lg p-4">
+            <FillLadderRow />
+          </div>
+        </SpecimenGroup>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Panel"
+        description="The opaque twin of --fill, for a scrolling panel whose sticky parts cannot let rows show through."
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-160">
+          <Specimen name="--surface-panel" note="Opaque — sticky headers, floating panels">
+            <div className="bg-surface-panel h-20 rounded-md" />
+          </Specimen>
+          <Specimen name="--fill" note="Translucent — the control beside it">
+            <div className="bg-fill h-20 rounded-md" />
+          </Specimen>
+        </div>
+        <Txt variant="caption" tone="muted">
+          Side by side on the canvas the two must read as one material; if they drift apart, the panel is wrong.
+        </Txt>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Boundary ladder"
+        description="The four states of a control's 1px edge, shown on a filled body and on a transparent one."
+      >
+        <SpecimenGroup label="Transparent, on the canvas">
+          <BoundaryLadderRow filled={false} />
+        </SpecimenGroup>
+        <SpecimenGroup label="Filled with --fill, on the canvas">
+          <BoundaryLadderRow filled />
+        </SpecimenGroup>
+        <SpecimenGroup label="Inside a sidebar card">
+          <div className="bg-sidebar flex flex-col gap-3 rounded-lg p-4">
+            <BoundaryLadderRow filled={false} />
+            <BoundaryLadderRow filled />
+          </div>
+        </SpecimenGroup>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Ring"
+        description="The focus boundary as a ring token, so ring utilities and a border edge stay the same colour."
+      >
+        <div className="flex flex-wrap items-end gap-6">
+          <div className="w-44">
+            <Specimen name="--ring" note="Alias of --border-focus">
+              <div role="img" aria-label="ring token" className="h-14 rounded-md" style={{ background: Colors.ring }} />
+            </Specimen>
+          </div>
+          <div className="w-44">
+            <Specimen name="ring-1 ring-ring" note="Drawn outside the fill">
+              <div className="bg-fill ring-ring h-14 rounded-md ring-1" />
+            </Specimen>
+          </div>
+        </div>
+      </FoundationSection>
+    </FoundationPage>
+  ),
+};

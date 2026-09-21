@@ -1,6 +1,7 @@
 import { WorkflowCanvasInsetContext } from '@mastra/playground-ui/components/Workflow';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useLocalStorageState } from '@mastra/playground-ui/hooks/use-local-storage-state';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { ResizeHandleIndicator } from '@mastra/playground-ui/primitives/resize-handle-indicator';
 import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react';
@@ -16,6 +17,13 @@ const LEFT_PANEL_MIN_WIDTH = 380;
 const LEFT_PANEL_WIDTH_STORAGE_KEY = 'workflow-canvas-left-panel-width';
 const PANEL_GUTTER = 8;
 const KEYBOARD_RESIZE_STEP = 16;
+
+/**
+ * The one surface for the workflow canvas' floating panels — information rail,
+ * suspended steps, data inspector. `raisedSurfaceStyle` carries the rim, so the
+ * panels never draw a border of their own; the radius belongs to the family.
+ */
+export const panelSurfaceStyle = `${raisedSurfaceStyle} rounded-studio-panel`;
 
 interface WorkflowLayoutStyle extends CSSProperties {
   '--workflow-left-panel-width': string;

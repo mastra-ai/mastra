@@ -1,6 +1,7 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { transitions } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useToolkits } from '../hooks/use-toolkits';
 
@@ -34,11 +35,11 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
           type="button"
           onClick={() => onSelectToolkit(undefined)}
           className={cn(
-            'text-left px-3 py-2 rounded-md text-ui-sm',
-            transitions.colors,
+            'text-left px-3 py-2 rounded-md text-caption',
+            controlStateColorTransition,
             selectedToolkit === undefined
               ? 'bg-surface4 text-foreground font-medium'
-              : 'text-muted-foreground hover:bg-surface4 hover:text-foreground',
+              : cn(quietTextHover, 'hover:bg-surface4'),
           )}
         >
           All
@@ -48,16 +49,16 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
           type="button"
           onClick={() => onSelectToolkit(SELECTED_TOOLKIT_SENTINEL)}
           className={cn(
-            'text-left px-3 py-2 rounded-md text-ui-sm flex items-center justify-between gap-2',
-            transitions.colors,
+            'text-left px-3 py-2 rounded-md text-caption flex items-center justify-between gap-2',
+            controlStateColorTransition,
             selectedToolkit === SELECTED_TOOLKIT_SENTINEL
               ? 'bg-surface4 text-foreground font-medium'
-              : 'text-muted-foreground hover:bg-surface4 hover:text-foreground',
+              : cn(quietTextHover, 'hover:bg-surface4'),
           )}
         >
           Selected
           {selectedCount > 0 && (
-            <span className="text-ui-xs bg-surface3 min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center tabular-nums">
+            <span className="text-meta bg-surface3 min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center tabular-nums">
               {selectedCount}
             </span>
           )}
@@ -69,11 +70,11 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
             type="button"
             onClick={() => onSelectToolkit(toolkit.slug)}
             className={cn(
-              'text-left px-3 py-2 rounded-md text-ui-sm truncate',
-              transitions.colors,
+              'text-left px-3 py-2 rounded-md text-caption truncate',
+              controlStateColorTransition,
               selectedToolkit === toolkit.slug
                 ? 'bg-surface4 text-foreground font-medium'
-                : 'text-muted-foreground hover:bg-surface4 hover:text-foreground',
+                : cn(quietTextHover, 'hover:bg-surface4'),
             )}
             title={toolkit.name}
           >

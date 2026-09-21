@@ -1,6 +1,9 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -16,7 +19,7 @@ export function RequestContextLabel({ as = 'span', children, tooltip }: RequestC
 
   return (
     <div className="flex items-center gap-1.5">
-      <Txt as={as} variant="ui-md" className="text-muted-foreground">
+      <Txt as={as} variant="body" className="text-muted-foreground">
         {children}
       </Txt>
 
@@ -27,7 +30,11 @@ export function RequestContextLabel({ as = 'span', children, tooltip }: RequestC
               <button
                 type="button"
                 aria-label={ariaLabel}
-                className="text-muted-foreground hover:text-foreground focus-visible:ring-border2 rounded-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                className={cn(
+                  quietTextHover,
+                  controlStateColorTransition,
+                  'focus-visible:ring-border2 rounded-sm focus-visible:ring-2 focus-visible:outline-none',
+                )}
               >
                 <Icon size="sm">
                   <Info />

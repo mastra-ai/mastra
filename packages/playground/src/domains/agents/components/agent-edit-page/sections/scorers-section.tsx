@@ -89,7 +89,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
                     <ChevronRight className="text-muted-foreground h-4 w-4" />
                     <SectionTitle icon={<JudgeIcon className="text-muted-foreground" />}>
-                      Scorers{count > 0 && <span className="text-muted-foreground font-normal">({count})</span>}
+                      Scorers{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
                 </div>
@@ -184,7 +184,7 @@ function ScorerConfigPanel({
           <Icon size="sm">
             <JudgeIcon className="text-muted-foreground" />
           </Icon>
-          <span className="text-foreground text-ui-sm font-medium">{scorerName}</span>
+          <span className="text-foreground text-column">{scorerName}</span>
         </div>
         {!readOnly && (
           <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -198,7 +198,7 @@ function ScorerConfigPanel({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this scorer..."
-        className="bg-surface3 text-ui-sm min-h-[40px] border-dashed px-2 py-1"
+        className="bg-surface3 text-caption min-h-[40px] border-dashed px-2 py-1"
         size="sm"
         disabled={readOnly}
       />

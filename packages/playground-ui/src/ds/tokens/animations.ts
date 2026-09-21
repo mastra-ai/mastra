@@ -1,10 +1,12 @@
-export const Animations = {
-  // Durations
-  durationNormal: '200ms',
-  durationSlow: '300ms',
+/** Named durations, one per rung in `theme.css`. Keys are the utility suffix (`duration-fast`). */
+export const Durations = {
+  fast: '150ms',
+  normal: '200ms',
+  slow: '300ms',
+};
 
-  // Easings
-  easeOut: 'cubic-bezier(0.33, 1, 0.68, 1)',
+export const Easings = {
+  outCustom: 'cubic-bezier(0.33, 1, 0.68, 1)',
 };
 
 /** Entrance played by anything the reader watches arrive. Defined in `theme.css`. */

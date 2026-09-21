@@ -48,7 +48,7 @@ export const AgentMetadataSection = ({
     >
       <header className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1">
         <div className="flex min-w-0 items-center gap-2">
-          <Txt as="h3" variant="ui-smd" className="text-foreground flex min-w-0 items-center gap-2 font-medium">
+          <Txt as="h3" variant="label" className="text-foreground flex min-w-0 items-center gap-2">
             {icon && (
               <Icon aria-hidden="true" className="shrink-0 text-(--section-accent)">
                 {icon}
@@ -57,7 +57,7 @@ export const AgentMetadataSection = ({
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="text-(--section-accent)">{title}</span>
               {count !== undefined && count > 0 && (
-                <Txt as="span" variant="caption" className="font-normal tabular-nums">
+                <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
                   {count}
                 </Txt>
               )}
