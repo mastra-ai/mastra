@@ -1252,6 +1252,86 @@ describe('eager tool dispatch — unsafe terminations', () => {
     const secondIndex = events.indexOf('execute-call-b');
     expect(secondIndex === -1 || secondIndex > finishIndex).toBe(true);
   });
+
+  /**
+   * A `processToolResult` tripwire builds a bail response, so the foreach never adopts the
+   * step's tool calls. The dispatch backstop at `llm-execution-step.ts` stops the coordinator
+   * *without* `cancelRunning`, deliberately: unlike the discarded-attempt and error-retry paths,
+   * a tripwire is terminal — no replacement attempt will re-issue these calls, so there is no
+   * duplicate run to prevent. Aborting mid-flight would only risk tearing a side effect that is
+   * already underway. This test locks that in: the in-flight call is allowed to finish, and it
+   * runs exactly once.
+   */
+  it('lets in-flight eager work finish when a processToolResult tripwire bails the attempt', async () => {
+    const { events, record } = createRecorder();
+    const model = createToolCallModel(
+      [
+        { toolCallId: 'call-fast', toolName: 'fast-tool', input: { value: 'fast' } },
+        { toolCallId: 'call-slow', toolName: 'slow-tool', input: { value: 'slow' } },
+      ],
+      record,
+    );
+
+    class TripwireOnToolResult {
+      readonly id = 'tripwire-on-tool-result';
+      async processToolResult({ toolName, abort }: any) {
+        if (toolName === 'fast-tool') {
+          record('tripwire');
+          abort('blocked by tool-result-guard');
+        }
+      }
+    }
+
+    const agent = new Agent({
+      id: 'eager-tripwire-agent',
+      name: 'Eager tripwire agent',
+      instructions: 'Call both tools.',
+      model,
+      tools: {
+        'fast-tool': createTool({
+          id: 'fast-tool',
+          description: 'Returns immediately so its result trips the processor mid-stream.',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            record('execute-fast');
+            return { value };
+          },
+        }),
+        'slow-tool': createTool({
+          id: 'slow-tool',
+          description: 'Still running when the tripwire fires.',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            record('enter-slow');
+            await new Promise(resolve => setTimeout(resolve, 150));
+            record('finish-slow');
+            return { value };
+          },
+        }),
+      },
+      outputProcessors: [new TripwireOnToolResult() as any],
+    });
+
+    const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+
+    // The tripwire really fired and really bailed the attempt.
+    expect(events).toContain('tripwire');
+    expect(chunks.some(chunk => chunk.type === 'tripwire')).toBe(true);
+
+    // Both calls were dispatched eagerly — bodies entered before the model stream finished.
+    const finishIndex = events.indexOf('finish');
+    expect(events.indexOf('execute-fast')).toBeLessThan(finishIndex);
+    expect(events.indexOf('enter-slow')).toBeLessThan(finishIndex);
+
+    // The in-flight call was left alone rather than cancelled: it ran to completion.
+    // The bail response returns before the slow tool settles, so give it its window.
+    await vi.waitFor(() => expect(events).toContain('finish-slow'), { timeout: 2000 });
+    // And exactly once — nothing adopts a bailed attempt, so nothing re-runs it either.
+    expect(events.filter(event => event === 'enter-slow')).toHaveLength(1);
+    expect(events.filter(event => event === 'execute-fast')).toHaveLength(1);
+  });
 });
 
 describe('eager tool dispatch — discarded model attempt', () => {
