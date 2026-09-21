@@ -905,11 +905,13 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       const loadedTool = loadedTools[loadedToolName]!;
       // Suspend/resume, tool-surface-fence restore, and durable registry replay
       // can re-expose the loaded executor through the input surface — as a
-      // `makeCoreTool` copy, not the catalog instance. That is the same
-      // executor the merge below injects, not a foreign shadow; only a
-      // genuinely different tool under the loaded name is an unresolvable
-      // collision and must still fail closed.
-      if (candidate === loadedTool || processorLoadedToolSource(candidate) === loadedTool) {
+      // `makeCoreTool` copy, not the catalog instance. The shared provenance
+      // token identifies that copy. It is not a reference to the executable,
+      // so a fenced view cannot swap the retained executor through the marker.
+      // Only a genuinely different tool under the loaded name fails closed.
+      const candidateToken = processorLoadedToolSource(candidate);
+      const loadedToken = processorLoadedToolSource(loadedTool);
+      if (candidate === loadedTool || (candidateToken !== undefined && candidateToken === loadedToken)) {
         continue;
       }
       throw new Error(
