@@ -300,6 +300,12 @@ describe('feedback deletion with lagging replicas', () => {
     const [writer, second, third] = clients as [ClickHouseClient, ClickHouseClient, ClickHouseClient];
     for (const client of [second, third])
       await client.command({ query: `SYSTEM STOP FETCHES ${TABLE_DELETION_REQUESTS}` });
+    const insert = writer.insert.bind(writer);
+    let secondAttempts = 0;
+    vi.spyOn(writer, 'insert').mockImplementation(async args => {
+      if ((args.values as Array<{ requestId?: string }>)[0]?.requestId === 'second') secondAttempts++;
+      return insert(args);
+    });
     const args = {
       signal: 'feedback' as const,
       predicateType: 'itemIds' as const,
@@ -324,11 +330,15 @@ describe('feedback deletion with lagging replicas', () => {
         value => ({ value }),
         error => ({ error }),
       );
-      await new Promise(resolve => setTimeout(resolve, 250));
+      // The first write still waits for quorum, so the second is rejected with
+      // UNSATISFIED_QUORUM_FOR_PREVIOUS_WRITE and retried. Release the lagging
+      // replicas only once that retry has been observed.
+      await vi.waitFor(() => expect(secondAttempts).toBeGreaterThanOrEqual(2), { timeout: 2_000 });
       for (const client of [second, third])
         await client.command({ query: `SYSTEM START FETCHES ${TABLE_DELETION_REQUESTS}` });
       await first;
       expect(await outcome).toMatchObject({ value: { requestId: 'second' } });
+      expect(secondAttempts).toBeGreaterThanOrEqual(2);
     } finally {
       for (const client of [second, third])
         await client.command({ query: `SYSTEM START FETCHES ${TABLE_DELETION_REQUESTS}` });

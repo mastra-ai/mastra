@@ -4967,6 +4967,7 @@ LIMIT 1`,
             WHERE signal = 'feedback'
               AND predicateType = 'itemIds'
               AND has(predicateValues, {feedbackId:String})
+              AND lastAppliedAt > toDateTime64(0, 3)
               AND (organizationId = '' OR organizationId = {organizationId:String})
               AND (resourceId = '' OR resourceId = {resourceId:String})
             LIMIT 1`,
@@ -5207,6 +5208,63 @@ LIMIT 1`,
         ]);
       } finally {
         commandSpy.mockRestore();
+        await client.close();
+      }
+    });
+
+    it('publishes review updates through the delta cursor only when delta polling is supported', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const feedback = {
+        feedbackId: 'delta-wiring-feedback-1',
+        timestamp: new Date('2026-09-01T12:00:03Z'),
+        traceId: 'delta-wiring-trace-1',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'rating',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        organizationId: 'org-1',
+        resourceId: 'resource-1',
+        metadata: null,
+      } as const;
+      const publishedRows = async () => {
+        const result = await client.query({
+          query: `SELECT count() AS rows FROM ${TABLE_FEEDBACK_EVENTS_DELTA} WHERE feedbackId = {feedbackId:String}`,
+          query_params: { feedbackId: feedback.feedbackId },
+          format: 'JSONEachRow',
+        });
+        return Number(((await result.json()) as Array<{ rows: string }>)[0]?.rows);
+      };
+      const enabled = coreFeatures.has('observability-delta-polling');
+
+      try {
+        coreFeatures.add('observability-delta-polling');
+        const store = new ObservabilityStorageClickhouseVNext({ client });
+        await store.init();
+        await store.createFeedback({ feedback });
+        const cursor = (await store.listFeedback({ mode: 'delta' })).deltaCursor!;
+
+        await store.updateFeedbackReviewStatus({ feedbackId: feedback.feedbackId, reviewStatus: 'reviewed' });
+
+        expect((await store.listFeedback({ mode: 'delta', after: cursor })).feedback).toMatchObject([
+          { feedbackId: feedback.feedbackId, reviewStatus: 'reviewed' },
+        ]);
+        const published = await publishedRows();
+
+        // Without delta polling the update still succeeds and publishes nothing.
+        coreFeatures.delete('observability-delta-polling');
+        await expect(
+          store.updateFeedbackReviewStatus({ feedbackId: feedback.feedbackId, reviewStatus: 'needs-review' }),
+        ).resolves.toMatchObject({ feedbackId: feedback.feedbackId, reviewStatus: 'needs-review' });
+        expect(await publishedRows()).toBe(published);
+      } finally {
+        if (enabled) coreFeatures.add('observability-delta-polling');
+        else coreFeatures.delete('observability-delta-polling');
         await client.close();
       }
     });

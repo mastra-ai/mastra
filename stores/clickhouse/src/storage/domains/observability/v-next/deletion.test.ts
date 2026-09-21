@@ -130,6 +130,18 @@ describe('ClickHouse deletion lifecycle', () => {
     expect(insert.mock.calls[0]?.[0].values[0].lastAppliedAt).toBe('1970-01-01T00:00:00.000Z');
   });
 
+  it('leaves the score deletion request unapplied when a later lightweight delete fails', async () => {
+    const { client, insert, command } = createClient();
+    command
+      .mockResolvedValueOnce({ query_id: 'delete-current' })
+      .mockRejectedValueOnce(new Error('event delete failed'));
+
+    await expect(deleteScores(client, { scoreIds: ['score-1'] })).rejects.toThrow('event delete failed');
+    expect(command).toHaveBeenCalledTimes(2);
+    expect(insert).toHaveBeenCalledOnce();
+    expect(insert.mock.calls[0]?.[0].values[0].lastAppliedAt).toBe('1970-01-01T00:00:00.000Z');
+  });
+
   it('marks the request applied only after the lightweight delete succeeds', async () => {
     const feedbackClient = createClient();
     await deleteFeedback(feedbackClient.client, { feedbackIds: ['feedback-1'] }, { cluster: 'test-cluster' });
@@ -218,7 +230,7 @@ describe('ClickHouse deletion lifecycle', () => {
         writeVersion: '0',
         reviewStatus: 'reviewed',
       }),
-      clickhouse_settings: expect.objectContaining({ mutations_sync: '2' }),
+      clickhouse_settings: expect.objectContaining({ mutations_sync: '1' }),
     });
   });
 
