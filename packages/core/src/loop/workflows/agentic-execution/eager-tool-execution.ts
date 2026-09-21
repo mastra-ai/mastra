@@ -33,8 +33,35 @@ export const EAGER_TOOL_ABORT_SIGNAL = Symbol('eager-tool-abort-signal');
 export const EAGER_TOOL_BAILOUT = Symbol('eager-tool-bailout');
 
 /** Set by `toolCallStep` when an eagerly dispatched call bails out. */
+/**
+ * What an eagerly dispatched tool asked for when it called `suspend()` at runtime.
+ *
+ * The eager attempt is abandoned before any suspension side effect happens, so this
+ * intent is what the adopting foreach iteration replays: it raises the real suspension
+ * from the owning iteration instead of re-running the tool body from the top.
+ *
+ * The options are an explicit pick rather than the whole `SuspendOptions`, which is
+ * `{ resumeLabel?: string | string[] } & Record<string, any>` — carrying it verbatim
+ * would make the carrier unbounded and let a caller smuggle arbitrary keys across.
+ */
+export type EagerSuspensionIntent = {
+  suspendPayload: unknown;
+  options: {
+    resumeLabel?: string | string[];
+    resumeSchema?: unknown;
+    runId?: string;
+    requireToolApproval?: boolean | { toolName?: string; args?: unknown };
+  };
+};
+
 export type EagerToolBailout = {
   reason?: string;
+  /**
+   * Set when the bailout was caused by a runtime `suspend()` call, carrying what the
+   * tool asked to suspend with. Recorded before the throw for the same reason `reason`
+   * is: a tool that catches the throw would otherwise return normally and lose it.
+   */
+  suspension?: EagerSuspensionIntent;
   /**
    * Set once the eager attempt has run the tool's `onInputAvailable`. The hook is
    * announced before `execute`, so a bailout that happens inside the tool body has
@@ -49,6 +76,9 @@ const EAGER_NOT_EXECUTED = Symbol('eager-tool-not-executed');
 
 /** Brands a bailout whose eager attempt already announced `onInputAvailable`. */
 const EAGER_INPUT_ANNOUNCED = Symbol('eager-tool-input-announced');
+
+/** Carries a runtime suspension's intent out of the attempt that was abandoned for it. */
+const EAGER_SUSPENSION_INTENT = Symbol('eager-tool-suspension-intent');
 
 type RunningExecution = {
   controller: AbortController;
@@ -381,12 +411,33 @@ export class EagerToolExecutionCoordinator {
 export class EagerToolExecutionNotRun extends Error {
   readonly [EAGER_NOT_EXECUTED] = true;
   readonly [EAGER_INPUT_ANNOUNCED]: boolean;
+  readonly [EAGER_SUSPENSION_INTENT]?: EagerSuspensionIntent;
 
-  constructor(reason: string, options?: { inputAvailableCalled?: boolean }) {
+  constructor(reason: string, options?: { inputAvailableCalled?: boolean; suspension?: EagerSuspensionIntent }) {
     super(`Eager tool execution did not run: ${reason}`);
     this.name = 'EagerToolExecutionNotRun';
     this[EAGER_INPUT_ANNOUNCED] = options?.inputAvailableCalled === true;
+    this[EAGER_SUSPENSION_INTENT] = options?.suspension;
   }
+}
+
+/**
+ * The suspension intent behind this rejection, when the eager attempt was abandoned
+ * because the tool called `suspend()` at runtime. The adopting foreach iteration uses
+ * it to raise the real suspension rather than running the tool body a second time.
+ */
+export function eagerToolCallSuspensionIntent(error: unknown): EagerSuspensionIntent | undefined {
+  // Walk `cause` for the same reason `eagerToolCallDidNotExecute` does, with the same
+  // depth bound: a runtime suspension raises this from inside the tool body, where
+  // CoreToolBuilder wraps it in a TOOL_EXECUTION_FAILED MastraError.
+  let current: unknown = error;
+  for (let depth = 0; depth < 10 && typeof current === 'object' && current !== null; depth++) {
+    if (EAGER_SUSPENSION_INTENT in current) {
+      return (current as Record<symbol, unknown>)[EAGER_SUSPENSION_INTENT] as EagerSuspensionIntent | undefined;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
 }
 
 /**

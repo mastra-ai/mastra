@@ -59,8 +59,9 @@ import {
   eagerToolCallAlreadyAnnouncedInput,
   EagerToolExecutionNotRun,
   eagerToolCallDidNotExecute,
+  eagerToolCallSuspensionIntent,
 } from './eager-tool-execution';
-import type { EagerToolBailout } from './eager-tool-execution';
+import type { EagerSuspensionIntent, EagerToolBailout } from './eager-tool-execution';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -130,6 +131,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Set when the eager attempt this invocation replaces already ran the tool's
       // `onInputAvailable`, so the hook stays at one call per adoption.
       let inputAlreadyAnnouncedEagerly = false;
+      // Set when the eager attempt was abandoned because the tool suspended at runtime.
+      // Stashed here and consumed further down, where the suspension helper's dependencies
+      // (`args`, `transformChunk`, `flushMessagesBeforeSuspension`) exist.
+      let eagerSuspensionIntent: EagerSuspensionIntent | undefined;
       if (!isEagerExecution) {
         // Take rather than read: adoption is exactly-once, so a later iteration that
         // reuses this toolCallId executes again instead of replaying a stale result.
@@ -146,6 +151,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // already announced must not be announced a second time.
             if (!eagerToolCallDidNotExecute(error)) throw error;
             inputAlreadyAnnouncedEagerly = eagerToolCallAlreadyAnnouncedInput(error);
+            eagerSuspensionIntent = eagerToolCallSuspensionIntent(error);
           }
         }
       }
@@ -711,9 +717,25 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // unwinds through the tool's body, and a tool that catches it would otherwise
               // return normally and have that return adopted as the call's result.
               const reason = `"${inputData.toolName}" requested suspension`;
-              if (eagerBailout) eagerBailout.reason = reason;
+              // What the tool asked for rides out with the bailout, so the owning foreach
+              // iteration can raise the real suspension instead of running the body again.
+              // An explicit pick, not the whole `SuspendOptions`, which is unbounded.
+              const suspension: EagerSuspensionIntent = {
+                suspendPayload,
+                options: {
+                  resumeLabel: options?.resumeLabel,
+                  resumeSchema: options?.resumeSchema,
+                  runId: options?.runId,
+                  requireToolApproval: options?.requireToolApproval,
+                },
+              };
+              if (eagerBailout) {
+                eagerBailout.reason = reason;
+                eagerBailout.suspension = suspension;
+              }
               throw new EagerToolExecutionNotRun(reason, {
                 inputAvailableCalled: eagerBailout?.inputAvailableCalled,
+                suspension,
               });
             }
             if (options?.requireToolApproval) {
@@ -1485,6 +1507,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         if (eagerBailout?.reason) {
           throw new EagerToolExecutionNotRun(eagerBailout.reason, {
             inputAvailableCalled: eagerBailout.inputAvailableCalled,
+            // A swallowed suspend produces its rejection here rather than in the closure,
+            // so the intent has to be re-attached or the hand-back loses it.
+            suspension: eagerBailout.suspension,
           });
         }
 

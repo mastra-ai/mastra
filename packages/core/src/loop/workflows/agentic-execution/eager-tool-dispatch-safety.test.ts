@@ -3,10 +3,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
 import { prepareForDurableExecution } from '../../../agent/durable/preparation';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { Mastra } from '../../../mastra';
 import { createTool } from '../../../tools';
 import type { ToolCallConcurrency } from '../../types';
-import { EagerToolExecutionCoordinator, eagerToolCallDidNotExecute } from './eager-tool-execution';
+import {
+  EagerToolExecutionCoordinator,
+  EagerToolExecutionNotRun,
+  eagerToolCallDidNotExecute,
+  eagerToolCallSuspensionIntent,
+} from './eager-tool-execution';
+import type { EagerToolBailout } from './eager-tool-execution';
 
 type Recorder = {
   events: string[];
@@ -2084,5 +2091,72 @@ describe('eager tool dispatch — durable boundary', () => {
         options: { eagerToolExecution: false },
       }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('eager suspension intent carrier', () => {
+  // The eager attempt is abandoned before any suspension side effect happens, so what the
+  // tool asked for has to ride out on the rejection. These are deliberately unit level:
+  // at this stage nothing an Agent can observe has changed, because the adopting iteration
+  // stashes the intent without acting on it yet.
+  const intent = {
+    suspendPayload: { message: 'need a human' },
+    options: { resumeLabel: 'call-1' },
+  };
+
+  it('recovers the intent from the error it was attached to', () => {
+    const error = new EagerToolExecutionNotRun('"ask" requested suspension', { suspension: intent });
+
+    expect(eagerToolCallSuspensionIntent(error)).toEqual(intent);
+  });
+
+  it('recovers the intent from an error the swallow path minted fresh', () => {
+    // The shape produced after `tool.execute` returns from a body that caught the throw:
+    // a new error built from the recorded bailout rather than thrown by the suspend closure.
+    const bailout: EagerToolBailout = { reason: '"ask" requested suspension', suspension: intent };
+    const error = new EagerToolExecutionNotRun(bailout.reason!, { suspension: bailout.suspension });
+
+    expect(eagerToolCallSuspensionIntent(error)).toEqual(intent);
+  });
+
+  it('carries approval-flavoured options alongside the payload', () => {
+    const approvalIntent = {
+      suspendPayload: { reason: 'confirm' },
+      options: { requireToolApproval: true },
+    };
+    const error = new EagerToolExecutionNotRun('"ask" requested suspension', { suspension: approvalIntent });
+
+    expect(eagerToolCallSuspensionIntent(error)).toEqual(approvalIntent);
+  });
+
+  it('preserves an array resumeLabel rather than narrowing it', () => {
+    // `SuspendOptions.resumeLabel` is `string | string[]`, and the real suspension path
+    // passes it through; a carrier typed `string` would silently drop the second label.
+    const arrayIntent = { suspendPayload: {}, options: { resumeLabel: ['a', 'b'] } };
+    const error = new EagerToolExecutionNotRun('"ask" requested suspension', { suspension: arrayIntent });
+
+    expect(eagerToolCallSuspensionIntent(error)?.options.resumeLabel).toEqual(['a', 'b']);
+  });
+
+  it('is found through the MastraError the tool builder wraps a thrown suspension in', () => {
+    // A runtime suspension is raised from inside the tool body, so CoreToolBuilder catches
+    // it and re-throws a TOOL_EXECUTION_FAILED MastraError carrying it as `cause`.
+    const inner = new EagerToolExecutionNotRun('"ask" requested suspension', { suspension: intent });
+    const wrapped = new MastraError(
+      { id: 'TOOL_EXECUTION_FAILED', domain: ErrorDomain.TOOL, category: ErrorCategory.USER },
+      inner,
+    );
+    const doubleWrapped = new MastraError(
+      { id: 'TOOL_EXECUTION_FAILED', domain: ErrorDomain.TOOL, category: ErrorCategory.USER },
+      wrapped,
+    );
+
+    expect(eagerToolCallSuspensionIntent(doubleWrapped)).toEqual(intent);
+  });
+
+  it('returns undefined for a rejection that carries no suspension', () => {
+    // A cancelled-while-queued attempt is the same branded error with nothing to replay.
+    expect(eagerToolCallSuspensionIntent(new EagerToolExecutionNotRun('cancelled'))).toBeUndefined();
+    expect(eagerToolCallSuspensionIntent(new Error('unrelated'))).toBeUndefined();
   });
 });

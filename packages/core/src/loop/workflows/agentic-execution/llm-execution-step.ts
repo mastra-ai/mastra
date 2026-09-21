@@ -2177,6 +2177,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         if (bailout.reason) {
                           throw new EagerToolExecutionNotRun(bailout.reason, {
                             inputAvailableCalled: bailout.inputAvailableCalled,
+                            // A tool that swallowed the suspend throw and returned settles
+                            // here, so the intent has to be carried across or the foreach
+                            // iteration has nothing to raise the real suspension from.
+                            suspension: bailout.suspension,
                           });
                         }
                         return settled;
