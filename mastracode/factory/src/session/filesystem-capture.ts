@@ -36,25 +36,10 @@ export interface FilesystemCaptureDependencies {
 
 export function parseFilesystemCaptureFiles(output: string): FilesystemFile[] {
   const files = new Map<string, FilesystemFile>();
-  const records = output.split('\0');
-
-  for (let index = 0; index < records.length; index += 1) {
-    const record = records[index];
+  for (const record of output.split('\0')) {
     if (!record) continue;
-    if (record.length < 4 || record[2] !== ' ') {
-      const path = record.replace(/^\.\//, '');
-      if (path) files.set(path, { path });
-      continue;
-    }
-
-    const code = record.slice(0, 2);
-    let path = record.slice(3);
-    const moved = code.includes('R') || code.includes('C');
-    if (moved) index += 1;
-    if (path.startsWith('./')) path = path.slice(2);
-    if (!path || (!code.includes('U') && code.includes('D') && !moved)) continue;
-
-    files.set(path, { path });
+    const path = record.replace(/^\.\//, '');
+    if (path) files.set(path, { path });
   }
 
   return [...files.values()].toSorted((a, b) => a.path.localeCompare(b.path));
