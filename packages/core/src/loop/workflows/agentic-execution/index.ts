@@ -11,7 +11,11 @@ import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
 import { createSignalDrainStep } from './signal-drain-step';
-import { normalizeToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
+import {
+  normalizeToolCallConcurrency,
+  resolveInitialToolCallConcurrency,
+  resolveToolCallConcurrency,
+} from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
 
@@ -26,16 +30,14 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     rest.toolCallConcurrency,
   );
   const toolCallForeachOptions: ToolCallForeachOptions = {
-    // This initial value is a conservative fallback for resume paths that can enter
-    // a suspended foreach before llm-execution recomputes the effective step tools.
-    // Use the 'available' strategy here regardless of the configured strategy: the
-    // called tool set is not known yet, and map-tool-calls narrows it before the
-    // foreach actually consumes this value.
-    concurrency: resolveToolCallConcurrency({
+    // Fresh runs replace this after the model emits its calls. Resume paths can
+    // skip that completed mapping step, so preserve the configured strategy here.
+    concurrency: resolveInitialToolCallConcurrency({
       requireToolApproval: rest.requireToolApproval,
       tools: rest.tools,
       activeTools: rest.activeTools as string[] | undefined,
       configuredConcurrency: configuredToolCallConcurrency,
+      strategy: toolCallConcurrencyStrategy,
     }),
   };
 

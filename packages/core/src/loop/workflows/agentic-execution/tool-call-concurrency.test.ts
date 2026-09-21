@@ -3,6 +3,7 @@ import {
   effectiveToolSetRequiresSequentialExecution,
   normalizeToolCallConcurrency,
   resolveConfiguredToolCallConcurrency,
+  resolveInitialToolCallConcurrency,
   resolveToolCallConcurrency,
 } from './tool-call-concurrency';
 
@@ -136,6 +137,30 @@ describe('tool call concurrency resolution', () => {
     expect(normalizeToolCallConcurrency({ limit: 8 })).toEqual({ limit: 8, strategy: 'available' });
     expect(normalizeToolCallConcurrency({ limit: 8, strategy: 'called' })).toEqual({ limit: 8, strategy: 'called' });
     expect(normalizeToolCallConcurrency({ limit: 0, strategy: 'called' })).toEqual({ limit: 10, strategy: 'called' });
+  });
+
+  describe('initial concurrency', () => {
+    it('preserves called-strategy concurrency for reconstructed resume paths', () => {
+      expect(
+        resolveInitialToolCallConcurrency({
+          tools: { safe: safeTool, suspend: suspendTool },
+          activeTools: ['safe', 'suspend'],
+          configuredConcurrency: 4,
+          strategy: 'called',
+        }),
+      ).toBe(4);
+    });
+
+    it('keeps available-strategy resume paths conservative', () => {
+      expect(
+        resolveInitialToolCallConcurrency({
+          tools: { safe: safeTool, suspend: suspendTool },
+          activeTools: ['safe', 'suspend'],
+          configuredConcurrency: 4,
+          strategy: 'available',
+        }),
+      ).toBe(1);
+    });
   });
 
   describe("strategy: 'called'", () => {

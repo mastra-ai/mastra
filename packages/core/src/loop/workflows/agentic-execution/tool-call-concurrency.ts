@@ -33,6 +33,34 @@ export function resolveConfiguredToolCallConcurrency(toolCallConcurrency: ToolCa
   return normalizeToolCallConcurrency(toolCallConcurrency).limit;
 }
 
+/**
+ * Resolve the mutable foreach concurrency before the current tool calls are known.
+ * Fresh runs replace this after the model emits its calls; resume paths can skip
+ * that completed mapping step and therefore keep this value.
+ */
+export function resolveInitialToolCallConcurrency({
+  requireToolApproval,
+  tools,
+  activeTools,
+  configuredConcurrency,
+  strategy,
+}: {
+  requireToolApproval?: RequireToolApproval;
+  tools?: ToolSet;
+  activeTools?: readonly string[];
+  configuredConcurrency: number;
+  strategy: ToolCallConcurrencyStrategy;
+}): number {
+  return resolveToolCallConcurrency({
+    requireToolApproval,
+    tools,
+    activeTools,
+    configuredConcurrency,
+    strategy,
+    calledToolNames: [],
+  });
+}
+
 export function effectiveToolSetRequiresSequentialExecution({
   requireToolApproval,
   tools,
