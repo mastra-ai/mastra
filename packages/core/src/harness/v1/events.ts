@@ -444,7 +444,8 @@ export interface QueueFailedEvent extends HarnessEventBase {
 // ---------------------------------------------------------------------------
 
 type SuspensionSource =
-  { source: 'parent' } | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string };
+  | { source: 'parent' }
+  | { source: 'subagent'; subagentToolCallId: string; subagentSessionId: string };
 
 export type ToolApprovalRequiredEvent = HarnessEventBase & {
   type: 'tool_approval_required';

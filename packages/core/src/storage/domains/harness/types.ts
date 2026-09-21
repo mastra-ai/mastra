@@ -367,7 +367,13 @@ export interface AttachmentSemanticMetadata {
 }
 
 export type AttachmentReferenceSource =
-  'queued_item' | 'queue_receipt' | 'current_run' | 'message_history' | 'channel_inbox' | 'wakeup' | 'outbox';
+  | 'queued_item'
+  | 'queue_receipt'
+  | 'current_run'
+  | 'message_history'
+  | 'channel_inbox'
+  | 'wakeup'
+  | 'outbox';
 
 /**
  * Durable session state. Loaded on hydration, flushed under the session's
@@ -1548,7 +1554,10 @@ export interface CreateOrLoadChannelActionReceiptResult {
 }
 
 export type ChannelDeliverySemantics =
-  'native-idempotency' | 'client-message-id' | 'lookup-reconcile' | 'at-least-once';
+  | 'native-idempotency'
+  | 'client-message-id'
+  | 'lookup-reconcile'
+  | 'at-least-once';
 
 export type ChannelOutboxKind =
   | 'assistant-message'
@@ -1561,7 +1570,12 @@ export type ChannelOutboxKind =
   | 'custom';
 
 export type ChannelOutboxOperationKind =
-  'message-create' | 'message-edit' | 'reaction-add' | 'reaction-remove' | 'file-upload' | 'custom';
+  | 'message-create'
+  | 'message-edit'
+  | 'reaction-add'
+  | 'reaction-remove'
+  | 'file-upload'
+  | 'custom';
 
 export interface ChannelOutboxSource {
   kind: 'session-event' | 'pending-resume' | 'queue' | 'wakeup' | 'operator' | 'custom';
