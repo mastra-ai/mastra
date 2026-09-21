@@ -1365,7 +1365,7 @@ export const mastra = new Mastra({
     );
   });
 
-describe.sequential('reproducible bundles', () => {
+  describe.sequential('reproducible bundles', () => {
     it(
       'produces identical bundles when invoked from the app and monorepo roots',
       async () => {
