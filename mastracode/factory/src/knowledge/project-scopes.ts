@@ -57,8 +57,10 @@ const KNOWLEDGE_IMPORTER_DEFAULT_ROLES: Readonly<Record<string, 'owner' | 'edit'
   notion: 'owner',
   confluence: 'owner',
   jira: 'edit',
-  linear: 'edit',
-  zendesk: 'edit',
+  // Linear syncs Documents and Zendesk syncs Help Center articles — both
+  // document-shaped, so they own their nodes (archived/draft content is removed).
+  linear: 'owner',
+  zendesk: 'owner',
   fireflies: 'edit',
 };
 

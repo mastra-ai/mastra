@@ -64,8 +64,8 @@ const PROVIDER_DESCRIPTIONS: Record<PlatformConnectProviderId, string> = {
   'incident-io': 'Sync incident.io incidents and follow-ups into knowledge.',
   notion: 'Sync Notion pages and databases into knowledge.',
   confluence: 'Sync Confluence spaces and pages into knowledge.',
-  linear: 'Sync Linear issues, projects, and comments into knowledge.',
-  zendesk: 'Sync Zendesk tickets and conversations into knowledge.',
+  linear: 'Sync Linear documents — project docs, PRDs, and initiative docs — into knowledge.',
+  zendesk: 'Sync Zendesk Help Center articles into knowledge.',
   fireflies: 'Sync Fireflies meeting transcripts and summaries into knowledge.',
 };
 

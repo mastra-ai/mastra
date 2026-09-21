@@ -126,9 +126,12 @@ describe('withProjectScopedIntegrations', () => {
       'notion',
       'zendesk',
     ]);
-    expect(integrations.notion).toMatchObject({ access: { 'resource:$projectId': 'owner' } });
-    expect(integrations.confluence).toMatchObject({ access: { 'resource:$projectId': 'owner' } });
-    for (const id of ['jira', 'linear', 'zendesk', 'fireflies']) {
+    // Document-shaped sources own their nodes (Linear Documents and Zendesk
+    // Help Center articles included); ticket/transcript sources only upsert.
+    for (const id of ['notion', 'confluence', 'linear', 'zendesk']) {
+      expect(integrations[id]).toMatchObject({ access: { 'resource:$projectId': 'owner' } });
+    }
+    for (const id of ['jira', 'fireflies']) {
       expect(integrations[id]).toMatchObject({ access: { 'resource:$projectId': 'edit' } });
     }
     await expect(integrations.notion!.scopes!(scopesContext())).resolves.toEqual(['resource:p1']);
