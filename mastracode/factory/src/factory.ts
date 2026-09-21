@@ -126,7 +126,7 @@ import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import type { WorkItemRow } from './storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
@@ -856,34 +856,41 @@ export class MastraFactory {
           }
         : {}),
     });
+    const loadMemorySettings = async ({
+      requestContext,
+      binding,
+    }: {
+      requestContext: RequestContext | undefined;
+      binding: FactoryRunBindingRecord | null;
+    }) => {
+      if (!requestContext) return;
+      const scope = readFactorySessionScope(requestContext);
+      const user = getFactoryAuthUserFromContext(requestContext);
+      const callerUserId = getFactoryAuthUserId(user);
+      const callerOrgId = factoryUserOrgId(user);
+      const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
+      // Project-scoped sessions share one row per project, addressed by the
+      // sentinel user id the settings UI picks when it passes a `factoryId`;
+      // unscoped sessions read the caller's own row. Both are rows the
+      // settings UI writes, so intent and the run agree without any session
+      // mutation.
+      const target = factoryProjectId
+        ? {
+            orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
+            userId: factoryMemorySettingsUserId(factoryProjectId),
+          }
+        : callerUserId && callerOrgId
+          ? { orgId: callerOrgId, userId: callerUserId }
+          : { orgId: 'local', userId: 'local' };
+      const record = await memorySettingsStorage.get(target);
+      requestContext.set('mastra__factoryMemorySettings', record satisfies MemorySettingsRecord | null);
+    };
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           configVersion,
           storage: workItemsStorage,
           boards: this.#boards,
-          loadMemorySettings: async ({ requestContext, binding }) => {
-            if (!requestContext) return;
-            const scope = readFactorySessionScope(requestContext);
-            const user = getFactoryAuthUserFromContext(requestContext);
-            const callerUserId = getFactoryAuthUserId(user);
-            const callerOrgId = factoryUserOrgId(user);
-            const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
-            // Project-scoped sessions share one row per project, addressed by the
-            // sentinel user id the settings UI picks when it passes a `factoryId`;
-            // unscoped sessions read the caller's own row. Both are rows the
-            // settings UI writes, so intent and the run agree without any session
-            // mutation.
-            const target = factoryProjectId
-              ? {
-                  orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
-                  userId: factoryMemorySettingsUserId(factoryProjectId),
-                }
-              : callerUserId && callerOrgId
-                ? { orgId: callerOrgId, userId: callerUserId }
-                : { orgId: 'local', userId: 'local' };
-            const record = await memorySettingsStorage.get(target);
-            requestContext.set('factoryMemorySettings', record satisfies MemorySettingsRecord | null);
-          },
+          loadMemorySettings,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1050,7 +1057,16 @@ export class MastraFactory {
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
-        ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
+        inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
+          if (factoryProcessor) {
+            await factoryProcessor.prepareMemorySettings(requestContext);
+            return [factoryProcessor];
+          }
+          const reason = 'work-items unavailable';
+          requestContext.set('mastra__factoryMemorySettings', { status: 'unavailable', reason });
+          console.warn('[Factory Memory Settings] Failed to load settings for run', { error: reason });
+          return [];
+        },
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 ||
         sourceControlToolProviders.length > 0 ||
