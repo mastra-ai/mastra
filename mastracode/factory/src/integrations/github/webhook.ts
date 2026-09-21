@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
-import { resolveSubscriptionSession } from '../subscription-session.js';
+import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.js';
 import type { FactorySessionOwner } from '../subscription-session.js';
 import { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
@@ -515,25 +515,29 @@ export async function dispatchGithubWebhook(
         continue;
       }
       const overrides = managedInlineReviewOverrides(notification, subscription);
-      const result = await session.sendNotificationSignal({
-        source: 'github',
-        kind: notification.kind,
-        summary: overrides?.summary ?? notification.summary,
-        priority: notification.priority,
-        payload: overrides?.payload ?? notification.payload,
-        sourceId: parsed.deliveryId,
-        dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
-        coalesceKey: `github:${subscription.data.repositoryExternalId}:pull-request:${subscription.data.changeRequestId}`,
-        metadata: {
-          event: notification.metadata.event,
-          action: notification.action,
-          repository: notification.metadata.repository,
-          issueNumber: notification.metadata.issueNumber,
-          pullRequestNumber: notification.metadata.pullRequestNumber,
-          targetUrl: notificationTargetUrl(parsed.event, parsed.payload),
-          deliveryId: parsed.deliveryId,
+      const runContext = subscriptionRunContext(session);
+      const result = await session.sendNotificationSignal(
+        {
+          source: 'github',
+          kind: notification.kind,
+          summary: overrides?.summary ?? notification.summary,
+          priority: notification.priority,
+          payload: overrides?.payload ?? notification.payload,
+          sourceId: parsed.deliveryId,
+          dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
+          coalesceKey: `github:${subscription.data.repositoryExternalId}:pull-request:${subscription.data.changeRequestId}`,
+          metadata: {
+            event: notification.metadata.event,
+            action: notification.action,
+            repository: notification.metadata.repository,
+            issueNumber: notification.metadata.issueNumber,
+            pullRequestNumber: notification.metadata.pullRequestNumber,
+            targetUrl: notificationTargetUrl(parsed.event, parsed.payload),
+            deliveryId: parsed.deliveryId,
+          },
         },
-      });
+        ...(runContext ? [{ requestContext: runContext }] : []),
+      );
       await Promise.all([result.persisted, result.accepted].filter(Boolean));
       if (notification.terminal) {
         await retireSubscription(subscription.id, notification.kind === 'pull-request-merged' ? 'merged' : 'closed');

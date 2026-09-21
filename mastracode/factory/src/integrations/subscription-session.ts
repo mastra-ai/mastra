@@ -18,6 +18,29 @@ export type SubscriptionSessionRow = IntegrationSubscription<{ projectRepository
  * can be delivered to it. Provider-neutral: GitHub and GitLab subscriptions
  * carry the same session binding and differ only in their target data.
  */
+/** The live-session fields a provider-triggered run needs to identify its tenant. */
+export interface SubscriptionRunSession {
+  ownerId?: string | null;
+  state?: { get: () => Record<string, unknown> | undefined };
+}
+
+/**
+ * The request context a provider-triggered run executes under: the session's
+ * owner in the session's organization. A webhook carries no signed-in user and
+ * tenant credential resolution fails closed without one, so a woken run would
+ * otherwise stop before it could persist or answer the notification. Built from
+ * the live session alone, so delivery costs no extra storage read; a session
+ * whose org is unresolved gets no context and behaves as before.
+ */
+export function subscriptionRunContext(session: SubscriptionRunSession): RequestContext | undefined {
+  const ownerId = session.ownerId;
+  const orgId = session.state?.get()?.factoryOrgId;
+  if (typeof ownerId !== 'string' || !ownerId || !hasResolvedOrg(orgId)) return undefined;
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: ownerId, organizationId: orgId });
+  return requestContext;
+}
+
 export async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: SubscriptionSessionRow,
