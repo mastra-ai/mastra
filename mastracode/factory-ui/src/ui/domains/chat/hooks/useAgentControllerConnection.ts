@@ -1,7 +1,7 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
 import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
@@ -73,6 +73,19 @@ export function useAgentControllerConnection({
     taskEventGeneration,
     liveTasks,
   });
+  const observedRun = useRef<{ resourceId: string; running?: boolean }>({ resourceId });
+  useEffect(() => {
+    const running = syncQuery.data?.running;
+    const previous = observedRun.current;
+    observedRun.current = { resourceId, running };
+    if (previous.resourceId !== resourceId || previous.running !== true || running !== false) return;
+    // A state poll can discover completion even when the connected SSE stream
+    // missed the final message. Recover that persisted message through the
+    // existing window merge rather than waiting for a manual page refresh.
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
+    });
+  }, [agentControllerId, queryClient, resourceId, syncQuery.data?.running]);
   const handleConnectedChange = (connected: boolean) => {
     // Ref mirrors the state so back-to-back events see the true previous value
     // even when React batches the renders in between.

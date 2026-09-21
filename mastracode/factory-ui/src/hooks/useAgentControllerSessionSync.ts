@@ -17,8 +17,14 @@ interface UseAgentControllerSessionSyncArgs {
   liveTasks: RefObject<{ threadId?: string; tasks: AgentControllerTaskSnapshot[] } | undefined>;
 }
 
-export function reconnectRefetchInterval(sseConnected: boolean, fetchFailureCount: number): false | number {
-  if (sseConnected) return false;
+export function reconnectRefetchInterval(
+  sseConnected: boolean,
+  fetchFailureCount: number,
+  running = false,
+): false | number {
+  // The stream is best-effort and does not replay events. A missed final
+  // message/end event must not leave an apparently active run stale forever.
+  if (sseConnected) return running ? 15_000 : false;
   if (fetchFailureCount >= 10) return false;
   return Math.min(1000 * 2 ** fetchFailureCount, 30_000);
 }
@@ -57,6 +63,7 @@ export function useAgentControllerSessionSync({
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchInterval: query => reconnectRefetchInterval(sseConnected, query.state.fetchFailureCount),
+    refetchInterval: query =>
+      reconnectRefetchInterval(sseConnected, query.state.fetchFailureCount, query.state.data?.running === true),
   });
 }

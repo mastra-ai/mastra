@@ -338,6 +338,8 @@ describe('useAgentControllerConnection', () => {
 
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
     expect(reconnectRefetchInterval(true, 0)).toBe(false);
+    expect(reconnectRefetchInterval(true, 0, true)).toBe(15_000);
+    expect(reconnectRefetchInterval(true, 0, false)).toBe(false);
     expect(reconnectRefetchInterval(false, 0)).toBe(1000);
     expect(reconnectRefetchInterval(false, 1)).toBe(2000);
     expect(reconnectRefetchInterval(false, 5)).toBe(30_000);
@@ -676,5 +678,42 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
     await waitFor(() => expect(result.current.state?.threadId).toBe('state-thread-after-gap'), { timeout: 3000 });
+  });
+
+  it('refetches the visible message window when server state completes a run without an end event', async () => {
+    const onEvent = vi.fn();
+    let running = true;
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          threadId: 'state-thread',
+          running,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+
+    const { client, result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
+    await waitFor(() => expect(result.current.state?.running).toBe(true));
+    const messagesKey = queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 100);
+    client.setQueryData(messagesKey, []);
+    const stateKey = queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, undefined);
+    running = false;
+    await client.invalidateQueries({ queryKey: stateKey, exact: true });
+
+    await waitFor(() => expect(result.current.state?.running).toBe(false));
+    await waitFor(() => expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true));
   });
 });
