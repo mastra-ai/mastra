@@ -4961,6 +4961,334 @@ describe('Session.message() — default path', () => {
       )?.status,
     ).toBe('committed');
   });
+
+  it('does not restore a cached suspension after the admission committed and cleared the pending', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'resumed answer' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-cleared-restore', generation: 1 };
+    const first = await session.message({
+      content: 'needs approval',
+      admissionId: 'cleared-restore-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(first.finishReason).toBe('suspended');
+    expect(session.getRecord().pendingResume?.toolCallId).toBe('tc-1');
+
+    // The duplicate's probe returns the STALE pending snapshot — while it was
+    // in flight the resume committed the admission and cleared pendingResume.
+    // The restore must not resurrect the consumed interaction.
+    let byRunCalls = 0;
+    const originalByRun = storage.loadTerminalAdmissionByRun.bind(storage);
+    vi.spyOn(storage, 'loadTerminalAdmissionByRun').mockImplementation(async (input: any) => {
+      byRunCalls += 1;
+      const admission = await originalByRun(input);
+      if (byRunCalls === 1) {
+        await session.respondToToolApproval({ approved: true });
+      }
+      return admission;
+    });
+
+    const duplicate = session.message({
+      content: 'needs approval',
+      admissionId: 'cleared-restore-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    await expect(duplicate).resolves.toMatchObject({ finishReason: 'suspended' });
+    expect(session.getRecord().pendingResume).toBeUndefined();
+  });
+
+  it('does not merge stale cached accounting into a newer same-tool pending generation', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      totalUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      totalUsage: { inputTokens: 15, outputTokens: 8, totalTokens: 23 },
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls -la' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-same-tool', generation: 1 };
+    const first = await session.message({
+      content: 'needs approval',
+      admissionId: 'same-tool-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(first.finishReason).toBe('suspended');
+    expect(session.getRecord().pendingResume?.accountedTokenUsage?.totalTokens).toBe(15);
+
+    // Hold the duplicate's admission probe so the resume can park a NEWER
+    // generation of the same tool call (same runId + toolCallId, later
+    // requestedAt) before the stale restore lands.
+    let byRunCalls = 0;
+    let releaseProbe!: () => void;
+    const probeGate = new Promise<void>(resolve => (releaseProbe = resolve));
+    const originalByRun = storage.loadTerminalAdmissionByRun.bind(storage);
+    vi.spyOn(storage, 'loadTerminalAdmissionByRun').mockImplementation(async (input: any) => {
+      byRunCalls += 1;
+      if (byRunCalls === 1) await probeGate;
+      return originalByRun(input);
+    });
+    const duplicate = session.message({
+      content: 'needs approval',
+      admissionId: 'same-tool-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    await vi.waitFor(() => expect(byRunCalls).toBe(1));
+
+    // Distinct requestedAt keeps the two generations' keys apart.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const resumed = await session.respondToToolApproval({ approved: true });
+    expect(resumed.finishReason).toBe('suspended');
+    const newerAccounting = session.getRecord().pendingResume?.accountedTokenUsage?.totalTokens;
+    expect(newerAccounting).toBe(23);
+
+    releaseProbe();
+    await expect(duplicate).resolves.toMatchObject({ finishReason: 'suspended' });
+    // The stale cached generation must not overwrite the newer park's
+    // accounting baseline even though runId/toolCallId match.
+    expect(session.getRecord().pendingResume?.accountedTokenUsage?.totalTokens).toBe(23);
+  });
+
+  it('reports cancellation to a suspended caller that joined a cancelled commit attempt', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-big', toolName: 'shell', args: { cmd: 'x'.repeat(1_000_000) } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-join-cancelled', generation: 1 };
+
+    // Hold the suspended run's commit inside its admission probe so the
+    // duplicate can join the parked attempt. The 1MB suspend payload overruns
+    // the session-record budget, so the park was already dropped — the
+    // attempt cancels rather than defers.
+    let admissionLoads = 0;
+    let releaseFirstAdmissionLoad!: () => void;
+    const firstAdmissionLoadGate = new Promise<void>(resolve => (releaseFirstAdmissionLoad = resolve));
+    const originalLoad = storage.loadTerminalAdmission.bind(storage);
+    vi.spyOn(storage, 'loadTerminalAdmission').mockImplementation(async (input: any) => {
+      admissionLoads += 1;
+      if (admissionLoads === 1) await firstAdmissionLoadGate;
+      return originalLoad(input);
+    });
+    const commitSpy = vi.spyOn(session as any, '_commitTerminalHandoff');
+    const winnerFailures: Error[] = [];
+    const message1 = session.message({
+      content: 'needs approval',
+      admissionId: 'join-cancelled-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      onTerminalCommitError: err => winnerFailures.push(err),
+    });
+    await vi.waitFor(() => expect(admissionLoads).toBe(1));
+
+    const duplicateFailures: Error[] = [];
+    const duplicate = session.message({
+      content: 'needs approval',
+      admissionId: 'join-cancelled-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      onTerminalCommitError: err => duplicateFailures.push(err),
+    });
+    await vi.waitFor(() => expect(commitSpy.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    releaseFirstAdmissionLoad();
+
+    await expect(message1).resolves.toMatchObject({ finishReason: 'suspended' });
+    await expect(duplicate).resolves.toMatchObject({ finishReason: 'suspended' });
+
+    // The shared attempt cancelled its admission — the joined suspended
+    // caller must observe that terminal outcome, not hang retained against a
+    // grant that can never settle.
+    expect(duplicateFailures).toHaveLength(1);
+    expect(duplicateFailures[0]!.name).toBe('HarnessTerminalHandoffError:harness.terminal_cancelled');
+    expect(winnerFailures.some(err => err.name === 'HarnessTerminalHandoffError:harness.terminal_cancelled')).toBe(
+      true,
+    );
+    expect(
+      (
+        await storage.loadTerminalAdmission({
+          harnessName: 'default',
+          sessionId: session.id,
+          admissionId: 'join-cancelled-admission',
+          executionGrant: grant,
+        })
+      )?.status,
+    ).toBe('cancelled');
+  });
+
+  it('does not recount resumed-run usage for a terminal duplicate after reopen', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const terminalHandoff = {
+      finalizer: {
+        id: 'doxa.chat',
+        version: '2026-09-20',
+        finalize: async () => ({
+          projectionKind: 'chat.summary',
+          projectionId: 'response-1',
+          payload: {},
+        }),
+      },
+    };
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      totalUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: { storage, terminalHandoff },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-reopen-dup', generation: 1 };
+    const first = await session.message({
+      content: 'needs approval',
+      admissionId: 'reopen-dup-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(first.finishReason).toBe('suspended');
+    expect(session.getTokenUsage().totalTokens).toBe(15);
+    const sessionId = session.id;
+    await harness.shutdown();
+
+    // Reopen: the in-memory accounted set is empty even though the suspended
+    // run's usage is durably persisted. The resume restores the cumulative
+    // counter and commits the terminal output — its delta (23 - 15 = 8) is
+    // accounted once.
+    const restartedAgent = new MockAgent({ id: 'default' });
+    restartedAgent.enqueueRun({
+      finishReason: 'stop',
+      text: 'resumed answer',
+      totalUsage: { inputTokens: 15, outputTokens: 8, totalTokens: 23 },
+    });
+    const restartedHarness = new Harness({
+      agents: { default: restartedAgent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage, terminalHandoff },
+    });
+    const restarted = await restartedHarness.session({ sessionId, resourceId: 'u1' });
+
+    // Hold the resume's terminal commit inside its admission probe so the
+    // duplicate observes still-pending evidence and replays the cached
+    // terminal output through the accounting path before the commit lands.
+    let admissionLoads = 0;
+    let releaseAdmissionLoad!: () => void;
+    const admissionLoadGate = new Promise<void>(resolve => (releaseAdmissionLoad = resolve));
+    const originalLoad = storage.loadTerminalAdmission.bind(storage);
+    vi.spyOn(storage, 'loadTerminalAdmission').mockImplementation(async (input: any) => {
+      admissionLoads += 1;
+      if (admissionLoads === 1) await admissionLoadGate;
+      return originalLoad(input);
+    });
+    const commitSpy = vi.spyOn(restarted as any, '_commitTerminalHandoff');
+    const respond = restarted.respondToToolApproval({ approved: true });
+    await vi.waitFor(() => expect(admissionLoads).toBe(1));
+    expect(restarted.getTokenUsage().totalTokens).toBe(23);
+
+    const duplicate = restarted.message({
+      content: 'needs approval',
+      admissionId: 'reopen-dup-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    // The replay must not re-apply the run's cumulative usage — the resume
+    // already accounted the (23 - 15) delta. The duplicate's own commit call
+    // fires only after its prepare path ran the usage accounting.
+    await vi.waitFor(() => expect(commitSpy.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(restarted.getTokenUsage().totalTokens).toBe(23);
+
+    releaseAdmissionLoad();
+    await expect(respond).resolves.toMatchObject({ text: 'resumed answer' });
+    await expect(duplicate).resolves.toMatchObject({ text: 'resumed answer' });
+    expect(restarted.getTokenUsage().totalTokens).toBe(23);
+    await restartedHarness.shutdown();
+  });
 });
 
 describe('Session.message() — streaming path', () => {

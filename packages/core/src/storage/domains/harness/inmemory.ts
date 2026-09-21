@@ -76,6 +76,7 @@ import type {
   HarnessTerminalAdmissionInput,
   HarnessPendingTerminalAdmissionLoadInput,
   HarnessTerminalAdmissionLoadInput,
+  HarnessTerminalAdmissionRecord,
   HarnessTerminalAdmissionReceipt,
   HarnessTerminalCancelInput,
   HarnessTerminalCancelReceipt,
@@ -89,6 +90,7 @@ import type {
   HarnessTerminalIdentity,
   HarnessTerminalIntent,
   HarnessTerminalIntentLoadInput,
+  HarnessTerminalProjection,
   HarnessTerminalQueuePressure,
   HarnessTerminalRenewReceipt,
   HarnessTerminalResult,
@@ -1562,7 +1564,7 @@ export class InMemoryHarness extends HarnessStorage {
     admission: HarnessTerminalAdmissionInput;
     resultEvidence: AgentSignalResultEvidence;
     terminalResult: HarnessTerminalResult;
-    projection: import('./terminal-handoff').HarnessTerminalProjection;
+    projection: HarnessTerminalProjection;
   }): Promise<HarnessTerminalCommitReceipt> {
     this.assertTerminalHandoffEnabled();
     const namespace = resolveHarnessName(input.admission.harnessName, this.harnessName);
@@ -1771,7 +1773,7 @@ export class InMemoryHarness extends HarnessStorage {
         grant: { ...input.executionGrant },
         tombstoneId,
         cancelledAt: prior.createdAt,
-        ...(existing ? { admission: cloneHarnessTerminal({ ...existing, status: 'cancelled' }) } : {}),
+        ...(existing ? { admission: cloneHarnessTerminal(existing) } : {}),
       };
     }
     const tombstone = {
@@ -1790,12 +1792,15 @@ export class InMemoryHarness extends HarnessStorage {
       existing.status = 'cancelled';
       existing.updatedAt = now;
     }
+    // Report the row's stored status: a fenced admission stays fenced — the
+    // tombstone still records this cancel for fencing, but the receipt must
+    // not claim a transition storage never made.
     return {
-      status: 'cancelled',
+      status: existing?.status === 'fenced' ? 'fenced' : 'cancelled',
       grant: { ...input.executionGrant },
       tombstoneId,
       cancelledAt: now,
-      ...(existing ? { admission: cloneHarnessTerminal({ ...existing, status: 'cancelled' }) } : {}),
+      ...(existing ? { admission: cloneHarnessTerminal(existing) } : {}),
     };
   }
 
@@ -4639,14 +4644,14 @@ function cloneSessionRecord(record: SessionRecord): SessionRecord {
 }
 
 function sameTerminalAdmissionIdentity(
-  left: import('./terminal-handoff').HarnessTerminalAdmissionRecord,
-  right: import('./terminal-handoff').HarnessTerminalAdmissionRecord,
+  left: HarnessTerminalAdmissionRecord,
+  right: HarnessTerminalAdmissionRecord,
 ): boolean {
   return sameTerminalAdmissionInput(left, right);
 }
 
 function sameTerminalAdmissionInput(
-  left: import('./terminal-handoff').HarnessTerminalAdmissionRecord,
+  left: HarnessTerminalAdmissionRecord,
   right: HarnessTerminalAdmissionInput,
 ): boolean {
   return (

@@ -4354,7 +4354,14 @@ export class Session {
     ) {
       return undefined;
     }
-    return this._tokenUsageDeltaFromFullOutput(full);
+    // The in-memory accounted sets are empty after a reopen even though the
+    // suspended run's cumulative usage is durably recorded on the parked
+    // pending. Subtract that durable baseline so a cached-duplicate replay
+    // cannot re-apply usage the session already persisted.
+    const parked = this._record.pendingResume;
+    const durableBaseline =
+      parked !== undefined && parked.runId === full.runId ? parked.accountedTokenUsage : undefined;
+    return this._tokenUsageDeltaFromFullOutput(full, durableBaseline);
   }
 
   private _reserveMessageSuspendedTokenUsage(full: FullOutput<unknown>): {
@@ -4420,7 +4427,7 @@ export class Session {
     modeId: string,
     modelId: string,
     activeTurnWaiter?: Promise<never>,
-    opts: { fenceStaleRestore?: boolean } = {},
+    opts: { restoreFence?: { expectedKey?: string } } = {},
   ): Promise<void> {
     await this._waitForMessageSuspendedTokenUsageOwner(full, activeTurnWaiter);
     const reservation = this._reserveMessageSuspendedTokenUsage(full);
@@ -4428,7 +4435,7 @@ export class Session {
       await this._raceActiveTurnWaiter(
         this._maybeCaptureSuspend(full, queuedItemId, modeId, modelId, {
           tokenUsageDelta: reservation.tokenUsageDelta,
-          fenceStaleRestore: opts.fenceStaleRestore,
+          restoreFence: opts.restoreFence,
         }),
         activeTurnWaiter,
       );
@@ -9272,7 +9279,11 @@ export class Session {
         this._messageDuplicateModeId(evidence, opts),
         this._messageDuplicateModelId(evidence, opts),
         activeDeleted,
-        { fenceStaleRestore: true },
+        {
+          restoreFence: {
+            expectedKey: parked === undefined ? undefined : pendingInteractionGenerationKey(parked),
+          },
+        },
       );
       return;
     }
@@ -9812,7 +9823,22 @@ export class Session {
         // NOT retain: the re-driven commit drains retained observers AND
         // invokes this caller's options directly, double-notifying it.
         if (this._agentEndReasonForFullOutput(full) === 'suspended') {
-          this._retainTerminalObservers(identity.runId, options);
+          // `undefined` also covers the shared attempt CANCELLING its
+          // admission — the record-size budget can drop the suspension's
+          // durable park, making the deferral undeliverable. Deferral is only
+          // legitimate while a resumable interaction for this run still
+          // exists; with no park there is nothing to retain for — report the
+          // cancellation now or this caller would hang on a dead grant.
+          const parked = this._record.pendingResume;
+          if (parked !== undefined && parked.runId === identity.runId) {
+            this._retainTerminalObservers(identity.runId, options);
+          } else {
+            try {
+              options.onFailure?.(new HarnessTerminalHandoffCancelledError(identity.executionGrant.key));
+            } catch {
+              // Failure observers are diagnostics only.
+            }
+          }
           return undefined;
         }
         continue;
@@ -12389,7 +12415,11 @@ export class Session {
     queuedItemId = this._currentQueuedItemId,
     modeId = this._record.modeId,
     modelId = this._modelIdForQueuedItem(queuedItemId),
-    opts: { tokenUsageDelta?: TokenUsage; originSignalId?: string; fenceStaleRestore?: boolean } = {},
+    opts: {
+      tokenUsageDelta?: TokenUsage;
+      originSignalId?: string;
+      restoreFence?: { expectedKey?: string };
+    } = {},
   ): Promise<void> {
     if (full.finishReason !== 'suspended') return;
     this._captureTurnRunId(full);
@@ -12414,12 +12444,33 @@ export class Session {
     const suspendedFenceLease = this._currentAgentRequestContext
       ? captureSuspendedToolSurfaceFenceLease(this._currentAgentRequestContext, full.runId)
       : undefined;
+    // For a fenced cached-restore the token delta is evaluated at flush time
+    // against the generation that actually survived the CAS: a skipped write
+    // applies no usage, and an applied write reconciles the cached output's
+    // cumulative counter against the durable per-run baseline still on the
+    // record (the in-memory accounted sets are empty after a reopen).
+    let writeApplied = false;
+    const flushTokenUsageDelta =
+      opts.restoreFence === undefined
+        ? opts.tokenUsageDelta
+        : () => {
+            if (!writeApplied) return undefined;
+            const baseline =
+              this._record.pendingResume !== undefined && this._record.pendingResume.runId === full.runId
+                ? this._record.pendingResume.accountedTokenUsage
+                : undefined;
+            return this._tokenUsageDeltaFromFullOutput(full, baseline);
+          };
     const existing = this._record.pendingResume;
     if (existing && existing.runId === full.runId && existing.toolCallId === payload.toolCallId) {
       if (pending.toolSurfaceFence !== undefined) this._retainCurrentReplacementToolSurface(full.runId);
       await this._flushUpdate(
         prev => {
           const current = prev.pendingResume;
+          if (opts.restoreFence !== undefined) {
+            const currentKey = current === undefined ? undefined : pendingInteractionGenerationKey(current);
+            if (currentKey !== opts.restoreFence.expectedKey) return prev;
+          }
           if (
             current === undefined ||
             current.runId !== full.runId ||
@@ -12430,6 +12481,7 @@ export class Session {
           ) {
             return prev;
           }
+          writeApplied = true;
           return {
             ...prev,
             pendingResume: {
@@ -12442,7 +12494,7 @@ export class Session {
             },
           };
         },
-        { tokenUsageDelta: opts.tokenUsageDelta },
+        { tokenUsageDelta: flushTokenUsageDelta },
       );
       if (this._currentAgentRequestContext && suspendedFenceLease) {
         clearSuspendedToolSurfaceFence(this._currentAgentRequestContext, full.runId, suspendedFenceLease);
@@ -12450,30 +12502,36 @@ export class Session {
       this._clearPendingDurableTurnFlushErrorIfRepaired(full);
       return;
     }
-    // A cached-suspension restore (fenceStaleRestore) reads `pendingResume`
-    // before awaiting a durable probe; a resume can clear and re-park a NEWER
-    // generation in that gap. Re-check inside the CAS updater so the stale
-    // restore cannot overwrite the newer pending — the durable park is
-    // authoritative.
+    // A cached-suspension restore (restoreFence) reads `pendingResume` before
+    // awaiting a durable probe; a resume can clear and re-park a NEWER
+    // generation — or clear it entirely on commit — in that gap. Re-check the
+    // pre-probe generation key inside the CAS updater so the stale restore
+    // cannot resurrect a cleared interaction or overwrite the newer pending:
+    // the durable park is authoritative.
     let restored = true;
     await this._flushUpdate(
       prev => {
         restored = true;
-        if (opts.fenceStaleRestore) {
+        if (opts.restoreFence !== undefined) {
           const current = prev.pendingResume;
-          if (current !== undefined && (current.runId !== full.runId || current.toolCallId !== payload.toolCallId)) {
+          const currentKey = current === undefined ? undefined : pendingInteractionGenerationKey(current);
+          if (currentKey !== opts.restoreFence.expectedKey) {
             restored = false;
             return prev;
           }
         }
+        writeApplied = true;
         return { ...prev, pendingResume: pending };
       },
-      { tokenUsageDelta: opts.tokenUsageDelta },
+      { tokenUsageDelta: flushTokenUsageDelta },
     );
     if (this._currentAgentRequestContext && suspendedFenceLease) {
       clearSuspendedToolSurfaceFence(this._currentAgentRequestContext, full.runId, suspendedFenceLease);
     }
-    if (!restored) return;
+    // Announce the suspension only when the durable write actually landed this
+    // pending — a fenced-out restore or a size-budget drop must not surface a
+    // pending event for an interaction storage never recorded.
+    if (!restored || this._record.pendingResume !== pending) return;
     this._clearPendingDurableTurnFlushErrorIfRepaired(full);
 
     // Emit the §10.2 pending event AFTER the durable-parking barrier (§5.4) so
@@ -15309,6 +15367,10 @@ export class Session {
     const markResumeAccountingDone = (): void => {
       const entry = this._completedRuns.get(pending.runId);
       if (entry !== undefined && entry.ok === true) entry.resumeAccountingKey = resumeAccountingKey;
+      // This run's usage is now part of the session total — mark the
+      // message-side memo too, or a cached-duplicate replay of the resumed
+      // output re-adds the run's cumulative usage.
+      this._messageTokenAccountedRunIds.add(pending.runId);
       // Arm the durable fence: the live counter already holds this delta, so
       // every flush until the pending clears must persist the advanced
       // baseline alongside it — a cold retry then computes a zero delta.
@@ -15357,6 +15419,7 @@ export class Session {
           this._captureTurnRunId(full);
           tokenUsageDelta = this._tokenUsageDeltaFromFullOutput(full, pending.accountedTokenUsage);
           alreadyAccounted = true;
+          this._messageTokenAccountedRunIds.add(pending.runId);
           await Promise.race([
             this._markQueuedPostRunFinalized(completingQueuedItemId, { tokenUsageDelta }),
             deletedTurnWaiter,
@@ -15510,7 +15573,12 @@ export class Session {
       deletedTurnWaiter,
     ]);
     modeFlipApplied ||= modeFlipAppliedThisPass;
-    if (full.finishReason !== 'suspended') {
+    if (full.finishReason === 'suspended') {
+      // The flush durably applied the re-suspension's usage delta — mark the
+      // message-side memo so a cached-duplicate replay of this run cannot
+      // re-apply its cumulative usage after a reopen empties the sets.
+      this._messageTokenAccountedRunIds.add(pending.runId);
+    } else {
       this._pendingReplacementToolSurfaces.delete(pending.runId);
     }
 
@@ -16102,6 +16170,7 @@ export class Session {
           this._captureTurnRunId(full);
           tokenUsageDelta = this._tokenUsageDeltaFromFullOutput(full, pending.accountedTokenUsage);
           alreadyAccounted = true;
+          this._messageTokenAccountedRunIds.add(pending.runId);
           await this._markQueuedPostRunFinalized(queuedItemId, { tokenUsageDelta });
         } catch (err) {
           this._deferQueuedTurnRetry(
@@ -17605,6 +17674,7 @@ export class Session {
         this._captureTurnRunId(full);
         tokenUsageDelta = this._tokenUsageDeltaFromFullOutput(full);
         alreadyAccounted = true;
+        if (full.runId) this._messageTokenAccountedRunIds.add(full.runId);
         await this._raceActiveTurnWaiter(
           this._markQueuedPostRunFinalized(item.id, { tokenUsageDelta }),
           activeTurnWaiter,

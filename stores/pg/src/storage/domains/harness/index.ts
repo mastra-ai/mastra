@@ -5155,7 +5155,7 @@ export class HarnessPG extends HarnessStorage {
           grant: { ...input.executionGrant },
           tombstoneId,
           cancelledAt: Number(tombstoneRow.rows[0].created_at),
-          ...(existing ? { admission: { ...existing, status: 'cancelled' } } : {}),
+          ...(existing ? { admission: existing } : {}),
         };
       }
 
@@ -5177,20 +5177,25 @@ export class HarnessPG extends HarnessStorage {
           now,
         ],
       });
+      let transitionedAdmission = existing;
       if (existing?.status === 'pending') {
         await tx.execute({
           sql: `UPDATE ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
                 SET status = 'cancelled', updated_at = ? WHERE id = ? AND status = 'pending'`,
           args: [now, existing.id],
         });
+        transitionedAdmission = { ...existing, status: 'cancelled', updatedAt: now };
       }
       await tx.commit();
+      // Report the row's stored status: a fenced admission stays fenced — the
+      // tombstone still records this cancel for fencing, but the receipt must
+      // not claim a transition storage never made.
       return {
-        status: 'cancelled',
+        status: existing?.status === 'fenced' ? 'fenced' : 'cancelled',
         grant: { ...input.executionGrant },
         tombstoneId,
         cancelledAt: now,
-        ...(existing ? { admission: { ...existing, status: 'cancelled', updatedAt: now } } : {}),
+        ...(transitionedAdmission ? { admission: transitionedAdmission } : {}),
       };
     } catch (err) {
       if (!tx.closed) await tx.rollback();

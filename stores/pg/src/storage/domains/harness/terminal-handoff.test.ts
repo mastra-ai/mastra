@@ -372,6 +372,51 @@ describe('HarnessPG native terminal handoff', () => {
     expect(await rowCount(TABLE_HARNESS_TERMINAL_INTENTS)).toBe(1);
   });
 
+  it('reports a fenced admission truthfully when its cancel still tombstones', async () => {
+    const session = await createNativeSession(harness(), 'session-cancel-fenced');
+    const input = admissionFor(session, 'cancel-fenced');
+    await harness().writeMessageResultEvidence(pendingEvidence(input));
+    await harness().admitTerminalHandoff(input);
+
+    // Deleting the session fences the stored row before the cancel lands.
+    await harness().deleteSession({
+      harnessName: HARNESS,
+      sessionId: session.id,
+      ifVersion: session.version,
+      expectedResourceId: session.resourceId,
+      expectedThreadId: session.threadId,
+      expectedCreatedAt: session.createdAt,
+    });
+
+    const cancelled = await harness().cancelTerminalHandoff({
+      harnessName: HARNESS,
+      sessionId: session.id,
+      sessionIncarnation: session.sessionIncarnation!,
+      admissionId: input.admissionId,
+      admissionHash: input.admissionHash,
+      executionGrant: input.executionGrant,
+      reason: { code: 'cancelled', message: 'stale incarnation' },
+    });
+    // The receipt must report the stored row's status — the cancel wrote its
+    // tombstone, but the fenced admission was never transitioned.
+    expect(cancelled.status).toBe('fenced');
+    expect(cancelled.admission?.status).toBe('fenced');
+    expect(await rowCount(TABLE_HARNESS_TERMINAL_TOMBSTONES)).toBe(1);
+
+    // A second cancel sees the prior tombstone and still reports fenced.
+    const again = await harness().cancelTerminalHandoff({
+      harnessName: HARNESS,
+      sessionId: session.id,
+      sessionIncarnation: session.sessionIncarnation!,
+      admissionId: input.admissionId,
+      admissionHash: input.admissionHash,
+      executionGrant: input.executionGrant,
+      reason: { code: 'cancelled', message: 'stale incarnation' },
+    });
+    expect(again.status).toBe('duplicate');
+    expect(again.admission?.status).toBe('fenced');
+  });
+
   it('resolves a concurrent commit-vs-cancel race to exactly one terminal outcome', async () => {
     const session = await createNativeSession(harness(), 'session-race');
     const input = admissionFor(session, 'race');
