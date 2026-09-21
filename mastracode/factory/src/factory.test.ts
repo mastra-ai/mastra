@@ -14,7 +14,6 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDynamicInstructions } from '../../sdk/src/agents/instructions.js';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
