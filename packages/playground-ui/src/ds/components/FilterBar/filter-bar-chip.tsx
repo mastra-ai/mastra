@@ -35,8 +35,8 @@ export const segmentClass = cn(
 
 export const editableSegmentClass = cn(
   segmentClass,
-  'cursor-pointer transition-colors hover:bg-neutral6/5 hover:text-neutral6',
-  'focus-visible:bg-neutral6/10 focus-visible:text-neutral6 data-[popup-open]:bg-neutral6/10 data-[popup-open]:text-neutral6',
+  'cursor-pointer transition-colors hover:bg-neutral6/5 hover:text-foreground',
+  'focus-visible:bg-neutral6/10 focus-visible:text-foreground data-[popup-open]:bg-neutral6/10 data-[popup-open]:text-foreground',
 );
 
 /** Field label with its optional leading icon — used by chips, the draft chip and field option lists. */
@@ -174,14 +174,14 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
         data-slot="filter-bar-chip"
         data-readonly={readOnly || undefined}
         className={cn(
-          'flex max-w-full items-stretch divide-x divide-border1 rounded-lg border border-border1 bg-surface5 text-neutral5',
+          'flex max-w-full items-stretch divide-x divide-border1 rounded-lg border border-border1 bg-surface5 text-foreground',
           className,
         )}
         onKeyDown={handleKeyDown}
         onClick={(event: MouseEvent) => event.stopPropagation()}
       >
         {readOnly && (
-          <span className={cn(segmentClass, 'pr-0 text-neutral3')} title="This filter is locked">
+          <span className={cn(segmentClass, 'pr-0 text-muted-foreground')} title="This filter is locked">
             <LockIcon className="size-[1.1em]" />
           </span>
         )}
@@ -276,7 +276,7 @@ function SegmentCombobox<T>({
   if (chip.readOnly) {
     return (
       <span
-        className={cn(segmentClass, isField && 'text-neutral6')}
+        className={cn(segmentClass, isField && 'text-foreground')}
         style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
         title={label}
       >
@@ -320,7 +320,7 @@ function SegmentCombobox<T>({
             tabIndex={segment === 'value' ? 0 : -1}
             aria-label={`${ariaLabel}: ${label}`}
             title={label}
-            className={cn(editableSegmentClass, isField && 'text-neutral6')}
+            className={cn(editableSegmentClass, isField && 'text-foreground')}
             style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
           />
         }
@@ -597,7 +597,7 @@ export function FilterBarChipRemove() {
       aria-label={label}
       title={label}
       ref={el => ctx.registerSegment(chip.item.id, 'remove', el)}
-      className={cn(editableSegmentClass, 'px-1.5 text-neutral3')}
+      className={cn(editableSegmentClass, 'px-1.5 text-muted-foreground')}
       onClick={() => {
         ctx.removeItem(chip.item.id);
         ctx.focusAfterRemove(chip.index);

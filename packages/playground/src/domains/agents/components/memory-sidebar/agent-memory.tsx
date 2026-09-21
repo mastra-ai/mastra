@@ -110,8 +110,8 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-border1 border-b p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-neutral5 text-ui-md font-medium">Clone Thread</h3>
-              <p className="text-neutral3 text-ui-sm mt-1">Create a copy of this conversation</p>
+              <h3 className="text-foreground text-ui-md font-medium">Clone Thread</h3>
+              <p className="text-muted-foreground text-ui-sm mt-1">Create a copy of this conversation</p>
             </div>
             <Button onClick={handleCloneThread} disabled={isCloning} icon={<GitFork />}>
               {isCloning ? 'Cloning...' : 'Clone'}
@@ -121,8 +121,8 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
       )}
 
       <div className="border-border1 border-b p-4">
-        <h3 className="text-neutral5 text-ui-md font-medium">Recent Messages</h3>
-        <p className="text-neutral3 text-ui-sm mt-1">
+        <h3 className="text-foreground text-ui-md font-medium">Recent Messages</h3>
+        <p className="text-muted-foreground text-ui-sm mt-1">
           {getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}
         </p>
       </div>
@@ -139,7 +139,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-border1 border-b p-4">
           <div className="mb-2">
             <div className="mb-2 flex items-center gap-2">
-              <h3 className="text-neutral5 text-ui-md font-medium">Semantic Recall</h3>
+              <h3 className="text-foreground text-ui-md font-medium">Semantic Recall</h3>
               {searchMemoryData?.searchScope && (
                 <span
                   className={cn(
@@ -165,7 +165,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
             />
           ) : (
             <div className="bg-surface3 border-border1 rounded-lg border p-4">
-              <p className="text-neutral3 text-ui-md mb-3">
+              <p className="text-muted-foreground text-ui-md mb-3">
                 Semantic recall is not enabled for this agent. Enable it to search through conversation history.
               </p>
               <a
@@ -195,9 +195,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
           <div className="bg-surface3 border-border1 rounded-lg border p-4">
             <div className="mb-1 flex items-center gap-2">
               <span className="text-ui-sm rounded bg-green-500/20 px-2 py-0.5 font-medium text-green-400">Remote</span>
-              <h3 className="text-neutral5 text-ui-md font-medium">Gateway</h3>
+              <h3 className="text-foreground text-ui-md font-medium">Gateway</h3>
             </div>
-            <p className="text-neutral3 text-ui-sm">
+            <p className="text-muted-foreground text-ui-sm">
               Memory is managed by the Gateway. Threads and observations are stored remotely.
             </p>
           </div>

@@ -5,7 +5,14 @@ import type { ExternalWorkItemSource } from './storage/domains/work-items/base.j
  * map their `externalSource` into this with {@link workItemBranchSource}; the
  * board's own `WorkItem['source']` is already this union.
  */
-export type WorkItemBranchSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'slack-thread' | 'manual';
+export type WorkItemBranchSource =
+  | 'github-issue'
+  | 'github-pr'
+  | 'linear-issue'
+  | 'jira-issue'
+  | 'incidentio-follow-up'
+  | 'slack-thread'
+  | 'manual';
 
 export interface WorkItemBranchInput {
   id: string;
@@ -17,8 +24,10 @@ export interface WorkItemBranchInput {
 export function workItemBranchSource(externalSource: ExternalWorkItemSource | null | undefined): WorkItemBranchSource {
   if (!externalSource) return 'manual';
   if (externalSource.integrationId === 'linear') return 'linear-issue';
-  // Only GitHub and Linear carry provider identities; anything else (a Slack
-  // thread, say) is a plain work item rather than a mislabeled GitHub issue.
+  if (externalSource.integrationId === 'jira') return 'jira-issue';
+  if (externalSource.integrationId === 'incidentio') return 'incidentio-follow-up';
+  // Only GitHub, Linear, Jira, and incident.io carry provider identities; anything
+  // else (a Slack thread, say) is a plain work item rather than a mislabeled GitHub issue.
   if (externalSource.integrationId !== 'github') return 'manual';
   return externalSource.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
@@ -58,9 +67,15 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   if (githubNumber !== undefined) {
     return item.source === 'github-issue' ? `factory/issue-${githubNumber}` : `factory/pr-${githubNumber}`;
   }
-  if (item.source === 'linear-issue' && typeof metadata.identifier === 'string') {
+  if (
+    (item.source === 'linear-issue' || item.source === 'jira-issue' || item.source === 'incidentio-follow-up') &&
+    typeof metadata.identifier === 'string'
+  ) {
     const identifier = metadata.identifier.trim();
-    if (identifier) return `factory/linear-${identifier.toLowerCase()}`;
+    if (identifier) {
+      const provider = item.source === 'linear-issue' ? 'linear' : item.source === 'jira-issue' ? 'jira' : 'incidentio';
+      return `factory/${provider}-${identifier.toLowerCase()}`;
+    }
   }
   return `factory/item-${item.id}`;
 }

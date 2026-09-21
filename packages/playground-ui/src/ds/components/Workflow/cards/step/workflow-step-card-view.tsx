@@ -90,7 +90,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
         open={expanded}
         onOpenChange={setExpanded}
         className={cn(
-          'relative rounded-xl border border-border1 bg-surface2 text-neutral5 shadow-panel transition-[border-color,box-shadow] [--card-radius:calc(var(--radius-xl)-2px)] motion-reduce:transition-none',
+          'relative rounded-xl border border-border1 bg-surface2 text-foreground shadow-panel transition-[border-color,box-shadow] [--card-radius:calc(var(--radius-xl)-2px)] motion-reduce:transition-none',
           'after:pointer-events-none after:absolute after:inset-x-4 after:-top-px after:h-px after:mask-x-from-76%',
           displayStatus && statusLineClasses[displayStatus],
           'has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-accent3',
@@ -122,13 +122,13 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
             onClick={onSelect}
           >
             <span className="group-hover:bg-surface4 flex items-start justify-between gap-2.5 rounded-(--card-radius) px-3.5 py-3">
-              <span className="text-ui-sm text-neutral6 min-w-0 font-semibold wrap-anywhere" title={label}>
+              <span className="text-ui-sm text-foreground min-w-0 font-semibold wrap-anywhere" title={label}>
                 <Shimmer active={isRunning}>{label}</Shimmer>
               </span>
               <WorkflowTypeBadge {...props} />
             </span>
             <span className="bg-surface3 flex flex-col gap-2 rounded-t-(--card-radius) px-3.5 py-3 empty:py-1.5">
-              {description && <span className="text-ui-sm text-neutral3 wrap-anywhere">{description}</span>}
+              {description && <span className="text-ui-sm text-muted-foreground wrap-anywhere">{description}</span>}
               <WorkflowTiming duration={props.duration} date={props.date} />
               {isWaiting && <span className="text-ui-xs text-accent3">Next step in debug</span>}
               {isForEach && foreachProgress && (
@@ -148,12 +148,14 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                   )}
                 </span>
               )}
-              {capabilities.length > 0 && <span className="text-ui-xs text-neutral3">{capabilities.join(' · ')}</span>}
+              {capabilities.length > 0 && (
+                <span className="text-ui-xs text-muted-foreground">{capabilities.join(' · ')}</span>
+              )}
             </span>
           </Summary>
           <div
             className={cn(
-              'nodrag nopan flex min-h-7 items-center justify-between gap-2 bg-surface3 px-3.5 pb-2.5 text-ui-xs text-neutral3',
+              'nodrag nopan flex min-h-7 items-center justify-between gap-2 bg-surface3 px-3.5 pb-2.5 text-ui-xs text-muted-foreground',
               displayStatus && footerStatusClasses[displayStatus],
             )}
           >

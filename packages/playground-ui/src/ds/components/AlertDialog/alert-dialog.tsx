@@ -109,7 +109,11 @@ type AlertDialogDescriptionProps = Omit<AlertDialogPrimitive.Description.Props, 
 
 const AlertDialogDescription = React.forwardRef<HTMLParagraphElement, AlertDialogDescriptionProps>(
   ({ className, ...props }, ref) => (
-    <AlertDialogPrimitive.Description ref={ref} className={cn('text-ui-sm text-neutral3', className)} {...props} />
+    <AlertDialogPrimitive.Description
+      ref={ref}
+      className={cn('text-ui-sm text-muted-foreground', className)}
+      {...props}
+    />
   ),
 );
 AlertDialogDescription.displayName = 'AlertDialogDescription';

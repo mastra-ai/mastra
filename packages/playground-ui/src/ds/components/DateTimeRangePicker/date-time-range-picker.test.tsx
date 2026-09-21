@@ -22,8 +22,10 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(presets.tagName).toBe('BUTTON');
     expect(presets.getAttribute('data-variant')).toBe('ghost');
     expect(presets.className).toContain('bg-transparent');
-    expect(presets.className).toContain('text-foreground/90');
-    expect(presets.className).not.toContain('pointer-events-none');
+    expect(presets.className).toContain('text-muted-foreground');
+    // Unprefixed only: the recipe carries aria-disabled:pointer-events-none, which a
+    // substring match would catch even though it never applies to an enabled control.
+    expect(presets.className).not.toMatch(/(^|\s)pointer-events-none(\s|$)/);
   });
 
   it('returns to the fallback preset when Presets is clicked', () => {
@@ -34,13 +36,13 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(onPresetChange).toHaveBeenCalledWith('last-7d');
   });
 
-  it('renders the range error with the error token', () => {
+  it('renders the range error with the shared field message', () => {
     renderCustom({ dateFrom: new Date(2026, 0, 10), dateTo: new Date(2026, 0, 5) });
 
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 
-    const error = screen.getByText(/start date\/time must be before/i);
-    expect(error.className).toContain('text-error');
-    expect(error.className).not.toContain('text-red-500');
+    const error = screen.getByRole('alert');
+    expect(error.className).toContain('text-destructive');
+    expect(error.querySelector('svg')).toBeNull();
   });
 });

@@ -178,7 +178,7 @@ export function WorkflowTrigger({
         {isSuspendedSteps && isStreamingWorkflow && (
           <div className="bg-surface5 border-border1 -mt-5 flex items-center gap-2 border-b px-5 py-2">
             <Icon>
-              <Loader2 className="text-neutral6 animate-spin" />
+              <Loader2 className="text-foreground animate-spin" />
             </Icon>
             <Txt>Resuming workflow</Txt>
           </div>
@@ -212,7 +212,7 @@ export function WorkflowTrigger({
         )}
 
         {!canExecuteWorkflow && (
-          <Txt variant="ui-sm" className="text-neutral3 px-5 py-2">
+          <Txt variant="ui-sm" className="text-muted-foreground px-5 py-2">
             You don't have permission to execute workflows.
           </Txt>
         )}

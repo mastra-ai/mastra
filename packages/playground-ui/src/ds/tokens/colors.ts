@@ -33,9 +33,12 @@ export const Colors = {
   muted: 'var(--muted)',
   foreground: 'var(--foreground)',
   'muted-foreground': 'var(--muted-foreground)',
+  placeholder: 'var(--placeholder)',
   ring: 'var(--ring)',
   'sidebar-accent': 'var(--sidebar-accent)',
   selected: 'var(--selected)',
+  destructive: 'var(--destructive)',
+  'destructive-foreground': 'var(--destructive-foreground)',
 
   error: 'var(--error)',
 

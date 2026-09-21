@@ -1,6 +1,6 @@
 {
   "name": "@mastra/factory",
-  "version": "0.16.0-alpha.5",
+  "version": "0.16.0-alpha.9",
   "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
@@ -70,7 +70,7 @@
     "@octokit/rest": "^22.0.1",
     "hono": "^4.13.7",
     "posthog-node": "^5.46.1",
-    "zod": "^4.3.6"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

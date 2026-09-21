@@ -550,19 +550,19 @@ export function DatasetReview({
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-ui-sm mb-1 block">Provider</Label>
+                <Label className="mb-1 block">Provider</Label>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
               </div>
               <div>
-                <Label className="text-ui-sm mb-1 block">Model</Label>
+                <Label className="mb-1 block">Model</Label>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
-            <Txt variant="ui-xs" className="text-neutral3">
+            <Txt variant="ui-xs" className="text-muted-foreground">
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
-              <Label className="text-ui-sm">Instructions (optional)</Label>
+              <Label>Instructions (optional)</Label>
               <Textarea
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
@@ -608,7 +608,7 @@ export function DatasetReview({
                       }
                     />
                     <div className="min-w-0 flex-1">
-                      <Txt variant="ui-xs" className="text-neutral4 block truncate">
+                      <Txt variant="ui-xs" className="text-muted-foreground block truncate">
                         {item
                           ? typeof item.input === 'string'
                             ? item.input.slice(0, 100)
@@ -636,7 +636,7 @@ export function DatasetReview({
                         ))}
                       </div>
                       {proposal.reason && (
-                        <Txt variant="ui-xs" className="text-neutral3 mt-1 block italic">
+                        <Txt variant="ui-xs" className="text-muted-foreground mt-1 block italic">
                           {proposal.reason}
                         </Txt>
                       )}
@@ -671,7 +671,7 @@ export function DatasetReview({
           ) : displayItems.length === 0 ? (
             <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
               <EmptyState
-                iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+                iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
                 titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
                 descriptionSlot={
                   showCompleted

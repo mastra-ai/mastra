@@ -1,5 +1,68 @@
 # create-factory
 
+## 0.2.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.0-alpha.10
+
+## 0.2.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.0-alpha.9
+
+## 0.2.0-alpha.8
+
+### Minor Changes
+
+- Brought incident.io follow-up intake to full parity with Linear and Jira. ([#24319](https://github.com/mastra-ai/mastra/pull/24319))
+
+  - **Connections**: in-app connect and reconnect for Platform-managed incident.io accounts, runtime discovery of multiple installations, and no more `MASTRA_INCIDENT_IO_CONNECTION_ID`.
+  - **Auto-ingestion**: observed follow-ups materialize as Work-board cards through configurable event rules (`followUpObserved`, `followUpClosed`), with close events transitioning cards to done/canceled.
+  - **Agent tools**: board runs get `incidentio_get_follow_up` for reading follow-up details.
+  - **Board UX**: follow-up cards carry assignee, creator, labels, priority, and incident metadata, plus the same Investigate/Build actions and work-item menu as Linear cards.
+  - **Routing**: teams choose which Factory and board receive follow-ups; incidents stay unrouted.
+
+  ```ts
+  import { IncidentioIntegration } from '@mastra/factory';
+
+  const incidentio = new IncidentioIntegration({
+    apiKey: process.env.INCIDENT_IO_API_KEY!,
+    // Optionally override the default follow-up rules:
+    rules: { followUpClosed: null }, // disable automatic close transitions
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.0-alpha.8
+
+## 0.2.0-alpha.7
+
+### Minor Changes
+
+- Added a Jira Cloud intake integration for the Software Factory with full Linear-equivalent behavior, supporting both direct credentials and Platform-managed connections. ([#20579](https://github.com/mastra-ai/mastra/pull/20579))
+
+  Direct mode: set `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` to use a deployment-global Atlassian API token — no OAuth app setup, intended for self-hosted/single-tenant deployments. Platform mode: with `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` configured, Factory automatically discovers visible Platform Jira connections (multiple sites supported) and proxies Jira requests through the Platform integrations service; an explicitly configured `JiraIntegration` takes precedence.
+
+  Factory settings and onboarding connect Jira accounts in-app, select Jira projects as intake sources, and route each project to a Factory board. Observed issues on routed projects materialize automatically as work items, closed issues transition their linked card to done or canceled, and both Jira integrations accept `rules` overrides for the `issueObserved` and `issueClosed` events. A background reconciliation worker keeps imported work items fresh (`MASTRACODE_JIRA_RECONCILE_ENABLED`, `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS`). Work cards preserve Jira descriptions, labels, reporters, assignees, priority, project, site, state, and timestamps, appear in the board's teammate filters, and offer the same investigate and build actions as Linear issues. Agents get `jira_get_issue` and `jira_create_comment` tools, including on automated board runs.
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.0-alpha.7
+
+## 0.1.19-alpha.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.31.0-alpha.6
+
 ## 0.1.19-alpha.5
 
 ### Patch Changes

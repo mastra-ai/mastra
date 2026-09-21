@@ -37,7 +37,7 @@ function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
 }
 
 describe('cardMoves', () => {
-  it.each(['github-issue', 'github-pr', 'linear-issue'] as const)(
+  it.each(['github-issue', 'github-pr', 'linear-issue', 'jira-issue', 'incidentio-follow-up'] as const)(
     'does not infer built-in automation for a custom-board %s',
     source => {
       expect(cardMoves({ source, board: 'release', metadata: {} }, 'intake')).toEqual([]);
@@ -58,6 +58,13 @@ describe('cardMoves', () => {
       ),
     ).toEqual([investigate, build]);
   });
+
+  it.each(['linear-issue', 'jira-issue', 'incidentio-follow-up'] as const)(
+    'offers a %s the same issue lanes',
+    source => {
+      expect(cardMoves({ source, metadata: {} }, 'intake')).toEqual([investigate, build]);
+    },
+  );
 
   it('re-reviews an open pull request sitting in Done, and reviews it in a working lane', () => {
     const pullRequest = { source: 'github-pr' as const, metadata: { state: 'open' }, stages: ['done'] };

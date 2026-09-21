@@ -49,7 +49,7 @@ The verdict is computed from gates and thresholds after all data items are proce
 - `scored`: All gates passed, but at least one threshold scorer missed its threshold
 - `passed`: All gates scored 1.0 and all thresholds were met
 
-When no gates or threshold-bearing scorers are provided, the verdict field is omitted and `runEvals` behaves exactly as before.
+The verdict field is omitted when no gates or threshold-bearing scorers are provided, and when every configured gate and threshold returned `notScorable()` (no numeric evidence). In those cases `runEvals` still returns `scores` and `summary`.
 
 ## Gates
 

@@ -157,7 +157,11 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <Avatar name={agentName ?? 'Agent'} src={agentAvatarUrl} size="lg" />
             </div>
             <div className="starter-chip" style={{ animationDelay: '150ms' }}>
-              <Txt variant="ui-lg" className="text-neutral6 font-semibold" style={{ viewTransitionName: 'agent-name' }}>
+              <Txt
+                variant="ui-lg"
+                className="text-foreground font-semibold"
+                style={{ viewTransitionName: 'agent-name' }}
+              >
                 {agentName ?? 'your agent'}
               </Txt>
             </div>
@@ -165,7 +169,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <div className="starter-chip" style={{ animationDelay: '220ms' }}>
                 <Txt
                   variant="ui-sm"
-                  className="text-neutral4 max-w-[40ch]"
+                  className="text-muted-foreground max-w-[40ch]"
                   style={{ viewTransitionName: 'agent-description' }}
                 >
                   {agentDescription}
@@ -184,17 +188,20 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 style={{ animationDelay: `${280 + index * 40}ms` }}
                 className="starter-chip group border-border1 bg-surface2 duration-normal ease-out-custom hover:border-border2 hover:bg-surface3 focus-visible:ring-accent1 flex gap-3 rounded-3xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
               >
-                <span className="bg-surface3 text-neutral4 group-hover:text-neutral6 mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors">
+                <span className="bg-surface3 text-muted-foreground group-hover:text-foreground mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors">
                   <starterPrompt.Icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
                   <Txt
                     variant="ui-sm"
-                    className="text-neutral6 group-hover:text-neutral6 font-medium transition-colors"
+                    className="text-foreground group-hover:text-foreground font-medium transition-colors"
                   >
                     {starterPrompt.title}
                   </Txt>
-                  <Txt variant="ui-xs" className="text-neutral4 group-hover:text-neutral5 mt-1 transition-colors">
+                  <Txt
+                    variant="ui-xs"
+                    className="text-muted-foreground group-hover:text-foreground mt-1 transition-colors"
+                  >
                     {starterPrompt.description}
                   </Txt>
                 </span>

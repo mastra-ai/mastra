@@ -235,10 +235,17 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     const wrapped = directShell ? invocation : this.sandbox.wrapCommandForIsolation(command);
 
     // Base options shared across all platforms.
+    //
+    // `stdinMode: 'ignore'` closes the child's stdin at spawn so it sees EOF
+    // immediately. Without it, a stdin-reading command (e.g. `rg` with no path
+    // argument) blocks forever waiting for input nothing will ever send, and the
+    // caller hangs. Callers that need to drive the process's stdin (`spawn` for
+    // an LSP server) keep the default writable pipe.
+    const stdio = options.stdinMode === 'ignore' ? (['ignore', 'pipe', 'pipe'] as const) : ('pipe' as const);
     const baseOptions = {
       cwd,
       env,
-      stdio: 'pipe' as const,
+      stdio,
       // Don't throw on non-zero exit — we handle exit codes ourselves.
       reject: false,
       // Don't buffer output — we stream it via ProcessHandle callbacks.

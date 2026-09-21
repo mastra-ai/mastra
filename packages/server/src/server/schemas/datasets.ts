@@ -613,6 +613,8 @@ export const runExperimentItemResponseSchema = z.object({
       score: z.number().nullable(),
       reason: z.string().nullable(),
       error: z.string().nullable(),
+      // Set when the scorer declared the item not scorable; `score` and `error` are null.
+      notScorable: z.object({ step: z.string(), reason: z.string().optional() }).optional(),
       failedStep: z.string().optional(),
       completedSteps: z.array(z.string()).optional(),
       targetScope: z.enum(['span', 'trajectory']).optional(),

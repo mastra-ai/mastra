@@ -37,8 +37,8 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
             'text-left px-3 py-2 rounded-md text-ui-sm',
             transitions.colors,
             selectedToolkit === undefined
-              ? 'bg-surface4 text-neutral6 font-medium'
-              : 'text-neutral3 hover:bg-surface4 hover:text-neutral5',
+              ? 'bg-surface4 text-foreground font-medium'
+              : 'text-muted-foreground hover:bg-surface4 hover:text-foreground',
           )}
         >
           All
@@ -51,8 +51,8 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
             'text-left px-3 py-2 rounded-md text-ui-sm flex items-center justify-between gap-2',
             transitions.colors,
             selectedToolkit === SELECTED_TOOLKIT_SENTINEL
-              ? 'bg-surface4 text-neutral6 font-medium'
-              : 'text-neutral3 hover:bg-surface4 hover:text-neutral5',
+              ? 'bg-surface4 text-foreground font-medium'
+              : 'text-muted-foreground hover:bg-surface4 hover:text-foreground',
           )}
         >
           Selected
@@ -72,8 +72,8 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
               'text-left px-3 py-2 rounded-md text-ui-sm truncate',
               transitions.colors,
               selectedToolkit === toolkit.slug
-                ? 'bg-surface4 text-neutral6 font-medium'
-                : 'text-neutral3 hover:bg-surface4 hover:text-neutral5',
+                ? 'bg-surface4 text-foreground font-medium'
+                : 'text-muted-foreground hover:bg-surface4 hover:text-foreground',
             )}
             title={toolkit.name}
           >

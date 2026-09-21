@@ -52,10 +52,10 @@ export const ComposerModelSwitcher = () => {
     const lockedLabel = selectedProvider && selectedModel ? `${selectedProvider}/${selectedModel}` : 'Locked by admin';
     return (
       <div
-        className="border-border1 bg-surface3 text-ui-xs text-neutral6 flex items-center gap-1.5 rounded-md border px-2 py-1"
+        className="border-border1 bg-surface3 text-ui-xs text-foreground flex items-center gap-1.5 rounded-md border px-2 py-1"
         data-testid="composer-model-locked"
       >
-        <Lock className="text-neutral3 h-3.5 w-3.5 shrink-0" />
+        <Lock className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{lockedLabel}</span>
       </div>
     );
