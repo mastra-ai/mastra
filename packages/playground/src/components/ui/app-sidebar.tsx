@@ -245,14 +245,14 @@ export function AppSidebar() {
                 type="button"
                 onClick={openNavigationCommand}
                 aria-label="Search and navigate"
-                className="border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5 border"
+                className="border-border1 bg-surface3 text-foreground hover:bg-surface4 hover:text-foreground active:bg-surface5 [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground border"
               >
                 <Search />
                 <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
                 {state !== 'collapsed' && (
                   <kbd
                     aria-hidden="true"
-                    className="border-border1 bg-surface4 text-neutral3 text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                    className="border-border1 bg-surface4 text-muted-foreground text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                   >
                     {commandShortcutLabel}
                   </kbd>

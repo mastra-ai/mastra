@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
@@ -153,6 +153,71 @@ describe('analyzeEntry', () => {
       expect(result.dependencies.has(excludedDependency)).toBe(false);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('should not analyze explicitly externalized dependencies', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-external-'));
+    const packageDir = join(root, 'node_modules', 'analysis-unsafe');
+    const entryFilePath = join(root, 'entry.ts');
+
+    try {
+      await mkdir(packageDir, { recursive: true });
+      await Promise.all([
+        writeFile(
+          join(packageDir, 'package.json'),
+          JSON.stringify({
+            name: 'analysis-unsafe',
+            version: '1.0.0',
+            type: 'module',
+            exports: { './subpath': './subpath.js' },
+          }),
+        ),
+        writeFile(join(packageDir, 'subpath.js'), 'export const broken = ;'),
+        writeFile(entryFilePath, `import { broken } from 'analysis-unsafe/subpath';\nexport { broken };\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+        externals: ['analysis-unsafe'],
+      });
+
+      expect(result.dependencies.get('analysis-unsafe/subpath')?.exports).toEqual(['broken']);
+      expect(result.output.code).toContain(`from 'analysis-unsafe/subpath'`);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('should resolve tsconfig aliases before applying the externals preset', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-tsconfig-alias-'));
+    const srcDir = join(root, 'src');
+    const entryFilePath = join(srcDir, 'entry.ts');
+
+    try {
+      await mkdir(srcDir, { recursive: true });
+      await Promise.all([
+        writeFile(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { paths: { '~/*': ['src/*'] } } })),
+        writeFile(join(srcDir, 'value.ts'), 'export const value = 42;'),
+        writeFile(entryFilePath, `import { value } from '~/value.js';\nexport { value };\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+        externalsPreset: true,
+      });
+
+      expect(result.dependencies.has('~')).toBe(false);
+      expect(result.output.code).not.toContain('~/value.js');
+      expect(result.output.code).toContain('42');
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 
@@ -341,6 +406,7 @@ describe('analyzeEntry', () => {
           workspaceMap,
           projectRoot: root,
           analyzeCache,
+          externals: ['@internal/a'],
         },
       );
 

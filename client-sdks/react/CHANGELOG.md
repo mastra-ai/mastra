@@ -1,5 +1,11 @@
 # @mastra/react
 
+## 1.6.0-alpha.10
+
+### Patch Changes
+
+- Fixed live progress for deeply nested agents in React and Studio. Inner agent messages now appear in the correct nested agent card before the outer delegation finishes. ([#21735](https://github.com/mastra-ai/mastra/pull/21735))
+
 ## 1.6.0-alpha.9
 
 ### Patch Changes

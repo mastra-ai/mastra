@@ -8,7 +8,7 @@ import { forwardRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRecentRuns } from '../workflow-run-list';
-import { emptyWorkflowRuns, oneSuccessfulRun, runsWithInput } from './fixtures/workflow-runs';
+import { emptyWorkflowRuns, oneSuccessfulRun, runsWithInput, runsWithResource } from './fixtures/workflow-runs';
 import { readOnlyAuthCapabilities } from '@/domains/agents/components/__tests__/fixtures/auth';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
@@ -147,6 +147,18 @@ describe('WorkflowRecentRuns', () => {
       const link = await screen.findByRole('link', { name: /run-success-1/ });
       expect(within(link).getByTitle('run-success-1')).not.toBeNull();
       expect(within(link).getByText(/2026/).getAttribute('datetime')).not.toBeNull();
+    });
+  });
+
+  describe('when a run is attributed to a resource', () => {
+    it('shows the resource on that run and nothing on the unattributed one', async () => {
+      stubCapabilities();
+      stubRuns(runsWithResource);
+      renderRunList();
+      const attributed = await screen.findByRole('link', { name: /run-tenant/ });
+      expect(within(attributed).getByTitle('Resource tenant-42')).not.toBeNull();
+      const unattributed = screen.getByRole('link', { name: /run-anonymous/ });
+      expect(within(unattributed).queryByTitle(/^Resource /)).toBeNull();
     });
   });
 

@@ -49,14 +49,14 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
         <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link} {...getRowProps(index)}>
           <DataList.NameCell>{s.workflowId ?? s.agentId}</DataList.NameCell>
           <DataList.Cell className="min-w-0">
-            <span className="text-ui-smd text-neutral3 block truncate font-mono" title={s.id}>
+            <span className="text-ui-smd text-muted-foreground block truncate font-mono" title={s.id}>
               {s.id}
             </span>
           </DataList.Cell>
           <DataList.Cell>
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
               <code className="text-ui-sm font-mono">{s.cron}</code>
-              {s.timezone ? <span className="text-neutral4 text-ui-xs">{s.timezone}</span> : null}
+              {s.timezone ? <span className="text-muted-foreground text-ui-xs">{s.timezone}</span> : null}
             </span>
           </DataList.Cell>
           <DataList.Cell>
@@ -71,7 +71,7 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
             {s.lastRun ? (
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
                 <WorkflowRunStatusInline status={s.lastRun.status} />
-                <span className="text-neutral4 text-ui-sm" title={formatScheduleTimestamp(s.lastFireAt)}>
+                <span className="text-muted-foreground text-ui-sm" title={formatScheduleTimestamp(s.lastFireAt)}>
                   {s.lastFireAt ? formatRelativeTime(s.lastFireAt) : ''}
                 </span>
               </span>
@@ -80,7 +80,7 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
                 {formatRelativeTime(s.lastFireAt)}
               </span>
             ) : (
-              <span className="text-neutral4">Never</span>
+              <span className="text-muted-foreground">Never</span>
             )}
           </DataList.Cell>
         </DataList.RowLink>

@@ -14,7 +14,7 @@ type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 const statusIconMap: Record<RunStatus, { icon: React.ReactNode; label: string }> = {
   pending: { icon: <ClockIcon className="text-warning1 size-4" />, label: 'Pending' },
   running: { icon: <Spinner size="sm" />, label: 'Running' },
-  completed: { icon: <CircleCheckIcon className="text-neutral3 size-4" />, label: 'Completed' },
+  completed: { icon: <CircleCheckIcon className="text-muted-foreground size-4" />, label: 'Completed' },
   failed: { icon: <CircleXIcon className="text-error size-4" />, label: 'Failed' },
 };
 
@@ -50,9 +50,9 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
     <div className={cn('grid justify-items-end gap-3', className)}>
       <div
         className={cn(
-          'flex items-center gap-3 text-neutral3 text-ui-md ',
+          'flex items-center gap-3 text-muted-foreground text-ui-md ',
           '[&>span]:flex [&>span]:gap-1 [&>span]:items-center ',
-          '[&_b]:text-neutral4 [&_b]:font-semibold',
+          '[&_b]:text-muted-foreground [&_b]:font-semibold',
         )}
       >
         <span>
@@ -71,9 +71,9 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
         )}
       </div>
 
-      {/* <div className="flex items-center gap-1.5 text-ui text-neutral4">
-        <span className="text-neutral3">{experiment.targetType}:</span>
-        <span className="text-neutral5 font-mono">{experiment.targetId}</span>
+      {/* <div className="flex items-center gap-1.5 text-ui text-muted-foreground">
+        <span className="text-muted-foreground">{experiment.targetType}:</span>
+        <span className="text-foreground font-mono">{experiment.targetId}</span>
       </div> */}
     </div>
   );

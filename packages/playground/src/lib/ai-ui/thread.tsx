@@ -397,7 +397,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
+      {isListening ? <CircleStopIcon /> : <Mic className="text-muted-foreground hover:text-foreground h-5 w-5" />}
     </Button>
   );
 };
@@ -495,7 +495,7 @@ const ComposerSendButton = ({
         className="border-border1 bg-surface5 rounded-full border"
         disabled={!canExecute || isEmpty}
       >
-        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
+        <ArrowUp className="text-muted-foreground hover:text-foreground h-6 w-6" />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
@@ -518,7 +518,7 @@ const CircleStopIcon = () => {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-neutral3 hover:text-neutral6"
+      className="text-muted-foreground hover:text-foreground"
     >
       <circle cx="12" cy="12" r="10" />
       <rect width="6" height="6" x="9" y="9" rx="1" />

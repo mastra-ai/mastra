@@ -65,7 +65,7 @@ export const WorkflowRunDetail = ({
   if (!runSnapshot || !runId) {
     return (
       <div className="p-4">
-        <Txt variant="ui-md" className="text-neutral6 text-center">
+        <Txt variant="ui-md" className="text-foreground text-center">
           No previous run
         </Txt>
       </div>

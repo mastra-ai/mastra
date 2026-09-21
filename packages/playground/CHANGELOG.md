@@ -1,5 +1,16 @@
 # @internal/playground
 
+## 1.31.0-alpha.10
+
+### Patch Changes
+
+- Fixed clipped starter prompts in the Studio agent chat empty state. ([#24525](https://github.com/mastra-ai/mastra/pull/24525))
+
+- Updated dependencies [[`1b4247a`](https://github.com/mastra-ai/mastra/commit/1b4247af2a78dcf37237d527a76c0f51690d76c1), [`1b4247a`](https://github.com/mastra-ai/mastra/commit/1b4247af2a78dcf37237d527a76c0f51690d76c1)]:
+  - @mastra/react@1.6.0-alpha.10
+  - @mastra/ai-sdk@1.10.4-alpha.0
+  - @mastra/playground-ui@56.0.0-alpha.10
+
 ## 1.31.0-alpha.9
 
 ### Patch Changes
