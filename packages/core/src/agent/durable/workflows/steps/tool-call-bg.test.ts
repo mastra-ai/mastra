@@ -215,7 +215,7 @@ describe('durable tool-call background task dispatch', () => {
       tools: {
         [TOOL_NAME]: {
           backgroundConfig: { enabled: true },
-          outputValidationSchema: z.object({ summary: z.number() }),
+          outputSchema: z.object({ summary: z.number() }),
           execute: vi.fn(async (_args: unknown, options: any) => {
             options.background.adopt({ completion: Promise.resolve({ summary: 'invalid' }) });
             return { summary: 42 };

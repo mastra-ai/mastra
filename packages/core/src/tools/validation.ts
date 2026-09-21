@@ -1,8 +1,31 @@
 import type { RequestContext } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
-import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
+import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, StandardSchemaIssue } from '../schema';
 import { getZodTypeName, isZodArray, isZodObject, unwrapZodType } from '../utils/zod-utils';
+
+const TOOL_OUTPUT_VALIDATION_SCHEMA: unique symbol = Symbol.for('mastra.tool.outputValidationSchema');
+
+type ToolWithOutputSchema = {
+  outputSchema?: unknown;
+  [TOOL_OUTPUT_VALIDATION_SCHEMA]?: StandardSchemaWithJSON;
+};
+
+export function registerToolOutputValidationSchema(tool: object, schema: unknown): void {
+  if (!isStandardSchemaWithJSON(schema)) return;
+
+  Object.defineProperty(tool, TOOL_OUTPUT_VALIDATION_SCHEMA, {
+    configurable: true,
+    value: schema,
+  });
+}
+
+export function resolveToolOutputValidationSchema(tool: ToolWithOutputSchema): StandardSchemaWithJSON | undefined {
+  const outputSchema = typeof tool.outputSchema === 'function' ? tool.outputSchema() : tool.outputSchema;
+  if (isStandardSchemaWithJSON(outputSchema)) return outputSchema;
+
+  return tool[TOOL_OUTPUT_VALIDATION_SCHEMA];
+}
 
 /**
  * Safely validates data against a Standard Schema.

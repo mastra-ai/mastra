@@ -15,7 +15,7 @@ import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { PublicSchema } from '../schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { Workspace } from '../workspace/workspace';
 import type { ElicitRequest, ElicitResult, ServerContext } from './mcp-types';
@@ -477,8 +477,6 @@ export type CoreTool = {
   description?: string;
   parameters: FlexibleSchema<any> | Schema;
   outputSchema?: FlexibleSchema<any> | Schema;
-  /** @internal Standard Schema retained for validating adopted background-operation results. */
-  outputValidationSchema?: StandardSchemaWithJSON;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
   /**
    * Enables strict tool input generation for providers that support it.

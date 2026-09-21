@@ -22,8 +22,8 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
-import type { CoreTool, MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
-import { validateToolOutput } from '../../../tools/validation';
+import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -986,7 +986,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
                     if (execution.adopted) {
                       const outputValidation = validateToolOutput(
-                        (resolvedTool as unknown as CoreTool).outputValidationSchema,
+                        resolveToolOutputValidationSchema(resolvedTool),
                         rawResult,
                         inputData.toolName,
                         false,

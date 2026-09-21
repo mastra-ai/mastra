@@ -13,6 +13,7 @@ import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { resolveToolOutputValidationSchema } from '../validation';
 import { CoreToolBuilder } from './builder';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai', 'openrouter']);
@@ -1482,7 +1483,7 @@ describe('CoreToolBuilder Output Schema', () => {
 
     const builtTool = builder.build();
     expect(builtTool.outputSchema).toBeDefined();
-    expect(builtTool.outputValidationSchema).toBe(toolWithTupleOutput.outputSchema);
+    expect(resolveToolOutputValidationSchema(builtTool)).toBe(toolWithTupleOutput.outputSchema);
   });
 
   describe('agent-as-tools schema serialization (#13324)', () => {

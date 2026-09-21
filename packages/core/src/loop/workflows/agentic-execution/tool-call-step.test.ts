@@ -1001,7 +1001,7 @@ describe('createToolCallStep background task stream replay', () => {
       tools: {
         'background-tool': {
           backgroundConfig: { enabled: true },
-          outputValidationSchema: z.object({ answer: z.number() }),
+          outputSchema: z.object({ answer: z.number() }),
           execute: vi.fn(async (_args: unknown, options: any) => {
             options.background.adopt({ completion: Promise.resolve({ answer: 'invalid' }) });
             return { answer: 42 };
