@@ -126,22 +126,39 @@ export interface LegacyGetTracesResponse {
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
 
-type QueryTracesBaseInput = Omit<TraceQueryRequest, 'group' | 'where' | 'page' | 'pagination'> & {
+type QueryTracesBaseInput = Omit<
+  TraceQueryRequest,
+  'group' | 'where' | 'page' | 'pagination' | 'mode' | 'after' | 'limit'
+> & {
   where?: TraceQueryPredicate;
   group?: never;
 };
 
-type QueryTracesKeysetInput = QueryTracesBaseInput & {
+export type QueryTracesKeysetInput = QueryTracesBaseInput & {
   page?: TraceQueryRequest['page'];
   pagination?: never;
+  mode?: never;
+  after?: never;
+  limit?: never;
 };
 
-type QueryTracesPaginatedInput = QueryTracesBaseInput & {
+export type QueryTracesPaginatedInput = QueryTracesBaseInput & {
   page?: never;
   pagination: NonNullable<TraceQueryRequest['pagination']>;
+  mode?: never;
+  after?: never;
+  limit?: never;
 };
 
-export type QueryTracesInput = QueryTracesKeysetInput | QueryTracesPaginatedInput;
+export type QueryTracesDeltaInput = Omit<QueryTracesBaseInput, 'orderBy'> & {
+  mode: 'delta';
+  after?: string;
+  limit?: number;
+  page?: never;
+  pagination?: never;
+  orderBy?: never;
+};
+export type QueryTracesInput = QueryTracesKeysetInput | QueryTracesPaginatedInput | QueryTracesDeltaInput;
 export type QueryTraceThreadsInput = QueryThreadsInput;
 export type QueryTraceThreadsResult = QueryThreadsResult;
 
@@ -262,6 +279,10 @@ export class Observability extends BaseResource {
    * @param params - Advanced trace query, including its required time range
    * @returns Matching lightweight traces
    */
+  queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
+  queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
+  queryTraces(params: QueryTracesKeysetInput): Promise<Extract<TraceQueryResponse, { page: unknown }>>;
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });
   }

@@ -370,6 +370,34 @@ Board definitions own lifecycle, transition-policy, phase-semantics, and tool-re
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
+### GitLab intake and source control
+
+Direct deployments can use either a GitLab Personal Access Token or Group Access Token. Both authenticate the GitLab API and Git-over-HTTPS in the same way; the difference is reach: a personal token follows the user's accessible projects, while a group token is limited to its group and subgroups. Configure the token with `api` and `write_repository` scopes so Factory can manage issues and merge requests, clone repositories, and push session branches.
+
+```typescript
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
+
+const gitlab = new GitLabIntegration({
+  accessToken: process.env.GITLAB_ACCESS_TOKEN,
+  accessTokenType: 'group', // Or 'personal'. Defaults to 'personal'.
+  baseUrl: 'https://gitlab.example.com', // Omit for gitlab.com.
+  webhookSecret: process.env.GITLAB_WEBHOOK_SECRET,
+});
+const factory = new MastraFactory({ storage, integrations: [gitlab] });
+```
+
+With no constructor options, the integration reads `GITLAB_ACCESS_TOKEN`, `GITLAB_ACCESS_TOKEN_TYPE` (`personal` or `group`), `GITLAB_BASE_URL`, and `GITLAB_WEBHOOK_SECRET`. See GitLab's [access-token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/), [personal token](https://docs.gitlab.com/user/profile/personal_access_tokens/), and [group token](https://docs.gitlab.com/user/group/settings/group_access_tokens/) documentation when creating the credential.
+
+`GITLAB_BASE_URL` must use HTTPS. Plain HTTP is accepted only for loopback development instances (`localhost`, `127.0.0.0/8`, or `::1`), where the access token is sent without transport encryption.
+
+For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. It proxies provider requests through `/v2/connections/{connectionId}/proxy` and reads `MASTRA_GITLAB_CONNECTION_ID` unless `connectionId` is passed to the constructor. `MastraFactory` installs it automatically when Platform credentials and that connection ID are present; an explicit integration with id `gitlab` takes precedence.
+
+```typescript
+import { PlatformGitLabIntegration } from '@mastra/factory/integrations/platform/gitlab/integration';
+
+const gitlab = new PlatformGitLabIntegration({ connectionId: 'connection-id' });
+```
+
 ### incident.io intake
 
 Use `IncidentioIntegration` with an incident.io API key to intake active incidents and outstanding follow-ups:

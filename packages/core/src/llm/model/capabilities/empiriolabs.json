@@ -42,7 +42,8 @@
     "seed-2-0-mini",
     "seed-2-0-pro",
     "seed-2-1-turbo",
-    "step-3-7-flash"
+    "step-3-7-flash",
+    "step-5-preview"
   ],
   "temperature": [
     "deepseek-v3-2",
@@ -100,7 +101,8 @@
     "seed-2-1-turbo",
     "step-3-5-flash",
     "step-3-5-flash-2603",
-    "step-3-7-flash"
+    "step-3-7-flash",
+    "step-5-preview"
   ],
   "structuredOutput": [
     "deepseek-v3-2",
@@ -164,6 +166,7 @@
     "seed-2-1-turbo",
     "step-3-5-flash",
     "step-3-5-flash-2603",
-    "step-3-7-flash"
+    "step-3-7-flash",
+    "step-5-preview"
   ]
 }

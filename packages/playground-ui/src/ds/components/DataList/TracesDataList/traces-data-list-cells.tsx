@@ -1,9 +1,14 @@
-import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
+import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon } from 'lucide-react';
+import type { ComponentType, SVGProps } from 'react';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { MemoryIcon } from '@/ds/icons/MemoryIcon';
+import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
+import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { cn } from '@/lib/utils';
 
@@ -57,36 +62,46 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 }
 
 // ---------------------------------------------------------------------------
-// EntityCell
+// TypeCell
 // ---------------------------------------------------------------------------
 
-function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
-  const iconClass = cn('size-3.5 shrink-0 text-placeholder', className);
-  const normalizedEntityType = entityType.toLowerCase();
+type EntityTypeDisplay = { label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
 
-  switch (normalizedEntityType) {
-    case 'agent':
-      return <AgentIcon className={iconClass} aria-hidden />;
-    case 'workflow':
-    case 'workflow_run':
-      return <WorkflowIcon className={iconClass} aria-hidden />;
-    default:
-      return null;
-  }
-}
+// Keys are lowercase `EntityType` enum values (plus legacy `workflow`).
+const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
+  agent: { label: 'Agent', Icon: AgentIcon },
+  workflow: { label: 'Workflow', Icon: WorkflowIcon },
+  workflow_run: { label: 'Workflow', Icon: WorkflowIcon },
+  workflow_step: { label: 'Step', Icon: WorkflowIcon },
+  tool: { label: 'Tool', Icon: ToolsIcon },
+  scorer: { label: 'Scorer', Icon: ScorersIcon },
+  memory: { label: 'Memory', Icon: MemoryIcon },
+  input_processor: { label: 'Processor', Icon: ProcessorIcon },
+  input_step_processor: { label: 'Processor', Icon: ProcessorIcon },
+  output_processor: { label: 'Processor', Icon: ProcessorIcon },
+  output_step_processor: { label: 'Processor', Icon: ProcessorIcon },
+  tool_result_processor: { label: 'Processor', Icon: ProcessorIcon },
+  rag_ingestion: { label: 'RAG', Icon: DatabaseIcon },
+  trajectory: { label: 'Trajectory', Icon: RouteIcon },
+};
 
-export interface TracesDataListEntityCellProps {
+export interface TracesDataListTypeCellProps {
   entityType?: string | null;
-  entityName?: string | null;
 }
 
-export function TracesDataListEntityCell({ entityType, entityName }: TracesDataListEntityCellProps) {
-  const type = entityType ?? '';
+export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellProps) {
+  const display = entityType ? ENTITY_TYPE_DISPLAY[entityType.toLowerCase()] : undefined;
 
   return (
     <DataListCell className="flex min-w-0 items-center gap-2">
-      <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
+      {display ? (
+        <>
+          <display.Icon className="text-placeholder size-3.5 shrink-0" aria-hidden />
+          <span className="text-ui-smd min-w-0 truncate">{display.label}</span>
+        </>
+      ) : (
+        '-'
+      )}
     </DataListCell>
   );
 }

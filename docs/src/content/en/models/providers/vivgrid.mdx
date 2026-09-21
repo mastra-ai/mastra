@@ -7,7 +7,7 @@ description: "Browse Vivgrid model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/vivgrid.svg" alt="Vivgrid logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vivgrid
 
-Access 29 Vivgrid models through Mastra's model router. Authentication is handled automatically using the `VIVGRID_API_KEY` environment variable.
+Access 31 Vivgrid models through Mastra's model router. Authentication is handled automatically using the `VIVGRID_API_KEY` environment variable.
 
 Learn more in the [Vivgrid documentation](https://docs.vivgrid.com/models).
 
@@ -140,6 +140,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 1.35,
     "outputCost": 3
+  },
+  {
+    "model": "vivgrid/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.31,
+    "outputCost": 1.23
   },
   {
     "model": "vivgrid/gemini-3.1-flash-lite-preview",
@@ -392,6 +404,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "vivgrid/viv-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 256000,
+    "inputCost": 0.13,
+    "outputCost": 0.4
   }
 ]}
 />
@@ -426,7 +450,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "vivgrid/kimi-k3"
+      ? "vivgrid/viv-fast"
       : "vivgrid/claude-fable-5";
   }
 });

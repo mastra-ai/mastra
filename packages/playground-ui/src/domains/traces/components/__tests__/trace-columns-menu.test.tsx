@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '../../trace-list-columns';
 import { TraceColumnsMenu } from '../trace-columns-menu';
 
 const defaultProps = {
-  preferences: {
-    visibleColumns: ['input', 'entity'] as const,
-    metadataKeys: [],
-  },
+  preferences: DEFAULT_TRACE_COLUMN_PREFERENCES,
   onToggleColumn: vi.fn(),
   onAddMetadataColumn: vi.fn(),
   onRemoveMetadataColumn: vi.fn(),
@@ -41,9 +39,12 @@ describe('TraceColumnsMenu', () => {
       const checked = async (name: string) =>
         (await screen.findByRole('menuitemcheckbox', { name })).getAttribute('aria-checked');
 
+      expect(await checked('Type')).toBe('true');
       expect(await checked('Input')).toBe('true');
-      expect(await checked('Entity')).toBe('true');
-      expect(await checked('Duration')).toBe('false');
+      expect(await checked('Duration')).toBe('true');
+      expect(await checked('Estimated cost')).toBe('true');
+      expect(await checked('Input tokens')).toBe('false');
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Entity' })).toBeNull();
     });
 
     it('reports the column the user toggled', async () => {
