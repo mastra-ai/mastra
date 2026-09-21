@@ -120,6 +120,19 @@ export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput, TOutp
    * Recovery-domain hosts must opt in per that contract.
    */
   recovery?: boolean;
+  /**
+   * Wire this FGA provider into the Mastra host (`server: { fga }`) so the
+   * agent's agents:execute gate is active. FGA-domain tests pass a mock
+   * provider here; legs must thread it into their Mastra construction.
+   */
+  fga?: unknown;
+  /**
+   * Sub-agents forwarded to the underlying Agent (`agents: {}`), turning it
+   * into a supervisor that can delegate via `agent-<key>` tool calls.
+   * Network-domain tests use this; legs must thread it into their Agent
+   * construction.
+   */
+  agents?: Record<string, any>;
   /** Forwarded to the underlying Agent when set (shared MastraMemory instance). */
   memory?: any;
   /** Forwarded to the underlying Agent when set. */
@@ -183,7 +196,17 @@ export type DurableAgentTestDomain =
   | 'memoryPersistence'
   | 'backgroundTasks'
   // Crash-recovery domain (kill mid-run, fresh host over same storage, recover)
-  | 'recovery';
+  | 'recovery'
+  // FGA / actor-identity domain (actor threading, agents:execute enforcement)
+  | 'fga'
+  // Network-equivalent delegation domain (supervisor → sub-agent routing)
+  | 'network'
+  // agentId propagation into tool execution context
+  | 'agentIdContext'
+  // requestContextSchema validation at the stream() boundary
+  | 'requestContextSchema'
+  // stream({ untilIdle }) idle-loop entry point (no-background-manager contract)
+  | 'streamUntilIdle';
 
 /**
  * Configuration for creating a DurableAgent test suite

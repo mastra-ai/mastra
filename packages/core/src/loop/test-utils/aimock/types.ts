@@ -172,6 +172,11 @@ export interface RunLoopScenarioOptions {
    */
   modelSettings?: any;
   /**
+   * Agent-level model-call retry count set on the Agent constructor. An explicit
+   * value (including 0) takes precedence over call-time `modelSettings.maxRetries`.
+   */
+  maxRetries?: number;
+  /**
    * Client-side tools to merge with agent-level tools. Forwarded to `agent.stream({ clientTools })`.
    * Useful for testing tool merging scenarios where tools are defined at the call site rather than
    * at agent construction time.
@@ -248,6 +253,13 @@ export interface RunLoopScenarioOptions {
    * stream open until background tasks complete and re-invoke the agent.
    */
   backgroundTasks?: any;
+  /**
+   * Whether to start the Mastra background workers when `backgroundTasks` is
+   * enabled (default: true). Set to `false` to keep dispatched tasks pending —
+   * e.g. to deterministically pin the placeholder tool-result content a
+   * backgrounded delegation hands to the supervisor's continuation turn.
+   */
+  startWorkers?: boolean;
   /**
    * When set, uses `agent.streamUntilIdle()` instead of `agent.stream()`. The
    * stream stays open until all background tasks complete, and the agent is

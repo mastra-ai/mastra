@@ -53,8 +53,10 @@ createDurableAgentTestSuite({
       instructions: config.instructions,
       model: config.model,
       tools: config.tools,
+      ...(config.agents ? { agents: config.agents } : {}),
       ...(config.memory ? { memory: config.memory } : {}),
       ...(config.outputProcessors ? { outputProcessors: config.outputProcessors } : {}),
+      ...(config.requestContextSchema ? { requestContextSchema: config.requestContextSchema } : {}),
     });
 
     // Wrap with evented durable execution
@@ -78,6 +80,8 @@ createDurableAgentTestSuite({
       // EventedAgent pins its own persistence policy, but the host config
       // stays symmetric with the DurableAgent leg.
       ...(config.recovery ? { recovery: { durableAgents: 'auto' as const } } : {}),
+      // FGA-domain tests activate the agents:execute gate on the host.
+      ...(config.fga ? { server: { fga: config.fga as any } } : {}),
     });
 
     return eventedAgent as unknown as DurableAgentLike;

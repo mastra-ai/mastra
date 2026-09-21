@@ -70,6 +70,16 @@ import {
   createBackgroundTaskTests,
   // Crash-recovery tests (kill mid-run, fresh host over same storage, recover)
   createRecoveryTests,
+  // FGA / actor-identity tests (actor threading, agents:execute enforcement)
+  createFGATests,
+  // Network-equivalent delegation tests (supervisor → sub-agent routing)
+  createNetworkTests,
+  // agentId propagation into tool execution context
+  createAgentIdContextTests,
+  // requestContextSchema validation at the stream() boundary
+  createRequestContextSchemaTests,
+  // stream({ untilIdle }) idle-loop entry point (no-background-manager contract)
+  createStreamUntilIdleTests,
 } from './domains';
 
 // Workflow domain imports (imported directly to avoid circular deps with domains/index)
@@ -121,12 +131,14 @@ function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTest
     instructions: config.instructions,
     model: config.model,
     tools: config.tools,
+    ...(config.agents ? { agents: config.agents } : {}),
     ...(config.memory ? { memory: config.memory } : {}),
     ...(config.outputProcessors ? { outputProcessors: config.outputProcessors } : {}),
+    ...(config.requestContextSchema ? { requestContextSchema: config.requestContextSchema } : {}),
   });
   const durableAgent = createDurableAgent({ agent, pubsub });
 
-  if (config.needsStorage || config.storage) {
+  if (config.needsStorage || config.storage || config.fga) {
     new Mastra({
       logger: false,
       // A caller-supplied store is shared across hosts (crash-recovery tests
@@ -136,6 +148,8 @@ function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTest
       // Crash-recovery hosts opt into `running` checkpoints (#23915): the
       // default policy skips them unless recovery is enabled.
       ...(config.recovery ? { recovery: { durableAgents: 'auto' as const } } : {}),
+      // FGA-domain tests activate the agents:execute gate on the host.
+      ...(config.fga ? { server: { fga: config.fga as any } } : {}),
     });
   }
 
@@ -389,6 +403,31 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
     // skip.recovery.
     if (!skip.recovery) {
       createRecoveryTests(context);
+    }
+
+    // FGA / actor-identity (actor threading + agents:execute enforcement)
+    if (!skip.fga) {
+      createFGATests(context);
+    }
+
+    // Network-equivalent delegation (supervisor → sub-agent routing)
+    if (!skip.network) {
+      createNetworkTests(context);
+    }
+
+    // agentId propagation into tool execution context
+    if (!skip.agentIdContext) {
+      createAgentIdContextTests(context);
+    }
+
+    // requestContextSchema validation at the stream() boundary
+    if (!skip.requestContextSchema) {
+      createRequestContextSchemaTests(context);
+    }
+
+    // stream({ untilIdle }) idle-loop entry point (no-background-manager contract)
+    if (!skip.streamUntilIdle) {
+      createStreamUntilIdleTests(context);
     }
   });
 }

@@ -143,8 +143,10 @@ createDurableAgentTestSuite({
       instructions: config.instructions,
       model: config.model,
       tools: config.tools,
+      ...(config.agents ? { agents: config.agents } : {}),
       ...(config.memory ? { memory: config.memory } : {}),
       ...(config.outputProcessors ? { outputProcessors: config.outputProcessors } : {}),
+      ...(config.requestContextSchema ? { requestContextSchema: config.requestContextSchema } : {}),
     });
 
     // Always register on a Mastra host with storage (mirrors the evented
@@ -153,6 +155,8 @@ createDurableAgentTestSuite({
       logger: false,
       storage: config.storage ?? new MockStore(),
       agents: { [agentId]: agent },
+      // FGA-domain tests activate the agents:execute gate on the host.
+      ...(config.fga ? { server: { fga: config.fga as any } } : {}),
     });
 
     return wrapNormalAgent(agent);

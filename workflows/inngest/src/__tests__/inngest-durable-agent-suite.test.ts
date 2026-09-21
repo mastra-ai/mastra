@@ -46,6 +46,7 @@ createDurableAgentTestSuite({
       instructions: config.instructions,
       model: config.model,
       tools: config.tools,
+      ...(config.agents ? { agents: config.agents } : {}),
     });
 
     // Wrap with Inngest durable execution
@@ -95,5 +96,14 @@ createDurableAgentTestSuite({
     // in-process "hosts" over shared storage. Inngest orchestrates retries and
     // recovery externally, and this harness cannot host two processes.
     recovery: true,
+    // FGA tests wire a per-test mock provider into the Mastra host
+    // (`server: { fga }`). This harness registers every agent on one shared
+    // Mastra instance built in setupSharedTestInfrastructure(), so a per-test
+    // provider cannot be injected — and a suite-wide gate would fail-close
+    // every other domain (their calls carry no user identity or actor).
+    // Actor threading through the Inngest event chain is covered by the
+    // ActorSignal params on inngest run.start()/resume(); enforcement is
+    // engine-agnostic (gated in DurableAgent.stream() before the workflow).
+    fga: true,
   },
 });

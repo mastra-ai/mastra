@@ -113,6 +113,7 @@ async function buildScenarioAgent({
   agentBackgroundTasks,
   goal,
   backgroundTasks,
+  startWorkers,
   model,
   errorProcessors,
   defaultOptions,
@@ -120,6 +121,7 @@ async function buildScenarioAgent({
   engine,
   inputProcessors,
   fsRouted,
+  maxRetries,
 }: Pick<
   RunLoopScenarioOptions,
   | 'llm'
@@ -133,6 +135,7 @@ async function buildScenarioAgent({
   | 'agentBackgroundTasks'
   | 'goal'
   | 'backgroundTasks'
+  | 'startWorkers'
   | 'model'
   | 'errorProcessors'
   | 'defaultOptions'
@@ -140,6 +143,7 @@ async function buildScenarioAgent({
   | 'engine'
   | 'inputProcessors'
   | 'fsRouted'
+  | 'maxRetries'
 >): Promise<{ agent: any; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',
@@ -184,6 +188,7 @@ async function buildScenarioAgent({
         ...(goal ? { goal } : {}),
         ...(errorProcessors ? { errorProcessors } : {}),
         ...(defaultOptions ? { defaultOptions } : {}),
+        ...(maxRetries === undefined ? {} : { maxRetries }),
       },
       instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
       ...(fsTools ? { tools: fsTools } : {}),
@@ -204,6 +209,7 @@ async function buildScenarioAgent({
       ...(goal ? { goal } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
       ...(defaultOptions ? { defaultOptions } : {}),
+      ...(maxRetries === undefined ? {} : { maxRetries }),
       // For durable engines, inputProcessors must be on the agent constructor
       // (not yet supported as call-time options for durable); outputProcessors
       // are forwarded at call-time via preparation.ts.
@@ -241,8 +247,9 @@ async function buildScenarioAgent({
     mastra.__registerFsAgents({ [agentId]: registrableAgent as any });
   }
 
-  // Start workers if background tasks are enabled
-  if (backgroundTasks?.enabled) {
+  // Start workers if background tasks are enabled (unless the scenario opts
+  // out to keep dispatched tasks deterministically pending).
+  if (backgroundTasks?.enabled && startWorkers !== false) {
     await mastra.startWorkers();
   }
 
@@ -288,6 +295,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     collectChunks,
     manualStreamConsumption,
     backgroundTasks,
+    startWorkers,
     streamUntilIdle,
     agentBackgroundTasks,
     goal,
@@ -300,6 +308,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     abortSignal,
     providerOptions,
     modelSettings,
+    maxRetries,
     toolsets,
     errorProcessors,
     onError,
@@ -361,6 +370,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       agentBackgroundTasks,
       goal,
       backgroundTasks,
+      startWorkers,
       model,
       errorProcessors,
       defaultOptions,
@@ -368,6 +378,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       engine,
       inputProcessors,
       fsRouted,
+      maxRetries,
     });
     agent = built.agent;
     mastra = built.mastra;

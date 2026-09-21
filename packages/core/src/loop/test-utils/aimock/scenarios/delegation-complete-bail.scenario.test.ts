@@ -81,89 +81,80 @@ describeForAllEngines('AIMock loop scenario: onDelegationComplete bail()', engin
     expect(text).toContain('Writer completed');
   });
 
-  // KNOWN GAP (evented): bail() takes effect one iteration late on the
-  // evented engine — the callback fires and no further delegation happens,
-  // but the supervisor makes one extra LLM request (4 instead of 3) before
-  // the loop stops, because the bail signal crosses the event boundary after
-  // the next iteration's step event is already dispatched. Real behavioral
-  // divergence recorded in the Phase 2 gap ledger.
-  it.skipIf(engine === 'evented')(
-    'bail() stops the supervisor loop from continuing to additional delegations',
-    async () => {
-      const mock = getMock();
-      let bailCalled = false;
-      let additionalDelegations = 0;
+  it('bail() stops the supervisor loop from continuing to additional delegations', async () => {
+    const mock = getMock();
+    let bailCalled = false;
+    let additionalDelegations = 0;
 
-      const openai = createOpenAI({
-        apiKey: 'aimock-test-key',
-        baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
-      });
+    const openai = createOpenAI({
+      apiKey: 'aimock-test-key',
+      baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
+    });
 
-      const agent1 = new Agent({
-        id: 'agent1',
-        name: 'Agent 1',
-        description: 'First agent',
-        instructions: 'You are agent 1.',
-        model: openai(SCENARIO_MODEL_ID),
-      });
+    const agent1 = new Agent({
+      id: 'agent1',
+      name: 'Agent 1',
+      description: 'First agent',
+      instructions: 'You are agent 1.',
+      model: openai(SCENARIO_MODEL_ID),
+    });
 
-      const agent2 = new Agent({
-        id: 'agent2',
-        name: 'Agent 2',
-        description: 'Second agent',
-        instructions: 'You are agent 2.',
-        model: openai(SCENARIO_MODEL_ID),
-      });
+    const agent2 = new Agent({
+      id: 'agent2',
+      name: 'Agent 2',
+      description: 'Second agent',
+      instructions: 'You are agent 2.',
+      model: openai(SCENARIO_MODEL_ID),
+    });
 
-      const { requests } = await runLoopScenario({
-        engine,
-        llm: mock,
-        prompt: 'Ask agent1, then agent2.',
-        agents: { agent1, agent2 },
-        stopWhen: stepCountIs(10),
-        delegation: {
-          onDelegationComplete: (context: DelegationCompleteContext) => {
-            if (context.primitiveId === 'agent1') {
-              bailCalled = true;
-              context.bail();
-              return { feedback: 'Stopping after agent1 completes.' };
-            }
-            // Track if we reach agent2 after bail
-            if (context.primitiveId === 'agent2') {
-              additionalDelegations++;
-            }
-            return undefined;
+    const { requests } = await runLoopScenario({
+      engine,
+      llm: mock,
+      prompt: 'Ask agent1, then agent2.',
+      agents: { agent1, agent2 },
+      stopWhen: stepCountIs(10),
+      delegation: {
+        onDelegationComplete: (context: DelegationCompleteContext) => {
+          if (context.primitiveId === 'agent1') {
+            bailCalled = true;
+            context.bail();
+            return { feedback: 'Stopping after agent1 completes.' };
+          }
+          // Track if we reach agent2 after bail
+          if (context.primitiveId === 'agent2') {
+            additionalDelegations++;
+          }
+          return undefined;
+        },
+      },
+      fixtures: llm => {
+        // Supervisor turn 1: delegate to agent1.
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call_agent1', name: 'agent-agent1', arguments: { prompt: 'Task 1' } }],
           },
-        },
-        fixtures: llm => {
-          // Supervisor turn 1: delegate to agent1.
-          llm.on(
-            { endpoint: 'chat', hasToolResult: false },
-            {
-              toolCalls: [{ id: 'call_agent1', name: 'agent-agent1', arguments: { prompt: 'Task 1' } }],
-            },
-          );
-          // Agent1 turn: completes successfully.
-          llm.on({ endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 }, { content: 'Agent1 completed task 1.' });
-          // Supervisor would normally delegate to agent2 next, but bail() should prevent it.
-          // We don't script agent2 because bail() should stop the loop.
-        },
-      });
+        );
+        // Agent1 turn: completes successfully.
+        llm.on({ endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 }, { content: 'Agent1 completed task 1.' });
+        // Supervisor would normally delegate to agent2 next, but bail() should prevent it.
+        // We don't script agent2 because bail() should stop the loop.
+      },
+    });
 
-      // Bail was called when agent1 completed
-      expect(bailCalled).toBe(true);
+    // Bail was called when agent1 completed
+    expect(bailCalled).toBe(true);
 
-      // Agent2 should NOT have been called after bail
-      expect(additionalDelegations).toBe(0);
+    // Agent2 should NOT have been called after bail
+    expect(additionalDelegations).toBe(0);
 
-      // Verify no request was made to agent2
-      const agent2Requests = requests.filter((r: any) => JSON.stringify(r.body?.messages).includes('agent-agent2'));
-      expect(agent2Requests.length).toBe(0);
+    // Verify no request was made to agent2
+    const agent2Requests = requests.filter((r: any) => JSON.stringify(r.body?.messages).includes('agent-agent2'));
+    expect(agent2Requests.length).toBe(0);
 
-      // Bail should stop the loop immediately — supervisor turn 1 (delegates to agent1),
-      // agent1 turn (completes), supervisor turn 2 (sees agent1 result, bail stops loop)
-      // Without bail, the loop would continue to a 4th iteration
-      expect(requests.length).toBe(3);
-    },
-  );
+    // Bail should stop the loop immediately — supervisor turn 1 (delegates to agent1),
+    // agent1 turn (completes), supervisor turn 2 (sees agent1 result, bail stops loop)
+    // Without bail, the loop would continue to a 4th iteration
+    expect(requests.length).toBe(3);
+  });
 });
