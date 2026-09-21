@@ -14,6 +14,7 @@ describe('worker entry (@mastra/livekit/worker)', () => {
       'createLiveKitWorker',
       'createMastraVoiceAgent',
       'createRemoteAgentReplyGenerator',
+      'createVoiceBenchmarkReplyGenerator',
       'mastraLLMNode',
       'observeVoiceSession',
       'runEndCall',

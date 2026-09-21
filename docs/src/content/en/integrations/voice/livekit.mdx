@@ -531,6 +531,65 @@ await session.start({ agent: new SupportAgent({ instructions: 'Support assistant
 
 Without the adapter, the plugin still emits text, but LiveKit's default node doesn't translate the plugin's boundary metadata into flush markers. Use `pipeAgentReplyToWriter()` in a workflow reply step to preserve the boundaries and tool results used for timing.
 
+### Voice benchmarks
+
+The package includes an adapter-based benchmark runner, fixed scenario definitions, result aggregation, and an experiment-result converter. Import these server-safe utilities from `@mastra/livekit`. They don't provision rooms, dial phone numbers, or load browser automation libraries.
+
+```typescript title="src/voice-benchmark.ts"
+import {
+  runVoiceBenchmarks,
+  summarizeVoiceBenchmarks,
+  voiceBenchmarkScenarios,
+} from '@mastra/livekit'
+import type { RunVoiceBenchmarksOptions } from '@mastra/livekit'
+
+export async function benchmark(run: RunVoiceBenchmarksOptions['run']) {
+  const results = await runVoiceBenchmarks({
+    scenarios: voiceBenchmarkScenarios.map(scenario => ({ ...scenario })),
+    iterations: 5,
+    timeoutMs: 30_000,
+    mode: 'ci',
+    measurement: 'simulation',
+    startup: 'warm',
+    versions: {
+      livekitAgents: '1.9.0',
+      fixture: '1',
+      // Also record the tested @mastra/livekit version and adapter revision.
+    },
+    run,
+  })
+  return { results, summary: summarizeVoiceBenchmarks(results) }
+}
+```
+
+Your `run(scenario, { signal, attempt })` adapter owns each trial's input and output. It returns `outcome`, `measurement`, the played transcript, tool names, and available latency measurements. It can also return `generatedText`, `traceId`, and a cost with its currency and pricing-version identifier. Honor the abort signal and release test rooms, streams, and provider resources in `finally`. The runner's timeout bounds its wait; it cannot forcibly terminate a callback or remote tool that ignores cancellation.
+
+The supplied scenarios cover a simple answer, a lookup, a slow lookup, interruption, an injected failure, and a grounded follow-up. The lookup fixture's answer is `42`. For controlled pipeline tests, `createVoiceBenchmarkReplyGenerator(scenario)` from `@mastra/livekit/worker` implements fake replies, tool delay, cancellation, and failure injection. Pass it as `generate` to `MastraVoiceAgent`, with a fake TTS node and audio output. This fixture tests transport behavior, not model quality or actual business-tool execution.
+
+For opt-in real-audio trials, select `mode: 'audio'` and either `measurement: 'server-playout'` or `'client-playout'`. Supply an adapter that sends synthetic caller audio through your application and its actual providers. The adapter must return the same measurement source as the run configuration; simulated results cannot pass as real audio. Run grounded follow-ups against the application agent, not the controlled reply fixture. Record the package, model, speech-provider, adapter, region, and configuration versions, and run cold and warm trials separately. The runner records these labels; it doesn't restart workers or warm models for you.
+
+Use three separate latency values, each anchored to caller speech ending:
+
+- `firstAudioMs`: the first audio, including an acknowledgment or filler.
+- `firstUsefulAnswerMs`: the first spoken content satisfying the scenario's expected answer. The adapter needs aligned transcript or audio evidence for this; leave it unset when unavailable.
+- `completionMs`: the end of completed answer playback.
+
+The default success check requires the expected outcome, expected tool names, and expected text in `playedText`. Text generated but never played can't satisfy that check. The expected-text check is a case-insensitive substring assertion, not a semantic grounding scorer. Use a Mastra scorer for richer quality criteria.
+
+Summaries group by scenario, measurement source, startup mode, and versions. They include every trial in the success rate and report failures and timeouts. Latency distributions use completed trials only, report p50/p95, and include a separate sample count for each measurement. Retain the raw results when interpreting interrupted trials or a small sample.
+
+To store trials in a caller-driven dataset experiment, use the converter with Mastra core 1.61 or newer:
+
+```typescript
+import { voiceBenchmarkToExperimentResult } from '@mastra/livekit'
+
+await dataset.submitExperimentResult(
+  voiceBenchmarkToExperimentResult(result, { experimentId, itemId }),
+)
+```
+
+Create the experiment without an execution target, map each scenario to an item in its pinned dataset version, and finalize it after submitting the trials. The converter includes the trace ID, timestamps, attempt number, raw measurements, and a success score. Use a separate experiment for each benchmark run so repeated attempt numbers don't overwrite earlier results. The converter doesn't load dataset APIs, so older Mastra core versions can still use the runner and JSON reports. See [caller-driven experiments](/docs/evals/experiments#caller-driven-experiments).
+
 ### Deployment
 
 The worker is a separate process from your Mastra server. Deploy it as a long-running Node service with the production command:

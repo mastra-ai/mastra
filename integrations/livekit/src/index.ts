@@ -15,3 +15,19 @@ export type { ConsentGrant, ConsentToolOptions } from './consent';
 export { createEndCallTool } from './end-call';
 export type { EndCallRequest, EndCallToolOptions } from './end-call';
 export { DEFAULT_LIVEKIT_AGENT_NAME } from './constants';
+
+export {
+  runVoiceBenchmarks,
+  summarizeVoiceBenchmarks,
+  voiceBenchmarkScenarios,
+  voiceBenchmarkScenarioSchema,
+  voiceBenchmarkObservationSchema,
+  voiceBenchmarkToExperimentResult,
+} from './benchmark';
+export type {
+  RunVoiceBenchmarksOptions,
+  VoiceBenchmarkScenario,
+  VoiceBenchmarkObservation,
+  VoiceBenchmarkResult,
+} from './benchmark';
+export type { VoiceGenerationMetrics, VoiceSpeechMetrics, VoiceTurnMetrics, VoiceSpeechResult } from './turn-metrics';
