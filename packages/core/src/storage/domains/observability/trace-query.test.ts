@@ -933,6 +933,70 @@ describe('planTraceQuery', () => {
     }
   });
 
+  it('carries a normalized trusted tenant scope on every plan and binds it into cursors', () => {
+    const scope = { organizationId: 'org-a', resourceId: undefined };
+    const keyset = planTraceQuery(parsed(), { scope });
+    expect(keyset.scope).toEqual({ organizationId: 'org-a' });
+    expect(planTraceQuery(parsed({ ...baseRequest, pagination: { page: 0, perPage: 10 } }), { scope }).scope).toEqual({
+      organizationId: 'org-a',
+    });
+    expect(planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] } }), { scope }).scope).toEqual({
+      organizationId: 'org-a',
+    });
+    expect(planTraceQuery(parsed(), { scope: { organizationId: 'org-a', resourceId: 'project-1' } }).scope).toEqual({
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+    });
+    expect(planTraceQuery(parsed()).scope).toBeUndefined();
+
+    const unscoped = planTraceQuery(parsed());
+    const project = planTraceQuery(parsed(), { scope: { organizationId: 'org-a', resourceId: 'project-1' } });
+    const orgB = planTraceQuery(parsed(), { scope: { organizationId: 'org-b' } });
+    expect(new Set([unscoped.binding, keyset.binding, project.binding, orgB.binding]).size).toBe(4);
+
+    const cursor = encodeTraceQueryCursor(keyset, {
+      result: 'traces',
+      sortValue: '2026-08-01T00:00:00.000Z',
+      traceId: 'trace-1',
+    });
+    expect(planTraceQuery(parsed({ ...baseRequest, page: { after: cursor } }), { scope }).cursor).toEqual({
+      sortValue: '2026-08-01T00:00:00.000Z',
+      traceId: 'trace-1',
+    });
+    for (const other of [
+      undefined,
+      { organizationId: 'org-b' },
+      { organizationId: 'org-a', resourceId: 'project-1' },
+    ]) {
+      expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: cursor } }), { scope: other })).toThrow(
+        expect.objectContaining({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+      );
+    }
+  });
+
+  it('rejects tenant scope fields as predicates in every predicate context', () => {
+    const contexts: Array<(field: string) => TraceQueryPredicate> = [
+      field => ({ op: 'eq', left: { path: field }, right: { literal: 'org-1' } }),
+      field => ({ spans: { some: { op: 'exists', path: field } } }),
+      field => ({ scores: { some: { op: 'exists', path: field } } }),
+      field => ({ feedback: { some: { op: 'exists', path: field } } }),
+    ];
+    for (const field of ['organizationId', 'projectId']) {
+      for (const where of contexts) {
+        const error = validationError(() => planTraceQuery(parsed({ ...baseRequest, where: where(field) })));
+        expect(error.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
+      }
+      const threads = validationError(() =>
+        planThreadQuery(
+          parsedThreads({
+            traces: { timeRange: baseRequest.timeRange, where: contexts[0]!(field) },
+          }),
+        ),
+      );
+      expect(threads.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
+    }
+  });
+
   it('rejects grouped orderBy and fixes grouped ordering', () => {
     const error = validationError(() =>
       planTraceQuery(

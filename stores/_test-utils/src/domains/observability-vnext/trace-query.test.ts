@@ -85,7 +85,9 @@ describe('trace-query reference evaluator', () => {
   for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
     it(testCase.name, () => {
       expect(
-        normalizeTraceQueryResponse(evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, testCase.request)),
+        normalizeTraceQueryResponse(
+          evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, testCase.request, testCase.scope),
+        ),
       ).toEqual(testCase.expected);
     });
     if (!testCase.request.group) {
@@ -307,7 +309,7 @@ describe('trace-query reference evaluator', () => {
 describe('thread-query reference evaluator', () => {
   for (const testCase of THREAD_QUERY_CONFORMANCE_CASES) {
     it(testCase.name, () => {
-      expect(evaluateThreadQueryRequest(THREAD_QUERY_FIXTURE_DATA, testCase.request).threads).toEqual(
+      expect(evaluateThreadQueryRequest(THREAD_QUERY_FIXTURE_DATA, testCase.request, testCase.scope).threads).toEqual(
         testCase.expected,
       );
     });

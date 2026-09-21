@@ -12,6 +12,7 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQueryValues,
+  type TraceQueryTenantScope,
 } from '@mastra/core/storage';
 import type {
   CreateFeedbackRecord,
@@ -22,7 +23,11 @@ import type {
 } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
-import { TRACE_QUERY_DISCOVERY_FIXTURE_DATA, TRACE_QUERY_DISCOVERY_TIME_RANGE } from './trace-query-discovery';
+import {
+  TRACE_QUERY_DISCOVERY_FIXTURE_DATA,
+  TRACE_QUERY_DISCOVERY_TIME_RANGE,
+  TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE,
+} from './trace-query-discovery';
 import {
   normalizeTraceQueryResponse,
   THREAD_QUERY_CONFORMANCE_CASES,
@@ -163,6 +168,7 @@ async function writeTraceQueryFixture(
       parentEntityVersionId: span.parentEntityVersionId,
       rootEntityVersionId: span.rootEntityVersionId,
       environment: span.environment,
+      organizationId: span.organizationId,
       attributes: span.attributes,
       metadata: span.metadata,
       error: span.error as CreateSpanRecord['error'],
@@ -185,6 +191,8 @@ async function writeTraceQueryFixture(
         entityVersionId: score.entityVersionId,
         parentEntityVersionId: score.parentEntityVersionId,
         rootEntityVersionId: score.rootEntityVersionId,
+        organizationId: score.organizationId ?? undefined,
+        resourceId: score.resourceId ?? undefined,
         timestamp,
         createdAt: timestamp,
         updatedAt: null,
@@ -208,6 +216,8 @@ async function writeTraceQueryFixture(
         entityVersionId: feedback.entityVersionId,
         parentEntityVersionId: feedback.parentEntityVersionId,
         rootEntityVersionId: feedback.rootEntityVersionId,
+        organizationId: feedback.organizationId ?? undefined,
+        resourceId: feedback.resourceId ?? undefined,
         metadata: null,
       },
     });
@@ -254,28 +264,36 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
     });
 
     if (capabilities.traceQueryDiscovery) {
-      const observedFields = async (args: {
-        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-        search?: string;
-        limit?: number;
-      }) => {
+      const observedFields = async (
+        args: {
+          predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+          search?: string;
+          limit?: number;
+          timeRange?: { from: string; to: string };
+        },
+        scope?: TraceQueryTenantScope,
+      ) => {
         const normalized = parseGetTraceQueryFieldsArgs({
           timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
           ...args,
         });
-        return storage.getTraceQueryObservedFields(planTraceQueryObservedFields(normalized));
+        return storage.getTraceQueryObservedFields(planTraceQueryObservedFields(normalized, { scope }));
       };
-      const values = async (args: {
-        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-        path: string;
-        search?: string;
-        limit?: number;
-      }) => {
+      const values = async (
+        args: {
+          predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+          path: string;
+          search?: string;
+          limit?: number;
+          timeRange?: { from: string; to: string };
+        },
+        scope?: TraceQueryTenantScope,
+      ) => {
         const normalized = parseGetTraceQueryValuesArgs({
           timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
           ...args,
         });
-        return storage.getTraceQueryValues(planTraceQueryValues(normalized));
+        return storage.getTraceQueryValues(planTraceQueryValues(normalized, { scope }));
       };
 
       const writeDiscoveryFixture = () =>
@@ -364,6 +382,33 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             { value: 'rating', count: 1 },
           ],
           valuesTruncated: false,
+        });
+      });
+
+      it('applies the trusted tenant scope to field and value discovery', async () => {
+        await writeDiscoveryFixture();
+        const timeRange = TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE;
+        await expect(values({ predicateScope: 'trace', path: 'environment', timeRange })).resolves.toEqual({
+          values: [
+            { value: 'scoped-a-env', count: 1 },
+            { value: 'scoped-b-env', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(
+          values({ predicateScope: 'trace', path: 'environment', timeRange }, { organizationId: 'org-a' }),
+        ).resolves.toEqual({ values: [{ value: 'scoped-a-env', count: 1 }], valuesTruncated: false });
+        await expect(
+          values(
+            { predicateScope: 'trace', path: 'environment', timeRange },
+            { organizationId: 'org-a', resourceId: 'project-2' },
+          ),
+        ).resolves.toEqual({ values: [], valuesTruncated: false });
+        await expect(
+          observedFields({ predicateScope: 'trace', timeRange }, { organizationId: 'org-b' }),
+        ).resolves.toEqual({
+          observedFields: [expect.objectContaining({ path: 'metadata.tenantB', occurrences: 1 })],
+          observedFieldsTruncated: false,
         });
       });
 
@@ -547,7 +592,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
             continue;
           }
-          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request), { scope: testCase.scope });
           const response = await storage.queryTraces(plan);
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
         }
@@ -767,7 +812,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
             continue;
           }
-          const plan = planThreadQuery(parseQueryThreadsInput(testCase.request));
+          const plan = planThreadQuery(parseQueryThreadsInput(testCase.request), { scope: testCase.scope });
           const response = await storage.queryThreads(plan);
           expect(response.threads, testCase.name).toEqual(testCase.expected);
         }
