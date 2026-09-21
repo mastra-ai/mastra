@@ -3,7 +3,6 @@
 import type { ProviderRegistration } from '../registry.js';
 
 import { anthropicProvider } from './anthropic/index.js';
-import { attioProvider } from './attio/index.js';
 import { clerkProvider } from './clerk/index.js';
 import { discordProvider } from './discord/index.js';
 import { firefliesProvider } from './fireflies/index.js';
@@ -27,7 +26,6 @@ import { workosProvider } from './workos/index.js';
 
 export const PROVIDERS: readonly ProviderRegistration[] = [
   anthropicProvider,
-  attioProvider,
   clerkProvider,
   discordProvider,
   firefliesProvider,

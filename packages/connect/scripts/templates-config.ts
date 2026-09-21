@@ -55,7 +55,6 @@ export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
   slack: PIN_677,
   github: PIN_677,
   posthog: PIN_677,
-  attio: PIN_677,
   stripe: PIN_677,
   'twitter-v2': PIN_677,
   hubspot: PIN_677,

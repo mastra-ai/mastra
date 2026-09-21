@@ -85,7 +85,7 @@ Generated action implementations are adapted from `NangoHQ/integration-templates
 
 ## Pending provider contributions
 
-Resend and incident.io are generated from the contribution branches under review in NangoHQ/integration-templates PRs [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Attio, Stripe, Discord, Twitter/X, and HubSpot are generated from the [#677](https://github.com/NangoHQ/integration-templates/pull/677) contribution branch, which is upstream main plus agent-focused gap actions; they share one pin in `TEMPLATE_PIN_OVERRIDES`. The shared pin stays on the upstream repository and every other provider is generated from it.
+Resend and incident.io are generated from the contribution branches under review in NangoHQ/integration-templates PRs [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot are generated from the [#677](https://github.com/NangoHQ/integration-templates/pull/677) contribution branch, which is upstream main plus agent-focused gap actions; they share one pin in `TEMPLATE_PIN_OVERRIDES`. The shared pin stays on the upstream repository and every other provider is generated from it.
 
 ```sh
 pnpm --filter @mastra/connect sync-templates resend

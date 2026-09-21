@@ -11,7 +11,6 @@ describe('shipped provider registry', () => {
     // Extend this list when generated provider branches land.
     expect(integrationIds).toEqual([
       'anthropic',
-      'attio',
       'clerk',
       'discord',
       'fireflies',
