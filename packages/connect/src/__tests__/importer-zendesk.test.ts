@@ -10,6 +10,7 @@ interface ZendeskArticleFixture {
   body?: string;
   draft?: boolean;
   locale?: string;
+  section_id?: number | string;
   updated_at?: string;
 }
 
@@ -20,9 +21,19 @@ function articleNode(fixture: ZendeskArticleFixture) {
     body: fixture.body ?? null,
     draft: fixture.draft ?? false,
     locale: fixture.locale ?? 'en-us',
+    section_id: fixture.section_id ?? null,
     updated_at: fixture.updated_at,
     html_url: `https://acme.zendesk.com/hc/en-us/articles/${fixture.id}`,
   };
+}
+
+/** Calls made against the incremental articles export (excludes the sections fetch). */
+function incrementalCalls(request: ReturnType<typeof vi.fn>) {
+  return request.mock.calls.filter(call => (call[0] as { path: string }).path.includes('incremental/articles'));
+}
+
+function sectionsResponse(sections: Array<{ id: number | string; name: string }>, meta?: unknown) {
+  return { sections, meta: meta ?? { has_more: false } };
 }
 
 function incrementalResponse(
@@ -109,7 +120,7 @@ describe('zendesk importer', () => {
 
     request.mockResolvedValueOnce(incrementalResponse([], {}));
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
-    const secondCall = request.mock.calls[1]![0]! as { query: Record<string, unknown> };
+    const secondCall = incrementalCalls(request)[1]![0]! as { query: Record<string, unknown> };
     expect(secondCall.query.start_time).toBe(1_780_000_123);
   });
 
@@ -125,9 +136,9 @@ describe('zendesk importer', () => {
       incrementalResponse([{ id: 2, title: 'B', body: 'y', updated_at: '2026-09-02T00:00:00Z' }], { end_time: 200 }),
     );
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(incrementalCalls(request)).toHaveLength(2);
     expect(importer.nodes.size).toBe(2);
-    const secondCall = request.mock.calls[1]![0]! as { query: Record<string, unknown> };
+    const secondCall = incrementalCalls(request)[1]![0]! as { query: Record<string, unknown> };
     expect(secondCall.query.start_time).toBe(100);
     expect(await state.get('zendesk:articles:watermark')).toBe(JSON.stringify({ watermark: '200' }));
   });
@@ -141,7 +152,7 @@ describe('zendesk importer', () => {
       }),
     );
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(incrementalCalls(request)).toHaveLength(1);
   });
 
   it('second run with unchanged fixtures is idempotent', async () => {
@@ -213,5 +224,90 @@ describe('zendesk importer', () => {
     request.mockResolvedValueOnce({ articles: [{ id: 'not-a-number' }] });
     await expect(runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state })).rejects.toThrow();
     expect(await state.get('zendesk:articles:watermark')).toBeUndefined();
+  });
+
+  it('upserts a section container node and links the article into it', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }], {
+        end_time: 100,
+      }),
+    );
+    request.mockResolvedValueOnce(sectionsResponse([{ id: 10, name: 'Guides' }]));
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+
+    const section = importer.nodes.get('zendesk:section:10')!;
+    expect(section.input).toMatchObject({
+      name: 'Guides',
+      kind: 'connect:zendesk:section',
+      metadata: { address: 'zendesk:section:10' },
+    });
+    expect(section.records.size).toBe(1);
+    const article = importer.nodes.get('zendesk:article:1')!;
+    expect(article.input.metadata).toEqual({ address: 'zendesk:article:1' });
+    const record = [...article.records.values()][0]!;
+    expect((record.metadata as { links: unknown[] }).links).toEqual([{ address: 'zendesk:section:10', rel: 'in' }]);
+  });
+
+  it('extracts article→article reference links from hrefs before HTML stripping', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      incrementalResponse(
+        [
+          {
+            id: 1,
+            title: 'A',
+            body: '<p>See <a href="https://acme.zendesk.com/hc/en-us/articles/999-related-guide">this</a> guide</p>',
+            updated_at: '2026-09-01T00:00:00Z',
+          },
+        ],
+        { end_time: 100 },
+      ),
+    );
+    request.mockResolvedValueOnce(sectionsResponse([]));
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+
+    const record = [...importer.nodes.get('zendesk:article:1')!.records.values()][0]!;
+    expect((record.metadata as { links: unknown[] }).links).toEqual([
+      { address: 'zendesk:article:999', rel: 'references' },
+    ]);
+    expect(record.text).toContain('See this guide');
+    expect(record.text).not.toContain('href');
+  });
+
+  it('sections fetch failure still imports articles — no containers, no in links that run', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }], {
+        end_time: 100,
+      }),
+    );
+    request.mockRejectedValueOnce(new Error('sections down'));
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+
+    const article = importer.nodes.get('zendesk:article:1')!;
+    expect(article.records.size).toBe(1);
+    expect(importer.nodes.has('zendesk:section:10')).toBe(false);
+    const record = [...article.records.values()][0]!;
+    expect((record.metadata as { links?: unknown[] }).links).toBeUndefined();
+    expect(await state.get('zendesk:articles:watermark')).toBe(JSON.stringify({ watermark: '100' }));
+  });
+
+  it('section pagination stops at the page cap', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }], {
+        end_time: 100,
+      }),
+    );
+    // Every sections page claims more — the cap must break the loop.
+    request.mockResolvedValue(sectionsResponse([{ id: 10, name: 'Guides' }], { has_more: true, after_cursor: 'c' }));
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+
+    const sectionCalls = request.mock.calls.filter(call =>
+      (call[0] as { path: string }).path.includes('help_center/sections'),
+    );
+    expect(sectionCalls).toHaveLength(10);
+    expect(importer.nodes.has('zendesk:section:10')).toBe(true);
   });
 });

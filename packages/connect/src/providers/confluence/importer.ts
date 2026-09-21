@@ -1,12 +1,16 @@
 import { z } from 'zod';
 
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
+import type { RecordLink } from '../../importer-runtime.js';
 import {
   boundText,
   contentRecordId,
   DEFAULT_MAX_PAGES_PER_RUN,
   DEFAULT_MAX_RECORDS_PER_RUN,
   importerCronTrigger,
+  linksMetadata,
+  neutralizeWikilinks,
+  nodeSelfMetadata,
   readWatermark,
   writeWatermark,
 } from '../../importer-runtime.js';
@@ -27,6 +31,7 @@ const searchResultSchema = z.object({
     .nullish(),
   _links: z.object({ webui: z.string().nullish() }).nullish(),
   history: z.object({ lastUpdated: z.object({ when: z.string() }).nullish() }).nullish(),
+  ancestors: z.array(z.object({ id: z.string(), title: z.string().nullish() })).nullish(),
 });
 
 const searchResponseSchema = z.object({
@@ -54,6 +59,34 @@ function storageToText(input: string): string {
 
 function lastModifiedOf(result: ConfluenceResult): string | undefined {
   return result.history?.lastUpdated?.when ?? result.version?.when ?? undefined;
+}
+
+/** `<ri:page .../>` elements inside storage-format `<ac:link>` bodies. */
+const RI_PAGE_PATTERN = /<ri:page\b[^>]*>/gi;
+
+function riAttribute(tag: string, attribute: string): string | undefined {
+  const match = new RegExp(`${attribute}="([^"]*)"`, 'i').exec(tag);
+  const value = match?.[1]?.trim();
+  return value || undefined;
+}
+
+/**
+ * Extracts cross-page reference links from storage-format markup. Must run
+ * BEFORE `storageToText` strips tags. `ri:content-id` gives a stable address;
+ * title-only links fall back to name resolution in the graph route.
+ */
+function extractStorageLinks(storage: string): RecordLink[] {
+  const links: RecordLink[] = [];
+  for (const [tag] of storage.matchAll(RI_PAGE_PATTERN)) {
+    const contentId = riAttribute(tag, 'ri:content-id');
+    if (contentId) {
+      links.push({ address: `confluence:page:${contentId}`, rel: 'references' });
+      continue;
+    }
+    const title = riAttribute(tag, 'ri:content-title');
+    if (title) links.push({ name: title, rel: 'references' });
+  }
+  return links;
 }
 
 function createConfluenceImporter(ctx: ImporterProviderContext) {
@@ -86,7 +119,7 @@ function createConfluenceImporter(ctx: ImporterProviderContext) {
           await ctx.request({
             method: 'GET',
             path: 'wiki/rest/api/content/search',
-            query: { cql, expand: 'body.storage,version,space,history.lastUpdated', start, limit: pageSize },
+            query: { cql, expand: 'body.storage,version,space,history.lastUpdated,ancestors', start, limit: pageSize },
           }),
         );
         for (const result of parsed.results) processed.push(result);
@@ -107,26 +140,39 @@ function createConfluenceImporter(ctx: ImporterProviderContext) {
           for (const record of records) await existing.removeRecord(record.id);
           continue;
         }
-        const bodyText = storageToText(result.body?.storage?.value ?? '');
+        const storage = result.body?.storage?.value ?? '';
+        // Links live in storage-format markup — extract BEFORE tags are stripped.
+        const links: RecordLink[] = extractStorageLinks(storage);
+        // Direct parent = last ancestor (ancestors are ordered root → parent).
+        const parent = result.ancestors?.at(-1);
+        if (parent) links.push({ address: `confluence:page:${parent.id}`, rel: 'child-of' });
+        const linkMeta = linksMetadata(links.filter(link => link.address !== address));
+        const bodyText = storageToText(storage);
         const title = result.title || 'Untitled';
         const recordPayload = {
           address,
           title,
           bodyText,
+          links: linkMeta.links ?? [],
           version: result.version?.number,
           lastModified,
         };
         const recordId = contentRecordId(recordPayload);
-        const node = await importer.upsertNode(address, { name: title, kind: 'connect:confluence:page' });
+        const node = await importer.upsertNode(address, {
+          name: title,
+          kind: 'connect:confluence:page',
+          metadata: nodeSelfMetadata(address),
+        });
         const existingRecords = await node.listRecords();
         if (!existingRecords.some(r => r.id === recordId)) {
           await node.appendRecord({
             id: recordId,
-            text: boundText(bodyText ? `${title}\n\n${bodyText}` : title),
+            text: boundText(neutralizeWikilinks(bodyText ? `${title}\n\n${bodyText}` : title)),
             metadata: {
               spaceKey: result.space?.key,
               version: result.version?.number,
               url: result._links?.webui,
+              ...linkMeta,
             },
           });
         }
