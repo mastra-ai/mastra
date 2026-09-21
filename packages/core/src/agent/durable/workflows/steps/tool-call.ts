@@ -16,6 +16,7 @@ import type { MemoryConfig } from '../../../../memory/types';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import type { ExportedSpan, ObservabilityContext } from '../../../../observability';
 import type { ProcessorState } from '../../../../processors';
+import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { ProcessorRunner } from '../../../../processors/runner';
 import type { RequestContext } from '../../../../request-context';
 import type { ChunkType } from '../../../../stream/types';
@@ -895,6 +896,7 @@ export function createDurableToolCallStep() {
 
       // Strip _background from args before execution (same as non-durable path)
       const cleanedArgs = { ...args };
+      const isAgentTool = toolName?.startsWith('agent-');
       if ('_background' in cleanedArgs) {
         delete (cleanedArgs as any)._background;
       }
@@ -1184,6 +1186,12 @@ export function createDurableToolCallStep() {
         },
       };
 
+      // Live-attempt barrier only. Durable recovery must use persisted task and
+      // transcript state because this Promise does not survive workflow replay.
+      let resolveReconciliation!: (outcome: { error?: unknown }) => void;
+      const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
+        resolveReconciliation = resolve;
+      });
       const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
         ...typedInput.providerMetadata,
         mastra: {
@@ -1210,6 +1218,7 @@ export function createDurableToolCallStep() {
         // suspended background task; a fresh call must dispatch its own.
         resumeData: isResumingFromSuspension ? resumeData : undefined,
         logger: logger as any,
+        adoptPersistedTask: true,
         emitTaskStarted: async task => {
           // Emit background-task-started chunk via PubSub
           if (pubsub) {
@@ -1225,11 +1234,19 @@ export function createDurableToolCallStep() {
             });
           }
         },
-        taskContext: () => ({
+        taskContext: info => ({
           executor: {
             execute: async (taskArgs: any, taskContext: any) => {
               return tool.execute!(taskArgs, {
                 ...toolOptions,
+                isBackgroundTask: true,
+                [BACKGROUND_WORK_CONTEXT]: {
+                  originRunId: runId,
+                  originToolCallId: toolCallId,
+                  taskId: info.getTaskId(),
+                  invocationKind: isAgentTool ? 'agent' : 'tool',
+                  disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
+                },
                 ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
                 // Framework-resolved delegated run id recovered from persisted
                 // suspension state (#23739) — never the model-authored one.
@@ -1242,7 +1259,7 @@ export function createDurableToolCallStep() {
                   await taskContext?.onProgress?.(chunk);
                   return toolOptions.outputWriter?.(chunk);
                 },
-              });
+              } as any);
             },
           },
           onChunk: (chunk: any) => {
@@ -1296,85 +1313,98 @@ export function createDurableToolCallStep() {
           },
 
           onResult: async (params: any) => {
-            if (!messageList) return;
+            if (!messageList) {
+              if (info.disposition === 'awaited') {
+                const error = new Error('Cannot reconcile an awaited background task without a message list');
+                resolveReconciliation({ error });
+                throw error;
+              }
+              return;
+            }
 
-            // Resolve the mapping tool at completion time: the registry entry
-            // may have been rebuilt (or expired) if the task finished after a
-            // process restart.
-            const liveEntry = globalRunRegistry.get(runId);
-            const mappingTool = liveEntry?.tools?.[toolName] ?? tool;
-            await applyBackgroundToolResult({
-              params,
-              currentRunId: runId,
-              hasResumeData: resumeData != null,
-              args: cleanedArgs,
-              messageList,
-              approvalGrant: approvalGrant as Record<string, unknown> | undefined,
-              baseProviderMetadata: typedInput.providerMetadata as any,
-              // Transcript payload transforms (L22 parity port). The policy and
-              // tool-level transform are resolved at completion time from the
-              // live registry — NOT captured at dispatch — because the entry may
-              // be rebuilt after a process restart. The run-level policy carries
-              // a closure and cannot be rehydrated across restarts (only
-              // tool-level transforms survive via registry re-resolution) — a
-              // limitation shared with the sync tool-call path.
-              transformForTranscript: async result => {
-                const failed = params.status === 'failed';
-                const transformCarrier = await applyToolPayloadTransformToChunk(
-                  {
-                    type: failed ? 'tool-error' : 'tool-result',
-                    payload: {
-                      toolCallId: params.toolCallId,
-                      toolName: params.toolName,
-                      args: cleanedArgs,
-                      ...(failed ? { error: params.error } : { result: params.result }),
+            try {
+              // Resolve the mapping tool at completion time: the registry entry
+              // may have been rebuilt (or expired) if the task finished after a
+              // process restart.
+              const liveEntry = globalRunRegistry.get(runId);
+              const mappingTool = liveEntry?.tools?.[toolName] ?? tool;
+              await applyBackgroundToolResult({
+                params,
+                currentRunId: runId,
+                hasResumeData: resumeData != null,
+                args: cleanedArgs,
+                messageList,
+                approvalGrant: approvalGrant as Record<string, unknown> | undefined,
+                baseProviderMetadata: typedInput.providerMetadata as any,
+                // Transcript payload transforms (L22 parity port). The policy and
+                // tool-level transform are resolved at completion time from the
+                // live registry — NOT captured at dispatch — because the entry may
+                // be rebuilt after a process restart. The run-level policy carries
+                // a closure and cannot be rehydrated across restarts (only
+                // tool-level transforms survive via registry re-resolution) — a
+                // limitation shared with the sync tool-call path.
+                transformForTranscript: async result => {
+                  const failed = params.status === 'failed';
+                  const transformCarrier = await applyToolPayloadTransformToChunk(
+                    {
+                      type: failed ? 'tool-error' : 'tool-result',
+                      payload: {
+                        toolCallId: params.toolCallId,
+                        toolName: params.toolName,
+                        args: cleanedArgs,
+                        ...(failed ? { error: params.error } : { result: params.result }),
+                      },
+                      metadata: {} as Record<string, any>,
                     },
-                    metadata: {} as Record<string, any>,
-                  },
-                  {
-                    policy: liveEntry?.toolPayloadTransform,
-                    toolTransform: (mappingTool as { transform?: any })?.transform,
-                    tools: liveEntry?.tools,
-                    logger: logger as any,
-                    transformInput: {
-                      providerMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
+                    {
+                      policy: liveEntry?.toolPayloadTransform,
+                      toolTransform: (mappingTool as { transform?: any })?.transform,
+                      tools: liveEntry?.tools,
+                      logger: logger as any,
+                      transformInput: {
+                        providerMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
+                      },
                     },
-                  },
-                );
-                const transcriptArgsTransform = getTransformedToolPayload(
-                  transformCarrier.metadata,
-                  'transcript',
-                  'input-available',
-                );
-                const transcriptResultTransform = getTransformedToolPayload(
-                  transformCarrier.metadata,
-                  'transcript',
-                  failed ? 'error' : 'output-available',
-                );
-                return {
-                  transcriptArgs: hasTransformedToolPayload(transcriptArgsTransform)
-                    ? transcriptArgsTransform.transformed
-                    : cleanedArgs,
-                  transcriptResult: hasTransformedToolPayload(transcriptResultTransform)
-                    ? transcriptResultTransform.transformed
-                    : result,
-                  providerMetadata: withToolPayloadTransformProviderMetadata(
-                    typedInput.providerMetadata as any,
+                  );
+                  const transcriptArgsTransform = getTransformedToolPayload(
                     transformCarrier.metadata,
-                  ) as any,
-                };
-              },
-              toModelOutput: mappingTool.toModelOutput,
-              // Respect a custom idGenerator for the fallback appended message —
-              // parity with main, which reads generateId from its run scope.
-              generateId: mastra ? () => (mastra as Mastra).generateId() : undefined,
-              logger: logger as any,
-              flush: async () => {
-                if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-                  await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
-                }
-              },
-            });
+                    'transcript',
+                    'input-available',
+                  );
+                  const transcriptResultTransform = getTransformedToolPayload(
+                    transformCarrier.metadata,
+                    'transcript',
+                    failed ? 'error' : 'output-available',
+                  );
+                  return {
+                    transcriptArgs: hasTransformedToolPayload(transcriptArgsTransform)
+                      ? transcriptArgsTransform.transformed
+                      : cleanedArgs,
+                    transcriptResult: hasTransformedToolPayload(transcriptResultTransform)
+                      ? transcriptResultTransform.transformed
+                      : result,
+                    providerMetadata: withToolPayloadTransformProviderMetadata(
+                      typedInput.providerMetadata as any,
+                      transformCarrier.metadata,
+                    ) as any,
+                  };
+                },
+                toModelOutput: mappingTool.toModelOutput,
+                // Respect a custom idGenerator for the fallback appended message —
+                // parity with main, which reads generateId from its run scope.
+                generateId: mastra ? () => (mastra as Mastra).generateId() : undefined,
+                logger: logger as any,
+                flush: async () => {
+                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
+                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+                  }
+                },
+              });
+              resolveReconciliation({});
+            } catch (error) {
+              resolveReconciliation({ error });
+              throw error;
+            }
           },
 
           onExecution: async (params: any) => {
@@ -1406,6 +1436,29 @@ export function createDurableToolCallStep() {
       });
 
       if (bgOutcome.status !== 'sync') {
+        if (bgOutcome.disposition === 'awaited') {
+          const completedTask = await bgOutcome.waitForCompletion({ abortSignal: toolAbortSignal });
+          if (completedTask.status !== 'completed') {
+            throw new Error(
+              completedTask.error?.message ??
+                `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
+            );
+          }
+
+          const reconciliation = await reconciliationComplete;
+          if (reconciliation.error) {
+            throw reconciliation.error;
+          }
+
+          return {
+            ...typedInput,
+            args: cleanedArgs,
+            result: completedTask.result,
+            providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
+            ...(bgOutcome.status === 'started' ? (approvalGrant ?? {}) : {}),
+          };
+        }
+
         if (bgOutcome.status === 'started') {
           // Return placeholder result so the LLM can continue
           return {

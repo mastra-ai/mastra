@@ -74,6 +74,32 @@ export async function applyBackgroundToolResult(deps: {
 }): Promise<void> {
   const { params, messageList } = deps;
   const failed = params.status === 'failed';
+  const terminalStatus = failed ? 'failed' : 'completed';
+
+  for (const message of messageList.get.all.db()) {
+    if (message.role !== 'assistant' || !message.content?.parts) continue;
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation?.toolCallId !== params.toolCallId) continue;
+      const backgroundTask = (part.providerMetadata as any)?.mastra?.backgroundTask as
+        | { taskId?: string; status?: string }
+        | undefined;
+      if (!backgroundTask) continue;
+      if (backgroundTask.taskId !== params.taskId) {
+        throw new Error(
+          `Background task identity conflict for tool call "${params.toolCallId}": expected "${params.taskId}", found "${backgroundTask.taskId}"`,
+        );
+      }
+      if (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') {
+        if (backgroundTask.status !== terminalStatus) {
+          throw new Error(
+            `Background task status conflict for task "${params.taskId}": expected "${terminalStatus}", found "${backgroundTask.status}"`,
+          );
+        }
+        return;
+      }
+    }
+  }
+
   const result = failed ? `Background task failed: ${params.error?.message ?? 'Unknown error'}` : params.result;
 
   const transformed = deps.transformForTranscript

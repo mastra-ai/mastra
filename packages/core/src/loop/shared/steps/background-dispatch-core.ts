@@ -4,6 +4,7 @@ import { resolveBackgroundConfig } from '../../../background-tasks/resolve-confi
 import type {
   AgentBackgroundConfig,
   BackgroundExecutionDisposition,
+  BackgroundTask,
   BackgroundTaskHandle,
   BackgroundTaskManagerConfig,
   CreateBackgroundTaskOptions,
@@ -19,7 +20,7 @@ export type BackgroundDispatchOutcome =
    * resolved `disposition` is `awaited`, in which case engines block the turn
    * on `waitForCompletion()` and return the authoritative result instead. */
   | {
-      status: 'started' | 'resumed' | 'restarted';
+      status: 'started' | 'resumed' | 'restarted' | 'reattached' | 'reconciled';
       taskId: string;
       placeholder: string;
       /** The resolved execution disposition (never `foreground` here — that
@@ -92,6 +93,8 @@ export async function dispatchBackgroundTool(deps: {
   taskContext: (info: BackgroundTaskContextInfo) => CreateBackgroundTaskOptions['context'];
   /** Emit the background-task-started chunk over engine transport. */
   emitTaskStarted: (task: { id: string }) => void | Promise<void>;
+  /** Durable workflow steps may replay after the task reached persisted storage. */
+  adoptPersistedTask?: boolean;
   logger?: IMastraLogger;
 }): Promise<BackgroundDispatchOutcome> {
   const { backgroundTaskManager, toolName, toolCallId, agentId, threadId, resourceId, runId, logger } = deps;
@@ -119,9 +122,10 @@ export async function dispatchBackgroundTool(deps: {
     return { status: 'sync' };
   }
 
-  const placeholder = (verb: 'started' | 'resumed' | 'restarted', taskId: string) =>
+  const placeholder = (verb: 'started' | 'resumed' | 'restarted' | 'reattached' | 'reconciled', taskId: string) =>
     `Background task ${verb}. Task ID: ${taskId}. The tool "${toolName}" is running in the background. You will be notified when it completes.`;
 
+  let failClosed = false;
   try {
     // The handle is created below, but engine hooks (built first, as task
     // context) need lazy access to the task id — `bgTask.task` throws until
@@ -138,6 +142,7 @@ export async function dispatchBackgroundTool(deps: {
         }
       },
     };
+    const context = deps.taskContext(info);
     bgTask = createBackgroundTask(backgroundTaskManager, {
       toolName,
       toolCallId,
@@ -148,16 +153,83 @@ export async function dispatchBackgroundTool(deps: {
       runId,
       timeoutMs: bgResolved.timeoutMs,
       maxRetries: bgResolved.maxRetries,
-      context: deps.taskContext(info),
+      context,
     });
     const handle = bgTask;
-    const dispatched = (status: 'started' | 'resumed' | 'restarted', taskId: string) => ({
+    const dispatched = (status: 'started' | 'resumed' | 'restarted' | 'reattached' | 'reconciled', taskId: string) => ({
       status,
       taskId,
       placeholder: placeholder(status, taskId),
       disposition: bgResolved.disposition,
       waitForCompletion: handle.waitForCompletion.bind(handle),
     });
+
+    if (deps.adoptPersistedTask && bgResolved.disposition === 'awaited') {
+      // The background task and the workflow step checkpoint independently. On
+      // replay, adopt the exact persisted invocation before looking at its
+      // status so a pending-to-running or running-to-terminal transition cannot
+      // make the step dispatch a duplicate. Recovery failures are ambiguous, so
+      // fail closed rather than falling through to synchronous execution.
+      failClosed = true;
+      const identity = { toolCallId, runId, agentId, threadId, resourceId, toolName };
+      const isTerminal = (task: BackgroundTask) =>
+        task.status === 'completed' ||
+        task.status === 'failed' ||
+        task.status === 'cancelled' ||
+        task.status === 'timed_out';
+      const reconcileTerminalTask = async (task: BackgroundTask) => {
+        if (!context.onResult) {
+          throw new Error(`Cannot reconcile awaited background task "${task.id}" without an onResult hook`);
+        }
+        const completed = task.status === 'completed';
+        await context.onResult({
+          runId: task.runId,
+          taskId: task.id,
+          toolCallId: task.toolCallId,
+          toolName: task.toolName,
+          agentId: task.agentId,
+          threadId: task.threadId,
+          resourceId: task.resourceId,
+          result: task.result,
+          error: completed
+            ? undefined
+            : (task.error ?? {
+                message: `Background task ${task.status.replace('_', ' ')}: ${task.id}`,
+              }),
+          status: completed ? 'completed' : 'failed',
+          startedAt: task.startedAt ?? task.createdAt,
+          completedAt: task.completedAt ?? task.createdAt,
+        });
+        return dispatched('reconciled', task.id);
+      };
+
+      const existingTask = await bgTask.checkIfExisting(identity);
+      if (existingTask) {
+        if (isTerminal(existingTask)) {
+          return reconcileTerminalTask(existingTask);
+        }
+
+        if (existingTask.status === 'suspended') {
+          if (deps.resumeData != null) {
+            const task = await bgTask.resume(deps.resumeData);
+            return dispatched('resumed', task.id);
+          }
+          return dispatched('reattached', existingTask.id);
+        }
+
+        try {
+          const task = await bgTask.restart();
+          return dispatched('restarted', task.id);
+        } catch (restartError) {
+          const transitionedTask = await bgTask.checkIfExisting(identity);
+          if (transitionedTask?.id === existingTask.id && isTerminal(transitionedTask)) {
+            return reconcileTerminalTask(transitionedTask);
+          }
+          throw restartError;
+        }
+      }
+      failClosed = false;
+    }
 
     // Resuming this tool call with a previously-suspended background task for
     // the same toolCallId+runId: resume it with the agent-resume payload
@@ -202,6 +274,9 @@ export async function dispatchBackgroundTool(deps: {
 
     return dispatched('started', task.id);
   } catch (bgError) {
+    if (failClosed) {
+      throw bgError;
+    }
     logger?.debug?.(`Background task dispatch failed for ${toolName}, falling back to sync: ${bgError}`);
     return { status: 'sync' };
   }

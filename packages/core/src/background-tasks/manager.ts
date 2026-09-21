@@ -527,11 +527,10 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Restarts a previously running task. The tool executor is re-registered via
-   * `registerTaskContext(taskId, ...)` because the original
+   * Re-dispatches a previously pending or running task. The tool executor is
+   * re-registered via `registerTaskContext(taskId, ...)` because the original
    * registration is gone (e.g. process restart) — the manager doesn't
    * rehydrate executor closures from storage.
-   *
    */
   async restart(taskId: string, context?: TaskContext): Promise<BackgroundTask> {
     if (this.shuttingDown) {
@@ -548,9 +547,10 @@ export class BackgroundTaskManager {
     if (!task) {
       throw new Error(`Task not found: ${taskId}`);
     }
-    if (task.status !== 'running') {
-      throw new Error(`Cannot restart task in status '${task.status}' (expected 'running')`);
+    if (task.status !== 'pending' && task.status !== 'running') {
+      throw new Error(`Cannot restart task in status '${task.status}' (expected 'pending' or 'running')`);
     }
+    const isRestart = task.status === 'running';
 
     if (context) {
       this.registerTaskContext(task.id, context);
@@ -567,7 +567,7 @@ export class BackgroundTaskManager {
     }
 
     try {
-      await this.dispatch(task, true);
+      await this.dispatch(task, isRestart);
     } catch (error) {
       if (isProcessAffine) this.releaseLocalSlot(taskId);
       throw error;

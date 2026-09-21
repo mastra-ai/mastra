@@ -442,6 +442,7 @@ export interface CheckIfSuspendedPayload {
 }
 
 export type CheckIfRunningPayload = CheckIfSuspendedPayload;
+export type CheckIfExistingPayload = CheckIfSuspendedPayload;
 
 /**
  * A handle returned by `createBackgroundTask()`.
@@ -454,6 +455,8 @@ export interface BackgroundTaskHandle {
   dispatch(): Promise<EnqueueResult>;
   /** Check if the task is suspended */
   checkIfSuspended(args: CheckIfSuspendedPayload): Promise<boolean>;
+  /** Adopt one persisted task matching this invocation, regardless of status. */
+  checkIfExisting(args: CheckIfExistingPayload): Promise<BackgroundTask | undefined>;
   /** Check if the task is running */
   checkIfRunning(args: CheckIfRunningPayload): Promise<boolean>;
   /** Resume the task */

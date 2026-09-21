@@ -340,6 +340,109 @@ describe('BackgroundTaskManager', () => {
       expect(completed.result).toBe('from-handle');
     });
 
+    it('adopts the exact persisted terminal task for a replayed invocation', async () => {
+      const executeFn = vi.fn().mockResolvedValue('persisted-result');
+      const identity = {
+        toolName: 'tool',
+        toolCallId: 'call-terminal',
+        agentId: 'a1',
+        runId: 'run-terminal',
+      };
+      const original = createBackgroundTask(manager, {
+        ...identity,
+        args: {},
+        context: ctx(executeFn),
+      });
+      const { task } = await original.dispatch();
+      await expect(original.waitForCompletion({ timeoutMs: 2000 })).resolves.toMatchObject({
+        id: task.id,
+        status: 'completed',
+        result: 'persisted-result',
+      });
+
+      const replay = createBackgroundTask(manager, {
+        ...identity,
+        args: {},
+        context: ctx(vi.fn()),
+      });
+      const terminalTask = await replay.checkIfExisting(identity);
+
+      expect(terminalTask).toMatchObject({ id: task.id, status: 'completed', result: 'persisted-result' });
+      await expect(replay.waitForCompletion()).resolves.toMatchObject({ id: task.id, status: 'completed' });
+      expect(executeFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-dispatches an adopted pending task without creating a duplicate', async () => {
+      const identity = {
+        toolName: 'tool',
+        toolCallId: 'call-pending',
+        agentId: 'a1',
+        runId: 'run-pending',
+      };
+      const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+      await backgroundTasksStore!.createTask({
+        id: 'pending-replay',
+        status: 'pending',
+        ...identity,
+        args: {},
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+      });
+      const executeFn = vi.fn().mockResolvedValue('recovered-result');
+      const replay = createBackgroundTask(manager, {
+        ...identity,
+        args: {},
+        context: ctx(executeFn),
+      });
+
+      await expect(replay.checkIfExisting(identity)).resolves.toMatchObject({
+        id: 'pending-replay',
+        status: 'pending',
+      });
+      await expect(replay.restart()).resolves.toMatchObject({ id: 'pending-replay', status: 'pending' });
+      await expect(replay.waitForCompletion({ timeoutMs: 2000 })).resolves.toMatchObject({
+        id: 'pending-replay',
+        status: 'completed',
+        result: 'recovered-result',
+      });
+      await expect(manager.listTasks(identity)).resolves.toMatchObject({ total: 1 });
+      expect(executeFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails closed when multiple tasks match one replayed invocation', async () => {
+      const identity = {
+        toolName: 'tool',
+        toolCallId: 'call-ambiguous',
+        agentId: 'a1',
+        runId: 'run-ambiguous',
+      };
+
+      for (const result of ['first', 'second']) {
+        const handle = createBackgroundTask(manager, {
+          ...identity,
+          args: {},
+          context: ctx(vi.fn().mockResolvedValue(result)),
+        });
+        await handle.dispatch();
+        await expect(handle.waitForCompletion({ timeoutMs: 2000 })).resolves.toMatchObject({
+          status: 'completed',
+          result,
+        });
+      }
+
+      const replay = createBackgroundTask(manager, {
+        ...identity,
+        args: {},
+        context: ctx(vi.fn()),
+      });
+
+      await expect(replay.checkIfExisting(identity)).rejects.toThrow(
+        'Multiple background tasks found for run "run-ambiguous" and tool call "call-ambiguous"',
+      );
+    });
+
     it('can cancel via handle', async () => {
       const executeFn = vi.fn().mockImplementation(
         (_args: any, opts: { abortSignal: AbortSignal }) =>
