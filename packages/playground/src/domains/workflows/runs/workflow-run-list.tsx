@@ -50,6 +50,25 @@ function formatRunInput(snapshot: unknown): string | null {
   }
 }
 
+function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resourceId?: string }) {
+  if (timestamp === undefined && !resourceId) return null;
+
+  return (
+    <span className="text-muted-foreground text-ui-xs flex w-full min-w-0 items-center gap-1.5">
+      {timestamp !== undefined && (
+        <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
+          {formatDate(timestamp, 'MMM d, yyyy · h:mm a')}
+        </time>
+      )}
+      {resourceId && (
+        <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
+          {timestamp === undefined ? resourceId : `· ${resourceId}`}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
@@ -111,12 +130,8 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                   <ThreadListItems>
                     {runList.map(run => {
                       const isActiveRun = run.runId === runId;
-                      const runInput = isActiveRun ? formatRunInput(run.snapshot) : null;
-                      const runResourceId = getRunResourceId(run);
-                      const runTimestamp =
-                        run?.snapshot && typeof run.snapshot === 'object'
-                          ? getRunTimestamp(run.snapshot.timestamp)
-                          : undefined;
+                      const snapshot = run.snapshot && typeof run.snapshot === 'object' ? run.snapshot : undefined;
+                      const runInput = isActiveRun ? formatRunInput(snapshot) : null;
 
                       return (
                         <ThreadListItem
@@ -129,9 +144,9 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                           className="h-auto min-h-0 items-stretch py-1"
                         >
                           <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
-                            {run?.snapshot && typeof run.snapshot === 'object' && (
+                            {snapshot && (
                               <span className="shrink-0">
-                                <WorkflowRunStatusIcon status={run.snapshot.status} />
+                                <WorkflowRunStatusIcon status={snapshot.status} />
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
@@ -140,20 +155,10 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                                   {run.runId}
                                 </span>
                               </span>
-                              {(runTimestamp !== undefined || runResourceId) && (
-                                <span className="text-muted-foreground text-ui-xs flex w-full min-w-0 items-center gap-1.5">
-                                  {runTimestamp !== undefined && (
-                                    <time className="shrink-0" dateTime={new Date(runTimestamp).toISOString()}>
-                                      {formatDate(runTimestamp, 'MMM d, yyyy · h:mm a')}
-                                    </time>
-                                  )}
-                                  {runResourceId && (
-                                    <span className="min-w-0 truncate" title={`Resource ${runResourceId}`}>
-                                      · {runResourceId}
-                                    </span>
-                                  )}
-                                </span>
-                              )}
+                              <WorkflowRunMeta
+                                timestamp={getRunTimestamp(snapshot?.timestamp)}
+                                resourceId={getRunResourceId(run)}
+                              />
                               {runInput && (
                                 <span className="text-muted-foreground text-ui-sm block w-full min-w-0 truncate">
                                   {runInput}
