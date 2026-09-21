@@ -24,7 +24,7 @@ describe('Textarea', () => {
 
     const cls = screen.getByPlaceholderText('Description').className;
     expect(cls).toContain('text-foreground');
-    expect(cls).not.toContain('text-neutral5');
+    expect(cls).not.toContain('text-neutral');
   });
 
   it.each([

@@ -62,7 +62,7 @@ function RunDuration({ span }: { span: RunSpan }) {
   const elapsedMs = useTimeDiff(span);
 
   return (
-    <span className="text-ui-xs text-neutral4 flex items-center gap-1.5 tabular-nums" title="Run duration">
+    <span className="text-ui-xs text-muted-foreground flex items-center gap-1.5 tabular-nums" title="Run duration">
       <Timer aria-hidden className="size-3.5" />
       {formatRunDuration(elapsedMs)}
     </span>
@@ -88,7 +88,7 @@ export function RunWorkflowHeader({
         <WorkflowRunStatusBadge status={status} />
         {runSpan && <RunDuration span={runSpan} />}
       </div>
-      <div className="text-ui-xs text-neutral3 flex min-w-0 items-center gap-1">
+      <div className="text-ui-xs text-muted-foreground flex min-w-0 items-center gap-1">
         <span className="min-w-0 truncate font-mono" title={runId}>
           {runId}
         </span>

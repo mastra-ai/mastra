@@ -70,8 +70,8 @@ const STATUS_OPTIONS = [
 
 const PanelContent = ({ title, description }: { title: string; description: string }) => (
   <div className="grid gap-1">
-    <h2 className={cn('text-ui-md', 'font-medium', 'text-neutral5')}>{title}</h2>
-    <p className="text-ui-sm text-neutral3">{description}</p>
+    <h2 className={cn('text-ui-md', 'font-medium', 'text-foreground')}>{title}</h2>
+    <p className="text-ui-sm text-muted-foreground">{description}</p>
   </div>
 );
 
@@ -158,8 +158,10 @@ export const SearchAndFilter: Story = {
         <TabbedContainer defaultTab="overview">
           <TabbedContainer.Panel value="overview" label="Overview">
             <div className="grid gap-1">
-              <h2 className={cn('text-ui-md', 'font-medium', 'text-neutral5')}>Evaluation overview</h2>
-              <p className="text-ui-sm text-neutral3">Any product content can share the frame with data-heavy tabs.</p>
+              <h2 className={cn('text-ui-md', 'font-medium', 'text-foreground')}>Evaluation overview</h2>
+              <p className="text-ui-sm text-muted-foreground">
+                Any product content can share the frame with data-heavy tabs.
+              </p>
             </div>
           </TabbedContainer.Panel>
           <TabbedContainer.DataList
@@ -265,8 +267,10 @@ export const OverflowAndClosable: Story = {
             tab.value === 'overview' ? (
               <TabbedContainer.Panel key={tab.value} value={tab.value} label={tab.label} onClose={closeTab(tab.value)}>
                 <div className="grid gap-1">
-                  <h2 className={cn('text-ui-md', 'font-medium', 'text-neutral5')}>Workspace overview</h2>
-                  <p className="text-ui-sm text-neutral3">Arbitrary content shares the same closable tab rail.</p>
+                  <h2 className={cn('text-ui-md', 'font-medium', 'text-foreground')}>Workspace overview</h2>
+                  <p className="text-ui-sm text-muted-foreground">
+                    Arbitrary content shares the same closable tab rail.
+                  </p>
                 </div>
               </TabbedContainer.Panel>
             ) : (

@@ -93,7 +93,7 @@ export function MCPClientFormSidebar({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-description" className="text-neutral5">
+            <Label htmlFor="mcp-client-description" className="text-foreground">
               Description
             </Label>
             <Textarea
@@ -145,7 +145,7 @@ export function MCPClientFormSidebar({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5">Server Type</Label>
+            <Label className="text-foreground">Server Type</Label>
             <Controller
               name="serverType"
               control={control}
@@ -182,7 +182,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-timeout" className="text-neutral5">
+                <Label htmlFor="mcp-timeout" className="text-foreground">
                   Timeout (ms)
                 </Label>
                 <Input
@@ -218,7 +218,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-args" className="text-neutral5">
+                <Label htmlFor="mcp-args" className="text-foreground">
                   Arguments (one per line)
                 </Label>
                 <Textarea
@@ -231,7 +231,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5">Environment Variables</Label>
+                <Label className="text-foreground">Environment Variables</Label>
                 <div className="flex flex-col gap-2">
                   {env.map((_, index) => (
                     <div key={index} className="flex items-center gap-2">

@@ -6,7 +6,7 @@ import { BadgeWrapper } from './badge-wrapper';
 export const LoadingBadge = () => {
   return (
     <BadgeWrapper
-      icon={<Spinner className="text-neutral3" />}
+      icon={<Spinner className="text-muted-foreground" />}
       title={<Skeleton className="ml-2 h-2 w-12" />}
       collapsible={false}
     />

@@ -35,7 +35,7 @@ export function MCPClientToolPreview({
   if (serverType === 'stdio') {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">
+        <Txt className="text-muted-foreground">
           Tool preview is available for HTTP servers. Stdio servers cannot be previewed.
         </Txt>
       </EmptyState>
@@ -45,7 +45,7 @@ export function MCPClientToolPreview({
   if (!url.trim()) {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">
+        <Txt className="text-muted-foreground">
           Enter a URL and click &quot;Try to connect&quot; to preview available tools.
         </Txt>
       </EmptyState>
@@ -55,7 +55,7 @@ export function MCPClientToolPreview({
   if (tryConnect.isIdle) {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">Click &quot;Try to connect&quot; to preview available tools.</Txt>
+        <Txt className="text-muted-foreground">Click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
@@ -65,7 +65,7 @@ export function MCPClientToolPreview({
       {tryConnect.isPending && (
         <div className="flex items-center gap-2">
           <Spinner className="h-3 w-3" />
-          <Txt className="text-neutral3">Connecting...</Txt>
+          <Txt className="text-muted-foreground">Connecting...</Txt>
         </div>
       )}
 
@@ -78,7 +78,7 @@ export function MCPClientToolPreview({
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length === 0 && (
-        <Txt className="text-neutral3">Connected successfully but no tools were found.</Txt>
+        <Txt className="text-muted-foreground">Connected successfully but no tools were found.</Txt>
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (
@@ -112,7 +112,7 @@ function ToolList({
 
   return (
     <div className="overflow-y-auto p-5">
-      <div className="text-neutral6 flex items-center gap-2">
+      <div className="text-foreground flex items-center gap-2">
         <Icon size="lg" className="bg-surface4 rounded-md p-1">
           <McpServerIcon />
         </Icon>
@@ -138,7 +138,7 @@ function ToolList({
                     type="text"
                     disabled={isDisabled}
                     className={cn(
-                      'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                      'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
                       !isDisabled && 'border-border1 border-dashed',
                     )}
                     value={

@@ -25,7 +25,6 @@ export type SearchFieldBlockProps = {
   layout?: 'horizontal' | 'vertical';
   className?: string;
   size?: InputProps['size'];
-  variant?: InputProps['variant'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
   /** Gives the caller access to the underlying input, e.g. to focus it from a keyboard shortcut. */
@@ -48,7 +47,6 @@ export function SearchFieldBlock({
   onReset,
   className,
   size,
-  variant,
   isMinimized,
   onMinimizedChange,
   inputRef: externalInputRef,
@@ -114,7 +112,6 @@ export function SearchFieldBlock({
               placeholder={placeholder}
               onChange={onChange}
               size={size}
-              variant={variant}
               error={error || Boolean(errorMsg)}
               aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
               className={cn(

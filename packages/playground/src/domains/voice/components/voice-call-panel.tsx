@@ -40,15 +40,15 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
             voiceCall.status === 'active' && voiceCall.agentState !== 'speaking' && 'bg-green-500',
           )}
         />
-        <span className="text-ui-sm text-neutral4">{stateLabel}</span>
+        <span className="text-ui-sm text-muted-foreground">{stateLabel}</span>
       </div>
       {lastUserCaption && (
-        <p className="text-ui-sm text-neutral3 mt-2 truncate" data-testid="voice-caption-user">
+        <p className="text-ui-sm text-muted-foreground mt-2 truncate" data-testid="voice-caption-user">
           {lastUserCaption.text}
         </p>
       )}
       {lastAgentCaption && (
-        <p className="text-ui-sm text-neutral6 mt-1" data-testid="voice-caption-agent">
+        <p className="text-ui-sm text-foreground mt-1" data-testid="voice-caption-agent">
           {lastAgentCaption.text}
         </p>
       )}

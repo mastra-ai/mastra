@@ -152,7 +152,7 @@ const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
     <div
       className={cn(
         'grid min-h-80 grid-cols-[9rem_1fr] overflow-hidden rounded-lg border',
-        semantic ? 'new-theme border-border text-foreground' : 'border-border1 text-neutral6',
+        semantic ? 'new-theme border-border text-foreground' : 'border-border1 text-foreground',
       )}
     >
       <div className={cn('p-4', semantic ? 'bg-sidebar' : 'bg-surface1')}>

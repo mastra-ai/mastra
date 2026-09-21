@@ -63,19 +63,19 @@ function ExperimentTargetCell({ experiment }: { experiment: DatasetExperiment })
   return (
     <span className="flex min-w-0 items-center gap-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0">
       {TargetIcon && (
-        <span className="text-neutral3 flex" role="img" aria-label={TARGET_LABEL[targetType!]}>
+        <span className="text-muted-foreground flex" role="img" aria-label={TARGET_LABEL[targetType!]}>
           <TargetIcon />
         </span>
       )}
-      <span className={targetType ? 'truncate' : 'text-neutral2 truncate'}>{name}</span>
+      <span className={targetType ? 'truncate' : 'text-placeholder truncate'}>{name}</span>
     </span>
   );
 }
 
 function ExperimentReviewCell({ review }: { review?: ExperimentReviewSummary }) {
-  if (!review) return <span className="text-neutral2">—</span>;
+  if (!review) return <span className="text-placeholder">—</span>;
   const inPipeline = review.needsReview + review.complete;
-  if (inPipeline === 0) return <span className="text-neutral2">—</span>;
+  if (inPipeline === 0) return <span className="text-placeholder">—</span>;
   if (review.needsReview > 0) {
     return (
       <Badge size="xs" variant="yellow">
