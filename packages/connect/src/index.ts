@@ -28,6 +28,9 @@ export {
   clearHighWater,
   clearResumeCursor,
   contentRecordId,
+  linksMetadata,
+  neutralizeWikilinks,
+  nodeSelfMetadata,
   readHighWater,
   readResumeCursor,
   readWatermark,
@@ -36,3 +39,4 @@ export {
   writeResumeCursor,
   writeWatermark,
 } from './importer-runtime.js';
+export type { RecordLink } from './importer-runtime.js';

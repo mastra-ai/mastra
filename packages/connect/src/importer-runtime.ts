@@ -138,6 +138,81 @@ export async function clearHighWater(state: KnowledgeImporterState, key: string)
 }
 
 /**
+ * A relationship a record asserts toward another node, stored as record
+ * metadata (`{ links: RecordLink[] }`) and resolved to graph edges at render
+ * time by the Factory graph route. `address` is the preferred handle — the
+ * target's stable node address, resolved against the window's node
+ * `metadata.address` map. `name` is the display-name fallback for sources that
+ * only expose titles (Confluence title-links), resolved via the wikilink name
+ * resolver. `rel` is free-form ('references' | 'child-of' | 'in' | ...) and
+ * render-neutral in v1.
+ */
+export interface RecordLink {
+  readonly address?: string;
+  readonly name?: string;
+  readonly rel?: string;
+}
+
+/**
+ * Normalizes a link set into record metadata: drops entries with neither
+ * address nor name, dedups, and sorts deterministically (by `address ?? name`,
+ * then `rel`) so the array is stable for content hashing. Returns `{}` for an
+ * empty result so records without links carry no `links` key.
+ *
+ * NOTE: record metadata is NOT hashed by `contentRecordId` — providers must
+ * add the returned sorted array to their hash payload explicitly.
+ */
+export function linksMetadata(links: readonly RecordLink[]): { links?: RecordLink[] } {
+  const seen = new Set<string>();
+  const cleaned: RecordLink[] = [];
+  for (const link of links) {
+    const address = link.address?.trim() || undefined;
+    const name = link.name?.trim() || undefined;
+    if (!address && !name) continue;
+    const key = `${address ?? ''}\u0000${name ?? ''}\u0000${link.rel ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cleaned.push({
+      ...(address ? { address } : {}),
+      ...(name ? { name } : {}),
+      ...(link.rel ? { rel: link.rel } : {}),
+    });
+  }
+  cleaned.sort((a, b) => {
+    const ka = a.address ?? a.name ?? '';
+    const kb = b.address ?? b.name ?? '';
+    if (ka !== kb) return ka < kb ? -1 : 1;
+    const ra = a.rel ?? '';
+    const rb = b.rel ?? '';
+    return ra < rb ? -1 : ra > rb ? 1 : 0;
+  });
+  return cleaned.length > 0 ? { links: cleaned } : {};
+}
+
+/**
+ * Node self-identification metadata. The graph route resolves `RecordLink`
+ * addresses against the window's nodes keyed on this metadata — every importer
+ * stamps it at upsert time. `aliases` covers alternative address forms links
+ * may arrive in (e.g. Linear doc slug URLs).
+ */
+export function nodeSelfMetadata(
+  address: string,
+  aliases?: readonly string[],
+): { address: string; addressAliases?: string[] } {
+  return aliases && aliases.length > 0 ? { address, addressAliases: [...aliases] } : { address };
+}
+
+/**
+ * Replaces wikilink brackets in imported body text with fullwidth lookalikes
+ * (`[[` → `［［`, `]]` → `］］`) so source content can never mint name-resolved
+ * edges through the graph route's wikilink parser. Relationships from
+ * importers travel exclusively through `RecordLink` metadata.
+ */
+export function neutralizeWikilinks(text: string): string {
+  return text.replaceAll('[[', '［［').replaceAll(']]', '］］');
+}
+
+/**
  * Deterministic UUID-shaped record id derived from arbitrary content. Two calls
  * with the same content produce the same id, so idempotent appends dedupe
  * naturally. Copy of Tyler's shipyard importer pattern (sha256 → RFC-4122 shape).
