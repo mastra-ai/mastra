@@ -41,6 +41,7 @@ function createShellOutputContext() {
       pendingAskUserComponents: new Map(),
       pendingSubmitPlanComponents: new Map(),
       chatContainer: new Container(),
+      options: { backgroundToolsEnabled: true },
       ui: { requestRender },
     },
   } as any;
@@ -284,6 +285,7 @@ describe('tool event handlers', () => {
         pendingSubmitPlanComponents: new Map(),
         allToolComponents: [],
         seenToolCallIds: new Set(),
+        options: { backgroundToolsEnabled: true },
         session: {
           displayState: {
             get: () => ({ toolInputBuffers }),

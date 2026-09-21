@@ -277,6 +277,7 @@ describe('headless goal parity', () => {
         create: vi.fn(),
         setSetting: vi.fn(),
       },
+      state: { get: vi.fn().mockResolvedValue({}) },
       identity: { getResourceId: vi.fn(() => 'resource-1') },
     };
 
@@ -325,6 +326,7 @@ describe('headless goal parity', () => {
         create: vi.fn(),
         setSetting: vi.fn(),
       },
+      state: { get: vi.fn().mockResolvedValue({}) },
       identity: { getResourceId: vi.fn(() => 'resource-1') },
     };
 
