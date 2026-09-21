@@ -4,31 +4,58 @@ import { TraceStatus } from '@mastra/core/storage';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { TracesDataListEntityCell, TracesDataListStatusCell } from '../traces-data-list-cells';
+import { TracesDataListStatusCell, TracesDataListTypeCell } from '../traces-data-list-cells';
 
 afterEach(cleanup);
 
-// The observability `EntityType` enum values are lowercase. These guard that the icon helper follows
+// The observability `EntityType` enum values are lowercase. These guard that the cell follows
 // the enum values while still tolerating uppercase strings from stale URLs or fixtures.
-describe('TracesDataListEntityCell entity icon', () => {
-  const renderCell = (entityType: string) =>
-    render(<TracesDataListEntityCell entityType={entityType} entityName="x" />);
+describe('TracesDataListTypeCell', () => {
+  const renderCell = (entityType?: string | null) => render(<TracesDataListTypeCell entityType={entityType} />);
+  const hasIcon = (entityType: string) => renderCell(entityType).container.querySelector('svg') !== null;
 
-  it('renders an icon for the lowercase stored value "agent"', () => {
-    expect(renderCell(EntityType.AGENT).container.querySelector('svg')).not.toBeNull();
+  describe('when the entity type is a known enum value', () => {
+    it.each([
+      [EntityType.AGENT, 'Agent'],
+      [EntityType.WORKFLOW_RUN, 'Workflow'],
+      [EntityType.WORKFLOW_STEP, 'Step'],
+      [EntityType.TOOL, 'Tool'],
+      [EntityType.SCORER, 'Scorer'],
+      [EntityType.MEMORY, 'Memory'],
+      [EntityType.INPUT_PROCESSOR, 'Processor'],
+      [EntityType.INPUT_STEP_PROCESSOR, 'Processor'],
+      [EntityType.OUTPUT_PROCESSOR, 'Processor'],
+      [EntityType.OUTPUT_STEP_PROCESSOR, 'Processor'],
+      [EntityType.TOOL_RESULT_PROCESSOR, 'Processor'],
+      [EntityType.RAG_INGESTION, 'RAG'],
+      [EntityType.TRAJECTORY, 'Trajectory'],
+    ])('renders an icon and the "%s" label as %s', (entityType, label) => {
+      expect(hasIcon(entityType)).toBe(true);
+      expect(screen.getByText(label)).not.toBeNull();
+    });
   });
 
-  it('renders an icon for the lowercase stored value "workflow_run"', () => {
-    expect(renderCell(EntityType.WORKFLOW_RUN).container.querySelector('svg')).not.toBeNull();
+  describe('when the entity type is a legacy uppercase value', () => {
+    it('still renders an icon and label', () => {
+      expect(hasIcon('AGENT')).toBe(true);
+      expect(screen.getByText('Agent')).not.toBeNull();
+      cleanup();
+      expect(hasIcon('WORKFLOW')).toBe(true);
+      expect(screen.getByText('Workflow')).not.toBeNull();
+    });
   });
 
-  it('still renders an icon for legacy uppercase values', () => {
-    expect(renderCell('AGENT').container.querySelector('svg')).not.toBeNull();
-    expect(renderCell('WORKFLOW').container.querySelector('svg')).not.toBeNull();
-  });
+  describe('when the entity type is unknown or missing', () => {
+    it('renders a dash and no icon for an unknown type', () => {
+      expect(hasIcon('something_else')).toBe(false);
+      expect(screen.getByText('-')).not.toBeNull();
+    });
 
-  it('renders no icon for entity types that are neither agent nor workflow', () => {
-    expect(renderCell('memory').container.querySelector('svg')).toBeNull();
+    it('renders a dash when the type is null', () => {
+      const { container } = renderCell(null);
+      expect(container.querySelector('svg')).toBeNull();
+      expect(screen.getByText('-')).not.toBeNull();
+    });
   });
 });
 

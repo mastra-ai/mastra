@@ -12,7 +12,7 @@ import { DataListTopCell, DataListTopCellWithTooltip } from '../data-list-top-ce
 import {
   TracesDataListNameCell,
   TracesDataListInputCell,
-  TracesDataListEntityCell,
+  TracesDataListTypeCell,
   TracesDataListStatusCell,
 } from './traces-data-list-cells';
 
@@ -35,7 +35,7 @@ export const TracesDataList = Object.assign(TracesDataListRoot, {
   CreatedCell: DataListCreatedCell,
   NameCell: TracesDataListNameCell,
   InputCell: TracesDataListInputCell,
-  EntityCell: TracesDataListEntityCell,
+  TypeCell: TracesDataListTypeCell,
   StatusCell: TracesDataListStatusCell,
   NextPageLoading: DataListNextPageLoading,
 });
