@@ -29,18 +29,11 @@ export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessages
       });
     },
     initialPageParam: 0,
-    getPreviousPageParam: (firstPage, _allPages, firstPageParam) => {
-      if (!firstPage?.hasMore) return undefined;
-      return (firstPageParam as number) + 1;
-    },
+    getPreviousPageParam: (firstPage, _allPages, firstPageParam) =>
+      firstPage?.hasMore ? firstPageParam + 1 : undefined,
     // Nothing calls fetchNextPage; this walks a refetch back down the loaded pages
     // (2 → 1 → 0), so dropping it would collapse the cache to the oldest page.
-    getNextPageParam: (_lastPage, _allPages, lastPageParam) => {
-      if (typeof lastPageParam === 'number' && lastPageParam > 0) {
-        return lastPageParam - 1;
-      }
-      return undefined;
-    },
+    getNextPageParam: (_lastPage, _allPages, lastPageParam) => (lastPageParam > 0 ? lastPageParam - 1 : undefined),
     enabled: memory && Boolean(threadId),
     staleTime: 0,
     gcTime: 0,
