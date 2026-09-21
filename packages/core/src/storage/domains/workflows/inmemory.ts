@@ -94,6 +94,7 @@ import {
   WorkflowSnapshotHandoffFenceError,
   compareWorkflowSnapshotHandoffCursors,
   materializeWorkflowSnapshotHandoffSnapshot,
+  pinWorkflowCasGuardValue,
   validateWorkflowSnapshotHandoffFence,
   validateWorkflowSnapshotHandoffIdentity,
   validateWorkflowSnapshotHandoffLimit,
@@ -225,7 +226,7 @@ function materializeTerminalSnapshot(snapshot: WorkflowRunState): WorkflowRunSta
   return materialized;
 }
 
-function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknown {
+function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErrorToJSONProbe = false): unknown {
   if (value === null || typeof value !== 'object') return value;
   const cached = seen.get(value as object);
   if (cached !== undefined) return cached;
@@ -246,7 +247,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     const out = new Map();
     seen.set(value, out);
     for (const [k, v] of value) {
-      out.set(deepCloneForRun(k, seen), deepCloneForRun(v, seen));
+      out.set(deepCloneForRun(k, seen, skipErrorToJSONProbe), deepCloneForRun(v, seen, skipErrorToJSONProbe));
     }
     return out;
   }
@@ -255,7 +256,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     const out = new Set();
     seen.set(value, out);
     for (const v of value) {
-      out.add(deepCloneForRun(v, seen));
+      out.add(deepCloneForRun(v, seen, skipErrorToJSONProbe));
     }
     return out;
   }
@@ -291,6 +292,10 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     // deep-cloned with source enumerability, accessors are preserved verbatim
     // and never invoked on the source — a getter or toJSON mutating `this`
     // during observation must only ever affect the clone, not the stored row.
+    // Enumerable getters resolve in a second pass so `this` already carries
+    // every property, matching the fully populated object JSON.stringify
+    // observes; resolving them mid-pass could read a not-yet-copied field.
+    const deferredGetters: { key: PropertyKey; get: () => unknown }[] = [];
     for (const key of Reflect.ownKeys(value)) {
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (!descriptor) continue;
@@ -306,33 +311,43 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
           });
           continue;
         }
-        // Accessors are never invoked on the source — a getter mutating `this`
-        // during observation must only affect the clone. JSON.stringify
-        // resolves enumerable getters, so resolve them on the clone for a
-        // matching projection; non-enumerable accessors stay live as
-        // toJSON/method backing.
-        Object.defineProperty(outRecord, key, descriptor);
         if (descriptor.enumerable && typeof descriptor.get === 'function') {
-          const resolved = deepCloneForRun(outRecord[key], seen);
-          Object.defineProperty(outRecord, key, {
-            configurable: true,
-            writable: true,
-            enumerable: true,
-            value: resolved,
-          });
+          // JSON.stringify resolves enumerable getters against the complete
+          // object — defer so `this` sees the fully populated clone, then
+          // install the resolved value. Never copy an enumerable accessor
+          // verbatim: a live getter left on the stored clone would re-resolve
+          // on every later observation while durable adapters persist the
+          // resolved value once.
+          deferredGetters.push({ key, get: descriptor.get });
+          continue;
         }
+        Object.defineProperty(outRecord, key, descriptor);
         continue;
       }
       if (key === 'cause' && descriptor.value === undefined) continue;
       const cloned =
         key === 'message' || key === 'name' || key === 'stack'
           ? descriptor.value
-          : deepCloneForRun(descriptor.value, seen);
+          : deepCloneForRun(descriptor.value, seen, skipErrorToJSONProbe);
       Object.defineProperty(outRecord, key, {
         configurable: true,
         writable: true,
         enumerable: descriptor.enumerable,
         value: cloned,
+      });
+    }
+    // JSON.stringify resolves enumerable getters once, against the complete
+    // object — do the same on the clone, then install the resolved value so
+    // canonical observations stay stable. The deferred keys were never
+    // defined in pass one, so defineProperty also works for getters the
+    // source declared non-configurable.
+    for (const { key, get } of deferredGetters) {
+      const resolved = deepCloneForRun(get.call(outRecord), seen, skipErrorToJSONProbe);
+      Object.defineProperty(outRecord, key, {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: resolved,
       });
     }
     // For `stack`, defer to the Error's own `toJSON` if present — that's how
@@ -341,11 +356,18 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     // attached toJSON omits stack from the JSON form). We only honour
     // toJSON's stack signal here, not its other fields, to avoid pulling in
     // subclass extras like Chai AssertionError.toJSON's name/ok/stack that
-    // the agent-loop snapshot tests don't expect. Invoke it on the clone so a
-    // self-mutating serializer cannot corrupt the source.
-    if (Object.getOwnPropertyDescriptor(out, 'stack') !== undefined && typeof outRecord.toJSON === 'function') {
+    // the agent-loop snapshot tests don't expect. Invoke it on a throwaway
+    // clone so a counting or self-mutating serializer neither corrupts the
+    // stored row nor shifts the durable projection on later serializations.
+    if (
+      !skipErrorToJSONProbe &&
+      Object.getOwnPropertyDescriptor(out, 'stack') !== undefined &&
+      typeof outRecord.toJSON === 'function'
+    ) {
       try {
-        const serialized = (outRecord.toJSON as () => unknown).call(out);
+        const probe = deepCloneForRun(out, new WeakMap(), true) as Record<PropertyKey, unknown>;
+        const probeToJSON = probe.toJSON;
+        const serialized = typeof probeToJSON === 'function' ? probeToJSON.call(probe) : undefined;
         if (serialized && typeof serialized === 'object' && !('stack' in serialized)) {
           delete outRecord.stack;
         }
@@ -360,7 +382,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     const out: unknown[] = new Array(value.length);
     seen.set(value, out);
     for (let i = 0; i < value.length; i++) {
-      out[i] = deepCloneForRun(value[i], seen);
+      out[i] = deepCloneForRun(value[i], seen, skipErrorToJSONProbe);
     }
     return out;
   }
@@ -387,30 +409,47 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
   // enumerability — because a copied `toJSON` may read backing fields that sit
   // off the JSON surface, and durable adapters stringify the full source.
   // Accessors are never invoked on the source — a getter mutating `this`
-  // during observation must only affect the clone. JSON.stringify resolves
-  // enumerable getters, so resolve them on the clone for a matching
-  // projection; non-enumerable accessors stay live as toJSON/method backing.
+  // during observation must only affect the clone. Enumerable getters are
+  // deferred to a second pass over the fully populated clone; non-enumerable
+  // accessors stay live as toJSON/method backing.
+  const deferredGetters: { key: PropertyKey; get: () => unknown }[] = [];
   for (const key of Reflect.ownKeys(value as object)) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor) continue;
     if (!('value' in descriptor)) {
-      Object.defineProperty(out, key, descriptor);
       if (descriptor.enumerable && typeof descriptor.get === 'function') {
-        const resolved = deepCloneForRun((out as Record<PropertyKey, unknown>)[key], seen);
-        Object.defineProperty(out, key, {
-          configurable: true,
-          writable: true,
-          enumerable: true,
-          value: resolved,
-        });
+        // JSON.stringify resolves enumerable getters against the complete
+        // object — defer so `this` sees the fully populated clone, then
+        // install the resolved value. Never copy an enumerable accessor
+        // verbatim: a live getter left on the stored clone would re-resolve
+        // on every later observation while durable adapters persist the
+        // resolved value once.
+        deferredGetters.push({ key, get: descriptor.get });
+        continue;
       }
+      Object.defineProperty(out, key, descriptor);
       continue;
     }
     Object.defineProperty(out, key, {
       configurable: true,
       writable: true,
       enumerable: descriptor.enumerable,
-      value: deepCloneForRun(descriptor.value, seen),
+      value: deepCloneForRun(descriptor.value, seen, skipErrorToJSONProbe),
+    });
+  }
+  // Resolve enumerable getters in a second pass so `this` sees the fully
+  // populated clone — the same surface JSON.stringify observes on the
+  // source — then install the resolved value for a stable canonical
+  // projection. The deferred keys were never defined in pass one, so
+  // defineProperty also works for getters the source declared
+  // non-configurable.
+  for (const { key, get } of deferredGetters) {
+    const resolved = deepCloneForRun(get.call(out), seen, skipErrorToJSONProbe);
+    Object.defineProperty(out, key, {
+      configurable: true,
+      writable: true,
+      enumerable: true,
+      value: resolved,
     });
   }
   return out;
@@ -567,7 +606,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
+      // Object-valued guards are pinned to their JSON projection: the caller's
+      // retained reference could otherwise mutate the fence contents while
+      // caller serialization runs inside the mutation loop.
+      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
       nextLifecycleResumeAttempt,
       resourceId,
       requestContext,
@@ -595,7 +637,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
+      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
       resourceId,
     };
     return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
@@ -623,7 +665,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
+      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
       resourceId,
       shouldPersistSnapshot,
       receiptKey,
@@ -2174,8 +2216,16 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     // Pin the CAS fields and state options once: getters on `opts` would
     // otherwise re-run per retry and could hand each attempt different
     // expectations.
-    const { expectedStatus, expectedExecutionGeneration, expectedLifecycleResumeAttempt, finalState, ...stateOptions } =
-      opts;
+    const {
+      expectedStatus: rawExpectedStatus,
+      expectedExecutionGeneration,
+      expectedLifecycleResumeAttempt,
+      finalState,
+      ...stateOptions
+    } = opts;
+    // `expectedStatus` may be an array the caller retains — pin its contents so
+    // reentrant serialization inside the loop cannot retarget the CAS guard.
+    const expectedStatus = pinWorkflowCasGuardValue(rawExpectedStatus);
     for (let attempt = 1; ; attempt++) {
       const run = this.db.workflows.get(key);
       this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);

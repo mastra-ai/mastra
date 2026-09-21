@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { MastraError } from '@mastra/core/error';
 import {
   createEmptyWorkflowSnapshot,
   createWorkflowTerminalGraphFingerprint,
@@ -377,20 +378,27 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     const workflowName = `crash-${randomUUID()}`;
     const runId = randomUUID();
     const injected = new Error('injected commit loss');
-    const original = (workflows as any).lockWorkflowSnapshotHandoff;
     (workflows as any).lockWorkflowSnapshotHandoff = async () => {
       throw injected;
     };
-    await expect(
-      workflows.claimWorkflowSnapshotHandoff({
-        workflowName,
-        runId,
-        expectedCanonical: { kind: 'absent' },
-        snapshot: snapshot(runId, 'waiting'),
-        mutationFence: 'crash-owner',
-      }),
-    ).rejects.toBe(injected);
-    delete (workflows as any).lockWorkflowSnapshotHandoff;
+    try {
+      const failure = await workflows
+        .claimWorkflowSnapshotHandoff({
+          workflowName,
+          runId,
+          expectedCanonical: { kind: 'absent' },
+          snapshot: snapshot(runId, 'waiting'),
+          mutationFence: 'crash-owner',
+        })
+        .then(
+          () => null,
+          error => error,
+        );
+      expect(failure).toBeInstanceOf(MastraError);
+      expect(failure.cause).toBe(injected);
+    } finally {
+      delete (workflows as any).lockWorkflowSnapshotHandoff;
+    }
 
     // The provisional parent revision and the handoff row roll back together.
     const left = await store.db.any<{ handoffs: number; revisions: number }>(
@@ -935,6 +943,94 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     ).resolves.toMatchObject({ status: 'created' });
   });
 
+  it('rejects NUL characters in fence and identity fields', async () => {
+    const runId = randomUUID();
+    // PostgreSQL text columns reject NUL outright; the in-memory adapter now
+    // rejects it too so a fence cannot exist on one adapter and not the other.
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: `nul-${randomUUID()}`,
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner\0token',
+      }),
+    ).rejects.toThrow(TypeError);
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'wf\0',
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).rejects.toThrow(TypeError);
+  });
+
+  it('pins object CAS guards captured before the transaction', async () => {
+    const workflowName = `guard-pin-${randomUUID()}`;
+    const runId = randomUUID();
+    const stored = snapshot(runId, 'suspended');
+    stored.executionGeneration = 'gen-1';
+    stored.lifecycleResumeAttempt = 0;
+    stored.lifecycleStepStates = { wait: { stepCallId: 'call-1', stepAttempt: 1 } };
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    const resumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash: `sha256:${'0'.repeat(64)}` as `sha256:${string}`,
+      executionGeneration: 'gen-1',
+      lifecycleResumeAttempt: 0,
+      lifecycleStepStates: { wait: { stepCallId: 'call-1', stepAttempt: 1 } },
+      nextLifecycleResumeAttempt: 1,
+      operationReplayContext: { version: 1 as const, steps: [] },
+    };
+
+    // Block the resume transaction at its row lock, mutate the caller's
+    // retained guard object, then release: the admitted fence must compare
+    // the pinned capture, not the mutated reference.
+    let releaseHold: () => void = () => {};
+    const holdOpen = new Promise<void>(resolve => (releaseHold = resolve));
+    let markUpdated: () => void = () => {};
+    const updated = new Promise<void>(resolve => (markUpdated = resolve));
+    const holdTx = store.db.tx(async t => {
+      await t.none(
+        `UPDATE mastra_workflow_snapshot SET "updatedAtZ" = clock_timestamp() WHERE workflow_name = $1 AND run_id = $2`,
+        [workflowName, runId],
+      );
+      markUpdated();
+      await holdOpen;
+    });
+    await updated;
+
+    const admitPromise = workflows.admitWorkflowResume(resumeInput);
+    try {
+      const deadline = Date.now() + 10_000;
+      for (;;) {
+        const { n } = await store.db.one<{ n: number }>(
+          `SELECT count(*)::int AS n
+           FROM pg_locks blocked
+           WHERE NOT blocked.granted
+             AND EXISTS (
+               SELECT 1 FROM pg_locks rel
+               WHERE rel.pid = blocked.pid
+                 AND rel.locktype = 'relation'
+                 AND rel.relation IN ('mastra_workflow_snapshot'::regclass, 'mastra_workflow_parent_revisions'::regclass)
+             )`,
+        );
+        if (n > 0) break;
+        if (Date.now() > deadline) throw new Error('resume never blocked on the workflow row lock');
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      resumeInput.lifecycleStepStates.wait.stepAttempt = 99;
+    } finally {
+      releaseHold();
+    }
+    await holdTx;
+    await expect(admitPromise).resolves.toMatchObject({ status: 'admitted' });
+  }, 30_000);
+
   it('keeps draining eligible rows when a candidate is skipped mid-batch', async () => {
     const prefix = `prune-race-${randomUUID()}`;
     const nameA = `${prefix}-a`;
@@ -983,11 +1079,31 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
 
     // Wait until the prune DELETE is actually blocked on the holder's row lock
     // (an ungranted transactionid lock) before releasing it — that ordering
-    // guarantees the candidate select already ran against the stale row.
+    // guarantees the candidate select already ran against the stale row. The
+    // probe is scoped to the snapshot relation and the blocked transaction so
+    // unrelated locks cannot trip it.
     try {
       const deadline = Date.now() + 10_000;
       for (;;) {
-        const { n } = await store.db.one<{ n: number }>(`SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted`);
+        const { n } = await store.db.one<{ n: number }>(
+          `SELECT count(*)::int AS n
+           FROM pg_locks blocked
+           WHERE NOT blocked.granted
+             AND blocked.locktype = 'transactionid'
+             AND EXISTS (
+               SELECT 1 FROM pg_locks rel
+               WHERE rel.pid = blocked.pid
+                 AND rel.locktype = 'relation'
+                 AND rel.relation = 'mastra_workflow_snapshot'::regclass
+             )
+             AND EXISTS (
+               SELECT 1 FROM pg_locks holder
+               WHERE holder.locktype = 'transactionid'
+                 AND holder.transactionid = blocked.transactionid
+                 AND holder.granted
+                 AND holder.pid <> blocked.pid
+             )`,
+        );
         if (n > 0) break;
         if (Date.now() > deadline) throw new Error('prune never blocked on the snapshot row lock');
         await new Promise(resolve => setTimeout(resolve, 25));

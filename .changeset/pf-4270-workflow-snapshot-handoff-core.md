@@ -8,6 +8,7 @@ Added framework-native workflow snapshot handoff records with opaque mutation fe
 await workflows.claimWorkflowSnapshotHandoff({
   workflowName,
   runId,
+  expectedCanonical: { kind: 'absent' },
   snapshot,
   mutationFence,
 });

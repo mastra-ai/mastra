@@ -67,6 +67,7 @@ import {
   rollbackWorkflowResumeRecord,
   WorkflowSnapshotHandoffFenceError,
   materializeWorkflowSnapshotHandoffSnapshot,
+  pinWorkflowCasGuardValue,
   validateWorkflowSnapshotHandoffFence,
   validateWorkflowSnapshotHandoffIdentity,
   validateWorkflowSnapshotHandoffLimit,
@@ -458,7 +459,10 @@ export class WorkflowsPG extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
+      // Object-valued guards are pinned to their JSON projection: the caller's
+      // retained reference could otherwise mutate the fence contents while the
+      // transaction awaits row locks.
+      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
       nextLifecycleResumeAttempt,
       resourceId,
       requestContext,
@@ -491,7 +495,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
+      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
       resourceId,
     };
     return this.mutateWorkflowResume(
@@ -524,7 +528,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
+      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
       resourceId,
       shouldPersistSnapshot,
       receiptKey,
@@ -1741,6 +1745,30 @@ export class WorkflowsPG extends WorkflowsStorage {
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         details: { workflowName, runId },
+      },
+      error,
+    );
+  }
+
+  private snapshotHandoffError(
+    operation: string,
+    workflowName: string | undefined,
+    runId: string | undefined,
+    error: unknown,
+  ): Error {
+    // The fence error must reach callers as its own instanceof-checkable type;
+    // validation TypeErrors/RangeErrors likewise keep their identity.
+    if (error instanceof WorkflowSnapshotHandoffFenceError) return error;
+    if (error instanceof TypeError || error instanceof RangeError) return error;
+    const details: Record<string, string> = {};
+    if (workflowName !== undefined) details.workflowName = workflowName;
+    if (runId !== undefined) details.runId = runId;
+    return new MastraError(
+      {
+        id: createStorageErrorId('PG', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details,
       },
       error,
     );
@@ -5156,53 +5184,57 @@ export class WorkflowsPG extends WorkflowsStorage {
         : { kind: 'absent' };
     const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
-    return this.#db.client.tx(async t => {
-      const revision = await this.lockWorkflowParentRevisionForSnapshotHandoff(t, workflowName, runId);
-      const observedCanonical = await this.lockWorkflowSnapshotHandoffCanonicalState(t, workflowName, runId);
-      if (!workflowSnapshotHandoffCanonicalStatesEqual(expectedCanonical, observedCanonical)) {
-        await this.deleteProvisionalWorkflowParentRevision(t, workflowName, runId, revision.created, 1);
-        return { status: 'conflict', observedCanonical };
-      }
-      const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
-      if (existing) {
-        const same =
-          existing.mutationFence === mutationFence &&
-          existing.resourceId === resourceId &&
-          workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
-        if (existing.status === 'completed' && existing.mutationFence !== mutationFence) {
-          return { status: 'conflict', record: existing };
+    try {
+      return await this.#db.client.tx(async t => {
+        const revision = await this.lockWorkflowParentRevisionForSnapshotHandoff(t, workflowName, runId);
+        const observedCanonical = await this.lockWorkflowSnapshotHandoffCanonicalState(t, workflowName, runId);
+        if (!workflowSnapshotHandoffCanonicalStatesEqual(expectedCanonical, observedCanonical)) {
+          await this.deleteProvisionalWorkflowParentRevision(t, workflowName, runId, revision.created, 1);
+          return { status: 'conflict', observedCanonical };
         }
-        return {
-          status: existing.status === 'completed' ? 'completed' : same ? 'existing' : 'conflict',
-          record: existing,
-        } as ClaimWorkflowSnapshotHandoffResult;
-      }
-      const clock = await t.one<{ now_ms: string }>(
-        `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
-      );
-      const now = Number(clock.now_ms);
-      if (!Number.isSafeInteger(now) || now < 0) throw new TypeError('Invalid PostgreSQL workflow handoff clock');
-      await t.none(
-        `INSERT INTO ${this.workflowSnapshotHandoffTableName()}
+        const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
+        if (existing) {
+          const same =
+            existing.mutationFence === mutationFence &&
+            existing.resourceId === resourceId &&
+            workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
+          if (existing.status === 'completed' && existing.mutationFence !== mutationFence) {
+            return { status: 'conflict', record: existing };
+          }
+          return {
+            status: existing.status === 'completed' ? 'completed' : same ? 'existing' : 'conflict',
+            record: existing,
+          } as ClaimWorkflowSnapshotHandoffResult;
+        }
+        const clock = await t.one<{ now_ms: string }>(
+          `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
+        );
+        const now = Number(clock.now_ms);
+        if (!Number.isSafeInteger(now) || now < 0) throw new TypeError('Invalid PostgreSQL workflow handoff clock');
+        await t.none(
+          `INSERT INTO ${this.workflowSnapshotHandoffTableName()}
          (workflow_name, run_id, version, status, resource_id, snapshot, mutation_fence, created_at, updated_at)
          VALUES ($1, $2, 1, 'pending', $3, $4, $5, $6, $6)`,
-        [workflowName, runId, resourceId ?? null, serializedSnapshot, mutationFence, now],
-      );
-      return {
-        status: 'created',
-        record: {
-          version: 1,
-          workflowName,
-          runId,
-          status: 'pending',
-          ...(resourceId === undefined ? {} : { resourceId }),
-          snapshot: materializedSnapshot,
-          mutationFence,
-          createdAt: now,
-          updatedAt: now,
-        },
-      };
-    });
+          [workflowName, runId, resourceId ?? null, serializedSnapshot, mutationFence, now],
+        );
+        return {
+          status: 'created',
+          record: {
+            version: 1,
+            workflowName,
+            runId,
+            status: 'pending',
+            ...(resourceId === undefined ? {} : { resourceId }),
+            snapshot: materializedSnapshot,
+            mutationFence,
+            createdAt: now,
+            updatedAt: now,
+          },
+        };
+      });
+    } catch (error) {
+      throw this.snapshotHandoffError('CLAIM_WORKFLOW_SNAPSHOT_HANDOFF', workflowName, runId, error);
+    }
   }
 
   async transitionWorkflowSnapshotHandoff(
@@ -5223,45 +5255,49 @@ export class WorkflowsPG extends WorkflowsStorage {
     const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
     const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
-    return this.#db.client.tx(async t => {
-      await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
-      const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
-      if (!existing) return { status: 'missing' };
-      if (existing.status === 'completed') {
-        return existing.mutationFence === mutationFence
-          ? { status: 'completed', record: existing }
-          : { status: 'conflict', record: existing };
-      }
-      const expectedMatches =
-        existing.mutationFence === mutationFence &&
-        existing.resourceId === expectedResourceId &&
-        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
-      if (!expectedMatches) return { status: 'conflict', record: existing };
-      const sameReplacement =
-        existing.resourceId === resourceId &&
-        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
-      if (sameReplacement) return { status: 'existing', record: existing };
-      const clock = await t.one<{ now_ms: string }>(
-        `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
-      );
-      const now = Number(clock.now_ms);
-      if (!Number.isSafeInteger(now) || now < 0) throw new TypeError('Invalid PostgreSQL workflow handoff clock');
-      await t.none(
-        `UPDATE ${this.workflowSnapshotHandoffTableName()}
+    try {
+      return await this.#db.client.tx(async t => {
+        await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
+        const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
+        if (!existing) return { status: 'missing' };
+        if (existing.status === 'completed') {
+          return existing.mutationFence === mutationFence
+            ? { status: 'completed', record: existing }
+            : { status: 'conflict', record: existing };
+        }
+        const expectedMatches =
+          existing.mutationFence === mutationFence &&
+          existing.resourceId === expectedResourceId &&
+          workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
+        if (!expectedMatches) return { status: 'conflict', record: existing };
+        const sameReplacement =
+          existing.resourceId === resourceId &&
+          workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
+        if (sameReplacement) return { status: 'existing', record: existing };
+        const clock = await t.one<{ now_ms: string }>(
+          `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
+        );
+        const now = Number(clock.now_ms);
+        if (!Number.isSafeInteger(now) || now < 0) throw new TypeError('Invalid PostgreSQL workflow handoff clock');
+        await t.none(
+          `UPDATE ${this.workflowSnapshotHandoffTableName()}
          SET resource_id = $1, snapshot = $2, updated_at = $3
          WHERE workflow_name = $4 AND run_id = $5`,
-        [resourceId ?? null, serializedSnapshot, now, workflowName, runId],
-      );
-      return {
-        status: 'transitioned',
-        record: {
-          ...existing,
-          ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
-          snapshot: materializedSnapshot,
-          updatedAt: now,
-        },
-      };
-    });
+          [resourceId ?? null, serializedSnapshot, now, workflowName, runId],
+        );
+        return {
+          status: 'transitioned',
+          record: {
+            ...existing,
+            ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
+            snapshot: materializedSnapshot,
+            updatedAt: now,
+          },
+        };
+      });
+    } catch (error) {
+      throw this.snapshotHandoffError('TRANSITION_WORKFLOW_SNAPSHOT_HANDOFF', workflowName, runId, error);
+    }
   }
 
   async completeWorkflowSnapshotHandoff(
@@ -5282,43 +5318,47 @@ export class WorkflowsPG extends WorkflowsStorage {
     const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
     const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
-    return this.#db.client.tx(async t => {
-      await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
-      const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
-      if (!existing) return { status: 'missing' };
-      if (existing.status === 'completed') {
-        return existing.mutationFence === mutationFence
-          ? { status: 'already_completed', record: existing }
-          : { status: 'conflict', record: existing };
-      }
-      const expectedMatches =
-        existing.mutationFence === mutationFence &&
-        existing.resourceId === expectedResourceId &&
-        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
-      if (!expectedMatches) return { status: 'conflict', record: existing };
-      const clock = await t.one<{ now_ms: string }>(
-        `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
-      );
-      const now = Number(clock.now_ms);
-      if (!Number.isSafeInteger(now) || now < 0) throw new TypeError('Invalid PostgreSQL workflow handoff clock');
-      await t.none(
-        `UPDATE ${this.workflowSnapshotHandoffTableName()}
-         SET status = 'completed', resource_id = $1, snapshot = $2, updated_at = $3, completed_at = $3
-         WHERE workflow_name = $4 AND run_id = $5`,
-        [resourceId ?? null, serializedSnapshot, now, workflowName, runId],
-      );
-      return {
-        status: 'completed',
-        record: {
-          ...existing,
+    try {
+      return await this.#db.client.tx(async t => {
+        await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
+        const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
+        if (!existing) return { status: 'missing' };
+        if (existing.status === 'completed') {
+          return existing.mutationFence === mutationFence
+            ? { status: 'already_completed', record: existing }
+            : { status: 'conflict', record: existing };
+        }
+        const expectedMatches =
+          existing.mutationFence === mutationFence &&
+          existing.resourceId === expectedResourceId &&
+          workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
+        if (!expectedMatches) return { status: 'conflict', record: existing };
+        const clock = await t.one<{ now_ms: string }>(
+          `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
+        );
+        const now = Number(clock.now_ms);
+        if (!Number.isSafeInteger(now) || now < 0) throw new TypeError('Invalid PostgreSQL workflow handoff clock');
+        await t.none(
+          `UPDATE ${this.workflowSnapshotHandoffTableName()}
+           SET status = 'completed', resource_id = $1, snapshot = $2, updated_at = $3, completed_at = $3
+           WHERE workflow_name = $4 AND run_id = $5`,
+          [resourceId ?? null, serializedSnapshot, now, workflowName, runId],
+        );
+        return {
           status: 'completed',
-          ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
-          snapshot: materializedSnapshot,
-          updatedAt: now,
-          completedAt: now,
-        },
-      };
-    });
+          record: {
+            ...existing,
+            status: 'completed',
+            ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
+            snapshot: materializedSnapshot,
+            updatedAt: now,
+            completedAt: now,
+          },
+        };
+      });
+    } catch (error) {
+      throw this.snapshotHandoffError('COMPLETE_WORKFLOW_SNAPSHOT_HANDOFF', workflowName, runId, error);
+    }
   }
 
   async listWorkflowSnapshotHandoffs(
@@ -5344,14 +5384,19 @@ export class WorkflowsPG extends WorkflowsStorage {
       );
     }
     values.push(limit + 1);
-    const rows = await this.#db.client.any<Record<string, unknown>>(
-      `SELECT * FROM ${this.workflowSnapshotHandoffTableName()}
-       ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
-       ORDER BY updated_at ASC, workflow_name COLLATE "C" ASC, run_id COLLATE "C" ASC
-       LIMIT $${values.length}`,
-      values,
-    );
-    const decoded = rows.map(row => this.decodeWorkflowSnapshotHandoff(row));
+    let decoded: WorkflowSnapshotHandoffRecord[];
+    try {
+      const rows = await this.#db.client.any<Record<string, unknown>>(
+        `SELECT * FROM ${this.workflowSnapshotHandoffTableName()}
+         ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+         ORDER BY updated_at ASC, workflow_name COLLATE "C" ASC, run_id COLLATE "C" ASC
+         LIMIT $${values.length}`,
+        values,
+      );
+      decoded = rows.map(row => this.decodeWorkflowSnapshotHandoff(row));
+    } catch (error) {
+      throw this.snapshotHandoffError('LIST_WORKFLOW_SNAPSHOT_HANDOFFS', input.workflowName, undefined, error);
+    }
     const page = decoded.slice(0, limit);
     const hasMore = decoded.length > limit;
     const last = page.at(-1);
@@ -5467,8 +5512,16 @@ export class WorkflowsPG extends WorkflowsStorage {
     // mutate expectations while the row locks are being acquired.
     // `expectedStatus` is a compare-and-set guard, not state; `finalState` is
     // likewise a directive rather than snapshot state.
-    const { expectedStatus, expectedExecutionGeneration, expectedLifecycleResumeAttempt, finalState, ...stateOptions } =
-      opts;
+    const {
+      expectedStatus: rawExpectedStatus,
+      expectedExecutionGeneration,
+      expectedLifecycleResumeAttempt,
+      finalState,
+      ...stateOptions
+    } = opts;
+    // `expectedStatus` may be an array the caller retains — pin its contents so
+    // mid-transaction mutation cannot retarget the CAS guard.
+    const expectedStatus = pinWorkflowCasGuardValue(rawExpectedStatus);
     try {
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {

@@ -1230,4 +1230,163 @@ describe('workflow snapshot handoff', () => {
       }),
     ).resolves.toMatchObject({ status: 'created' });
   });
+
+  it('rejects NUL characters in fence and identity fields', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const runId = 'nul-run';
+    // PostgreSQL text columns reject NUL outright; accepting it in-memory
+    // would let a fence exist on one adapter and not the other.
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'nul-workflow',
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner\0token',
+      }),
+    ).rejects.toThrow(TypeError);
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'wf\0',
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).rejects.toThrow(TypeError);
+  });
+
+  it('resolves enumerable getters against the fully populated clone', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'getter-order';
+    const runId = 'getter-order-run';
+    const source = snapshot(runId, 'success');
+    // JSON.stringify observes the complete object: `copied` must read the
+    // later `backing` field, not a partially built clone.
+    const value: Record<string, unknown> = {};
+    Object.defineProperty(value, 'copied', {
+      enumerable: true,
+      configurable: true,
+      get() {
+        return (this as Record<string, unknown>).backing;
+      },
+    });
+    value.backing = 42;
+    source.value = value;
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: source });
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({
+      status: 'success',
+      value: { copied: 42, backing: 42 },
+    });
+    // The canonical projection must match what PostgreSQL persists — a
+    // partial-view clone would store copied:undefined and conflict here.
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: source },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('clones non-configurable enumerable getters without throwing', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'frozen-getter';
+    const runId = 'frozen-getter-run';
+    const source = snapshot(runId, 'success');
+    const value: Record<string, unknown> = {};
+    Object.defineProperty(value, 'frozen', {
+      enumerable: true,
+      configurable: false,
+      get() {
+        return 42;
+      },
+    });
+    source.value = value;
+    // JSON.stringify accepts this input; the clone must not throw redefining
+    // the accessor.
+    await expect(workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: source })).resolves.toBeUndefined();
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({
+      status: 'success',
+      value: { frozen: 42 },
+    });
+  });
+
+  it('keeps the durable projection stable across a counting Error toJSON', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'counting-error';
+    const runId = 'counting-error-run';
+    const source = snapshot(runId, 'success');
+    const err = new Error('counted');
+    (err as unknown as Record<string, unknown>).count = 0;
+    Object.defineProperty(err, 'toJSON', {
+      enumerable: true,
+      configurable: true,
+      value: function (this: Record<string, unknown>) {
+        return { count: ++(this.count as number), stack: 's' };
+      },
+    });
+    source.value = { err };
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: source });
+    // PostgreSQL persists one toJSON invocation ({count:1}); the in-memory
+    // canonical observation must project the same value every time, not a
+    // count that grows with each materialization.
+    const expected = snapshot(runId, 'success', { err: { count: 1, stack: 's' } });
+    expected.timestamp = (await workflows.loadWorkflowSnapshot({ workflowName, runId }))!.timestamp;
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: expected },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('pins object CAS guards against reentrant mutation mid-mutation', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'guard-pin';
+    const runId = 'guard-pin-run';
+    const resumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash: `sha256:${'0'.repeat(64)}` as `sha256:${string}`,
+      executionGeneration: 'gen-1',
+      lifecycleResumeAttempt: 0,
+      lifecycleStepStates: { wait: { stepCallId: 'call-1', stepAttempt: 1 } },
+      nextLifecycleResumeAttempt: 1,
+      operationReplayContext: { version: 1 as const, steps: [] },
+    };
+    let armed = false;
+    const stored = snapshot(runId, 'suspended');
+    stored.executionGeneration = 'gen-1';
+    stored.lifecycleResumeAttempt = 0;
+    stored.lifecycleStepStates = { wait: { stepCallId: 'call-1', stepAttempt: 1 } };
+    const err = new Error('trigger');
+    Object.defineProperty(err, 'toJSON', {
+      enumerable: true,
+      configurable: true,
+      value: function (this: Record<string, unknown>) {
+        if (armed) resumeInput.lifecycleStepStates.wait.stepAttempt = 99;
+        return { stack: 's' };
+      },
+    });
+    stored.value = { err };
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+    armed = true;
+    // Materializing the stored snapshot inside the mutation loop fires the
+    // armed toJSON; the admitted fence must still compare the step states the
+    // caller captured, not the mutated object.
+    await expect(workflows.admitWorkflowResume(resumeInput)).resolves.toMatchObject({
+      status: 'admitted',
+    });
+  });
 });

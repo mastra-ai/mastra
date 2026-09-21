@@ -118,17 +118,19 @@ export function validateWorkflowSnapshotHandoffFence(mutationFence: string): voi
   if (typeof mutationFence !== 'string' || mutationFence.length < 1 || mutationFence.length > 4096) {
     throw new TypeError('Workflow snapshot handoff mutationFence must be between 1 and 4096 characters');
   }
-  if (hasUnpairedSurrogate(mutationFence)) {
-    throw new TypeError('Workflow snapshot handoff mutationFence must be well-formed UTF-16');
+  if (hasUnsafeIdentityChar(mutationFence)) {
+    throw new TypeError('Workflow snapshot handoff mutationFence must be well-formed UTF-16 with no NUL characters');
   }
 }
 
-function hasUnpairedSurrogate(value: string): boolean {
-  // Durable adapters transmit strings as UTF-8; unpaired surrogates encode as
-  // U+FFFD on the PostgreSQL wire, which would rewrite fence tokens and row
-  // identities and collapse distinct in-memory keys onto one stored row.
+function hasUnsafeIdentityChar(value: string): boolean {
+  // Durable adapters transmit strings as UTF-8 into text columns: unpaired
+  // surrogates encode as U+FFFD on the PostgreSQL wire and NUL is rejected
+  // outright — either would rewrite fence tokens and row identities or fail
+  // only on durable adapters, collapsing in-memory/PostgreSQL parity.
   for (let i = 0; i < value.length; i++) {
     const unit = value.charCodeAt(i);
+    if (unit === 0) return true;
     if (unit >= 0xd800 && unit <= 0xdbff) {
       const next = value.charCodeAt(i + 1);
       if (Number.isNaN(next) || next < 0xdc00 || next > 0xdfff) return true;
@@ -147,15 +149,32 @@ export function validateWorkflowSnapshotHandoffIdentity(
   resourceId?: string,
   expectedResourceId?: string,
 ): void {
-  if (hasUnpairedSurrogate(workflowName) || hasUnpairedSurrogate(runId)) {
-    throw new TypeError('Workflow snapshot handoff workflowName/runId must be well-formed UTF-16');
+  if (hasUnsafeIdentityChar(workflowName) || hasUnsafeIdentityChar(runId)) {
+    throw new TypeError(
+      'Workflow snapshot handoff workflowName/runId must be well-formed UTF-16 with no NUL characters',
+    );
   }
   if (
-    (resourceId !== undefined && hasUnpairedSurrogate(resourceId)) ||
-    (expectedResourceId !== undefined && hasUnpairedSurrogate(expectedResourceId))
+    (resourceId !== undefined && hasUnsafeIdentityChar(resourceId)) ||
+    (expectedResourceId !== undefined && hasUnsafeIdentityChar(expectedResourceId))
   ) {
-    throw new TypeError('Workflow snapshot handoff resourceId must be well-formed UTF-16');
+    throw new TypeError('Workflow snapshot handoff resourceId must be well-formed UTF-16 with no NUL characters');
   }
+}
+
+/**
+ * Freezes a caller-owned CAS guard to the JSON projection both adapters
+ * compare, so payload getters fired during capture or mid-transaction
+ * mutation through the caller's retained reference cannot retarget the
+ * expectation after it is pinned.
+ */
+export function pinWorkflowCasGuardValue<T>(value: T): T {
+  if (value === undefined || value === null) return value;
+  const json = JSON.stringify(value);
+  if (json === undefined) {
+    throw new TypeError('Workflow CAS guard value must be JSON-serializable');
+  }
+  return JSON.parse(json) as T;
 }
 
 export function validateWorkflowSnapshotHandoffLimit(limit: number | undefined): number {
