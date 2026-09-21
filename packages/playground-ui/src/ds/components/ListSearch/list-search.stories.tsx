@@ -50,7 +50,6 @@ export const PresetValue: Story = {
     value: 'research',
     debounceMs: 0,
     size: 'sm',
-    variant: 'unstyled',
   },
   render: args => <SearchPreview {...args} />,
 };

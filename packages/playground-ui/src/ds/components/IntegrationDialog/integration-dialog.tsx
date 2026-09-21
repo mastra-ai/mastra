@@ -111,7 +111,6 @@ function IntegrationDialogContent({
           value={query}
           onChange={event => setQuery(event.target.value)}
           onReset={() => setQuery('')}
-          variant="outline"
           size="md"
         />
       </div>
