@@ -143,4 +143,34 @@ describe('createThreadOwnershipManager', () => {
     // release itself rather than leave a deleted thread advertised.
     expect(unsubscribe).toHaveBeenCalledOnce();
   });
+
+  it('does not retain a superseded attempt that resolves after the thread was re-claimed', async () => {
+    const resolvers: Array<(claim: { claimed: boolean; unsubscribe: () => void }) => void> = [];
+    const manager = createThreadOwnershipManager(
+      () =>
+        new Promise(resolve => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    // The first attempt for the thread is in flight when the thread is deleted.
+    const stale = manager.claim('thread-1');
+    manager.release('thread-1');
+
+    // The same thread id is claimed again, so a fresh attempt supersedes it.
+    const current = manager.claim('thread-1');
+
+    const staleUnsubscribe = vi.fn();
+    resolvers[0]?.({ claimed: true, unsubscribe: staleUnsubscribe });
+    await stale;
+
+    const currentUnsubscribe = vi.fn();
+    resolvers[1]?.({ claimed: true, unsubscribe: currentUnsubscribe });
+    await current;
+
+    // The attempt started before the release is superseded by the re-claim, so it
+    // must release itself instead of being retained and silently replaced.
+    expect(staleUnsubscribe).toHaveBeenCalledOnce();
+    expect(currentUnsubscribe).not.toHaveBeenCalled();
+  });
 });

@@ -25,6 +25,10 @@ export function createThreadOwnershipManager(claimThread: (threadId: string) => 
   close(): void;
 } {
   const states = new Map<string, ThreadClaimState>();
+  // Manager-scoped so the counter keeps climbing across `release`/re-claim of the
+  // same thread id: a per-thread counter restarts at 1 after a release, letting a
+  // pre-release attempt match the new state and be retained.
+  let nextGeneration = 0;
   let closed = false;
 
   const clearRetry = (state: ThreadClaimState) => {
@@ -84,7 +88,7 @@ export function createThreadOwnershipManager(claimThread: (threadId: string) => 
         existing.claim?.unsubscribe();
       }
       const state: ThreadClaimState = {
-        generation: (existing?.generation ?? 0) + 1,
+        generation: ++nextGeneration,
         retryDelayMs: OWNERSHIP_RETRY_INITIAL_DELAY_MS,
       };
       states.set(threadId, state);
