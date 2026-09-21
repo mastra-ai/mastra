@@ -4420,6 +4420,7 @@ export class Session {
     modeId: string,
     modelId: string,
     activeTurnWaiter?: Promise<never>,
+    opts: { fenceStaleRestore?: boolean } = {},
   ): Promise<void> {
     await this._waitForMessageSuspendedTokenUsageOwner(full, activeTurnWaiter);
     const reservation = this._reserveMessageSuspendedTokenUsage(full);
@@ -4427,6 +4428,7 @@ export class Session {
       await this._raceActiveTurnWaiter(
         this._maybeCaptureSuspend(full, queuedItemId, modeId, modelId, {
           tokenUsageDelta: reservation.tokenUsageDelta,
+          fenceStaleRestore: opts.fenceStaleRestore,
         }),
         activeTurnWaiter,
       );
@@ -9270,6 +9272,7 @@ export class Session {
         this._messageDuplicateModeId(evidence, opts),
         this._messageDuplicateModelId(evidence, opts),
         activeDeleted,
+        { fenceStaleRestore: true },
       );
       return;
     }
@@ -9776,9 +9779,6 @@ export class Session {
         const joined = await inFlight.then(
           receipt => {
             if (receipt === undefined) {
-              // The winning attempt deferred (suspended run): retain this
-              // caller's observers for the resume-side settlement too.
-              this._retainTerminalObservers(identity.runId, options);
               return undefined;
             }
             try {
@@ -9806,9 +9806,15 @@ export class Session {
         // caller's own output may be terminal — a resume settling the same
         // run's deferred admission — and joining the suspended attempt must
         // not report deferral for it. Re-drive settlement with our output now
-        // that the in-flight entry has cleared; a suspended caller simply
-        // stands by its own deferral.
-        if (this._agentEndReasonForFullOutput(full) === 'suspended') return undefined;
+        // that the in-flight entry has cleared; a suspended caller instead
+        // stands by its own deferral — retain its observers for the
+        // resume-side settlement that will drain them. A terminal caller must
+        // NOT retain: the re-driven commit drains retained observers AND
+        // invokes this caller's options directly, double-notifying it.
+        if (this._agentEndReasonForFullOutput(full) === 'suspended') {
+          this._retainTerminalObservers(identity.runId, options);
+          return undefined;
+        }
         continue;
       }
       const attempt = this._runTerminalHandoffCommit(identity, full, options);
@@ -12383,7 +12389,7 @@ export class Session {
     queuedItemId = this._currentQueuedItemId,
     modeId = this._record.modeId,
     modelId = this._modelIdForQueuedItem(queuedItemId),
-    opts: { tokenUsageDelta?: TokenUsage; originSignalId?: string } = {},
+    opts: { tokenUsageDelta?: TokenUsage; originSignalId?: string; fenceStaleRestore?: boolean } = {},
   ): Promise<void> {
     if (full.finishReason !== 'suspended') return;
     this._captureTurnRunId(full);
@@ -12444,10 +12450,30 @@ export class Session {
       this._clearPendingDurableTurnFlushErrorIfRepaired(full);
       return;
     }
-    await this._flushUpdate(prev => ({ ...prev, pendingResume: pending }), { tokenUsageDelta: opts.tokenUsageDelta });
+    // A cached-suspension restore (fenceStaleRestore) reads `pendingResume`
+    // before awaiting a durable probe; a resume can clear and re-park a NEWER
+    // generation in that gap. Re-check inside the CAS updater so the stale
+    // restore cannot overwrite the newer pending — the durable park is
+    // authoritative.
+    let restored = true;
+    await this._flushUpdate(
+      prev => {
+        restored = true;
+        if (opts.fenceStaleRestore) {
+          const current = prev.pendingResume;
+          if (current !== undefined && (current.runId !== full.runId || current.toolCallId !== payload.toolCallId)) {
+            restored = false;
+            return prev;
+          }
+        }
+        return { ...prev, pendingResume: pending };
+      },
+      { tokenUsageDelta: opts.tokenUsageDelta },
+    );
     if (this._currentAgentRequestContext && suspendedFenceLease) {
       clearSuspendedToolSurfaceFence(this._currentAgentRequestContext, full.runId, suspendedFenceLease);
     }
+    if (!restored) return;
     this._clearPendingDurableTurnFlushErrorIfRepaired(full);
 
     // Emit the §10.2 pending event AFTER the durable-parking barrier (§5.4) so

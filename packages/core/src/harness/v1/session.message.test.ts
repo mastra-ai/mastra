@@ -4791,6 +4791,176 @@ describe('Session.message() — default path', () => {
     await expect(respond2).resolves.toMatchObject({ text: 'resumed answer' });
     expect(judgeSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('does not restore a cached suspension over a newer parked pending generation', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-2', toolName: 'shell', args: { cmd: 'ls -la' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-stale-restore', generation: 1 };
+    const first = await session.message({
+      content: 'needs approval',
+      admissionId: 'stale-restore-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(first.finishReason).toBe('suspended');
+    expect(session.getRecord().pendingResume?.toolCallId).toBe('tc-1');
+
+    // A duplicate message reads the cached suspended output and checks
+    // `pendingResume` before awaiting the admission probe. Hold that probe so
+    // a resume can park a NEWER suspension in the gap — the restore must then
+    // lose, not overwrite the live generation.
+    let byRunCalls = 0;
+    let releaseProbe!: () => void;
+    const probeGate = new Promise<void>(resolve => (releaseProbe = resolve));
+    const originalByRun = storage.loadTerminalAdmissionByRun.bind(storage);
+    vi.spyOn(storage, 'loadTerminalAdmissionByRun').mockImplementation(async (input: any) => {
+      byRunCalls += 1;
+      if (byRunCalls === 1) await probeGate;
+      return originalByRun(input);
+    });
+
+    const duplicate = session.message({
+      content: 'needs approval',
+      admissionId: 'stale-restore-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    await vi.waitFor(() => expect(byRunCalls).toBe(1));
+
+    // The resume executes, re-suspends on tc-2, and parks the newer pending.
+    const resumed = await session.respondToToolApproval({ approved: true });
+    expect(resumed.finishReason).toBe('suspended');
+    expect(session.getRecord().pendingResume?.toolCallId).toBe('tc-2');
+
+    // Releasing the duplicate's probe must not restore tc-1 over tc-2.
+    releaseProbe();
+    await expect(duplicate).resolves.toMatchObject({ finishReason: 'suspended' });
+    expect(session.getRecord().pendingResume?.toolCallId).toBe('tc-2');
+  });
+
+  it('notifies a terminal caller once when it re-drives a joined deferred commit', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'resumed answer' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-joined-once', generation: 1 };
+
+    // Hold the suspended run's commit inside its durable admission probe so a
+    // resume AND a duplicate message can both join the parked attempt.
+    let admissionLoads = 0;
+    let releaseFirstAdmissionLoad!: () => void;
+    const firstAdmissionLoadGate = new Promise<void>(resolve => (releaseFirstAdmissionLoad = resolve));
+    const originalLoad = storage.loadTerminalAdmission.bind(storage);
+    vi.spyOn(storage, 'loadTerminalAdmission').mockImplementation(async (input: any) => {
+      admissionLoads += 1;
+      if (admissionLoads === 1) await firstAdmissionLoadGate;
+      return originalLoad(input);
+    });
+    const commitSpy = vi.spyOn(session as any, '_commitTerminalHandoff');
+    const originalReceipts: unknown[] = [];
+    const message1 = session.message({
+      content: 'needs approval',
+      admissionId: 'joined-once-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      onTerminalCommit: receipt => originalReceipts.push(receipt),
+    });
+    await vi.waitFor(() => expect(admissionLoads).toBe(1));
+
+    // The resume executes 'stop' and its settlement joins the held attempt.
+    const respond = session.respondToToolApproval({ approved: true });
+    await vi.waitFor(() => expect(commitSpy.mock.calls.length).toBeGreaterThanOrEqual(2));
+
+    // A duplicate message adopts the completed terminal output and joins the
+    // same held attempt — its own output is terminal, so on deferral it
+    // re-drives settlement.
+    const duplicateReceipts: unknown[] = [];
+    const duplicate = session.message({
+      content: 'needs approval',
+      admissionId: 'joined-once-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      onTerminalCommit: receipt => duplicateReceipts.push(receipt),
+    });
+    await vi.waitFor(() => expect(commitSpy.mock.calls.length).toBeGreaterThanOrEqual(3));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    releaseFirstAdmissionLoad();
+
+    await expect(respond).resolves.toMatchObject({ text: 'resumed answer' });
+    await expect(message1).resolves.toMatchObject({ finishReason: 'suspended' });
+    await expect(duplicate).resolves.toMatchObject({ text: 'resumed answer' });
+
+    // The joined caller re-drove settlement with its own callbacks — it must
+    // be notified exactly once. Retaining its observers on the deferred join
+    // AND invoking them via the re-driven commit would fire it twice.
+    expect(duplicateReceipts).toHaveLength(1);
+    expect(originalReceipts).toHaveLength(1);
+    expect(
+      (
+        await storage.loadTerminalAdmission({
+          harnessName: 'default',
+          sessionId: session.id,
+          admissionId: 'joined-once-admission',
+          executionGrant: grant,
+        })
+      )?.status,
+    ).toBe('committed');
+  });
 });
 
 describe('Session.message() — streaming path', () => {

@@ -10,6 +10,7 @@ import {
   type HarnessTerminalAdmissionInput,
   type HarnessTerminalAdmissionLoadInput,
   type HarnessPendingTerminalAdmissionLoadInput,
+  type HarnessTerminalAdmissionRecord,
   type HarnessTerminalAdmissionReceipt,
   type HarnessTerminalCancelInput,
   type HarnessTerminalCancelReceipt,
@@ -17,11 +18,14 @@ import {
   type HarnessTerminalClaimInput,
   type HarnessTerminalClaimReceipt,
   type HarnessTerminalCommitReceipt,
+  type HarnessTerminalError,
   type HarnessTerminalFailReceipt,
   type HarnessTerminalHandoffOption,
   type HarnessTerminalIntent,
   type HarnessTerminalIntentLoadInput,
+  type HarnessTerminalProjection,
   type HarnessTerminalQueuePressure,
+  type HarnessTerminalResult,
   type HarnessTerminalRenewReceipt,
   type NormalizedHarnessTerminalHandoffOption,
 } from './terminal-handoff';
@@ -1161,27 +1165,27 @@ export abstract class HarnessStorage extends StorageDomain {
   async commitTerminalHandoff(_input: {
     admission: HarnessTerminalAdmissionInput;
     resultEvidence: AgentSignalResultEvidence;
-    terminalResult: import('./terminal-handoff').HarnessTerminalResult;
-    projection: import('./terminal-handoff').HarnessTerminalProjection;
+    terminalResult: HarnessTerminalResult;
+    projection: HarnessTerminalProjection;
   }): Promise<HarnessTerminalCommitReceipt> {
     throw new HarnessTerminalHandoffUnsupportedError();
   }
 
   async loadTerminalAdmission(
     _input: HarnessTerminalAdmissionLoadInput,
-  ): Promise<import('./terminal-handoff').HarnessTerminalAdmissionRecord | null> {
+  ): Promise<HarnessTerminalAdmissionRecord | null> {
     throw new HarnessTerminalHandoffUnsupportedError();
   }
 
   async loadPendingTerminalAdmission(
     _input: HarnessPendingTerminalAdmissionLoadInput,
-  ): Promise<import('./terminal-handoff').HarnessTerminalAdmissionRecord | null> {
+  ): Promise<HarnessTerminalAdmissionRecord | null> {
     throw new HarnessTerminalHandoffUnsupportedError();
   }
 
   async loadTerminalAdmissionByRun(
     _input: HarnessPendingTerminalAdmissionLoadInput,
-  ): Promise<import('./terminal-handoff').HarnessTerminalAdmissionRecord | null> {
+  ): Promise<HarnessTerminalAdmissionRecord | null> {
     throw new HarnessTerminalHandoffUnsupportedError();
   }
 
@@ -1208,7 +1212,7 @@ export abstract class HarnessStorage extends StorageDomain {
   }
 
   async failTerminalIntent(
-    _input: HarnessTerminalClaimIdentity & { error: import('./terminal-handoff').HarnessTerminalError },
+    _input: HarnessTerminalClaimIdentity & { error: HarnessTerminalError },
   ): Promise<HarnessTerminalFailReceipt> {
     throw new HarnessTerminalHandoffUnsupportedError();
   }
