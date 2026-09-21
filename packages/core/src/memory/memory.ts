@@ -2,7 +2,7 @@ import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sd
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
 import { MastraFGAPermissions } from '../auth/ee';
-import type { MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
+import type { IFGAProvider, MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -513,10 +513,17 @@ https://mastra.ai/en/docs/memory/overview`,
       memoryConfig?: MemoryConfig | undefined;
       observabilityContext?: Partial<ObservabilityContext>;
       thread?: StorageThreadType;
+      requireThreadCreation?: boolean;
     },
     _generatedMessageIds: readonly string[],
   ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
-    const { thread: _thread, ...saveArgs } = args;
+    if (args.requireThreadCreation) {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        `Atomic thread creation is not supported by this memory implementation (${this.constructor.name}).`,
+      );
+    }
+    const { thread: _thread, requireThreadCreation: _requireThreadCreation, ...saveArgs } = args;
     return this.saveMessages(saveArgs);
   }
 
@@ -678,6 +685,7 @@ https://mastra.ai/en/docs/memory/overview`,
     requestContext?: RequestContext;
     permission?: MastraFGAPermissionInput;
     actor?: ActorSignal;
+    fgaProvider?: IFGAProvider;
   }): Promise<void> {
     const {
       mastra,
@@ -687,8 +695,9 @@ https://mastra.ai/en/docs/memory/overview`,
       requestContext,
       permission = MastraFGAPermissions.MEMORY_READ,
       actor,
+      fgaProvider: providedFGAProvider,
     } = options;
-    const fgaProvider = mastra?.getServer()?.fga;
+    const fgaProvider = providedFGAProvider ?? mastra?.getServer()?.fga;
     if (!fgaProvider) return;
 
     const { requireFGA } = await import('../auth/ee/fga-check');
@@ -1128,6 +1137,46 @@ https://mastra.ai/en/docs/memory/overview`,
   ): Promise<void>;
 
   async branchThread(_input: BranchThreadInput): Promise<BranchThreadOutput> {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,
+    );
+  }
+
+  /** @internal Reports physical branch visibility without exposing lineage metadata publicly. */
+  protected async __mastraInspectThreadBranchState(threadId: string): Promise<{
+    state: 'absent' | 'ordinary' | 'pending' | 'ready';
+    hasReadyDescendants: boolean;
+  }> {
+    if (this.supportsThreadBranching) {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        `Thread branching requires physical branch-state inspection (${this.constructor.name}).`,
+      );
+    }
+    const thread = await this.getThreadById({ threadId });
+    return { state: thread ? 'ordinary' : 'absent', hasReadyDescendants: false };
+  }
+
+  /** @internal Returns raw relationship candidates so transports can authorize before strict lineage validation. */
+  protected async __mastraGetThreadBranchAuthorizationCandidates(
+    threadId: string,
+    _direction: 'ancestors' | 'children' | 'descendants',
+  ): Promise<Array<{ id: string; resourceId?: string }>> {
+    if (this.supportsThreadBranching) {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        `Thread branching requires pre-validation authorization support (${this.constructor.name}).`,
+      );
+    }
+    const thread = await this.getThreadById({ threadId });
+    return thread ? [{ id: thread.id, resourceId: thread.resourceId }] : [];
+  }
+
+  /** @internal Trusted transport hook for authorizing a generated destination before branch persistence. */
+  protected __mastraBranchThreadWithGeneratedId(
+    _input: BranchThreadInput & { generatedThreadId: string },
+  ): Promise<BranchThreadOutput> {
     throw createThreadBranchError(
       'BRANCHING_UNSUPPORTED',
       `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,

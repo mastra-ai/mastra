@@ -1,14 +1,16 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import { MockMemory } from '@mastra/core/memory';
+import { MockMemory, createThreadBranchError } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MASTRA_AUTH_MODE_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   GET_MEMORY_STATUS_ROUTE,
   GET_MEMORY_CONFIG_ROUTE,
+  GET_OBSERVATIONAL_MEMORY_ROUTE,
   GET_WORKING_MEMORY_ROUTE,
   LIST_THREADS_ROUTE,
   GET_THREAD_BY_ID_ROUTE,
@@ -19,6 +21,10 @@ import {
   DELETE_THREAD_ROUTE,
   UPDATE_THREAD_ROUTE,
   CLONE_THREAD_ROUTE,
+  BRANCH_THREAD_ROUTE,
+  GET_PARENT_THREAD_ROUTE,
+  LIST_THREAD_BRANCHES_ROUTE,
+  GET_BRANCH_HISTORY_ROUTE,
   TRANSFER_THREAD_ROUTE,
   SEARCH_MEMORY_ROUTE,
   getTextContent,
@@ -345,8 +351,7 @@ describe('Memory Handlers', () => {
       expect(result.threads).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith({
         filter: undefined,
-        page: 0,
-        perPage: 10,
+        perPage: false,
         orderBy: undefined,
       });
     });
@@ -377,13 +382,12 @@ describe('Memory Handlers', () => {
 
       expect(spy).toBeCalledWith({
         filter: { resourceId: 'test-resource' },
-        page: 0,
-        perPage: 10,
+        perPage: false,
         orderBy: undefined,
       });
     });
 
-    it('should preserve storage pagination for authenticated users when no FGA provider is configured', async () => {
+    it('should paginate authorized threads when no FGA provider is configured', async () => {
       const mastra = new Mastra({
         logger: false,
         agents: { 'test-agent': mockAgent },
@@ -406,8 +410,7 @@ describe('Memory Handlers', () => {
       expect(result.total).toEqual(1);
       expect(spy).toHaveBeenCalledWith({
         filter: { resourceId: 'test-resource' },
-        page: 0,
-        perPage: 10,
+        perPage: false,
         orderBy: undefined,
       });
     });
@@ -435,8 +438,7 @@ describe('Memory Handlers', () => {
       expect(result.threads).toHaveLength(1);
       expect(spy).toHaveBeenCalledWith({
         filter: { resourceId: 'test-resource' },
-        page: 0,
-        perPage: 20,
+        perPage: false,
         orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
     });
@@ -466,8 +468,7 @@ describe('Memory Handlers', () => {
       expect(result.threads).toHaveLength(2);
       expect(spy).toHaveBeenCalledWith({
         filter: { resourceId: 'test-resource' },
-        page: 0,
-        perPage: 10,
+        perPage: false,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
     });
@@ -566,7 +567,7 @@ describe('Memory Handlers', () => {
           threadId: 'non-existent',
           agentId: 'test-agent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
+      ).rejects.toMatchObject({ status: 404 });
       expect(spy).toHaveBeenCalledWith({ threadId: 'non-existent' });
     });
 
@@ -589,6 +590,41 @@ describe('Memory Handlers', () => {
       });
       expect(result).toEqual(createdThread);
       expect(spy).toHaveBeenCalledWith({ threadId: 'test-thread' });
+    });
+
+    it('returns a placeholder for a gateway thread before its first message', async () => {
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-gateway-key');
+      vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway.example.test');
+      const gatewayAgent = new Agent({
+        id: 'gateway-agent',
+        name: 'gateway-agent',
+        instructions: 'test-instructions',
+        model: 'mastra/openai/gpt-5-mini' as any,
+      });
+      const mastra = new Mastra({ logger: false, agents: { 'gateway-agent': gatewayAgent } });
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', { status: 404 }));
+
+      try {
+        const result = await GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'unsaved-thread',
+          resourceId: 'resource-1',
+          agentId: 'gateway-agent',
+        });
+
+        expect(result).toMatchObject({
+          id: 'unsaved-thread',
+          resourceId: 'resource-1',
+          title: '',
+          metadata: {},
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        });
+        expect(fetchMock).toHaveBeenCalledOnce();
+      } finally {
+        fetchMock.mockRestore();
+        vi.unstubAllEnvs();
+      }
     });
 
     it('should deny thread reads when FGA denies access', async () => {
@@ -1096,6 +1132,29 @@ describe('Memory Handlers', () => {
       });
     });
 
+    it('rejects reserved lineage metadata before thread creation', async () => {
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+      const spy = vi.spyOn(mockMemory, 'createThread');
+
+      let error: HTTPException | undefined;
+      try {
+        await CREATE_THREAD_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: 'test-resource',
+          metadata: { __mastra_thread_branch: {} },
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toMatchObject({ status: 409 });
+      await expect(error?.res?.json()).resolves.toMatchObject({
+        error: { code: 'BRANCH_MUTATION_CONFLICT' },
+      });
+      expect(spy).not.toHaveBeenCalled();
+    });
+
     it('should deny thread creation when FGA denies memory writes', async () => {
       const mastra = new Mastra({
         logger: false,
@@ -1128,6 +1187,585 @@ describe('Memory Handlers', () => {
           }),
         },
       );
+    });
+  });
+
+  describe('thread branching handlers', () => {
+    const root = createThread({ id: 'root-thread' });
+    const child = createThread({ id: 'child-thread', title: 'Branch' });
+    const branch = {
+      parentThreadId: root.id,
+      branchPointMessageId: 'fork-message',
+      branchPointCreatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      branchCreatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+
+    function enableBranching() {
+      Object.defineProperty(mockMemory, 'supportsThreadBranching', { configurable: true, value: true });
+      vi.spyOn(mockMemory, 'getThreadById').mockImplementation(async ({ threadId }) => {
+        return threadId === root.id ? root : threadId === child.id ? child : null;
+      });
+      vi.spyOn(mockMemory, 'getBranchHistory').mockImplementation(async ({ threadId }) => ({
+        history:
+          threadId === child.id
+            ? [
+                { thread: root, branch: null },
+                { thread: child, branch },
+              ]
+            : [{ thread: root, branch: null }],
+      }));
+      vi.spyOn(mockMemory, 'branchThread').mockResolvedValue({ thread: child, branch });
+      Object.defineProperty(mockMemory, '__mastraInspectThreadBranchState', {
+        configurable: true,
+        value: vi.fn(async (threadId: string) => ({
+          state: threadId === child.id ? 'ready' : threadId === root.id ? 'ordinary' : 'absent',
+          hasReadyDescendants: threadId === root.id,
+        })),
+      });
+      Object.defineProperty(mockMemory, '__mastraGetThreadBranchAuthorizationCandidates', {
+        configurable: true,
+        value: vi.fn(async (threadId: string, direction: 'ancestors' | 'children' | 'descendants') => {
+          if (threadId === child.id && direction === 'ancestors') return [child, root];
+          if (threadId === root.id && (direction === 'children' || direction === 'descendants')) return [root, child];
+          if (threadId === root.id) return [root];
+          if (threadId === child.id) return [child];
+          return [];
+        }),
+      });
+      Object.defineProperty(mockMemory, '__mastraBranchThreadWithGeneratedId', {
+        configurable: true,
+        value: vi.fn(async ({ generatedThreadId: _generatedThreadId, ...input }) => mockMemory.branchThread(input)),
+      });
+      vi.spyOn(mockMemory, 'listBranches').mockResolvedValue({
+        branches: [{ thread: child, branch }],
+        page: 0,
+        perPage: false,
+        total: 1,
+        hasMore: false,
+      });
+    }
+
+    it('rejects a pending branch before validating or persisting messages', async () => {
+      enableBranching();
+      vi.mocked((mockMemory as any).__mastraInspectThreadBranchState).mockResolvedValue({
+        state: 'pending',
+        hasReadyDescendants: false,
+      });
+      const saveMessages = vi.spyOn(mockMemory, 'saveMessages');
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      let error: HTTPException | undefined;
+      try {
+        await SAVE_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          messages: [
+            {
+              id: 'message',
+              threadId: 'pending-thread',
+              resourceId: 'test-resource',
+              role: 'user',
+              content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+              createdAt: 'not-a-date',
+            },
+          ] as any,
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toMatchObject({ status: 404 });
+      await expect(error?.res?.json()).resolves.toMatchObject({ error: { code: 'BRANCH_NOT_FOUND' } });
+      expect(saveMessages).not.toHaveBeenCalled();
+    });
+
+    it('does not overwrite an existing branch participant through ordinary thread creation', async () => {
+      enableBranching();
+      const createThread = vi.spyOn(mockMemory, 'createThread');
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      let error: HTTPException | undefined;
+      try {
+        await CREATE_THREAD_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: root.resourceId,
+          threadId: root.id,
+          title: 'Replacement',
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toMatchObject({ status: 409 });
+      await expect(error?.res?.json()).resolves.toMatchObject({ error: { code: 'BRANCH_MUTATION_CONFLICT' } });
+      expect(createThread).not.toHaveBeenCalled();
+    });
+
+    it('creates a branch after authorizing the complete source history', async () => {
+      enableBranching();
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      const result = await BRANCH_THREAD_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'test-agent',
+        threadId: root.id,
+        branchPointMessageId: branch.branchPointMessageId,
+        title: 'Branch',
+      });
+
+      expect(result).toEqual({ thread: child, branch });
+      expect((mockMemory as any).__mastraBranchThreadWithGeneratedId).toHaveBeenCalledWith({
+        threadId: root.id,
+        branchPointMessageId: branch.branchPointMessageId,
+        generatedThreadId: '00000000-0000-4000-8000-000000000001',
+        title: 'Branch',
+        metadata: undefined,
+      });
+      expect(mockMemory.branchThread).toHaveBeenCalledWith({
+        threadId: root.id,
+        branchPointMessageId: branch.branchPointMessageId,
+        title: 'Branch',
+        metadata: undefined,
+      });
+    });
+
+    it('retries an authorized generated destination after an invisible pending-row collision', async () => {
+      enableBranching();
+      const hook = vi.mocked((mockMemory as any).__mastraBranchThreadWithGeneratedId);
+      hook
+        .mockRejectedValueOnce(
+          Object.assign(new Error('Unable to allocate a unique branch thread ID after 5 attempts.'), {
+            id: 'BRANCH_MUTATION_CONFLICT',
+          }),
+        )
+        .mockResolvedValueOnce({ thread: child, branch });
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      await expect(
+        BRANCH_THREAD_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          threadId: root.id,
+          branchPointMessageId: branch.branchPointMessageId,
+        }),
+      ).resolves.toEqual({ thread: child, branch });
+
+      expect(hook).toHaveBeenCalledTimes(2);
+      expect(hook.mock.calls[0]?.[0].generatedThreadId).not.toBe(hook.mock.calls[1]?.[0].generatedThreadId);
+    });
+
+    it('authorizes the generated child destination before creating a branch', async () => {
+      enableBranching();
+      const branchThread = vi.mocked(mockMemory.branchThread);
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+      const require = vi.fn().mockImplementation(async (_user, input) => {
+        if (input.resource.id === '00000000-0000-4000-8000-000000000001') {
+          throw Object.assign(new Error('FGA denied'), { status: 403 });
+        }
+      });
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const context = createTestContextWithReservedKeys({ mastra, resourceId: 'test-resource' });
+      context.requestContext.set('user', { id: 'user-1' });
+
+      await expect(
+        BRANCH_THREAD_ROUTE.handler({
+          ...context,
+          agentId: 'test-agent',
+          threadId: root.id,
+          branchPointMessageId: branch.branchPointMessageId,
+        }),
+      ).rejects.toMatchObject({ status: 403, message: 'FGA denied' });
+      expect(require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({
+          resource: { type: 'thread', id: '00000000-0000-4000-8000-000000000001' },
+          permission: 'memory:write',
+        }),
+      );
+      expect(branchThread).not.toHaveBeenCalled();
+    });
+
+    it('returns non-revealing not-found before writing when studio FGA denies an ancestor', async () => {
+      enableBranching();
+      const branchThread = vi.mocked(mockMemory.branchThread);
+      const getBranchHistory = vi
+        .mocked(mockMemory.getBranchHistory)
+        .mockRejectedValue(createThreadBranchError('BRANCH_LINEAGE_CORRUPT', 'inaccessible lineage is malformed'));
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+      const require = vi.fn().mockImplementation(async (_user, input) => {
+        if (input.resource.id === root.id) {
+          throw Object.assign(new Error('FGA denied'), { status: 403 });
+        }
+      });
+      vi.spyOn(mastra, 'getStudio').mockReturnValue({ fga: { require } } as any);
+      const context = createTestContextWithReservedKeys({ mastra, resourceId: 'test-resource' });
+      context.requestContext.set(MASTRA_AUTH_MODE_KEY, 'studio');
+      context.requestContext.set('user', { id: 'user-1' });
+
+      let error: HTTPException | undefined;
+      try {
+        await BRANCH_THREAD_ROUTE.handler({
+          ...context,
+          agentId: 'test-agent',
+          threadId: child.id,
+          branchPointMessageId: 'child-message',
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toMatchObject({ status: 404 });
+      await expect(error?.res?.json()).resolves.toEqual({
+        error: {
+          code: 'BRANCH_NOT_FOUND',
+          message: 'Thread branch was not found or is not accessible.',
+        },
+      });
+      expect(require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({
+          resource: { type: 'thread', id: root.id },
+          permission: 'memory:write',
+        }),
+      );
+      expect(getBranchHistory).not.toHaveBeenCalled();
+      expect(branchThread).not.toHaveBeenCalled();
+    });
+
+    it('hides an existing clone destination when one of its descendants is inaccessible', async () => {
+      enableBranching();
+      const source = createThread({ id: 'clone-source' });
+      vi.mocked(mockMemory.getThreadById).mockImplementation(async ({ threadId }) => {
+        return threadId === source.id ? source : threadId === root.id ? root : threadId === child.id ? child : null;
+      });
+      vi.mocked(mockMemory.getBranchHistory).mockImplementation(async ({ threadId }) => ({
+        history:
+          threadId === child.id
+            ? [
+                { thread: root, branch: null },
+                { thread: child, branch },
+              ]
+            : [{ thread: threadId === source.id ? source : root, branch: null }],
+      }));
+      Object.defineProperty(mockMemory, '__mastraInspectThreadBranchState', {
+        configurable: true,
+        value: vi.fn(async (threadId: string) => ({
+          state:
+            threadId === child.id ? 'ready' : threadId === source.id || threadId === root.id ? 'ordinary' : 'absent',
+          hasReadyDescendants: threadId === root.id,
+        })),
+      });
+      Object.defineProperty(mockMemory, '__mastraGetThreadBranchAuthorizationCandidates', {
+        configurable: true,
+        value: vi.fn(async (threadId: string, direction: 'ancestors' | 'children' | 'descendants') => {
+          if (threadId === root.id && direction === 'descendants') return [root, child];
+          if (threadId === child.id && direction === 'ancestors') return [child, root];
+          if (threadId === source.id) return [source];
+          if (threadId === root.id) return [root];
+          return [];
+        }),
+      });
+      const cloneThread = vi.spyOn(mockMemory, 'cloneThread');
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+      const require = vi.fn().mockImplementation(async (_user, input) => {
+        if (input.resource.id === child.id) throw Object.assign(new Error('FGA denied'), { status: 403 });
+      });
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const context = createTestContextWithReservedKeys({ mastra, resourceId: 'test-resource' });
+      context.requestContext.set('user', { id: 'user-1' });
+
+      let error: HTTPException | undefined;
+      try {
+        await CLONE_THREAD_ROUTE.handler({
+          ...context,
+          agentId: 'test-agent',
+          threadId: source.id,
+          newThreadId: root.id,
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toMatchObject({ status: 404 });
+      await expect(error?.res?.json()).resolves.toMatchObject({ error: { code: 'BRANCH_NOT_FOUND' } });
+      expect(cloneThread).not.toHaveBeenCalled();
+    });
+
+    it('returns parent, direct children, and root-to-current history', async () => {
+      enableBranching();
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+      const context = createTestServerContext({ mastra });
+
+      await expect(
+        GET_PARENT_THREAD_ROUTE.handler({ ...context, agentId: 'test-agent', threadId: root.id }),
+      ).resolves.toBeNull();
+      await expect(
+        GET_PARENT_THREAD_ROUTE.handler({ ...context, agentId: 'test-agent', threadId: child.id }),
+      ).resolves.toEqual(root);
+      await expect(
+        LIST_THREAD_BRANCHES_ROUTE.handler({
+          ...context,
+          agentId: 'test-agent',
+          threadId: root.id,
+          page: 0,
+          perPage: 10,
+        }),
+      ).resolves.toMatchObject({ branches: [{ thread: child, branch }], total: 1, hasMore: false });
+      await expect(
+        GET_BRANCH_HISTORY_ROUTE.handler({ ...context, agentId: 'test-agent', threadId: child.id }),
+      ).resolves.toEqual({
+        history: [
+          { thread: root, branch: null },
+          { thread: child, branch },
+        ],
+      });
+    });
+
+    it('authorizes direct children before pagination and omits inaccessible rows from totals', async () => {
+      enableBranching();
+      const blocked = createThread({ id: 'blocked-child', title: 'Blocked' });
+      vi.mocked(mockMemory.getThreadById).mockImplementation(async ({ threadId }) => {
+        return threadId === root.id ? root : threadId === child.id ? child : threadId === blocked.id ? blocked : null;
+      });
+      vi.mocked(mockMemory.getBranchHistory).mockImplementation(async ({ threadId }) => ({
+        history:
+          threadId === root.id
+            ? [{ thread: root, branch: null }]
+            : [
+                { thread: root, branch: null },
+                { thread: threadId === child.id ? child : blocked, branch: { ...branch, parentThreadId: root.id } },
+              ],
+      }));
+      Object.defineProperty(mockMemory, '__mastraGetThreadBranchAuthorizationCandidates', {
+        configurable: true,
+        value: vi.fn(async (threadId: string, direction: 'ancestors' | 'children' | 'descendants') => {
+          if (threadId === root.id && direction === 'children') return [root, blocked, child];
+          if ((threadId === child.id || threadId === blocked.id) && direction === 'ancestors') {
+            return [threadId === child.id ? child : blocked, root];
+          }
+          if (threadId === root.id) return [root];
+          return [];
+        }),
+      });
+      const listBranches = vi.mocked(mockMemory.listBranches);
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+      const require = vi.fn().mockImplementation(async (_user, input) => {
+        if (input.resource.id === blocked.id) {
+          throw Object.assign(new Error('FGA denied'), { status: 403 });
+        }
+      });
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const context = createTestContextWithReservedKeys({ mastra, resourceId: 'test-resource' });
+      context.requestContext.set('user', { id: 'user-1' });
+
+      const result = await LIST_THREAD_BRANCHES_ROUTE.handler({
+        ...context,
+        agentId: 'test-agent',
+        threadId: root.id,
+        page: 0,
+        perPage: 1,
+      });
+
+      expect(result).toMatchObject({
+        branches: [{ thread: child, branch }],
+        page: 0,
+        perPage: 1,
+        total: 1,
+        hasMore: false,
+      });
+      expect(listBranches).not.toHaveBeenCalled();
+    });
+
+    it('uses the branch-owned observational-memory locator', async () => {
+      enableBranching();
+      const record = { id: 'child-om-record' };
+      const getRecord = vi.fn().mockResolvedValue(record);
+      const getHistory = vi.fn().mockResolvedValue([]);
+      vi.spyOn(mockAgent, 'resolveProcessorById').mockResolvedValue({
+        config: { scope: 'resource' },
+        getRecord,
+        getHistory,
+      } as any);
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      await expect(
+        GET_OBSERVATIONAL_MEMORY_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: 'test-resource',
+          threadId: child.id,
+          from: undefined,
+          to: undefined,
+          offset: undefined,
+          limit: undefined,
+        }),
+      ).resolves.toEqual({ record, history: undefined });
+      expect(getRecord).toHaveBeenCalledWith(child.id, 'test-resource');
+      expect(getHistory).toHaveBeenCalledWith(child.id, 'test-resource', 5, {
+        from: undefined,
+        to: undefined,
+        offset: undefined,
+      });
+    });
+
+    it('returns the empty observational-memory record for a not-yet-persisted thread', async () => {
+      enableBranching();
+      const getRecord = vi.fn().mockResolvedValue(null);
+      const getHistory = vi.fn().mockResolvedValue([]);
+      vi.spyOn(mockAgent, 'resolveProcessorById').mockResolvedValue({
+        config: { scope: 'thread' },
+        getRecord,
+        getHistory,
+      } as any);
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      await expect(
+        GET_OBSERVATIONAL_MEMORY_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: 'test-resource',
+          threadId: 'unsaved-thread',
+          from: undefined,
+          to: undefined,
+          offset: undefined,
+          limit: undefined,
+        }),
+      ).resolves.toEqual({ record: null, history: undefined });
+      expect(getRecord).toHaveBeenCalledWith('unsaved-thread', 'test-resource');
+    });
+
+    it('hides observational-memory status for a pending branch', async () => {
+      enableBranching();
+      vi.mocked((mockMemory as any).__mastraInspectThreadBranchState).mockResolvedValue({
+        state: 'pending',
+        hasReadyDescendants: false,
+      });
+      const getRecord = vi.fn().mockResolvedValue({ id: 'record' });
+      vi.spyOn(mockAgent, 'resolveProcessorById').mockResolvedValue({
+        config: { scope: 'thread' },
+        getRecord,
+        getHistory: vi.fn().mockResolvedValue([]),
+      } as any);
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      await expect(
+        GET_OBSERVATIONAL_MEMORY_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: 'test-resource',
+          threadId: child.id,
+          from: undefined,
+          to: undefined,
+          offset: undefined,
+          limit: undefined,
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(getRecord).not.toHaveBeenCalled();
+    });
+
+    it('denies ordinary message reads when an intermediate ancestor becomes inaccessible', async () => {
+      enableBranching();
+      const recall = vi.spyOn(mockMemory, 'recall');
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+      const require = vi.fn().mockImplementation(async (_user, input) => {
+        if (input.resource.id === root.id) {
+          throw Object.assign(new Error('FGA denied'), { status: 403 });
+        }
+      });
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const context = createTestContextWithReservedKeys({ mastra, resourceId: 'test-resource' });
+      context.requestContext.set('user', { id: 'user-1' });
+
+      let error: HTTPException | undefined;
+      try {
+        await LIST_MESSAGES_ROUTE.handler({
+          ...context,
+          agentId: 'test-agent',
+          threadId: child.id,
+          page: 0,
+          perPage: 10,
+          orderBy: undefined,
+          include: undefined,
+          filter: undefined,
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toMatchObject({ status: 404 });
+      await expect(error?.res?.json()).resolves.toMatchObject({
+        error: { code: 'BRANCH_NOT_FOUND' },
+      });
+      expect(recall).not.toHaveBeenCalled();
+    });
+
+    it('requires an explicit thread for resource search when accessible branches exist', async () => {
+      enableBranching();
+      vi.spyOn(mockMemory, 'listThreads').mockResolvedValue({
+        threads: [root, child],
+        page: 0,
+        perPage: false,
+        total: 2,
+        hasMore: false,
+      });
+      const recall = vi.spyOn(mockMemory, 'recall');
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      let error: HTTPException | undefined;
+      try {
+        await SEARCH_MEMORY_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: 'test-resource',
+          searchQuery: 'branch content',
+          limit: 20,
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toMatchObject({ status: 400 });
+      await expect(error?.res?.json()).resolves.toMatchObject({
+        error: { code: 'BRANCH_INVALID_REQUEST' },
+      });
+      expect(recall).not.toHaveBeenCalled();
+    });
+
+    it('fails closed instead of falling back to raw storage', async () => {
+      const mastra = new Mastra({ logger: false });
+
+      let error: HTTPException | undefined;
+      try {
+        await BRANCH_THREAD_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: undefined,
+          threadId: root.id,
+          branchPointMessageId: 'root-message',
+        });
+      } catch (caught) {
+        error = caught as HTTPException;
+      }
+
+      expect(error).toMatchObject({ status: 501 });
+      await expect(error?.res?.json()).resolves.toMatchObject({
+        error: { code: 'BRANCHING_UNSUPPORTED' },
+      });
+    });
+
+    it('fails closed when the configured memory does not support branching', async () => {
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+      const branchThread = vi.spyOn(mockMemory, 'branchThread');
+
+      await expect(
+        BRANCH_THREAD_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          threadId: root.id,
+          branchPointMessageId: branch.branchPointMessageId,
+        }),
+      ).rejects.toMatchObject({ status: 501 });
+      expect(branchThread).not.toHaveBeenCalled();
     });
   });
 
@@ -1226,7 +1864,7 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           page: 0,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
+      ).rejects.toMatchObject({ status: 404 });
     });
 
     it('should return paginated messages for valid thread', async () => {
@@ -1260,7 +1898,15 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+      const thread = createThread({ id: 'test-thread', resourceId: 'test-resource' });
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(thread);
+      vi.spyOn(mockMemory, 'listThreads').mockResolvedValue({
+        threads: [thread],
+        total: 1,
+        page: 0,
+        perPage: false,
+        hasMore: false,
+      });
       vi.spyOn(mockMemory, 'recall').mockResolvedValue(mockResult);
 
       const result = await LIST_MESSAGES_ROUTE.handler({
@@ -2140,7 +2786,15 @@ describe('Memory Handlers', () => {
           storage,
         });
 
-        vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+        const thread = createThread({ id: 'test-thread', resourceId: 'test-resource' });
+        vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(thread);
+        vi.spyOn(mockMemory, 'listThreads').mockResolvedValue({
+          threads: [thread],
+          total: 1,
+          page: 0,
+          perPage: false,
+          hasMore: false,
+        });
         const recallSpy = vi.spyOn(mockMemory, 'recall').mockResolvedValue({
           messages: [],
           total: 0,

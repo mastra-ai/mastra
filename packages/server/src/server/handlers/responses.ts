@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import { createThreadBranchError } from '@mastra/core/memory';
+import type { MastraMemory } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { MastraFGAPermissions } from '../fga-permissions';
@@ -43,6 +45,13 @@ import type {
   ThreadExecutionContext,
   UsageLike,
 } from './responses.storage';
+import {
+  authorizeMemoryThreadAccess,
+  authorizeThreadBranchTree,
+  createMemoryThreadIfAbsent,
+  inspectVisibleMemoryThread,
+  throwThreadBranchNotFound,
+} from './thread-branching';
 import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
 
 type AgentExecutionInput = Parameters<Agent['generate']>[0];
@@ -95,6 +104,7 @@ type FinalizedResponse = {
 
 type PreparedCreateResponseRequest = {
   agent: Agent<any, any, any, any>;
+  agentMemory: MastraMemory | null;
   agentMemoryStore: MemoryStorage | null;
   configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
   createdAt: number;
@@ -154,6 +164,37 @@ function getStreamedMessageOutputItem(response: ResponseObject, responseId: stri
   );
 }
 
+async function authorizeResponseTurnRecord({
+  mastra,
+  requestContext,
+  record,
+  permission,
+}: {
+  mastra: Mastra;
+  requestContext: RequestContext;
+  record: ResponseTurnRecord;
+  permission: string;
+}): Promise<void> {
+  const authorize =
+    permission === MastraFGAPermissions.MEMORY_READ ? authorizeMemoryThreadAccess : authorizeThreadBranchTree;
+  await authorize({
+    mastra,
+    requestContext,
+    memory: record.memory,
+    thread: record.thread,
+    effectiveResourceId: getEffectiveResourceId(requestContext, undefined),
+    permission,
+  });
+  const { messages } = await record.memory.recall({
+    threadId: record.thread.id,
+    resourceId: record.thread.resourceId,
+    perPage: false,
+  });
+  if (!messages.some(message => message.id === record.message.id)) {
+    throwThreadBranchNotFound();
+  }
+}
+
 /**
  * Resolves the memory thread that should back the current response request.
  *
@@ -174,14 +215,15 @@ async function resolveThreadExecutionContext({
   previousResponseTurnRecord: ResponseTurnRecord | null;
   requestContext: RequestContext;
 }): Promise<ThreadExecutionContext | null> {
-  if (conversationId && previousResponseTurnRecord && previousResponseTurnRecord.thread.id !== conversationId) {
-    throw new HTTPException(400, {
-      message:
-        'conversation_id and previous_response_id must reference the same conversation thread when both are provided',
+  if (previousResponseTurnRecord && !conversationId) {
+    await authorizeThreadBranchTree({
+      mastra: agent.getMastraInstance(),
+      requestContext,
+      memory: previousResponseTurnRecord.memory,
+      thread: previousResponseTurnRecord.thread,
+      effectiveResourceId: getEffectiveResourceId(requestContext, undefined),
+      permission: MastraFGAPermissions.MEMORY_WRITE,
     });
-  }
-
-  if (previousResponseTurnRecord) {
     return {
       threadId: previousResponseTurnRecord.thread.id,
       resourceId: previousResponseTurnRecord.thread.resourceId,
@@ -207,18 +249,28 @@ async function resolveThreadExecutionContext({
   }
 
   if (conversationId) {
+    await inspectVisibleMemoryThread(memory, conversationId);
     const existingThread = await memory.getThreadById({ threadId: conversationId });
-    if (!existingThread) {
-      throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
-    }
+    if (!existingThread) throwThreadBranchNotFound();
 
-    await enforceThreadAccess({
+    await authorizeThreadBranchTree({
       mastra: agent.getMastraInstance(),
       requestContext,
-      threadId: conversationId,
+      memory,
       thread: existingThread,
       effectiveResourceId,
+      permission: MastraFGAPermissions.MEMORY_WRITE,
     });
+    if (previousResponseTurnRecord) {
+      const { messages } = await memory.recall({
+        threadId: existingThread.id,
+        resourceId: existingThread.resourceId,
+        perPage: false,
+      });
+      if (!messages.some(message => message.id === previousResponseTurnRecord.message.id)) {
+        throwThreadBranchNotFound();
+      }
+    }
     return {
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,
@@ -230,27 +282,47 @@ async function resolveThreadExecutionContext({
       return null;
     }
 
-    const threadId = randomUUID();
-    const createdThread = await memory.createThread({
-      threadId,
-      resourceId: effectiveResourceId ?? threadId,
-    });
-
-    return {
-      threadId: createdThread.id,
-      resourceId: createdThread.resourceId,
-    };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const threadId = randomUUID();
+      const resourceId = effectiveResourceId ?? threadId;
+      await enforceThreadAccess({
+        mastra: agent.getMastraInstance(),
+        requestContext,
+        threadId,
+        effectiveResourceId: resourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
+      try {
+        const createdThread = await createMemoryThreadIfAbsent(memory, {
+          threadId,
+          resourceId,
+        });
+        return {
+          threadId: createdThread.id,
+          resourceId: createdThread.resourceId,
+        };
+      } catch (error) {
+        const code = error && typeof error === 'object' ? (error as { id?: unknown }).id : undefined;
+        if (code !== 'BRANCH_MUTATION_CONFLICT') throw error;
+      }
+    }
+    throw createThreadBranchError(
+      'BRANCH_MUTATION_CONFLICT',
+      'Unable to allocate a unique response thread ID after 5 attempts.',
+    );
   }
 
   const threadId = effectiveThreadId;
-  const existingThread = await memory.getThreadById({ threadId });
+  const threadState = await inspectVisibleMemoryThread(memory, threadId, { allowCreate: true });
+  const existingThread = threadState.state === 'absent' ? null : await memory.getThreadById({ threadId });
   if (existingThread) {
-    await enforceThreadAccess({
+    await authorizeThreadBranchTree({
       mastra: agent.getMastraInstance(),
       requestContext,
-      threadId,
+      memory,
       thread: existingThread,
       effectiveResourceId,
+      permission: MastraFGAPermissions.MEMORY_WRITE,
     });
     return {
       threadId: existingThread.id,
@@ -263,7 +335,14 @@ async function resolveThreadExecutionContext({
   }
 
   const resourceId = effectiveResourceId ?? threadId;
-  const createdThread = await memory.createThread({
+  await enforceThreadAccess({
+    mastra: agent.getMastraInstance(),
+    requestContext,
+    threadId,
+    effectiveResourceId: resourceId,
+    permission: MastraFGAPermissions.MEMORY_WRITE,
+  });
+  const createdThread = await createMemoryThreadIfAbsent(memory, {
     threadId,
     resourceId,
   });
@@ -502,6 +581,7 @@ async function resolveCompletedResponseState(
  * Stores the completed response when the request opted into memory-backed persistence.
  */
 async function storeCompletedResponse({
+  agentMemory,
   agentMemoryStore,
   didStore,
   threadContext,
@@ -511,6 +591,7 @@ async function storeCompletedResponse({
   messages,
   outputItems,
 }: {
+  agentMemory: MastraMemory | null;
   agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
   threadContext: ThreadExecutionContext | null;
@@ -525,6 +606,7 @@ async function storeCompletedResponse({
   }
 
   await persistResponseTurnRecord({
+    memory: agentMemory,
     memoryStore: agentMemoryStore,
     responseId,
     metadata: {
@@ -545,6 +627,7 @@ async function storeCompletedResponse({
  * Resolves the final response object and persists the stored response turn when needed.
  */
 async function finalizeResponse({
+  agentMemory,
   agentMemoryStore,
   didStore,
   threadContext,
@@ -560,6 +643,7 @@ async function finalizeResponse({
   fallbackText,
   fallbackOutputItems,
 }: {
+  agentMemory: MastraMemory | null;
   agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
   threadContext: ThreadExecutionContext | null;
@@ -608,6 +692,7 @@ async function finalizeResponse({
   });
 
   await storeCompletedResponse({
+    agentMemory,
     agentMemoryStore,
     didStore,
     threadContext,
@@ -646,6 +731,7 @@ async function prepareCreateResponseRequest({
         agent: resolvedAgent,
         responseId: body.previous_response_id,
         requestContext,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
       if (!previousResponseTurnRecord) {
@@ -653,20 +739,19 @@ async function prepareCreateResponseRequest({
           mastra,
           responseId: body.previous_response_id,
           requestContext,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
         });
 
         if (owningResponseTurnRecord) {
           if (owningResponseTurnRecord.metadata.agentId === body.agent_id) {
             previousResponseTurnRecord = owningResponseTurnRecord;
           } else {
-            throw new HTTPException(400, {
-              message: `Stored response ${body.previous_response_id} belongs to agent ${owningResponseTurnRecord.metadata.agentId}, not ${body.agent_id}`,
-            });
+            throwThreadBranchNotFound();
           }
         }
 
         if (!previousResponseTurnRecord) {
-          throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+          throwThreadBranchNotFound();
         }
       }
     } else {
@@ -678,12 +763,26 @@ async function prepareCreateResponseRequest({
         mastra,
         responseId: body.previous_response_id,
         requestContext,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
       if (!previousResponseTurnRecord) {
-        throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+        throwThreadBranchNotFound();
       }
     }
+  }
+
+  if (previousResponseTurnRecord) {
+    const authorizationMastra = resolvedAgent?.getMastraInstance() ?? mastra;
+    if (!authorizationMastra) {
+      throwThreadBranchNotFound();
+    }
+    await authorizeResponseTurnRecord({
+      mastra: authorizationMastra,
+      requestContext,
+      record: previousResponseTurnRecord,
+      permission: MastraFGAPermissions.MEMORY_WRITE,
+    });
   }
 
   const agent =
@@ -716,6 +815,7 @@ async function prepareCreateResponseRequest({
     })();
   const shouldStore = body.store ?? false;
   const needsMemoryStore = shouldStore || Boolean(body.conversation_id) || Boolean(body.previous_response_id);
+  const agentMemory = needsMemoryStore ? ((await agent.getMemory({ requestContext })) ?? null) : null;
   const agentMemoryStore = needsMemoryStore
     ? await resolveAgentMemoryStore({
         agent,
@@ -751,6 +851,7 @@ async function prepareCreateResponseRequest({
 
   return {
     agent,
+    agentMemory,
     agentMemoryStore,
     configuredTools,
     createdAt,
@@ -779,6 +880,7 @@ async function prepareCreateResponseRequest({
  * the stored response-turn record when the stream finishes.
  */
 function createResponseEventStream({
+  agentMemory,
   agentMemoryStore,
   body,
   configuredTools,
@@ -791,6 +893,7 @@ function createResponseEventStream({
   streamResult,
   threadContext,
 }: {
+  agentMemory: MastraMemory | null;
   agentMemoryStore: MemoryStorage | null;
   body: CreateResponseBody;
   configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
@@ -860,6 +963,7 @@ function createResponseEventStream({
         }
 
         const { completedState, response } = await finalizeResponse({
+          agentMemory,
           agentMemoryStore,
           didStore,
           threadContext,
@@ -924,6 +1028,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
     try {
       const {
         agent,
+        agentMemory,
         agentMemoryStore,
         configuredTools,
         createdAt,
@@ -952,6 +1057,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         });
 
         const { response } = await finalizeResponse({
+          agentMemory,
           agentMemoryStore,
           didStore,
           threadContext,
@@ -984,6 +1090,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
       });
 
       const stream = createResponseEventStream({
+        agentMemory,
         agentMemoryStore,
         body,
         configuredTools,
@@ -1026,9 +1133,15 @@ export const GET_RESPONSE_ROUTE = createRoute({
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
       if (!responseTurnRecord) {
-        throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
+        throwThreadBranchNotFound();
       }
 
+      await authorizeResponseTurnRecord({
+        mastra,
+        requestContext,
+        record: responseTurnRecord,
+        permission: MastraFGAPermissions.MEMORY_READ,
+      });
       return mapResponseTurnRecordToResponse(responseTurnRecord);
     } catch (error) {
       return handleError(error, 'Error retrieving response');
@@ -1049,11 +1162,30 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   requiresPermission: MastraFGAPermissions.AGENTS_DELETE,
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
-      const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
+      const responseTurnRecord = await findResponseTurnRecordAcrossAgents({
+        mastra,
+        responseId,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_DELETE,
+      });
       if (!responseTurnRecord) {
-        throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
+        throwThreadBranchNotFound();
       }
 
+      await authorizeResponseTurnRecord({
+        mastra,
+        requestContext,
+        record: responseTurnRecord,
+        permission: MastraFGAPermissions.MEMORY_DELETE,
+      });
+      await authorizeThreadBranchTree({
+        mastra,
+        requestContext,
+        memory: responseTurnRecord.memory,
+        thread: responseTurnRecord.thread,
+        effectiveResourceId: getEffectiveResourceId(requestContext, undefined),
+        permission: MastraFGAPermissions.MEMORY_DELETE,
+      });
       await deleteResponseTurnRecord({ responseTurnRecord });
 
       const response: DeleteResponse = {

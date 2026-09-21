@@ -112,6 +112,70 @@ The clone response includes:
 - `thread`: The newly created cloned thread with clone metadata
 - `clonedMessages`: Array of the cloned messages with new IDs
 
+### Create a shared-history branch
+
+Create a child thread at an inclusive message boundary. `agentId` is required either when you call `getMemoryThread()` or in the method parameters.
+
+```typescript
+const source = mastraClient.getMemoryThread({
+  threadId: 'conversation-1',
+  agentId: 'agent-1',
+})
+
+const { thread: child, branch } = await source.branch({
+  branchPointMessageId: 'message-3',
+  title: 'Alternative answer',
+  metadata: { reason: 'regenerate' },
+})
+```
+
+The request doesn't accept a destination ID or resource ID, so Mastra generates `child.id`. The response contains the sanitized child thread and:
+
+```typescript
+{
+  parentThreadId: string
+  branchPointMessageId: string
+  branchPointCreatedAt: Date
+  branchCreatedAt: Date
+}
+```
+
+Unlike `clone()`, `branch()` doesn't copy inherited message rows or embeddings. See [`Memory.branchThread()`](/reference/memory/branchThread) for fork and derived-memory behavior.
+
+### Get the parent
+
+```typescript
+const parent = await mastraClient
+  .getMemoryThread({ threadId: child.id, agentId: 'agent-1' })
+  .getParent()
+```
+
+`getParent()` returns the direct parent thread or `null` for a root thread. You can pass `{ agentId, requestContext }` to override or supplement the values supplied to `getMemoryThread()`.
+
+### List direct branches
+
+```typescript
+const result = await source.listBranches({
+  page: 0,
+  perPage: 20,
+})
+
+console.log(result.branches)
+console.log(result.total, result.hasMore)
+```
+
+`perPage` accepts a positive number or `false`. Use `{ page: 0, perPage: false }` to return all accessible direct children. Each entry has the same `{ thread, branch }` shape returned by `branch()`.
+
+### Get branch history
+
+```typescript
+const { history } = await mastraClient
+  .getMemoryThread({ threadId: child.id, agentId: 'agent-1' })
+  .getBranchHistory()
+```
+
+`history` is ordered from the root to the selected thread. The root entry has `branch: null`. Later entries contain the public branch metadata shown above. The server authorizes the selected thread and every ancestor at read time.
+
 ## Message operations
 
 ### Save Messages

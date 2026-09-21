@@ -13,6 +13,7 @@ import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import type { MastraMemory } from '@mastra/core/memory';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -81,6 +82,7 @@ import type { Context } from '../types';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
+import { authorizeMemoryThreadAccess, authorizeThreadBranchTree, inspectVisibleMemoryThread } from './thread-branching';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -90,7 +92,6 @@ import {
   getEffectiveThreadId,
   enforceThreadAccess,
   mergeBodyRequestContext,
-  validateThreadOwnership,
   validateRunOwnership,
 } from './utils';
 
@@ -143,6 +144,42 @@ function normalizePublicExecutionOptions(
   const { actor: _actor, requestContext, ...normalized } = options;
   mergeBodyRequestContext(serverRequestContext, requestContext);
   return { ...normalized, requestContext: serverRequestContext };
+}
+
+async function authorizeAgentMemoryWrite({
+  mastra,
+  requestContext,
+  memory,
+  threadId,
+  resourceId,
+}: {
+  mastra: any;
+  requestContext: RequestContext;
+  memory: MastraMemory;
+  threadId: string;
+  resourceId?: string;
+}): Promise<void> {
+  const branchState = await inspectVisibleMemoryThread(memory, threadId, { allowCreate: true });
+  const thread = branchState.state === 'absent' ? null : await memory.getThreadById({ threadId });
+  if (thread) {
+    await authorizeThreadBranchTree({
+      mastra,
+      requestContext,
+      memory,
+      thread,
+      effectiveResourceId: resourceId,
+      permission: MastraFGAPermissions.MEMORY_WRITE,
+    });
+    return;
+  }
+
+  await enforceThreadAccess({
+    mastra,
+    requestContext,
+    threadId,
+    effectiveResourceId: resourceId,
+    permission: MastraFGAPermissions.MEMORY_WRITE,
+  });
 }
 
 function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string): boolean {
@@ -1464,21 +1501,16 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
-        // Validate thread ownership if accessing an existing thread
         if (effectiveThreadId) {
           const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
           if (memoryInstance) {
-            const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-            if (thread) {
-              await enforceThreadAccess({
-                mastra,
-                requestContext: serverRequestContext,
-                threadId: effectiveThreadId,
-                thread,
-                effectiveResourceId,
-                permission: MastraFGAPermissions.MEMORY_WRITE,
-              });
-            }
+            await authorizeAgentMemoryWrite({
+              mastra,
+              requestContext: serverRequestContext,
+              memory: memoryInstance,
+              threadId: effectiveThreadId,
+              resourceId: effectiveResourceId,
+            });
           }
         }
 
@@ -1551,21 +1583,16 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
       }
 
-      // Validate thread ownership if accessing an existing thread
       if (effectiveThreadId) {
         const memory = await agent.getMemory({ requestContext });
         if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext,
-              threadId: effectiveThreadId,
-              thread,
-              effectiveResourceId,
-              permission: MastraFGAPermissions.MEMORY_WRITE,
-            });
-          }
+          await authorizeAgentMemoryWrite({
+            mastra,
+            requestContext,
+            memory,
+            threadId: effectiveThreadId,
+            resourceId: effectiveResourceId,
+          });
         }
       }
 
@@ -1621,21 +1648,16 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
       }
 
-      // Validate thread ownership if accessing an existing thread
       if (effectiveThreadId) {
         const memory = await agent.getMemory({ requestContext });
         if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext,
-              threadId: effectiveThreadId,
-              thread,
-              effectiveResourceId,
-              permission: MastraFGAPermissions.MEMORY_WRITE,
-            });
-          }
+          await authorizeAgentMemoryWrite({
+            mastra,
+            requestContext,
+            memory,
+            threadId: effectiveThreadId,
+            resourceId: effectiveResourceId,
+          });
         }
       }
 
@@ -1847,21 +1869,16 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
-        // Validate thread ownership if accessing an existing thread
         if (effectiveThreadId) {
           const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
           if (memoryInstance) {
-            const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-            if (thread) {
-              await enforceThreadAccess({
-                mastra,
-                requestContext: serverRequestContext,
-                threadId: effectiveThreadId,
-                thread,
-                effectiveResourceId,
-                permission: MastraFGAPermissions.MEMORY_WRITE,
-              });
-            }
+            await authorizeAgentMemoryWrite({
+              mastra,
+              requestContext: serverRequestContext,
+              memory: memoryInstance,
+              threadId: effectiveThreadId,
+              resourceId: effectiveResourceId,
+            });
           }
         }
 
@@ -1995,8 +2012,13 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       if (effectiveThreadId && effectiveResourceId) {
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
         if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
+          await authorizeAgentMemoryWrite({
+            mastra,
+            requestContext: serverRequestContext,
+            memory,
+            threadId: effectiveThreadId,
+            resourceId: effectiveResourceId,
+          });
         }
       }
 
@@ -2099,8 +2121,13 @@ async function handleAgentMessageRoute({
   if (effectiveThreadId && effectiveResourceId) {
     const memory = await agent.getMemory({ requestContext: serverRequestContext });
     if (memory) {
-      const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-      await validateThreadOwnership(thread, effectiveResourceId);
+      await authorizeAgentMemoryWrite({
+        mastra,
+        requestContext: serverRequestContext,
+        memory,
+        threadId: effectiveThreadId,
+        resourceId: effectiveResourceId,
+      });
     }
   }
 
@@ -2210,12 +2237,15 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'threadId is required' });
       }
 
-      if (effectiveResourceId) {
-        const memory = await agent.getMemory({ requestContext: serverRequestContext });
-        if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
-        }
+      const memory = await agent.getMemory({ requestContext: serverRequestContext });
+      if (memory) {
+        await authorizeAgentMemoryWrite({
+          mastra,
+          requestContext: serverRequestContext,
+          memory,
+          threadId: effectiveThreadId,
+          resourceId: effectiveResourceId,
+        });
       }
 
       const aborted = await agent.abortThreadStream({
@@ -2260,12 +2290,15 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'threadId is required' });
       }
 
-      if (effectiveResourceId) {
-        const memory = await agent.getMemory({ requestContext: serverRequestContext });
-        if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
-        }
+      const memory = await agent.getMemory({ requestContext: serverRequestContext });
+      if (memory) {
+        await authorizeAgentMemoryWrite({
+          mastra,
+          requestContext: serverRequestContext,
+          memory,
+          threadId: effectiveThreadId,
+          resourceId: effectiveResourceId,
+        });
       }
 
       const subscription = await agent.subscribeToThread({
@@ -2384,12 +2417,16 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
-        // Validate thread ownership if accessing an existing thread
-        if (effectiveThreadId && effectiveResourceId) {
+        if (effectiveThreadId) {
           const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
           if (memoryInstance) {
-            const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-            await validateThreadOwnership(thread, effectiveResourceId);
+            await authorizeAgentMemoryWrite({
+              mastra,
+              requestContext: serverRequestContext,
+              memory: memoryInstance,
+              threadId: effectiveThreadId,
+              resourceId: effectiveResourceId,
+            });
           }
         }
 
@@ -2606,11 +2643,13 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 });
 
 async function validateSubscriptionToolCallThreadAccess({
+  mastra,
   agent,
   requestContext,
   resourceId,
   threadId,
 }: {
+  mastra: any;
   agent: Agent;
   requestContext: RequestContext;
   resourceId?: string;
@@ -2623,12 +2662,15 @@ async function validateSubscriptionToolCallThreadAccess({
     throw new HTTPException(400, { message: 'threadId is required' });
   }
 
-  if (effectiveResourceId) {
-    const memory = await agent.getMemory({ requestContext });
-    if (memory) {
-      const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-      await validateThreadOwnership(thread, effectiveResourceId);
-    }
+  const memory = await agent.getMemory({ requestContext });
+  if (memory) {
+    await authorizeAgentMemoryWrite({
+      mastra,
+      requestContext,
+      memory,
+      threadId: effectiveThreadId,
+      resourceId: effectiveResourceId,
+    });
   }
 
   return { effectiveResourceId: effectiveResourceId ?? '', effectiveThreadId };
@@ -2669,6 +2711,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
         serverRequestContext,
       );
       const { effectiveResourceId, effectiveThreadId } = await validateSubscriptionToolCallThreadAccess({
+        mastra,
         agent,
         requestContext: serverRequestContext,
         resourceId: params.resourceId,
@@ -2730,10 +2773,10 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         if (!thread) {
           throw new HTTPException(403, { message: 'Access denied: thread not found' });
         }
-        await enforceThreadAccess({
+        await authorizeMemoryThreadAccess({
           mastra,
           requestContext,
-          threadId: effectiveThreadId,
+          memory,
           thread,
           effectiveResourceId,
         });
@@ -2864,17 +2907,13 @@ export const RESUME_STREAM_ROUTE = createRoute({
       if (effectiveThreadId) {
         const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
         if (memoryInstance) {
-          const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext: serverRequestContext,
-              threadId: effectiveThreadId,
-              thread,
-              effectiveResourceId,
-              permission: MastraFGAPermissions.MEMORY_WRITE,
-            });
-          }
+          await authorizeAgentMemoryWrite({
+            mastra,
+            requestContext: serverRequestContext,
+            memory: memoryInstance,
+            threadId: effectiveThreadId,
+            resourceId: effectiveResourceId,
+          });
         }
       }
 
@@ -3057,17 +3096,13 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       if (effectiveThreadId) {
         const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
         if (memoryInstance) {
-          const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext: serverRequestContext,
-              threadId: effectiveThreadId,
-              thread,
-              effectiveResourceId,
-              permission: MastraFGAPermissions.MEMORY_WRITE,
-            });
-          }
+          await authorizeAgentMemoryWrite({
+            mastra,
+            requestContext: serverRequestContext,
+            memory: memoryInstance,
+            threadId: effectiveThreadId,
+            resourceId: effectiveResourceId,
+          });
         }
       }
 

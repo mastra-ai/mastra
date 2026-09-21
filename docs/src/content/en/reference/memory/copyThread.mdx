@@ -7,9 +7,11 @@ packages:
 
 # Memory.copyThread()
 
-The `.copyThread()` method copies an existing thread and its messages to a new thread. It behaves like [`cloneThread()`](/reference/memory/cloneThread), including working memory, observational memory, and semantic-recall embeddings, but it doesn't return the copied messages. On `@mastra/libsql` and `@mastra/pg` the rows are copied inside the database, so the copy itself never loads message content into the Node.js process. See [Memory usage](#memory-usage) for the cases where content is still read.
+The `.copyThread()` method creates an independent copy of a thread and its messages. It behaves like [`cloneThread()`](/reference/memory/cloneThread), including working memory, Observational Memory, and semantic-recall embeddings, but it doesn't return the copied messages. On `@mastra/libsql` and `@mastra/pg`, the rows are copied inside the database, so the copy itself never loads message content into the Node.js process. See [Memory usage](#memory-usage) for the cases where content is still read.
 
-Use `copyThread()` when you only need the new thread ID, such as forking a conversation for a subagent. Use `cloneThread()` when you need the copied messages in the response.
+If the source is a shared-history branch, `copyThread()` materializes its root-to-current logical path with fresh message IDs and embeddings. Use [`branchThread()`](/reference/memory/branchThread) when the child should reference inherited messages without copying them.
+
+Use `copyThread()` when you only need the new independent thread ID, such as copying a conversation for a subagent. Use `cloneThread()` when you need the copied messages in the response.
 
 ## Usage example
 
@@ -118,6 +120,10 @@ const { thread, messageIdMap } = await memory.copyThread({
 - When semantic recall is enabled, the copied messages are read back to generate embeddings. This happens in batches of 100 by destination message ID, so only one batch is held in memory at a time.
 
 `cloneThread()` calls `copyThread()` and then reads the new thread's messages back to populate `clonedMessages`.
+
+## Derived memory
+
+`copyThread()` uses the same derived-memory rules as `cloneThread()`: thread-scoped Working Memory and Observational Memory are copied, resource-scoped Working Memory remains shared for the same resource, and only the active Observational Memory generation is considered. A same-resource copy uses the resource's normal shared Observational Memory record rather than a branch-owned record. A changed-resource copy snapshots the source branch's active Observational Memory into the destination resource.
 
 ## Related
 

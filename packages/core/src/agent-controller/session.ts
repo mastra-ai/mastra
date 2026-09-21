@@ -254,6 +254,7 @@ export interface ThreadDataStore {
   /** Clone a thread (and its messages) via the host's memory, returning the new thread. */
   cloneThread(input: {
     sourceThreadId: string;
+    newThreadId?: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
@@ -733,10 +734,12 @@ export class SessionThread {
   /** Clone a thread (and its messages), bind the session to the clone, and rebind the stream. */
   async clone({
     sourceThreadId,
+    newThreadId,
     title,
     resourceId,
   }: {
     sourceThreadId?: string;
+    newThreadId?: string;
     title?: string;
     resourceId?: string;
   } = {}): Promise<AgentControllerThread> {
@@ -750,6 +753,7 @@ export class SessionThread {
     }
     return this.#cloneThread({
       sourceThreadId: sourceId,
+      newThreadId,
       resourceId: resourceId ?? this.#owner.identity.getResourceId(),
       title,
     });
@@ -757,11 +761,13 @@ export class SessionThread {
 
   async #cloneThread({
     sourceThreadId,
+    newThreadId,
     resourceId,
     title,
     metadata,
   }: {
     sourceThreadId: string;
+    newThreadId?: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
@@ -772,7 +778,7 @@ export class SessionThread {
       throw new Error('Memory is not configured on this AgentController');
     }
 
-    const clonedThread = await store.cloneThread({ sourceThreadId, resourceId, title, metadata });
+    const clonedThread = await store.cloneThread({ sourceThreadId, newThreadId, resourceId, title, metadata });
 
     // Acquire lock on new thread before releasing old one
     const oldThreadId = this.#threadId;
