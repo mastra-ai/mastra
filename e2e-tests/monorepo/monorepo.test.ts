@@ -516,15 +516,8 @@ export const environmentRoute = registerApiRoute('/environment', {
       const originalPackageJsons = await Promise.all(packageJsonPaths.map(path => readFile(path, 'utf-8')));
       const sourceLockfilePath = join(fixturePath, 'pnpm-lock.yaml');
       const sourceLockfile = await readFile(sourceLockfilePath, 'utf-8');
-      const mastraConfigPath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
-      const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
 
       try {
-        // Keep the lockfile probe external so dependency optimization does not bundle it away.
-        await writeFile(
-          mastraConfigPath,
-          originalMastraConfig.replace('externals: [', "externals: ['unicorn-magic', "),
-        );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
           const packageJson = JSON.parse(originalPackageJsons[index]!);
           packageJson.dependencies['unicorn-magic'] = '>=0.2.0';
@@ -548,7 +541,6 @@ export const environmentRoute = registerApiRoute('/environment', {
       } finally {
         await Promise.all(packageJsonPaths.map((path, index) => writeFile(path, originalPackageJsons[index]!)));
         await writeFile(sourceLockfilePath, sourceLockfile);
-        await writeFile(mastraConfigPath, originalMastraConfig);
       }
 
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
@@ -1140,11 +1132,6 @@ export const mastra = new Mastra({
             join(corePath, 'runtime-context', 'index.js'),
             `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
           );
-
-          const mastraConfigPath = join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
-          const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
-          // The unresolved import must be bundled, not explicitly left for runtime resolution.
-          await writeFile(mastraConfigPath, mastraConfig.replace("'@inner/subpath-only'", ''));
 
           const transitiveDependencyPath = join(isolatedFixturePath, 'packages', 'transitive-c', 'src', 'index.js');
           const transitiveDependencySource = await readFile(transitiveDependencyPath, 'utf-8');
