@@ -50,6 +50,12 @@ function isWorkflowResumeAlreadyClaimedError(error: unknown): error is Error {
   return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_RESUME_ALREADY_CLAIMED_CODE;
 }
 
+const FEEDBACK_REVIEW_STATUS_CONFLICT_CODE = 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT';
+
+function isFeedbackReviewStatusConflictError(error: unknown): error is Error {
+  return error instanceof Error && (error as { id?: unknown }).id === FEEDBACK_REVIEW_STATUS_CONFLICT_CODE;
+}
+
 /**
  * Structural check for ZodError instances.
  *
@@ -114,6 +120,16 @@ export function handleError(error: unknown, defaultMessage: string): never {
   // A losing concurrent resume is a conflict on run state, not a malformed request, so it maps
   // to 409 and clients can distinguish it from a 400/500 and re-read the run.
   if (isWorkflowResumeAlreadyClaimedError(error)) {
+    throw new HTTPException(409, {
+      message: error.message,
+      stack: error.stack,
+      cause: error,
+    });
+  }
+
+  // The feedback row changed under a review-status update, so the caller re-reads and retries;
+  // that is a conflict, not a broken store.
+  if (isFeedbackReviewStatusConflictError(error)) {
     throw new HTTPException(409, {
       message: error.message,
       stack: error.stack,
