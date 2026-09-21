@@ -22,6 +22,8 @@
 
 Five built-in providers ship in the `IMPORTERS` registry: Notion (pages and databases), Confluence (pages), Linear (Documents — knowledge, not issue tracking), Zendesk (Help Center articles — not tickets), and Fireflies (meeting transcripts). Jira is deliberately not an importer — it remains a work-intake source. Each is a deterministic cursor-based sync through the platform proxy (no source credentials in your process), with content-hashed record ids for idempotent re-runs and durable watermark state that only advances after mutations commit.
 
+Importers also emit the relationships their source natively knows as `metadata.links` on records (new exported `RecordLink` type): cross-references (Notion page links, Confluence `<ri:page>` links, Linear doc URLs, Zendesk article hrefs) and containment structure (Notion parents, Confluence ancestors, Linear projects, Zendesk sections, Fireflies attendees + recurring-meeting series). Notion now fetches page bodies via a bounded `blocks/{id}/children` walk — pages carry their block text, not just titles and properties. Every node is stamped with its own address in metadata (`address`, plus `addressAliases` for Linear slug-form links) so render layers can resolve link targets without extra lookups. Link arrays are part of each record's content hash, so the first run after this upgrade re-records every entity once (owner-role bindings clean up the stale generation; `edit`-role bindings — Fireflies by default — keep one stale generation per node).
+
 ```typescript
 import { Knowledge } from '@mastra/core/knowledge';
 import { importers } from '@mastra/connect';

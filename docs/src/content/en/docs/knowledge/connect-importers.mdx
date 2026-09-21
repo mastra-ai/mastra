@@ -37,13 +37,13 @@ Only the providers you list under `integrations` are considered. A provider with
 
 ## Providers
 
-| `integrationId` | Default schedule | External address | Notes |
-| - | - | - | - |
-| `notion` | `0 * * * *` | `notion:page:<id>`, `notion:database:<id>` | `POST /v1/search` sorted by `last_edited_time`; archived pages remove records under an `owner` binding. |
-| `confluence` | `0 * * * *` | `confluence:page:<id>` | CQL `lastmodified >= "<watermark>"`; storage-format body stripped to plain text. |
-| `linear` | `*/30 * * * *` | `linear:document:<id>` | GraphQL `documents(filter: { updatedAt: { gte: $watermark } })` — Documents (project docs, PRDs), not issues; archived documents remove records. |
-| `zendesk` | `*/30 * * * *` | `zendesk:article:<id>` | Help Center incremental export (`/api/v2/help_center/incremental/articles.json`) — Guide articles, not tickets; HTML bodies stripped to plain text; drafts remove records. |
-| `fireflies` | `0 */2 * * *` | `fireflies:transcript:<id>` | GraphQL `transcripts(fromDate: $watermark)`; one record per summary facet (overview, action items, keywords) with a `metadata.citation` deep link. |
+| `integrationId` | Default schedule | External address | Relationships | Notes |
+| - | - | - | - | - |
+| `notion` | `0 * * * *` | `notion:page:<id>`, `notion:database:<id>` | Parent page/database (`child-of`); page links from `link_to_page` blocks, page mentions, and notion.so URLs (`references`). | `POST /v1/search` sorted by `last_edited_time`; page bodies fetched via a bounded `blocks/{id}/children` walk; archived pages remove records under an `owner` binding. |
+| `confluence` | `0 * * * *` | `confluence:page:<id>` | Direct ancestor (`child-of`); `<ri:page>` storage-format links — by content id when present, by title otherwise (`references`). | CQL `lastmodified >= "<watermark>"`; storage-format body stripped to plain text. |
+| `linear` | `*/30 * * * *` | `linear:document:<id>` | Project container (`in`, `linear:project:<id>`); doc-to-doc links from `linear.app` document URLs, resolved via slug aliases (`references`). | GraphQL `documents(filter: { updatedAt: { gte: $watermark } })` — Documents (project docs, PRDs), not issues; archived documents remove records. |
+| `zendesk` | `*/30 * * * *` | `zendesk:article:<id>` | Section container (`in`, `zendesk:section:<id>`); article-to-article links from Help Center hrefs (`references`). | Help Center incremental export (`/api/v2/help_center/incremental/articles.json`) — Guide articles, not tickets; HTML bodies stripped to plain text; drafts remove records. |
+| `fireflies` | `0 */2 * * *` | `fireflies:transcript:<id>` | Attendee containers (`attended-by`/`organized-by`, `fireflies:person:<email>`); recurring-meeting series keyed on title (`in`, `fireflies:series:<slug>`). | GraphQL `transcripts(fromDate: $watermark)`; one record per summary facet (overview, action items, keywords) with a `metadata.citation` deep link. |
 
 ## Per-integration options
 
@@ -98,6 +98,25 @@ Every importer is written for at-least-once execution:
 - Zendesk's watermark is the incremental export's `end_time` (epoch seconds) — stored verbatim and passed back as the next `start_time`.
 - Every run is bounded: at most 50 HTTP pages and 500 records per invocation, and every handler honors `context.signal` for cancellation.
 - Descending walkers (Notion, Linear, Fireflies) persist a resume cursor alongside the watermark. When a run hits the per-run bound before draining back to the previous watermark, the next scheduled run resumes deeper into the tail instead of restarting from the newest page — so an initial backfill larger than one bounded run still converges. During the multi-run backfill the walker also persists the newest timestamp it observed on the first-fetched page, so the final drain run (which by construction only sees older items via its resume cursor) still writes the correct high-water watermark rather than regressing it to the older tail. Once the walk exhausts pagination, the watermark advances, and both the resume cursor and the high-water candidate are cleared.
+
+## Relationship links
+
+Importers record the relationships their source natively knows — cross-references between content and containment structure — as `metadata.links` on each record:
+
+```typescript
+interface RecordLink {
+  address?: string // Stable node address, preferred (e.g. 'notion:page:<id>')
+  name?: string // Display-name fallback for title-only sources (Confluence)
+  rel?: string // 'references' | 'child-of' | 'in' | 'attended-by' | ...
+}
+// Stored as record metadata: { links: RecordLink[] }
+```
+
+No edges are stored. The Factory graph route derives edges at render time: `address` entries resolve against the loaded window's nodes via the self-address each importer stamps into node metadata (`metadata.address`, plus `metadata.addressAliases` — Linear docs register a slug alias because doc URLs carry the short slug, not the uuid); `name` entries resolve through the same name resolver wikilinks use. Unresolvable targets are skipped silently. Structure links are emitted one-directionally — the child records `child-of`/`in` toward its container.
+
+Container nodes (Linear projects, Zendesk sections, Fireflies people and series) are upserted with a name, a kind (`connect:linear:project`, `connect:zendesk:section`, `connect:fireflies:person`, `connect:fireflies:series`), and one minimal record so they render in the graph.
+
+The sorted link array is part of each record's content hash, so a structural move or link change produces a new record id and flows through the normal replace-and-clean-up machinery. Imported body text has `[[`/`]]` neutralized to fullwidth brackets so source content can never mint accidental wikilink edges.
 
 ## Cache and revalidation
 
