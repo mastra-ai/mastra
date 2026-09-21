@@ -17,27 +17,32 @@ import {
   writeWatermark,
 } from '../../importer-runtime.js';
 
-const LINEAR_WATERMARK_KEY = 'linear:watermark';
-const LINEAR_RESUME_CURSOR_KEY = 'linear:resume-cursor';
-const LINEAR_HIGH_WATER_KEY = 'linear:high-water';
+// Keys are namespaced under `documents` — earlier revisions of this importer
+// synced issues under `linear:watermark`, and reusing that key would make the
+// documents backfill skip anything older than the issues watermark.
+const LINEAR_WATERMARK_KEY = 'linear:documents:watermark';
+const LINEAR_RESUME_CURSOR_KEY = 'linear:documents:resume-cursor';
+const LINEAR_HIGH_WATER_KEY = 'linear:documents:high-water';
 
-const issueSchema = z.object({
+// Linear is an issue tracker, but issues are operational work — not knowledge.
+// This importer syncs Linear Documents (project docs, PRDs, initiative docs),
+// which are the durable, document-shaped content in a Linear workspace.
+const documentSchema = z.object({
   id: z.string(),
-  identifier: z.string().nullish(),
   title: z.string().default(''),
-  description: z.string().nullish(),
+  content: z.string().nullish(),
   url: z.string().nullish(),
   updatedAt: z.string(),
   archivedAt: z.string().nullish(),
   trashed: z.boolean().nullish(),
-  state: z.object({ name: z.string().nullish() }).nullish(),
-  team: z.object({ key: z.string().nullish(), name: z.string().nullish() }).nullish(),
+  project: z.object({ name: z.string().nullish() }).nullish(),
+  initiative: z.object({ name: z.string().nullish() }).nullish(),
 });
 
-const issuesResponseSchema = z.object({
+const documentsResponseSchema = z.object({
   data: z.object({
-    issues: z.object({
-      nodes: z.array(issueSchema),
+    documents: z.object({
+      nodes: z.array(documentSchema),
       pageInfo: z.object({
         hasNextPage: z.boolean(),
         endCursor: z.string().nullish(),
@@ -46,22 +51,21 @@ const issuesResponseSchema = z.object({
   }),
 });
 
-type LinearIssue = z.infer<typeof issueSchema>;
+type LinearDocument = z.infer<typeof documentSchema>;
 
-const ISSUES_QUERY = `
-query Issues($filter: IssueFilter, $after: String) {
-  issues(filter: $filter, orderBy: updatedAt, first: 50, after: $after) {
+const DOCUMENTS_QUERY = `
+query Documents($filter: DocumentFilter, $after: String) {
+  documents(filter: $filter, orderBy: updatedAt, first: 50, after: $after) {
     nodes {
       id
-      identifier
       title
-      description
+      content
       url
       updatedAt
       archivedAt
       trashed
-      state { name }
-      team { key name }
+      project { name }
+      initiative { name }
     }
     pageInfo { hasNextPage endCursor }
   }
@@ -89,7 +93,7 @@ function createLinearImporter(ctx: ImporterProviderContext) {
       // (maxPages/maxRecords) we persist endCursor so the next run resumes further into
       // the tail. Only when the source exhausts pagination do we advance the watermark
       // and clear the resume cursor.
-      const collected: LinearIssue[] = [];
+      const collected: LinearDocument[] = [];
       let cursor: string | undefined = resumeCursor;
       let nextCursorAfterLastPage: string | undefined;
       let drainedFully = false;
@@ -101,23 +105,23 @@ function createLinearImporter(ctx: ImporterProviderContext) {
         if (context.signal.aborted) break;
         const variables: Record<string, unknown> = { after: cursor };
         if (previousWatermark) variables.filter = { updatedAt: { gte: previousWatermark } };
-        const parsed = issuesResponseSchema.parse(
+        const parsed = documentsResponseSchema.parse(
           await ctx.request({
             method: 'POST',
             path: 'graphql',
-            body: { query: ISSUES_QUERY, variables },
+            body: { query: DOCUMENTS_QUERY, variables },
           }),
         );
-        for (const issue of parsed.data.issues.nodes) {
-          if (!newestObserved || issue.updatedAt > newestObserved) newestObserved = issue.updatedAt;
-          collected.push(issue);
+        for (const document of parsed.data.documents.nodes) {
+          if (!newestObserved || document.updatedAt > newestObserved) newestObserved = document.updatedAt;
+          collected.push(document);
         }
-        if (!parsed.data.issues.pageInfo.hasNextPage || !parsed.data.issues.pageInfo.endCursor) {
+        if (!parsed.data.documents.pageInfo.hasNextPage || !parsed.data.documents.pageInfo.endCursor) {
           drainedFully = true;
           break;
         }
-        cursor = parsed.data.issues.pageInfo.endCursor;
-        nextCursorAfterLastPage = parsed.data.issues.pageInfo.endCursor;
+        cursor = parsed.data.documents.pageInfo.endCursor;
+        nextCursorAfterLastPage = parsed.data.documents.pageInfo.endCursor;
         if (collected.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
       }
 
@@ -125,10 +129,10 @@ function createLinearImporter(ctx: ImporterProviderContext) {
       collected.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
 
       let lastProcessed: string | undefined;
-      for (const issue of collected) {
+      for (const document of collected) {
         if (context.signal.aborted) return;
-        const address = `linear:issue:${issue.id}`;
-        const archived = Boolean(issue.archivedAt || issue.trashed);
+        const address = `linear:document:${document.id}`;
+        const archived = Boolean(document.archivedAt || document.trashed);
         if (archived) {
           if (canRemove) {
             const existing = await importer.getNode(address);
@@ -137,29 +141,28 @@ function createLinearImporter(ctx: ImporterProviderContext) {
               for (const record of records) await existing.removeRecord(record.id);
             }
           }
-          lastProcessed = issue.updatedAt;
+          lastProcessed = document.updatedAt;
           continue;
         }
-        const title = issue.title || issue.identifier || issue.id;
-        const description = issue.description ?? '';
+        const title = document.title || document.id;
+        const content = document.content ?? '';
         const recordPayload = {
           address,
           title,
-          description,
-          updatedAt: issue.updatedAt,
+          content,
+          updatedAt: document.updatedAt,
         };
         const recordId = contentRecordId(recordPayload);
-        const node = await importer.upsertNode(address, { name: title, kind: 'connect:linear:issue' });
+        const node = await importer.upsertNode(address, { name: title, kind: 'connect:linear:document' });
         const existingRecords = await node.listRecords();
         if (!existingRecords.some(r => r.id === recordId)) {
           await node.appendRecord({
             id: recordId,
-            text: boundText(description ? `${title}\n\n${description}` : title),
+            text: boundText(content ? `${title}\n\n${content}` : title),
             metadata: {
-              identifier: issue.identifier,
-              state: issue.state?.name,
-              team: issue.team?.key ?? issue.team?.name,
-              url: issue.url,
+              project: document.project?.name,
+              initiative: document.initiative?.name,
+              url: document.url,
             },
           });
         }
@@ -168,7 +171,7 @@ function createLinearImporter(ctx: ImporterProviderContext) {
             if (previous.id !== recordId) await node.removeRecord(previous.id);
           }
         }
-        lastProcessed = issue.updatedAt;
+        lastProcessed = document.updatedAt;
       }
 
       if (drainedFully && (lastProcessed || newestObserved)) {

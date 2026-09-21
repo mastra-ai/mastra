@@ -11,29 +11,44 @@ import {
   writeWatermark,
 } from '../../importer-runtime.js';
 
-const ZENDESK_CURSOR_KEY = 'zendesk:cursor';
+// Namespaced under `articles` — earlier revisions synced tickets under
+// `zendesk:cursor`, and that opaque ticket cursor is meaningless here.
+const ZENDESK_WATERMARK_KEY = 'zendesk:articles:watermark';
 
-const ticketSchema = z.object({
+// Zendesk tickets are operational work — not knowledge. This importer syncs
+// Help Center (Guide) articles: the durable, document-shaped content in a
+// Zendesk instance.
+const articleSchema = z.object({
   id: z.number(),
-  subject: z.string().nullish(),
-  description: z.string().nullish(),
-  status: z.string().nullish(),
+  title: z.string().nullish(),
+  body: z.string().nullish(),
+  draft: z.boolean().nullish(),
+  locale: z.string().nullish(),
   updated_at: z.string().nullish(),
-  url: z.string().nullish(),
+  html_url: z.string().nullish(),
 });
 
-const cursorResponseSchema = z.object({
-  tickets: z.array(ticketSchema),
-  after_cursor: z.string().nullish(),
-  after_url: z.string().nullish(),
-  end_of_stream: z.boolean().nullish(),
+const incrementalArticlesSchema = z.object({
+  articles: z.array(articleSchema),
+  end_time: z.number().nullish(),
+  next_page: z.string().nullish(),
 });
 
-type ZendeskTicket = z.infer<typeof ticketSchema>;
+type ZendeskArticle = z.infer<typeof articleSchema>;
 
-function isPurged(ticket: ZendeskTicket): boolean {
-  const status = (ticket.status ?? '').toLowerCase();
-  return status === 'deleted' || status === 'purged';
+/** Strip HTML tags from article bodies — enough for semantic search, no DOM needed. */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function createZendeskImporter(ctx: ImporterProviderContext) {
@@ -48,42 +63,42 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
       state: import('@mastra/core/knowledge').KnowledgeImporterState;
       importer: () => Promise<import('@mastra/core/knowledge').StaticKnowledgeImporterOperations>;
     }) => {
-      const previousCursor = await readWatermark(context.state, ZENDESK_CURSOR_KEY);
+      const previousWatermark = await readWatermark(context.state, ZENDESK_WATERMARK_KEY);
       const importer = await context.importer();
       const canRemove = Object.values(ctx.access).some(role => role === 'owner');
 
-      const collected: ZendeskTicket[] = [];
-      let cursor: string | undefined = previousCursor;
-      let lastCursorSeen: string | undefined = previousCursor;
+      // Help Center's incremental articles export is time-based: each page
+      // returns articles updated since start_time plus an end_time to use as
+      // the next start_time. When end_time stops advancing (or no articles
+      // return), the export is drained.
+      const collected: ZendeskArticle[] = [];
+      let startTime = previousWatermark ? Number(previousWatermark) : 0;
+      if (!Number.isFinite(startTime) || startTime < 0) startTime = 0;
+      let lastEndTime: number | undefined;
       for (let pageIndex = 0; pageIndex < DEFAULT_MAX_PAGES_PER_RUN; pageIndex++) {
         if (context.signal.aborted) break;
-        const query: Record<string, string | number | boolean | undefined> = {};
-        if (cursor) {
-          query.cursor = cursor;
-        } else {
-          // Initial run — start from epoch to fetch all tickets. Callers can override
-          // start_time by pre-seeding the cursor if they need a narrower window.
-          query.start_time = 0;
-        }
-        const parsed = cursorResponseSchema.parse(
+        const parsed = incrementalArticlesSchema.parse(
           await ctx.request({
             method: 'GET',
-            path: 'api/v2/incremental/tickets/cursor.json',
-            query,
+            path: 'api/v2/help_center/incremental/articles.json',
+            query: { start_time: startTime },
           }),
         );
-        for (const ticket of parsed.tickets) collected.push(ticket);
-        if (parsed.after_cursor) lastCursorSeen = parsed.after_cursor;
-        if (parsed.end_of_stream) break;
-        if (!parsed.after_cursor) break;
-        cursor = parsed.after_cursor;
+        for (const article of parsed.articles) collected.push(article);
+        const endTime = parsed.end_time ?? undefined;
+        if (endTime !== undefined && endTime > startTime) lastEndTime = endTime;
+        // Drained: nothing new, no forward progress, or no continuation page.
+        if (parsed.articles.length === 0 || endTime === undefined || endTime <= startTime || !parsed.next_page) break;
+        startTime = endTime;
         if (collected.length >= DEFAULT_MAX_RECORDS_PER_RUN) break;
       }
 
-      for (const ticket of collected) {
+      for (const article of collected) {
         if (context.signal.aborted) return;
-        const address = `zendesk:ticket:${ticket.id}`;
-        if (isPurged(ticket)) {
+        const address = `zendesk:article:${article.id}`;
+        if (article.draft) {
+          // Drafts aren't published knowledge — remove any previously
+          // published records when an article moves back to draft.
           if (!canRemove) continue;
           const existing = await importer.getNode(address);
           if (!existing) continue;
@@ -91,25 +106,25 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
           for (const record of records) await existing.removeRecord(record.id);
           continue;
         }
-        const subject = ticket.subject ?? `Ticket #${ticket.id}`;
-        const description = ticket.description ?? '';
+        const title = article.title ?? `Article #${article.id}`;
+        const body = stripHtml(article.body ?? '');
         const recordPayload = {
           address,
-          subject,
-          description,
-          updatedAt: ticket.updated_at,
+          title,
+          body,
+          updatedAt: article.updated_at,
         };
         const recordId = contentRecordId(recordPayload);
-        const node = await importer.upsertNode(address, { name: subject, kind: 'connect:zendesk:ticket' });
+        const node = await importer.upsertNode(address, { name: title, kind: 'connect:zendesk:article' });
         const existingRecords = await node.listRecords();
         if (!existingRecords.some(r => r.id === recordId)) {
           await node.appendRecord({
             id: recordId,
-            text: boundText(description ? `${subject}\n\n${description}` : subject),
+            text: boundText(body ? `${title}\n\n${body}` : title),
             metadata: {
-              status: ticket.status,
-              updatedAt: ticket.updated_at,
-              url: ticket.url,
+              locale: article.locale,
+              updatedAt: article.updated_at,
+              url: article.html_url,
             },
           });
         }
@@ -120,11 +135,10 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
         }
       }
 
-      // Zendesk's after_cursor is opaque — store it verbatim. The runner's pending-state
-      // batching commits this only if the handler returns cleanly, so ordering within the
-      // handler is not load-bearing; write once at the end for clarity.
-      if (lastCursorSeen && lastCursorSeen !== previousCursor) {
-        await writeWatermark(context.state, ZENDESK_CURSOR_KEY, lastCursorSeen);
+      // The runner's pending-state batching commits this only if the handler
+      // returns cleanly, so a mid-run failure re-reads the old window.
+      if (lastEndTime !== undefined) {
+        await writeWatermark(context.state, ZENDESK_WATERMARK_KEY, String(lastEndTime));
       }
     },
   };

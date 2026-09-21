@@ -4,33 +4,35 @@ import type { ImporterProviderContext } from '../importer-registry.js';
 import { zendeskImporterRegistration } from '../providers/zendesk/importer.js';
 import { createFakeImporter, createFakeState, runImporter, type FakeImporter } from './fixtures/importer-harness.js';
 
-interface ZendeskTicketFixture {
+interface ZendeskArticleFixture {
   id: number;
-  subject?: string;
-  description?: string;
-  status?: string;
+  title?: string;
+  body?: string;
+  draft?: boolean;
+  locale?: string;
   updated_at?: string;
 }
 
-function ticketNode(fixture: ZendeskTicketFixture) {
+function articleNode(fixture: ZendeskArticleFixture) {
   return {
     id: fixture.id,
-    subject: fixture.subject ?? null,
-    description: fixture.description ?? null,
-    status: fixture.status ?? 'open',
+    title: fixture.title ?? null,
+    body: fixture.body ?? null,
+    draft: fixture.draft ?? false,
+    locale: fixture.locale ?? 'en-us',
     updated_at: fixture.updated_at,
-    url: `https://acme.zendesk.com/api/v2/tickets/${fixture.id}.json`,
+    html_url: `https://acme.zendesk.com/hc/en-us/articles/${fixture.id}`,
   };
 }
 
-function cursorResponse(
-  tickets: ZendeskTicketFixture[],
-  opts: { after_cursor?: string | null; end_of_stream?: boolean } = {},
+function incrementalResponse(
+  articles: ZendeskArticleFixture[],
+  opts: { end_time?: number | null; next_page?: string | null } = {},
 ) {
   return {
-    tickets: tickets.map(ticketNode),
-    after_cursor: opts.after_cursor ?? null,
-    end_of_stream: opts.end_of_stream ?? false,
+    articles: articles.map(articleNode),
+    end_time: opts.end_time ?? null,
+    next_page: opts.next_page ?? null,
   };
 }
 
@@ -40,7 +42,7 @@ function makeContext(overrides?: { role?: 'owner' | 'edit'; request?: ReturnType
   importer: FakeImporter;
   state: ReturnType<typeof createFakeState>;
 } {
-  const request = overrides?.request ?? vi.fn(async () => ({ tickets: [], after_cursor: null, end_of_stream: true }));
+  const request = overrides?.request ?? vi.fn(async () => ({ articles: [], end_time: null, next_page: null }));
   const role = overrides?.role ?? 'owner';
   const ctx: ImporterProviderContext = {
     connection: { id: 'c_zendesk', integrationId: 'zendesk', status: 'active' } as never,
@@ -52,54 +54,90 @@ function makeContext(overrides?: { role?: 'owner' | 'edit'; request?: ReturnType
 }
 
 describe('zendesk importer', () => {
-  it('first run imports every ticket as a node with a content-hashed record', async () => {
+  it('first run imports every published article as a node with a content-hashed record', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce(
-      cursorResponse(
+      incrementalResponse(
         [
-          { id: 1, subject: 'Alpha', description: 'first', updated_at: '2026-09-01T00:00:00Z' },
-          { id: 2, subject: 'Beta', description: 'second', updated_at: '2026-09-02T00:00:00Z' },
+          { id: 1, title: 'Getting started', body: '<p>first</p>', updated_at: '2026-09-01T00:00:00Z' },
+          { id: 2, title: 'FAQ', body: '<p>second</p>', updated_at: '2026-09-02T00:00:00Z' },
         ],
-        { after_cursor: 'cur-1', end_of_stream: true },
+        { end_time: 1_780_000_000 },
       ),
     );
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
-    expect(importer.nodes.get('zendesk:ticket:1')?.input).toMatchObject({ name: 'Alpha' });
-    expect(importer.nodes.get('zendesk:ticket:2')?.records.size).toBe(1);
+    expect(importer.nodes.get('zendesk:article:1')?.input).toMatchObject({
+      name: 'Getting started',
+      kind: 'connect:zendesk:article',
+    });
+    expect(importer.nodes.get('zendesk:article:2')?.records.size).toBe(1);
     const call = request.mock.calls[0]![0]! as { method: string; path: string; query: Record<string, unknown> };
     expect(call.method).toBe('GET');
-    expect(call.path).toBe('api/v2/incremental/tickets/cursor.json');
+    expect(call.path).toBe('api/v2/help_center/incremental/articles.json');
     expect(call.query.start_time).toBe(0);
   });
 
-  it('stores the after_cursor verbatim as the watermark', async () => {
+  it('strips HTML from article bodies before storing records', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce(
-      cursorResponse([{ id: 1, subject: 'A', description: 'x', updated_at: '2026-09-01T00:00:00Z' }], {
-        after_cursor: 'opaque:cursor:abc==',
-        end_of_stream: true,
+      incrementalResponse(
+        [
+          {
+            id: 1,
+            title: 'Styling',
+            body: '<h1>Header</h1><p>Some <strong>bold</strong> text &amp; more</p><script>alert(1)</script>',
+            updated_at: '2026-09-01T00:00:00Z',
+          },
+        ],
+        { end_time: 1_780_000_000 },
+      ),
+    );
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+    const records = [...importer.nodes.get('zendesk:article:1')!.records.values()];
+    expect(records[0]!.text).toBe('Styling\n\nHeader Some bold text & more');
+  });
+
+  it('stores end_time as the watermark and resumes from it on the next run', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: 'x', updated_at: '2026-09-01T00:00:00Z' }], {
+        end_time: 1_780_000_123,
       }),
     );
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
-    expect(await state.get('zendesk:cursor')).toBe(JSON.stringify({ watermark: 'opaque:cursor:abc==' }));
-  });
+    expect(await state.get('zendesk:articles:watermark')).toBe(JSON.stringify({ watermark: '1780000123' }));
 
-  it('reuses stored cursor on subsequent runs — no start_time query', async () => {
-    const { ctx, request, importer, state } = makeContext();
-    await state.set('zendesk:cursor', JSON.stringify({ watermark: 'existing-cursor' }));
-    request.mockResolvedValueOnce(cursorResponse([], { end_of_stream: true }));
+    request.mockResolvedValueOnce(incrementalResponse([], {}));
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
-    const call = request.mock.calls[0]![0]! as { query: Record<string, unknown> };
-    expect(call.query.cursor).toBe('existing-cursor');
-    expect(call.query.start_time).toBeUndefined();
+    const secondCall = request.mock.calls[1]![0]! as { query: Record<string, unknown> };
+    expect(secondCall.query.start_time).toBe(1_780_000_123);
   });
 
-  it('end_of_stream halts pagination even when after_cursor is present', async () => {
+  it('walks continuation pages while end_time advances and next_page is present', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce(
-      cursorResponse([{ id: 1, subject: 'A', updated_at: '2026-09-01T00:00:00Z' }], {
-        after_cursor: 'cur-1',
-        end_of_stream: true,
+      incrementalResponse([{ id: 1, title: 'A', body: 'x', updated_at: '2026-09-01T00:00:00Z' }], {
+        end_time: 100,
+        next_page: 'https://acme.zendesk.com/next',
+      }),
+    );
+    request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 2, title: 'B', body: 'y', updated_at: '2026-09-02T00:00:00Z' }], { end_time: 200 }),
+    );
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(importer.nodes.size).toBe(2);
+    const secondCall = request.mock.calls[1]![0]! as { query: Record<string, unknown> };
+    expect(secondCall.query.start_time).toBe(100);
+    expect(await state.get('zendesk:articles:watermark')).toBe(JSON.stringify({ watermark: '200' }));
+  });
+
+  it('stops when end_time stops advancing — no infinite loop on a caught-up export', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValue(
+      incrementalResponse([{ id: 1, title: 'A', body: 'x', updated_at: '2026-09-01T00:00:00Z' }], {
+        end_time: 0,
+        next_page: 'https://acme.zendesk.com/next',
       }),
     );
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
@@ -109,85 +147,71 @@ describe('zendesk importer', () => {
   it('second run with unchanged fixtures is idempotent', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValue(
-      cursorResponse([{ id: 1, subject: 'A', description: 'x', updated_at: '2026-09-01T00:00:00Z' }], {
-        after_cursor: 'cur-1',
-        end_of_stream: true,
-      }),
+      incrementalResponse([{ id: 1, title: 'A', body: 'x', updated_at: '2026-09-01T00:00:00Z' }], { end_time: 100 }),
     );
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
-    const first = importer.nodes.get('zendesk:ticket:1')!.records.size;
+    const first = importer.nodes.get('zendesk:article:1')!.records.size;
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
-    expect(importer.nodes.get('zendesk:ticket:1')!.records.size).toBe(first);
+    expect(importer.nodes.get('zendesk:article:1')!.records.size).toBe(first);
   });
 
-  it('cursor advances only on success — mid-run failure leaves it untouched', async () => {
+  it('updated article bumps to a new record id and removes the stale record under owner', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: 'v1', updated_at: '2026-09-01T00:00:00Z' }], { end_time: 100 }),
+    );
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+    const firstIds = [...importer.nodes.get('zendesk:article:1')!.records.keys()];
+    request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: 'v2', updated_at: '2026-09-02T00:00:00Z' }], { end_time: 200 }),
+    );
+    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
+    const secondIds = [...importer.nodes.get('zendesk:article:1')!.records.keys()];
+    expect(secondIds).toHaveLength(1);
+    expect(secondIds[0]).not.toBe(firstIds[0]);
+  });
+
+  it('draft articles remove published records under owner but are skipped under edit', async () => {
+    const owner = makeContext({ role: 'owner' });
+    owner.request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: 'v1', updated_at: '2026-09-01T00:00:00Z' }], { end_time: 100 }),
+    );
+    await runImporter(zendeskImporterRegistration.createImporter(owner.ctx), owner);
+    owner.request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: 'v1', draft: true, updated_at: '2026-09-02T00:00:00Z' }], {
+        end_time: 200,
+      }),
+    );
+    await runImporter(zendeskImporterRegistration.createImporter(owner.ctx), owner);
+    expect(owner.importer.nodes.get('zendesk:article:1')!.records.size).toBe(0);
+
+    const edit = makeContext({ role: 'edit' });
+    edit.request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: 'v1', updated_at: '2026-09-01T00:00:00Z' }], { end_time: 100 }),
+    );
+    await runImporter(zendeskImporterRegistration.createImporter(edit.ctx), edit);
+    edit.request.mockResolvedValueOnce(
+      incrementalResponse([{ id: 1, title: 'A', body: 'v1', draft: true, updated_at: '2026-09-02T00:00:00Z' }], {
+        end_time: 200,
+      }),
+    );
+    await runImporter(zendeskImporterRegistration.createImporter(edit.ctx), edit);
+    expect(edit.importer.nodes.get('zendesk:article:1')!.records.size).toBe(1);
+  });
+
+  it('watermark advances only on success — a failing request leaves it untouched', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockRejectedValueOnce(new Error('platform down'));
     await expect(runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state })).rejects.toThrow(
       /platform down/,
     );
-    expect(await state.get('zendesk:cursor')).toBeUndefined();
-  });
-
-  it('deleted tickets remove records under an owner binding but are skipped under edit', async () => {
-    const owner = makeContext({ role: 'owner' });
-    owner.request.mockResolvedValueOnce(
-      cursorResponse([{ id: 1, subject: 'A', description: 'v1', updated_at: '2026-09-01T00:00:00Z' }], {
-        after_cursor: 'cur-1',
-        end_of_stream: true,
-      }),
-    );
-    await runImporter(zendeskImporterRegistration.createImporter(owner.ctx), owner);
-    owner.request.mockResolvedValueOnce(
-      cursorResponse([{ id: 1, subject: 'A', status: 'deleted', updated_at: '2026-09-02T00:00:00Z' }], {
-        after_cursor: 'cur-2',
-        end_of_stream: true,
-      }),
-    );
-    await runImporter(zendeskImporterRegistration.createImporter(owner.ctx), owner);
-    expect(owner.importer.nodes.get('zendesk:ticket:1')!.records.size).toBe(0);
-
-    const edit = makeContext({ role: 'edit' });
-    edit.request.mockResolvedValueOnce(
-      cursorResponse([{ id: 1, subject: 'A', description: 'v1', updated_at: '2026-09-01T00:00:00Z' }], {
-        after_cursor: 'cur-1',
-        end_of_stream: true,
-      }),
-    );
-    await runImporter(zendeskImporterRegistration.createImporter(edit.ctx), edit);
-    edit.request.mockResolvedValueOnce(
-      cursorResponse([{ id: 1, subject: 'A', status: 'deleted', updated_at: '2026-09-02T00:00:00Z' }], {
-        after_cursor: 'cur-2',
-        end_of_stream: true,
-      }),
-    );
-    await runImporter(zendeskImporterRegistration.createImporter(edit.ctx), edit);
-    expect(edit.importer.nodes.get('zendesk:ticket:1')!.records.size).toBe(1);
-  });
-
-  it('walks multiple pages until end_of_stream', async () => {
-    const { ctx, request, importer, state } = makeContext();
-    request.mockResolvedValueOnce(
-      cursorResponse([{ id: 1, subject: 'A', updated_at: '2026-09-01T00:00:00Z' }], {
-        after_cursor: 'cur-1',
-        end_of_stream: false,
-      }),
-    );
-    request.mockResolvedValueOnce(
-      cursorResponse([{ id: 2, subject: 'B', updated_at: '2026-09-02T00:00:00Z' }], {
-        after_cursor: 'cur-2',
-        end_of_stream: true,
-      }),
-    );
-    await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(importer.nodes.size).toBe(2);
+    expect(await state.get('zendesk:articles:watermark')).toBeUndefined();
   });
 
   it('rejects malformed payloads via zod', async () => {
     const { ctx, request, importer, state } = makeContext();
-    request.mockResolvedValueOnce({ tickets: [{ id: 'not-a-number' }] });
+    request.mockResolvedValueOnce({ articles: [{ id: 'not-a-number' }] });
     await expect(runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state })).rejects.toThrow();
-    expect(await state.get('zendesk:cursor')).toBeUndefined();
+    expect(await state.get('zendesk:articles:watermark')).toBeUndefined();
   });
 });

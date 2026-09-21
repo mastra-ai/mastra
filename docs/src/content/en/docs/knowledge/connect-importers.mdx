@@ -42,8 +42,8 @@ Only the providers you list under `integrations` are considered. A provider with
 | `notion` | `0 * * * *` | `notion:page:<id>`, `notion:database:<id>` | `POST /v1/search` sorted by `last_edited_time`; archived pages remove records under an `owner` binding. |
 | `confluence` | `0 * * * *` | `confluence:page:<id>` | CQL `lastmodified >= "<watermark>"`; storage-format body stripped to plain text. |
 | `jira` | `*/30 * * * *` | `jira:issue:<key>` | JQL `updated >= "<watermark>" ORDER BY updated ASC`. |
-| `linear` | `*/30 * * * *` | `linear:issue:<id>` | GraphQL `issues(filter: { updatedAt: { gte: $watermark } })`; archived issues remove records. |
-| `zendesk` | `*/30 * * * *` | `zendesk:ticket:<id>` | Incremental cursor export (`/api/v2/incremental/tickets/cursor.json`); `after_cursor` stored verbatim. |
+| `linear` | `*/30 * * * *` | `linear:document:<id>` | GraphQL `documents(filter: { updatedAt: { gte: $watermark } })` — Documents (project docs, PRDs), not issues; archived documents remove records. |
+| `zendesk` | `*/30 * * * *` | `zendesk:article:<id>` | Help Center incremental export (`/api/v2/help_center/incremental/articles.json`) — Guide articles, not tickets; HTML bodies stripped to plain text; drafts remove records. |
 | `fireflies` | `0 */2 * * *` | `fireflies:transcript:<id>` | GraphQL `transcripts(fromDate: $watermark)`; one record per summary facet (overview, action items, keywords) with a `metadata.citation` deep link. |
 
 ## Per-integration options
@@ -96,7 +96,7 @@ Every importer is written for at-least-once execution:
 
 - Cursor or watermark state lives in `context.state` — the importer's durable KV store. It is written exactly once per run, after every mutation for that window has committed. A mid-run failure leaves the watermark low, so the next run replays that window; deterministic record ids keep the replay idempotent.
 - Date-based watermarks (Notion, Confluence, Jira, Linear, Fireflies) re-process the boundary timestamp inclusively.
-- Zendesk's `after_cursor` is opaque — importers store it verbatim, never parse it.
+- Zendesk's watermark is the incremental export's `end_time` (epoch seconds) — stored verbatim and passed back as the next `start_time`.
 - Every run is bounded: at most 50 HTTP pages and 500 records per invocation, and every handler honors `context.signal` for cancellation.
 - Descending walkers (Notion, Linear, Fireflies) persist a resume cursor alongside the watermark. When a run hits the per-run bound before draining back to the previous watermark, the next scheduled run resumes deeper into the tail instead of restarting from the newest page — so an initial backfill larger than one bounded run still converges. During the multi-run backfill the walker also persists the newest timestamp it observed on the first-fetched page, so the final drain run (which by construction only sees older items via its resume cursor) still writes the correct high-water watermark rather than regressing it to the older tail. Once the walk exhausts pagination, the watermark advances, and both the resume cursor and the high-water candidate are cleared.
 
@@ -139,7 +139,7 @@ The following forms are all supported:
 | `importers: false` | Explicit opt-out — no Knowledge is auto-constructed even if the platform env is present. |
 | _(neither field set)_ | Auto-construct when the platform env is present; otherwise skip silently. `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1` enables an empty-importer Knowledge as a dev override. |
 
-When the Factory auto-constructs with `importers()` and you did not pass `importersOptions.integrations`, every catalogue provider defaults to per-project destinations: scopes are resolved from the Factory project inventory at each cron fire (`resource:<projectId>` per project), so newly created projects start syncing without a restart. Document sources (Notion, Confluence) default to the `owner` role; ticket and transcript sources (Jira, Linear, Zendesk, Fireflies) default to `edit`. Hosts that construct `Knowledge` themselves can reuse the same topology via `factoryProjectScopes(storage)` from `@mastra/factory`.
+When the Factory auto-constructs with `importers()` and you did not pass `importersOptions.integrations`, every catalogue provider defaults to per-project destinations: scopes are resolved from the Factory project inventory at each cron fire (`resource:<projectId>` per project), so newly created projects start syncing without a restart. Document sources (Notion, Confluence, Linear Documents, Zendesk Help Center) default to the `owner` role; ticket and transcript sources (Jira, Fireflies) default to `edit`. Hosts that construct `Knowledge` themselves can reuse the same topology via `factoryProjectScopes(storage)` from `@mastra/factory`.
 
 The default resolver enumerates projects across every org in the storage backend — the platform connection feeding the importers is deployment-level, so in a multi-org deployment its content lands in all orgs' projects. Pass your own `importersOptions.integrations` with an org-filtered `scopes` resolver when you need a tenant boundary.
 

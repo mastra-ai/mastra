@@ -20,7 +20,7 @@
 
 **Added** `importers()` — a live async resolver of Knowledge importer definitions from Mastra Platform connections. Pass it directly to `new Knowledge({ importers })`; connections attached or detached on the platform start or stop syncing without a restart.
 
-Six built-in providers ship in the `IMPORTERS` registry: Notion, Confluence, Jira, Linear, Zendesk, and Fireflies. Each is a deterministic cursor-based sync through the platform proxy (no source credentials in your process), with content-hashed record ids for idempotent re-runs and durable watermark state that only advances after mutations commit.
+Six built-in providers ship in the `IMPORTERS` registry: Notion (pages and databases), Confluence (pages), Jira (issues), Linear (Documents — knowledge, not issue tracking), Zendesk (Help Center articles — not tickets), and Fireflies (meeting transcripts). Each is a deterministic cursor-based sync through the platform proxy (no source credentials in your process), with content-hashed record ids for idempotent re-runs and durable watermark state that only advances after mutations commit.
 
 ```typescript
 import { Knowledge } from '@mastra/core/knowledge';

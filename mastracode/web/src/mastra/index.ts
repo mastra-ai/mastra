@@ -314,8 +314,10 @@ const demoImportersResolver = (() => {
         notion: integrationConfig('owner'),
         confluence: integrationConfig('owner'),
         jira: integrationConfig('edit'),
-        linear: integrationConfig('edit'),
-        zendesk: integrationConfig('edit'),
+        // Document-shaped sources (Linear Documents, Zendesk Help Center
+        // articles) own their nodes so archived/draft content gets removed.
+        linear: integrationConfig('owner'),
+        zendesk: integrationConfig('owner'),
         fireflies: integrationConfig('edit'),
       },
     });
