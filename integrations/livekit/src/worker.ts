@@ -923,7 +923,8 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       await ctx.connect();
       const roomName = ctx.room.name ?? 'mastra-voice';
 
-      let vad: VAD | undefined;
+      // LiveKit provisions its default VAD for undefined; null explicitly disables it.
+      let vad: VAD | null = null;
       if (options.vad && options.vad !== 'silero') {
         vad = options.vad;
       } else if (wantsSileroVad) {

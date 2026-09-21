@@ -1,5 +1,5 @@
-import { InferenceRunner, voice } from '@livekit/agents';
-import type { JobContext, JobProcess } from '@livekit/agents';
+import { inference, InferenceRunner, initializeLogger, voice } from '@livekit/agents';
+import type { JobContext, JobProcess, VAD } from '@livekit/agents';
 import type { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -15,7 +15,13 @@ import {
   speakGreeting,
   waitForAgentDoneSpeaking,
 } from './worker';
-import type { GreetingContext, ResolveMastraAgentArgs, VoiceCallContext } from './worker';
+import type {
+  CreateLiveKitWorkerOptions,
+  GreetingContext,
+  ResolveMastraAgentArgs,
+  SessionStartArgs,
+  VoiceCallContext,
+} from './worker';
 import { isEouMethodRequested, workerSetupComplete } from './worker-setup';
 
 function fakeMastra(overrides: Partial<Record<'getAgentById' | 'getAgent' | 'getLogger', unknown>> = {}): Mastra {
@@ -188,6 +194,63 @@ describe('createLiveKitWorker', () => {
     expect(context.requestContext).toBeDefined();
     // Both resolvers receive the same per-call context.
     expect(tts.mock.calls[0]![0]).toBe(context);
+  });
+});
+
+describe('worker session VAD', () => {
+  beforeEach(() => {
+    initializeLogger({ level: 'silent', pretty: false });
+    // Keep the real session constructor; skip connecting audio to a LiveKit room.
+    vi.spyOn(voice.AgentSession.prototype, 'start').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  async function startSession(options: Pick<CreateLiveKitWorkerOptions, 'vad' | 'sessionOptions'>, prewarmedVad?: VAD) {
+    const onSessionStart = vi.fn<(args: SessionStartArgs) => void>();
+    const definition = createLiveKitWorker({
+      mastra: fakeMastra(),
+      generate: async () => null,
+      memory: false,
+      observability: false,
+      turnDetection: 'manual',
+      onSessionStart,
+      ...options,
+    });
+    const ctx = fakeJobContext();
+    ctx.proc.userData.vad = prewarmedVad;
+    await definition.entry(ctx);
+    expect(onSessionStart).toHaveBeenCalledOnce();
+    return onSessionStart.mock.calls[0]![0].session;
+  }
+
+  it('disables VAD when vad is false instead of enabling the LiveKit default', async () => {
+    const session = await startSession({ vad: false });
+    expect(session.vad).toBeUndefined();
+  });
+
+  it('uses an explicitly supplied VAD', async () => {
+    const vad = new inference.VAD({ model: 'silero' });
+    const session = await startSession({ vad });
+    expect(session.vad).toBe(vad);
+  });
+
+  it.each([undefined, 'silero'] as const)('uses the prewarmed VAD when vad is %s', async vadOption => {
+    const vad = new inference.VAD({ model: 'silero' });
+    const session = await startSession({ vad: vadOption }, vad);
+    expect(session.vad).toBe(vad);
+  });
+
+  it('allows sessionOptions to override vad false with a VAD instance', async () => {
+    const vad = new inference.VAD({ model: 'silero' });
+    const session = await startSession({ vad: false, sessionOptions: { vad } });
+    expect(session.vad).toBe(vad);
+  });
+
+  it('allows sessionOptions to disable an explicitly supplied VAD', async () => {
+    const vad = new inference.VAD({ model: 'silero' });
+    const session = await startSession({ vad, sessionOptions: { vad: null } });
+    expect(session.vad).toBeUndefined();
   });
 });
 
