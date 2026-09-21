@@ -214,19 +214,17 @@ export const ToolkitFilterPane = ({
       className="border-border flex h-full min-h-0 flex-col gap-3 border-r px-4 py-4"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
-      <div className="bg-card shrink-0 rounded-full" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
-        <InputGroup variant="outline" size="md">
-          <InputGroupAddon align="inline-start">
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label="Filter toolkits"
-            placeholder="Filter toolkits..."
-            onChange={event => setSearch(event.target.value)}
-          />
-        </InputGroup>
-      </div>
+      <InputGroup size="md" className="flex-none" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
+        <InputGroupAddon align="inline-start">
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="search"
+          aria-label="Filter toolkits"
+          placeholder="Filter toolkits..."
+          onChange={event => setSearch(event.target.value)}
+        />
+      </InputGroup>
 
       <div className="text-meta flex shrink-0 items-center gap-2">
         <button

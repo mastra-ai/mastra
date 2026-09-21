@@ -4,8 +4,6 @@ import * as React from 'react';
 
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
-  disabledOutlineSurfaceStyle,
-  inputOutlineAndFocusStyle,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
@@ -38,12 +36,6 @@ const inputVariants = cva(
     variants: {
       variant: {
         default: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
-        outline: cn(
-          inputOutlineAndFocusStyle,
-          'rounded-full',
-          sharedFormElementDisabledStyle,
-          disabledOutlineSurfaceStyle,
-        ),
         unstyled: unstyledFormElementStyle,
       },
       size: {

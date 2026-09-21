@@ -44,7 +44,6 @@ export const Variants: Story = {
   render: () => (
     <div className="flex w-64 flex-col gap-3">
       <Input variant="default" placeholder="Default" />
-      <Input variant="outline" placeholder="Outline" />
       <Input variant="unstyled" placeholder="Unstyled" />
     </div>
   ),
@@ -58,13 +57,6 @@ export const Sizes: Story = {
       <Input size="lg" placeholder="Large" />
     </div>
   ),
-};
-
-export const Outline: Story = {
-  args: {
-    placeholder: 'Outline variant',
-    variant: 'outline',
-  },
 };
 
 // export const Unstyled: Story = {

@@ -43,19 +43,17 @@ export const ToolGrid = ({
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
       <div className="flex shrink-0 items-center justify-between gap-4">
-        <div data-testid="tools-card-picker-search" className="bg-card max-w-[30ch] flex-1 rounded-full">
-          <InputGroup variant="outline" size="md">
-            <InputGroupAddon align="inline-start">
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search tools"
-              placeholder="Search tools..."
-              onChange={event => onSearch(event.target.value)}
-            />
-          </InputGroup>
-        </div>
+        <InputGroup size="md" className="max-w-[30ch] flex-1" data-testid="tools-card-picker-search">
+          <InputGroupAddon align="inline-start">
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label="Search tools"
+            placeholder="Search tools..."
+            onChange={event => onSearch(event.target.value)}
+          />
+        </InputGroup>
 
         <label
           data-testid="tools-only-selected-filter"

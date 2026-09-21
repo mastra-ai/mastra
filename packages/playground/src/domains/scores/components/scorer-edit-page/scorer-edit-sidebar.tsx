@@ -53,7 +53,6 @@ export function ScorerEditSidebar({
             label="Name"
             required
             placeholder="My Scorer"
-            variant="outline"
             {...register('name')}
             errorMsg={errors.name?.message}
           />
@@ -62,7 +61,6 @@ export function ScorerEditSidebar({
             label="Description"
             required
             placeholder="Describe what this scorer does"
-            variant="outline"
             {...register('description')}
             errorMsg={errors.description?.message}
           />
@@ -123,7 +121,6 @@ export function ScorerEditSidebar({
                   <Input
                     type="number"
                     placeholder="Min"
-                    variant="outline"
                     value={field.value}
                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />
@@ -137,7 +134,6 @@ export function ScorerEditSidebar({
                   <Input
                     type="number"
                     placeholder="Max"
-                    variant="outline"
                     value={field.value}
                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />
@@ -180,7 +176,6 @@ export function ScorerEditSidebar({
                     min="0"
                     max="1"
                     placeholder="Rate (0-1)"
-                    variant="outline"
                     value={field.value ?? ''}
                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />

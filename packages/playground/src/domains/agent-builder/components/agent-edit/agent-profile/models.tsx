@@ -138,19 +138,17 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
         )}
 
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
-          <div data-testid="model-card-picker-search" className="bg-card max-w-[30ch] shrink-0 rounded-full">
-            <InputGroup variant="outline" size="md">
-              <InputGroupAddon align="inline-start">
-                <SearchIcon />
-              </InputGroupAddon>
-              <InputGroupInput
-                type="search"
-                aria-label="Search models"
-                placeholder="Search models or providers..."
-                onChange={event => setSearch(event.target.value)}
-              />
-            </InputGroup>
-          </div>
+          <InputGroup size="md" className="max-w-[30ch] shrink-0" data-testid="model-card-picker-search">
+            <InputGroupAddon align="inline-start">
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search models"
+              placeholder="Search models or providers..."
+              onChange={event => setSearch(event.target.value)}
+            />
+          </InputGroup>
 
           {groups.length === 0 ? (
             <div className="flex min-h-0 items-center justify-center">

@@ -35,12 +35,7 @@ function RecursiveFieldRenderer({
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row items-center gap-2">
-            <JSONSchemaForm.FieldName
-              labelIsHidden
-              placeholder="Variable name"
-              size="md"
-              className="[&_input]:bg-card w-full"
-            />
+            <JSONSchemaForm.FieldName labelIsHidden placeholder="Variable name" size="md" className="w-full" />
 
             <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-card w-full" />
             <JSONSchemaForm.FieldRemove variant="default" className="shrink-0" />

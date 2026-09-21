@@ -21,16 +21,6 @@ const getInput = () => {
   return input;
 };
 
-const expectOnlyGuardedHoverBorder = (className: string) => {
-  const hoverBorderTokens = className
-    .split(/\s+/)
-    .filter(token => token.includes('hover') && token.includes('border-border-hover'));
-
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within):not(:has(:disabled))]:border-border-hover']);
-  expect(className).toContain('focus-within:border-border-focus');
-  expect(className).not.toContain('hover:border-border-focus');
-};
-
 describe('InputGroup', () => {
   it('puts an explicit height on the root box so the group matches a same-size sibling control', () => {
     render(
@@ -83,7 +73,7 @@ describe('InputGroup', () => {
 
   it('the root does NOT expose a zero min-width (would let it collapse to ~0 inside a flex group)', () => {
     render(
-      <InputGroup variant="outline">
+      <InputGroup>
         <InputGroupInput placeholder="x" />
       </InputGroup>,
     );
@@ -152,19 +142,6 @@ describe('InputGroup', () => {
     expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:[--surface-rim:var(--destructive)]');
   });
 
-  it('supports an outline variant without an initial filled background', () => {
-    render(
-      <InputGroup variant="outline">
-        <InputGroupInput placeholder="x" />
-      </InputGroup>,
-    );
-
-    const wrapper = getWrapper();
-    expect(wrapper.className).toContain('bg-transparent');
-    expect(wrapper.className).toContain('rounded-full');
-    expect(wrapper.classList.contains('bg-fill')).toBe(false);
-  });
-
   it('suppresses both native number spinners (WebKit + Firefox) and the WebKit search clear button', () => {
     render(
       <InputGroup>
@@ -177,19 +154,5 @@ describe('InputGroup', () => {
     expect(cls).toContain('[&::-webkit-inner-spin-button]:appearance-none');
     expect(cls).toContain('[&[type=number]]:[appearance:textfield]');
     expect(cls).toContain('[&::-webkit-search-cancel-button]:appearance-none');
-  });
-
-  it('prioritizes the focus border over hover for the outline variant', () => {
-    render(
-      <InputGroup variant="outline">
-        <InputGroupInput placeholder="outline" />
-      </InputGroup>,
-    );
-    const cls = getWrapper().className;
-
-    // Focused border brightens to a neutral tone (no green accent), and the hover border
-    // is guarded so it cannot override focus when the group is focused and hovered.
-    expectOnlyGuardedHoverBorder(cls);
-    expect(cls).not.toContain('ring-accent1');
   });
 });

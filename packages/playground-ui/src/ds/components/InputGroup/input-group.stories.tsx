@@ -19,12 +19,6 @@ const meta: Meta<typeof InputGroup> = {
   parameters: {
     layout: 'centered',
   },
-  argTypes: {
-    variant: {
-      control: { type: 'select' },
-      options: ['default', 'outline'],
-    },
-  },
 };
 
 export default meta;
@@ -40,23 +34,17 @@ export const Default: Story = {
   ),
 };
 
-export const Variants: Story = {
+export const WithTextarea: Story = {
   render: () => (
     <div className="flex w-80 flex-col gap-3">
-      <InputGroup variant="default">
+      <InputGroup>
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Default" />
+        <InputGroupInput placeholder="Search" />
       </InputGroup>
-      <InputGroup variant="outline">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Outline" />
-      </InputGroup>
-      <InputGroup variant="outline">
-        <InputGroupTextarea placeholder="Outline textarea" />
+      <InputGroup>
+        <InputGroupTextarea placeholder="Textarea" />
       </InputGroup>
     </div>
   ),

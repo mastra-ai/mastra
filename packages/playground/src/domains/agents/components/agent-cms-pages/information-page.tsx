@@ -25,7 +25,6 @@ export function InformationPage() {
           label="Name"
           required
           placeholder="My Agent"
-          variant="outline"
           {...register('name')}
           errorMsg={errors.name?.message}
           disabled={readOnly}
@@ -35,7 +34,6 @@ export function InformationPage() {
           label="Description"
           className="pb-8"
           placeholder="Describe what this agent does"
-          variant="outline"
           {...register('description')}
           errorMsg={errors.description?.message}
           disabled={readOnly}

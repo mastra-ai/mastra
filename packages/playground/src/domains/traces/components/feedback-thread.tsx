@@ -223,7 +223,7 @@ export function FeedbackThread({
           }
         }}
       >
-        <InputGroup size="sm" variant="outline">
+        <InputGroup size="sm">
           <InputGroupInput
             aria-label="Leave feedback"
             placeholder="Leave feedback..."

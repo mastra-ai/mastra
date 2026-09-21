@@ -30,15 +30,6 @@ export const inputFocusBorderWithin = 'focus-within:border-border-focus';
 // whose focus lives on a nested control use `inputFocusBorderWithin` instead.
 export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-hidden ${inputFocusBorderVisible}`;
 
-// Hover borders are guarded so they can never clobber the focus border. Tailwind
-// can emit focus variants before hover variants, so an unguarded `hover:border-*`
-// of equal specificity may win on a field that is focused AND hovered.
-export const inputHoverBorderVisible = '[&:hover:not(:focus-visible):not(:disabled)]:border-border-hover';
-// The wrapper itself is never `:disabled` — the control it wraps is — so the guard
-// has to ask about descendants. Without it, hovering a group that contains a
-// disabled input repaints the enabled border over the muted disabled one.
-export const inputHoverBorderWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:border-border-hover';
-
 // A field is the same material as a card: `bg-card` plus `shadow-raised`, which
 // carries the 1px rim, so a field draws no border of its own. That is what makes a
 // filter input and the panel beside it read as one system — in light the field is
@@ -84,15 +75,6 @@ export const inputSurfaceAndFocusWithinStyle =
   surfaceTintHoverWithin +
   ' outline-hidden focus-within:outline-hidden ' +
   surfaceRimFocusWithin;
-
-// Outline fields share Button's outline ladder exactly: a visible resting border
-// (`foreground/30`), brightening on hover, then the shared focus border.
-export const inputOutlineAndFocusStyle =
-  'bg-transparent border border-border-strong text-foreground ' +
-  inputHoverBorderVisible +
-  ' ' +
-  'outline-hidden focus-visible:outline-hidden ' +
-  inputFocusBorderVisible;
 
 // Filled field trigger (Select/Combobox `default`): the same surface as Input.
 // Applied *after* `buttonVariants` so tailwind-merge replaces the Button's fill

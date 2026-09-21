@@ -108,7 +108,7 @@ export function AgentsPage() {
             <SubSectionHeader title="Available Agents" icon={<AgentIcon />} />
           </Section.Header>
 
-          <InputGroup variant="outline">
+          <InputGroup>
             <InputGroupAddon align="inline-start">
               <SearchIcon />
             </InputGroupAddon>

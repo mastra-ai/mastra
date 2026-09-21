@@ -34,9 +34,13 @@ import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
 // `filter-bar-segment` carries the left-to-right entrance (see filter-bar-chip.css).
+// No `first:`/`last:` rounding here: a segment is not reliably the first or last child.
+// Base UI interleaves a hidden input after every combobox and wraps an open trigger in
+// focus guards, so the rounded end would silently drop the moment a popup opened and the
+// segment's own state fill — the one state a chip has — would paint square corners
+// straight through the chip's pill edge. The chip clips instead (see `chipClass`).
 export const segmentClass = cn(
   'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-label whitespace-nowrap outline-none',
-  'first:rounded-l-full last:rounded-r-full',
 );
 
 // A filter bar is a dense row: it sits above a list, carries many chips at once, and never
@@ -48,8 +52,10 @@ export const FILTER_BAR_CONTROL_SIZE: ControlSize = 'sm';
 // fill rung: on a light canvas a `bg-fill` chip read as a grey slab beside the white typeahead
 // pill it belongs to. The segments layer their own state over that card, which is why the chip
 // keeps `divide-border` for the internal seams and takes its outer edge from the material's rim.
+// `overflow-hidden` is what gives every segment its end cap: the chip is the only node that
+// knows where the pill ends, and it keeps knowing it while a framework injects children.
 export const chipClass = cn(
-  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border rounded-full',
+  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border overflow-hidden rounded-full',
   inputSurfaceAndFocusWithinStyle,
   controlHeight[FILTER_BAR_CONTROL_SIZE],
 );

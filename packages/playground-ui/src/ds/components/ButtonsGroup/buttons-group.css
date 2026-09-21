@@ -52,15 +52,19 @@
      seam rules below can only halve a border, so that rim survives next to its neighbour's
      edge and the seam reads as two lines. Inside a group the edges belong to the group, so
      the material goes flat and the segment takes the same 1px border as every other one —
-     the border its focus state already moves (`focus-visible:border-border-focus`). Hover
-     moved with the rim, so it moves to the border here too. */
+     the border its focus state already moves (`focus-visible:border-border-focus`).
+     What has to go is only the rim: it paints all four sides, so it survives beside a
+     neighbour's edge and the seam reads as two lines. The rest of the shadow list must
+     stay, because `--surface-tint` is the layer a field expresses every state in — hover
+     washes to `fill-subtle`, open to `fill`. Dropping the list wholesale left both states
+     with nothing to paint on and handed them to the border instead: a rim flash on the one
+     control whose boundary is deliberately static. Keeping the tint inset alone repairs
+     hover and open together, and a grouped trigger reads like the same trigger standing
+     alone. The inset also clips to the padding box, so the wash cannot composite through
+     the translucent border and lighten it — which is the whole point. */
   [data-slot='buttons-group'] > .shadow-raised {
-    box-shadow: none;
+    box-shadow: inset 0 0 0 9999px var(--surface-tint);
     border-width: 1px;
-  }
-
-  [data-slot='buttons-group'] > .shadow-raised:hover:not(:focus-visible) {
-    border-color: var(--border-hover);
   }
 
   /* One border per seam, and no overlap. A border is a translucent alpha of the

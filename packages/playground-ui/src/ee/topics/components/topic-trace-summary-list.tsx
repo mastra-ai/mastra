@@ -32,7 +32,7 @@ export function TopicTraceSummaryList({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Topic trace summaries">
-      <InputGroup variant="outline">
+      <InputGroup>
         <InputGroupAddon align="inline-start">
           <SearchIcon />
         </InputGroupAddon>

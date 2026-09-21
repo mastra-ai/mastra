@@ -10,15 +10,6 @@ afterEach(() => {
 });
 
 describe('Textarea', () => {
-  it('supports an outline variant without an initial filled background', () => {
-    render(<Textarea variant="outline" placeholder="Description" />);
-
-    const textarea = screen.getByPlaceholderText('Description');
-    expect(textarea.className).toContain('bg-transparent');
-    expect(textarea.className).toContain('rounded-xl');
-    expect(textarea.className).not.toContain('bg-foreground/10');
-  });
-
   it('uses the shared foreground text color at rest', () => {
     render(<Textarea placeholder="Description" />);
 

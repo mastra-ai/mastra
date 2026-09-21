@@ -19,7 +19,7 @@ type Story = StoryObj<typeof Popover>;
 export const Default: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger variant="outline">Open Popover</PopoverTrigger>
+      <PopoverTrigger>Open Popover</PopoverTrigger>
       <PopoverContent>
         <div className="grid gap-4">
           <div className="space-y-2">
@@ -93,10 +93,8 @@ export const CustomRender: Story = {
 export const WithIconTrigger: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="md">
-          <Settings className="size-4" />
-        </Button>
+      <PopoverTrigger variant="ghost" size="icon-md" tooltip="Settings">
+        <Settings />
       </PopoverTrigger>
       <PopoverContent className="w-80">
         <div className="grid gap-4">
@@ -113,9 +111,7 @@ export const WithIconTrigger: Story = {
 export const AlignStart: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline">Align Start</Button>
-      </PopoverTrigger>
+      <PopoverTrigger>Align Start</PopoverTrigger>
       <PopoverContent align="start">
         <p className="text-body">This popover is aligned to the start.</p>
       </PopoverContent>
@@ -126,9 +122,7 @@ export const AlignStart: Story = {
 export const AlignEnd: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline">Align End</Button>
-      </PopoverTrigger>
+      <PopoverTrigger>Align End</PopoverTrigger>
       <PopoverContent align="end">
         <p className="text-body">This popover is aligned to the end.</p>
       </PopoverContent>
@@ -139,9 +133,7 @@ export const AlignEnd: Story = {
 export const SideTop: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline">Open Above</Button>
-      </PopoverTrigger>
+      <PopoverTrigger>Open Above</PopoverTrigger>
       <PopoverContent side="top">
         <p className="text-body">This popover opens above the trigger.</p>
       </PopoverContent>
@@ -152,9 +144,7 @@ export const SideTop: Story = {
 export const SideRight: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline">Open Right</Button>
-      </PopoverTrigger>
+      <PopoverTrigger>Open Right</PopoverTrigger>
       <PopoverContent side="right">
         <p className="text-body">This popover opens to the right.</p>
       </PopoverContent>
@@ -165,9 +155,7 @@ export const SideRight: Story = {
 export const SimpleText: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost">?</Button>
-      </PopoverTrigger>
+      <PopoverTrigger variant="ghost">?</PopoverTrigger>
       <PopoverContent className="w-60">
         <p className="text-body text-foreground">This is helpful information about the feature.</p>
       </PopoverContent>

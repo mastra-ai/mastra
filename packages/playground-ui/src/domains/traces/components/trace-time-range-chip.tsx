@@ -55,10 +55,7 @@ export function TraceTimeRangeChip(props: TraceTimeRangeChipProps) {
   const ctx = useFilterBarContext();
   return (
     <FilterBarChip item={TRACE_TIME_RANGE_ITEM} removable={false}>
-      <span
-        className={cn(segmentClass, 'text-foreground last:rounded-r-none')}
-        style={fieldSegmentAccentStyle(TRACE_TIME_RANGE_FIELD)}
-      >
+      <span className={cn(segmentClass, 'text-foreground')} style={fieldSegmentAccentStyle(TRACE_TIME_RANGE_FIELD)}>
         <FilterBarFieldLabel field={TRACE_TIME_RANGE_FIELD} />
       </span>
       {/* The picker popup is portaled but bubbles React events through here — keep its
@@ -79,7 +76,7 @@ export function TraceTimeRangeChip(props: TraceTimeRangeChipProps) {
               disabled={disabled}
               aria-label={`Value: ${label}`}
               title={label}
-              className={cn(editableSegmentClass, 'first:rounded-l-none')}
+              className={editableSegmentClass}
             >
               <span className="truncate">{label}</span>
             </button>

@@ -29,7 +29,7 @@ describe('ButtonsGroup', () => {
   it('a Select trigger stays the last *visible* segment: its only trailing sibling is the aria-hidden form input', () => {
     render(
       <ButtonsGroup>
-        <Input variant="outline" placeholder="search" />
+        <Input placeholder="search" />
         <Select defaultValue="a">
           <SelectTrigger className="rounded-full">
             <SelectValue />

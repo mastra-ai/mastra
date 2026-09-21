@@ -6,13 +6,7 @@ import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
-import {
-  inputFocusBorderWithin,
-  inputHoverBorderWithin,
-  inputSurfaceAndFocusWithinStyle,
-  resolveFieldVariant,
-} from '@/ds/primitives/form-element';
-import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 // No React context: size flows via `data-size` on the named group root
@@ -50,57 +44,37 @@ const inputGroupRoundedTextareaClassName = cn(
   'has-[textarea]:rounded-xl',
 );
 
-// The default look is the field material — the same `bg-card` plus rim an Input
-// wears — so a group and a bare field beside it are one surface. Its states move
-// the rim, and they read the nested control's focus (`focus-within`) because the
-// wrapper never takes focus itself.
-const inputGroupFilledVariant = cn(
+// A group wears the field material — the same `bg-card` plus rim an Input wears — so a
+// group and a bare field beside it are one surface. Its states move the rim, and they
+// read the nested control's focus (`focus-within`) because the wrapper never takes focus
+// itself. There is no second look: a transparent `outline` group existed alongside this
+// one and only ever produced two boundary languages for the same control, which is why
+// four of its call sites had wrapped it in a hand-made `bg-card rounded-full` div to get
+// the material back.
+const inputGroupClassName = cn(
+  inputGroupBaseClassName,
   'rounded-full',
   inputSurfaceAndFocusWithinStyle,
   'has-[[aria-invalid=true]]:[--surface-rim:var(--destructive)]',
   inputGroupRoundedTextareaClassName,
 );
 
-const inputGroupVariants = cva(inputGroupBaseClassName, {
-  variants: {
-    variant: {
-      default: inputGroupFilledVariant,
-      outline: cn(
-        'rounded-full border border-border-strong bg-transparent',
-        'has-[:disabled]:border-border has-[:disabled]:bg-fill-subtle',
-        'has-[[aria-invalid=true]]:border-destructive',
-        inputHoverBorderWithin,
-        'outline-hidden focus-within:outline-hidden',
-        inputFocusBorderWithin,
-        inputGroupRoundedTextareaClassName,
-      ),
-    },
-  },
-  defaultVariants: {
-    variant: 'default',
-  },
-});
-
 export type InputGroupProps = React.ComponentPropsWithoutRef<'div'> & {
   size?: ControlSize;
-  /** `filled` is a deprecated alias for `default`; both render the filled surface. */
-  variant?: VariantProps<typeof inputGroupVariants>['variant'] | DeprecatedFilledVariant;
-} & Omit<VariantProps<typeof inputGroupVariants>, 'variant'>;
+};
 
-const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(
-  ({ className, size = 'md', variant, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        role="group"
-        data-slot="input-group"
-        data-size={size}
-        className={cn(inputGroupVariants({ variant: resolveFieldVariant(variant) }), controlHeight[size], className)}
-        {...props}
-      />
-    );
-  },
-);
+const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(({ className, size = 'md', ...props }, ref) => {
+  return (
+    <div
+      ref={ref}
+      role="group"
+      data-slot="input-group"
+      data-size={size}
+      className={cn(inputGroupClassName, controlHeight[size], className)}
+      {...props}
+    />
+  );
+});
 InputGroup.displayName = 'InputGroup';
 
 const inputGroupControlTextBySize = cn(

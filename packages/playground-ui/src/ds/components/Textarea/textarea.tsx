@@ -3,8 +3,6 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import {
-  disabledOutlineSurfaceStyle,
-  inputOutlineAndFocusStyle,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
@@ -27,12 +25,6 @@ const textareaVariants = cva(
     variants: {
       variant: {
         default: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
-        outline: cn(
-          inputOutlineAndFocusStyle,
-          'rounded-xl',
-          sharedFormElementDisabledStyle,
-          disabledOutlineSurfaceStyle,
-        ),
         unstyled: unstyledFormElementStyle,
       },
       // Text roles mirror the Input size scale so a Textarea reads at the same size as a

@@ -30,12 +30,7 @@ function RecursiveFieldRenderer({
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row items-center gap-4">
-            <JSONSchemaForm.FieldName
-              labelIsHidden
-              placeholder="Variable name"
-              size="md"
-              className="[&_input]:bg-card w-full"
-            />
+            <JSONSchemaForm.FieldName labelIsHidden placeholder="Variable name" size="md" className="w-full" />
 
             <JSONSchemaForm.FieldType placeholder="Type" />
             <JSONSchemaForm.FieldOptional />
@@ -130,7 +125,6 @@ export function PromptBlockEditSidebar({
             label="Name"
             required
             placeholder="My Prompt Block"
-            variant="outline"
             {...register('name')}
             errorMsg={errors.name?.message}
           />
@@ -138,7 +132,6 @@ export function PromptBlockEditSidebar({
           <TextareaFieldBlock
             label="Description"
             placeholder="Describe what this prompt block does"
-            variant="outline"
             {...register('description')}
             errorMsg={errors.description?.message}
           />

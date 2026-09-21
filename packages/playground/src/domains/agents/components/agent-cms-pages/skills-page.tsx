@@ -76,7 +76,7 @@ export function SkillsPage() {
           )}
         </div>
 
-        <InputGroup variant="outline">
+        <InputGroup>
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>
