@@ -49,7 +49,7 @@ export function CreateFactoryPalette({
     <Command
       loop
       shouldFilter={false}
-      label="Create Factory"
+      label={searchLabel}
       className="mx-auto flex h-[min(34rem,100%)] w-full max-w-2xl flex-col gap-2 overflow-visible bg-transparent"
     >
       <div className="flex min-h-8 shrink-0 items-center">
