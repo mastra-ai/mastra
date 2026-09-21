@@ -247,20 +247,13 @@ describe('withProjectScopedIntegrations', () => {
     const { storage } = fakeStorageWithProjects([{ id: 'p1' }]);
     const options = withProjectScopedIntegrations(undefined, storage);
     const integrations = options.integrations!;
-    expect(Object.keys(integrations).sort()).toEqual([
-      'confluence',
-      'fireflies',
-      'jira',
-      'linear',
-      'notion',
-      'zendesk',
-    ]);
+    expect(Object.keys(integrations).sort()).toEqual(['confluence', 'fireflies', 'linear', 'notion', 'zendesk']);
     // Document-shaped sources own their nodes (Linear Documents and Zendesk
-    // Help Center articles included); ticket/transcript sources only upsert.
+    // Help Center articles included); transcript sources only upsert.
     for (const id of ['notion', 'confluence', 'linear', 'zendesk']) {
       expect(integrations[id]).toMatchObject({ access: { [`resource:$projectId:${id}:$accountId`]: 'owner' } });
     }
-    for (const id of ['jira', 'fireflies']) {
+    for (const id of ['fireflies']) {
       expect(integrations[id]).toMatchObject({ access: { [`resource:$projectId:${id}:$accountId`]: 'edit' } });
     }
     await expect(integrations.notion!.scopes!(scopesContext())).resolves.toEqual(['resource:p1:notion:conn-1']);

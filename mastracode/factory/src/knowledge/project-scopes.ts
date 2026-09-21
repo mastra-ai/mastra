@@ -12,7 +12,6 @@ import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/
 const SOURCE_SCOPE_NAMES: Readonly<Record<string, string>> = {
   notion: 'Notion',
   confluence: 'Confluence',
-  jira: 'Jira',
   linear: 'Linear',
   zendesk: 'Zendesk',
   fireflies: 'Fireflies',
@@ -161,12 +160,11 @@ async function materializeSourceScopeChain(
 /**
  * Default role per catalogue provider when the Factory auto-constructs its
  * importer config: document sources own their nodes (stale pages get removed),
- * ticket/transcript sources only upsert.
+ * transcript sources only upsert.
  */
 const KNOWLEDGE_IMPORTER_DEFAULT_ROLES: Readonly<Record<string, 'owner' | 'edit'>> = {
   notion: 'owner',
   confluence: 'owner',
-  jira: 'edit',
   // Linear syncs Documents and Zendesk syncs Help Center articles — both
   // document-shaped, so they own their nodes (archived/draft content is removed).
   linear: 'owner',
