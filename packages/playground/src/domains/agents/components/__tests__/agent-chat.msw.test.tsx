@@ -68,41 +68,33 @@ const Wrapper = ({ children, threadId = 'thread-1' }: { children: ReactNode; thr
   );
 };
 
-const userMessage = (text: string): MastraDBMessage => ({
-  id: `m-${text}`,
+const userMessage = (index: number): MastraDBMessage => ({
+  id: `m-message ${index}`,
   role: 'user',
-  createdAt: new Date(),
-  content: { format: 2, parts: [{ type: 'text', text }] },
+  createdAt: new Date(1700000000000 + index * 1000),
+  content: { format: 2, parts: [{ type: 'text', text: `message ${index}` }] },
 });
 
 afterEach(() => {
   cleanup();
 });
 
-describe('AgentChat Pagination (useAgentMessages)', () => {
+describe('AgentChat history pagination', () => {
   beforeEach(() => {
     server.resetHandlers();
   });
 
-  it('preserves chronological order across pagination pages without reversing the UI', async () => {
-    // We mock listThreadMessages to return two pages.
-    // Page 0 (latest messages): [message 2, message 3]
-    // Page 1 (older messages): [message 0, message 1]
-    const page0 = [userMessage('message 2'), userMessage('message 3')];
-    const page1 = [userMessage('message 0'), userMessage('message 1')];
+  it('loads older messages above the thread when the reader scrolls to the top', async () => {
+    const newestPage = [userMessage(2), userMessage(3)];
+    const olderPage = [userMessage(0), userMessage(1)];
 
     server.use(
       ...baseHandlers(),
       http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, ({ request }) => {
-        const url = new URL(request.url);
-        const page = parseInt(url.searchParams.get('page') || '0', 10);
-
-        if (page === 0) {
-          return HttpResponse.json({ messages: page0, page: 0, hasMore: true });
-        } else if (page === 1) {
-          return HttpResponse.json({ messages: page1, page: 1, hasMore: false });
-        }
-        return HttpResponse.json({ messages: [], hasMore: false });
+        const olderThan = new URL(request.url).searchParams.get('filter');
+        return olderThan
+          ? HttpResponse.json({ messages: olderPage, hasMore: false })
+          : HttpResponse.json({ messages: newestPage, hasMore: true });
       }),
     );
 
@@ -119,13 +111,11 @@ describe('AgentChat Pagination (useAgentMessages)', () => {
       </Wrapper>,
     );
 
-    // Initial load should display page 0
     await waitFor(() => {
       expect(screen.getByText('message 2')).toBeTruthy();
       expect(screen.getByText('message 3')).toBeTruthy();
     });
 
-    // We shouldn't see page 1 yet
     expect(screen.queryByText('message 0')).toBeNull();
 
     const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');

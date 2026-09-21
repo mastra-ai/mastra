@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, cleanup, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useAgentMessages } from '../use-agent-messages';
 import { server } from '@/test/msw-server';
@@ -9,15 +9,40 @@ import { renderHookWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const MESSAGES_URL = `${TEST_BASE_URL}/api/memory/threads/:threadId/messages`;
 
-const createMessage = (index: number, text?: string): MastraDBMessage => ({
+const createdAt = (index: number) => new Date(1700000000000 + index * 1000);
+
+const createMessage = (index: number, text = `Message ${index}`): MastraDBMessage => ({
   id: `msg-${index}`,
   role: 'user',
-  createdAt: new Date(1700000000000 + index * 1000),
-  content: {
-    format: 2,
-    parts: [{ type: 'text', text: text ?? `Message ${index}` }],
-  },
+  createdAt: createdAt(index),
+  content: { format: 2, parts: [{ type: 'text', text }] },
 });
+
+interface CursorRequest {
+  end?: string;
+  endExclusive?: boolean;
+}
+
+const serveThread = (store: MastraDBMessage[], requests: CursorRequest[] = []) =>
+  http.get(MESSAGES_URL, ({ request }) => {
+    const url = new URL(request.url);
+    const perPage = Number(url.searchParams.get('perPage'));
+    const filter = JSON.parse(url.searchParams.get('filter') ?? 'null');
+    requests.push({ end: filter?.dateRange?.end, endExclusive: filter?.dateRange?.endExclusive });
+
+    const cutoff = filter?.dateRange?.end ? new Date(filter.dateRange.end).getTime() : Infinity;
+    const older = store
+      .filter(message => new Date(message.createdAt).getTime() < cutoff)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const page = older.slice(0, perPage).reverse();
+    return HttpResponse.json({ messages: page, hasMore: older.length > perPage });
+  });
+
+const ids = (messages: MastraDBMessage[] | undefined) => messages?.map(message => message.id);
+
+const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => `msg-${from + i}`);
+
+const seed = (count: number) => Array.from({ length: count }, (_, i) => createMessage(i));
 
 afterEach(() => cleanup());
 
@@ -26,161 +51,69 @@ describe('useAgentMessages', () => {
     server.resetHandlers();
   });
 
-  it('refetches all loaded pages in order (2, 1, 0) and maintains chronological ordering without duplicates', async () => {
-    // 1. Mock 120 messages across three pages of 40:
-    // Page 0 (newest messages): 80..119
-    // Page 1 (older messages): 40..79
-    // Page 2 (oldest messages): 0..39
-    const messagesPage0: MastraDBMessage[] = Array.from({ length: 40 }, (_, i) => createMessage(80 + i));
-    const messagesPage1: MastraDBMessage[] = Array.from({ length: 40 }, (_, i) => createMessage(40 + i));
-    const messagesPage2: MastraDBMessage[] = Array.from({ length: 40 }, (_, i) => createMessage(i));
+  it('walks older pages behind a createdAt cursor, oldest first, without duplicates', async () => {
+    const requests: CursorRequest[] = [];
+    server.use(serveThread(seed(90), requests));
 
-    const pageRequests: number[] = [];
-
-    server.use(
-      http.get(MESSAGES_URL, ({ request }) => {
-        const url = new URL(request.url);
-        const page = parseInt(url.searchParams.get('page') || '0', 10);
-        pageRequests.push(page);
-
-        if (page === 0) {
-          return HttpResponse.json({
-            messages: messagesPage0,
-            page: 0,
-            perPage: 40,
-            total: 120,
-            hasMore: true,
-          });
-        }
-        if (page === 1) {
-          return HttpResponse.json({
-            messages: messagesPage1,
-            page: 1,
-            perPage: 40,
-            total: 120,
-            hasMore: true,
-          });
-        }
-        if (page === 2) {
-          return HttpResponse.json({
-            messages: messagesPage2,
-            page: 2,
-            perPage: 40,
-            total: 120,
-            hasMore: false,
-          });
-        }
-        return HttpResponse.json({ messages: [], hasMore: false });
-      }),
-    );
-
-    // 2. Mount the hook and call fetchPreviousPage() twice, waiting for each request to finish.
     const { result } = renderHookWithProviders(() =>
-      useAgentMessages({
-        threadId: 'thread-1',
-        agentId: 'agent-1',
-        memory: true,
-      }),
+      useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
     );
 
-    // Wait for initial page 0 to load
-    await waitFor(() => {
-      expect(result.current.data?.messages).toHaveLength(40);
-    });
-    expect(result.current.hasPreviousPage).toBe(true);
+    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(50, 90)));
+    expect(result.current.hasNextPage).toBe(true);
 
-    // Fetch page 1 (older)
     await act(async () => {
-      await result.current.fetchPreviousPage();
+      await result.current.fetchNextPage();
     });
-    await waitFor(() => {
-      expect(result.current.data?.messages).toHaveLength(80);
-    });
+    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(10, 90)));
 
-    // Fetch page 2 (oldest)
     await act(async () => {
-      await result.current.fetchPreviousPage();
+      await result.current.fetchNextPage();
     });
-    await waitFor(() => {
-      expect(result.current.data?.messages).toHaveLength(120);
-    });
+    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(0, 90)));
+    expect(result.current.hasNextPage).toBe(false);
 
-    // 3. Check that all 120 messages appear in chronological order (0 to 119).
-    const initialIds = result.current.data?.messages.map(m => m.id);
-    const expectedIds = Array.from({ length: 120 }, (_, i) => `msg-${i}`);
-    expect(initialIds).toEqual(expectedIds);
+    expect(requests).toEqual([
+      { end: undefined, endExclusive: undefined },
+      { end: createdAt(50).toISOString(), endExclusive: true },
+      { end: createdAt(10).toISOString(), endExclusive: true },
+    ]);
+  });
 
-    // 4. Change one message’s content on each mocked page, keeping IDs and ordering unchanged.
-    messagesPage0[0] = createMessage(80, 'Updated message 80');
-    messagesPage1[0] = createMessage(40, 'Updated message 40');
-    messagesPage2[0] = createMessage(0, 'Updated message 0');
+  it('keeps older pages stable when new messages land at the end of the thread', async () => {
+    const store = seed(60);
+    server.use(serveThread(store));
 
-    // Reset request tracking before calling refetch
-    pageRequests.length = 0;
+    const { result } = renderHookWithProviders(() =>
+      useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
+    );
+    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(20, 60)));
 
-    // 5. Call the hook’s refetch().
+    store.push(createMessage(60), createMessage(61));
+
     await act(async () => {
-      await result.current.refetch();
+      await result.current.fetchNextPage();
     });
-
-    // 6. Check assertions:
-    // - The refetch requests pages 2, 1, and 0, in that order.
-    expect(pageRequests).toEqual([2, 1, 0]);
-
-    // - All 120 messages remain in the same order, with no duplicates.
-    const refetchedIds = result.current.data?.messages.map(m => m.id);
-    expect(refetchedIds).toEqual(expectedIds);
-    expect(new Set(refetchedIds).size).toBe(120);
-
-    // - All three updated messages appear.
-    await waitFor(() => {
-      const message0 = result.current.data?.messages.find(m => m.id === 'msg-0');
-      const message40 = result.current.data?.messages.find(m => m.id === 'msg-40');
-      const message80 = result.current.data?.messages.find(m => m.id === 'msg-80');
-
-      expect(message0?.content?.parts?.[0]?.text).toBe('Updated message 0');
-      expect(message40?.content?.parts?.[0]?.text).toBe('Updated message 40');
-      expect(message80?.content?.parts?.[0]?.text).toBe('Updated message 80');
-    });
+    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(0, 60)));
   });
 
   it('refreshes every loaded page when another feature invalidates the thread by prefix', async () => {
-    const pages = [
-      Array.from({ length: 40 }, (_, i) => createMessage(80 + i)),
-      Array.from({ length: 40 }, (_, i) => createMessage(40 + i)),
-      Array.from({ length: 40 }, (_, i) => createMessage(i)),
-    ];
-    const pageRequests: number[] = [];
-
-    server.use(
-      http.get(MESSAGES_URL, ({ request }) => {
-        const page = Number(new URL(request.url).searchParams.get('page') ?? '0');
-        pageRequests.push(page);
-        return HttpResponse.json({
-          messages: pages[page] ?? [],
-          page,
-          perPage: 40,
-          total: 120,
-          hasMore: page < 2,
-        });
-      }),
-    );
+    const store = seed(60);
+    const requests: CursorRequest[] = [];
+    server.use(serveThread(store, requests));
 
     const { result, queryClient } = renderHookWithProviders(() =>
       useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
     );
-
     await waitFor(() => expect(result.current.data?.messages).toHaveLength(40));
     await act(async () => {
-      await result.current.fetchPreviousPage();
+      await result.current.fetchNextPage();
     });
-    await act(async () => {
-      await result.current.fetchPreviousPage();
-    });
-    await waitFor(() => expect(result.current.data?.messages).toHaveLength(120));
+    await waitFor(() => expect(result.current.data?.messages).toHaveLength(60));
 
-    pages[2][0] = createMessage(0, 'Updated by the voice call');
-    pageRequests.length = 0;
+    store[0] = createMessage(0, 'Updated by the voice call');
+    store[59] = createMessage(59, 'Updated by the voice call');
+    requests.length = 0;
 
     // `useVoiceCall` refreshes the transcript with the thread prefix alone, so the
     // query key it never spells out in full still has to match.
@@ -188,13 +121,15 @@ describe('useAgentMessages', () => {
       await queryClient.invalidateQueries({ queryKey: ['memory', 'messages', 'thread-1'] });
     });
 
-    expect(pageRequests).toEqual([2, 1, 0]);
-    await waitFor(() =>
-      expect(result.current.data?.messages.find(m => m.id === 'msg-0')?.content?.parts?.[0]?.text).toBe(
-        'Updated by the voice call',
-      ),
-    );
-    const ids = result.current.data?.messages.map(m => m.id);
-    expect(ids).toEqual(Array.from({ length: 120 }, (_, i) => `msg-${i}`));
+    expect(requests).toEqual([
+      { end: undefined, endExclusive: undefined },
+      { end: createdAt(20).toISOString(), endExclusive: true },
+    ]);
+    await waitFor(() => {
+      const messages = result.current.data?.messages ?? [];
+      expect(ids(messages)).toEqual(range(0, 60));
+      expect(messages[0]?.content.parts[0]).toMatchObject({ text: 'Updated by the voice call' });
+      expect(messages[59]?.content.parts[0]).toMatchObject({ text: 'Updated by the voice call' });
+    });
   });
 });
