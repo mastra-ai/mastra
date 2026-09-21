@@ -289,25 +289,29 @@ if (demoKnowledgeEnabled && !demoRepositoryMatch) {
 }
 // If the platform env is present, wire the six Connect importers (Notion,
 // Confluence, Jira, Linear, Zendesk, Fireflies) into the demo Knowledge.
-// Every provider syncs into the project-level resource scope. Missing
-// connections warn-and-skip inside `importers()` — safe to leave enabled
-// unconditionally.
+// Each source syncs into its own sub-scope under the project — the same
+// topology as the GitHub repository scope — so sources show up as distinct
+// nodes in the knowledge graph. Missing connections warn-and-skip inside
+// `importers()` — safe to leave enabled unconditionally.
 const platformImportersEnabled = Boolean(
   (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim()) &&
     process.env.MASTRA_PROJECT_ID?.trim(),
 );
 // Destination scopes are resolved dynamically at each cron fire via
-// `factoryProjectScopes(storage)`: one `resource:<projectId>` per Factory
-// project (filtered by any per-connection routing selection), so new
-// projects start syncing without a restart. The parameterized access grant
-// (`resource:$projectId`) makes each resolved scope writable. The project
-// Importers tab resolves these dynamic destinations at request time, so a
-// connected importer is listed before its first run.
+// `factoryProjectScopes`: one `resource:<projectId>:connect:<provider>`
+// sub-scope per Factory project per source (filtered by any per-connection
+// routing selection), materialized on demand, so new projects start syncing
+// without a restart. The parameterized access grant
+// (`resource:$projectId:connect:$sourceId`) makes each sub-scope writable.
+// The project Importers tab resolves these dynamic destinations at request
+// time, so a connected importer is listed before its first run. The
+// `knowledge` thunk late-binds `demoKnowledge` (declared below) — it's only
+// invoked at cron fire, long after module init.
 const demoImportersResolver = (() => {
   if (!demoKnowledgeEnabled || !platformImportersEnabled) return undefined;
-  const scopes = factoryProjectScopes(storage);
+  const scopes = factoryProjectScopes(storage, { knowledge: () => demoKnowledge });
   const integrationConfig = (role: 'owner' | 'edit') =>
-    ({ access: { 'resource:$projectId': role }, scopes }) as const;
+    ({ access: { 'resource:$projectId:connect:$sourceId': role }, scopes }) as const;
   try {
     return platformImporters({
       integrations: {

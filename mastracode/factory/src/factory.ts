@@ -387,9 +387,11 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
  *
  * When auto-constructing with `importers()` and the host didn't pass explicit
  * `importersOptions.integrations`, every catalogue provider defaults to
- * per-project destinations: dynamic scopes enumerating the Factory project
- * inventory at each cron fire, with a parameterized access grant
- * (`resource:$projectId`) so each project's scope is writable.
+ * per-project, per-source destinations: dynamic scopes enumerating the
+ * Factory project inventory at each cron fire, one
+ * `resource:<projectId>:connect:<provider>` sub-scope per project per source
+ * (materialized on demand), with a parameterized access grant
+ * (`resource:$projectId:connect:$sourceId`) so each sub-scope is writable.
  *
  * Any throw from `importers()` (missing project id, credential resolution, …)
  * is swallowed with a single console warning — Factory boot must survive a
@@ -410,12 +412,22 @@ function resolveEffectiveKnowledge(input: {
   );
   const subconsciousOverride = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
 
+  // The default project-scopes resolver materializes each source's
+  // destination sub-scope at cron-fire time, which needs the Knowledge
+  // instance we're about to construct. Late-bind it through a ref so the
+  // resolver (built first, fired later) always sees the live instance.
+  const knowledgeRef: { current?: Knowledge } = {};
+
   let effectiveImporters: KnowledgeImportersInput | undefined;
   if (input.importers !== undefined) {
     effectiveImporters = input.importers;
   } else if (platformEnvPresent) {
     try {
-      effectiveImporters = importersFromConnect(withProjectScopedIntegrations(input.importersOptions, input.storage));
+      effectiveImporters = importersFromConnect(
+        withProjectScopedIntegrations(input.importersOptions, input.storage, {
+          knowledge: () => knowledgeRef.current,
+        }),
+      );
     } catch (error) {
       console.warn('[factory:knowledge] Skipping auto-construction — importers() failed:', error);
       return undefined;
@@ -426,11 +438,13 @@ function resolveEffectiveKnowledge(input: {
     return undefined;
   }
 
-  return new Knowledge({
+  const knowledge = new Knowledge({
     id: 'factory',
     storage: input.storage.getMastraStorage(),
     importers: effectiveImporters,
   });
+  knowledgeRef.current = knowledge;
+  return knowledge;
 }
 
 export class MastraFactory {

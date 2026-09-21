@@ -445,6 +445,9 @@ function importBinding(binding: string): { source?: string; scopeAddress?: strin
 function importScopeBelongsToView(scope: string | undefined, projectId: string, threadId?: string): boolean {
   return (
     scope === `resource:${projectId}` ||
+    // Per-source sub-scopes (`resource:<pid>:connect:<provider>`) belong to
+    // the project view — they're where the platform importers land content.
+    scope?.startsWith(`resource:${projectId}:connect:`) === true ||
     (threadId !== undefined && scope === `resource:${projectId}:thread:${threadId}`)
   );
 }
