@@ -845,7 +845,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // declaration; queries hydrate the real one lazily via
       // getDeclaredFilterPaths().
       if (vectorIndexCreated) {
-        this.declaredFilterPaths.set(indexName, new Set([this.documentFieldName, ...declaredMetadataPaths]));
+        this.declaredFilterPaths.set(
+          indexName,
+          new Set(documentIsEmbedded ? declaredMetadataPaths : [this.documentFieldName, ...declaredMetadataPaths]),
+        );
       }
 
       // Companion full-text index (dynamic mapping). Only auto-created for MANAGED
@@ -1388,7 +1391,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           [this.metadataFieldName]: normalizedMeta,
         };
         if (doc !== undefined) {
-          updateDoc[this.documentFieldName] = doc;
+          // On an autoEmbed index the text must land on the field the index embeds.
+          updateDoc[autoEmbed ? autoEmbed.path : this.documentFieldName] = doc;
         }
 
         // Match both the raw string and (when the id is 24-hex) the ObjectId form, so an

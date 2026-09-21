@@ -2414,6 +2414,15 @@ describe('MongoDBVector autoEmbed', () => {
       ).rejects.toThrow(/dimension cannot be combined with autoEmbed/);
     });
 
+    it('does not cache the embedded field as a declared filter path', async () => {
+      const v = makeVector();
+      stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' }, filterFields: ['year'] });
+
+      expect((v as any).declaredFilterPaths.get('movies')).toEqual(new Set(['metadata.year']));
+    });
+
     it('persists the autoEmbed config so another process can rebuild the query stage', async () => {
       const v = makeVector();
       stubCreateIndex(v);
@@ -2708,6 +2717,17 @@ describe('MongoDBVector autoEmbed', () => {
       expect(update.embedding).toBeUndefined();
     });
 
+    it('writes the text to the configured autoEmbed path', async () => {
+      const v = makeVector();
+      const bulkWrite = stubUpsert(v, { model: 'voyage-4', path: 'fullplot' });
+
+      await v.upsert({ indexName: 'movies', documents: ['a lonely astronaut'] });
+
+      const update = bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+      expect(update.fullplot).toBe('a lonely astronaut');
+      expect(update.document).toBeUndefined();
+    });
+
     it('generates one id per document', async () => {
       const v = makeVector();
       const bulkWrite = stubUpsert(v);
@@ -2841,10 +2861,10 @@ describe('MongoDBVector autoEmbed', () => {
 const AUTOEMBED_URL = process.env.MONGODB_AUTOEMBED_URL;
 const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY;
 const describeAutoEmbed =
-  process.env.TEST_MONGODB_AUTOEMBEDDING && (AUTOEMBED_URL || VOYAGE_API_KEY) ? describe : describe.skip;
+  process.env.TEST_MONGODB_AUTOEMBEDDING === '1' && (AUTOEMBED_URL || VOYAGE_API_KEY) ? describe : describe.skip;
 
 describeAutoEmbed('MongoDBVector Automated Embedding (live)', () => {
-  const indexName = 'autoembed_movies';
+  const indexName = `autoembed_movies_${Date.now()}`;
   const autoEmbedUri = AUTOEMBED_URL || uri;
   let store: MongoDBVector;
 
@@ -2889,7 +2909,6 @@ describeAutoEmbed('MongoDBVector Automated Embedding (live)', () => {
   beforeAll(async () => {
     store = new MongoDBVector({ id: 'autoembed', uri: autoEmbedUri, dbName });
     await store.connect();
-    await store.deleteIndex({ indexName }).catch(() => {});
     try {
       await createIndexAndWait(store, { indexName, autoEmbed: { model: 'voyage-4' }, filterFields: ['year'] }, 300000);
     } catch (error: any) {
