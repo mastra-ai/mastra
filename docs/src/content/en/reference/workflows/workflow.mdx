@@ -235,6 +235,14 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             isOptional: true,
           },
           {
+            name: 'reuseCompletedStepCheckpoint',
+            type: 'boolean',
+            description:
+              'Allows the default execution engine to reuse an acknowledged completed-step snapshot for the next sequential step when its persisted input, state, and request context match. Every completed result is still saved. Branches and nested workflows retain their start snapshots. Enabled internally for durable agents; disabled by default for user workflows.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
             name: 'onStart',
             type: '(info: WorkflowStartCallbackInfo) => void | Promise<void>',
             description:

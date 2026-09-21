@@ -52,7 +52,7 @@ import type {
 } from './types';
 // Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
 // to build a runnable step from a declarative entry.
-import { abortableSleep, getSingleStepEntryId, omitPriorCompletionFields } from './utils';
+import { abortableSleep, getSingleStepEntryId, isSingleStepEntry, omitPriorCompletionFields } from './utils';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
@@ -89,6 +89,25 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    */
   protected lastPersistedStatusByRun = new Map<string, WorkflowRunStatus>();
 
+  // One small fingerprint per live run; never a substitute for a storage write.
+  // It is created only after the completed checkpoint has been acknowledged.
+  private completedStepCheckpoints = new Map<string, { index: number; fingerprint: string }>();
+
+  getCompletedStepCheckpoint(runId: string) {
+    return this.completedStepCheckpoints.get(runId);
+  }
+
+  setCompletedStepCheckpoint(runId: string, checkpoint?: { index: number; fingerprint: string }): void {
+    if (checkpoint) this.completedStepCheckpoints.set(runId, checkpoint);
+    else this.completedStepCheckpoints.delete(runId);
+  }
+
+  supportsCompletedStepCheckpointReuse(): boolean {
+    // Other engines may journal operations independently. Their replay contract
+    // must not change merely because they inherit default-engine handlers.
+    return this.constructor === DefaultExecutionEngine;
+  }
+
   /** Returns the last status persisted for a given run in this process, if any. */
   getLastPersistedStatus(runId: string): WorkflowRunStatus | undefined {
     return this.lastPersistedStatusByRun.get(runId);
@@ -102,6 +121,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   /** Clears the last-persisted-status entry for a run (used on run cleanup). */
   clearLastPersistedStatus(runId: string): void {
     this.lastPersistedStatusByRun.delete(runId);
+    this.completedStepCheckpoints.delete(runId);
   }
 
   /** Returns the current step's zero-based retry attempt, or zero outside an attempt. */
@@ -891,29 +911,58 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       };
       lastExecutionContext = executionContext;
 
-      lastOutput = await this.executeEntry({
-        workflowId,
-        runId,
-        resourceId,
-        entry,
-        executionContext,
-        serializedStepGraph: params.serializedStepGraph,
-        prevStep: steps[i - 1]!,
-        stepResults,
-        resume,
-        timeTravel,
-        restart,
-        ...createObservabilityContext({ currentSpan: workflowSpan }),
-        abortController: params.abortController,
-        pubsub: params.pubsub,
-        requestContext: currentRequestContext,
-        actor: params.actor,
-        outputWriter: params.outputWriter,
-        disableScorers,
-        perStep,
-      });
+      // The entry-end checkpoint can be the last write before a process exits.
+      // It still points at this entry, but has no active step and already owns
+      // its successful result. Reuse it rather than repeating its side effects.
+      const completedRestartEntry =
+        i === startIdx &&
+        restart &&
+        restart.activePaths.length === 0 &&
+        Object.keys(restart.activeStepsPath ?? {}).length === 0
+          ? restart.completedEntry
+            ? { status: 'success', output: this.getStepOutput(stepResults, entry) }
+            : isSingleStepEntry(entry)
+              ? stepResults[getSingleStepEntryId(entry)]
+              : undefined
+          : undefined;
+      lastOutput =
+        completedRestartEntry?.status === 'success'
+          ? {
+              result: completedRestartEntry,
+              stepResults,
+              mutableContext: this.buildMutableContext(executionContext),
+            }
+          : await this.executeEntry({
+              workflowId,
+              runId,
+              resourceId,
+              entry,
+              executionContext,
+              serializedStepGraph: params.serializedStepGraph,
+              prevStep: steps[i - 1]!,
+              stepResults,
+              resume,
+              timeTravel,
+              restart,
+              ...createObservabilityContext({ currentSpan: workflowSpan }),
+              abortController: params.abortController,
+              pubsub: params.pubsub,
+              requestContext: currentRequestContext,
+              actor: params.actor,
+              outputWriter: params.outputWriter,
+              disableScorers,
+              perStep,
+            });
 
       // Apply mutable context changes from entry execution
+      if (completedRestartEntry?.status === 'success' && restart?.preparedNextStep) {
+        const nextEntry = steps[i + 1];
+        if (nextEntry && isSingleStepEntry(nextEntry) && getSingleStepEntryId(nextEntry) === restart.preparedNextStep) {
+          const nextStepId = restart.preparedNextStep;
+          restart.activeStepsPath = { [nextStepId]: [i + 1] };
+          stepResults[nextStepId] = { status: 'running', payload: lastOutput.result.output, startedAt: Date.now() };
+        }
+      }
       this.applyMutableContext(executionContext, lastOutput.mutableContext);
       lastState = lastOutput.mutableContext.state;
       // Update requestContext from step result (only for engines that serialize context)

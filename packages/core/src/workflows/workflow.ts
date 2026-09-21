@@ -1804,6 +1804,7 @@ export class Workflow<
     this.#options = {
       validateInputs: options.validateInputs ?? true,
       emitStepEvents: options.emitStepEvents ?? true,
+      reuseCompletedStepCheckpoint: options.reuseCompletedStepCheckpoint ?? false,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       allowUnclaimedResumes: options.allowUnclaimedResumes,
       pruneSnapshot: options.pruneSnapshot,

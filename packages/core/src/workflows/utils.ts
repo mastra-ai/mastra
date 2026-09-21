@@ -621,6 +621,8 @@ export const createRestartExecutionParams = ({
     );
   }
   const restartData: RestartExecutionParams = {
+    completedEntry: snapshot.completedEntry,
+    preparedNextStep: snapshot.preparedNextStep,
     activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
     activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
     stepResults: snapshot.context,

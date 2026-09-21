@@ -326,7 +326,7 @@ function stripRunningHistoryFields<T>(value: T): T {
  * exactly the bytes they keep today.
  */
 function getActiveStepIds(snapshot: WorkflowRunState): Set<string> {
-  return new Set(
+  const activeStepIds = new Set(
     Object.entries(snapshot.activeStepsPath ?? {})
       .filter(
         ([, path]) =>
@@ -335,6 +335,30 @@ function getActiveStepIds(snapshot: WorkflowRunState): Set<string> {
       )
       .map(([stepId]) => stepId),
   );
+  // A completed entry has already removed itself from activeStepsPath. Until
+  // the next entry starts, its output is still the recovery continuation.
+  if (activeStepIds.size === 0 && snapshot.activePaths?.length === 1) {
+    const entry = snapshot.serializedStepGraph?.[snapshot.activePaths[0]!];
+    if (snapshot.completedEntry && (entry?.type === 'loop' || entry?.type === 'foreach')) {
+      const child = entry.step;
+      const childId = child.type === 'step' ? child.step.id : child.id;
+      if (snapshot.context?.[childId]?.status === 'success') activeStepIds.add(childId);
+    }
+    if (snapshot.completedEntry && (entry?.type === 'parallel' || entry?.type === 'conditional')) {
+      for (const child of entry.steps) {
+        const childId = child.type === 'step' ? child.step.id : child.id;
+        if (snapshot.context?.[childId]?.status === 'success') activeStepIds.add(childId);
+      }
+    }
+    const id =
+      entry?.type === 'step'
+        ? entry.step.id
+        : entry && ['mapping', 'agent', 'tool'].includes(entry.type) && 'id' in entry
+          ? entry.id
+          : undefined;
+    if (id && snapshot.context?.[id]?.status === 'success') activeStepIds.add(id);
+  }
+  return activeStepIds;
 }
 
 function pruneRunningHistory(context: WorkflowRunState['context'], activeStepIds: ReadonlySet<string>): void {
@@ -382,7 +406,7 @@ export function pruneAgentLoopSnapshot({
       context.input = strippedInput;
     } else {
       context[key] = pruneStepResult(value as Record<string, any>, {
-        preserveTerminalPayloadState: activeStepIds.has(key),
+        preserveTerminalPayloadState: activeStepIds.has(key) && key in (snapshot.activeStepsPath ?? {}),
       }) as any;
     }
   }

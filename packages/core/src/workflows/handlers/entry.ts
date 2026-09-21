@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import type { SerializedError } from '../../error';
@@ -26,6 +27,37 @@ function publishStepEvent(
   ...args: Parameters<PubSub['publish']>
 ): Promise<void> {
   return engine.options.emitStepEvents === false ? Promise.resolve() : pubsub.publish(...args);
+}
+
+function checkpointFingerprint(value: unknown, requestContext: unknown, input: unknown): string | undefined {
+  try {
+    // Normalize exactly as JSON storage does, then ignore object insertion order.
+    // Pruning builds copies with a different key order but unchanged values.
+    const normalized = JSON.parse(JSON.stringify([value, requestContext, input]));
+    return createHash('sha256')
+      .update(
+        JSON.stringify(normalized, (_key, item) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+          return Object.fromEntries(
+            Object.keys(item)
+              .sort()
+              .map(key => [key, item[key]]),
+          );
+        }),
+      )
+      .digest('hex');
+  } catch {
+    // Unsupported serialization must take the normal persistence path.
+    return undefined;
+  }
+}
+
+function getSequentialCheckpointStep(snapshot: WorkflowRunState, index = snapshot.activePaths[0]!): string | undefined {
+  if (snapshot.activePaths.length !== 1) return undefined;
+  const entry = snapshot.serializedStepGraph?.[index];
+  if (entry?.type === 'step' && entry.step.component !== 'WORKFLOW') return entry.step.id;
+  if (entry?.type === 'mapping' || entry?.type === 'agent' || entry?.type === 'tool') return entry.id;
+  return undefined;
 }
 
 /**
@@ -182,6 +214,8 @@ export async function persistStepUpdate(
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
 
   await engine.wrapDurableOperation(operationId, async () => {
+    const completedCheckpoint = engine.getCompletedStepCheckpoint(runId);
+    engine.setCompletedStepCheckpoint(runId);
     // A run-scoped override (e.g. the transient per-chunk runs of a workflow used as an
     // agent output processor, #19605) wins over the workflow-wide option.
     const persistencePredicate = engine.getRunPersistenceOverride(runId) ?? engine.options?.shouldPersistSnapshot;
@@ -207,6 +241,7 @@ export async function persistStepUpdate(
     const requestContextObj = engine.serializeRequestContext(requestContext);
 
     const snapshot: WorkflowRunState = {
+      ...(phase === 'entry-end' && workflowStatus === 'running' ? { completedEntry: true } : {}),
       runId,
       status: workflowStatus,
       value: executionContext.state,
@@ -226,14 +261,88 @@ export async function persistStepUpdate(
       tracingContext,
     };
 
+    const canReuse = engine.options.reuseCompletedStepCheckpoint && engine.supportsCompletedStepCheckpointReuse();
+    const stepId = canReuse ? getSequentialCheckpointStep(snapshot) : undefined;
+    let persistedSnapshot = engine.options?.pruneSnapshot
+      ? engine.options.pruneSnapshot({ snapshot, workflowStatus })
+      : snapshot;
+    if (
+      canReuse &&
+      phase === 'start' &&
+      workflowStatus === 'running' &&
+      stepId &&
+      completedCheckpoint &&
+      completedCheckpoint.index + 1 === snapshot.activePaths[0] &&
+      Object.keys(snapshot.activeStepsPath ?? {}).length === 1 &&
+      snapshot.context[stepId]?.status === 'running' &&
+      completedCheckpoint.fingerprint ===
+        checkpointFingerprint(
+          persistedSnapshot.value,
+          persistedSnapshot.requestContext,
+          persistedSnapshot.context[stepId]?.payload,
+        )
+    ) {
+      // The acknowledged prior result contains exactly what restart needs to
+      // enter this step. No side effect occurs between that checkpoint and here.
+      return;
+    }
+
+    const nextStepId =
+      canReuse &&
+      phase === 'entry-end' &&
+      workflowStatus === 'running' &&
+      stepId &&
+      Object.keys(persistedSnapshot.activeStepsPath ?? {}).length === 0 &&
+      persistedSnapshot.context[stepId]?.status === 'success'
+        ? getSequentialCheckpointStep(persistedSnapshot, snapshot.activePaths[0]! + 1)
+        : undefined;
+    let candidate: { index: number; fingerprint: string } | undefined;
+    if (nextStepId && stepId) {
+      try {
+        // Detach before yielding: storage may serialize either before or after
+        // awaiting I/O, while callers can still mutate the live state or input.
+        const serialized = JSON.stringify(persistedSnapshot);
+        const detached = structuredClone(persistedSnapshot);
+        const completedResult = detached.context[stepId];
+        const fingerprint =
+          // Cloning Buffers or custom classes can change their JSON encoding.
+          // Such values must keep the existing persistence behavior.
+          serialized === JSON.stringify(detached) && completedResult?.status === 'success'
+            ? checkpointFingerprint(detached.value, detached.requestContext, completedResult.output)
+            : undefined;
+        if (fingerprint) {
+          // The start intent and preceding result share one acknowledged write.
+          // Recovery can enter the next step with restart:true and its input.
+          persistedSnapshot = { ...detached, preparedNextStep: nextStepId };
+          candidate = { index: detached.activePaths[0]!, fingerprint };
+        }
+      } catch {
+        // Non-cloneable values retain the ordinary start checkpoint.
+      }
+    }
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
       resourceId,
-      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
+      snapshot: persistedSnapshot,
     });
     engine.setLastPersistedStatus(runId, workflowStatus);
+    if (
+      workflowsStore &&
+      candidate &&
+      stepId &&
+      persistedSnapshot.context[stepId]?.status === 'success' &&
+      candidate.fingerprint ===
+        checkpointFingerprint(
+          persistedSnapshot.value,
+          persistedSnapshot.requestContext,
+          persistedSnapshot.context[stepId].output,
+        )
+    ) {
+      // A storage adapter that mutates its argument also disables reuse.
+      engine.setCompletedStepCheckpoint(runId, candidate);
+    }
   });
 }
 

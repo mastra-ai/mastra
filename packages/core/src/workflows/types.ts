@@ -49,6 +49,8 @@ export type WorkflowEngineType = string;
 export type WorkflowType = 'default' | 'processor';
 
 export type RestartExecutionParams = {
+  completedEntry?: boolean;
+  preparedNextStep?: string;
   activePaths: number[];
   activeStepsPath: Record<string, number[]>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -395,6 +397,10 @@ export type WorkflowStateField =
   | 'tracingContext';
 
 export interface WorkflowRunState {
+  /** The entry at activePaths finished successfully before this checkpoint. */
+  completedEntry?: boolean;
+  /** Next sequential step whose start intent shares this completed checkpoint. */
+  preparedNextStep?: string;
   // Core state info
   runId: string;
   status: WorkflowRunStatus;
@@ -524,6 +530,13 @@ export interface WorkflowOptions {
    * Internal workflows may disable these events when no consumer observes them.
    */
   emitStepEvents?: boolean;
+  /**
+   * Allow the default engine to reuse a completed sequential step's durable
+   * checkpoint when it contains the exact next input, state and request context.
+   * Every completed step is still persisted. Branches and nested workflows keep
+   * their start checkpoints. Defaults to false.
+   */
+  reuseCompletedStepCheckpoint?: boolean;
   /**
    * When true, nested runs created by execute() share the parent's pubsub
    * instance instead of creating an isolated one. Used by durable agent
