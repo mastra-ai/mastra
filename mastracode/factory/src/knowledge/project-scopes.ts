@@ -18,13 +18,21 @@ const SOURCE_SCOPE_NAMES: Readonly<Record<string, string>> = {
   fireflies: 'Fireflies',
 };
 
-function sourceScopeName(integrationId: string): string {
-  return SOURCE_SCOPE_NAMES[integrationId] ?? integrationId.charAt(0).toUpperCase() + integrationId.slice(1);
+function sourceScopeName(integrationId: string, accountLabel?: string | null): string {
+  const provider = SOURCE_SCOPE_NAMES[integrationId] ?? integrationId.charAt(0).toUpperCase() + integrationId.slice(1);
+  const label = accountLabel?.trim();
+  return label ? `${provider} — ${label}` : provider;
 }
 
-/** Destination sub-scope for one source under one Factory project. */
-export function connectSourceScopeAddress(projectId: string, integrationId: string): string {
-  return `resource:${projectId}:connect:${integrationId}`;
+/**
+ * Destination sub-scope for one source account under one Factory project.
+ * General form `provider:resource` — the same rung grammar as repository
+ * knowledge (`resource:<pid>:github:<owner/repo>`). For a platform source
+ * the resource is the connected account/workspace, addressed by its stable
+ * connection id; the human label lives on the scope name, not the address.
+ */
+export function connectSourceScopeAddress(projectId: string, integrationId: string, connectionId: string): string {
+  return `resource:${projectId}:${integrationId}:${connectionId}`;
 }
 
 export interface FactoryProjectScopesOptions {
@@ -35,7 +43,7 @@ export interface FactoryProjectScopesOptions {
    * that's empty during construction and set before the first cron fire.
    *
    * When present, each resolution materializes the destination sub-scopes —
-   * `org → resource → resource:<pid>:connect:<provider>` in dependency
+   * `org → resource → resource:<pid>:<provider>:<connectionId>` in dependency
    * order — so imports work for projects nobody has visited yet. Without it
    * the resolver only returns addresses and relies on the scopes existing.
    */
@@ -44,14 +52,15 @@ export interface FactoryProjectScopesOptions {
 
 /**
  * Knowledge-importer scopes resolver over the Factory project inventory: one
- * `resource:<projectId>:connect:<integrationId>` sub-scope per project per
- * source, resolved live at each cron fire so projects created or deleted
- * after startup start/stop syncing automatically.
+ * `resource:<projectId>:<provider>:<connectionId>` sub-scope per project per
+ * source account, resolved live at each cron fire so projects created or
+ * deleted after startup start/stop syncing automatically.
  *
- * Each source gets its own sub-scope under the project — the same topology
- * as repository knowledge (`resource:<pid>:github:<repo>`) — so Notion,
- * Linear, etc. show up as distinct scopes in the knowledge graph instead of
- * flattening into the project root.
+ * Each source account gets its own sub-scope under the project — the same
+ * `provider:resource` rung grammar as repository knowledge
+ * (`resource:<pid>:github:<owner/repo>`) — so Notion, Linear, etc. show up
+ * as distinct scopes in the knowledge graph instead of flattening into the
+ * project root. Two connections of the same provider get two scopes.
  *
  * Honors per-connection routing when the `importer-routing` storage domain is
  * registered: a connection routed to selected projects resolves only those
@@ -70,7 +79,7 @@ export interface FactoryProjectScopesOptions {
  * accordingly (or route each connection to selected projects).
  *
  * Pair with a parameterized access map so every source sub-scope is writable:
- * `{ access: { 'resource:$projectId:connect:$sourceId': 'owner' }, scopes: factoryProjectScopes(storage, { knowledge }) }`.
+ * `{ access: { 'resource:$projectId:notion:$accountId': 'owner' }, scopes: factoryProjectScopes(storage, { knowledge }) }`.
  */
 export function factoryProjectScopes(
   storage: FactoryStorage,
@@ -94,11 +103,11 @@ export function factoryProjectScopes(
     const knowledge = options.knowledge?.();
     if (knowledge) {
       for (const project of inventory) {
-        await materializeSourceScopeChain(knowledge, project, connection.integrationId);
+        await materializeSourceScopeChain(knowledge, project, connection);
       }
     }
 
-    return inventory.map(project => connectSourceScopeAddress(project.id, connection.integrationId));
+    return inventory.map(project => connectSourceScopeAddress(project.id, connection.integrationId, connection.id));
   };
 }
 
@@ -117,11 +126,11 @@ export function factoryProjectScopes(
 async function materializeSourceScopeChain(
   knowledge: Knowledge,
   project: FactoryProject,
-  integrationId: string,
+  connection: { id: string; integrationId: string; accountLabel?: string | null },
 ): Promise<void> {
   const orgAddress = `org:${project.orgId}`;
   const resourceAddress = `resource:${project.id}`;
-  const sourceAddress = connectSourceScopeAddress(project.id, integrationId);
+  const sourceAddress = connectSourceScopeAddress(project.id, connection.integrationId, connection.id);
 
   if (!(await knowledge.resolveScopeAddress(orgAddress))) {
     await knowledge.materializeScope({
@@ -141,10 +150,10 @@ async function materializeSourceScopeChain(
   if (!(await knowledge.resolveScopeAddress(sourceAddress))) {
     await knowledge.materializeScope({
       address: sourceAddress,
-      name: sourceScopeName(integrationId),
+      name: sourceScopeName(connection.integrationId, connection.accountLabel),
       parentAddresses: [resourceAddress],
       contextualScopeAddress: resourceAddress,
-      parameters: { resourceId: project.id, sourceId: integrationId },
+      parameters: { resourceId: project.id, sourceId: connection.integrationId, accountId: connection.id },
     });
   }
 }
@@ -167,10 +176,10 @@ const KNOWLEDGE_IMPORTER_DEFAULT_ROLES: Readonly<Record<string, 'owner' | 'edit'
 
 /**
  * Fill in the default per-project integration config when the host didn't
- * pass one: every catalogue provider syncs into its own
- * `resource:<projectId>:connect:<provider>` sub-scope per Factory project via
- * {@link factoryProjectScopes}. Host-supplied `integrations` are used
- * verbatim — the host owns the destination topology.
+ * pass one: every catalogue provider syncs each connected account into its
+ * own `resource:<projectId>:<provider>:<connectionId>` sub-scope per Factory
+ * project via {@link factoryProjectScopes}. Host-supplied `integrations` are
+ * used verbatim — the host owns the destination topology.
  */
 export function withProjectScopedIntegrations(
   options: Omit<ImportersOptions, 'client'> | undefined,
@@ -182,7 +191,7 @@ export function withProjectScopedIntegrations(
   const integrations = Object.fromEntries(
     Object.entries(KNOWLEDGE_IMPORTER_DEFAULT_ROLES).map(([integrationId, role]) => [
       integrationId,
-      { access: { 'resource:$projectId:connect:$sourceId': role }, scopes },
+      { access: { [`resource:$projectId:${integrationId}:$accountId`]: role }, scopes },
     ]),
   );
   return { ...options, integrations };
