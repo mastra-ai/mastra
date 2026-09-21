@@ -218,7 +218,12 @@ export function FilterBarChip({
         data-readonly={readOnly || undefined}
         data-shine={shine.active || undefined}
         className={cn(chipClass, className)}
-        style={{ '--filter-bar-segments-settled': segments.settled } as CSSProperties}
+        style={
+          {
+            '--filter-bar-segments-settled': segments.settled,
+            '--filter-bar-chip-shine': field?.color ?? 'currentColor',
+          } as CSSProperties
+        }
         onKeyDown={handleKeyDown}
         onClick={(event: MouseEvent) => event.stopPropagation()}
         onAnimationEnd={(event: AnimationEvent) => {

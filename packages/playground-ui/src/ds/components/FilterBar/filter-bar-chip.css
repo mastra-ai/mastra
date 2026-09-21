@@ -55,9 +55,9 @@
   }
 }
 
-/* Once the value lands, a narrow band of the text colour sweeps across the chip like
- * light catching a surface. Drawn as an overlay so no segment has to know about it;
- * it waits for the last segment to finish growing before it starts. */
+/* Once the value lands, a slanted band in the field's accent colour (the chip sets
+ * `--filter-bar-chip-shine`, falling back to the text colour) sweeps across the chip
+ * like light catching a surface. Drawn as an overlay so no segment has to know. */
 
 /* With a 300% wide image and the band at 40–60%, positions 100% → 0% carry it from
  * just off the left edge to just off the right edge — the whole run is on-chip. */
@@ -78,9 +78,9 @@
   border-radius: inherit;
   pointer-events: none;
   background-image: linear-gradient(
-    105deg,
+    125deg,
     transparent 40%,
-    color-mix(in oklab, currentColor 38%, transparent) 50%,
+    color-mix(in oklab, var(--filter-bar-chip-shine, currentColor) 38%, transparent) 50%,
     transparent 60%
   );
   background-size: 300% 100%;
