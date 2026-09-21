@@ -396,9 +396,10 @@ jobs:
             /usr/bin/git show "${HEAD_SHA}:${script_path}" \
               > "${RUNNER_TEMP}/run-papersflow-fork-pr-validation.bash"
           elif [[ "${HEAD_REPOSITORY}" == "${GITHUB_REPOSITORY}" && \
+            "${PR_NUMBER}" == '425' && \
             "${HEAD_REF}" == 'ci/pf-4278-clickhouse-cloudflare-validation' && \
             "${BASE_REF}" == 'main' ]]; then
-            echo 'Bootstrapping the validator from the exact PF-4278 policy branch.'
+            echo 'Bootstrapping the validator from exact PF-4278 policy PR #425.'
             /usr/bin/git show "${HEAD_SHA}:${script_path}" \
               > "${RUNNER_TEMP}/run-papersflow-fork-pr-validation.bash"
           elif /usr/bin/git cat-file -e "${BASE_SHA}:${script_path}" && \
