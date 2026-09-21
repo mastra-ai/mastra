@@ -2523,6 +2523,40 @@ describe('MongoDBVector autoEmbed', () => {
       expect(aggregate.mock.calls[0][0][0].$vectorSearch.filter).toEqual({ document: { $eq: 'astronaut' } });
     });
 
+    it('returns the embedded text as document when a custom path is configured', async () => {
+      const v = makeVector();
+      const aggregate = stubQuery(v, { model: 'voyage-4', path: 'fullplot' });
+
+      await v.query({ indexName: 'movies', queryText: 'space opera' });
+
+      const projection = aggregate.mock.calls[0][0].at(-1).$project;
+      expect(projection.document).toBe('$fullplot');
+    });
+
+    it('applies documentFilter to the embedded field when a custom path is configured', async () => {
+      const v = makeVector();
+      const aggregate = vi
+        .fn()
+        .mockReturnValueOnce({
+          map: () => ({ toArray: async () => ['doc-1'] }),
+          toArray: async () => [{ _id: 'doc-1' }],
+        })
+        .mockReturnValueOnce({ toArray: async () => [] });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+        autoEmbed: { model: 'voyage-4', path: 'fullplot' },
+      });
+
+      await v.query({ indexName: 'movies', queryText: 'space opera', documentFilter: { $eq: 'astronaut' } });
+
+      // The embedded field is never a declared filter field, so it is pre-filtered.
+      expect(aggregate.mock.calls[0][0][0].$match).toEqual({ fullplot: { $eq: 'astronaut' } });
+      expect(aggregate.mock.calls[1][0][0].$vectorSearch.filter).toEqual({ _id: { $in: ['doc-1'] } });
+    });
+
     it('rejects supplying both queryText and queryVector', async () => {
       const v = makeVector();
       stubQuery(v);

@@ -563,6 +563,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     metadataMode: 'field' | 'document',
     includeVector: boolean,
     scoreMeta: 'vectorSearchScore' | 'searchScore' | 'score',
+    /** Field holding the text, which an autoEmbed index may place outside `document`. */
+    documentPath: string = this.documentFieldName,
   ): Document[] {
     const score = { $meta: scoreMeta };
     if (metadataMode === 'document') {
@@ -581,7 +583,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           _id: 1,
           score,
           metadata: `$${this.metadataFieldName}`,
-          document: `$${this.documentFieldName}`,
+          document: `$${documentPath}`,
           ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
         },
       },
@@ -1043,7 +1045,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     searchIndexName?: string;
   }): Promise<QueryResult[]> {
     const { indexName, query, paths, topK = 10, filter, metadataMode = 'field', searchIndexName } = params;
-    const { collectionName } = await this.resolveIndexTarget(indexName);
+    const { collectionName, autoEmbed } = await this.resolveIndexTarget(indexName);
     // The full-text search index name is resolved from the persisted registry entry (set by
     // createSearchIndex / createIndex), defaulting to `${collectionName}_search_index`. A
     // caller may override it per-call via `searchIndexName`.
@@ -1057,7 +1059,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         { $limit: Math.min(10000, topK) },
         // Score is projected via $meta inside buildProjection (not a preceding $set) so it
         // never pollutes `metadata: '$$ROOT'` in document mode.
-        ...this.buildProjection(metadataMode, false, 'searchScore'),
+        ...this.buildProjection(metadataMode, false, 'searchScore', autoEmbed?.path),
       ];
       const rows = await collection.aggregate(pipeline).toArray();
       return rows.map((r: any) => ({
@@ -1229,7 +1231,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // (NOT `searchScore`, which is the text-branch score and is absent on vector-only hits).
         // Score is projected via $meta inside buildProjection (not a preceding $set) so it
         // never pollutes `metadata: '$$ROOT'` in document mode.
-        ...this.buildProjection(metadataMode, false, 'score'),
+        ...this.buildProjection(metadataMode, false, 'score', autoEmbed?.path),
       ];
       const rows = await collection.aggregate(pipeline).toArray();
       return rows.map((r: any) => ({
@@ -1524,10 +1526,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         limit: Math.min(10000, topK),
       };
 
-      const documentFilterExpr = documentFilter ? { [this.documentFieldName]: documentFilter } : undefined;
-      // `document` is a declared filter field except when it is the text an autoEmbed index
-      // embeds — a path cannot be both, so there it goes through the $match pre-filter.
-      const canPushDocumentFilter = autoEmbed?.path !== this.documentFieldName;
+      // documentFilter applies to whichever field holds the text: `document` on a managed
+      // index, or the field an autoEmbed index embeds.
+      const documentTextField = autoEmbed ? autoEmbed.path : this.documentFieldName;
+      const documentFilterExpr = documentFilter ? { [documentTextField]: documentFilter } : undefined;
+      // An embedded path cannot also be declared as a filter field, so on an autoEmbed index
+      // the condition goes through the $match pre-filter instead of into $vectorSearch.
+      const canPushDocumentFilter = !autoEmbed;
 
       if (hasMetadataFilter || documentFilterExpr) {
         // Fast path: if every field the filter touches was declared via
@@ -1581,7 +1586,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         {
           $vectorSearch: vectorSearch,
         },
-        ...this.buildProjection(metadataMode, includeVector, 'vectorSearchScore'),
+        ...this.buildProjection(metadataMode, includeVector, 'vectorSearchScore', autoEmbed?.path),
       ];
 
       const results = await collection.aggregate(pipeline).toArray();
