@@ -106,14 +106,14 @@ function CommandPaletteScope({
     <button
       type="button"
       // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- v4 emits nothing for `scale-0.99`
-      className="text-ui-smd text-neutral3 hover:border-border1 hover:bg-surface4 hover:text-neutral6 data-[active=true]:border-border1 data-[active=true]:bg-surface4 data-[active=true]:text-neutral6 flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.99]"
+      className="text-ui-smd leading-ui-sm text-neutral3 hover:border-border1 hover:bg-surface4 hover:text-neutral6 data-[active=true]:border-border1 data-[active=true]:bg-surface4 data-[active=true]:text-neutral6 flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.99]"
       data-active={active}
       aria-pressed={active}
       onClick={onSelect}
     >
       <span className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="border-border1 bg-surface4/70 text-ui-xs text-neutral3 rounded-md border px-1.5 py-0.5">
+      <span className="border-border1 bg-surface4/70 text-ui-xs text-neutral3 rounded-md border px-1.5 py-0.5 leading-none">
         {count}
       </span>
     </button>
@@ -180,18 +180,18 @@ function CommandPaletteItem({
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="text-ui-smd text-neutral6 truncate font-medium">{title}</span>
+          <span className="text-ui-smd leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
           {badge && (
-            <span className="border-border1 bg-surface4/60 text-ui-xs text-neutral3 shrink-0 rounded-md border px-1.5 py-0.5 font-medium uppercase">
+            <span className="border-border1 bg-surface4/60 text-ui-xs text-neutral3 shrink-0 rounded-md border px-1.5 py-0.5 leading-none font-medium uppercase">
               {badge}
             </span>
           )}
         </span>
         {(subtitle || path) && (
-          <span className="text-ui-xs text-neutral3 flex min-w-0 items-center gap-2">
+          <span className="text-ui-xs leading-ui-xs text-neutral3 flex min-w-0 items-center gap-2">
             {subtitle && <span className="truncate">{subtitle}</span>}
             {path && (
-              <span className="border-border1 bg-surface4/70 text-ui-xs text-neutral3 max-w-52 truncate rounded-md border px-1.5 py-0.5 font-mono">
+              <span className="border-border1 bg-surface4/70 text-ui-xs text-neutral3 max-w-52 truncate rounded-md border px-1.5 py-0.5 font-mono leading-none">
                 {path}
               </span>
             )}

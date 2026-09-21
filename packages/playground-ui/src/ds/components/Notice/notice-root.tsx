@@ -44,7 +44,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
     return (
       <div
         className={cn(
-          '@container relative rounded-2xl border p-3 text-ui-md',
+          '@container relative rounded-2xl border p-3 text-ui-md leading-ui-md',
           'animate-in duration-200 fade-in-0 slide-in-from-top-2',
           classes,
           className,
@@ -74,7 +74,7 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
       <div className="flex h-4 min-w-0 items-center gap-2 [&>svg]:size-4">
         {resolvedIcon}
         {/* truncate, not wrap — the row is 1rem tall, a wrapped title would spill out of it */}
-        <span className="text-ui-sm truncate font-medium tracking-wide uppercase">{title}</span>
+        <span className="text-ui-sm truncate leading-none font-medium tracking-wide uppercase">{title}</span>
       </div>
       {action && <div className="absolute top-2 right-2 hidden @md:block">{action}</div>}
       {(children || action) && (

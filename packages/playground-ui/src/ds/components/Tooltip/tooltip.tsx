@@ -98,7 +98,7 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
             // Base UI omits the tooltip role queried by existing consumers.
             role="tooltip"
             className={cn(
-              'new-theme relative z-100 flex origin-(--transform-origin) flex-col rounded-lg border border-border bg-popover px-2.5 py-1.5 text-ui-sm text-foreground shadow-dialog transition-[transform,scale,opacity] duration-150',
+              'new-theme relative z-100 flex origin-(--transform-origin) flex-col rounded-lg border border-border bg-popover px-2.5 py-1.5 text-ui-sm leading-ui-sm text-foreground shadow-dialog transition-[transform,scale,opacity] duration-150',
               'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
               'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
               'data-[instant]:transition-none motion-reduce:transition-none',

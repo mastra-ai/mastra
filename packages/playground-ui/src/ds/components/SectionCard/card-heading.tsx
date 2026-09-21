@@ -34,7 +34,7 @@ export function CardHeading({
       {description != null && (
         <p
           className={cn(
-            'mt-1 max-w-[62ch] font-sans text-ui-sm',
+            'mt-1 max-w-[62ch] font-sans text-ui-sm leading-ui-sm',
             danger ? 'text-accent2/70' : 'text-neutral3',
             descriptionClassName,
           )}

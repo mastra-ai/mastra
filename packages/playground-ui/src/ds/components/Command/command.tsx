@@ -109,7 +109,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
-          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd text-neutral6',
+          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-neutral6',
           'placeholder:text-neutral2 disabled:cursor-not-allowed disabled:opacity-50',
           'outline-none focus:outline-none focus-visible:outline-none',
           transitions.colors,
@@ -222,7 +222,7 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={useFluidMenuItemRef(ref)}
     className={cn(
-      'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd text-neutral4 select-none',
+      'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-neutral4 select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
       // The row background is the travelling FluidMenuItems highlight in CommandList.

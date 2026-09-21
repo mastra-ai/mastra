@@ -265,7 +265,7 @@ function SaveFullConversationInner() {
         type="button"
         onClick={handleClick}
         disabled={isFetching}
-        className="text-neutral3 hover:text-neutral5 text-ui-xs mx-auto flex cursor-pointer items-center gap-1.5 py-3 transition-colors disabled:opacity-50"
+        className="text-neutral3 hover:text-neutral5 text-ui-xs leading-ui-xs mx-auto flex cursor-pointer items-center gap-1.5 py-3 transition-colors disabled:opacity-50"
       >
         {isFetching ? <Spinner className="h-3.5 w-3.5" /> : <DatabaseIcon className="h-3.5 w-3.5" />}
         Save full conversation to dataset

@@ -29,7 +29,7 @@ export function Message({ from, avatar, footer, pending, children, className, ..
         <div
           data-slot="message-content"
           className={cn(
-            'max-w-full min-w-0 text-ui-md break-words',
+            'max-w-full min-w-0 text-ui-md leading-ui-md break-words',
             isUser && 'rounded-xl border border-transparent bg-neutral6/5 px-4 py-2 text-text1',
             isUser && pending && 'border-dashed border-border1',
             !isUser && footer && '[&>:last-child]:mb-0',

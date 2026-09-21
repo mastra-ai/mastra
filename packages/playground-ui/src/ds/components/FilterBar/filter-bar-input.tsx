@@ -254,7 +254,7 @@ export function FilterBarInput({
           className={cn(
             // Naked control inside the styled FilterBar surface — same baseline as the DS Input `unstyled` variant.
             unstyledFormElementStyle,
-            'flex-1 px-1 text-ui-smd text-neutral6',
+            'flex-1 px-1 text-ui-smd leading-ui-sm text-neutral6',
             'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             draft.step === 'field' ? 'min-w-32' : 'min-w-24 pl-0',
             className,

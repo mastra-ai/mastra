@@ -176,7 +176,7 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
           {action ? <span className="pointer-events-auto">{action}</span> : null}
         </div>
 
-        <p className="text-ui-lg text-foreground mt-0.5 font-semibold tabular-nums">{value}</p>
+        <p className="text-ui-lg text-foreground mt-0.5 leading-tight font-semibold tabular-nums">{value}</p>
 
         {status ? (
           <div className="text-ui-xs mt-1">
