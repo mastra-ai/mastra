@@ -96,8 +96,9 @@ function credentialEncryption() {
 // in favor of pubsub-coordinated leases. Without `REDIS_URL` (bare local dev)
 // the in-process default applies.
 const redisUrl = process.env.REDIS_URL;
-// Backstop TTL for idle streams: every publish/subscribe refreshes it, so
-// active topics never expire. Open-ended topics (per-thread streams, feed
+// Backstop TTL for idle streams: every write (publish, group creation, nack
+// retry) refreshes it — reads do not — so actively written topics never
+// expire. Open-ended topics (per-thread streams, feed
 // topics) are never clearTopic'd, and topics whose eager cleanup was missed
 // (e.g. a crashed run, or a reply landing after the requester's clearTopic)
 // would otherwise stay in Redis forever.
