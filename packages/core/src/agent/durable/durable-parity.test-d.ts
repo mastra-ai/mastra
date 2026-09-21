@@ -130,6 +130,8 @@ type PhantomSerializedKeys = Exclude<
   // base option key but are derived from one:
   | 'hasErrorProcessors' // derived from errorProcessors.length
   | 'skipBgTaskWait' // derived from _skipBgTaskWait
+  | 'agentMaxRetries' // derived from the agent's maxRetries config
+  | 'agentMaxRetriesConfigured' // preserves omitted vs explicitly configured maxRetries
   | 'instructionsOverride' // derived from instructions
   | 'systemMessage' // derived from system
   | 'transform' // shadow of transform policy (targets only)
