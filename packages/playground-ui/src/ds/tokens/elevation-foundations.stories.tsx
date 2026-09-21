@@ -1,8 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Txt } from '../components/Txt/Txt';
-import { Colors } from './colors';
-import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
-import { Glows } from './shadows';
+import { FoundationPage, FoundationSection, Specimen } from './foundations-layout';
 
 const meta: Meta = {
   title: 'Foundations/Elevation',
@@ -11,7 +9,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'One recipe carries elevation: --shadow-raised. It draws the rim as well as the drop, so a raised surface never adds a border of its own. Beside it, only the coloured glows remain — a status marker and the focus halo.',
+          'One recipe carries elevation: --shadow-raised. It draws the rim as well as the drop, so a raised surface never adds a border of its own, and nothing else in the system casts a shadow.',
       },
     },
   },
@@ -20,23 +18,13 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-type GlowToken = keyof typeof Glows;
-
-const glowTokens: Record<GlowToken, { note: string; surface: string }> = {
-  'glow-accent1': { note: 'Succeeded step marker', surface: Colors.accent1Dark },
-  'glow-accent2': { note: 'Failed step marker', surface: Colors.accent2Dark },
-  'focus-ring': { note: 'Focus halo, paired with ring-accent1', surface: Colors.fill },
-};
-
-const glowKeys = Object.keys(Glows) as GlowToken[];
-
 export const ElevationFoundations: Story = {
   name: 'Elevation foundations',
   render: () => (
     <FoundationPage
-      eyebrow={`Elevation / ${glowKeys.length + 1} tokens`}
+      eyebrow="Elevation / 1 token"
       title="Elevation foundations"
-      description="Elevation says a surface floats and is dismissible. One recipe covers every raised surface in the shell; a coloured halo is the only shadow allowed to carry hue."
+      description="Elevation says a surface floats and is dismissible. One recipe covers every raised surface in the shell: app frame, card, popover, dropdown, dialog, tooltip, drawer."
       note="A raised surface never draws a border: --shadow-raised already contains a 1px ring and, in dark, a top inset highlight."
       noteAside="Utility: shadow-raised, from src/index.css."
     >
@@ -66,23 +54,16 @@ export const ElevationFoundations: Story = {
       </FoundationSection>
 
       <FoundationSection
-        label="Glows"
-        description="Coloured halos for a status marker and for focus — the only shadows allowed to carry hue."
+        label="Not elevation"
+        description="The focus halo is the only other box-shadow in the system. It belongs to focus, not to depth — it is documented on the Surface page beside --border-focus and --ring."
       >
-        <SpecimenGroup label="On the surface they are used on">
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 lg:max-w-200">
-            {glowKeys.map(key => (
-              <Specimen key={key} name={`--shadow-${key}`} note={glowTokens[key].note}>
-                <div
-                  role="img"
-                  aria-label={`glow ${key}`}
-                  className="h-20 rounded-md"
-                  style={{ background: glowTokens[key].surface, boxShadow: `var(--shadow-${key})` }}
-                />
-              </Specimen>
-            ))}
+        <Specimen name="--shadow-focus-ring" note="Paired with ring-accent1 by focusRing.visible">
+          <div className="bg-background flex h-20 items-center justify-center rounded-xl p-4">
+            <div className="bg-fill shadow-focus-ring ring-accent1 rounded-md px-3 py-1.5 ring-1">
+              <Txt variant="label">Focused row</Txt>
+            </div>
           </div>
-        </SpecimenGroup>
+        </Specimen>
       </FoundationSection>
     </FoundationPage>
   ),

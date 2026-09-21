@@ -127,8 +127,8 @@ export const SurfaceFoundations: Story = {
       </FoundationSection>
 
       <FoundationSection
-        label="Ring"
-        description="The focus boundary as a ring token, so ring utilities and a border edge stay the same colour."
+        label="Focus"
+        description="Two focus languages, on purpose. A field takes the neutral edge — no accent — so a focused input does not read as a status. A row, link or tab takes the accent ring plus its halo, because there is no field edge to move."
       >
         <div className="flex flex-wrap items-end gap-6">
           <div className="w-44">
@@ -139,6 +139,11 @@ export const SurfaceFoundations: Story = {
           <div className="w-44">
             <Specimen name="ring-1 ring-ring" note="Drawn outside the fill">
               <div className="bg-fill ring-ring h-14 rounded-md ring-1" />
+            </Specimen>
+          </div>
+          <div className="w-44">
+            <Specimen name="--shadow-focus-ring" note="focusRing.visible — row, link, tab">
+              <div className="bg-fill shadow-focus-ring ring-accent1 h-14 rounded-md ring-1" />
             </Specimen>
           </div>
         </div>

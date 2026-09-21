@@ -7,7 +7,7 @@ const fontSizeKeys = Object.keys(Tokens.FontSizes);
 const lineHeightKeys = Object.keys(Tokens.LineHeights);
 const borderRadiusKeys = Object.keys(Tokens.BorderRadius);
 const sizeKeys = Object.keys(Tokens.Sizes);
-const shadowKeys = Object.keys(Tokens.Shadows).concat(Object.keys(Tokens.Glows));
+const shadowKeys = Object.keys(Tokens.Shadows);
 const durationKeys = Object.keys(Tokens.Durations);
 
 export const twMerge = extendTailwindMerge({

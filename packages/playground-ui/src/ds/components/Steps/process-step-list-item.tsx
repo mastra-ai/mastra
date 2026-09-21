@@ -44,14 +44,13 @@ function StepStatusMarker({ status, variant }: { status: string; variant: Proces
         'flex size-7 items-center justify-center self-center rounded-full motion-reduce:transition-none',
         transitions.colors,
         transitions.transform,
-        transitions.shadow,
         {
           '[&>svg]:text-notice-success-fg': status === 'success',
           '[&>svg]:text-notice-destructive-fg': status === 'failed',
           'border border-dashed border-neutral2': status === 'pending',
           '[&>svg]:size-4': status !== 'running',
-          'bg-accent1Dark shadow-glow-accent1': status === 'success',
-          'bg-accent2Dark shadow-glow-accent2': status === 'failed',
+          'bg-accent1Dark': status === 'success',
+          'bg-accent2Dark': status === 'failed',
           'scale-110': status === 'success' || status === 'failed',
         },
       )}

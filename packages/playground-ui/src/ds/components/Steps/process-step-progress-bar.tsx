@@ -24,14 +24,13 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
             >
               <div
                 className={cn(
-                  'absolute right-0 z-10 flex size-8 translate-x-1/2 items-center justify-center self-center rounded-full bg-surface3 text-column text-muted-foreground motion-reduce:transition-none',
+                  'absolute right-0 z-10 flex size-8 translate-x-1/2 items-center justify-center self-center rounded-full bg-fill text-column text-muted-foreground motion-reduce:transition-none',
                   transitions.colors,
                   transitions.transform,
-                  transitions.shadow,
                   {
                     'border border-dashed border-neutral2': step.status === 'pending',
-                    'bg-accent1Dark text-notice-success-fg shadow-glow-accent1 scale-110': step.status === 'success',
-                    'bg-accent2Dark text-notice-destructive-fg shadow-glow-accent2 scale-110': step.status === 'failed',
+                    'bg-accent1Dark text-notice-success-fg scale-110': step.status === 'success',
+                    'bg-accent2Dark text-notice-destructive-fg scale-110': step.status === 'failed',
                   },
                 )}
               >

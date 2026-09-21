@@ -595,8 +595,6 @@ html.light {
 
   --ease-out-custom: cubic-bezier(0.33, 1, 0.68, 1);
 
-  --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
-  --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
 
   @keyframes shimmer {
