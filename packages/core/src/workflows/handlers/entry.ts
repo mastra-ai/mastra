@@ -52,6 +52,30 @@ function checkpointFingerprint(value: unknown, requestContext: unknown, input: u
   }
 }
 
+function omitContextCallbacks(value: unknown): unknown {
+  if (typeof value === 'function') return undefined;
+  if (!value || typeof value !== 'object') return value;
+  const prototype = Object.getPrototypeOf(value);
+  if (Array.isArray(value) && (prototype !== Array.prototype || Object.hasOwn(value, 'constructor'))) {
+    throw new Error('Custom context arrays require the ordinary checkpoint');
+  }
+  // Preserve custom encodings and non-plain values for the existing clone and
+  // JSON-equivalence checks. Only plain context data may lose callbacks.
+  if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) return value;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  // Do not evaluate application accessors while copying transient callbacks.
+  if (Object.values(descriptors).some(descriptor => descriptor.get || descriptor.set)) {
+    throw new Error('Context accessors require the ordinary checkpoint');
+  }
+  if (typeof descriptors.toJSON?.value === 'function') return value;
+  if (Array.isArray(value)) return Array.prototype.map.call(value, omitContextCallbacks);
+  return Object.fromEntries(
+    Object.entries(descriptors)
+      .filter(([, descriptor]) => descriptor.enumerable)
+      .map(([key, descriptor]) => [key, omitContextCallbacks(descriptor.value)]),
+  );
+}
+
 function getSequentialCheckpointStep(snapshot: WorkflowRunState, index = snapshot.activePaths[0]!): string | undefined {
   if (snapshot.activePaths.length !== 1) return undefined;
   const entry = snapshot.serializedStepGraph?.[index];
@@ -302,7 +326,13 @@ export async function persistStepUpdate(
         // Detach before yielding: storage may serialize either before or after
         // awaiting I/O, while callers can still mutate the live state or input.
         const serialized = JSON.stringify(persistedSnapshot);
-        const detached = structuredClone(persistedSnapshot);
+        // Native memory carries a live runState callback in RequestContext.
+        // JSON storage already omits it; it must not disable checkpoint reuse.
+        // Leave step values unchanged and verify the complete stored encoding.
+        const detached = structuredClone({
+          ...persistedSnapshot,
+          requestContext: omitContextCallbacks(persistedSnapshot.requestContext),
+        }) as WorkflowRunState;
         const completedResult = detached.context[stepId];
         const fingerprint =
           // Cloning Buffers or custom classes can change their JSON encoding.

@@ -10,6 +10,96 @@ import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
 describe('completed checkpoint reuse', () => {
+  it.each([
+    'callback',
+    'array',
+    'overridden-map',
+    'array-species',
+    'array-constructor',
+    'accessor',
+    'buffer',
+    'custom-json',
+    'function-json',
+  ])('preserves live context and its stored encoding for %s', async kind => {
+    const callback = () => 'live';
+    class Receipt {
+      toJSON() {
+        return { receipt: 'saved' };
+      }
+    }
+    const customMap = vi.fn(() => {
+      throw new Error('Application map must not execute');
+    });
+    const customSpecies = vi.fn(() => {
+      throw new Error('Application array species must not execute');
+    });
+    class ContextArray extends Array {
+      static get [Symbol.species]() {
+        customSpecies();
+        return Array;
+      }
+    }
+    const arrayConstructor = Object.defineProperty({}, Symbol.species, { get: customSpecies });
+    const contexts: Record<string, unknown> = {
+      callback: { nested: { callback }, retained: 'yes' },
+      array: [callback, { retained: 'yes' }],
+      'overridden-map': Object.assign([callback, { retained: 'yes' }], { map: customMap }),
+      'array-species': new ContextArray(callback, { retained: 'yes' }),
+      'array-constructor': Object.defineProperty([callback, { retained: 'yes' }], 'constructor', {
+        value: arrayConstructor,
+      }),
+      accessor: Object.defineProperty({}, 'nested', { enumerable: true, get: () => ({ retained: 'yes' }) }),
+      buffer: Buffer.from('saved'),
+      'custom-json': new Receipt(),
+      'function-json': { nested: Object.assign(() => 'live', { toJSON: () => ({ retained: 'function encoding' }) }) },
+    };
+    const context = contexts[kind];
+    const requestContext = new RequestContext();
+    requestContext.set('live', context);
+    const expected = JSON.parse(JSON.stringify({ live: context }));
+    const storage = new InMemoryStore();
+    const workflows = (await storage.getStore('workflows'))!;
+    const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+    const writes: WorkflowRunState[] = [];
+    vi.spyOn(workflows, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      writes.push(JSON.parse(JSON.stringify(args.snapshot)));
+      await persist(args);
+    });
+    const step = (id: string) =>
+      createStep({
+        id,
+        inputSchema: z.any(),
+        outputSchema: z.any(),
+        execute: async ({ requestContext }) => {
+          expect(requestContext.get('live')).toBe(context);
+          expect(callback()).toBe('live');
+          return { receipt: 'saved' };
+        },
+      });
+    const workflow = createWorkflow({
+      id: `context-${kind}`,
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      options: { reuseCompletedStepCheckpoint: true },
+    })
+      .then(step('first'))
+      .then(step('second'))
+      .commit();
+    const mastra = new Mastra({ logger: false, storage, workflows: { workflow } });
+    try {
+      expect((await (await workflow.createRun()).start({ inputData: {}, requestContext })).status).toBe('success');
+      const completed = writes.find(s => s.completedEntry && s.context.first?.status === 'success')!;
+      expect(completed.requestContext).toMatchObject(expected);
+      const reusable = ['callback', 'array', 'overridden-map'].includes(kind);
+      expect(completed.preparedNextStep).toBe(reusable ? 'second' : undefined);
+      expect(writes.some(s => s.context.second?.status === 'running')).toBe(!reusable);
+      expect(customMap).not.toHaveBeenCalled();
+      expect(customSpecies).not.toHaveBeenCalled();
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+
   it.each(['buffer', 'custom-json', 'non-cloneable'])(
     'preserves storage encoding and keeps start writes for %s values',
     async kind => {

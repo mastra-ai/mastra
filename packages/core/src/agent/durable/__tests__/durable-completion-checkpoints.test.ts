@@ -1,12 +1,18 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
 describe('durable completion checkpoint round trips', () => {
-  it.each([0, 100])('reuses acknowledged results with %sms storage latency', async delayMs => {
+  it.each([
+    { delayMs: 0, withMemory: false },
+    { delayMs: 100, withMemory: false },
+    { delayMs: 0, withMemory: true },
+    { delayMs: 100, withMemory: true },
+  ])('reuses acknowledged results with $delayMs ms latency and memory=$withMemory', async ({ delayMs, withMemory }) => {
     const storage = new InMemoryStore();
     const workflows = (await storage.getStore('workflows'))!;
     const persist = workflows.persistWorkflowSnapshot.bind(workflows);
@@ -42,6 +48,7 @@ describe('durable completion checkpoint round trips', () => {
       name: 'Checkpoint proof',
       instructions: 'Answer.',
       model,
+      memory: withMemory ? new MockMemory() : undefined,
       outputProcessors: [
         {
           id: 'observer',
@@ -61,12 +68,16 @@ describe('durable completion checkpoint round trips', () => {
     const agent = createDurableAgent({ agent: base });
     const mastra = new Mastra({ logger: false, storage, agents: { agent }, recovery: { durableAgents: 'auto' } });
     try {
-      const result = await agent.stream('Answer.');
+      const result = await agent.stream(
+        'Answer.',
+        withMemory ? { memory: { thread: 'checkpoint-thread', resource: 'owner' } } : undefined,
+      );
       expect(await result.output.text).toBe('Ready.');
       expect(completionFinished).toBe(true);
       process.stdout.write(
         JSON.stringify({
           delayMs,
+          withMemory,
           completionWrites: writes.length,
           completionMs: completionFinishedAt - completionStartedAt,
         }) + '\n',
