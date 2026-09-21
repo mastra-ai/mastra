@@ -42,11 +42,16 @@ function sortCanonicalJson(value: unknown): unknown {
 }
 
 function canonicalize(value: unknown): unknown {
+  // Compare on the exact JSON projection durable adapters persist. Plain
+  // JSON.stringify keeps enumerable properties assigned onto an Error (name,
+  // cause, custom fields) and honors custom toJSON, so a live value and its
+  // stored JSONB round-trip canonicalize identically. The single exception is
+  // `message`: in-memory snapshot clones always expose it as an enumerable own
+  // property while a fresh Error's is non-enumerable, so it is normalized away
+  // to keep both sides on the durable-adapter projection.
   const serialized = JSON.stringify(value, (_key, nestedValue: unknown) => {
     if (nestedValue instanceof Error && typeof (nestedValue as { toJSON?: unknown }).toJSON !== 'function') {
-      return Object.fromEntries(
-        Object.entries(nestedValue).filter(([key]) => !['cause', 'message', 'name', 'stack'].includes(key)),
-      );
+      return Object.fromEntries(Object.entries(nestedValue).filter(([key]) => key !== 'message'));
     }
     return nestedValue;
   });
@@ -89,7 +94,18 @@ export function workflowSnapshotHandoffCanonicalStatesEqual(
 }
 
 function compareWorkflowSnapshotHandoffText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
+  // PostgreSQL orders these columns under COLLATE "C" (UTF-8 byte order), which
+  // is code-point order. Iterate code points so in-memory ordering matches
+  // exactly; UTF-16 code-unit comparison would invert astral characters.
+  const leftPoints = Array.from(left);
+  const rightPoints = Array.from(right);
+  const shared = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < shared; index++) {
+    const leftPoint = leftPoints[index]!.codePointAt(0)!;
+    const rightPoint = rightPoints[index]!.codePointAt(0)!;
+    if (leftPoint !== rightPoint) return leftPoint - rightPoint;
+  }
+  return leftPoints.length - rightPoints.length;
 }
 
 /** Uses the same code-point tuple ordering for in-memory sort and cursor filtering. */

@@ -420,6 +420,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return publicResult as T;
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', operation.toUpperCase(), 'FAILED'),
@@ -433,58 +434,69 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
+    const frozenInput = { ...input };
     return this.mutateWorkflowResume(
-      input.workflowName,
-      input.runId,
-      input.resourceId,
+      frozenInput.workflowName,
+      frozenInput.runId,
+      frozenInput.resourceId,
       snapshot =>
-        admitWorkflowResumeRecord(snapshot, input, Date.now(), value => this.materializeResumeSnapshot(value)),
+        admitWorkflowResumeRecord(snapshot, frozenInput, Date.now(), value => this.materializeResumeSnapshot(value)),
       'admit_workflow_resume',
     );
   }
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
+    const frozenInput = { ...input };
     return this.mutateWorkflowResume(
-      input.workflowName,
-      input.runId,
-      input.resourceId,
+      frozenInput.workflowName,
+      frozenInput.runId,
+      frozenInput.resourceId,
       snapshot =>
-        rollbackWorkflowResumeRecord(snapshot, input, Date.now(), value => this.materializeResumeSnapshot(value)),
+        rollbackWorkflowResumeRecord(snapshot, frozenInput, Date.now(), value => this.materializeResumeSnapshot(value)),
       'rollback_workflow_resume',
     );
   }
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
+    const frozenInput = { ...input };
     return this.mutateWorkflowResume(
-      input.workflowName,
-      input.runId,
-      input.resourceId,
+      frozenInput.workflowName,
+      frozenInput.runId,
+      frozenInput.resourceId,
       snapshot =>
-        finalizeWorkflowResumeRecord(snapshot, input, Date.now(), value => this.materializeResumeSnapshot(value)),
+        finalizeWorkflowResumeRecord(snapshot, frozenInput, Date.now(), value => this.materializeResumeSnapshot(value)),
       'finalize_workflow_resume',
     );
   }
 
   async consumeWorkflowResumeResult(input: ConsumeWorkflowResumeResultInput): Promise<ConsumeWorkflowResumeResult> {
+    const frozenInput = { ...input };
     return this.mutateWorkflowResume(
-      input.workflowName,
-      input.runId,
+      frozenInput.workflowName,
+      frozenInput.runId,
       undefined,
       snapshot =>
-        consumeWorkflowResumeResultRecord(snapshot, input, Date.now(), value => this.materializeResumeSnapshot(value)),
+        consumeWorkflowResumeResultRecord(snapshot, frozenInput, Date.now(), value =>
+          this.materializeResumeSnapshot(value),
+        ),
       'consume_workflow_resume_result',
     );
   }
 
   async persistWorkflowStepUpdate(input: PersistWorkflowStepUpdateInput): Promise<PersistWorkflowStepUpdateResult> {
+    // Capture every input field before awaiting so a mutated input object
+    // cannot redirect the write away from the locked row or swap the CAS
+    // expectations mid-transaction.
+    const { workflowName, runId, resourceId } = input;
+    const frozenInput = { ...input };
     try {
       return await this.#db.client.tx(async t => {
-        const revision = await this.lockWorkflowParentRevisionForSnapshotUpsert(t, input.workflowName, input.runId);
-        await this.assertWorkflowSnapshotHandoffAvailable(t, input.workflowName, input.runId);
+        const revision = await this.lockWorkflowParentRevisionForSnapshotUpsert(t, workflowName, runId);
+        await this.assertWorkflowSnapshotHandoffAvailable(t, workflowName, runId);
         const row = await t.oneOrNone<{ snapshot: WorkflowRunState | string; resourceId?: string | null }>(
           `SELECT snapshot, "resourceId" FROM ${this.workflowSnapshotTableName()}
            WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
-          [input.workflowName, input.runId],
+          [workflowName, runId],
         );
         if (revision.created && row) {
           throw new TypeError('Workflow snapshot is missing parent revision evidence');
@@ -492,13 +504,13 @@ export class WorkflowsPG extends WorkflowsStorage {
         const snapshot = row?.snapshot
           ? this.materializeResumeSnapshot(typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot)
           : undefined;
-        const outcome = persistWorkflowStepUpdateRecord(snapshot, input, value =>
+        const outcome = persistWorkflowStepUpdateRecord(snapshot, frozenInput, value =>
           this.materializeResumeSnapshot(value),
         );
         const { snapshot: updatedSnapshot, ...result } = outcome;
         if (updatedSnapshot) {
           const now = new Date();
-          const retainedResourceId = row?.resourceId ?? updatedSnapshot.resourceId ?? input.resourceId ?? null;
+          const retainedResourceId = row?.resourceId ?? updatedSnapshot.resourceId ?? resourceId ?? null;
           await t.none(
             `INSERT INTO ${this.workflowSnapshotTableName()}
                (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
@@ -506,8 +518,8 @@ export class WorkflowsPG extends WorkflowsStorage {
              ON CONFLICT (workflow_name, run_id) DO UPDATE
              SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
             [
-              input.workflowName,
-              input.runId,
+              workflowName,
+              runId,
               retainedResourceId,
               sanitizeJsonForPg(JSON.stringify(updatedSnapshot)),
               now,
@@ -516,19 +528,20 @@ export class WorkflowsPG extends WorkflowsStorage {
               now,
             ],
           );
-          await this.bumpWorkflowParentRevision(t, input.workflowName, input.runId, revision.generation);
+          await this.bumpWorkflowParentRevision(t, workflowName, runId, revision.generation);
         } else {
-          await this.deleteProvisionalWorkflowParentRevision(t, input.workflowName, input.runId, revision.created);
+          await this.deleteProvisionalWorkflowParentRevision(t, workflowName, runId, revision.created);
         }
         return result;
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'PERSIST_WORKFLOW_STEP_UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName: input.workflowName, runId: input.runId },
+          details: { workflowName, runId },
         },
         error,
       );
@@ -3002,7 +3015,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       {
         name: 'mastra_workflow_snapshot_handoffs_recovery_idx',
         table: TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
-        columns: ['status', 'updated_at', 'workflow_name', 'run_id'],
+        columns: ['status', 'updated_at', 'workflow_name COLLATE "C" ASC', 'run_id COLLATE "C" ASC'],
       },
     ];
   }
@@ -4575,6 +4588,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         [cutoff, limit - deleted],
       );
       if (candidates.length === 0) break;
+      const deletedBefore = deleted;
       for (const candidate of candidates) {
         const removed = await this.#db.client.tx(async t => {
           const revision = await this.lockExistingWorkflowParentRevision(t, candidate.workflow_name, candidate.run_id);
@@ -4592,6 +4606,9 @@ export class WorkflowsPG extends WorkflowsStorage {
         if (removed) deleted++;
         if (deleted >= limit) break;
       }
+      // Candidates skipped under the revision/handoff locks are re-selected by
+      // the next WHERE; a batch with no deletions would loop forever.
+      if (deleted === deletedBefore) break;
     }
     return deleted;
   }
@@ -4688,6 +4705,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         };
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'BIND_WORKFLOW_NESTED_RUN_OWNERSHIP', 'FAILED'),
@@ -5000,34 +5018,42 @@ export class WorkflowsPG extends WorkflowsStorage {
   async claimWorkflowSnapshotHandoff(
     input: ClaimWorkflowSnapshotHandoffInput,
   ): Promise<ClaimWorkflowSnapshotHandoffResult> {
-    validateWorkflowSnapshotHandoffFence(input.mutationFence);
-    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
+    // Capture every input field before invoking caller serialization
+    // (toJSON/getters) or awaiting: a mutated input object must not redirect
+    // the compare-and-write or swap the expected state mid-call.
+    const {
+      workflowName,
+      runId,
+      mutationFence,
+      resourceId,
+      snapshot: rawSnapshot,
+      expectedCanonical: rawExpectedCanonical,
+    } = input;
+    validateWorkflowSnapshotHandoffFence(mutationFence);
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
     const expectedCanonical =
-      input.expectedCanonical.kind === 'present'
+      rawExpectedCanonical.kind === 'present'
         ? {
-            ...input.expectedCanonical,
-            snapshot: this.materializeWorkflowSnapshotHandoffSnapshot(input.expectedCanonical.snapshot),
+            kind: 'present' as const,
+            resourceId: rawExpectedCanonical.resourceId,
+            snapshot: this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedCanonical.snapshot),
           }
-        : input.expectedCanonical;
+        : rawExpectedCanonical;
     return this.#db.client.tx(async t => {
-      const revision = await this.lockWorkflowParentRevisionForSnapshotHandoff(t, input.workflowName, input.runId);
-      const observedCanonical = await this.lockWorkflowSnapshotHandoffCanonicalState(
-        t,
-        input.workflowName,
-        input.runId,
-      );
+      const revision = await this.lockWorkflowParentRevisionForSnapshotHandoff(t, workflowName, runId);
+      const observedCanonical = await this.lockWorkflowSnapshotHandoffCanonicalState(t, workflowName, runId);
       if (!workflowSnapshotHandoffCanonicalStatesEqual(expectedCanonical, observedCanonical)) {
-        await this.deleteProvisionalWorkflowParentRevision(t, input.workflowName, input.runId, revision.created, 1);
+        await this.deleteProvisionalWorkflowParentRevision(t, workflowName, runId, revision.created, 1);
         return { status: 'conflict', observedCanonical };
       }
-      const existing = await this.lockWorkflowSnapshotHandoff(t, input.workflowName, input.runId);
+      const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
       if (existing) {
         const same =
-          existing.mutationFence === input.mutationFence &&
-          existing.resourceId === input.resourceId &&
+          existing.mutationFence === mutationFence &&
+          existing.resourceId === resourceId &&
           workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
-        if (existing.status === 'completed' && existing.mutationFence !== input.mutationFence) {
+        if (existing.status === 'completed' && existing.mutationFence !== mutationFence) {
           return { status: 'conflict', record: existing };
         }
         return {
@@ -5044,18 +5070,18 @@ export class WorkflowsPG extends WorkflowsStorage {
         `INSERT INTO ${this.workflowSnapshotHandoffTableName()}
          (workflow_name, run_id, version, status, resource_id, snapshot, mutation_fence, created_at, updated_at)
          VALUES ($1, $2, 1, 'pending', $3, $4, $5, $6, $6)`,
-        [input.workflowName, input.runId, input.resourceId ?? null, serializedSnapshot, input.mutationFence, now],
+        [workflowName, runId, resourceId ?? null, serializedSnapshot, mutationFence, now],
       );
       return {
         status: 'created',
         record: {
           version: 1,
-          workflowName: input.workflowName,
-          runId: input.runId,
+          workflowName,
+          runId,
           status: 'pending',
-          ...(input.resourceId === undefined ? {} : { resourceId: input.resourceId }),
+          ...(resourceId === undefined ? {} : { resourceId }),
           snapshot: materializedSnapshot,
-          mutationFence: input.mutationFence,
+          mutationFence,
           createdAt: now,
           updatedAt: now,
         },
@@ -5066,26 +5092,35 @@ export class WorkflowsPG extends WorkflowsStorage {
   async transitionWorkflowSnapshotHandoff(
     input: TransitionWorkflowSnapshotHandoffInput,
   ): Promise<TransitionWorkflowSnapshotHandoffResult> {
-    validateWorkflowSnapshotHandoffFence(input.mutationFence);
-    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
+    const {
+      workflowName,
+      runId,
+      mutationFence,
+      resourceId,
+      expectedResourceId,
+      snapshot: rawSnapshot,
+      expectedSnapshot: rawExpectedSnapshot,
+    } = input;
+    validateWorkflowSnapshotHandoffFence(mutationFence);
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
-    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.expectedSnapshot);
+    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
     return this.#db.client.tx(async t => {
-      await this.lockExistingWorkflowParentRevision(t, input.workflowName, input.runId);
-      const existing = await this.lockWorkflowSnapshotHandoff(t, input.workflowName, input.runId);
+      await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
+      const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
       if (!existing) return { status: 'missing' };
       if (existing.status === 'completed') {
-        return existing.mutationFence === input.mutationFence
+        return existing.mutationFence === mutationFence
           ? { status: 'completed', record: existing }
           : { status: 'conflict', record: existing };
       }
       const expectedMatches =
-        existing.mutationFence === input.mutationFence &&
-        existing.resourceId === input.expectedResourceId &&
+        existing.mutationFence === mutationFence &&
+        existing.resourceId === expectedResourceId &&
         workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
       if (!expectedMatches) return { status: 'conflict', record: existing };
       const sameReplacement =
-        existing.resourceId === input.resourceId &&
+        existing.resourceId === resourceId &&
         workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
       if (sameReplacement) return { status: 'existing', record: existing };
       const clock = await t.one<{ now_ms: string }>(
@@ -5097,13 +5132,13 @@ export class WorkflowsPG extends WorkflowsStorage {
         `UPDATE ${this.workflowSnapshotHandoffTableName()}
          SET resource_id = $1, snapshot = $2, updated_at = $3
          WHERE workflow_name = $4 AND run_id = $5`,
-        [input.resourceId ?? null, serializedSnapshot, now, input.workflowName, input.runId],
+        [resourceId ?? null, serializedSnapshot, now, workflowName, runId],
       );
       return {
         status: 'transitioned',
         record: {
           ...existing,
-          ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
+          ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
           snapshot: materializedSnapshot,
           updatedAt: now,
         },
@@ -5114,22 +5149,31 @@ export class WorkflowsPG extends WorkflowsStorage {
   async completeWorkflowSnapshotHandoff(
     input: CompleteWorkflowSnapshotHandoffInput,
   ): Promise<CompleteWorkflowSnapshotHandoffResult> {
-    validateWorkflowSnapshotHandoffFence(input.mutationFence);
-    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
+    const {
+      workflowName,
+      runId,
+      mutationFence,
+      resourceId,
+      expectedResourceId,
+      snapshot: rawSnapshot,
+      expectedSnapshot: rawExpectedSnapshot,
+    } = input;
+    validateWorkflowSnapshotHandoffFence(mutationFence);
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
     const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
-    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.expectedSnapshot);
+    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
     return this.#db.client.tx(async t => {
-      await this.lockExistingWorkflowParentRevision(t, input.workflowName, input.runId);
-      const existing = await this.lockWorkflowSnapshotHandoff(t, input.workflowName, input.runId);
+      await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
+      const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
       if (!existing) return { status: 'missing' };
       if (existing.status === 'completed') {
-        return existing.mutationFence === input.mutationFence
+        return existing.mutationFence === mutationFence
           ? { status: 'already_completed', record: existing }
           : { status: 'conflict', record: existing };
       }
       const expectedMatches =
-        existing.mutationFence === input.mutationFence &&
-        existing.resourceId === input.expectedResourceId &&
+        existing.mutationFence === mutationFence &&
+        existing.resourceId === expectedResourceId &&
         workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
       if (!expectedMatches) return { status: 'conflict', record: existing };
       const clock = await t.one<{ now_ms: string }>(
@@ -5141,14 +5185,14 @@ export class WorkflowsPG extends WorkflowsStorage {
         `UPDATE ${this.workflowSnapshotHandoffTableName()}
          SET status = 'completed', resource_id = $1, snapshot = $2, updated_at = $3, completed_at = $3
          WHERE workflow_name = $4 AND run_id = $5`,
-        [input.resourceId ?? null, serializedSnapshot, now, input.workflowName, input.runId],
+        [resourceId ?? null, serializedSnapshot, now, workflowName, runId],
       );
       return {
         status: 'completed',
         record: {
           ...existing,
           status: 'completed',
-          ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
+          ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
           snapshot: materializedSnapshot,
           updatedAt: now,
           completedAt: now,
@@ -5173,13 +5217,17 @@ export class WorkflowsPG extends WorkflowsStorage {
       const updatedAt = add(input.after.updatedAt);
       const workflowName = add(input.after.workflowName);
       const runId = add(input.after.runId);
-      clauses.push(`(updated_at, workflow_name, run_id) > (${updatedAt}, ${workflowName}, ${runId})`);
+      // COLLATE "C" pins UTF-8 byte ordering, matching the code-point tuple
+      // comparison the in-memory adapter applies to the same cursor.
+      clauses.push(
+        `(updated_at, workflow_name COLLATE "C", run_id COLLATE "C") > (${updatedAt}, ${workflowName}, ${runId})`,
+      );
     }
     values.push(limit + 1);
     const rows = await this.#db.client.any<Record<string, unknown>>(
       `SELECT * FROM ${this.workflowSnapshotHandoffTableName()}
        ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
-       ORDER BY updated_at ASC, workflow_name ASC, run_id ASC
+       ORDER BY updated_at ASC, workflow_name COLLATE "C" ASC, run_id COLLATE "C" ASC
        LIMIT $${values.length}`,
       values,
     );
@@ -5269,6 +5317,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return snapshot.context;
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
@@ -5375,6 +5424,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return updatedSnapshot;
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
@@ -5442,6 +5492,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         await this.bumpWorkflowParentRevision(t, workflowName, runId, revision.generation);
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
@@ -5615,6 +5666,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         }
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),

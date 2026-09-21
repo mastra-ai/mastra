@@ -312,7 +312,16 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     seen.set(value, out);
     const outRecord = out as unknown as Record<string, unknown>;
     if (value.cause !== undefined) {
-      defineEnumerableRunDataProperty(outRecord, 'cause', deepCloneForRun(value.cause, seen));
+      // Preserve the source enumerability: a constructor-provided cause is
+      // non-enumerable while an assigned one is enumerable, and the JSON
+      // persistence projection differs accordingly.
+      const causeEnumerable = Object.getOwnPropertyDescriptor(value, 'cause')?.enumerable ?? false;
+      Object.defineProperty(outRecord, 'cause', {
+        configurable: true,
+        writable: true,
+        enumerable: causeEnumerable,
+        value: deepCloneForRun(value.cause, seen),
+      });
     }
     for (const key of Object.keys(value)) {
       if (copiedToJSON && key === 'toJSON') continue;
@@ -412,15 +421,27 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     }
   }
 
+  // Snapshot writes must check the fence immediately before mutating: cloning
+  // or materializing run data can invoke caller getters/toJSON that reenter
+  // this adapter, so an assert placed earlier in the method could be bypassed
+  // by a handoff claimed in between.
+  private setWorkflowRunRecord(workflowName: string, runId: string, record: StorageWorkflowRun): void {
+    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
+    this.db.workflows.set(this.getWorkflowKey(workflowName, runId), record);
+  }
+
+  private deleteWorkflowRunRecord(workflowName: string, runId: string): boolean {
+    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
+    return this.db.workflows.delete(this.getWorkflowKey(workflowName, runId));
+  }
+
   private copyWorkflowSnapshotHandoff(record: WorkflowSnapshotHandoffRecord): WorkflowSnapshotHandoffRecord {
     return cloneRunData(record);
   }
 
-  private getWorkflowSnapshotHandoffCanonicalState(
-    workflowName: string,
-    runId: string,
+  private getWorkflowSnapshotHandoffCanonicalStateFrom(
+    run: StorageWorkflowRun | undefined,
   ): WorkflowSnapshotHandoffCanonicalState {
-    const run = this.db.workflows.get(this.getWorkflowKey(workflowName, runId));
     if (!run) return { kind: 'absent' };
     const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
@@ -440,71 +461,98 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     mutate: (snapshot: WorkflowRunState | undefined) => { status: string; snapshot?: WorkflowRunState },
   ) {
     const key = this.getWorkflowKey(workflowName, runId);
-    const existing = this.db.workflows.get(key);
-    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
-    const existingSnapshot = existing?.snapshot
-      ? cloneRunData(typeof existing.snapshot === 'string' ? JSON.parse(existing.snapshot) : existing.snapshot)
-      : undefined;
-    const result = mutate(existingSnapshot);
-    const { snapshot: updatedSnapshot, ...publicResult } = result;
-    if (updatedSnapshot && existing) {
-      this.db.workflows.set(key, {
-        ...existing,
-        resourceId: existing.resourceId ?? resourceId ?? updatedSnapshot.resourceId,
-        snapshot: cloneRunData(updatedSnapshot),
-        updatedAt: new Date(),
-      });
-      this.bumpParentRevision(key);
+    for (;;) {
+      const existing = this.db.workflows.get(key);
+      this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
+      // Cloning the stored snapshot and computing the mutation can invoke
+      // caller toJSON/getters that reenter these maps. Re-read the source row
+      // afterwards and restart if a reentrant write changed it mid-computation.
+      const existingSnapshot = existing?.snapshot
+        ? cloneRunData(typeof existing.snapshot === 'string' ? JSON.parse(existing.snapshot) : existing.snapshot)
+        : undefined;
+      const result = mutate(existingSnapshot);
+      if (this.db.workflows.get(key) !== existing) continue;
+      const { snapshot: updatedSnapshot, ...publicResult } = result;
+      if (updatedSnapshot && existing) {
+        this.setWorkflowRunRecord(workflowName, runId, {
+          ...existing,
+          resourceId: existing.resourceId ?? resourceId ?? updatedSnapshot.resourceId,
+          snapshot: cloneRunData(updatedSnapshot),
+          updatedAt: new Date(),
+        });
+        this.bumpParentRevision(key);
+      }
+      this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
+      return publicResult;
     }
-    return publicResult;
   }
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
-    return this.applyWorkflowResumeMutation(input.workflowName, input.runId, input.resourceId, snapshot =>
-      admitWorkflowResumeRecord(snapshot, input, Date.now(), cloneRunData),
+    const { workflowName, runId, resourceId } = input;
+    const frozenInput = { ...input };
+    return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
+      admitWorkflowResumeRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as AdmitWorkflowResumeResult;
   }
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
-    return this.applyWorkflowResumeMutation(input.workflowName, input.runId, input.resourceId, snapshot =>
-      rollbackWorkflowResumeRecord(snapshot, input, Date.now(), cloneRunData),
+    const { workflowName, runId, resourceId } = input;
+    const frozenInput = { ...input };
+    return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
+      rollbackWorkflowResumeRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as RollbackWorkflowResumeResult;
   }
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
-    return this.applyWorkflowResumeMutation(input.workflowName, input.runId, input.resourceId, snapshot =>
-      finalizeWorkflowResumeRecord(snapshot, input, Date.now(), cloneRunData),
+    const { workflowName, runId, resourceId } = input;
+    const frozenInput = { ...input };
+    return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
+      finalizeWorkflowResumeRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as FinalizeWorkflowResumeResult;
   }
 
   async consumeWorkflowResumeResult(input: ConsumeWorkflowResumeResultInput): Promise<ConsumeWorkflowResumeResult> {
-    return this.applyWorkflowResumeMutation(input.workflowName, input.runId, undefined, snapshot =>
-      consumeWorkflowResumeResultRecord(snapshot, input, Date.now(), cloneRunData),
+    const { workflowName, runId } = input;
+    const frozenInput = { ...input };
+    return this.applyWorkflowResumeMutation(workflowName, runId, undefined, snapshot =>
+      consumeWorkflowResumeResultRecord(snapshot, frozenInput, Date.now(), cloneRunData),
     ) as ConsumeWorkflowResumeResult;
   }
 
   async persistWorkflowStepUpdate(input: PersistWorkflowStepUpdateInput): Promise<PersistWorkflowStepUpdateResult> {
-    const key = this.getWorkflowKey(input.workflowName, input.runId);
-    const existing = this.db.workflows.get(key);
-    this.assertWorkflowSnapshotHandoffAvailable(input.workflowName, input.runId);
-    const existingSnapshot = existing?.snapshot
-      ? cloneRunData(typeof existing.snapshot === 'string' ? JSON.parse(existing.snapshot) : existing.snapshot)
-      : undefined;
-    const outcome = persistWorkflowStepUpdateRecord(existingSnapshot, input, cloneRunData);
-    const { snapshot, ...result } = outcome;
-    if (snapshot) {
-      const now = new Date();
-      this.db.workflows.set(key, {
-        workflow_name: input.workflowName,
-        run_id: input.runId,
-        resourceId: existing?.resourceId ?? snapshot.resourceId ?? input.resourceId,
-        snapshot: cloneRunData(snapshot),
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      });
-      this.bumpParentRevision(key);
+    // Capture every input field before invoking caller serialization
+    // (toJSON/getters) so a mutated input object cannot redirect the write or
+    // swap the CAS expectations mid-computation.
+    const { workflowName, runId } = input;
+    const frozenInput = { ...input };
+    const key = this.getWorkflowKey(workflowName, runId);
+    for (;;) {
+      const existing = this.db.workflows.get(key);
+      this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
+      // Cloning the stored snapshot and merging the update can both invoke
+      // caller toJSON/getters that reenter these maps. Re-read the source row
+      // afterwards and restart if a reentrant write changed it mid-computation.
+      const existingSnapshot = existing?.snapshot
+        ? cloneRunData(typeof existing.snapshot === 'string' ? JSON.parse(existing.snapshot) : existing.snapshot)
+        : undefined;
+      const outcome = persistWorkflowStepUpdateRecord(existingSnapshot, frozenInput, cloneRunData);
+      if (this.db.workflows.get(key) !== existing) continue;
+      const { snapshot, ...result } = outcome;
+      if (snapshot) {
+        const now = new Date();
+        this.setWorkflowRunRecord(workflowName, runId, {
+          workflow_name: workflowName,
+          run_id: runId,
+          resourceId: existing?.resourceId ?? snapshot.resourceId ?? frozenInput.resourceId,
+          snapshot: cloneRunData(snapshot),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        });
+        this.bumpParentRevision(key);
+      }
+      this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
+      return result;
     }
-    return result;
   }
 
   async persistWorkflowTerminalRecoveryAncestry(
@@ -991,7 +1039,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         envelope: result.recovery.envelope,
         createdAt: result.record.updatedAt,
       };
-      this.db.workflows.set(workflowKey, {
+      this.setWorkflowRunRecord(operation.workflowName, operation.runId, {
         ...existingRun,
         resourceId,
         snapshot: result.snapshot,
@@ -1412,8 +1460,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       storageTimestamp,
     );
     if (finalized.status === 'applied' && finalized.plan.contract.patch.kind !== 'none') {
-      this.assertWorkflowSnapshotHandoffAvailable(effect.parentWorkflowName, effect.parentRunId);
-      this.db.workflows.set(parentKey, {
+      this.setWorkflowRunRecord(effect.parentWorkflowName, effect.parentRunId, {
         ...parentRun,
         snapshot: patchedParent,
         updatedAt: new Date(storageTimestamp),
@@ -1436,19 +1483,56 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async claimWorkflowSnapshotHandoff(
     input: ClaimWorkflowSnapshotHandoffInput,
   ): Promise<ClaimWorkflowSnapshotHandoffResult> {
-    validateWorkflowSnapshotHandoffFence(input.mutationFence);
-    const key = this.getWorkflowKey(input.workflowName, input.runId);
-    const observedCanonical = this.getWorkflowSnapshotHandoffCanonicalState(input.workflowName, input.runId);
-    if (!workflowSnapshotHandoffCanonicalStatesEqual(input.expectedCanonical, observedCanonical)) {
+    // Capture every input field before invoking caller serialization
+    // (toJSON/getters) so a mutated input object cannot redirect the write or
+    // swap the expected state mid-call.
+    const {
+      workflowName,
+      runId,
+      mutationFence,
+      resourceId,
+      snapshot: rawSnapshot,
+      expectedCanonical: rawExpectedCanonical,
+    } = input;
+    validateWorkflowSnapshotHandoffFence(mutationFence);
+    // Materialize every caller-provided snapshot before touching shared state;
+    // serialization may run arbitrary user code that must not execute between
+    // the canonical comparison and the record write.
+    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
+    const expectedCanonical =
+      rawExpectedCanonical.kind === 'present'
+        ? {
+            kind: 'present' as const,
+            resourceId: rawExpectedCanonical.resourceId,
+            snapshot: materializeWorkflowSnapshotHandoffSnapshot(rawExpectedCanonical.snapshot),
+          }
+        : rawExpectedCanonical;
+    const key = this.getWorkflowKey(workflowName, runId);
+    // Reading the canonical state materializes the stored snapshot, which can
+    // invoke caller toJSON/getters and reenter these maps. Re-read both source
+    // records after materialization and restart if a reentrant write changed
+    // either one mid-read so the comparison and the claim stay consistent.
+    let observedCanonical: WorkflowSnapshotHandoffCanonicalState;
+    let existing: WorkflowSnapshotHandoffRecord | undefined;
+    let canonicalMatches: boolean;
+    for (;;) {
+      const run = this.db.workflows.get(key);
+      existing = this.db.workflowSnapshotHandoffs.get(key);
+      observedCanonical = this.getWorkflowSnapshotHandoffCanonicalStateFrom(run);
+      canonicalMatches = workflowSnapshotHandoffCanonicalStatesEqual(expectedCanonical, observedCanonical);
+      if (this.db.workflows.get(key) === run && this.db.workflowSnapshotHandoffs.get(key) === existing) break;
+    }
+    // From here to the map write no caller code may run: every comparison uses
+    // already-materialized (plain JSON) values.
+    if (!canonicalMatches) {
       return { status: 'conflict', observedCanonical };
     }
-    const existing = this.db.workflowSnapshotHandoffs.get(key);
     if (existing) {
       const same =
-        existing.mutationFence === input.mutationFence &&
-        existing.resourceId === input.resourceId &&
-        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.snapshot);
-      if (existing.status === 'completed' && existing.mutationFence !== input.mutationFence) {
+        existing.mutationFence === mutationFence &&
+        existing.resourceId === resourceId &&
+        workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
+      if (existing.status === 'completed' && existing.mutationFence !== mutationFence) {
         return { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
       }
       return {
@@ -1459,12 +1543,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const now = Date.now();
     const record: WorkflowSnapshotHandoffRecord = {
       version: 1,
-      workflowName: input.workflowName,
-      runId: input.runId,
+      workflowName,
+      runId,
       status: 'pending',
-      ...(input.resourceId === undefined ? {} : { resourceId: input.resourceId }),
-      snapshot: materializeWorkflowSnapshotHandoffSnapshot(input.snapshot),
-      mutationFence: input.mutationFence,
+      ...(resourceId === undefined ? {} : { resourceId }),
+      snapshot: materializedSnapshot,
+      mutationFence,
       createdAt: now,
       updatedAt: now,
     };
@@ -1475,28 +1559,39 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async transitionWorkflowSnapshotHandoff(
     input: TransitionWorkflowSnapshotHandoffInput,
   ): Promise<TransitionWorkflowSnapshotHandoffResult> {
-    validateWorkflowSnapshotHandoffFence(input.mutationFence);
-    const key = this.getWorkflowKey(input.workflowName, input.runId);
+    const {
+      workflowName,
+      runId,
+      mutationFence,
+      resourceId,
+      expectedResourceId,
+      snapshot: rawSnapshot,
+      expectedSnapshot: rawExpectedSnapshot,
+    } = input;
+    validateWorkflowSnapshotHandoffFence(mutationFence);
+    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
+    const expectedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
+    const key = this.getWorkflowKey(workflowName, runId);
     const existing = this.db.workflowSnapshotHandoffs.get(key);
     if (!existing) return { status: 'missing' };
     if (existing.status === 'completed') {
-      return existing.mutationFence === input.mutationFence
+      return existing.mutationFence === mutationFence
         ? { status: 'completed', record: this.copyWorkflowSnapshotHandoff(existing) }
         : { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
     }
     const expectedMatches =
-      existing.mutationFence === input.mutationFence &&
-      existing.resourceId === input.expectedResourceId &&
-      workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.expectedSnapshot);
+      existing.mutationFence === mutationFence &&
+      existing.resourceId === expectedResourceId &&
+      workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
     if (!expectedMatches) return { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
     const sameReplacement =
-      existing.resourceId === input.resourceId &&
-      workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.snapshot);
+      existing.resourceId === resourceId &&
+      workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
     if (sameReplacement) return { status: 'existing', record: this.copyWorkflowSnapshotHandoff(existing) };
     const updated: WorkflowSnapshotHandoffRecord = {
       ...existing,
-      ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
-      snapshot: materializeWorkflowSnapshotHandoffSnapshot(input.snapshot),
+      ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
+      snapshot: materializedSnapshot,
       updatedAt: Date.now(),
     };
     this.db.workflowSnapshotHandoffs.set(key, updated);
@@ -1506,26 +1601,37 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async completeWorkflowSnapshotHandoff(
     input: CompleteWorkflowSnapshotHandoffInput,
   ): Promise<CompleteWorkflowSnapshotHandoffResult> {
-    validateWorkflowSnapshotHandoffFence(input.mutationFence);
-    const key = this.getWorkflowKey(input.workflowName, input.runId);
+    const {
+      workflowName,
+      runId,
+      mutationFence,
+      resourceId,
+      expectedResourceId,
+      snapshot: rawSnapshot,
+      expectedSnapshot: rawExpectedSnapshot,
+    } = input;
+    validateWorkflowSnapshotHandoffFence(mutationFence);
+    const materializedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawSnapshot);
+    const expectedSnapshot = materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
+    const key = this.getWorkflowKey(workflowName, runId);
     const existing = this.db.workflowSnapshotHandoffs.get(key);
     if (!existing) return { status: 'missing' };
     if (existing.status === 'completed') {
-      return existing.mutationFence === input.mutationFence
+      return existing.mutationFence === mutationFence
         ? { status: 'already_completed', record: this.copyWorkflowSnapshotHandoff(existing) }
         : { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
     }
     const expectedMatches =
-      existing.mutationFence === input.mutationFence &&
-      existing.resourceId === input.expectedResourceId &&
-      workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, input.expectedSnapshot);
+      existing.mutationFence === mutationFence &&
+      existing.resourceId === expectedResourceId &&
+      workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
     if (!expectedMatches) return { status: 'conflict', record: this.copyWorkflowSnapshotHandoff(existing) };
     const now = Date.now();
     const completed: WorkflowSnapshotHandoffRecord = {
       ...existing,
       status: 'completed',
-      ...(input.resourceId === undefined ? { resourceId: undefined } : { resourceId: input.resourceId }),
-      snapshot: materializeWorkflowSnapshotHandoffSnapshot(input.snapshot),
+      ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
+      snapshot: materializedSnapshot,
       updatedAt: now,
       completedAt: now,
     };
@@ -1590,22 +1696,32 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
     validateWorkflowNestedRunOwnershipInput(operation);
     const key = this.getWorkflowKey(operation.workflowName, operation.runId);
-    this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
-    const run = this.db.workflows.get(key);
-    if (!run?.snapshot) return { status: 'missing_run' };
-    const snapshot = cloneRunData(typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot);
-    const ownership = bindWorkflowNestedRunOwnershipRecord(snapshot, operation);
-    if (ownership.status === 'ownership_conflict') return ownership;
-    if (ownership.status === 'already_bound') {
-      return { status: 'already_bound', stepResults: cloneRunData(ownership.snapshot.context) };
+    for (;;) {
+      const run = this.db.workflows.get(key);
+      this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
+      if (!run?.snapshot) return { status: 'missing_run' };
+      // Cloning the stored snapshot can invoke caller toJSON/getters that
+      // reenter these maps. Re-read the source row before writing and restart
+      // if a reentrant write changed it mid-computation.
+      const snapshot = cloneRunData(typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot);
+      const ownership = bindWorkflowNestedRunOwnershipRecord(snapshot, operation);
+      if (ownership.status === 'ownership_conflict') return ownership;
+      if (ownership.status === 'already_bound') {
+        return { status: 'already_bound', stepResults: cloneRunData(ownership.snapshot.context) };
+      }
+      const storedSnapshot = cloneRunData(ownership.snapshot);
+      if (this.db.workflows.get(key) !== run) continue;
+      this.setWorkflowRunRecord(operation.workflowName, operation.runId, {
+        ...run,
+        snapshot: storedSnapshot,
+        updatedAt: new Date(),
+      });
+      this.bumpParentRevision(key);
+      return {
+        status: 'bound',
+        stepResults: cloneRunData(storedSnapshot.context),
+      };
     }
-    const storedSnapshot = cloneRunData(ownership.snapshot);
-    this.db.workflows.set(key, { ...run, snapshot: storedSnapshot, updatedAt: new Date() });
-    this.bumpParentRevision(key);
-    return {
-      status: 'bound',
-      stepResults: cloneRunData(storedSnapshot.context),
-    };
   }
 
   async admitWorkflowNestedRun(input: AdmitWorkflowNestedRunInput): Promise<AdmitWorkflowNestedRunResult> {
@@ -1632,142 +1748,158 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     validateWorkflowTerminalizationIdentity(operation.nestedWorkflowName, 'nestedWorkflowName', 512);
 
     const parentKey = this.getWorkflowKey(operation.workflowName, operation.runId);
-    this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
-    const run = this.db.workflows.get(parentKey);
-    if (!run?.snapshot) return { status: 'missing_run' };
-    const parentRevision = this.db.workflowTerminalParentRevisions.get(parentKey);
-    if (parentRevision?.terminalStatus) return { status: 'parent_terminal' };
-    const snapshot = cloneRunData(typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot);
-    try {
-      validateWorkflowRunSnapshotShape(snapshot, operation.runId, 'Nested workflow parent snapshot');
-    } catch {
-      return { status: 'parent_snapshot_conflict' };
-    }
-    if (isTerminalParentStatus(snapshot.status)) {
-      this.latchParentTerminalStatus(parentKey, snapshot.status);
-      return { status: 'parent_terminal' };
-    }
-    const recovery = createWorkflowTerminalRecoveryAncestryRecord(
-      operation.nestedWorkflowName,
-      operation.nestedRunId,
-      operation.recoveryAncestry,
-      Date.now(),
-    );
-    const immediate = recovery.ancestry[0];
-    const expectedSource =
-      immediate &&
-      immediate.parentWorkflowName === operation.workflowName &&
-      immediate.parentRunId === operation.runId &&
-      immediate.source.stepId === operation.stepId &&
-      (operation.forEachIndex === undefined
-        ? immediate.source.kind === 'step'
-        : immediate.source.kind === 'foreach-iteration' && immediate.source.iterationIndex === operation.forEachIndex);
-    if (!expectedSource) return { status: 'ancestry_conflict' };
-    validateWorkflowTerminalRecoveryParentFrameGraphBinding(immediate, snapshot.serializedStepGraph);
-
-    const parentRecovery = this.db.workflowTerminalRecoveryAncestries.get(parentKey);
-    const expectedTailHash = createWorkflowTerminalRecoveryAncestryRecord(
-      operation.workflowName,
-      operation.runId,
-      recovery.ancestry.slice(1),
-      recovery.createdAt,
-    ).ancestryHash;
-    const retainedTailHash = createWorkflowTerminalRecoveryAncestryRecord(
-      operation.workflowName,
-      operation.runId,
-      parentRecovery?.ancestry ?? [],
-      recovery.createdAt,
-    ).ancestryHash;
-    if (expectedTailHash !== retainedTailHash) return { status: 'ancestry_conflict' };
-
     const childKey = this.getWorkflowKey(operation.nestedWorkflowName, operation.nestedRunId);
-    this.assertWorkflowSnapshotHandoffAvailable(operation.nestedWorkflowName, operation.nestedRunId);
-    const childRevision = this.db.workflowTerminalParentRevisions.get(childKey);
-    if (childRevision?.terminalStatus) return { status: 'child_terminal' };
-    const existingChild = this.db.workflows.get(childKey);
-    let existingChildSnapshot: WorkflowRunState | undefined;
-    if (existingChild?.snapshot) {
+    // Cloning stored snapshots and running the record helpers can invoke
+    // caller toJSON/getters that reenter these maps. The loop re-reads the
+    // source rows and restarts whenever a reentrant write changed either one
+    // mid-computation so ownership binding never overwrites a newer record.
+    for (;;) {
+      this.assertWorkflowSnapshotHandoffAvailable(operation.workflowName, operation.runId);
+      const run = this.db.workflows.get(parentKey);
+      if (!run?.snapshot) return { status: 'missing_run' };
+      const parentRevision = this.db.workflowTerminalParentRevisions.get(parentKey);
+      if (parentRevision?.terminalStatus) return { status: 'parent_terminal' };
+      const snapshot = cloneRunData(typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot);
       try {
-        existingChildSnapshot = cloneRunData(
-          typeof existingChild.snapshot === 'string' ? JSON.parse(existingChild.snapshot) : existingChild.snapshot,
-        );
+        validateWorkflowRunSnapshotShape(snapshot, operation.runId, 'Nested workflow parent snapshot');
       } catch {
-        return { status: 'child_snapshot_conflict' };
+        return { status: 'parent_snapshot_conflict' };
       }
-      const inspection = inspectWorkflowNestedRunRetainedSnapshot(
-        existingChildSnapshot,
+      if (isTerminalParentStatus(snapshot.status)) {
+        this.latchParentTerminalStatus(parentKey, snapshot.status);
+        return { status: 'parent_terminal' };
+      }
+      const recovery = createWorkflowTerminalRecoveryAncestryRecord(
+        operation.nestedWorkflowName,
         operation.nestedRunId,
-        expectedChildGraphFingerprint,
+        operation.recoveryAncestry,
+        Date.now(),
       );
-      if (inspection.status === 'conflict') return { status: 'child_snapshot_conflict' };
-      if (inspection.status === 'terminal') {
-        this.latchParentTerminalStatus(childKey, inspection.terminalStatus);
-        return { status: 'child_terminal' };
+      const immediate = recovery.ancestry[0];
+      const expectedSource =
+        immediate &&
+        immediate.parentWorkflowName === operation.workflowName &&
+        immediate.parentRunId === operation.runId &&
+        immediate.source.stepId === operation.stepId &&
+        (operation.forEachIndex === undefined
+          ? immediate.source.kind === 'step'
+          : immediate.source.kind === 'foreach-iteration' &&
+            immediate.source.iterationIndex === operation.forEachIndex);
+      if (!expectedSource) return { status: 'ancestry_conflict' };
+      validateWorkflowTerminalRecoveryParentFrameGraphBinding(immediate, snapshot.serializedStepGraph);
+
+      const parentRecovery = this.db.workflowTerminalRecoveryAncestries.get(parentKey);
+      const expectedTailHash = createWorkflowTerminalRecoveryAncestryRecord(
+        operation.workflowName,
+        operation.runId,
+        recovery.ancestry.slice(1),
+        recovery.createdAt,
+      ).ancestryHash;
+      const retainedTailHash = createWorkflowTerminalRecoveryAncestryRecord(
+        operation.workflowName,
+        operation.runId,
+        parentRecovery?.ancestry ?? [],
+        recovery.createdAt,
+      ).ancestryHash;
+      if (expectedTailHash !== retainedTailHash) return { status: 'ancestry_conflict' };
+
+      this.assertWorkflowSnapshotHandoffAvailable(operation.nestedWorkflowName, operation.nestedRunId);
+      const childRevision = this.db.workflowTerminalParentRevisions.get(childKey);
+      if (childRevision?.terminalStatus) return { status: 'child_terminal' };
+      const existingChild = this.db.workflows.get(childKey);
+      let existingChildSnapshot: WorkflowRunState | undefined;
+      if (existingChild?.snapshot) {
+        try {
+          existingChildSnapshot = cloneRunData(
+            typeof existingChild.snapshot === 'string' ? JSON.parse(existingChild.snapshot) : existingChild.snapshot,
+          );
+        } catch {
+          return { status: 'child_snapshot_conflict' };
+        }
+        const inspection = inspectWorkflowNestedRunRetainedSnapshot(
+          existingChildSnapshot,
+          operation.nestedRunId,
+          expectedChildGraphFingerprint,
+        );
+        if (inspection.status === 'conflict') return { status: 'child_snapshot_conflict' };
+        if (inspection.status === 'terminal') {
+          this.latchParentTerminalStatus(childKey, inspection.terminalStatus);
+          return { status: 'child_terminal' };
+        }
       }
-    }
-    const ensureInitialChildSnapshot = (): 'initialized' | 'retained' | 'not_requested' => {
-      if (!initialChildSnapshot) return 'not_requested';
-      if (existingChildSnapshot) return 'retained';
-      const timestamp = new Date(recovery.createdAt);
-      this.db.workflows.set(childKey, {
-        workflow_name: operation.nestedWorkflowName,
-        run_id: operation.nestedRunId,
-        resourceId: initialChildSnapshot.resourceId ?? existingChild?.resourceId,
-        snapshot: cloneRunData(initialChildSnapshot.snapshot),
-        createdAt: existingChild?.createdAt ?? timestamp,
-        updatedAt: timestamp,
-      });
-      this.bumpParentRevision(childKey);
-      return 'initialized';
-    };
-    const existingRecovery = this.db.workflowTerminalRecoveryAncestries.get(childKey);
-    if (existingRecovery) {
-      validateWorkflowTerminalRecoveryAncestryRecord(existingRecovery, {
-        workflowName: operation.nestedWorkflowName,
-        runId: operation.nestedRunId,
-        now: Date.now(),
-      });
-      if (!sameWorkflowTerminalRecoveryAncestry(existingRecovery, recovery)) {
+      const ensureInitialChildSnapshot = (): 'initialized' | 'retained' | 'not_requested' | 'stale' => {
+        if (!initialChildSnapshot) return 'not_requested';
+        if (existingChildSnapshot) return 'retained';
+        const timestamp = new Date(recovery.createdAt);
+        const storedChildSnapshot = cloneRunData(initialChildSnapshot.snapshot);
+        if (this.db.workflows.get(childKey) !== existingChild) return 'stale';
+        this.setWorkflowRunRecord(operation.nestedWorkflowName, operation.nestedRunId, {
+          workflow_name: operation.nestedWorkflowName,
+          run_id: operation.nestedRunId,
+          resourceId: initialChildSnapshot.resourceId ?? existingChild?.resourceId,
+          snapshot: storedChildSnapshot,
+          createdAt: existingChild?.createdAt ?? timestamp,
+          updatedAt: timestamp,
+        });
+        this.bumpParentRevision(childKey);
+        return 'initialized';
+      };
+      const existingRecovery = this.db.workflowTerminalRecoveryAncestries.get(childKey);
+      if (existingRecovery) {
+        validateWorkflowTerminalRecoveryAncestryRecord(existingRecovery, {
+          workflowName: operation.nestedWorkflowName,
+          runId: operation.nestedRunId,
+          now: Date.now(),
+        });
+        if (!sameWorkflowTerminalRecoveryAncestry(existingRecovery, recovery)) {
+          return { status: 'ancestry_conflict' };
+        }
+      }
+      const ownership = bindWorkflowNestedRunOwnershipRecord(snapshot, operation);
+      if (ownership.status === 'ownership_conflict') return ownership;
+      if (ownership.status === 'bound' && existingRecovery) {
         return { status: 'ancestry_conflict' };
       }
-    }
-    const ownership = bindWorkflowNestedRunOwnershipRecord(snapshot, operation);
-    if (ownership.status === 'ownership_conflict') return ownership;
-    if (ownership.status === 'bound' && existingRecovery) {
-      return { status: 'ancestry_conflict' };
-    }
-    if (ownership.status === 'already_bound' && existingRecovery) {
+      if (ownership.status === 'already_bound' && existingRecovery) {
+        const childSnapshotState = ensureInitialChildSnapshot();
+        if (childSnapshotState === 'stale') continue;
+        return {
+          status: 'already_admitted',
+          stepResults: cloneRunData(ownership.snapshot.context),
+          recovery: copyWorkflowTerminalRecoveryAncestryRecord(existingRecovery),
+          childSnapshotState,
+        };
+      }
+      // A transient nested run can become durable only when it suspends. Its
+      // parent owner was bound at initial dispatch, while the child snapshot and
+      // recovery ancestry did not exist yet. Promote that matching owner once a
+      // retained (or atomically initialized) child snapshot proves the run; do
+      // not treat the expected transient -> durable transition as an ancestry
+      // conflict.
+      if (ownership.status === 'already_bound' && !existingChildSnapshot && !initialChildSnapshot) {
+        return { status: 'ancestry_conflict' };
+      }
+      const storedSnapshot = cloneRunData(ownership.snapshot);
+      const storedRecovery = copyWorkflowTerminalRecoveryAncestryRecord(recovery);
+      if (this.db.workflows.get(parentKey) !== run || this.db.workflows.get(childKey) !== existingChild) continue;
+      this.db.workflowTerminalRecoveryAncestries.set(childKey, storedRecovery);
+      if (ownership.status === 'bound') {
+        this.setWorkflowRunRecord(operation.workflowName, operation.runId, {
+          ...run,
+          snapshot: storedSnapshot,
+          updatedAt: new Date(),
+        });
+        this.bumpParentRevision(parentKey);
+      }
       const childSnapshotState = ensureInitialChildSnapshot();
+      if (childSnapshotState === 'stale') continue;
       return {
-        status: 'already_admitted',
-        stepResults: cloneRunData(ownership.snapshot.context),
-        recovery: copyWorkflowTerminalRecoveryAncestryRecord(existingRecovery),
+        status: 'admitted',
+        stepResults: cloneRunData(storedSnapshot.context),
+        recovery: copyWorkflowTerminalRecoveryAncestryRecord(storedRecovery),
         childSnapshotState,
       };
     }
-    // A transient nested run can become durable only when it suspends. Its
-    // parent owner was bound at initial dispatch, while the child snapshot and
-    // recovery ancestry did not exist yet. Promote that matching owner once a
-    // retained (or atomically initialized) child snapshot proves the run; do
-    // not treat the expected transient -> durable transition as an ancestry
-    // conflict.
-    if (ownership.status === 'already_bound' && !existingChildSnapshot && !initialChildSnapshot) {
-      return { status: 'ancestry_conflict' };
-    }
-    const storedSnapshot = cloneRunData(ownership.snapshot);
-    const storedRecovery = copyWorkflowTerminalRecoveryAncestryRecord(recovery);
-    this.db.workflowTerminalRecoveryAncestries.set(childKey, storedRecovery);
-    if (ownership.status === 'bound') {
-      this.db.workflows.set(parentKey, { ...run, snapshot: storedSnapshot, updatedAt: new Date() });
-      this.bumpParentRevision(parentKey);
-    }
-    const childSnapshotState = ensureInitialChildSnapshot();
-    return {
-      status: 'admitted',
-      stepResults: cloneRunData(storedSnapshot.context),
-      recovery: copyWorkflowTerminalRecoveryAncestryRecord(storedRecovery),
-      childSnapshotState,
-    };
   }
 
   async updateWorkflowResults({
@@ -1784,39 +1916,48 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const key = this.getWorkflowKey(workflowName, runId);
-    const run = this.db.workflows.get(key);
-    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
+    for (;;) {
+      const run = this.db.workflows.get(key);
+      this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
-    if (!run) {
-      return {};
-    }
+      if (!run) {
+        return {};
+      }
 
-    let snapshot: WorkflowRunState;
-    if (!run.snapshot) {
-      snapshot = createEmptyWorkflowSnapshot(run.run_id);
+      if (!run.snapshot) {
+        const snapshot = createEmptyWorkflowSnapshot(run.run_id);
+        this.setWorkflowRunRecord(workflowName, runId, {
+          ...run,
+          snapshot,
+        });
+        continue;
+      }
 
-      this.db.workflows.set(key, {
+      // Merge into a clone, never the live stored object: merging can invoke
+      // caller getters and a fence assert at write time must not leave the
+      // stored snapshot partially mutated.
+      const working = cloneRunData(
+        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot,
+      ) as WorkflowRunState;
+
+      if (!working || !working?.context) {
+        throw new Error(`Snapshot not found for runId ${runId}`);
+      }
+
+      mergeWorkflowStepResult({ snapshot: working, stepId, result, requestContext });
+      // Caller code above may reenter this map; restart if the source row
+      // changed so the CAS merge never overwrites a newer record.
+      if (this.db.workflows.get(key) !== run) continue;
+      const storedSnapshot = cloneRunData(working);
+
+      this.setWorkflowRunRecord(workflowName, runId, {
         ...run,
-        snapshot,
+        snapshot: storedSnapshot,
       });
-    } else {
-      snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+      this.bumpParentRevision(key);
+
+      return cloneRunData(storedSnapshot.context);
     }
-
-    if (!snapshot || !snapshot?.context) {
-      throw new Error(`Snapshot not found for runId ${runId}`);
-    }
-
-    mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
-    const storedSnapshot = cloneRunData(snapshot);
-
-    this.db.workflows.set(key, {
-      ...run,
-      snapshot: storedSnapshot,
-    });
-    this.bumpParentRevision(key);
-
-    return cloneRunData(storedSnapshot.context);
   }
 
   async updateWorkflowState({
@@ -1829,64 +1970,77 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     const key = this.getWorkflowKey(workflowName, runId);
-    const run = this.db.workflows.get(key);
-    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
+    for (;;) {
+      const run = this.db.workflows.get(key);
+      this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
 
-    if (!run) {
-      return;
-    }
+      if (!run) {
+        return;
+      }
 
-    let snapshot: WorkflowRunState;
-    if (!run.snapshot) {
-      snapshot = createEmptyWorkflowSnapshot(run.run_id);
+      if (!run.snapshot) {
+        const snapshot = createEmptyWorkflowSnapshot(run.run_id);
+        this.setWorkflowRunRecord(workflowName, runId, {
+          ...run,
+          snapshot,
+        });
+        continue;
+      }
 
-      this.db.workflows.set(key, {
-        ...run,
-        snapshot,
-      });
-    } else {
-      snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
-    }
+      // Work on a clone: a fence assert at write time must not leave a
+      // partially merged live object behind.
+      const working = cloneRunData(
+        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot,
+      ) as WorkflowRunState;
 
-    if (!snapshot || !snapshot?.context) {
-      throw new Error(`Snapshot not found for runId ${runId}`);
-    }
+      if (!working || !working?.context) {
+        throw new Error(`Snapshot not found for runId ${runId}`);
+      }
 
-    const { expectedStatus, expectedExecutionGeneration, expectedLifecycleResumeAttempt, finalState, ...stateOptions } =
-      opts;
-    // Compare-and-set guards run before any mutation: a mismatch makes
-    // the whole update a no-op, including the terminal `finalState` replacement.
-    if (
-      !matchesExpectedWorkflowState(snapshot, {
+      const {
         expectedStatus,
         expectedExecutionGeneration,
         expectedLifecycleResumeAttempt,
-      })
-    ) {
-      return;
-    }
+        finalState,
+        ...stateOptions
+      } = opts;
+      // Compare-and-set guards run before any mutation: a mismatch makes
+      // the whole update a no-op, including the terminal `finalState` replacement.
+      if (
+        !matchesExpectedWorkflowState(working, {
+          expectedStatus,
+          expectedExecutionGeneration,
+          expectedLifecycleResumeAttempt,
+        })
+      ) {
+        return;
+      }
 
-    const existingTimestamp = snapshot.timestamp;
-    snapshot = { ...snapshot, ...stateOptions };
-    if (finalState !== undefined) {
-      const storageTimestamp = Date.now();
-      const finalTimestamp = validateWorkflowSnapshotTimestampForFinalState(existingTimestamp, storageTimestamp);
-      const canonicalFinalState = materializeWorkflowTerminalCanonicalJsonObject(finalState, 'finalState');
-      snapshot.context = {
-        ...snapshot.context,
-        __state: cloneRunData(canonicalFinalState) as never,
-      } as unknown as WorkflowRunState['context'];
-      snapshot.value = cloneRunData(canonicalFinalState) as WorkflowRunState['value'];
-      snapshot.timestamp = finalTimestamp;
-    }
-    const storedSnapshot = cloneRunData(snapshot);
-    this.db.workflows.set(key, {
-      ...run,
-      snapshot: storedSnapshot,
-    });
-    this.bumpParentRevision(key);
+      const existingTimestamp = working.timestamp;
+      let nextSnapshot: WorkflowRunState = { ...working, ...stateOptions };
+      if (finalState !== undefined) {
+        const storageTimestamp = Date.now();
+        const finalTimestamp = validateWorkflowSnapshotTimestampForFinalState(existingTimestamp, storageTimestamp);
+        const canonicalFinalState = materializeWorkflowTerminalCanonicalJsonObject(finalState, 'finalState');
+        nextSnapshot.context = {
+          ...nextSnapshot.context,
+          __state: cloneRunData(canonicalFinalState) as never,
+        } as unknown as WorkflowRunState['context'];
+        nextSnapshot.value = cloneRunData(canonicalFinalState) as WorkflowRunState['value'];
+        nextSnapshot.timestamp = finalTimestamp;
+      }
+      const storedSnapshot = cloneRunData(nextSnapshot);
+      // Caller code above may reenter this map; restart if the source row
+      // changed so the CAS merge never overwrites a newer record.
+      if (this.db.workflows.get(key) !== run) continue;
+      this.setWorkflowRunRecord(workflowName, runId, {
+        ...run,
+        snapshot: storedSnapshot,
+      });
+      this.bumpParentRevision(key);
 
-    return cloneRunData(storedSnapshot);
+      return cloneRunData(storedSnapshot);
+    }
   }
 
   async persistWorkflowSnapshot({
@@ -1906,24 +2060,32 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
-    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
-    const existing = this.db.workflows.get(key);
-    const data: StorageWorkflowRun = {
-      workflow_name: workflowName,
-      run_id: runId,
-      // A re-persist without a resourceId (e.g. resume) must not erase a
-      // previously-set value. Matches the persistent stores' COALESCE upserts.
-      resourceId: resourceId ?? existing?.resourceId,
-      snapshot: cloneRunData(snapshot),
-      // Preserve the original creation time when re-persisting an existing run; only set it
-      // on first insert. Otherwise listWorkflowRuns ordering and date filters drift to the
-      // last activity time. Matches the persistent stores (pg/mysql/mongodb/libsql).
-      createdAt: createdAt ?? existing?.createdAt ?? now,
-      updatedAt: updatedAt ?? now,
-    };
+    for (;;) {
+      const existing = this.db.workflows.get(key);
+      this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
+      // Cloning the caller snapshot can invoke toJSON/getters that reenter
+      // this map; restart if a reentrant write changed the row so a persisted
+      // snapshot never silently overwrites a newer record.
+      const clonedSnapshot = cloneRunData(snapshot);
+      if (this.db.workflows.get(key) !== existing) continue;
+      const data: StorageWorkflowRun = {
+        workflow_name: workflowName,
+        run_id: runId,
+        // A re-persist without a resourceId (e.g. resume) must not erase a
+        // previously-set value. Matches the persistent stores' COALESCE upserts.
+        resourceId: resourceId ?? existing?.resourceId,
+        snapshot: clonedSnapshot,
+        // Preserve the original creation time when re-persisting an existing run; only set it
+        // on first insert. Otherwise listWorkflowRuns ordering and date filters drift to the
+        // last activity time. Matches the persistent stores (pg/mysql/mongodb/libsql).
+        createdAt: createdAt ?? existing?.createdAt ?? now,
+        updatedAt: updatedAt ?? now,
+      };
 
-    this.db.workflows.set(key, data);
-    this.bumpParentRevision(key);
+      this.setWorkflowRunRecord(workflowName, runId, data);
+      this.bumpParentRevision(key);
+      return;
+    }
   }
 
   async loadWorkflowSnapshot({
@@ -2083,8 +2245,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
-    this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);
-    if (this.db.workflows.delete(key)) {
+    if (this.deleteWorkflowRunRecord(workflowName, runId)) {
       // Keep the tombstone revision so deleting and recreating the same logical
       // run cannot make an older parent context current again (ABA).
       this.bumpParentRevision(key);

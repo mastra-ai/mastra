@@ -4,6 +4,7 @@ import type { WorkflowRunState, WorkflowTerminalRecoveryAncestryV1 } from '../..
 import { createWorkflowTerminalGraphFingerprint } from '../../../workflows/terminal-continuation';
 import { InMemoryStore } from '../../mock';
 import { createEmptyWorkflowSnapshot } from '../../workflow-snapshot';
+import { WorkflowSnapshotHandoffFenceError } from '../../workflow-snapshot-handoff';
 
 const NESTED_PARENT_GRAPH: WorkflowRunState['serializedStepGraph'] = [
   { type: 'step', step: { id: 'nested', component: 'WORKFLOW' } },
@@ -438,5 +439,198 @@ describe('workflow snapshot handoff', () => {
       runId: 'different-run',
       snapshot: snapshot('different-run', 'running'),
     });
+  });
+
+  it('keeps enumerable Error fields in the persisted JSON projection', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'enumerable-error-workflow';
+    const runId = 'enumerable-error-run';
+
+    // Object.assign makes these own-enumerable: JSON.stringify persists them
+    // into JSONB, so the canonical comparison must see them identically.
+    const persistedError = Object.assign(new Error('boom'), {
+      name: 'CustomError',
+      cause: { reason: 'required' },
+      code: 'E_PERSISTED',
+    });
+    const canonical = snapshot(runId, 'failed', { error: persistedError });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: canonical });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: canonical },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-a',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+
+    // A snapshot whose Error differs only in an enumerable field is a real
+    // divergence, not a replay.
+    const divergentError = Object.assign(new Error('boom'), {
+      name: 'CustomError',
+      cause: { reason: 'changed' },
+      code: 'E_PERSISTED',
+    });
+    const divergentCanonical = snapshot(runId, 'failed', { error: divergentError });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: 'enumerable-error-workflow-2',
+      runId,
+      snapshot: divergentCanonical,
+    });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'enumerable-error-workflow-2',
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: canonical },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-b',
+      }),
+    ).resolves.toMatchObject({ status: 'conflict' });
+
+    // A constructor-provided cause is non-enumerable: it stays out of the JSON
+    // projection and does not create a phantom divergence.
+    const specError = new Error('wrapped', { cause: 'inner' });
+    const specCanonical = snapshot('spec-error-run', 'failed', { error: specError });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: 'spec-error-workflow',
+      runId: 'spec-error-run',
+      snapshot: specCanonical,
+    });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'spec-error-workflow',
+        runId: 'spec-error-run',
+        expectedCanonical: { kind: 'present', snapshot: specCanonical },
+        snapshot: snapshot('spec-error-run', 'waiting'),
+        mutationFence: 'owner-c',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('cannot be reentered by snapshot serialization mid-claim', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'reentrant-workflow';
+    const runId = 'reentrant-run';
+
+    // The outer claim's snapshot carries a toJSON that synchronously claims
+    // the same run before the outer claim ever observes storage.
+    const outerSnapshot = snapshot(runId, 'waiting', { phase: 'outer' });
+    Object.defineProperty(outerSnapshot, 'trigger', {
+      enumerable: true,
+      value: {
+        toJSON: () => {
+          void workflows.claimWorkflowSnapshotHandoff({
+            workflowName,
+            runId,
+            expectedCanonical: { kind: 'absent' },
+            snapshot: snapshot(runId, 'waiting', { phase: 'inner' }),
+            mutationFence: 'inner-owner',
+          });
+          return { armed: true };
+        },
+      },
+    });
+
+    const outer = await workflows.claimWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'absent' },
+      snapshot: outerSnapshot,
+      mutationFence: 'outer-owner',
+    });
+    // The reentrant claim wins: the outer claim observes its row instead of
+    // overwriting it with a stale read.
+    expect(outer.status).toBe('conflict');
+    const stored = await workflows.listWorkflowSnapshotHandoffs({ workflowName });
+    expect(stored.records).toHaveLength(1);
+    expect(stored.records[0]).toMatchObject({ mutationFence: 'inner-owner', status: 'pending' });
+  });
+
+  it('pins every input field before caller serialization in claim', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'aliased-workflow';
+    let runIdReads = 0;
+    const input = {
+      workflowName,
+      get runId() {
+        return runIdReads++ === 0 ? 'aliased-run' : 'swapped-run';
+      },
+      expectedCanonical: { kind: 'absent' as const },
+      snapshot: snapshot('aliased-run', 'waiting'),
+      mutationFence: 'aliased-owner',
+    };
+
+    const result = await workflows.claimWorkflowSnapshotHandoff(input);
+    expect(result).toMatchObject({ status: 'created', record: { runId: 'aliased-run' } });
+    const listed = await workflows.listWorkflowSnapshotHandoffs({ workflowName });
+    expect(listed.records.map(record => record.runId)).toEqual(['aliased-run']);
+  });
+
+  it('fences a step update whose input serialization claims the handoff mid-flight', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'mid-flight-workflow';
+    const runId = 'mid-flight-run';
+    const stored = snapshot(runId, 'running');
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    const armedSnapshot = snapshot(runId, 'running', { phase: 'update' });
+    Object.defineProperty(armedSnapshot.value as Record<string, unknown>, 'trigger', {
+      enumerable: true,
+      get() {
+        void workflows.claimWorkflowSnapshotHandoff({
+          workflowName,
+          runId,
+          expectedCanonical: { kind: 'present', snapshot: stored },
+          snapshot: snapshot(runId, 'waiting'),
+          mutationFence: 'mid-flight-owner',
+        });
+        return { armed: true };
+      },
+    });
+
+    await expect(workflows.persistWorkflowStepUpdate({ workflowName, runId, snapshot: armedSnapshot })).rejects.toThrow(
+      WorkflowSnapshotHandoffFenceError,
+    );
+    // The fenced row is still the handoff owner's claim state, not the update.
+    const listed = await workflows.listWorkflowSnapshotHandoffs({ workflowName });
+    expect(listed.records).toHaveLength(1);
+    expect(listed.records[0]).toMatchObject({ mutationFence: 'mid-flight-owner', status: 'pending' });
+  });
+
+  it('orders cursor ties in code-point order including astral names', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const claim = (workflowName: string, runId: string) =>
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: `${workflowName}-owner`,
+      });
+
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(7_000);
+    try {
+      await claim('x￿', 'run-a');
+      await claim('Ba', 'run-a');
+      await claim('x💥', 'run-a');
+      await claim('aB', 'run-a');
+    } finally {
+      clock.mockRestore();
+    }
+
+    // Code-point order (UTF-8 byte order, matching PostgreSQL COLLATE "C"):
+    // 'B' < 'a' < 'x', and U+FFFF precedes U+1F4A5 even though a UTF-16
+    // code-unit compare would invert the astral pair.
+    const page1 = await workflows.listWorkflowSnapshotHandoffs({ limit: 2 });
+    expect(page1.records.map(record => record.workflowName)).toEqual(['Ba', 'aB']);
+    const page2 = await workflows.listWorkflowSnapshotHandoffs({ limit: 2, after: page1.nextCursor });
+    expect(page2.records.map(record => record.workflowName)).toEqual(['x￿', 'x💥']);
+    expect(page2.hasMore).toBe(false);
   });
 });

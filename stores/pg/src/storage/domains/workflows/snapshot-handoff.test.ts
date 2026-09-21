@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { createEmptyWorkflowSnapshot, createWorkflowTerminalGraphFingerprint } from '@mastra/core/storage';
+import {
+  createEmptyWorkflowSnapshot,
+  createWorkflowTerminalGraphFingerprint,
+  WorkflowSnapshotHandoffFenceError,
+} from '@mastra/core/storage';
 import type { WorkflowRunState, WorkflowTerminalRecoveryAncestryV1 } from '@mastra/core/workflows';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { PostgresStore } from '../../index';
@@ -522,5 +526,159 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
       hasMore: false,
     });
     await expect(workflows.deleteWorkflowRunById({ workflowName, runId })).rejects.toThrow(/handoff fence/);
+  });
+
+  it('keeps enumerable Error fields in the persisted JSON projection', async () => {
+    const workflowName = `enum-error-${randomUUID()}`;
+    const runId = randomUUID();
+
+    // Object.assign makes these own-enumerable: JSON.stringify persists them
+    // into JSONB, so the canonical comparison must see them identically.
+    const persistedError = Object.assign(new Error('boom'), {
+      name: 'CustomError',
+      cause: { reason: 'required' },
+      code: 'E_PERSISTED',
+    });
+    const canonical = snapshot(runId, 'failed', { error: persistedError });
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: canonical });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: canonical },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-a',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+
+    // A snapshot whose Error differs only in an enumerable field is a real
+    // divergence, not a replay.
+    const divergentName = `${workflowName}-divergent`;
+    const divergentError = Object.assign(new Error('boom'), {
+      name: 'CustomError',
+      cause: { reason: 'changed' },
+      code: 'E_PERSISTED',
+    });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: divergentName,
+      runId,
+      snapshot: snapshot(runId, 'failed', { error: divergentError }),
+    });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: divergentName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: canonical },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner-b',
+      }),
+    ).resolves.toMatchObject({ status: 'conflict' });
+
+    // A constructor-provided cause is non-enumerable: it stays out of the JSON
+    // projection and does not create a phantom divergence.
+    const specName = `${workflowName}-spec`;
+    const specRunId = randomUUID();
+    const specCanonical = snapshot(specRunId, 'failed', { error: new Error('wrapped', { cause: 'inner' }) });
+    await workflows.persistWorkflowSnapshot({ workflowName: specName, runId: specRunId, snapshot: specCanonical });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: specName,
+        runId: specRunId,
+        expectedCanonical: { kind: 'present', snapshot: specCanonical },
+        snapshot: snapshot(specRunId, 'waiting'),
+        mutationFence: 'owner-c',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('orders cursor ties in code-point order including astral names', async () => {
+    const prefix = `collate-${randomUUID()}`;
+    const names = [`${prefix}-x￿`, `${prefix}-Ba`, `${prefix}-x💥`, `${prefix}-aB`];
+    for (const workflowName of names) {
+      await workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId: `${prefix}-run`,
+        expectedCanonical: { kind: 'absent' },
+        snapshot: snapshot(`${prefix}-run`, 'waiting'),
+        mutationFence: `${workflowName}-owner`,
+      });
+    }
+    // Force identical updated_at so ordering must resolve on the key tiebreak.
+    await store.db.none(
+      `UPDATE mastra_workflow_snapshot_handoffs SET created_at = 515151, updated_at = 515151
+       WHERE workflow_name LIKE $1`,
+      [`${prefix}-%`],
+    );
+
+    // Code-point order (UTF-8 byte order via COLLATE "C"): 'B' < 'a' < 'x',
+    // and U+FFFF precedes U+1F4A5 even though a UTF-16 code-unit compare would
+    // invert the astral pair.
+    const expected = [`${prefix}-Ba`, `${prefix}-aB`, `${prefix}-x￿`, `${prefix}-x💥`];
+    const seen: string[] = [];
+    let cursor: any;
+    do {
+      const page = await workflows.listWorkflowSnapshotHandoffs({ status: 'pending', limit: 2, after: cursor });
+      for (const record of page.records) {
+        if (record.workflowName.startsWith(prefix)) seen.push(record.workflowName);
+      }
+      cursor = page.nextCursor;
+      if (!page.hasMore) break;
+    } while (cursor);
+    expect(seen).toEqual(expected);
+  });
+
+  it('pins every input field before caller serialization in claim', async () => {
+    const workflowName = `aliased-${randomUUID()}`;
+    let runIdReads = 0;
+    const input = {
+      workflowName,
+      get runId() {
+        return runIdReads++ === 0 ? 'aliased-run' : 'swapped-run';
+      },
+      expectedCanonical: { kind: 'absent' as const },
+      snapshot: snapshot('aliased-run', 'waiting'),
+      mutationFence: 'aliased-owner',
+    };
+
+    const result = await workflows.claimWorkflowSnapshotHandoff(input);
+    expect(result).toMatchObject({ status: 'created', record: { runId: 'aliased-run' } });
+    await expect(workflows.listWorkflowSnapshotHandoffs({ workflowName })).resolves.toMatchObject({
+      records: [{ runId: 'aliased-run' }],
+    });
+  });
+
+  it('surfaces the typed fence error from every mutation path', async () => {
+    const workflowName = `typed-fence-${randomUUID()}`;
+    const runId = randomUUID();
+    const terminal = { ...createEmptyWorkflowSnapshot(runId), status: 'success' as const };
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: terminal });
+    const claimed = snapshot(runId, 'waiting', { product: true });
+    await workflows.claimWorkflowSnapshotHandoff({
+      workflowName,
+      runId,
+      expectedCanonical: { kind: 'present', snapshot: terminal },
+      mutationFence: 'typed-owner',
+      snapshot: claimed,
+    });
+
+    const fenced = [
+      workflows.persistWorkflowStepUpdate({ workflowName, runId, snapshot: snapshot(runId, 'running') }),
+      workflows.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step',
+        result: { status: 'success', output: {} },
+        requestContext: {},
+      }),
+      workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, 'failed') }),
+      workflows.deleteWorkflowRunById({ workflowName, runId }),
+    ];
+    // Attach rejection handlers before awaiting so none surface unhandled.
+    await Promise.all(
+      fenced.flatMap(promise => [
+        expect(promise).rejects.toThrow(WorkflowSnapshotHandoffFenceError),
+        expect(promise).rejects.toMatchObject({ code: 'WORKFLOW_SNAPSHOT_HANDOFF_FENCED' }),
+      ]),
+    );
   });
 });
