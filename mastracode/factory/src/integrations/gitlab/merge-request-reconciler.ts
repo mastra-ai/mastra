@@ -1,6 +1,7 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
 import type { PullRequest } from '../../capabilities/version-control.js';
 import type { FactoryProject } from '../../storage/domains/projects/base.js';
+import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { IssueReconcileSummary } from '../issue-reconciler.js';
@@ -21,6 +22,12 @@ function numberMetadata(item: WorkItemRow, key: string): number | undefined {
 
 function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, '');
+}
+
+/** The provider outcome a card's metadata already records, if it is closed. */
+function reconciledOutcome(metadata: Record<string, unknown>): 'merged' | 'closed' | undefined {
+  if (metadata.state !== 'closed' || typeof metadata.merged !== 'boolean') return undefined;
+  return metadata.merged ? 'merged' : 'closed';
 }
 
 function identityForItem(item: WorkItemRow): { projectId: number; mergeRequestIid: number; host: string } | null {
@@ -61,10 +68,9 @@ function terminalEvent(
   identity: { projectId: number; mergeRequestIid: number; host: string },
 ): ParsedGitLabWebhook {
   const { projectId, mergeRequestIid, host } = identity;
-  const projectPath =
-    item.externalSource?.url
-      ? projectPathFromUrl(item.externalSource.url, host, mergeRequestIid)
-      : undefined;
+  const projectPath = item.externalSource?.url
+    ? projectPathFromUrl(item.externalSource.url, host, mergeRequestIid)
+    : undefined;
   if (!projectPath) {
     throw new Error('GitLab merge-request work item is missing canonical reconciliation metadata.');
   }
@@ -139,7 +145,11 @@ export type GitLabMergeRequestReconciler = () => Promise<IssueReconcileSummary>;
 export function attachGitLabMergeRequestReconciler(
   gitlab: Pick<
     GitLabIntegrationBase,
-    'versionControl' | 'rules' | 'getProjectMemberAccessLevel' | 'getWorkItemAuthorUsername' | 'resolveActiveConnectionForHost'
+    | 'versionControl'
+    | 'rules'
+    | 'getProjectMemberAccessLevel'
+    | 'getWorkItemAuthorUsername'
+    | 'resolveActiveConnectionForHost'
   >,
   context: IntegrationContext,
 ): GitLabMergeRequestReconciler | undefined {
@@ -161,18 +171,19 @@ export function attachGitLabMergeRequestReconciler(
     for (const project of await context.storage.projects.listAll()) {
       const items = (
         await context.runtime!.workItems.list({ orgId: project.orgId, factoryProjectId: project.id })
-      ).filter(
-        item => {
-          if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'pull-request') {
-            return false;
-          }
-          if (workItemPhaseSemantics(boards, item)?.kind !== 'terminal') return true;
-          // Done means the review finished, not that the MR was merged. Keep
-          // polling until the provider's terminal outcome and card agree.
-          if (item.metadata?.state !== 'closed') return true;
-          return !item.stages.includes(item.metadata?.merged === true ? 'done' : 'canceled');
-        },
-      );
+      ).filter(item => {
+        if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'pull-request') {
+          return false;
+        }
+        if (workItemPhaseSemantics(boards, item)?.kind !== 'terminal') return true;
+        // Same contract as the GitHub sweep: a terminal card is settled once
+        // the provider's terminal outcome has been replayed and stamped. Done
+        // means the review finished, not that the MR merged, so a later close
+        // still gets exactly one replay before the card drops out of the sweep.
+        const metadata = item.metadata ?? {};
+        const outcome = reconciledOutcome(metadata);
+        return outcome === undefined || metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] !== outcome;
+      });
       if (items.length === 0) continue;
       summary.projects += 1;
       for (const item of items) {
@@ -233,10 +244,31 @@ export function attachGitLabMergeRequestReconciler(
             ...(authorTrusted !== undefined ? { authorTrusted } : {}),
             updatedAt: pullRequest.updatedAt,
           };
-          const metadataChanged = !Object.entries(desired).every(
-            ([key, value]) => JSON.stringify(current[key]) === JSON.stringify(value),
-          );
+          const metadataChanged = (next: Record<string, unknown>) =>
+            !Object.entries(next).every(([key, value]) => JSON.stringify(current[key]) === JSON.stringify(value));
           if (pullRequest.state === 'closed') {
+            const terminal = workItemPhaseSemantics(boards, item)?.kind === 'terminal';
+            let cleanupFailed = false;
+            if (terminal) {
+              // Retire whatever the card still had pending, as the GitHub sweep
+              // does, so a stale proposal cannot resurface on a settled card.
+              try {
+                await context.runtime!.workItems.supersedeDecisionsForWorkItem({
+                  orgId: project.orgId,
+                  factoryProjectId: project.id,
+                  workItemId: item.id,
+                  supersededAt: new Date(),
+                });
+              } catch (error) {
+                cleanupFailed = true;
+                summary.failed += 1;
+                summary.errors.push({
+                  projectId: project.id,
+                  workItemId: item.id,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
             const terminalTransition =
               current.state !== 'closed' ||
               current.merged !== pullRequest.merged ||
@@ -244,24 +276,35 @@ export function attachGitLabMergeRequestReconciler(
             if (terminalTransition) {
               await ingest(terminalEvent(item, pullRequest, identity));
             }
-            if (metadataChanged) {
+            // The settled stamp is what takes a terminal card out of later
+            // sweeps. Withhold it while cleanup failed so the next sweep retries.
+            const settled = cleanupFailed
+              ? {}
+              : { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: pullRequest.merged ? 'merged' : 'closed' };
+            if (metadataChanged({ ...desired, ...settled })) {
               await context.runtime!.workItems.update({
                 orgId: project.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: { ...current, ...desired } },
+                patch: { metadata: { ...current, ...desired, ...settled } },
               });
               summary.updated += 1;
             }
             summary.closed += 1;
             continue;
           }
-          if (!metadataChanged) continue;
+          // A reopened MR is live again: clear a stale stamp so a later close
+          // gets its replay, but never write the key onto a card that lacks it.
+          const reopened =
+            current[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] === undefined
+              ? {}
+              : { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: null };
+          if (!metadataChanged({ ...desired, ...reopened })) continue;
           await context.runtime!.workItems.update({
             orgId: project.orgId,
             id: item.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { ...current, ...desired } },
+            patch: { metadata: { ...current, ...desired, ...reopened } },
           });
           summary.updated += 1;
         } catch (error) {
