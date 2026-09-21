@@ -5,10 +5,9 @@ import {
   getScatterPlotClickedPoint,
   getScatterPlotPointColor,
 } from './scatter-plot-chart-utils';
-import { CHART_TICK_FONT_SIZE, Colors } from '@/ds/tokens';
+import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE, Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
-const LABEL_COLOR = '#a1a1aa';
 const DEFAULT_POINT_SIZE = 48;
 const CHART_MARGIN = { top: 16, right: 16, bottom: 16, left: 16 };
 
@@ -78,7 +77,7 @@ export function ScatterPlotChart({
               dataKey={xKey}
               name={xLabel}
               type="number"
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
               domain={xDomain}
@@ -88,7 +87,7 @@ export function ScatterPlotChart({
               dataKey={yKey}
               name={yLabel}
               type="number"
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
               width={44}

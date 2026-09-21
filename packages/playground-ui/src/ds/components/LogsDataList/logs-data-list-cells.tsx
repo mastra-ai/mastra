@@ -6,11 +6,11 @@ import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { cn } from '@/lib/utils';
 
 const LEVEL_CONFIG: Record<LogLevel, { label: string; color: string }> = {
-  debug: { label: 'DEBUG', color: '#71717a' },
-  info: { label: 'INFO', color: '#60a5fa' },
-  warn: { label: 'WARN', color: '#facc15' },
-  error: { label: 'ERROR', color: '#f87171' },
-  fatal: { label: 'FATAL', color: '#dc2626' },
+  debug: { label: 'DEBUG', color: 'var(--muted-foreground)' },
+  info: { label: 'INFO', color: 'var(--notice-info)' },
+  warn: { label: 'WARN', color: 'var(--notice-warning)' },
+  error: { label: 'ERROR', color: 'var(--notice-destructive)' },
+  fatal: { label: 'FATAL', color: 'var(--destructive)' },
 };
 
 // ---------------------------------------------------------------------------

@@ -19,15 +19,12 @@ export const METRICS_DATA_LIST_PROPS = {
 } satisfies Pick<DataListRootProps, 'className' | 'mask'>;
 
 export const CHART_COLORS = {
-  green: '#22c55e',
-  orange: '#fb923c',
-  pink: '#f472b6',
-  purple: '#8b5cf6',
-  blue: '#4f83f1',
-  blueDark: '#2b5cd9',
-  blueLight: '#6b8fe5',
-  red: '#f87171',
-  greenDark: '#15613a',
-  redDark: '#991b1b',
-  yellow: '#facc15',
+  green: 'var(--chart-green)',
+  orange: 'var(--chart-orange)',
+  pink: 'var(--chart-pink)',
+  purple: 'var(--chart-purple)',
+  blue: 'var(--chart-blue)',
+  blueDark: 'var(--chart-blue-deep)',
+  red: 'var(--chart-red)',
+  yellow: 'var(--chart-yellow)',
 } as const;

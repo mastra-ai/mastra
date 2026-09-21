@@ -22,8 +22,8 @@ type SpanTokenUsageProps = {
   className?: string;
 };
 
-const INPUT_COLOR = 'oklch(0.78 0.16 320)';
-const OUTPUT_COLOR = 'oklch(0.55 0.18 320)';
+const INPUT_COLOR = 'var(--chart-soft-3)';
+const OUTPUT_COLOR = 'var(--chart-soft-1)';
 
 export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
   const view = getTokenUsageView(usage);
