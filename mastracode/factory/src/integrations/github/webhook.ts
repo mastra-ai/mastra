@@ -515,7 +515,7 @@ export async function dispatchGithubWebhook(
         continue;
       }
       const overrides = managedInlineReviewOverrides(notification, subscription);
-      const runContext = subscriptionRunContext(session);
+      const runContext = await subscriptionRunContext(subscription, dependencies.github?.sourceControlStorage);
       const result = await session.sendNotificationSignal(
         {
           source: 'github',
