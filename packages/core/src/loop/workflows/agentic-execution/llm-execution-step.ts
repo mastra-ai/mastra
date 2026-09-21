@@ -1134,6 +1134,16 @@ async function processOutputStream<OUTPUT = undefined>({
   return { collectedChunks, toolResultTripwire };
 }
 
+/**
+ * Builds a runner that attempts models in order until the callback succeeds.
+ * Logs each transition to a fallback model and preserves the final failure.
+ * Tripwires and total-run timeouts propagate immediately.
+ *
+ * @param models - Configured models in fallback order.
+ * @param logger - Logger for fallback transitions and exhausted attempts.
+ * @param startIndex - Index of the first model to attempt.
+ * @returns A runner that resolves with the successful callback result.
+ */
 function executeStreamWithFallbackModels<T>(
   models: ModelManagerModelConfig[],
   logger?: IMastraLogger,
@@ -1192,6 +1202,13 @@ function executeStreamWithFallbackModels<T>(
   };
 }
 
+/**
+ * Creates the workflow step for one streamed LLM iteration.
+ * Applies processors, collects output, and coordinates processor retries and
+ * model fallback before reporting terminal errors.
+ *
+ * @returns An execution step that updates the run state and message list.
+ */
 export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
   _internal,
