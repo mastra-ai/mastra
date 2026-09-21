@@ -79,17 +79,19 @@ export function DynamicForm({
 
   useEffect(() => () => subscriptionRef.current?.unsubscribe(), []);
 
+  const hasValuesListener = Boolean(onValuesChange);
+
   const handleFormInit = useCallback(
     (form: UseFormReturn<any>) => {
       subscriptionRef.current?.unsubscribe();
       subscriptionRef.current = null;
 
-      if (!onValuesChangeRef.current) return;
+      if (!hasValuesListener) return;
 
       subscriptionRef.current = form.watch(values => onValuesChangeRef.current?.(getFormInput(values, isWrapped)));
-      onValuesChangeRef.current(getFormInput(form.getValues(), isWrapped));
+      onValuesChangeRef.current?.(getFormInput(form.getValues(), isWrapped));
     },
-    [isWrapped],
+    [hasValuesListener, isWrapped],
   );
 
   const schemaProvider = useMemo(

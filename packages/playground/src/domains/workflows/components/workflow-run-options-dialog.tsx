@@ -7,10 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
@@ -46,18 +44,15 @@ export const WorkflowRunOptionsDialog = ({ resourceId, onResourceIdChange }: Wor
             </DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <div className="space-y-2 px-5 py-2">
-              <Label htmlFor="workflow-run-resource-id">Resource ID</Label>
-              <Input
-                id="workflow-run-resource-id"
+            <div className="px-5 py-2">
+              <TextFieldBlock
+                name="workflow-run-resource-id"
+                label="Resource ID"
                 value={resourceId}
                 onChange={event => onResourceIdChange(event.target.value)}
                 placeholder="e.g. tenant-42"
+                helpText="Ignored when server auth derives the resource ID from the user."
               />
-              <Txt variant="ui-sm" className="text-neutral3">
-                Attributes runs started here to a resource so they show up in resource-filtered run lists. Ignored when
-                server auth derives the resource ID from the authenticated user.
-              </Txt>
             </div>
             <WorkflowTracingRunOptions onSaved={() => setOpen(false)} />
           </DialogBody>
