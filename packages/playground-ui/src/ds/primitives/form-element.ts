@@ -39,17 +39,46 @@ export const inputHoverBorderVisible = '[&:hover:not(:focus-visible):not(:disabl
 // disabled input repaints the enabled border over the muted disabled one.
 export const inputHoverBorderWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:border-border-hover';
 
-// Background-agnostic surface + focus recipe shared by Input, Textarea and the
-// filled field triggers (Select/Combobox `default`). Reads on any underlying
-// surface, with no accent on focus — caller appends a radius (`rounded-full` for
-// single-line inputs, `rounded-xl` for textareas).
-// Filled fields carry their affordance in the fill, exactly like a default Button:
-// the resting `border` stays put on hover and only the surface steps up.
+// A field is the same material as a card: `bg-card` plus `shadow-raised`, which
+// carries the 1px rim, so a field draws no border of its own. That is what makes a
+// filter input and the panel beside it read as one system — in light the field is
+// white on the off-white canvas, in dark it is the same step above it.
+//
+// Its states repaint the rim rather than the fill. An `<input>` cannot carry a
+// pseudo-element, so the state-layer trick raised surfaces use is unavailable, and
+// stepping the fill would break the pinned card colour. `--surface-rim` reaches
+// into the one inset ring the `shadow-raised` utility draws, so hover and focus
+// move that single edge instead of adding a second one beside it. Disabled is the
+// exception: it drops the card fill for the lowest translucent rung, which is how
+// a disabled field reads as recessed rather than raised.
+//
+// The three rungs stay close together — focus sits one step above hover, not at
+// the `--border-focus` weight a bare outline needs, because the edge here is the
+// boundary of a surface that already reads as raised. Wrappers whose focus lives
+// on a nested control (InputGroup) take the `within` flavour of the same rungs.
+//
+// Caller appends a radius (`rounded-full` for single-line inputs, `rounded-xl` for
+// textareas).
+const surfaceRimHover = '[&:hover:not(:focus-visible):not(:disabled)]:[--surface-rim:var(--surface-rim-hover)]';
+const surfaceRimFocus = 'focus-visible:[--surface-rim:var(--surface-rim-focus)]';
+
+// The wrapper itself is never `:disabled` — the control it wraps is — so both
+// guards have to ask about descendants.
+const surfaceRimHoverWithin =
+  '[&:hover:not(:focus-within):not(:has(:disabled))]:[--surface-rim:var(--surface-rim-hover)]';
+const surfaceRimFocusWithin = 'focus-within:[--surface-rim:var(--surface-rim-focus)]';
+
 export const inputSurfaceAndFocusStyle =
-  'bg-fill border border-border text-foreground ' +
-  'not-disabled:hover:bg-fill-hover ' +
-  'outline-hidden focus-visible:outline-hidden focus-visible:bg-fill-hover ' +
-  inputFocusBorderVisible;
+  'bg-card shadow-raised text-foreground disabled:bg-fill-subtle ' +
+  surfaceRimHover +
+  ' outline-hidden focus-visible:outline-hidden ' +
+  surfaceRimFocus;
+
+export const inputSurfaceAndFocusWithinStyle =
+  'bg-card shadow-raised text-foreground has-[:disabled]:bg-fill-subtle ' +
+  surfaceRimHoverWithin +
+  ' outline-hidden focus-within:outline-hidden ' +
+  surfaceRimFocusWithin;
 
 // Outline fields share Button's outline ladder exactly: a visible resting border
 // (`foreground/30`), brightening on hover, then the shared focus border.
@@ -62,13 +91,14 @@ export const inputOutlineAndFocusStyle =
 
 // Filled field trigger (Select/Combobox `default`): the same surface as Input.
 // Applied *after* `buttonVariants` so tailwind-merge replaces the Button's fill
-// and border with the field overlay — a field is not a button. Like every filled
-// control it carries hover in the fill and leaves the resting border alone.
+// and border with the field material — a field is not a button. The Button
+// variant it lands on drives `background-color` on hover, so the pinned
+// `hover:bg-card` is what keeps the trigger from turning translucent mid-hover.
 export const fieldTriggerSurfaceStyle =
-  'bg-fill border-border text-foreground ' +
-  'not-disabled:hover:bg-fill-hover not-disabled:active:bg-fill-hover ' +
-  'focus-visible:bg-fill-hover ' +
-  inputFocusBorderVisible;
+  'bg-card hover:bg-card active:bg-card border-0 shadow-raised text-foreground ' +
+  surfaceRimHover +
+  ' ' +
+  surfaceRimFocus;
 
 // `filled` was an alias for `default` (both render the filled surface) and has been
 // removed from the variant set. An unknown value makes cva emit nothing for the

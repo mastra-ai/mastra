@@ -18,8 +18,70 @@
   }
 }
 
+/* Assembled here, not in `theme.css`, so `--surface-rim` resolves against the
+ * element wearing the utility: a custom property that referenced it would be
+ * substituted once on the root and inherited as a finished string. */
 @utility shadow-raised {
-  box-shadow: var(--shadow-raised);
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    var(--elevation-raised);
+}
+
+@utility shadow-overlay {
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    var(--elevation-overlay);
+}
+
+/* Interaction states for a surface that already has an opaque fill.
+ *
+ * A `hover:bg-fill-subtle` on such a surface *replaces* its `background-color`,
+ * so the rung composites over the parent instead of over the surface. Measured
+ * on `bg-muted`, that lands 3 levels darker in dark and 5 lighter in light — the
+ * hover inverts across themes. Layered, the same rung is +9/-9 from whatever it
+ * sits on, in both themes, whatever the resting rung.
+ *
+ * The layer is a pseudo-element rather than a `background-image` so it can still
+ * transition, and it stops a pixel short of the edge to leave the inset rim of
+ * `shadow-raised` visible. `isolation` is what keeps a negative z-index from
+ * escaping to an ancestor's stacking context.
+ *
+ * It does not touch the rim: `--surface-rim` inherits, so brightening it here
+ * would repaint the rim of every raised surface nested inside the hovered one.
+ * A field has to move that edge because it cannot carry a pseudo-element; a
+ * surface that can layer keeps the rim as its resting boundary. */
+@utility state-layer {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    transition: background-color var(--duration-fast) var(--ease-out-custom);
+  }
+
+  &:not(:disabled, [aria-disabled='true']) {
+    &:hover::before,
+    &:focus-visible::before {
+      background-color: var(--fill-subtle);
+    }
+
+    &:active::before {
+      background-color: var(--fill);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::before {
+      transition: none;
+    }
+  }
 }
 
 @utility rounded-studio-frame {
@@ -48,10 +110,10 @@
 
 @layer base {
   * {
-    border-color: var(--border1);
+    border-color: var(--border);
   }
   body {
-    background-color: var(--surface1);
+    background-color: var(--sidebar);
     color: var(--neutral6);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -131,7 +193,7 @@
 
 @keyframes fade-row-highlight {
   0% {
-    background-color: var(--surface5);
+    background-color: var(--fill-hover);
   }
 
   100% {

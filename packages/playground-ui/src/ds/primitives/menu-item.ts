@@ -1,5 +1,5 @@
 import { buttonVariants } from '@/ds/components/Button/Button';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // Shared recipe for items rendered inside floating menus (DropdownMenu, ContextMenu,
@@ -55,7 +55,7 @@ export const menuPopupClass = cn(
   'z-50 max-h-[min(var(--max-height-dropdown),var(--available-height))]',
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
-  cn('rounded-xl p-1 text-foreground/90 outline-none', raisedSurfaceStyle),
+  cn('rounded-xl p-1 text-foreground/90 outline-none', overlaySurfaceStyle),
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );

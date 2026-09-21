@@ -1,10 +1,4 @@
 export const Colors = {
-  surface1: 'var(--surface1)',
-  surface2: 'var(--surface2)',
-  surface3: 'var(--surface3)',
-  surface4: 'var(--surface4)',
-  surface5: 'var(--surface5)',
-  surface6: 'var(--surface6)',
   accent1: 'var(--accent1)',
   accent2: 'var(--accent2)',
   accent3: 'var(--accent3)',
@@ -50,8 +44,6 @@ export const Colors = {
 };
 
 export const BorderColors = {
-  border1: 'var(--border1)',
-  border2: 'var(--border2)',
   border: 'var(--border)',
   'border-strong': 'var(--border-strong)',
   'border-hover': 'var(--border-hover)',

@@ -9,7 +9,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'One recipe carries elevation: --shadow-raised. It draws the rim as well as the drop, so a raised surface never adds a border of its own, and nothing else in the system casts a shadow.',
+          'Two utilities carry elevation: shadow-raised for a surface in the flow, shadow-overlay for a detached one. Each assembles the lip, the 1px rim and the drops, so a raised surface never adds a border of its own, and nothing else in the system casts a shadow.',
       },
     },
   },
@@ -22,18 +22,18 @@ export const ElevationFoundations: Story = {
   name: 'Elevation foundations',
   render: () => (
     <FoundationPage
-      eyebrow="Elevation / 1 token"
+      eyebrow="Elevation / 2 tokens"
       title="Elevation foundations"
-      description="Elevation says a surface floats and is dismissible. One recipe covers every raised surface in the shell: app frame, card, popover, dropdown, dialog, tooltip, drawer."
-      note="A raised surface never draws a border: --shadow-raised already contains a 1px ring and, in dark, a top inset highlight."
-      noteAside="Utility: shadow-raised, from src/index.css."
+      description="Elevation encodes distance from the canvas, and the product has two distances: a surface that sits in the flow, and one that is detached and dismissible."
+      note="Neither draws a border: both tokens already contain a 1px ring and, in dark, a top inset highlight."
+      noteAside="Utilities: shadow-raised, shadow-overlay, from src/index.css."
     >
       <FoundationSection
-        label="Raised"
-        description="The one elevation recipe, shared by every surface that floats above the canvas."
+        label="Raised — in the flow"
+        description="App frame, card, list panel, settings container, table head. The bleed stays short on purpose: a tile in a grid inside a scroller is clipped by that scroller, and a shadow reaching past the tile's clearance is sliced into a hard line along the container edge."
       >
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Specimen name="--shadow-raised" note="App frame, card, popover, dropdown, dialog, tooltip, drawer">
+          <Specimen name="shadow-raised" note="raisedSurfaceStyle — the class pair components share">
             <div className="bg-card shadow-raised flex h-32 flex-col justify-end rounded-xl p-4">
               <Txt variant="label">Raised surface</Txt>
               <Txt variant="caption" tone="muted">
@@ -41,11 +41,38 @@ export const ElevationFoundations: Story = {
               </Txt>
             </div>
           </Specimen>
-          <Specimen name="bg-card shadow-raised" note="raisedSurfaceStyle — the class pair components share">
+          <Specimen name="Tiles in a grid" note="Short bleed, so neighbours and the container edge stay clean">
+            <div className="bg-background grid h-32 grid-cols-2 gap-2 overflow-hidden rounded-xl p-2">
+              {['Tile', 'Tile'].map((label, index) => (
+                <div key={index} className="bg-card shadow-raised rounded-lg p-3">
+                  <Txt variant="caption" tone="muted">
+                    {label}
+                  </Txt>
+                </div>
+              ))}
+            </div>
+          </Specimen>
+        </div>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Overlay — detached"
+        description="Popover, dropdown, dialog, drawer, tooltip, a dragged item. Never clipped, and it has to separate from whatever content it lands on, so the falloff carries further."
+      >
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Specimen name="shadow-overlay" note="overlaySurfaceStyle — the class pair popups share">
+            <div className="bg-card shadow-overlay flex h-32 flex-col justify-end rounded-xl p-4">
+              <Txt variant="label">Overlay surface</Txt>
+              <Txt variant="caption" tone="muted">
+                Same rim, longer falloff
+              </Txt>
+            </div>
+          </Specimen>
+          <Specimen name="Over content" note="A nested surface keeps the recipe, never a second border">
             <div className="bg-background flex h-32 items-center justify-center rounded-xl p-4">
-              <div className="bg-card shadow-raised w-full rounded-lg p-3">
+              <div className="bg-card shadow-overlay w-full rounded-lg p-3">
                 <Txt variant="caption" tone="muted">
-                  Nested: a raised surface inside another one keeps the same recipe, never a second border.
+                  Reads as lifted off the surface beneath it.
                 </Txt>
               </div>
             </div>

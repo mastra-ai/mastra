@@ -39,9 +39,7 @@ const sizeKeys = Object.keys(Sizes) as SizeToken[];
 const iconKeys = sizeKeys.filter(key => key.startsWith('icon-'));
 const formKeys = sizeKeys.filter(key => key.startsWith('form-'));
 // `dropdown` caps a popup rather than sizing a control, so it sits in the note.
-const elementKeys = sizeKeys.filter(
-  key => !key.startsWith('icon-') && !key.startsWith('form-') && key !== 'dropdown',
-);
+const elementKeys = sizeKeys.filter(key => !key.startsWith('icon-') && !key.startsWith('form-') && key !== 'dropdown');
 
 // A form rung is declared as a named spacing so it can size a height and a
 // width from one token; everything else is declared as a height.
