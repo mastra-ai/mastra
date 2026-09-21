@@ -578,6 +578,68 @@ describe('MastraFactory.prepare', () => {
     ).rejects.toThrow('security state could not be restored before prompt creation');
   });
 
+  it('heals a review binding that kept factoryProjectId but lost untrustedCheckout', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    (config.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+    const workItems = assembleFactoryApiRoutesSpy.mock.calls[0]![0].domains.workItems;
+    await workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'octo/repo#18' },
+          title: 'Pull request 18',
+          stages: ['intake'],
+          sessions: {},
+          metadata: { authorTrusted: true, baseBranch: 'main' },
+        },
+      },
+      role: 'review',
+      session: { sessionId: 'session-1', branch: 'review/pr-18', threadId: 'session-1' },
+      resourceId: 'session-1',
+      kickoffKey: 'github-review-18',
+      kickoffMessage: null,
+    });
+    // A restarted or partially persisted session: the address survived, the
+    // security posture did not. The project id alone must not skip recovery.
+    const state: Record<string, unknown> = {
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      factoryOrgId: 'org-1',
+    };
+    let persistState = true;
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('controller', {
+      resourceId: 'session-1',
+      threadId: 'session-1',
+      getState: () => state,
+      setState: async (updates: Record<string, unknown>) => {
+        if (persistState) Object.assign(state, updates);
+      },
+    });
+
+    await (config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>)({
+      requestContext: context,
+    });
+
+    expect(state).toMatchObject({
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      factoryOrgId: 'org-1',
+      untrustedCheckout: true,
+      baseRef: 'main',
+    });
+
+    delete state.untrustedCheckout;
+    delete state.baseRef;
+    persistState = false;
+    await expect(
+      (config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>)({
+        requestContext: context,
+      }),
+    ).rejects.toThrow('security state could not be restored before prompt creation');
+  });
+
   it('serves trusted-base instructions, not MR-owned instructions, after a cold GitLab review recovery', async () => {
     const repo = mkdtempSync(join(tmpdir(), 'factory-gitlab-review-prompt-'));
     try {
