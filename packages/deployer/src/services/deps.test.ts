@@ -332,6 +332,23 @@ describe('bun patchedDependencies handling', () => {
     expect(fs.existsSync(join(outputDir, 'bun-patches'))).toBe(false);
   });
 
+  it('skips an in-workspace symlink whose target resolves outside the workspace', async () => {
+    const outsidePatch = join(sourceRoot, '..', 'outside.patch');
+    await writeFile(outsidePatch, 'OUTSIDE');
+    await mkdir(join(sourceRoot, 'patches'), { recursive: true });
+    await symlink(outsidePatch, join(sourceRoot, 'patches', 'escape.patch'));
+    await writeFile(
+      join(sourceRoot, 'package.json'),
+      JSON.stringify({ name: 'test-app', patchedDependencies: { 'foo@1.0.0': 'patches/escape.patch' } }),
+      'utf-8',
+    );
+
+    const deps = new DepsService(sourceRoot);
+    await deps.install({ dir: outputDir });
+
+    expect(fs.existsSync(join(outputDir, 'bun-patches'))).toBe(false);
+  });
+
   it('no-ops when source has no package.json', async () => {
     const deps = new DepsService(sourceRoot);
     await deps.install({ dir: outputDir });

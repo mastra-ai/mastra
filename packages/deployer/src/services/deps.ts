@@ -436,15 +436,11 @@ export class Deps extends MastraBase {
     const resolvedRoot = path.resolve(sourceRoot);
 
     for (const [key, declaredPath] of Object.entries(declared)) {
-      const sourcePath = path.resolve(resolvedRoot, declaredPath);
-      if (!sourcePath.startsWith(`${resolvedRoot}${path.sep}`)) {
-        this.logger.warn(`Skipping bun patch for "${key}": patch file is outside the workspace at ${sourcePath}`);
-        continue;
-      }
-      if (!fs.existsSync(sourcePath)) {
-        this.logger.warn(`Skipping bun patch for "${key}": patch file not found at ${sourcePath}`);
-        continue;
-      }
+      const sourcePath = await this.resolvePatchSource(resolvedRoot, declaredPath, {
+        key,
+        label: 'bun',
+      });
+      if (!sourcePath) continue;
 
       let fileName = path.basename(sourcePath);
       if (usedFileNames.has(fileName)) {
