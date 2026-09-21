@@ -1238,7 +1238,9 @@ export class InternalMastraMCPClient extends MastraBase {
    * short reason when the schema is invalid, null when it is acceptable.
    */
   private getInputSchemaShapeError(schema: unknown, depth = 0): string | null {
-    if (depth > 8) return null; // bounded: pathological nesting is not worth walking
+    if (depth > MAX_JSON_SCHEMA_DEPTH) {
+      return `exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`;
+    }
     if (typeof schema === 'boolean') return null; // `true`/`false` are valid JSON Schema (2020-12)
     if (schema === null || typeof schema !== 'object' || Array.isArray(schema)) {
       return 'expected a schema object';

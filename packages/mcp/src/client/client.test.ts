@@ -645,6 +645,22 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(tools.exotic_tool).toBeDefined();
   });
 
+  it('should skip a tool whose schema is malformed deep below the surface', async () => {
+    const sdkClient = (client as any).client as Client;
+    // A malformed property nested ten levels down must still be caught: the
+    // structural check walks the whole tree, not just the first few levels.
+    let deep: Record<string, unknown> = { type: 'object', properties: { leaf: [] } };
+    for (let i = 0; i < 10; i++) {
+      deep = { type: 'object', properties: { nested: deep } };
+    }
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'deep_tool', inputSchema: deep as any }],
+    });
+
+    const tools = await client.tools();
+    expect(tools.deep_tool).toBeUndefined();
+  });
+
   it('should preserve recursive $ref input schemas when creating tools', async () => {
     const sdkClient = (client as any).client as Client;
     const recursiveInputSchema = {
