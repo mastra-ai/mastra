@@ -308,4 +308,126 @@ describe('GoalManager adapter', () => {
       }),
     );
   });
+
+  // --- #22447 defect 1: the pause cause must outlive the moment it happens ---
+
+  it('applyEvaluation carries the pause cause into the in-memory view', async () => {
+    const manager = new GoalManager();
+    await manager.setGoal(createState(createAgent()), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.applyEvaluation({
+      runsUsed: 4,
+      status: 'paused',
+      pausedReason: 'Scorer threw an error: Scorer Run Failed: Bad Request',
+    });
+
+    expect(manager.getGoal()).toMatchObject({
+      status: 'paused',
+      turnsUsed: 4,
+      pausedReason: 'Scorer threw an error: Scorer Run Failed: Bad Request',
+    });
+  });
+
+  it('applyEvaluation drops a stale pause cause once the goal is no longer paused', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.pause('judge exploded');
+    manager.applyEvaluation({ runsUsed: 5, status: 'active' });
+    agent.updateObjectiveOptions.mockClear();
+    await manager.saveToThread(state);
+
+    expect(manager.getGoal()).toMatchObject({ status: 'active' });
+    expect(manager.getGoal()?.pausedReason).toBeUndefined();
+    // A running goal must not keep a cause a later pause could inherit.
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ threadId: 'parent-thread', status: 'active' }),
+    );
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ pausedReason: expect.anything() }),
+    );
+  });
+
+  it('retires the pause cause when the goal completes', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.pause('judge exploded');
+    manager.markDone();
+    agent.updateObjectiveOptions.mockClear();
+    await manager.saveToThread(state);
+
+    expect(manager.getGoal()).toMatchObject({ status: 'done' });
+    expect(manager.getGoal()?.pausedReason).toBeUndefined();
+    // A finished goal must not persist a cause a later pause could inherit.
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ threadId: 'parent-thread', status: 'done' }),
+    );
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ pausedReason: expect.anything() }),
+    );
+  });
+
+  it('carries the pause cause through the saveToThread create fallback', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.pause('Ran out of evaluation budget (50 runs).');
+
+    agent.updateObjectiveOptions.mockClear();
+    agent.updateObjectiveOptions.mockResolvedValueOnce(undefined);
+
+    await manager.saveToThread(state);
+
+    // First call misses (no persisted record yet), so the save creates one and
+    // re-applies the paused status — the cause has to survive that second hop.
+    expect(agent.updateObjectiveOptions).toHaveBeenCalledTimes(2);
+    expect(agent.updateObjectiveOptions).toHaveBeenLastCalledWith({
+      threadId: 'parent-thread',
+      status: 'paused',
+      pausedReason: 'Ran out of evaluation budget (50 runs).',
+    });
+  });
+
+  it('exposes the pause cause loaded from the durable objective record', async () => {
+    const agent = createAgent();
+    agent.getObjective.mockResolvedValue(
+      makeRecord({ status: 'paused', pausedReason: 'Ran out of evaluation budget (50 runs).' }),
+    );
+    const manager = new GoalManager();
+
+    await manager.loadFromThread(createState(agent));
+
+    expect(manager.getGoal()).toMatchObject({
+      status: 'paused',
+      pausedReason: 'Ran out of evaluation budget (50 runs).',
+    });
+  });
+
+  it('loadFromThreadMetadata keeps the pause cause from legacy metadata', () => {
+    const manager = new GoalManager();
+
+    manager.loadFromThreadMetadata({
+      goal: {
+        id: 'goal-1',
+        objective: 'finish the task',
+        status: 'paused',
+        turnsUsed: 4,
+        maxTurns: 20,
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+        startedAt: '2026-05-15T10:00:00.000Z',
+        pausedReason: 'The goal judge failed to evaluate the objective.',
+      },
+    });
+
+    expect(manager.getGoal()).toMatchObject({
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+  });
 });

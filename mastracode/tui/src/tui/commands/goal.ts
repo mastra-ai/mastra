@@ -126,7 +126,8 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
 }
 
 function formatGoalStatus(goal: GoalState): string {
-  return `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]`;
+  const reason = goal.status === 'paused' && goal.pausedReason ? ` — paused: ${goal.pausedReason}` : '';
+  return `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]${reason}`;
 }
 
 function formatGoalStatusRow(goal: GoalState): string {

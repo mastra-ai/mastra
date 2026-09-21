@@ -44,6 +44,8 @@ export interface GoalState {
   startedAt: string;
   activeStartedAt?: string;
   activeDurationMs?: number;
+  /** Why the goal paused (judge failure, budget exhaustion, ...). Only set while paused. */
+  pausedReason?: string;
 }
 
 // =============================================================================
@@ -83,6 +85,7 @@ export class GoalManager {
       maxTurns,
       judgeModelId,
       startedAt: new Date(this.record.startedAt).toISOString(),
+      ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
       activeDurationMs:
         this.agentId && this.threadId
           ? getGoalActivityDurationMs({
@@ -195,7 +198,7 @@ export class GoalManager {
 
   markDone(): void {
     if (this.record) {
-      this.record = { ...this.record, status: 'done', updatedAt: Date.now() };
+      this.record = { ...this.record, status: 'done', pausedReason: undefined, updatedAt: Date.now() };
     }
   }
 
@@ -210,9 +213,16 @@ export class GoalManager {
    * Sync the latest objective record from ThreadState into the in-memory view.
    * Called from the `goal` stream-chunk handler after each evaluation.
    */
-  applyEvaluation(update: { runsUsed: number; status: GoalStatus }): GoalState | null {
+  applyEvaluation(update: { runsUsed: number; status: GoalStatus; pausedReason?: string }): GoalState | null {
     if (!this.record) return null;
-    this.record = { ...this.record, runsUsed: update.runsUsed, status: update.status, updatedAt: Date.now() };
+    this.record = {
+      ...this.record,
+      runsUsed: update.runsUsed,
+      status: update.status,
+      // The cause only describes a paused goal; any other status retires it.
+      pausedReason: update.status === 'paused' ? update.pausedReason : undefined,
+      updatedAt: Date.now(),
+    };
     return this.getGoal();
   }
 
@@ -319,6 +329,7 @@ export class GoalManager {
         activeDurationMs: normalizeActiveDurationMs(saved.activeDurationMs),
         maxRuns: saved.maxTurns ?? DEFAULT_MAX_TURNS,
         judgeModelId: saved.judgeModelId ?? '',
+        ...(saved.pausedReason ? { pausedReason: saved.pausedReason } : {}),
         startedAt: saved.startedAt ? Date.parse(saved.startedAt) || Date.now() : Date.now(),
         updatedAt: Date.now(),
         id: saved.id ?? randomUUID(),
