@@ -54,6 +54,22 @@ The post-call hook ran and saved summaries. The example also logged an OpenAI st
 
 These runs had `LIVEKIT_RECORDING_ENABLED=false`. They do not validate an S3 upload or Studio recording playback on the candidate versions. No recording credentials were available in the test environment.
 
+## Metrics and delivery follow-up (`1.0.0-next.1`)
+
+The next local archive adds common metrics, speech-segment flushing, the delivery hook, and the limited benchmark kit. Its SHA-256 is `c6288f86c68d2d933d32bf2ad0bff7875eb0ba77cd25cae95f83783696ebf8df`. It was installed into the same disposable example with Agents 1.9.0 and Node 22.13.0; it was not published.
+
+- All 256 tests across 23 files passed on the existing Agents 1.7.1 installation and the isolated Agents 1.9.0 baseline. The 1.9 suite passed on both Node 25.8.1 and 22.13.0. TypeScript, focused ESLint/Oxlint, ESM/CJS/declaration builds, Remark, and Vale passed. The commit hook could not invoke `corepack`; the relevant checks were run directly with pnpm.
+- A test using the real SDK `AgentSession` and controlled audio output confirmed that the acknowledgment reaches the TTS node before the blocked tool finishes. Agent, remote SSE, and workflow tests cover boundaries and tool timing; cancellation, failed observers, unknown transcript/timing data, and overlapping speech handles have regression coverage.
+- Two further 65-second Studio calls used synthetic microphone input and real LiveKit Cloud, Deepgram, Cartesia, and model requests. Both had positive incoming audio energy, zero lost inbound packets, and returned to idle after explicit hangup. Received audio was 154,494 bytes and 169,477 bytes respectively.
+- The ordinary reply's generation and speech records shared a turn ID and attempt ID. LiveKit reported first audio at about 3,345 ms and completed playback at 11,659 ms after caller speech ended. These are one-call server measurements, not performance baselines or proof of listener hearing.
+- The interruption call reproduced the important distinction: generation completed in about 2,924 ms, but the same attempt's playback was interrupted later. `onSpeechComplete` reported a partial committed transcript and no completion latency. A later turn completed normally. Both call traces finalized and contain the correlated generation and speech event records.
+- The greeting handles had no committed assistant messages in `chatItems`. Their hook records correctly omitted transcript and timing instead of substituting generated greeting text. A completed speech handle alone is insufficient evidence of audio delivery.
+- Benchmark tests distinguish filler from the expected played answer, retain timeout/failure trials in success rates, separate versions and cold/warm runs, reject incompatible measurement labels, and verify the dataset submission shape. The CI fixture runs no model or real business tool. The browser calls validate the package; they are not a distribution benchmark or a bundled real-audio benchmark adapter.
+
+The hooks do not reconcile memory, and the benchmark watchdog does not establish remote tool deadlines. Direct generator consumers must handle the new boundary objects; `MastraLLM` users need the documented node adapter for flushing. Repository manifests and lockfiles remain byte-for-byte unchanged from the start of this increment. The phone, S3, Linux deployment, and release-metadata gates below remain open.
+
+Temporary follow-up evidence includes `browser-next1-result.json`, `browser-next1-interruption-result.json`, `next1-metrics.jsonl`, `next1-speech.jsonl`, and `next1-trace-evidence.json` under the same prerelease directory. The pipeline and benchmark implementations have separate commits, each including tests and documentation.
+
 ## Remaining release gates
 
 1. **Real phone call:** the configured project has zero inbound trunks, zero outbound trunks, and zero SIP dispatch rules. Supply a working SIP setup and an authorized test destination before attempting a call. A successful agent dispatch alone is not phone validation.
