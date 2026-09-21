@@ -262,13 +262,22 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
   };
 }
 
+const GITHUB_PULL_REQUEST_URL = /^https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+\/?$/;
+
 export function parseCreatedPullRequest(context: {
   toolName: string;
   input: unknown;
   output?: unknown;
   error?: unknown;
 }) {
-  if (context.toolName !== 'execute_command' || context.error) return undefined;
+  if (context.error) return undefined;
+  // The provider-neutral change-request tool reports the created PR directly;
+  // subscribe on it exactly as on a successful `gh pr create`.
+  if (context.toolName === 'source_control_create_change_request') {
+    const url = (context.output as { url?: unknown } | undefined)?.url;
+    return typeof url === 'string' && GITHUB_PULL_REQUEST_URL.test(url) ? url.replace(/\/$/, '') : undefined;
+  }
+  if (context.toolName !== 'execute_command') return undefined;
   const command = (context.input as { command?: unknown } | undefined)?.command;
   if (typeof command !== 'string' || !runsPullRequestCreate(command)) return undefined;
   const output = context.output as { stdout?: unknown; result?: unknown } | undefined;
