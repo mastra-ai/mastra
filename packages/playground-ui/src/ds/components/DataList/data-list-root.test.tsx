@@ -336,58 +336,44 @@ describe('DataListRoot', () => {
   });
 
   describe('SortableTopCell', () => {
-    it('starts with the default direction and reverses the active direction', () => {
+    it('starts ascending when unsorted and reverses the active sort, passing the column key', () => {
       const onSortChange = vi.fn();
       const { rerender } = render(
         <DataList columns="1fr">
           <DataList.Top>
-            <DataList.SortableTopCell onSortChange={onSortChange}>Name</DataList.SortableTopCell>
+            <DataList.SortableTopCell sortKey="name" onSortChange={onSortChange}>
+              Name
+            </DataList.SortableTopCell>
           </DataList.Top>
         </DataList>,
       );
 
       fireEvent.click(screen.getByRole('button', { name: /Name.*not sorted.*sort ascending/i }));
-      expect(onSortChange).toHaveBeenLastCalledWith('ascending');
+      expect(onSortChange).toHaveBeenLastCalledWith('asc', 'name');
 
       rerender(
         <DataList columns="1fr">
           <DataList.Top>
-            <DataList.SortableTopCell sortDirection="ascending" onSortChange={onSortChange}>
+            <DataList.SortableTopCell sortKey="name" sort="asc" onSortChange={onSortChange}>
               Name
             </DataList.SortableTopCell>
           </DataList.Top>
         </DataList>,
       );
       fireEvent.click(screen.getByRole('button', { name: /Name.*sorted ascending.*sort descending/i }));
-      expect(onSortChange).toHaveBeenLastCalledWith('descending');
+      expect(onSortChange).toHaveBeenLastCalledWith('desc', 'name');
 
       rerender(
         <DataList columns="1fr">
           <DataList.Top>
-            <DataList.SortableTopCell sortDirection="descending" onSortChange={onSortChange}>
+            <DataList.SortableTopCell sortKey="name" sort="desc" onSortChange={onSortChange}>
               Name
             </DataList.SortableTopCell>
           </DataList.Top>
         </DataList>,
       );
       fireEvent.click(screen.getByRole('button', { name: /Name.*sorted descending.*sort ascending/i }));
-      expect(onSortChange).toHaveBeenLastCalledWith('ascending');
-    });
-
-    it('supports descending as the first direction', () => {
-      const onSortChange = vi.fn();
-      render(
-        <DataList columns="1fr">
-          <DataList.Top>
-            <DataList.SortableTopCell defaultSortDirection="descending" onSortChange={onSortChange}>
-              Date
-            </DataList.SortableTopCell>
-          </DataList.Top>
-        </DataList>,
-      );
-
-      fireEvent.click(screen.getByRole('button', { name: /Date.*not sorted.*sort descending/i }));
-      expect(onSortChange).toHaveBeenCalledWith('descending');
+      expect(onSortChange).toHaveBeenLastCalledWith('asc', 'name');
     });
   });
 });
