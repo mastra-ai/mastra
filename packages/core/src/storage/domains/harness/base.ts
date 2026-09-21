@@ -1179,6 +1179,12 @@ export abstract class HarnessStorage extends StorageDomain {
     throw new HarnessTerminalHandoffUnsupportedError();
   }
 
+  async loadTerminalAdmissionByRun(
+    _input: HarnessPendingTerminalAdmissionLoadInput,
+  ): Promise<import('./terminal-handoff').HarnessTerminalAdmissionRecord | null> {
+    throw new HarnessTerminalHandoffUnsupportedError();
+  }
+
   async loadTerminalIntent(_input: HarnessTerminalIntentLoadInput): Promise<HarnessTerminalIntent | null> {
     throw new HarnessTerminalHandoffUnsupportedError();
   }

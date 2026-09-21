@@ -1442,6 +1442,237 @@ describe('Session.message() — default path', () => {
     expect(record?.pendingResume?.runId).toBe(admission!.runId);
   });
 
+  it('cancels the deferred terminal admission when the session is cancelled', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-session-cancel', generation: 1 };
+    const failures: Error[] = [];
+    const result = await session.message({
+      content: 'needs approval',
+      admissionId: 'session-cancel-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      onTerminalCommitError: err => failures.push(err),
+    });
+    expect(result.finishReason).toBe('suspended');
+    const pending = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'session-cancel-admission',
+      executionGrant: grant,
+    });
+    expect(pending?.status).toBe('pending');
+
+    await session.cancel({ reason: 'user cancelled' });
+
+    const cancelled = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'session-cancel-admission',
+      executionGrant: grant,
+    });
+    expect(cancelled?.status).toBe('cancelled');
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.name).toBe('HarnessTerminalHandoffError:harness.terminal_cancelled');
+  });
+
+  it('finishes retried resume bookkeeping without re-running the provider or double-accounting usage', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+      usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+    });
+    agent.enqueueRun({
+      finishReason: 'stop',
+      text: 'resumed answer',
+      usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 },
+      totalUsage: { inputTokens: 6, outputTokens: 8, totalTokens: 14 },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-committed-retry', generation: 1 };
+    const result = await session.message({
+      content: 'needs approval',
+      admissionId: 'committed-retry-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(result.finishReason).toBe('suspended');
+    expect((await storage.loadSession({ harnessName: 'default', sessionId: session.id }))?.tokenUsage.totalTokens).toBe(
+      5,
+    );
+
+    // The terminal commit seals the grant, then the pendingResume-clearing
+    // flush is lost. `resumedAt` and the committed row are both durable, so
+    // the retry must finish the remaining bookkeeping off the cached run —
+    // not re-run the provider, and not re-apply the resumed usage delta.
+    const originalCommit = storage.commitTerminalHandoff.bind(storage);
+    let commitSealed = false;
+    vi.spyOn(storage, 'commitTerminalHandoff').mockImplementation(async input => {
+      const receipt = await originalCommit(input);
+      commitSealed = true;
+      return receipt;
+    });
+    const originalSave = storage.saveSession.bind(storage);
+    let failedOnce = false;
+    vi.spyOn(storage, 'saveSession').mockImplementation(async (record: any, opts?: any) => {
+      if (commitSealed && !failedOnce) {
+        failedOnce = true;
+        throw new Error('pendingResume flush lost');
+      }
+      return originalSave(record, opts);
+    });
+
+    await expect(session.respondToToolApproval({ approved: true })).rejects.toThrow(
+      'An internal harness error occurred',
+    );
+    expect(agent.resumeCalls).toHaveLength(1);
+    const sealed = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'committed-retry-admission',
+      executionGrant: grant,
+    });
+    expect(sealed?.status).toBe('committed');
+    expect((await storage.loadSession({ harnessName: 'default', sessionId: session.id }))?.pendingResume).toBeDefined();
+
+    vi.restoreAllMocks();
+    const retried = await session.respondToToolApproval({ approved: true });
+    expect(retried.text).toBe('resumed answer');
+    expect(agent.resumeCalls).toHaveLength(1);
+    expect(agent.streamCalls).toHaveLength(1);
+    const after = await storage.loadSession({ harnessName: 'default', sessionId: session.id });
+    expect(after?.pendingResume).toBeUndefined();
+    // Suspended segment (5) + resumed remainder (14-5) applied exactly once.
+    expect(after?.tokenUsage.totalTokens).toBe(14);
+  });
+
+  it('parks the pending resume from an adopted duplicate stream when the original bookkeeping died', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    let releaseRun!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseRun = resolve;
+      }),
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-adopted', generation: 1 };
+    const opts = {
+      content: 'suspending stream',
+      admissionId: 'adopted-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      stream: true,
+    } as const;
+
+    const first = await session.message({ ...opts });
+    await vi.waitFor(() => expect(agent.streamCalls).toHaveLength(1));
+    // The duplicate adopts the still-live run's stream.
+    const second = await session.message({ ...opts });
+    expect(second).toBe(first);
+
+    // Kill the original caller's suspend-capture flush: its bookkeeping dies
+    // before pendingResume is parked, leaving settlement to the adoptee.
+    const originalSave = storage.saveSession.bind(storage);
+    let failedOnce = false;
+    vi.spyOn(storage, 'saveSession').mockImplementation(async (record: any, o?: any) => {
+      if (!failedOnce) {
+        failedOnce = true;
+        throw new Error('suspend capture flush lost');
+      }
+      return originalSave(record, o);
+    });
+
+    releaseRun();
+    await vi.waitFor(async () => {
+      const record = await storage.loadSession({ harnessName: 'default', sessionId: session.id });
+      expect(record?.pendingResume?.toolCallId).toBe('tc-1');
+    });
+    vi.restoreAllMocks();
+
+    // The adoptee's commit defers on the suspended output — the grant stays
+    // pending for the approval-gated resume instead of sealing a false winner.
+    const admission = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'adopted-admission',
+      executionGrant: grant,
+    });
+    expect(admission?.status).toBe('pending');
+  });
+
   it('binds logical identity to the admitted message hash', async () => {
     const { harness, agent } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

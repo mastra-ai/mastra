@@ -5,6 +5,7 @@ import {
   HarnessTerminalHandoffClaimConflictError,
   HarnessTerminalHandoffFencedError,
   HarnessTerminalHandoffIdentityConflictError,
+  HarnessTerminalHandoffUnsupportedError,
   HarnessTerminalHandoffValidationError,
   TABLE_HARNESS_TERMINAL_ADMISSIONS,
   TABLE_HARNESS_TERMINAL_INTENTS,
@@ -890,5 +891,79 @@ describe('HarnessPG native terminal handoff', () => {
         runId: input.runId,
       }),
     ).resolves.toBeNull();
+  });
+
+  it('loads a terminal admission by run across pending and committed statuses', async () => {
+    const session = await createNativeSession(harness(), 'by-run-session');
+    const input = admissionFor(session, 'by-run');
+    await harness().writeMessageResultEvidence(pendingEvidence(input));
+    await harness().admitTerminalHandoff(input);
+
+    const byRun = { harnessName: HARNESS, sessionId: session.id, runId: input.runId };
+    // The settlement-retry probe must see the row in ANY status: a commit that
+    // sealed before the caller's bookkeeping finished is 'committed', not
+    // 'pending', and still owns the run.
+    await expect(harness().loadTerminalAdmissionByRun(byRun)).resolves.toMatchObject({
+      id: harnessTerminalAdmissionId(input),
+      status: 'pending',
+    });
+
+    await harness().commitTerminalHandoff(commitInput(input, 'by-run'));
+    await expect(harness().loadPendingTerminalAdmission(byRun)).resolves.toBeNull();
+    await expect(harness().loadTerminalAdmissionByRun(byRun)).resolves.toMatchObject({
+      id: harnessTerminalAdmissionId(input),
+      status: 'committed',
+    });
+    await expect(harness().loadTerminalAdmissionByRun({ ...byRun, runId: 'run-unknown' })).resolves.toBeNull();
+  });
+
+  it('reports terminal handoff as unsupported and rejects terminal operations when disabled', async () => {
+    const disabledStore = terminalStore('pg-harness-terminal-disabled-store', schemaName, { enabled: false });
+    await disabledStore.init();
+    try {
+      const disabled = disabledStore.stores.harness!;
+      expect(disabled.supportsTerminalHandoff).toBe(false);
+      const input = admissionFor(
+        { id: 'disabled-session', resourceId: 'r', threadId: 't', sessionIncarnation: 'inc' } as SessionRecord,
+        'disabled',
+      );
+      const expected = HarnessTerminalHandoffUnsupportedError;
+      await expect(disabled.admitTerminalHandoff(input)).rejects.toBeInstanceOf(expected);
+      await expect(
+        disabled.loadTerminalAdmission({
+          harnessName: HARNESS,
+          sessionId: input.sessionId,
+          admissionId: input.admissionId,
+          executionGrant: input.executionGrant,
+        }),
+      ).rejects.toBeInstanceOf(expected);
+      await expect(
+        disabled.loadPendingTerminalAdmission({
+          harnessName: HARNESS,
+          sessionId: input.sessionId,
+          runId: input.runId,
+        }),
+      ).rejects.toBeInstanceOf(expected);
+      await expect(
+        disabled.loadTerminalAdmissionByRun({
+          harnessName: HARNESS,
+          sessionId: input.sessionId,
+          runId: input.runId,
+        }),
+      ).rejects.toBeInstanceOf(expected);
+      await expect(disabled.commitTerminalHandoff(commitInput(input, 'disabled'))).rejects.toBeInstanceOf(expected);
+      await expect(
+        disabled.loadTerminalIntent({
+          harnessName: HARNESS,
+          intentId: harnessTerminalIntentId(harnessTerminalAdmissionId(input)),
+        }),
+      ).rejects.toBeInstanceOf(expected);
+      await expect(
+        disabled.claimTerminalIntents({ harnessName: HARNESS, consumerId: 'w-1', limit: 1, now: Date.now() }),
+      ).rejects.toBeInstanceOf(expected);
+      await expect(disabled.getTerminalQueuePressure({ harnessName: HARNESS })).rejects.toBeInstanceOf(expected);
+    } finally {
+      await disabledStore.close();
+    }
   });
 });

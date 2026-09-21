@@ -37,6 +37,7 @@ import {
   HarnessTerminalHandoffFencedError,
   HarnessTerminalHandoffIdentityConflictError,
   HarnessTerminalHandoffNotFoundError,
+  HarnessTerminalHandoffUnsupportedError,
   HarnessTerminalHandoffValidationError,
   TABLE_CONFIGS,
   TABLE_HARNESS_ATTACHMENT_REFERENCES,
@@ -802,7 +803,7 @@ export class HarnessPG extends HarnessStorage {
   }
 
   override get supportsTerminalHandoff(): boolean {
-    return true;
+    return this.terminalHandoff.enabled;
   }
 
   static getDefaultIndexDefs(schemaPrefix: string) {
@@ -4681,7 +4682,14 @@ export class HarnessPG extends HarnessStorage {
   // Native chat terminal handoff
   // -------------------------------------------------------------------------
 
+  #assertTerminalHandoffEnabled(): void {
+    if (!this.terminalHandoff.enabled) {
+      throw new HarnessTerminalHandoffUnsupportedError();
+    }
+  }
+
   async admitTerminalHandoff(input: HarnessTerminalAdmissionInput): Promise<HarnessTerminalAdmissionReceipt> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     const harnessName = this.#resolveHarnessName(input.harnessName);
     const admissionInput = { ...input, harnessName };
@@ -4785,6 +4793,7 @@ export class HarnessPG extends HarnessStorage {
   async loadTerminalAdmission(
     input: HarnessTerminalAdmissionLoadInput,
   ): Promise<HarnessTerminalAdmissionRecord | null> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     const harnessName = this.#resolveHarnessName(input.harnessName);
     const id = harnessTerminalAdmissionId({
@@ -4803,11 +4812,27 @@ export class HarnessPG extends HarnessStorage {
   async loadPendingTerminalAdmission(
     input: HarnessPendingTerminalAdmissionLoadInput,
   ): Promise<HarnessTerminalAdmissionRecord | null> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     const harnessName = this.#resolveHarnessName(input.harnessName);
     const result = await this.#client.execute({
       sql: `SELECT * FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
             WHERE harness_name = ? AND session_id = ? AND run_id = ? AND status = 'pending'
+            LIMIT 1`,
+      args: [harnessName, input.sessionId, input.runId],
+    });
+    return result.rows[0] ? rowToHarnessTerminalAdmission(result.rows[0] as Record<string, unknown>) : null;
+  }
+
+  async loadTerminalAdmissionByRun(
+    input: HarnessPendingTerminalAdmissionLoadInput,
+  ): Promise<HarnessTerminalAdmissionRecord | null> {
+    this.#assertTerminalHandoffEnabled();
+    await this.#ensureTerminalHandoffTables();
+    const harnessName = this.#resolveHarnessName(input.harnessName);
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
+            WHERE harness_name = ? AND session_id = ? AND run_id = ?
             LIMIT 1`,
       args: [harnessName, input.sessionId, input.runId],
     });
@@ -4820,6 +4845,7 @@ export class HarnessPG extends HarnessStorage {
     terminalResult: HarnessTerminalResult;
     projection: HarnessTerminalProjection;
   }): Promise<HarnessTerminalCommitReceipt> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureMessageResultsTable();
     await this.#ensureTerminalHandoffTables();
     const harnessName = this.#resolveHarnessName(input.admission.harnessName);
@@ -5064,6 +5090,7 @@ export class HarnessPG extends HarnessStorage {
   }
 
   async loadTerminalIntent(input: HarnessTerminalIntentLoadInput): Promise<HarnessTerminalIntent | null> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     const harnessName = this.#resolveHarnessName(input.harnessName);
     const result = await this.#client.execute({
@@ -5075,6 +5102,7 @@ export class HarnessPG extends HarnessStorage {
   }
 
   async cancelTerminalHandoff(input: HarnessTerminalCancelInput): Promise<HarnessTerminalCancelReceipt> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     validateHarnessTerminalExecutionGrant(input.executionGrant);
     const harnessName = this.#resolveHarnessName(input.harnessName);
@@ -5170,6 +5198,7 @@ export class HarnessPG extends HarnessStorage {
   }
 
   async claimTerminalIntents(input: HarnessTerminalClaimInput): Promise<HarnessTerminalClaimReceipt> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     const harnessName = this.#resolveHarnessName(input.harnessName);
     if (
@@ -5250,6 +5279,7 @@ export class HarnessPG extends HarnessStorage {
   async renewTerminalIntent(
     input: HarnessTerminalClaimIdentity & { leaseMs?: number },
   ): Promise<HarnessTerminalRenewReceipt> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     const now = input.now ?? Date.now();
     const leaseMs = input.leaseMs ?? this.terminalHandoff.claimLeaseMs;
@@ -5285,6 +5315,7 @@ export class HarnessPG extends HarnessStorage {
   }
 
   async ackTerminalIntent(input: HarnessTerminalClaimIdentity): Promise<HarnessTerminalAckReceipt> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     const now = input.now ?? Date.now();
     assertTerminalClock(now, 'now');
@@ -5338,6 +5369,7 @@ export class HarnessPG extends HarnessStorage {
   async failTerminalIntent(
     input: HarnessTerminalClaimIdentity & { error: HarnessTerminalError },
   ): Promise<HarnessTerminalFailReceipt> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     const now = input.now ?? Date.now();
     assertTerminalClock(now, 'now');
@@ -5399,6 +5431,7 @@ export class HarnessPG extends HarnessStorage {
   }
 
   async getTerminalQueuePressure(input: { harnessName?: string }): Promise<HarnessTerminalQueuePressure> {
+    this.#assertTerminalHandoffEnabled();
     await this.#ensureTerminalHandoffTables();
     const harnessName = this.#resolveHarnessName(input.harnessName);
     const result = await this.#client.execute({

@@ -216,7 +216,7 @@ export class InMemoryHarness extends HarnessStorage {
   }
 
   override get supportsTerminalHandoff(): boolean {
-    return true;
+    return this.terminalHandoff.enabled;
   }
 
   override get supportsSessionRecordProjection(): boolean {
@@ -1534,6 +1534,21 @@ export class InMemoryHarness extends HarnessStorage {
         admission.sessionId === input.sessionId &&
         admission.runId === input.runId &&
         admission.status === 'pending'
+      ) {
+        return cloneHarnessTerminal(admission);
+      }
+    }
+    return null;
+  }
+
+  async loadTerminalAdmissionByRun(input: HarnessPendingTerminalAdmissionLoadInput) {
+    this.assertTerminalHandoffEnabled();
+    const namespace = resolveHarnessName(input.harnessName, this.harnessName);
+    for (const admission of this.db.harnessTerminalAdmissions.values()) {
+      if (
+        admission.harnessName === namespace &&
+        admission.sessionId === input.sessionId &&
+        admission.runId === input.runId
       ) {
         return cloneHarnessTerminal(admission);
       }

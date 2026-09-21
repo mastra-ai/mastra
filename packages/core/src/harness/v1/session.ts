@@ -1822,7 +1822,7 @@ export class Session {
    */
   private readonly _completedRuns = new Map<
     string,
-    { ok: true; full: FullOutput<unknown> } | { ok: false; err: unknown }
+    { ok: true; full: FullOutput<unknown>; resumeAccountingKey?: string } | { ok: false; err: unknown }
   >();
   /**
    * Message admission retries can observe `_completedRuns` before the original
@@ -5277,6 +5277,10 @@ export class Session {
         error: projectedError,
       });
     }
+    // A cancelled suspended turn may have deferred a terminal admission —
+    // settle the pending grant so its retained observers and durable row do
+    // not outlive the owning interaction.
+    await this._cancelTerminalizedPendingAdmission(pending, projectedError);
   }
 
   /**
@@ -5339,6 +5343,12 @@ export class Session {
         error: projectedError,
       });
     }
+    // A discarded suspension may have deferred a terminal admission — settle
+    // the pending grant alongside the other durable evidence BEFORE the
+    // pending row clears below. If cancellation fails here the claim marker
+    // (`expiryStartedAt`) stays on the row, the interaction remains
+    // discoverable, and the pending-deadline recovery finishes the cancel.
+    await this._cancelTerminalizedPendingAdmission(pending, projectedError);
 
     let discarded = false;
     await this._flushUpdate(prev => {
@@ -5410,10 +5420,6 @@ export class Session {
 
     this._clearPendingInteractionExpiryTimer();
     this._pendingReplacementToolSurfaces.delete(pending.runId);
-    // A discarded suspension may have deferred a terminal admission — settle
-    // the pending grant so retained observers and the durable handoff do not
-    // outlive the interaction that owned them.
-    await this._cancelTerminalizedPendingAdmission(pending, projectedError);
     if (queuedItemId !== undefined) {
       const resolver = this._queueResolvers.get(queuedItemId);
       if (resolver) {
@@ -8883,41 +8889,50 @@ export class Session {
               // The returned stream may have been adopted after the original
               // caller died between dispatch and bookkeeping — retain this
               // retry's terminal observers AND take settlement ownership: a
-              // detached task drives the commit when the run ends. The
-              // per-runId in-flight dedup makes this a no-op when the original
-              // caller is still alive and commits first.
-              if (
+              // detached task runs the durable completion bookkeeping the
+              // original caller would have run (a suspended outcome must still
+              // park its pendingResume or the approval can never be answered)
+              // and then drives the terminal commit when the run ends. The
+              // per-runId in-flight dedup makes the commit a no-op when the
+              // original caller is still alive and commits first.
+              const adoptedTerminal =
                 this._terminalFinalizer !== undefined &&
                 opts.executionAuthorityGrant !== undefined &&
                 runId !== undefined &&
                 evidence.admissionId !== undefined &&
-                evidence.admissionHash !== undefined
-              ) {
-                this._retainTerminalObservers(runId, {
+                evidence.admissionHash !== undefined;
+              if (adoptedTerminal) {
+                this._retainTerminalObservers(runId!, {
                   onReceipt: opts.onTerminalCommit,
                   onFailure: opts.onTerminalCommitError,
                 });
-                const identity = this._prepareTerminalIdentity(
-                  this._messageAdmissionIdentity(evidence.admissionId),
-                  evidence.admissionId,
-                  evidence.admissionHash,
-                  opts.executionAuthorityGrant,
-                );
-                const duplicateMode = this._messageDuplicateModeId(evidence, opts);
-                const duplicateModel = this._messageDuplicateModelId(evidence, opts);
-                void (output as { getFullOutput: () => Promise<unknown> })
-                  .getFullOutput()
-                  .then(full =>
-                    this._commitTerminalHandoff(identity, full as FullOutput<unknown>, {
+              }
+              const identity = adoptedTerminal
+                ? this._prepareTerminalIdentity(
+                    this._messageAdmissionIdentity(evidence.admissionId!),
+                    evidence.admissionId!,
+                    evidence.admissionHash!,
+                    opts.executionAuthorityGrant!,
+                  )
+                : undefined;
+              const duplicateMode = this._messageDuplicateModeId(evidence, opts);
+              const duplicateModel = this._messageDuplicateModelId(evidence, opts);
+              void (output as { getFullOutput: () => Promise<unknown> })
+                .getFullOutput()
+                .then(async full => {
+                  const fullOutput = full as FullOutput<unknown>;
+                  await this._prepareCachedDuplicateMessageCompletion(fullOutput, evidence, opts, activeDeleted);
+                  if (identity !== undefined) {
+                    await this._commitTerminalHandoff(identity, fullOutput, {
                       modeId: duplicateMode,
                       modelId: duplicateModel,
-                    }),
-                  )
-                  .catch(() => {
-                    // Settlement failures drain retained observers inside the
-                    // commit helper; the admission stays pending for recovery.
-                  });
-              }
+                    });
+                  }
+                })
+                .catch(() => {
+                  // Settlement failures drain retained observers inside the
+                  // commit helper; the admission stays pending for recovery.
+                });
               return output;
             }
           }
@@ -9187,12 +9202,19 @@ export class Session {
     if (this._terminalFinalizer === undefined) return undefined;
     const cached = this._completedRuns.get(pending.runId);
     if (cached === undefined || !cached.ok || cached.full.finishReason === 'suspended') return undefined;
-    const admission = await this._storage.loadPendingTerminalAdmission({
+    // Probe by run regardless of status: a commit may have sealed the grant
+    // while the post-commit bookkeeping (the pendingResume-clearing flush)
+    // failed — the admission is then 'committed' rather than 'pending', and
+    // the retry must still finish the remaining bookkeeping. A cancelled or
+    // fenced row means the interaction was already terminalized elsewhere.
+    const admission = await this._storage.loadTerminalAdmissionByRun({
       harnessName: this._record.harnessName,
       sessionId: this.id,
       runId: pending.runId,
     });
-    if (!admission) return undefined;
+    if (!admission || (admission.status !== 'pending' && admission.status !== 'committed')) {
+      return undefined;
+    }
 
     const { expectedKind, responseMode, responseId } = options;
     const pendingQueuedItemId = this._queuedItemIdForPendingResume(pending);
@@ -14831,6 +14853,26 @@ export class Session {
         ? this._tokenUsageDeltaFromFullOutput(full, pending.accountedTokenUsage)
         : undefined;
     if (full.finishReason === 'suspended') this._captureTurnRunId(full);
+    // `_recordTurnCompletion` mutates the live counter immediately (unlike the
+    // flush-carried deltas, which apply only on a successful save), so a
+    // settlement retry that re-enters this helper must not re-apply the same
+    // pending generation's delta. The marker lives on the shared completed-run
+    // entry the retry already requires, keyed by the durable pending identity.
+    const resumeAccountingKey = pendingInteractionGenerationKey({
+      kind: pending.kind,
+      itemId: pending.itemId,
+      runId: pending.runId,
+      toolCallId: pending.toolCallId,
+      requestedAt: pending.requestedAt,
+    });
+    const resumeAccountingDone = (): boolean => {
+      const entry = this._completedRuns.get(pending.runId);
+      return entry !== undefined && entry.ok === true && entry.resumeAccountingKey === resumeAccountingKey;
+    };
+    const markResumeAccountingDone = (): void => {
+      const entry = this._completedRuns.get(pending.runId);
+      if (entry !== undefined && entry.ok === true) entry.resumeAccountingKey = resumeAccountingKey;
+    };
     let alreadyAccounted = false;
     if (completingQueuedItemId !== undefined) {
       if (modeFlipTarget && modeFlipTarget !== previousModeId) {
@@ -14865,17 +14907,19 @@ export class Session {
           throw new QueuePostRunFinalizationPendingError(Date.now() + QUEUE_POST_RUN_FINALIZATION_RETRY_MS, err);
         }
       }
-      if (!alreadyAccounted) {
+      if (!alreadyAccounted && !resumeAccountingDone()) {
         this._recordTurnCompletion(full, {
           persist: false,
           accountedCumulative: pending.accountedTokenUsage,
         });
+        markResumeAccountingDone();
       }
-    } else if (full.finishReason !== 'suspended') {
+    } else if (full.finishReason !== 'suspended' && !resumeAccountingDone()) {
       this._recordTurnCompletion(full, {
         persist: false,
         accountedCumulative: pending.accountedTokenUsage,
       });
+      markResumeAccountingDone();
     }
     // A terminal-handoff `message()` that suspended deferred its durable
     // admission rather than sealing a false 'completed' winner. The resumed
@@ -20099,12 +20143,12 @@ function appendExpiredPendingInteraction(
 
 function pendingInteractionGenerationKey(input: {
   kind: PendingResume['kind'];
-  itemId: string;
+  itemId?: string;
   runId: string;
   toolCallId: string;
   requestedAt: number;
 }): string {
-  return sha256CanonicalJson([input.kind, input.itemId, input.runId, input.toolCallId, input.requestedAt]);
+  return sha256CanonicalJson([input.kind, input.itemId ?? null, input.runId, input.toolCallId, input.requestedAt]);
 }
 
 function publicErrorProjectionToError(error: { code: string; message: string }): Error {

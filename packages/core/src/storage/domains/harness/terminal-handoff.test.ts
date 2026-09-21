@@ -6,6 +6,7 @@ import {
   HarnessTerminalHandoffClaimConflictError,
   HarnessTerminalHandoffFencedError,
   HarnessTerminalHandoffIdentityConflictError,
+  HarnessTerminalHandoffUnsupportedError,
   HarnessTerminalFinalizationPendingError,
   InMemoryHarness,
   harnessTerminalAdmissionId,
@@ -626,5 +627,86 @@ describe('native chat terminal handoff', () => {
     await expect(storage.getTerminalQueuePressure({ harnessName: 'default' })).resolves.toMatchObject({
       pendingIntents: 1,
     });
+  });
+
+  it('loads a terminal admission by run across pending and committed statuses', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const input = admission();
+    await storage.writeMessageResultEvidence(pendingEvidence(input));
+    await storage.admitTerminalHandoff(input);
+
+    const byRun = {
+      harnessName: input.harnessName,
+      sessionId: input.sessionId,
+      runId: input.runId,
+    };
+    // The settlement-retry probe must see the row in ANY status: a commit that
+    // sealed before the caller's bookkeeping finished is 'committed', not
+    // 'pending', and still owns the run.
+    await expect(storage.loadTerminalAdmissionByRun(byRun)).resolves.toMatchObject({ status: 'pending' });
+
+    await storage.commitTerminalHandoff({
+      admission: input,
+      resultEvidence: { ...pendingEvidence(input), status: 'completed', result: { text: 'done' }, updatedAt: 3_000 },
+      terminalResult: { status: 'completed', runId: input.runId, completedAt: 3_000 },
+      projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: {} },
+    });
+    await expect(storage.loadPendingTerminalAdmission(byRun)).resolves.toBeNull();
+    await expect(storage.loadTerminalAdmissionByRun(byRun)).resolves.toMatchObject({ status: 'committed' });
+    await expect(storage.loadTerminalAdmissionByRun({ ...byRun, runId: 'run-other' })).resolves.toBeNull();
+  });
+
+  it('reports terminal handoff as unsupported and rejects terminal operations when disabled', async () => {
+    const disabled = new InMemoryHarness({ db: new InMemoryDB() });
+    expect(disabled.supportsTerminalHandoff).toBe(false);
+    const input = admission();
+    const expected = HarnessTerminalHandoffUnsupportedError;
+    await expect(disabled.admitTerminalHandoff(input)).rejects.toBeInstanceOf(expected);
+    await expect(
+      disabled.loadTerminalAdmission({
+        harnessName: input.harnessName,
+        sessionId: input.sessionId,
+        admissionId: input.admissionId,
+        executionGrant: input.executionGrant,
+      }),
+    ).rejects.toBeInstanceOf(expected);
+    await expect(
+      disabled.loadPendingTerminalAdmission({
+        harnessName: input.harnessName,
+        sessionId: input.sessionId,
+        runId: input.runId,
+      }),
+    ).rejects.toBeInstanceOf(expected);
+    await expect(
+      disabled.loadTerminalAdmissionByRun({
+        harnessName: input.harnessName,
+        sessionId: input.sessionId,
+        runId: input.runId,
+      }),
+    ).rejects.toBeInstanceOf(expected);
+    await expect(
+      disabled.commitTerminalHandoff({
+        admission: input,
+        resultEvidence: pendingEvidence(input),
+        terminalResult: { status: 'completed', runId: input.runId, completedAt: 3_000 },
+        projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: {} },
+      }),
+    ).rejects.toBeInstanceOf(expected);
+    await expect(
+      disabled.loadTerminalIntent({
+        harnessName: input.harnessName,
+        intentId: harnessTerminalIntentId(harnessTerminalAdmissionId(input)),
+      }),
+    ).rejects.toBeInstanceOf(expected);
+    await expect(
+      disabled.claimTerminalIntents({ harnessName: input.harnessName, consumerId: 'w-1', limit: 1, now: 4_000 }),
+    ).rejects.toBeInstanceOf(expected);
+    await expect(disabled.getTerminalQueuePressure({ harnessName: input.harnessName })).rejects.toBeInstanceOf(
+      expected,
+    );
+
+    const enabled = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    expect(enabled.supportsTerminalHandoff).toBe(true);
   });
 });
