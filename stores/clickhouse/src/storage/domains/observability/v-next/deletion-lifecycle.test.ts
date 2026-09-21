@@ -1,5 +1,5 @@
 import type { ClickHouseClient } from '@clickhouse/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ALL_MIGRATIONS, ALL_TABLE_NAMES, DELETION_REQUESTS_DDL, TABLE_DELETION_REQUESTS } from './ddl';
 import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
@@ -155,14 +155,26 @@ describe('serialized quorum contention', () => {
   };
   const busy = () => Object.assign(new Error('previous quorum is pending'), { code: '286' });
 
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('retries the same pending and applied rows without changing identity or version', async () => {
     const insert = vi.fn().mockRejectedValueOnce(busy()).mockResolvedValue(undefined);
     const client = { insert } as unknown as ClickHouseClient;
-    const pending = await recordDeletionRequest(client, args);
+    const recording = recordDeletionRequest(client, args);
+    await vi.runAllTimersAsync();
+    const pending = await recording;
     expect(insert).toHaveBeenCalledTimes(2);
     expect(insert.mock.calls[0]).toEqual(insert.mock.calls[1]);
     insert.mockClear().mockRejectedValueOnce(busy()).mockResolvedValue(undefined);
-    const applied = await markDeletionRequestApplied(client, pending, {});
+    const marking = markDeletionRequestApplied(client, pending, {});
+    await vi.runAllTimersAsync();
+    const applied = await marking;
     expect(insert).toHaveBeenCalledTimes(2);
     expect(insert.mock.calls[0]).toEqual(insert.mock.calls[1]);
     expect(applied.requestId).toBe(pending.requestId);
@@ -172,7 +184,9 @@ describe('serialized quorum contention', () => {
   it('bounds retries and preserves the final error for caller recovery', async () => {
     const error = busy();
     const insert = vi.fn().mockRejectedValue(error);
-    await expect(recordDeletionRequest({ insert } as unknown as ClickHouseClient, args)).rejects.toBe(error);
+    const outcome = expect(recordDeletionRequest({ insert } as unknown as ClickHouseClient, args)).rejects.toBe(error);
+    await vi.runAllTimersAsync();
+    await outcome;
     expect(insert).toHaveBeenCalledTimes(6);
   });
 

@@ -165,17 +165,20 @@ describe('ClickHouse deletion lifecycle', () => {
 
   it('mutates only the observed row and reports a concurrent applied deletion', async () => {
     const { client, insert, command, query } = createClient();
-    const existingRow = feedbackRecordToRow({
-      feedbackId: 'feedback-1',
-      timestamp: new Date('2026-09-03T12:00:00Z'),
-      traceId: 'trace-1',
-      feedbackSource: 'user',
-      feedbackType: 'rating',
-      value: 1,
-      organizationId: 'org-1',
-      resourceId: 'resource-1',
-      reviewStatus: 'needs-review',
-    });
+    const existingRow = {
+      reviewWriteVersion: '0',
+      ...feedbackRecordToRow({
+        feedbackId: 'feedback-1',
+        timestamp: new Date('2026-09-03T12:00:00Z'),
+        traceId: 'trace-1',
+        feedbackSource: 'user',
+        feedbackType: 'rating',
+        value: 1,
+        organizationId: 'org-1',
+        resourceId: 'resource-1',
+        reviewStatus: 'needs-review',
+      }),
+    };
     query
       .mockResolvedValueOnce(queryResult([existingRow]))
       .mockResolvedValueOnce(queryResult([]))
@@ -279,15 +282,18 @@ describe('ClickHouse deletion lifecycle', () => {
 
   it('reads the guard without sequential consistency when replication is not configured', async () => {
     const { client, query } = createClient();
-    const existingRow = feedbackRecordToRow({
-      feedbackId: 'feedback-1',
-      timestamp: new Date('2026-09-03T12:00:00Z'),
-      traceId: 'trace-1',
-      feedbackSource: 'user',
-      feedbackType: 'rating',
-      value: 1,
-      reviewStatus: 'needs-review',
-    });
+    const existingRow = {
+      reviewWriteVersion: '0',
+      ...feedbackRecordToRow({
+        feedbackId: 'feedback-1',
+        timestamp: new Date('2026-09-03T12:00:00Z'),
+        traceId: 'trace-1',
+        feedbackSource: 'user',
+        feedbackType: 'rating',
+        value: 1,
+        reviewStatus: 'needs-review',
+      }),
+    };
     query
       .mockResolvedValueOnce(queryResult([existingRow]))
       .mockResolvedValueOnce(queryResult([]))

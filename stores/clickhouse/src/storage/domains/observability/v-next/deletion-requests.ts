@@ -1,5 +1,3 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 
 import { isReplicationConfigured } from '../../../db/replication';
@@ -101,7 +99,11 @@ export async function markDeletionRequestApplied(
   return applied;
 }
 
-/** Retry only the rejection of a write while an earlier serialized quorum is
+/** Retries after `UNSATISFIED_QUORUM_FOR_PREVIOUS_WRITE` before the error propagates. */
+const QUORUM_BUSY_RETRIES = 5;
+
+/**
+ * Retry only the rejection of a write while an earlier serialized quorum is
  * pending. Reuse the exact row and version. Timeouts and ambiguous insert
  * failures still propagate to the caller; OSS recovery is a delete API retry.
  */
@@ -125,14 +127,14 @@ async function insertDeletionRequest(
       // it could write. Do not retry a timeout of this insert's own quorum.
       if (
         !replicated ||
-        attempt >= 5 ||
+        attempt >= QUORUM_BUSY_RETRIES ||
         !(error instanceof Error) ||
         !('code' in error) ||
         String(error.code) !== '286'
       ) {
         throw error;
       }
-      await delay(Math.min(100 * 2 ** attempt, 1_000));
+      await new Promise(resolve => setTimeout(resolve, Math.min(100 * 2 ** attempt, 1_000)));
     }
   }
 }

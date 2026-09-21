@@ -223,37 +223,6 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
 // Delete
 // ============================================================================
 
-/** Apply the scoped feedback delete mask and wait for completion. */
-async function hideFeedbackRows(
-  client: ClickHouseClient,
-  args: DeleteFeedbackArgs,
-  replication?: ClickhouseReplicationConfig,
-): Promise<void> {
-  const params: Record<string, string> = {};
-  const idPlaceholders: string[] = [];
-  for (let i = 0; i < args.feedbackIds.length; i++) {
-    const name = `fid_${i}`;
-    params[name] = args.feedbackIds[i]!;
-    idPlaceholders.push(`{${name}:String}`);
-  }
-
-  const conditions = [`feedbackId IN (${idPlaceholders.join(', ')})`];
-  if (args.organizationId !== undefined) {
-    conditions.push('organizationId = {delOrganizationId:String}');
-    params.delOrganizationId = args.organizationId;
-  }
-  if (args.resourceId !== undefined) {
-    conditions.push('resourceId = {delResourceId:String}');
-    params.delResourceId = args.resourceId;
-  }
-
-  await client.command({
-    query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE ${conditions.join(' AND ')}`,
-    query_params: params,
-    clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
-  });
-}
-
 /**
  * Delete feedback events by feedbackId via lightweight DELETE. Optional
  * `organizationId` and `resourceId` values are ANDed into the predicate to
@@ -286,7 +255,30 @@ export async function deleteFeedback(
     replication,
   });
 
-  await hideFeedbackRows(client, args, replication);
+  const params: Record<string, string> = {};
+  const idPlaceholders: string[] = [];
+  for (let i = 0; i < args.feedbackIds.length; i++) {
+    const name = `fid_${i}`;
+    params[name] = args.feedbackIds[i]!;
+    idPlaceholders.push(`{${name}:String}`);
+  }
+
+  const conditions = [`feedbackId IN (${idPlaceholders.join(', ')})`];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = {delOrganizationId:String}');
+    params.delOrganizationId = args.organizationId;
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = {delResourceId:String}');
+    params.delResourceId = args.resourceId;
+  }
+
+  await client.command({
+    query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE ${conditions.join(' AND ')}`,
+    query_params: params,
+    clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
+  });
+
   await markDeletionRequestApplied(client, request, replication);
 }
 
@@ -415,7 +407,7 @@ async function applyReviewStatus(
     feedbackId,
     timestamp: existingRow.timestamp,
     traceId: existingRow.traceId,
-    writeVersion: existingRow.reviewWriteVersion ?? String(existingRow.writeVersion ?? 0),
+    writeVersion: existingRow.reviewWriteVersion,
     reviewStatus,
   };
   await client.command({
