@@ -18,6 +18,7 @@
  *   3. A non-tripwire processor failure is non-fatal: the raw result survives.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ChunkFrom } from '../../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { MastraDBMessage } from '../../../message-list';
 import { MessageList } from '../../../message-list';
@@ -174,8 +175,11 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     expect(emittedChunksOfType('tool-result')).toHaveLength(0);
     const tripwires = emittedChunksOfType('tripwire');
     expect(tripwires).toHaveLength(1);
-    expect(tripwires[0].payload.reason).toBe('blocked by test');
-    expect(tripwires[0].payload.processorId).toBe('blocker');
+    expect(tripwires[0]).toMatchObject({
+      runId: RUN_ID,
+      from: ChunkFrom.AGENT,
+      payload: { reason: 'blocked by test', processorId: 'blocker' },
+    });
 
     // llm-mapping skips the blocked entry: the invocation stays in 'call' state.
     const mappingStep = createDurableLLMMappingStep();

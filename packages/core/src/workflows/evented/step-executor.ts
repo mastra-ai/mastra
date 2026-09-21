@@ -519,6 +519,7 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
     requestContext: RequestContext;
+    actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
   }): Promise<number> {
@@ -546,6 +547,7 @@ export class StepExecutor extends MastraBase {
             runId,
             mastra: this.mastra!,
             requestContext,
+            actor: params.actor,
             inputData: params.input,
             state: currentState,
             setState: async (newState: Record<string, any>) => {
@@ -602,6 +604,7 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
     requestContext: RequestContext;
+    actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
   }): Promise<number> {
@@ -629,6 +632,7 @@ export class StepExecutor extends MastraBase {
             runId,
             mastra: this.mastra!,
             requestContext,
+            actor: params.actor,
             inputData: params.input,
             state: currentState,
             setState: async (newState: Record<string, any>) => {

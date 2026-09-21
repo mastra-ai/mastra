@@ -1586,6 +1586,8 @@ export function createDurableToolCallStep() {
                 try {
                   await emitChunkEvent(pubsub, runId, {
                     type: 'tripwire',
+                    runId,
+                    from: ChunkFrom.AGENT,
                     payload: {
                       reason: processorError.message || 'Tool result blocked by processor',
                       retry: processorError.options?.retry,

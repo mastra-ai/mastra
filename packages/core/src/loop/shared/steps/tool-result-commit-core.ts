@@ -154,7 +154,7 @@ export function commitToolResult(deps: {
         ? {
             state: 'output-error' as const,
             errorText: errorText!,
-            ...(outcome.result ? { result: outcome.result } : {}),
+            ...(outcome.result != null ? { result: outcome.result } : {}),
           }
         : { state: 'result' as const, result: outcome.result }),
       toolCallId: deps.toolCallId,

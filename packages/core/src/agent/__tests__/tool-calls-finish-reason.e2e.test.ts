@@ -120,42 +120,46 @@ async function runToolCallTest(engine: EngineLeg, agent: Agent, modelName: strin
     'I need a comprehensive city report for Paris. Look up everything: weather, population, timezone, language, and currency. Explain what you are about to do first, then call all 5 tools simultaneously.',
   );
 
-  let toolCallCount = 0;
-  let toolResultCount = 0;
-  const finishReasons: string[] = [];
+  try {
+    let toolCallCount = 0;
+    let toolResultCount = 0;
+    const finishReasons: string[] = [];
 
-  for await (const chunk of response.fullStream) {
-    if (chunk.type === 'tool-call') {
-      toolCallCount++;
+    for await (const chunk of response.fullStream) {
+      if (chunk.type === 'tool-call') {
+        toolCallCount++;
+      }
+      if (chunk.type === 'tool-result') {
+        toolResultCount++;
+      }
+      if (chunk.type === 'step-finish') {
+        const reason = (chunk as any).payload?.finishReason ?? (chunk as any).finishReason ?? 'unknown';
+        finishReasons.push(reason);
+      }
     }
-    if (chunk.type === 'tool-result') {
-      toolResultCount++;
-    }
-    if (chunk.type === 'step-finish') {
-      const reason = (chunk as any).payload?.finishReason ?? (chunk as any).finishReason ?? 'unknown';
-      finishReasons.push(reason);
-    }
+
+    const text = await response.text;
+
+    // Log what we observed for debugging
+    console.log(
+      `[${modelName}] toolCalls=${toolCallCount} toolResults=${toolResultCount} finishReasons=${JSON.stringify(finishReasons)} textLen=${text.length}`,
+    );
+
+    // All 5 tools should have been called and returned results
+    expect(toolCallCount).toBe(5);
+    expect(toolResultCount).toBe(5);
+
+    // The agent loop must have completed at least 2 steps:
+    // step 1: tool calls (finishReason may be 'tool-calls' or 'stop' depending on the model)
+    // step 2: final text summary after processing tool results
+    expect(finishReasons.length).toBeGreaterThanOrEqual(2);
+
+    // The final response should reference the gathered data
+    expect(text).toBeTruthy();
+    expect(text.length).toBeGreaterThan(0);
+  } finally {
+    await response.cleanup();
   }
-
-  const text = await response.text;
-
-  // Log what we observed for debugging
-  console.log(
-    `[${modelName}] toolCalls=${toolCallCount} toolResults=${toolResultCount} finishReasons=${JSON.stringify(finishReasons)} textLen=${text.length}`,
-  );
-
-  // All 5 tools should have been called and returned results
-  expect(toolCallCount).toBe(5);
-  expect(toolResultCount).toBe(5);
-
-  // The agent loop must have completed at least 2 steps:
-  // step 1: tool calls (finishReason may be 'tool-calls' or 'stop' depending on the model)
-  // step 2: final text summary after processing tool results
-  expect(finishReasons.length).toBeGreaterThanOrEqual(2);
-
-  // The final response should reference the gathered data
-  expect(text).toBeTruthy();
-  expect(text.length).toBeGreaterThan(0);
 }
 
 describe('Tool calls with various LLM providers', { timeout: 120_000 }, () => {

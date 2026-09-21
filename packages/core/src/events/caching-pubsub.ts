@@ -90,7 +90,7 @@ export class CachingPubSub extends PubSub {
   /** Bus this cache follows for externally-published events. See {@link __setSource}. */
   private source?: PubSub;
   /** Per-topic follower subscriptions on {@link source}, refcounted by local subscribers. */
-  private followers = new Map<string, { cb: EventCallback; refs: number }>();
+  private followers = new Map<string, { source: PubSub; cb: EventCallback; refs: number }>();
 
   constructor(
     private readonly inner: PubSub,
@@ -192,8 +192,8 @@ export class CachingPubSub extends PubSub {
    * events through their inner subscription — the follower must then only
    * cache, never republish, or every event would be delivered twice.
    */
-  private isSourceAliased(): boolean {
-    return !!this.source && this.source.__rawBus() === this.inner.__rawBus();
+  private isSourceAliased(source: PubSub): boolean {
+    return source.__rawBus() === this.inner.__rawBus();
   }
 
   /**
@@ -231,7 +231,7 @@ export class CachingPubSub extends PubSub {
         if (event.index !== undefined) {
           return await ack?.();
         }
-        const aliased = this.isSourceAliased();
+        const aliased = this.isSourceAliased(source);
         let outbound: Event = event;
         if (this.shouldCache?.(topic) !== false) {
           // Same single-round-trip op as publish() (#22477): the follower sits
@@ -258,7 +258,7 @@ export class CachingPubSub extends PubSub {
     };
 
     // Record synchronously so concurrent retains don't double-subscribe.
-    const entry = { cb: followerCb, refs: 1 };
+    const entry = { source, cb: followerCb, refs: 1 };
     this.followers.set(topic, entry);
     try {
       await source.subscribe(topic, followerCb, { startFrom: 'latest' });
@@ -275,7 +275,7 @@ export class CachingPubSub extends PubSub {
     entry.refs--;
     if (entry.refs > 0) return;
     this.followers.delete(topic);
-    await this.source?.unsubscribe(topic, entry.cb).catch?.(() => {});
+    await entry.source.unsubscribe(topic, entry.cb).catch?.(() => {});
   }
 
   /** Tear down a topic's follower unconditionally (stream completion). */
@@ -283,7 +283,7 @@ export class CachingPubSub extends PubSub {
     const entry = this.followers.get(topic);
     if (!entry) return;
     this.followers.delete(topic);
-    await this.source?.unsubscribe(topic, entry.cb).catch?.(() => {});
+    await entry.source.unsubscribe(topic, entry.cb).catch?.(() => {});
   }
 
   /**

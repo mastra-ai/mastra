@@ -24,6 +24,7 @@ import { createDurableAgenticWorkflow } from '../../agent/durable/workflows/crea
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
+import type { AnyWorkflow } from '../workflow';
 import { createStep, createWorkflow } from '.';
 
 const looseObject = z.looseObject({});
@@ -53,7 +54,24 @@ function makeWorkflow(id: string, options?: { emitStepEvents?: boolean }) {
     .commit();
 }
 
-async function makeHost(workflow: ReturnType<typeof makeWorkflow>) {
+function makeForeachWorkflow(id: string, options?: { emitStepEvents?: boolean }) {
+  const itemStep = createStep({
+    id: 'item-step',
+    inputSchema: z.string(),
+    outputSchema: z.string(),
+    execute: async ({ inputData }) => inputData,
+  });
+  return createWorkflow({
+    id,
+    inputSchema: z.array(z.string()),
+    outputSchema: z.array(z.string()),
+    options,
+  })
+    .foreach(itemStep)
+    .commit();
+}
+
+async function makeHost(workflow: AnyWorkflow) {
   const mastra = new Mastra({
     logger: false,
     storage: new MockStore(),
@@ -64,7 +82,7 @@ async function makeHost(workflow: ReturnType<typeof makeWorkflow>) {
   return mastra;
 }
 
-async function runAndCollectWatchEvents(workflow: ReturnType<typeof makeWorkflow>) {
+async function runAndCollectWatchEvents(workflow: AnyWorkflow, inputData: any = { value: 'go' }) {
   const mastra = await makeHost(workflow);
   try {
     const run = await workflow.createRun();
@@ -73,7 +91,7 @@ async function runAndCollectWatchEvents(workflow: ReturnType<typeof makeWorkflow
       events.push(event.type);
     });
 
-    const result = await run.start({ inputData: { value: 'go' } });
+    const result = await run.start({ inputData });
     expect(result.status).toBe('success');
 
     // workflow-finish is published around start() settling — wait for it so
@@ -101,6 +119,13 @@ describe('evented engine option honoring (Phase 2 Item 8)', () => {
     expect(events.filter(type => type.startsWith('workflow-step-'))).toEqual([]);
     // Run-level events still flow — only step-lifecycle events are gated.
     expect(events).toContain('workflow-finish');
+  });
+
+  it('suppresses foreach progress events when emitStepEvents is false', async () => {
+    const workflow = makeForeachWorkflow('foreach-step-events-off-wf', { emitStepEvents: false });
+    const events = await runAndCollectWatchEvents(workflow, ['first', 'second']);
+
+    expect(events).not.toContain('workflow-step-progress');
   });
 
   it('createRun() fails loud when no Mastra host is registered', async () => {

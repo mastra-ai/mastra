@@ -2350,7 +2350,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Must run before emitFatalErrorBail, which serializes the list.
       terminalAttemptContext?.recordTerminalError(fatalError);
 
-      return emitFatalErrorBail(fatalError, modelList[0]?.id ?? 'unknown');
+      return emitFatalErrorBail(fatalError, modelList.at(-1)?.config.modelId ?? 'unknown');
     },
   });
 }

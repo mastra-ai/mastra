@@ -1482,5 +1482,22 @@ describe('CachingPubSub', () => {
       expect(received).toHaveLength(1);
       expect(await caching.getHistory(topic)).toHaveLength(1);
     });
+
+    it('releases a follower from the source it subscribed to after source replacement', async () => {
+      const firstSource = new EventEmitterPubSub();
+      const secondSource = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: firstSource });
+      const callback = vi.fn();
+
+      await caching.subscribe(topic, callback);
+      caching.__setSource(secondSource);
+      await caching.unsubscribe(topic, callback);
+
+      await firstSource.publish(topic, { type: 'after-unsubscribe', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(await caching.getHistory(topic)).toHaveLength(0);
+    });
   });
 });

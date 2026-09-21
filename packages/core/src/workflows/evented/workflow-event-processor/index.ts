@@ -2575,21 +2575,23 @@ export class WorkflowEventProcessor extends EventProcessor {
               ? ('success' as const)
               : ('failed' as const);
 
-        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-progress',
-            payload: {
-              id: getEntryId(step.step),
-              completedCount,
-              totalCount: targetLen,
-              currentIndex: currentIdx,
-              iterationStatus,
-              ...(prevResult.status === 'success' ? { iterationOutput: (prevResult as any).output } : {}),
+        if (workflow.options.emitStepEvents !== false) {
+          await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-progress',
+              payload: {
+                id: getEntryId(step.step),
+                completedCount,
+                totalCount: targetLen,
+                currentIndex: currentIdx,
+                iterationStatus,
+                ...(prevResult.status === 'success' ? { iterationOutput: (prevResult as any).output } : {}),
+              },
             },
-          },
-        });
+          });
+        }
 
         if (pendingCount > 0) {
           // There are still pending (null) iterations - concurrent execution in progress

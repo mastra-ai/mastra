@@ -111,6 +111,7 @@ export async function processWorkflowSleep(
     requestContext: reqContext,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
+    actor,
   });
 
   setTimeout(
@@ -214,6 +215,7 @@ export async function processWorkflowSleepUntil(
     requestContext: reqContext,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
+    actor,
   });
 
   if (emitStepEvents) {
