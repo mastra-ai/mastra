@@ -6,12 +6,15 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
-import { ALL_EXPERIMENTS, ExperimentCombobox } from '@/domains/experiments/components/experiment-combobox';
+import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 import { DatasetReview } from '@/domains/review/components/dataset-review';
-import { TargetFilter } from '@/domains/shared/components/target-filter';
-import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
+import { ReviewQueueFilterBar, type ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
+import { TARGET_ID_PARAM, TARGET_TYPE_PARAM } from '@/domains/shared/hooks/use-target-filter-params';
 import { useLinkComponent } from '@/lib/framework';
+
+const EXPERIMENT_PARAM = 'experiment';
+const REVIEW_PARAM = 'review';
 
 /**
  * Single review queue across the project. Lists every item awaiting review by default;
@@ -20,26 +23,35 @@ import { useLinkComponent } from '@/lib/framework';
  */
 function ReviewQueuePage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedId = searchParams.get('experiment');
-  const featuredResultId = searchParams.get('review');
-  // The selected experiment may fall out of scope when the target changes, so drop it (and `review`).
-  const { targetType, targetId, setTargetType, setTargetId } = useTargetFilterParams({
-    resetParams: ['experiment', 'review'],
-  });
+  const rawType = searchParams.get(TARGET_TYPE_PARAM);
+  const targetType = isDatasetTargetType(rawType) ? rawType : '';
+  const targetId = targetType ? (searchParams.get(TARGET_ID_PARAM) ?? '') : '';
+  const selectedId = searchParams.get(EXPERIMENT_PARAM);
+  const featuredResultId = searchParams.get(REVIEW_PARAM);
 
   const { Link, paths } = useLinkComponent();
   const { data, error } = useExperimentsForDatasetFilter(undefined, { targetType, targetId });
   const selected = data?.experiments.find(experiment => experiment.id === selectedId);
 
-  const selectExperiment = (experimentId: string) => {
-    // Changing the filter drops `review`: the featured result belongs to the previous scope.
+  const handleFiltersChange = (next: ReviewQueueFilters) => {
     setSearchParams(
       prev => {
-        const next = new URLSearchParams(prev);
-        if (experimentId === ALL_EXPERIMENTS) next.delete('experiment');
-        else next.set('experiment', experimentId);
-        next.delete('review');
-        return next;
+        const params = new URLSearchParams(prev);
+        // Narrower scopes only make sense within the wider one: a new type drops the id and experiment,
+        // a new id drops the experiment. Any change drops `review`, which belonged to the previous scope.
+        const typeChanged = next.targetType !== targetType;
+        const idChanged = typeChanged || next.targetId !== targetId;
+        const experimentId = idChanged ? '' : next.experimentId;
+        const targetIdValue = typeChanged ? '' : next.targetId;
+
+        if (next.targetType) params.set(TARGET_TYPE_PARAM, next.targetType);
+        else params.delete(TARGET_TYPE_PARAM);
+        if (targetIdValue) params.set(TARGET_ID_PARAM, targetIdValue);
+        else params.delete(TARGET_ID_PARAM);
+        if (experimentId) params.set(EXPERIMENT_PARAM, experimentId);
+        else params.delete(EXPERIMENT_PARAM);
+        params.delete(REVIEW_PARAM);
+        return params;
       },
       { replace: true },
     );
@@ -72,29 +84,20 @@ function ReviewQueuePage() {
   return (
     <PageLayout height="full">
       <DatasetReview
-        key={`${targetType}:${targetId}:${selectedId ?? ALL_EXPERIMENTS}`}
+        key={`${targetType}:${targetId}:${selectedId ?? 'all'}`}
         datasetId={selected?.datasetId ?? undefined}
         experimentId={selectedId ?? undefined}
         targetType={targetType}
         targetId={targetId}
         featuredItemId={featuredResultId}
         toolbarStart={
-          <>
-            <TargetFilter
-              targetType={targetType}
-              targetId={targetId}
-              onTargetTypeChange={setTargetType}
-              onTargetIdChange={setTargetId}
-            />
-            <ExperimentCombobox
-              allOption
-              value={selectedId ?? undefined}
-              onValueChange={selectExperiment}
-              targetType={targetType}
-              targetId={targetId}
-              className="w-72"
-            />
-          </>
+          <ReviewQueueFilterBar
+            targetType={targetType}
+            targetId={targetId}
+            experimentId={selectedId ?? ''}
+            experiments={data?.experiments ?? []}
+            onChange={handleFiltersChange}
+          />
         }
         toolbarEnd={
           selectedId ? (
