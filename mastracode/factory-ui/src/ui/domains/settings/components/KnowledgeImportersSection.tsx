@@ -55,18 +55,22 @@ import { ProviderConnectControl } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
- * Per-provider one-line description shown under the provider name. The
- * brand mark itself is fetched at runtime via `IntegrationLogo` so we don't
- * need to ship SVG assets here.
+ * Per-provider one-line description shown under the provider name. Each
+ * description states exactly what the importer pulls from the provider —
+ * keep these in sync with `packages/connect/src/providers/<id>/importer.ts`.
+ * The brand mark itself is fetched at runtime via `IntegrationLogo` so we
+ * don't need to ship SVG assets here.
  */
 const PROVIDER_DESCRIPTIONS: Record<PlatformConnectProviderId, string> = {
-  jira: 'Sync Jira issues and comments into knowledge.',
-  'incident-io': 'Sync incident.io incidents and follow-ups into knowledge.',
-  notion: 'Sync Notion pages and databases into knowledge.',
-  confluence: 'Sync Confluence spaces and pages into knowledge.',
-  linear: 'Sync Linear documents — project docs, PRDs, and initiative docs — into knowledge.',
-  zendesk: 'Sync Zendesk Help Center articles into knowledge.',
-  fireflies: 'Sync Fireflies meeting transcripts and summaries into knowledge.',
+  jira: 'Imports Jira issues — summary, description, and status.',
+  // Not a knowledge importer; present only because the record is exhaustive
+  // over all platform-connect providers. Never rendered in this section.
+  'incident-io': 'Imports incident.io incidents and follow-ups.',
+  notion: 'Imports Notion pages and databases — titles and text properties.',
+  confluence: 'Imports Confluence pages with their full body text.',
+  linear: 'Imports Linear documents — project docs, PRDs, and initiative docs.',
+  zendesk: 'Imports published Zendesk Help Center articles.',
+  fireflies: 'Imports Fireflies meeting summaries — overview, action items, and keywords.',
 };
 
 /**
