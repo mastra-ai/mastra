@@ -154,8 +154,12 @@ export interface ProviderConnectControlProps {
   icon?: ReactNode;
   /** Layout classes forwarded to the connect button. */
   className?: string;
-  /** Called after the provider confirmed the authorization. */
-  onCompleted?: () => void;
+  /**
+   * Called after the provider confirmed the authorization. Receives the
+   * activated connection, or `null` when activation is still pending
+   * server-side.
+   */
+  onCompleted?: (connection: PlatformProviderConnection | null) => void;
 }
 
 /**
@@ -190,7 +194,7 @@ export function ProviderConnectControl({
       } else {
         toast.success(`${meta.displayName} authorization completed — the connection is activating`);
       }
-      onCompleted?.();
+      onCompleted?.(connection);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Failed to connect ${meta.displayName}`);
     }
