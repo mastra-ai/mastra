@@ -218,6 +218,7 @@ describe('worker session VAD', () => {
       ...options,
     });
     const ctx = fakeJobContext();
+    ctx.addShutdownCallback = vi.fn();
     ctx.proc.userData.vad = prewarmedVad;
     await definition.entry(ctx);
     expect(onSessionStart).toHaveBeenCalledOnce();

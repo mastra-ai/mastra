@@ -10,6 +10,8 @@ import type {
   VoiceTurnCompleteHook,
   VoiceTurnContext,
 } from './bridge';
+import { VOICE_TEXT_FLUSH } from './turn-metrics';
+import type { VoiceReplyChunk } from './turn-metrics';
 
 export interface WorkflowReplyGeneratorOptions {
   /** The Mastra workflow that generates each turn's reply. Runs once per turn (no suspend/resume). */
@@ -86,7 +88,7 @@ export interface AgentReplyStreamLike {
  * AND its `tool-call` chunks (so {@link WorkflowReplyGeneratorOptions.toolFeedback} fires and
  * {@link WorkflowReplyGeneratorOptions.onTurnComplete}'s `result.toolCalls` is populated). This is
  * the difference from piping only `agent.stream().textStream`, which silently drops tool calls.
- * Other chunk types (reasoning, tool results, lifecycle) are not forwarded, keeping the spoken
+ * Speech boundaries and tool results are forwarded for flushing and timing. Reasoning is not forwarded, keeping the spoken
  * stream clean. Returns the accumulated reply text for the step to return.
  *
  * Pass the step's `abortSignal` to `agent.stream(...)` so barge-in stops generation promptly.
@@ -119,7 +121,7 @@ export function pipeAgentReplyToWriter(
             text += delta;
             controller.enqueue(chunk);
           }
-        } else if (type === 'tool-call') {
+        } else if (['tool-call', 'tool-result', 'text-end', 'step-finish'].includes(String(type))) {
           controller.enqueue(chunk);
         }
       }
@@ -173,7 +175,7 @@ export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOpti
         });
     };
 
-    return new ReadableStream<string>({
+    return new ReadableStream<VoiceReplyChunk>({
       start: async controller => {
         let streamedAny = false;
         try {
@@ -182,6 +184,13 @@ export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOpti
             if (chunk.type !== 'workflow-step-output') continue;
             const payload = chunk.payload as { output?: unknown; stepName?: unknown };
             if (replyStep && payload.stepName !== replyStep) continue;
+            const event = payload.output as { type?: string; payload?: { toolCallId?: string } } | undefined;
+            if (event?.type === 'text-end' || event?.type === 'step-finish') {
+              controller.enqueue(VOICE_TEXT_FLUSH);
+              continue;
+            }
+            if (event?.type === 'tool-result' && event.payload?.toolCallId)
+              ctx.metrics?.toolEnd(event.payload.toolCallId);
             const text = unwrapStepText(payload.output);
             if (text) {
               streamedAny = true;
@@ -194,9 +203,14 @@ export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOpti
             const toolCall = unwrapStepToolCall(payload.output);
             if (toolCall) {
               toolCalls.push(toolCall);
+              ctx.metrics?.toolStart({ toolCallId: toolCall.toolCallId, toolName: toolCall.toolName });
+              controller.enqueue(VOICE_TEXT_FLUSH);
               if (toolFeedback) {
                 const filler = toolFeedback(toolCall);
-                if (filler) controller.enqueue(filler.endsWith(' ') ? filler : `${filler} `);
+                if (filler) {
+                  controller.enqueue(filler.endsWith(' ') ? filler : `${filler} `);
+                  controller.enqueue(VOICE_TEXT_FLUSH);
+                }
               }
             }
           }

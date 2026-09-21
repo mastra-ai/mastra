@@ -462,6 +462,75 @@ export const mastra = new Mastra({
 
 Tracing is on by default. Pass `observability: false` to `createLiveKitWorker` to turn it off.
 
+### Turn metrics and playback completion
+
+`createLiveKitWorker()` accepts two observers for evaluating voice calls:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  onTurnMetrics: metrics => {
+    console.info('voice metric', metrics)
+  },
+  onSpeechComplete: speech => {
+    console.info('speech outcome', speech.speechId, speech.outcome)
+  },
+})
+```
+
+Observers run asynchronously and aren't awaited by the audio pipeline. Errors are logged. Keep their work small. Neither observer writes or reconciles memory.
+
+`onTurnMetrics` receives versioned records with `phase: 'generation'` or `phase: 'speech'`. Generation records contain a `turnId`, a unique `attemptId`, a terminal `outcome`, `durationMs`, optional `firstTextMs`, and tool timings. Attempts for the same user message share its turn ID. Tool durations run from the bridge receiving a tool call to receiving its result; remote durations include transport and aren't pure server execution times. A tool without a result has no duration.
+
+Speech records also contain LiveKit's `speechId`. The bridge carries turn and attempt IDs in assistant message metadata so they can be joined after playback. Speech without a correlated assistant message, such as cancelled speech that produced no output, uses its speech ID as the turn ID and omits the attempt ID. Don't infer a correlation by matching event arrival order.
+
+| Measurement | Meaning |
+| - | - |
+| Generation `firstTextMs` | Time from starting generation to the first text forwarded toward speech synthesis. Can include filler. |
+| Speech `firstAudioMs` | Time from caller speech ending to the first output audio, as reported by LiveKit. Can include filler. |
+| Speech `completionMs` | Time from caller speech ending to completed output playback. Omitted for interrupted, cancelled, or failed speech. |
+| `speechStartedAt` / `speechEndedAt` | Playback timestamps in Unix epoch milliseconds when available. |
+
+Missing measurements are `undefined`, not zero. Local generation durations use a monotonic clock. LiveKit's speech timing values are converted to milliseconds. When observability is configured, these records appear as events in the existing `voice call` trace. Pipeline metric events retain LiveKit's speech ID when supplied.
+
+`onSpeechComplete` runs once when a speech handle finishes, or when the session closes with that speech pending. It supplies the speech metrics plus optional `playedText` and `transcriptSource`. Outcomes are `completed`, `interrupted`, `cancelled`, or `failed`. A completed speech lifecycle alone doesn't prove that audio was produced; check whether the relevant audio measurements are present.
+
+The measurement source is `server-playout`. LiveKit's committed transcript can be partial or estimated, depending on the output's synchronization support. It doesn't prove that the remote browser or phone listener heard every word. `transcriptSource: 'unavailable'` means no committed assistant transcript was available.
+
+Keep using `onTurnComplete` for its existing generation contract. It can fire before speech playback finishes, with `interrupted: false`, even when the caller interrupts the audio later. Use `onSpeechComplete` for playback outcomes. Existing agent memory may already contain generated text; adding this hook doesn't change that persistence behavior.
+
+For a session you own, call `observeVoiceSession(session, { onTurnMetrics, onSpeechComplete })` from `@mastra/livekit/worker` or `@mastra/livekit/plugin` before `session.start()`. Its return value detaches the observer and finalizes pending speech as cancelled. The worker attaches its observer automatically.
+
+### Speech segment boundaries
+
+The built-in agent, remote, and workflow reply generators preserve text-segment and tool-step boundaries. Tool feedback is flushed after its text is queued, so an acknowledgment can reach text-to-speech while a tool is still running. A flush requests a segment boundary; it doesn't guarantee immediate audio from every speech provider.
+
+Custom generators can continue returning string streams. To emit an explicit boundary, return a `ReadableStream<VoiceReplyChunk>` and enqueue `VOICE_TEXT_FLUSH`, both exported from `@mastra/livekit/worker` and `@mastra/livekit/plugin`. Consumers that read a reply generator directly must distinguish strings from boundary objects. Never concatenate a boundary object into a transcript.
+
+The worker translates boundaries into LiveKit's `FlushSentinel`. With the `MastraLLM` plugin, add the node adapter to the LiveKit agent you own:
+
+```typescript
+import { voice } from '@livekit/agents'
+import { MastraLLM, mastraLLMNode } from '@mastra/livekit/plugin'
+
+class SupportAgent extends voice.Agent {
+  override llmNode(...args: Parameters<voice.Agent['llmNode']>) {
+    return mastraLLMNode(this, ...args)
+  }
+}
+
+const session = new voice.AgentSession({
+  llm: new MastraLLM({ agent: supportAgent }),
+  // Configure STT and TTS for your application.
+})
+await session.start({ agent: new SupportAgent({ instructions: 'Support assistant' }), room })
+```
+
+Without the adapter, the plugin still emits text, but LiveKit's default node doesn't translate the plugin's boundary metadata into flush markers. Use `pipeAgentReplyToWriter()` in a workflow reply step to preserve the boundaries and tool results used for timing.
+
 ### Deployment
 
 The worker is a separate process from your Mastra server. Deploy it as a long-running Node service with the production command:

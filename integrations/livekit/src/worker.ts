@@ -17,6 +17,9 @@ import type {
 import { parseSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
 import { startVoiceCallObservability } from './observability';
+import { observeVoiceSession } from './speech';
+import type { VoiceSpeechCompleteHook, VoiceTurnMetricsHook } from './turn-metrics';
+import { notifyVoiceObserver } from './turn-metrics';
 import { ensureVoiceCallThread, persistSpokenGreeting } from './voice-thread';
 import { isEouMethodRequested, queueWorkerSetup, requestEouMethod } from './worker-setup';
 import { createWorkflowReplyGenerator } from './workflow-generator';
@@ -79,6 +82,10 @@ export interface VoiceCallEndArgs {
 export type VoiceCallEndHook = (args: VoiceCallEndArgs) => void | Promise<void>;
 
 export interface CreateLiveKitWorkerOptions {
+  /** Generation and server-playout metrics; observer errors never interrupt the call. */
+  onTurnMetrics?: VoiceTurnMetricsHook;
+  /** Playback completion, separate from onTurnComplete. Does not reconcile memory. */
+  onSpeechComplete?: VoiceSpeechCompleteHook;
   /** The Mastra instance whose agents handle voice sessions. */
   mastra: Mastra;
   /**
@@ -150,8 +157,7 @@ export interface CreateLiveKitWorkerOptions {
    * `agent.getMemory()` does), so a `Memory` that relies on the Mastra instance for storage works.
    */
   memoryInstance?:
-    | MastraMemory
-    | ((args: ResolveMastraAgentArgs) => MastraMemory | undefined | Promise<MastraMemory | undefined>);
+    MastraMemory | ((args: ResolveMastraAgentArgs) => MastraMemory | undefined | Promise<MastraMemory | undefined>);
   /**
    * Spoken while a Mastra tool call runs. Works on both the agent and workflow paths; on the
    * workflow path it fires only for tool calls the reply step surfaces to its `writer` (use
@@ -387,8 +393,7 @@ export type SessionComponentResolver<T> = (
  * Return `undefined` (or empty) for no greeting on that call.
  */
 export type GreetingText =
-  | string
-  | ((context: GreetingContext) => string | undefined | void | Promise<string | undefined | void>);
+  string | ((context: GreetingContext) => string | undefined | void | Promise<string | undefined | void>);
 
 /**
  * The opening greeting spoken when the session starts — and the vehicle for a required AI
@@ -1003,7 +1008,12 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           ? { everyMs: greetingConfig.repeatEvery, text: greetingConfig.repeatText }
           : undefined;
 
+      const onTurnMetrics: VoiceTurnMetricsHook = metric => {
+        voiceObs?.recordTurn(metric);
+        notifyVoiceObserver(options.onTurnMetrics, metric);
+      };
       const agent = createMastraVoiceAgent({
+        onTurnMetrics,
         ...(replyGenerator ? { generate: replyGenerator } : { agent: mastraAgent! }),
         instructions: mastraAgent ? await resolveInstructions(mastraAgent, requestContext) : undefined,
         memory,
@@ -1036,6 +1046,13 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
 
       // Subscribe before start so the first turn's metrics are captured.
       voiceObs?.attach(session);
+      const detachSpeechObserver = observeVoiceSession(session, {
+        onTurnMetrics,
+        onSpeechComplete: options.onSpeechComplete,
+      });
+      ctx.addShutdownCallback(async () => {
+        detachSpeechObserver();
+      });
 
       try {
         await session.start({
@@ -1067,6 +1084,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         }
         await options.onSessionStart?.({ session, ctx, agent, metadata });
       } catch (error) {
+        detachSpeechObserver();
         voiceObs?.finalize({ error });
         throw error;
       }
