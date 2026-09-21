@@ -282,6 +282,7 @@ export function serializeDurableOptions(options: {
   modelSettings?: SerializableModelSettings | Record<string, unknown>;
   requireToolApproval?: boolean;
   permissionPolicyRequired?: boolean;
+  onBeforeToolExecutionRequired?: boolean;
   toolCallConcurrency?: ToolCallConcurrency;
   autoResumeSuspendedTools?: boolean;
   maxProcessorRetries?: number;
@@ -325,6 +326,7 @@ export function serializeDurableOptions(options: {
     modelSettings: serializeModelSettings(options.modelSettings),
     requireToolApproval: options.requireToolApproval,
     permissionPolicyRequired: options.permissionPolicyRequired,
+    onBeforeToolExecutionRequired: options.onBeforeToolExecutionRequired,
     toolCallConcurrency: options.toolCallConcurrency,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
     maxProcessorRetries: options.maxProcessorRetries,

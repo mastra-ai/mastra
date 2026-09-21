@@ -50,7 +50,13 @@ import {
 } from '../../agent/thread-stream-runtime';
 import { parseToolApprovalDecision } from '../../agent/tool-call-identity';
 import type { ToolApprovalDecision } from '../../agent/tool-call-identity';
-import { TOOL_PERMISSION_POLICY_KEY, TOOL_PERMISSION_POLICY_STABLE_KEY } from '../../agent/tool-permission-prefilter';
+import {
+  ON_BEFORE_TOOL_EXECUTION_KEY,
+  ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY,
+  TOOL_PERMISSION_POLICY_KEY,
+  TOOL_PERMISSION_POLICY_STABLE_KEY,
+} from '../../agent/tool-permission-prefilter';
+import type { BeforeToolExecutionInput } from '../../agent/tool-permission-prefilter';
 import {
   captureSuspendedToolSurfaceFenceLease,
   clearSuspendedToolSurfaceFence,
@@ -17335,7 +17341,9 @@ export class Session {
     // proceed). OPT-IN: only engaged when the operator configured a policy
     // (mode.permissions/runtime rules, or an explicit defaultPermissionPolicy),
     // so an unconfigured harness keeps today's no-gate behavior.
-    if (this._toolPermissionGateEngaged()) {
+    const toolPermissionGateEngaged = this._toolPermissionGateEngaged();
+    const onBeforeToolExecution = this._harness._internalOnBeforeToolExecution;
+    if (toolPermissionGateEngaged) {
       // Snapshot rules/grants/default at turn-build time so a concurrent
       // switchMode (or runtime setPolicy) mid-turn cannot retroactively re-gate an
       // in-flight turn. Resume rebuilds the context (re-snapshots the CURRENT
@@ -17363,9 +17371,14 @@ export class Session {
       // choosing concurrency without a mid-turn rule/grant change turning an
       // `allow` preflight into an `ask` at the side-effect boundary.
       entries.push([TOOL_PERMISSION_POLICY_STABLE_KEY, true]);
-      // §O4 — deny observability: the loop calls this when the policy above blocks
-      // a tool (pre-exposure removal or action-time refusal), so a `tool_denied`
-      // event surfaces WHY instead of the denial being silent. Sync + best-effort.
+    }
+    // §O4 — deny observability: the loop calls this when a tool is blocked (a
+    // policy-gate pre-exposure removal or action-time refusal, or an
+    // `onBeforeToolExecution` revalidation denial), so a `tool_denied` event
+    // surfaces WHY instead of the denial being silent. Sync + best-effort.
+    // Installed when EITHER the policy gate or the revalidation hook is
+    // configured — a hook-only session still owes its denials an audit event.
+    if (toolPermissionGateEngaged || onBeforeToolExecution !== undefined) {
       entries.push([
         '__mastra_onToolDenied',
         (info: {
@@ -17388,6 +17401,21 @@ export class Session {
           });
         },
       ]);
+    }
+    // §4.2e per-tool revalidation — the optional `sessions.onBeforeToolExecution`
+    // hook is threaded so the loop's action-time gate can await it on every tool
+    // call after the snapshot policy resolves. The closure binds this session so
+    // integrations can compare live session state (grants, mirrors) against their
+    // durable store; it fires regardless of whether the policy gate is engaged.
+    // The REQUIRED marker is JSON-safe: it survives transport/persistence where
+    // the closure cannot, so a gate that finds the marker without the function
+    // fails closed instead of silently skipping revalidation.
+    if (onBeforeToolExecution !== undefined) {
+      entries.push([
+        ON_BEFORE_TOOL_EXECUTION_KEY,
+        (input: BeforeToolExecutionInput) => onBeforeToolExecution({ session, ...input }),
+      ]);
+      entries.push([ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY, true]);
     }
     // §4.2e `yolo` — a per-turn suppressor for the POLICY-level approval reason
     // (an effective `ask` from the permission gate). Per spec it clears ONLY the

@@ -457,6 +457,155 @@ describe('BackgroundTaskManager', () => {
       expect(result?.error?.message).toContain('No executor');
     });
 
+    it('fails closed when a hook-required task resolves via a static executor', async () => {
+      // Simulates recovery on a foreign worker / after cold restart: the
+      // producer's TaskContext closure is gone, so only the static executor
+      // resolves — but the persisted marker says the call was gated behind an
+      // action-time permission hook that cannot be reconstructed here.
+      const staticExec = vi.fn().mockResolvedValue('ok');
+      manager.registerStaticExecutor('my-tool', { execute: staticExec });
+
+      const { task } = await manager.enqueue({
+        toolName: 'my-tool',
+        toolCallId: 'call-hook-gated',
+        args: { query: 'x' },
+        agentId: 'agent-1',
+        runId: 'run-1',
+        requiresToolPermissionHook: true,
+      });
+
+      await tick();
+
+      const result = await manager.getTask(task.id);
+      expect(result?.status).toBe('failed');
+      expect(result?.error?.message).toContain('permission revalidation hook');
+      expect(staticExec).not.toHaveBeenCalled();
+    });
+
+    it('strips the hook marker and executes via the per-task executor when it survives', async () => {
+      const executeFn = vi.fn().mockResolvedValue({ data: 'ok' });
+
+      const { task } = await manager.enqueue(
+        {
+          toolName: 'my-tool',
+          toolCallId: 'call-hook-gated-local',
+          args: { query: 'x' },
+          agentId: 'agent-1',
+          runId: 'run-1',
+          requiresToolPermissionHook: true,
+        },
+        ctx(executeFn),
+      );
+
+      await tick();
+
+      const result = await manager.getTask(task.id);
+      expect(result?.status).toBe('completed');
+      // The internal marker is stripped before the tool sees its args, but the
+      // persisted record retains it so a later recovery still fails closed.
+      expect(executeFn).toHaveBeenCalledWith({ query: 'x' }, expect.anything());
+      expect(result?.args).toHaveProperty('__mastra_requiresToolPermissionHook', true);
+    });
+
+    it('persists the hook marker when a flagged handle attaches to a row enqueued without it', async () => {
+      // Rows written before the marker existed (or by a producer that did not
+      // thread a hook) carry no `__mastra_requiresToolPermissionHook`. When a
+      // later hook-gated leg attaches via checkIfSuspended/resume, the
+      // requirement must be backfilled onto the stored args *before* the
+      // resume event becomes claimable — otherwise a foreign worker or cold
+      // recovery resolves the static executor and executes without
+      // revalidation.
+      const execute = vi.fn(async (_args: any, opts: any) => {
+        if (!opts.resumeData) return opts.suspend({ waiting: 'approval' });
+        return 'resumed';
+      });
+      const { task } = await manager.enqueue(
+        {
+          toolName: 'approval-tool',
+          toolCallId: 'call-pre-marker',
+          args: { q: 1 },
+          agentId: 'agent-1',
+          runId: 'run-pre-marker',
+        },
+        ctx(execute),
+      );
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('suspended'));
+      expect((await manager.getTask(task.id))?.args).not.toHaveProperty('__mastra_requiresToolPermissionHook');
+
+      const handle = createBackgroundTask(manager, {
+        toolName: 'approval-tool',
+        toolCallId: 'call-pre-marker',
+        args: { q: 1 },
+        agentId: 'agent-1',
+        runId: 'run-pre-marker',
+        requiresToolPermissionHook: true,
+        context: ctx(execute),
+      });
+      await expect(
+        handle.checkIfSuspended({
+          toolCallId: 'call-pre-marker',
+          runId: 'run-pre-marker',
+          agentId: 'agent-1',
+          toolName: 'approval-tool',
+        }),
+      ).resolves.toBe(true);
+
+      // Marker is durable before any resume event can be claimed by a worker.
+      const marked = await manager.getTask(task.id);
+      expect(marked?.args).toHaveProperty('__mastra_requiresToolPermissionHook', true);
+
+      await handle.resume({ approved: true });
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('completed'));
+    });
+
+    it('fails closed when the marker-persistence read returns null', async () => {
+      // A null getTask is ambiguous — row gone or store failed. A flagged
+      // attach must refuse rather than proceed leaving an unmarked row that a
+      // cold worker could execute without revalidation.
+      const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+      const execute = vi.fn(async (_args: any, opts: any) => {
+        if (!opts.resumeData) return opts.suspend({ waiting: 'approval' });
+        return 'resumed';
+      });
+      const { task } = await manager.enqueue(
+        {
+          toolName: 'approval-tool',
+          toolCallId: 'call-null-read',
+          args: { q: 1 },
+          agentId: 'agent-1',
+          runId: 'run-null-read',
+        },
+        ctx(execute),
+      );
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('suspended'));
+      const suspended = await manager.getTask(task.id);
+      expect(suspended).toBeTruthy();
+
+      const handle = createBackgroundTask(manager, {
+        toolName: 'approval-tool',
+        toolCallId: 'call-null-read',
+        args: { q: 1 },
+        agentId: 'agent-1',
+        runId: 'run-null-read',
+        requiresToolPermissionHook: true,
+        context: ctx(execute),
+      });
+      const getTaskSpy = vi.spyOn(backgroundTasksStore!, 'getTask').mockResolvedValueOnce(null);
+      try {
+        await expect(
+          handle.checkIfSuspended({
+            toolCallId: 'call-null-read',
+            runId: 'run-null-read',
+            agentId: 'agent-1',
+            toolName: 'approval-tool',
+          }),
+        ).rejects.toThrow('not found');
+        expect((await manager.getTask(suspended!.id))?.status).toBe('suspended');
+      } finally {
+        getTaskSpy.mockRestore();
+      }
+    });
+
     it('keeps task context when dispatch claim loses to another worker', async () => {
       const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
       const taskId = 'claim-race';

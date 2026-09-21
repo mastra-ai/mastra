@@ -13,6 +13,8 @@ import {
   AgentStreamEventTypes,
   createDurableAgent,
   globalRunRegistry,
+  ON_BEFORE_TOOL_EXECUTION_KEY,
+  ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY,
   TOOL_PERMISSION_POLICY_KEY,
   TOOL_PERMISSION_POLICY_REQUIRED_KEY,
 } from '@mastra/core/agent/durable';
@@ -1724,6 +1726,82 @@ describe('InngestAgent parity surface', () => {
         requestContext: {
           organizationId: 'fresh-org',
           [TOOL_PERMISSION_POLICY_REQUIRED_KEY]: true,
+        },
+      });
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+      await mastra.shutdown();
+    }
+  });
+
+  it('transports the revalidation-hook requirement marker on resume while stripping the closure', async () => {
+    // The hook closure never crosses the event boundary; its REQUIRED marker
+    // must, or a worker that cannot reconstruct the hook would execute
+    // unrevalidated instead of failing closed.
+    const { durableAgent, mastra } = makeIsolatedAgent('parity-request-context-resume-hook', {
+      durableRequestContextKeys: ['organizationId'],
+    });
+    const workflowIds = workflowIdsFor('parity-request-context-resume-hook');
+    const sendSpy = stubInngestSend();
+    const runId = 'request-context-resume-hook-run';
+    const workflowsStore = await mastra.getStorage()!.getStore('workflows');
+    const [workflow] = durableAgent.getDurableWorkflows() as any[];
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: workflowIds.AGENTIC_LOOP,
+      runId,
+      snapshot: {
+        runId,
+        executionGeneration: 'request-context-resume-hook-generation',
+        lifecycleResumeAttempt: 0,
+        lifecycleStepStates: {},
+        status: 'suspended',
+        value: { retainedState: true },
+        context: {
+          input: {
+            __workflowKind: 'durable-agent',
+            runId,
+            runtimeBindingId: 'request-context-resume-hook-binding',
+          },
+        },
+        suspendedPaths: { 'agentic-loop': [0] },
+        activePaths: [],
+        activeStepsPath: {},
+        waitingPaths: {},
+        resumeLabels: {},
+        serializedStepGraph: workflow.serializedStepGraph,
+        requestContext: { [ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY]: true },
+        timestamp: Date.now(),
+      },
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'fresh-org');
+    requestContext.set(ON_BEFORE_TOOL_EXECUTION_KEY, async () => 'allow' as const);
+
+    const result = await durableAgent.resume(runId, { answer: 'approved' }, { requestContext });
+    try {
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(runId);
+      }
+      await expect(entry?.workflowExecution).resolves.toBeUndefined();
+
+      const transported = sendSpy.mock.calls[0]?.[0]?.data?.requestContext;
+      expect(transported).toEqual({
+        organizationId: 'fresh-org',
+        [ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY]: true,
+      });
+      expect(transported).not.toHaveProperty(ON_BEFORE_TOOL_EXECUTION_KEY);
+      expect(() => structuredClone(transported)).not.toThrow();
+
+      await expect(
+        workflowsStore.loadWorkflowSnapshot({ workflowName: workflowIds.AGENTIC_LOOP, runId }),
+      ).resolves.toMatchObject({
+        requestContext: {
+          organizationId: 'fresh-org',
+          [ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY]: true,
         },
       });
     } finally {

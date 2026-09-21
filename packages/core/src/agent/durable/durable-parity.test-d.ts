@@ -153,6 +153,7 @@ type PhantomSerializedKeys = Exclude<
   | 'toolSurfaceFence' // PF-1790: derived name ceiling from toolsets + toolsetsMode: 'replace'
   | 'toolHookPolicy' // opaque shadow of per-execution hooks
   | 'permissionPolicyRequired' // marker derived from the live per-tool policy evaluator
+  | 'onBeforeToolExecutionRequired' // marker derived from the live per-tool revalidation hook
 >;
 
 describe('DurableAgent ↔ Agent parity gate', () => {

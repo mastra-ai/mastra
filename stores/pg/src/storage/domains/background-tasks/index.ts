@@ -287,6 +287,10 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
       setClauses.push(`"suspend_payload" = $${paramIdx++}`);
       params.push(serializeJson(update.suspendPayload));
     }
+    if ('args' in update) {
+      setClauses.push(`"args" = $${paramIdx++}`);
+      params.push(serializeJson(update.args));
+    }
     if ('retryCount' in update) {
       setClauses.push(`"retry_count" = $${paramIdx++}`);
       params.push(update.retryCount);

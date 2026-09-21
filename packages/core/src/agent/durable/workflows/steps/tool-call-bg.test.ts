@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { MessageList } from '../../../message-list';
 import { createToolCallIdentityDigest } from '../../../tool-call-identity';
+import { ON_BEFORE_TOOL_EXECUTION_KEY, TOOL_PERMISSION_DENIED_ERROR_NAME } from '../../../tool-permission-prefilter';
 import { globalRunRegistry } from '../../run-registry';
 import { createDurableToolCallStep } from './tool-call';
 
@@ -686,5 +687,66 @@ describe('durable tool-call activeTools enforcement', () => {
       }),
     );
     expect(hiddenExecute).not.toHaveBeenCalled();
+  });
+});
+
+describe('durable tool-call background revalidation', () => {
+  it('revalidates the hook on each attempt; a mid-flight revocation denies the retry', async () => {
+    const pubsub = mockPubsub();
+    const { entry } = setupRegistry();
+    const toolExecute = entry.tools[TOOL_NAME].execute;
+
+    let granted = true;
+    const hook = vi.fn(async () => (granted ? ('allow' as const) : ('deny' as const)));
+    // Registry-held live context: the transported request context arrives
+    // with functions stripped, exactly like a real worker boundary.
+    entry.requestContext = new Map([[ON_BEFORE_TOOL_EXECUTION_KEY, hook]]);
+
+    toolExecute.mockImplementation(async () => {
+      // The grant is revoked while attempt 1 is in flight; attempt 1 fails.
+      granted = false;
+      throw new Error('transient failure');
+    });
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      timeoutMs: 30_000,
+      maxRetries: 1,
+    } as any);
+
+    let executor: any;
+    let taskSpec: any;
+    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, spec: any) => {
+      taskSpec = spec;
+      executor = spec.context.executor;
+      return {
+        dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-bg-gate' }, fallbackToSync: false }),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
+        task: { id: 'task-bg-gate' },
+        cancel: vi.fn(),
+        waitForCompletion: vi.fn(),
+      } as any;
+    });
+
+    const result = await executeStep(pubsub, makeInitData());
+    expect(result.result).toContain('Background task started');
+    expect(executor).toBeDefined();
+    // The hook closure cannot survive recovery — the requirement persists on
+    // the task so a statically-resolved executor fails closed instead.
+    expect(taskSpec?.requiresToolPermissionHook).toBe(true);
+
+    // Attempt 1 — revalidated (grant still held), executes, fails transiently.
+    await expect(executor.execute({ topic: 'quantum' }, {})).rejects.toThrow('transient failure');
+    expect(toolExecute).toHaveBeenCalledTimes(1);
+
+    // Attempt 2 — grant revoked in between: revalidation denies before any
+    // side effect, with the name the bg-task workflow classifies non-retryable.
+    await expect(executor.execute({ topic: 'quantum' }, {})).rejects.toMatchObject({
+      name: TOOL_PERMISSION_DENIED_ERROR_NAME,
+    });
+    expect(toolExecute).toHaveBeenCalledTimes(1);
+    // Dispatch gate + attempt 1 + attempt 2.
+    expect(hook).toHaveBeenCalledTimes(3);
   });
 });

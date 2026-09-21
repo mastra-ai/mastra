@@ -11,6 +11,14 @@ import {
   toolApprovalEditedArgsSchema,
 } from '../../../agent/tool-call-identity';
 import type { ToolApprovalGrant } from '../../../agent/tool-call-identity';
+import {
+  ON_BEFORE_TOOL_EXECUTION_KEY,
+  ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY,
+  TOOL_PERMISSION_DENIED_ERROR_NAME,
+  TOOL_PERMISSION_POLICY_KEY,
+  type BeforeToolExecutionHook,
+  type ToolPermissionPolicy,
+} from '../../../agent/tool-permission-prefilter';
 import { MastraFGAPermissions } from '../../../auth/ee';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
@@ -60,7 +68,7 @@ import { raceAgainstAbort } from '../../timeout';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
-import { notifyToolDenied } from './tool-permission-notify';
+import { notifyToolDenied, TOOL_DENIED_CALLBACK_KEY, type ToolDeniedCallback } from './tool-permission-notify';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -142,9 +150,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   agentVersionId,
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
+  requestContext: factoryRequestContext,
   actor,
   mcp,
 }: OuterLLMRun<Tools, OUTPUT>) {
+  // Function-valued requestContext entries do not survive `RequestContext.toJSON()`
+  // across the evented engine's event bus. The factory closure captured the live
+  // turn context, so these reads are authoritative — same pattern as
+  // `requireToolApproval` above. The execute-time requestContext remains the
+  // fallback for direct callers that seed the entries there.
+  const toolPermissionPolicyFromFactory = factoryRequestContext?.get(TOOL_PERMISSION_POLICY_KEY) as
+    | ToolPermissionPolicy
+    | undefined;
+  const onBeforeToolExecutionFromFactory = factoryRequestContext?.get(ON_BEFORE_TOOL_EXECUTION_KEY) as
+    | BeforeToolExecutionHook
+    | undefined;
+  const onToolDeniedFromFactory = factoryRequestContext?.get(TOOL_DENIED_CALLBACK_KEY) as
+    | ToolDeniedCallback
+    | undefined;
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -945,6 +968,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           (authoritativeResumeType === 'suspension' || storedResumeMetadata?.identityMatches === true);
         resumedFromSuspension = isKnownSuspensionResume;
         const isApprovalResumeData = hasApprovalResumeShape && isKnownApprovalResume && !isModelAuthoredResumeData;
+        const isAnyResume = Boolean(isApprovalResumeData || isKnownSuspensionResume || isDelegatedApprovalResume);
         const isToolExecutionApprovalResume = isApprovalResumeData && effectiveApprovalSource === 'tool-execution';
         const persistedApprovalGrant =
           effectiveResumeType === 'suspension'
@@ -1138,17 +1162,28 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // 'allow' | 'ask' | 'deny' for a tool name. `deny` blocks the call with a
         // non-aborting result the model can react to; `ask` forces approval (it is
         // OR'd with tool-owned/global approval, never suppressing them); `allow`
-        // defers entirely to the tool's own approval config.
-        const toolPermissionPolicy = (
-          requestContext.get('__mastra_toolPermissionPolicy') as
-            | ((toolName: string) => 'allow' | 'ask' | 'deny')
-            | undefined
-        )?.(inputData.toolName);
+        // defers entirely to the tool's own approval config. The factory-captured
+        // value is authoritative because the function does not survive the
+        // evented engine's requestContext transport.
+        const toolPermissionPolicyResolver =
+          toolPermissionPolicyFromFactory ??
+          (requestContext.get(TOOL_PERMISSION_POLICY_KEY) as ToolPermissionPolicy | undefined);
+        const toolPermissionPolicy = toolPermissionPolicyResolver?.(inputData.toolName);
+        // §O4 deny observability reads the callback off the request context;
+        // prefer the factory-captured one so the event survives evented
+        // transport too.
+        const deniedNotifyContext =
+          onToolDeniedFromFactory === undefined
+            ? requestContext
+            : {
+                get: (key: string) =>
+                  key === TOOL_DENIED_CALLBACK_KEY ? onToolDeniedFromFactory : requestContext.get(key),
+              };
         if (toolPermissionPolicy === 'deny') {
           // §O4 — surface WHY a tool was blocked (action-time deny is otherwise
           // opaque: only a generic result reaches the model). Optional, sync,
           // fire-and-forget, isolated; a non-harness caller threads no callback.
-          notifyToolDenied(requestContext, {
+          notifyToolDenied(deniedNotifyContext, {
             toolName: inputData.toolName,
             stage: 'action',
             toolCallId: inputData.toolCallId,
@@ -1158,6 +1193,74 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             ...resumeTarget,
             disposition: 'denied' as const,
             result: `Tool "${inputData.toolName}" was denied by the session permission policy.`,
+          };
+        }
+
+        // §4.2e per-tool revalidation — an awaited hook the caller (the harness)
+        // may thread on the request context so authorization can be re-checked
+        // against durable state captured after this turn's snapshot (e.g. a
+        // grant revoked or expired mid-turn). Runs after the policy deny
+        // short-circuit and before approval resolution/`execute()`. Throwing
+        // or returning an unrecognized decision fails closed as deny. When the
+        // REQUIRED marker is present without the function (transported or
+        // restored context), the call is denied rather than silently
+        // unrevalidated.
+        const onBeforeToolExecution =
+          onBeforeToolExecutionFromFactory ??
+          (requestContext.get(ON_BEFORE_TOOL_EXECUTION_KEY) as BeforeToolExecutionHook | undefined);
+        if (typeof onBeforeToolExecution === 'function') {
+          let beforeDecision: 'allow' | 'deny' | void;
+          try {
+            beforeDecision = await onBeforeToolExecution({
+              toolName: inputData.toolName,
+              toolCallId: inputData.toolCallId,
+              args,
+              isResume: isAnyResume,
+              policyDecision: toolPermissionPolicy,
+            });
+          } catch {
+            beforeDecision = 'deny';
+          }
+          if (beforeDecision !== undefined && beforeDecision !== 'allow') {
+            notifyToolDenied(deniedNotifyContext, {
+              toolName: inputData.toolName,
+              stage: 'action',
+              toolCallId: inputData.toolCallId,
+            });
+            return {
+              ...inputData,
+              ...resumeTarget,
+              disposition: 'denied' as const,
+              result: `Tool "${inputData.toolName}" was denied by the pre-execution permission hook.`,
+            };
+          }
+          // The awaited hook can span real I/O (e.g. a grant-store read). A
+          // request aborted inside that window must not proceed to approval or
+          // dispatch — the hook's verdict is moot once the turn is cancelled.
+          if (options?.abortSignal?.aborted) {
+            return {
+              aborted: true,
+              abortError: serializeToolError(
+                (options.abortSignal as AbortSignal & { reason?: unknown }).reason ??
+                  new DOMException('The operation was aborted.', 'AbortError'),
+              ),
+              ...inputData,
+            };
+          }
+        } else if (
+          requestContext.get(ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY) === true ||
+          factoryRequestContext?.get(ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY) === true
+        ) {
+          notifyToolDenied(deniedNotifyContext, {
+            toolName: inputData.toolName,
+            stage: 'action',
+            toolCallId: inputData.toolCallId,
+          });
+          return {
+            ...inputData,
+            ...resumeTarget,
+            disposition: 'denied' as const,
+            result: `Tool "${inputData.toolName}" was denied by the pre-execution permission hook.`,
           };
         }
 
@@ -1331,7 +1434,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 resumeLabel: inputData.toolCallId,
               },
             );
-          } else if (!isApprovalResumeData && !isKnownSuspensionResume && !isDelegatedApprovalResume) {
+          } else if (!isAnyResume) {
             await removeToolMetadata(metadataToolCallId, inputData.toolName, 'approval');
 
             // Return the approval decision (not a `result` string) so it persists as
@@ -1777,6 +1880,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               timeoutMs: bgResolved.timeoutMs,
               maxRetries: bgResolved.maxRetries,
               runId,
+              // The hook closure cannot survive cross-process dispatch or cold
+              // recovery — persist the requirement so a statically-resolved
+              // executor fails closed instead of skipping revalidation.
+              requiresToolPermissionHook: typeof onBeforeToolExecution === 'function',
               context: {
                 awaited: bgResolved.disposition === 'awaited',
                 // Executor — uses the tool from the current closure
@@ -1790,6 +1897,49 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       resumeData?: unknown;
                     },
                   ) => {
+                    // Every attempt is a fresh side-effect boundary: the gate
+                    // above ran only before dispatch, so retries must revalidate
+                    // or a mid-flight grant revocation never takes effect. A
+                    // denial throws TOOL_PERMISSION_DENIED_ERROR_NAME, which the
+                    // bg-task workflow classifies as non-retryable.
+                    if (typeof onBeforeToolExecution === 'function') {
+                      let attemptDecision: 'allow' | 'deny' | void;
+                      try {
+                        attemptDecision = await onBeforeToolExecution({
+                          toolName: inputData.toolName,
+                          toolCallId: inputData.toolCallId,
+                          args: bgArgs,
+                          // The step-level resume (approval/suspension) counts
+                          // even when this attempt itself carries no resumeData —
+                          // e.g. an approved call dispatched into background
+                          // execution for the first time.
+                          isResume: isAnyResume || opts?.resumeData !== undefined,
+                          policyDecision: toolPermissionPolicy,
+                        });
+                      } catch {
+                        attemptDecision = 'deny';
+                      }
+                      if (opts?.abortSignal?.aborted || options?.abortSignal?.aborted) {
+                        throw (
+                          (
+                            (opts?.abortSignal ?? options?.abortSignal) as
+                              | (AbortSignal & { reason?: unknown })
+                              | undefined
+                          )?.reason ?? new DOMException('The operation was aborted.', 'AbortError')
+                        );
+                      }
+                      if (attemptDecision !== undefined && attemptDecision !== 'allow') {
+                        notifyToolDenied(deniedNotifyContext, {
+                          toolName: inputData.toolName,
+                          stage: 'action',
+                          toolCallId: inputData.toolCallId,
+                        });
+                        throw Object.assign(
+                          new Error(`Tool "${inputData.toolName}" was denied by the pre-execution permission hook.`),
+                          { name: TOOL_PERMISSION_DENIED_ERROR_NAME },
+                        );
+                      }
+                    }
                     // Override the agent loop's `suspend`/`resumeData` (which
                     // would suspend the AGENT run via tool-call-approval) with
                     // the bg-task workflow's, so calling `suspend()` from the

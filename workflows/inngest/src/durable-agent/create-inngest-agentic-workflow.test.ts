@@ -125,7 +125,7 @@ function findStepEntry(steps: any[], id: string): any {
 describe('createInngestDurableAgenticWorkflow ownership IDs', () => {
   const inngest = new Inngest({ id: 'inngest-agentic-workflow-id-tests' });
 
-  it('uses protocol-v3 shared IDs for direct factory callers', () => {
+  it('uses protocol-v4 shared IDs for direct factory callers', () => {
     const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
     const functionIds = workflow.getFunctions().map((fn: any) => fn.id());
 
@@ -145,22 +145,25 @@ describe('createInngestDurableAgenticWorkflow ownership IDs', () => {
 
     expect(first).toEqual(repeated);
     expect(first).not.toEqual(other);
-    expect(INNGEST_DURABLE_AGENT_PROTOCOL_VERSION).toBe('v3');
-    expect(first.AGENTIC_LOOP).toMatch(/^inngest:v3:durable-agentic-loop:[a-f0-9]{32}$/);
-    expect(first.AGENTIC_EXECUTION).toMatch(/^inngest:v3:durable-agentic-execution:[a-f0-9]{32}$/);
+    expect(INNGEST_DURABLE_AGENT_PROTOCOL_VERSION).toBe('v4');
+    expect(first.AGENTIC_LOOP).toMatch(/^inngest:v4:durable-agentic-loop:[a-f0-9]{32}$/);
+    expect(first.AGENTIC_EXECUTION).toMatch(/^inngest:v4:durable-agentic-execution:[a-f0-9]{32}$/);
     expect(() => createInngestDurableAgenticWorkflowIds('')).toThrow(/non-empty agent ID/);
   });
 
-  it('does not reuse the protocol-v2 function identity', () => {
+  it.each(['v2', 'v3'])('does not reuse the protocol-%s function identity', legacyVersion => {
     const agentId = 'policy-owner';
     const current = createInngestDurableAgenticWorkflowIds(agentId);
     const legacyOwnerHash = createHash('sha256')
-      .update(`mastra:inngest:durable-agent:v2\0${agentId}`)
+      .update(`mastra:inngest:durable-agent:${legacyVersion}\0${agentId}`)
       .digest('hex')
       .slice(0, 32);
 
-    expect(current.AGENTIC_LOOP).not.toBe(`inngest:v2:durable-agentic-loop:${legacyOwnerHash}`);
-    expect(current.AGENTIC_EXECUTION).not.toBe(`inngest:v2:durable-agentic-execution:${legacyOwnerHash}`);
+    // A worker from a prior protocol must never claim a hook-protected run —
+    // it would ignore the onBeforeToolExecution-required marker and execute
+    // gated calls without revalidation.
+    expect(current.AGENTIC_LOOP).not.toBe(`inngest:${legacyVersion}:durable-agentic-loop:${legacyOwnerHash}`);
+    expect(current.AGENTIC_EXECUTION).not.toBe(`inngest:${legacyVersion}:durable-agentic-execution:${legacyOwnerHash}`);
   });
 
   it('applies the owner namespace to both parent and nested function IDs', () => {
@@ -1402,8 +1405,14 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         modelSpanData: modelSpan.exportSpan(),
         agentSpanData: agentSpan.exportSpan(),
         state: {},
+        messageListState: new MessageList().serialize(),
       },
-      getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
+      getInitData: () => ({
+        runId: 'run-1',
+        agentId: 'agent-1',
+        state: {},
+        modelConfig: { provider: 'test', modelId: 'test-model' },
+      }),
       engine: { step: { run: skipFinishSideEffects } },
       mastra: { observability, getLogger: () => undefined },
     });
@@ -1446,8 +1455,14 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         accumulatedUsage: usage,
         lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
         state: {},
+        messageListState: new MessageList().serialize(),
       },
-      getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
+      getInitData: () => ({
+        runId: 'run-1',
+        agentId: 'agent-1',
+        state: {},
+        modelConfig: { provider: 'test', modelId: 'test-model' },
+      }),
       engine: { step: { run: skipFinishSideEffects } },
       mastra: { getLogger: () => undefined },
     });
