@@ -390,6 +390,10 @@ export class Deps extends MastraBase {
     return rewritten;
   }
 
+  /**
+   * Writes the `.yarnrc.yml` for the bundled output, recording the supported architectures so the
+   * output install only resolves optional native binaries that match the deployment target.
+   */
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
     const yarnrcPath = path.join(dir, '.yarnrc.yml');
     const config = {
