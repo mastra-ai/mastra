@@ -2,10 +2,82 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FieldBlock } from './block/field-block';
+import { SelectFieldBlock } from './fields/select-field-block';
 import { TextFieldBlock } from './fields/text-field-block';
 import { TextareaFieldBlock } from './fields/textarea-field-block';
 
 afterEach(() => cleanup());
+
+const messageContainer = (container: HTMLElement) => container.querySelector('.h-\\[1lh\\]');
+
+describe('TextFieldBlock message', () => {
+  describe('when neither helpText nor errorMsg is provided', () => {
+    it('does not render the message container', () => {
+      const { container } = render(<TextFieldBlock name="email" label="Email" />);
+
+      expect(messageContainer(container)).toBeNull();
+    });
+  });
+
+  describe('when helpText is provided', () => {
+    it('renders the message container', () => {
+      const { container } = render(<TextFieldBlock name="email" label="Email" helpText="Use your work email." />);
+
+      expect(messageContainer(container)).not.toBeNull();
+      expect(screen.getByText('Use your work email.')).toBeDefined();
+    });
+  });
+});
+
+describe('TextareaFieldBlock message', () => {
+  describe('when neither helpText nor errorMsg is provided', () => {
+    it('does not render the message container', () => {
+      const { container } = render(<TextareaFieldBlock name="bio" label="Bio" />);
+
+      expect(messageContainer(container)).toBeNull();
+    });
+  });
+
+  describe('when helpText is provided', () => {
+    it('renders the message container', () => {
+      const { container } = render(<TextareaFieldBlock name="bio" label="Bio" helpText="Keep it short." />);
+
+      expect(messageContainer(container)).not.toBeNull();
+      expect(screen.getByText('Keep it short.')).toBeDefined();
+    });
+  });
+});
+
+describe('SelectFieldBlock message', () => {
+  const options = [{ value: 'a', label: 'A' }];
+
+  describe('when neither helpText nor errorMsg is provided', () => {
+    it('does not render the message container', () => {
+      const { container } = render(
+        <SelectFieldBlock name="kind" label="Kind" options={options} onValueChange={() => {}} />,
+      );
+
+      expect(messageContainer(container)).toBeNull();
+    });
+  });
+
+  describe('when helpText is provided', () => {
+    it('renders the message container', () => {
+      const { container } = render(
+        <SelectFieldBlock
+          name="kind"
+          label="Kind"
+          options={options}
+          onValueChange={() => {}}
+          helpText="Pick a kind."
+        />,
+      );
+
+      expect(messageContainer(container)).not.toBeNull();
+      expect(screen.getByText('Pick a kind.')).toBeDefined();
+    });
+  });
+});
 
 describe('FieldBlock error wiring', () => {
   it('ties the message to its control so the reason is announced with the field', () => {

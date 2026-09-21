@@ -68,10 +68,10 @@ function TagsCell({ tags: rawTags }: { tags: DatasetRecord['tags'] }) {
           {tags.slice(0, 2).map(tag => (
             <ComputedTag key={tag} value={tag} className="shrink-0" />
           ))}
-          {tags.length > 2 && <span className="text-neutral2 text-ui-xs shrink-0">+{tags.length - 2}</span>}
+          {tags.length > 2 && <span className="text-placeholder text-ui-xs shrink-0">+{tags.length - 2}</span>}
         </div>
       ) : (
-        <span className="text-neutral2">—</span>
+        <span className="text-placeholder">—</span>
       )}
     </EntityList.Cell>
   );
@@ -111,7 +111,7 @@ function SelectableDatasetRow({
       <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
       <EntityList.Cell>
         {trailingCell ??
-          (ds.experimentCount > 0 ? <ExperimentsBadge dataset={ds} /> : <span className="text-neutral2">—</span>)}
+          (ds.experimentCount > 0 ? <ExperimentsBadge dataset={ds} /> : <span className="text-placeholder">—</span>)}
       </EntityList.Cell>
     </EntityList.RowButton>
   );

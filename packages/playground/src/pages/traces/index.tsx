@@ -20,7 +20,10 @@ import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
-import { useTraceMetadataFilterFields } from '@mastra/playground-ui/domains/traces/hooks/use-trace-metadata-filter-fields';
+import {
+  createTraceQueryValuesResolver,
+  useTraceMetadataFilterFields,
+} from '@mastra/playground-ui/domains/traces/hooks/use-trace-metadata-filter-fields';
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
@@ -36,7 +39,9 @@ import {
   clampTraceDiscoveryTimeRange,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from '@mastra/playground-ui/domains/traces/trace-query-filters';
+import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
+import { useMastraClient } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useTracesListSource } from './hooks/use-traces-list-source';
@@ -167,6 +172,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
   });
+  const client = useMastraClient();
+  const valueSuggestions = useCallback(
+    (scope: TraceQueryRelatedScope, path: string) =>
+      createTraceQueryValuesResolver(client, discoveryTimeRange, scope, path),
+    [client, discoveryTimeRange],
+  );
 
   const filterBarFields = useMemo(
     () => [
@@ -176,9 +187,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
         metadataFields,
+        valueSuggestions,
       }),
     ],
-    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFields],
+    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFields, valueSuggestions],
   );
   const allFilterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
   const filterBarItems = useMemo(
@@ -278,22 +290,30 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         operators={TRACE_FILTER_BAR_OPERATORS}
         value={filterBarValue}
         onValueChange={handleFilterBarChange}
+        // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
+        // draft that id so the chip survives the round trip without remounting.
+        createItemId={fieldId => fieldId}
         aria-label="Trace filters"
         className="min-w-64 flex-1"
       >
-        <TraceTimeRangeChip
-          preset={url.datePreset}
-          onPresetChange={url.handleDatePresetChange}
-          dateFrom={url.selectedDateFrom}
-          dateTo={url.selectedDateTo}
-          onDateChange={url.handleDateChange}
-          onDateRangeChange={url.handleDateRangeChange}
-          disabled={isTracesLoading}
-          presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+        <FilterBar.Chips
+          renderChip={item =>
+            item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
+              <TraceTimeRangeChip
+                preset={url.datePreset}
+                onPresetChange={url.handleDatePresetChange}
+                dateFrom={url.selectedDateFrom}
+                dateTo={url.selectedDateTo}
+                onDateChange={url.handleDateChange}
+                onDateRangeChange={url.handleDateRangeChange}
+                disabled={isTracesLoading}
+                presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+              />
+            ) : (
+              <FilterBar.Chip item={item} />
+            )
+          }
         />
-        {filterBarItems.map(item => (
-          <FilterBar.Chip key={item.id} item={item} />
-        ))}
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
       <div className="min-h-form-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">

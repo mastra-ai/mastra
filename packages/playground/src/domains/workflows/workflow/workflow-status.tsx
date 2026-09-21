@@ -36,7 +36,7 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
             {status === 'waiting' && <HourglassIcon className="text-accent5" />}
             {status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
           </Icon>
-          <Txt as="span" variant="ui-lg" className="text-neutral6 font-medium">
+          <Txt as="span" variant="ui-lg" className="text-foreground font-medium">
             {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
           </Txt>
         </div>

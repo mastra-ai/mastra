@@ -114,7 +114,7 @@ export function ScorerEditSidebar({
 
           {/* Score Range */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5">Score Range</Label>
+            <Label className="text-foreground">Score Range</Label>
             <div className="flex items-center gap-2">
               <Controller
                 name="scoreRange.min"
@@ -129,7 +129,7 @@ export function ScorerEditSidebar({
                   />
                 )}
               />
-              <span className="text-neutral3 text-ui-sm">to</span>
+              <span className="text-muted-foreground text-ui-sm">to</span>
               <Controller
                 name="scoreRange.max"
                 control={control}
@@ -148,7 +148,7 @@ export function ScorerEditSidebar({
 
           {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5">Default Sampling</Label>
+            <Label className="text-foreground">Default Sampling</Label>
             <Controller
               name="defaultSampling.type"
               control={control}
@@ -156,13 +156,13 @@ export function ScorerEditSidebar({
                 <RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange}>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="none" id="sampling-none" />
-                    <Label htmlFor="sampling-none" className="text-neutral5">
+                    <Label htmlFor="sampling-none" className="text-foreground">
                       None
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="ratio" id="sampling-ratio" />
-                    <Label htmlFor="sampling-ratio" className="text-neutral5">
+                    <Label htmlFor="sampling-ratio" className="text-foreground">
                       Ratio
                     </Label>
                   </div>

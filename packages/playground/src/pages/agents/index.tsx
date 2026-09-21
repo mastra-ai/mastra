@@ -10,7 +10,6 @@ import { AgentsCompactGrid } from '@/domains/agents/components/agent-list/agents
 import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
 import { sortAgents } from '@/domains/agents/components/agent-list/agents-sort';
 import type { AgentsSort } from '@/domains/agents/components/agent-list/agents-sort';
-import { AgentsSortSelect } from '@/domains/agents/components/agent-list/agents-sort-select';
 import { AgentsViewToggle } from '@/domains/agents/components/agent-list/agents-view-toggle';
 import type { AgentsView } from '@/domains/agents/components/agent-list/agents-view-toggle';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
@@ -62,7 +61,15 @@ function Agents() {
   });
   const visibleAgents = sortAgents(filteredAgents, sort);
 
-  let agentsView = <AgentsList agents={visibleAgents} isLoading={isLoading} hasSearch={Boolean(search)} />;
+  let agentsView = (
+    <AgentsList
+      agents={visibleAgents}
+      isLoading={isLoading}
+      hasSearch={Boolean(search)}
+      sort={sort}
+      onSortChange={setSort}
+    />
+  );
   if (view === 'compact') {
     agentsView = <AgentsCompactGrid agents={visibleAgents} isLoading={isLoading} hasSearch={Boolean(search)} />;
   }
@@ -75,8 +82,7 @@ function Agents() {
           <div className="max-w-120 flex-1">
             <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
           </div>
-          <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">
-            <AgentsSortSelect sort={sort} onSortChange={setSort} />
+          <div className="flex items-center justify-end sm:ml-auto">
             <AgentsViewToggle view={view} onViewChange={setView} />
           </div>
         </div>

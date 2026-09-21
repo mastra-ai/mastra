@@ -172,7 +172,7 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 text-ui-md flex w-full items-center gap-2 py-2 font-medium">
+      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground text-ui-md flex w-full items-center gap-2 py-2 font-medium">
         <ChevronRight className="h-4 w-4" />
         Schema Configuration (Optional)
       </CollapsibleTrigger>
@@ -240,7 +240,7 @@ export function SchemaConfigSection({
 
             {/* Loading indicator for workflow schema */}
             {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
-              <span className="text-neutral3 text-ui-sm">Loading schema...</span>
+              <span className="text-muted-foreground text-ui-sm">Loading schema...</span>
             )}
 
             {/* Scorer target type picker */}
@@ -263,7 +263,7 @@ export function SchemaConfigSection({
 
           {/* Helper text for scorer */}
           {sourceType === 'scorer' && (
-            <p className="text-neutral3 text-ui-sm">
+            <p className="text-muted-foreground text-ui-sm">
               {scorerTargetType === 'agent'
                 ? 'For calibrating agent-type scorers'
                 : 'For calibrating custom scorers (input/output as any)'}

@@ -73,7 +73,7 @@ export const buttonVariants = cva(
           'disabled:bg-transparent aria-disabled:bg-transparent',
         ),
         outline: cn(
-          'border border-foreground/30 bg-transparent text-foreground not-disabled:hover:border-foreground/45 not-disabled:hover:bg-foreground/4 not-disabled:active:bg-foreground/10',
+          'border border-foreground/18 bg-transparent text-foreground not-disabled:hover:border-foreground/30 not-disabled:hover:bg-foreground/4 not-disabled:active:bg-foreground/10',
           NEUTRAL_ICON_STATE,
           disabledOutlineSurfaceStyle,
           'aria-disabled:border-border aria-disabled:bg-transparent',

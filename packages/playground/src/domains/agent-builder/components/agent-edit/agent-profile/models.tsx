@@ -152,7 +152,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
 
           {groups.length === 0 ? (
             <div className="flex min-h-0 items-center justify-center">
-              <Txt variant="ui-md" className="text-neutral3">
+              <Txt variant="ui-md" className="text-muted-foreground">
                 {search.trim()
                   ? `No models match "${search.trim()}"`
                   : allProvidersUnchecked
@@ -203,7 +203,7 @@ const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChan
           <Txt
             variant="ui-sm"
             as="h3"
-            className="text-neutral3 tracking-wide uppercase"
+            className="text-muted-foreground tracking-wide uppercase"
             data-testid={`model-provider-section-title-${group.providerId}`}
           >
             {group.providerName}
@@ -267,11 +267,11 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
     className="border-border1 bg-surface3 flex items-center gap-2 rounded-md border px-3 py-2"
     data-testid="model-detail-locked-chip"
   >
-    <LockIcon className="text-neutral3 h-4 w-4 shrink-0" />
-    <Txt variant="ui-sm" className="text-neutral6 truncate font-medium">
+    <LockIcon className="text-muted-foreground h-4 w-4 shrink-0" />
+    <Txt variant="ui-sm" className="text-foreground truncate font-medium">
       {provider && modelId ? `${provider}/${modelId}` : 'Locked by admin'}
     </Txt>
-    <Txt variant="ui-xs" className="text-neutral3 ml-auto shrink-0">
+    <Txt variant="ui-xs" className="text-muted-foreground ml-auto shrink-0">
       Set by admin
     </Txt>
   </div>

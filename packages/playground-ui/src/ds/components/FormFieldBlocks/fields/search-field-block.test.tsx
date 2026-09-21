@@ -94,10 +94,17 @@ describe('SearchFieldBlock — the field itself', () => {
     expect(screen.getByRole('textbox').getAttribute('aria-describedby')).toBeNull();
   });
 
-  it('reserves a message line when it has nothing to say', () => {
+  it('renders no message line when it has nothing to say', () => {
     const { container } = render(<SearchFieldBlock name="search" />);
 
+    expect(fieldColumn(container)?.childElementCount).toBe(1);
+  });
+
+  it('renders a message line when given help text', () => {
+    const { container } = render(<SearchFieldBlock name="search" helpText="Matches names and ids" />);
+
     expect(fieldColumn(container)?.childElementCount).toBe(2);
+    expect(screen.getByText('Matches names and ids')).toBeTruthy();
   });
 
   it('leaves out a label it was never given', () => {

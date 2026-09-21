@@ -59,7 +59,6 @@ export default function PromptBlocks() {
   if (promptBlocks.length === 0 && !isLoading && page === 0) {
     return (
       <NoDataPageLayout>
-        <PromptBlocksHeaderCreateAction />
         <NoPromptBlocksInfo />
       </NoDataPageLayout>
     );

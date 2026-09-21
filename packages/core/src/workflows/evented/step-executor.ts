@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
@@ -175,7 +174,7 @@ export class StepExecutor extends MastraBase {
         throw validationError;
       }
 
-      const callId = randomUUID();
+      const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
       const stepOutput = await executeWithContext({
@@ -462,7 +461,7 @@ export class StepExecutor extends MastraBase {
     retryCount?: number;
     iterationCount: number;
   }): Promise<boolean> {
-    const callId = randomUUID();
+    const callId = globalThis.crypto.randomUUID();
     const outputWriter = this.createOutputWriter(runId);
 
     return condition(
@@ -537,7 +536,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      const callId = randomUUID();
+      const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
       return await step.fn(
@@ -620,7 +619,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      const callId = randomUUID();
+      const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
       const result = await step.fn(

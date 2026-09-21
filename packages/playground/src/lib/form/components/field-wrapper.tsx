@@ -19,7 +19,7 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, id,
       {children}
 
       {field.fieldConfig?.description && (
-        <Txt as="p" variant="ui-sm" className="text-neutral6">
+        <Txt as="p" variant="ui-sm" className="text-foreground">
           {field.fieldConfig.description}
         </Txt>
       )}

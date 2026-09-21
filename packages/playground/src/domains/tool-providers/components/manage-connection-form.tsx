@@ -68,7 +68,7 @@ export const ManageConnectionForm = ({
             onClick={onBack}
             aria-label="Back to connections"
             data-testid={`${testIdPrefix}-back`}
-            className="text-neutral3 -mt-1 -ml-1.5 w-fit"
+            className="text-muted-foreground -mt-1 -ml-1.5 w-fit"
             icon={<ChevronLeft />}
           >
             Connections
@@ -79,14 +79,14 @@ export const ManageConnectionForm = ({
             {iconUrl ? (
               <img src={iconUrl} alt="" className="size-8 object-contain" />
             ) : (
-              <Icon size="lg" className="text-neutral3">
+              <Icon size="lg" className="text-muted-foreground">
                 <Link2 />
               </Icon>
             )}
           </div>
 
           <div className="flex w-full flex-col items-center gap-1.5">
-            <Txt variant="ui-xs" className="text-neutral3">
+            <Txt variant="ui-xs" className="text-muted-foreground">
               {integrationName} connection
             </Txt>
             <div className="relative w-full">

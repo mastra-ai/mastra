@@ -120,7 +120,7 @@ export function SpanScoring({
           disabled={isWaiting}
         />
         {selectedScorerDescription && (
-          <TextAndIcon className="text-neutral3 text-ui-sm">
+          <TextAndIcon className="text-muted-foreground text-ui-sm">
             <InfoIcon /> {selectedScorerDescription}
           </TextAndIcon>
         )}

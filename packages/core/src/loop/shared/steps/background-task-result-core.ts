@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { MessageList } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';
 import type { ProviderMetadata } from '../../../stream/types';
@@ -144,7 +143,7 @@ export async function applyBackgroundToolResult(deps: {
           {
             role: 'tool' as const,
             type: 'tool-call',
-            id: deps.generateId?.() ?? randomUUID(),
+            id: deps.generateId?.() ?? globalThis.crypto.randomUUID(),
             createdAt: new Date(),
             content: [
               {

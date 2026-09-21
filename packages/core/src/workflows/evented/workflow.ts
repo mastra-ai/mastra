@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
@@ -1805,7 +1804,7 @@ export class EventedWorkflow<
       });
     }
 
-    const runIdToUse = options?.runId || randomUUID();
+    const runIdToUse = options?.runId || globalThis.crypto.randomUUID();
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
 

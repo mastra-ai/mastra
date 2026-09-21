@@ -82,7 +82,7 @@ export function SkillsTable({
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div className="text-ui-md">
             <p className="font-medium text-amber-500">Skills installed but not discovered</p>
-            <p className="text-neutral4 mt-1">
+            <p className="text-muted-foreground mt-1">
               You have skills in <code className="bg-surface4 text-ui-sm rounded px-1 py-0.5">.agents/skills</code> that
               aren&apos;t being discovered. Add this path to your workspace skills configuration to see them.
             </p>
@@ -113,7 +113,7 @@ export function SkillsTable({
 
             const rowContent = (
               <>
-                <DataList.Cell className="text-neutral6 font-medium">{skill.name}</DataList.Cell>
+                <DataList.Cell className="text-foreground font-medium">{skill.name}</DataList.Cell>
                 <DataList.TextCell font="mono">{skill.path}</DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   <span className="block truncate">{skill.description || '—'}</span>
@@ -179,10 +179,10 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
     <div className="grid place-items-center py-16">
       <div className="flex max-w-md flex-col items-center text-center">
         <div className="bg-surface4 mb-4 rounded-full p-4">
-          <CircleSlashIcon className="text-neutral3 h-8 w-8" />
+          <CircleSlashIcon className="text-muted-foreground h-8 w-8" />
         </div>
-        <h2 className="text-neutral6 text-header-sm mb-2 font-medium">Skills Not Configured</h2>
-        <p className="text-neutral4 text-ui-md mb-6">
+        <h2 className="text-foreground text-header-sm mb-2 font-medium">Skills Not Configured</h2>
+        <p className="text-muted-foreground text-ui-md mb-6">
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
         </p>

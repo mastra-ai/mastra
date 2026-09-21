@@ -45,7 +45,7 @@ export const TracingRunOptions = ({
   return (
     <div className={cn('px-5 py-2', !hideTitle && 'space-y-2', className)}>
       {!hideTitle && (
-        <Txt as="h3" variant="ui-md" className="text-neutral3">
+        <Txt as="h3" variant="ui-md" className="text-muted-foreground">
           Tracing Options
         </Txt>
       )}
@@ -55,7 +55,7 @@ export const TracingRunOptions = ({
           <FieldBlock.Label name={fieldName} size="bigger">
             Tracing Options (JSON)
           </FieldBlock.Label>
-          <Txt as="span" variant="ui-xs" className="text-neutral3">
+          <Txt as="span" variant="ui-xs" className="text-muted-foreground">
             Auto-applied on valid JSON
           </Txt>
         </div>

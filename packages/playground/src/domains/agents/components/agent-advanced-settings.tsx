@@ -69,7 +69,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
     }
   };
 
-  const buttonClass = 'text-neutral3 hover:text-neutral6';
+  const buttonClass = 'text-muted-foreground hover:text-foreground';
 
   return (
     <TooltipProvider>

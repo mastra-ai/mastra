@@ -122,6 +122,8 @@ export interface ThreadProps {
    * only replaces the welcome screen; live messages that arrive earlier take precedence.
    */
   isHistoryLoading?: boolean;
+  onLoadPrevious?: () => void | Promise<void>;
+  isLoadingPrevious?: boolean;
 }
 
 export const Thread = ({
@@ -134,6 +136,8 @@ export const Thread = ({
   runOptionsSlot,
   refreshThreadList,
   isHistoryLoading,
+  onLoadPrevious,
+  isLoadingPrevious,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -161,11 +165,29 @@ export const Thread = ({
 
   return (
     <ComposerAttachmentsProvider>
-      <ChatShell className="h-full" scroller={{ defaultScrollPosition: 'last-anchor' }} data-testid="thread-wrapper">
+      <ChatShell
+        className="h-full"
+        scroller={{
+          defaultScrollPosition: 'last-anchor',
+          onReachStart: onLoadPrevious,
+          preserveScrollOnPrepend: Boolean(onLoadPrevious),
+        }}
+        data-testid="thread-wrapper"
+      >
         <ChatShell.Stage>
           <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
             <ThreadRailLayer turns={threadRailTurns} />
             <ChatShell.Content>
+              {isLoadingPrevious && (
+                <ChatShell.Column
+                  data-testid="thread-history-older-skeleton"
+                  aria-busy="true"
+                  aria-label="Loading older messages"
+                  className="py-3"
+                >
+                  <ChatMessagesLoadingSkeleton />
+                </ChatShell.Column>
+              )}
               {isEmpty && isHistoryLoading ? (
                 <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
                   <ChatMessagesLoadingSkeleton />
@@ -375,7 +397,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
+      {isListening ? <CircleStopIcon /> : <Mic className="text-muted-foreground hover:text-foreground h-5 w-5" />}
     </Button>
   );
 };
@@ -473,7 +495,7 @@ const ComposerSendButton = ({
         className="border-border1 bg-surface5 rounded-full border"
         disabled={!canExecute || isEmpty}
       >
-        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
+        <ArrowUp className="text-muted-foreground hover:text-foreground h-6 w-6" />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
@@ -496,7 +518,7 @@ const CircleStopIcon = () => {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-neutral3 hover:text-neutral6"
+      className="text-muted-foreground hover:text-foreground"
     >
       <circle cx="12" cy="12" r="10" />
       <rect width="6" height="6" x="9" y="9" rx="1" />

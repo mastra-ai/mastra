@@ -6,26 +6,49 @@ import {
   BracesIcon,
   BuildingIcon,
   ClockIcon,
+  CloudIcon,
+  CpuIcon,
   FingerprintIcon,
   FlaskConicalIcon,
+  GaugeIcon,
+  GitBranchIcon,
   GlobeIcon,
   HashIcon,
   LayersIcon,
+  MessageCircleIcon,
   MessageSquareIcon,
+  PercentIcon,
   PlayIcon,
   RadioIcon,
   ServerIcon,
+  ShapesIcon,
+  StarIcon,
   TagIcon,
   TagsIcon,
+  ThumbsUpIcon,
+  TimerIcon,
+  TriangleAlertIcon,
   UserIcon,
   WaypointsIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { TraceMetadataFilterField } from './hooks/use-trace-metadata-filter-fields';
-import { TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from './trace-query-filters';
+import {
+  isTraceFilterOperatorId,
+  TRACE_QUERY_NUMERIC_FIELD_IDS,
+  TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
+} from './trace-query-filters';
+import type { TraceFilterOperatorId, TraceFilterToken, TraceQueryRelatedScope } from './trace-query-filters';
 import type { TraceDatePreset } from './types';
-import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
+import type {
+  FilterBarField,
+  FilterBarItem,
+  FilterBarOperator,
+  FilterBarSuggestionsResolver,
+} from '@/ds/components/FilterBar/types';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+
+export type { TraceFilterOperatorId, TraceFilterToken, TraceQueryRelatedScope } from './trace-query-filters';
 import { stringToThemedColor, themedHueColor } from '@/lib/colors';
 
 type EntityTypeValue = `${EntityType}`;
@@ -118,11 +141,42 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   serviceName: 'filterServiceName',
   environment: 'filterEnvironment',
   experimentId: 'filterExperimentId',
+  'spans.name': 'filterSpanName',
+  'spans.spanType': 'filterSpanType',
+  'spans.model': 'filterSpanModel',
+  'spans.provider': 'filterSpanProvider',
+  'spans.durationMs': 'filterSpanDurationMs',
+  'spans.error': 'filterSpanError',
+  'scores.scorerId': 'filterScorerId',
+  'scores.score': 'filterScore',
+  'feedback.feedbackType': 'filterFeedbackType',
+  'feedback.value': 'filterFeedbackValue',
+  'feedback.comment': 'filterFeedbackComment',
 } as const;
 
 export const TRACE_PROPERTY_FILTER_FIELD_IDS = Object.keys(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD) as Array<
   keyof typeof TRACE_PROPERTY_FILTER_PARAM_BY_FIELD
 >;
+
+/** The operator of a filter lives in a sibling `<valueParam>.op` param; omitted
+ *  means the default (`is`). Metadata keys cannot contain dots, so the suffix is
+ *  unambiguous. */
+export const TRACE_FILTER_OPERATOR_PARAM_SUFFIX = '.op';
+export const traceFilterOperatorParam = (valueParam: string) => valueParam + TRACE_FILTER_OPERATOR_PARAM_SUFFIX;
+const isTraceFilterOperatorParam = (param: string) => param.endsWith(TRACE_FILTER_OPERATOR_PARAM_SUFFIX);
+
+const isPresenceOperator = (operatorId: TraceFilterOperatorId | undefined) =>
+  operatorId === 'exists' || operatorId === 'notExists';
+const isManyOperator = (operatorId: TraceFilterOperatorId | undefined) => operatorId === 'in' || operatorId === 'notIn';
+
+/** Default operator for a token without one: arrays mean set membership. */
+export const traceFilterTokenOperator = (token: TraceFilterToken): TraceFilterOperatorId =>
+  token.operatorId ?? (Array.isArray(token.value) ? 'in' : 'is');
+
+const readTraceFilterOperator = (searchParams: URLSearchParams, valueParam: string) => {
+  const raw = searchParams.get(traceFilterOperatorParam(valueParam));
+  return raw !== null && isTraceFilterOperatorId(raw) ? raw : undefined;
+};
 
 export const TRACE_STATUS_VALUES = new Set<TraceStatusFilter>(['running', 'success', 'error']);
 
@@ -196,12 +250,36 @@ export function hasAnyTraceFilterParams(params: URLSearchParams): boolean {
   return false;
 }
 
-/** The trace query API only runs equality (`eq`) and set membership (`in`)
- *  predicates, so the FilterBar offers exactly those two operators. */
-export const TRACE_FILTER_BAR_OPERATORS: FilterBarOperator[] = [
+/** Every operator the trace query API supports, keyed by the UI id that goes in the URL. */
+export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterOperatorId })[] = [
   { id: 'is', label: 'is' },
-  { id: 'in', label: 'in', arity: 'many' },
+  { id: 'isNot', label: 'is not' },
+  { id: 'in', label: 'is any of', arity: 'many' },
+  { id: 'notIn', label: 'is none of', arity: 'many' },
+  { id: 'exists', label: 'exists', arity: 'none' },
+  { id: 'notExists', label: 'does not exist', arity: 'none' },
+  { id: 'gt', label: '>' },
+  { id: 'gte', label: '≥' },
+  { id: 'lt', label: '<' },
+  { id: 'lte', label: '≤' },
 ];
+
+const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
+/** Fields every trace carries (`traceId`, `entityName`): presence operators would never be false. */
+const TRACE_REQUIRED_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn'];
+const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
+  'is',
+  'isNot',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'exists',
+  'notExists',
+];
+const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
+/** Synthetic fields live in a single dedicated URL param, so they cannot carry an operator. */
+const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
 
 const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   rootEntityType: 'Primitive Type',
@@ -220,6 +298,17 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   userId: 'User ID',
   organizationId: 'Organization ID',
   experimentId: 'Experiment ID',
+  'spans.name': 'Span name',
+  'spans.spanType': 'Span type',
+  'spans.model': 'Model',
+  'spans.provider': 'Provider',
+  'spans.durationMs': 'Span duration (ms)',
+  'spans.error': 'Span error',
+  'scores.scorerId': 'Scorer',
+  'scores.score': 'Score',
+  'feedback.feedbackType': 'Feedback type',
+  'feedback.value': 'Feedback value',
+  'feedback.comment': 'Feedback comment',
 };
 
 /** Icon and hue for each known trace filter key. Hues are spread by hand — hashing
@@ -242,6 +331,17 @@ const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; hue: numbe
   userId: { icon: UserIcon, hue: 20 },
   organizationId: { icon: BuildingIcon, hue: 120 },
   experimentId: { icon: FlaskConicalIcon, hue: 160 },
+  'spans.name': { icon: GitBranchIcon, hue: 250 },
+  'spans.spanType': { icon: ShapesIcon, hue: 275 },
+  'spans.model': { icon: CpuIcon, hue: 300 },
+  'spans.provider': { icon: CloudIcon, hue: 205 },
+  'spans.durationMs': { icon: TimerIcon, hue: 40 },
+  'spans.error': { icon: TriangleAlertIcon, hue: 10 },
+  'scores.scorerId': { icon: GaugeIcon, hue: 130 },
+  'scores.score': { icon: PercentIcon, hue: 110 },
+  'feedback.feedbackType': { icon: ThumbsUpIcon, hue: 185 },
+  'feedback.value': { icon: StarIcon, hue: 45 },
+  'feedback.comment': { icon: MessageCircleIcon, hue: 225 },
 };
 
 export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_META[fieldId]?.icon;
@@ -272,6 +372,25 @@ const TRACE_FILTER_BAR_TEXT_FIELD_IDS = [
   'experimentId',
 ] as const;
 
+const TRACE_FILTER_BAR_RELATED_FIELD_IDS = [
+  'spans.name',
+  'spans.spanType',
+  'spans.model',
+  'spans.provider',
+  'spans.durationMs',
+  'spans.error',
+  'scores.scorerId',
+  'scores.score',
+  'feedback.feedbackType',
+  'feedback.value',
+  'feedback.comment',
+] as const;
+type TraceFilterRelatedFieldId = (typeof TRACE_FILTER_BAR_RELATED_FIELD_IDS)[number];
+
+const TRACE_FILTER_BAR_PRESENCE_FIELD_IDS = new Set<string>(['spans.error', 'feedback.comment']);
+
+const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
+
 /** FilterBar field definitions for the trace pages. Fields the query API cannot
  *  filter on (see `TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS`) are omitted, as is the
  *  `running` status, so no chip advertises a filter that has no effect. Hidden
@@ -282,33 +401,61 @@ export function createTraceFilterBarFields({
   availableEnvironments,
   hiddenFieldIds = [],
   metadataFields = [],
+  valueSuggestions,
 }: {
   availableRootEntityNames: string[];
   availableEnvironments: string[];
   hiddenFieldIds?: readonly string[];
   /** Discovered `metadata.<key>` paths with a lazy value-suggestions resolver each. */
   metadataFields?: readonly TraceMetadataFilterField[];
+  /** Builds a lazy value resolver for a related-scope field (`spans.model`, …). Absent → free text. */
+  valueSuggestions?: (scope: TraceQueryRelatedScope, path: string) => FilterBarSuggestionsResolver;
 }): FilterBarField[] {
-  const pick = (id: string, suggestions: { value: string; label?: string }[]): FilterBarField => ({
+  const pick = (
+    id: string,
+    suggestions: { value: string; label?: string }[],
+    operators: TraceFilterOperatorId[] = TRACE_STRING_OPERATORS,
+  ): FilterBarField => ({
     ...traceFieldBase(id),
-    operators: ['is'],
+    operators,
     strict: true,
     suggestions,
   });
-  const text = (id: string): FilterBarField => ({ ...traceFieldBase(id), operators: ['is'] });
+  const text = (id: string): FilterBarField => ({
+    ...traceFieldBase(id),
+    operators: id === 'traceId' ? TRACE_REQUIRED_STRING_OPERATORS : TRACE_STRING_OPERATORS,
+  });
+  const relatedPick = (id: TraceFilterRelatedFieldId): FilterBarField => {
+    const [scope, path] = id.split('.') as [TraceQueryRelatedScope, string];
+    const resolver = valueSuggestions?.(scope, path);
+    return {
+      ...traceFieldBase(id),
+      operators: TRACE_STRING_OPERATORS,
+      ...(resolver ? { strict: true, suggestions: resolver } : {}),
+    };
+  };
+  const number = (id: string): FilterBarField => ({
+    ...traceFieldBase(id),
+    type: 'number',
+    operators: TRACE_NUMBER_OPERATORS,
+  });
+  const presence = (id: string): FilterBarField => ({ ...traceFieldBase(id), operators: TRACE_PRESENCE_OPERATORS });
 
   const pickFields: FilterBarField[] = [
     pick(
       'rootEntityType',
       ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ value: o.entityType, label: o.label })),
+      TRACE_SYNTHETIC_OPERATORS,
     ),
     pick(
       'entityName',
       availableRootEntityNames.map(name => ({ value: name })),
+      TRACE_REQUIRED_STRING_OPERATORS,
     ),
     pick(
       'status',
       TRACE_STATUS_OPTIONS.filter(o => o.value !== 'running').map(o => ({ value: o.value, label: o.label })),
+      TRACE_SYNTHETIC_OPERATORS,
     ),
     pick(
       'environment',
@@ -316,6 +463,15 @@ export function createTraceFilterBarFields({
     ),
   ];
   const textFields = TRACE_FILTER_BAR_TEXT_FIELD_IDS.map(text);
+  const relatedFields = (['spans', 'scores', 'feedback'] as const).flatMap(scope =>
+    TRACE_FILTER_BAR_RELATED_FIELD_IDS.filter(id => id.startsWith(`${scope}.`))
+      .map(id => {
+        if (TRACE_QUERY_NUMERIC_FIELD_IDS.has(id)) return number(id);
+        if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(id)) return presence(id);
+        return relatedPick(id);
+      })
+      .sort(byLabel),
+  );
   const metadataBarFields: FilterBarField[] = metadataFields
     .filter(({ path }) => isTraceMetadataFieldId(path))
     .map(({ path, suggestions }) => ({
@@ -323,13 +479,17 @@ export function createTraceFilterBarFields({
       label: path.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length),
       icon: BracesIcon,
       color: stringToThemedColor(path),
-      operators: ['is'],
+      operators: TRACE_STRING_OPERATORS,
       suggestions,
     }));
 
-  const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
   const hidden = new Set(hiddenFieldIds);
-  return [...pickFields.sort(byLabel), ...textFields.sort(byLabel), ...metadataBarFields.sort(byLabel)]
+  return [
+    ...pickFields.sort(byLabel),
+    ...textFields.sort(byLabel),
+    ...relatedFields,
+    ...metadataBarFields.sort(byLabel),
+  ]
     .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id))
     .map(field => (hidden.has(field.id) ? { ...field, hidden: true } : field));
 }
@@ -338,20 +498,27 @@ export function createTraceFilterBarFields({
  *  Empty values ('' / []) are kept: that's a pending chip whose field was just
  *  changed and whose value hasn't been picked yet (the query builder skips it).
  *  Only the legacy 'Any' sentinel is mapped back to an empty value. */
-export function traceTokensToFilterBarItems(tokens: PropertyFilterToken[]): FilterBarItem[] {
+export function traceTokensToFilterBarItems(tokens: TraceFilterToken[]): FilterBarItem[] {
   return tokens.map(token => ({
     id: token.fieldId,
     fieldId: token.fieldId,
-    operatorId: token.fieldId === 'tags' ? 'in' : 'is',
+    operatorId: traceFilterTokenOperator(token),
     value: token.value === 'Any' ? '' : token.value,
   }));
 }
 
-export function filterBarItemsToTraceTokens(items: FilterBarItem[]): PropertyFilterToken[] {
-  return items.map(item => ({
-    fieldId: item.fieldId,
-    value: Array.isArray(item.value) ? item.value.map(String) : String(item.value),
-  }));
+export function filterBarItemsToTraceTokens(items: FilterBarItem[]): TraceFilterToken[] {
+  return items.map(item => {
+    const token: TraceFilterToken = {
+      fieldId: item.fieldId,
+      value: Array.isArray(item.value) ? item.value.map(String) : String(item.value),
+    };
+    // Only carry a non-default operator so tokens stay minimal (and URLs stay short).
+    if (isTraceFilterOperatorId(item.operatorId) && item.operatorId !== traceFilterTokenOperator(token)) {
+      token.operatorId = item.operatorId;
+    }
+    return token;
+  });
 }
 
 /**
@@ -360,8 +527,8 @@ export function filterBarItemsToTraceTokens(items: FilterBarItem[]): PropertyFil
  * is used by the Filter popover + PropertyFilterApplied pills so the UI reflects the
  * order the user created the filters in.
  */
-export function getTracePropertyFilterTokens(searchParams: URLSearchParams): PropertyFilterToken[] {
-  const tokens: PropertyFilterToken[] = [];
+export function getTracePropertyFilterTokens(searchParams: URLSearchParams): TraceFilterToken[] {
+  const tokens: TraceFilterToken[] = [];
 
   // Map URL param name → fieldId for both generic filterX params and the
   // dedicated synthetic params (rootEntityType, status).
@@ -375,24 +542,26 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Pro
 
   const seen = new Set<string>();
   for (const [paramName] of searchParams.entries()) {
+    if (isTraceFilterOperatorParam(paramName)) continue;
     const fieldId = isTraceMetadataParam(paramName) ? metadataParamToFieldId(paramName) : paramToFieldId.get(paramName);
     if (!fieldId || seen.has(fieldId)) continue;
     seen.add(fieldId);
 
-    if (fieldId === 'tags') {
-      const raw = searchParams.getAll(paramName);
-      if (raw.length === 0) continue;
+    const operatorId = readTraceFilterOperator(searchParams, paramName);
+    const raw = searchParams.getAll(paramName);
+
+    if (fieldId === 'tags' || isManyOperator(operatorId)) {
       // An empty `filterTags=` sentinel keeps the pill alive after a Reset
       // (neutral state = no selections) so users can re-pick without losing
-      // the pill's position. Non-empty entries are the actual selected tags.
-      tokens.push({ fieldId, value: raw.filter(Boolean) });
+      // the pill's position. Non-empty entries are the actual selected values.
+      tokens.push({ fieldId, value: raw.filter(Boolean), ...(operatorId ? { operatorId } : {}) });
       continue;
     }
 
     // Text and synthetic single-value fields: include empty strings so
     // pending-but-not-yet-filled filters survive URL round-trips.
-    const value = searchParams.get(paramName);
-    if (value !== null) tokens.push({ fieldId, value });
+    const value = raw[0];
+    if (value !== undefined) tokens.push({ fieldId, value, ...(operatorId ? { operatorId } : {}) });
   }
 
   return tokens;
@@ -410,6 +579,14 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
   const listMode = searchParams.get(TRACE_LIST_MODE_PARAM);
   if (listMode) next.set(TRACE_LIST_MODE_PARAM, listMode);
 
+  const preserve = (param: string) => {
+    const operatorId = readTraceFilterOperator(searchParams, param);
+    const values = searchParams.getAll(param).filter(value => value || isPresenceOperator(operatorId));
+    if (!values.length) return;
+    for (const value of values) next.append(param, value);
+    if (operatorId) next.set(traceFilterOperatorParam(param), operatorId);
+  };
+
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     const param = TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId];
     if (fieldId === 'tags') {
@@ -418,15 +595,14 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
       }
       continue;
     }
-
-    const value = searchParams.get(param);
-    if (value) {
-      next.set(param, value);
-    }
+    preserve(param);
   }
 
-  for (const [param, value] of searchParams.entries()) {
-    if (isTraceMetadataParam(param) && value) next.set(param, value);
+  const seenMetadata = new Set<string>();
+  for (const param of searchParams.keys()) {
+    if (!isTraceMetadataParam(param) || isTraceFilterOperatorParam(param) || seenMetadata.has(param)) continue;
+    seenMetadata.add(param);
+    preserve(param);
   }
 
   return next;
@@ -438,21 +614,19 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
  * creation order of filters. Handles the generic `filterX` params plus the
  * dedicated synthetic params (rootEntityType, status).
  */
-export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: PropertyFilterToken[]) {
+export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: TraceFilterToken[]) {
   params.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
   params.delete(TRACE_STATUS_PARAM);
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
-    params.delete(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId]);
+    const param = TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId];
+    params.delete(param);
+    params.delete(traceFilterOperatorParam(param));
   }
   for (const param of Array.from(params.keys())) {
     if (isTraceMetadataParam(param)) params.delete(param);
   }
 
   for (const token of tokens) {
-    if (isTraceMetadataFieldId(token.fieldId)) {
-      if (typeof token.value === 'string') params.set(metadataFieldIdToParam(token.fieldId), token.value.trim());
-      continue;
-    }
     if (token.fieldId === 'rootEntityType' && typeof token.value === 'string') {
       params.set(TRACE_ROOT_ENTITY_TYPE_PARAM, token.value);
       continue;
@@ -462,11 +636,12 @@ export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: 
       continue;
     }
 
-    const param =
-      TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[token.fieldId as keyof typeof TRACE_PROPERTY_FILTER_PARAM_BY_FIELD];
+    const param = isTraceMetadataFieldId(token.fieldId)
+      ? metadataFieldIdToParam(token.fieldId)
+      : TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[token.fieldId as keyof typeof TRACE_PROPERTY_FILTER_PARAM_BY_FIELD];
     if (!param) continue;
 
-    if (token.fieldId === 'tags' && Array.isArray(token.value)) {
+    if (Array.isArray(token.value)) {
       if (token.value.length === 0) {
         // Empty sentinel — keeps the pill visible after Reset.
         params.append(param, '');
@@ -475,15 +650,19 @@ export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: 
           params.append(param, value);
         }
       }
-      continue;
-    }
-
-    if (typeof token.value === 'string') {
+    } else {
       // Persist empty / 'Any' values too so neutralized-but-still-visible pills
-      // survive URL round-trips. buildTraceListFilters skips these on the API
-      // query side so neutrals never reach the backend.
+      // survive URL round-trips. The query builder skips these so neutrals
+      // never reach the backend.
       params.set(param, token.value.trim());
     }
+
+    // Only `is` is implicit on read. `in` must be written explicitly (except
+    // for tags, which are always multi-valued) or a reload would collapse the
+    // selection to its first value.
+    const operatorId = traceFilterTokenOperator(token);
+    const implicit = token.fieldId === 'tags' ? 'in' : 'is';
+    if (operatorId !== implicit) params.set(traceFilterOperatorParam(param), operatorId);
   }
 }
 

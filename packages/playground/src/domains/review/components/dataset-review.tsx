@@ -50,6 +50,20 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Completed' },
 ];
 
+export type ReviewListStatus = 'review' | 'completed';
+/** Sentinel tag value matching items without any tag. */
+export const UNTAGGED_TAG = UNTAGGED;
+
+export interface ReviewListFilters {
+  status: ReviewListStatus;
+  onStatusChange: (status: ReviewListStatus) => void;
+  /** `null` → every tag. */
+  tag: string | null;
+  onTagChange: (tag: string | null) => void;
+  /** Tags present on the review items (most used first), plus `UNTAGGED_TAG` when relevant. */
+  tagOptions: Array<{ value: string; label: string }>;
+}
+
 export interface DatasetReviewProps {
   /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
   datasetId?: string;
@@ -71,6 +85,11 @@ export interface DatasetReviewProps {
   featuredItemId?: string | null;
   /** Rendered before the status/tag filters in the toolbar (e.g. an experiment picker). */
   toolbarStart?: ReactNode;
+  /**
+   * Takes over the status/tag filters: when set, the built-in selects and reset button are not
+   * rendered and the caller draws them from the given state (e.g. inside a shared filter bar).
+   */
+  renderFilters?: (filters: ReviewListFilters) => ReactNode;
   /** Rendered at the end of the toolbar, after the bulk actions. */
   toolbarEnd?: ReactNode;
   /** When set, shows a "Create Scorer" action fed with the visible review items (input/output). */
@@ -86,6 +105,7 @@ export function DatasetReview({
   targetId,
   featuredItemId: featuredItemIdRequest,
   toolbarStart,
+  renderFilters,
   toolbarEnd,
   onCreateScorer,
 }: DatasetReviewProps) {
@@ -404,39 +424,55 @@ export function DatasetReview({
   const hasSelection = !showCompleted && selectedItemIds.size > 0;
   const showCreateScorer = !!onCreateScorer && !showCompleted && filteredItems.length > 0;
 
+  const status: ReviewListStatus = showCompleted ? 'completed' : 'review';
+  const onStatusChange = (next: ReviewListStatus) => {
+    setShowCompleted(next === 'completed');
+    setFeaturedItemId(null);
+  };
+
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2">
-      <ButtonsGroup>
-        {toolbarStart}
-        <SelectFieldBlock
-          label="Status"
-          labelIsHidden
-          name="filter-status"
-          options={STATUS_OPTIONS}
-          value={showCompleted ? 'completed' : 'review'}
-          onValueChange={value => {
-            setShowCompleted(value === 'completed');
-            setFeaturedItemId(null);
-          }}
-          className="whitespace-nowrap"
-        />
-        {tagOptions.length > 1 && (
+      {renderFilters ? (
+        <>
+          {toolbarStart}
+          {renderFilters({
+            status,
+            onStatusChange,
+            tag: activeTagFilter,
+            onTagChange: setActiveTagFilter,
+            tagOptions: tagOptions.filter(option => option.value !== ALL_TAGS),
+          })}
+        </>
+      ) : (
+        <ButtonsGroup>
+          {toolbarStart}
           <SelectFieldBlock
-            label="Tags"
+            label="Status"
             labelIsHidden
-            name="filter-tags"
-            options={tagOptions}
-            value={activeTagFilter ?? ALL_TAGS}
-            onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+            name="filter-status"
+            options={STATUS_OPTIONS}
+            value={status}
+            onValueChange={value => onStatusChange(value === 'completed' ? 'completed' : 'review')}
             className="whitespace-nowrap"
           />
-        )}
-        {hasActiveFilters && (
-          <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
-            Reset
-          </Button>
-        )}
-      </ButtonsGroup>
+          {tagOptions.length > 1 && (
+            <SelectFieldBlock
+              label="Tags"
+              labelIsHidden
+              name="filter-tags"
+              options={tagOptions}
+              value={activeTagFilter ?? ALL_TAGS}
+              onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+              className="whitespace-nowrap"
+            />
+          )}
+          {hasActiveFilters && (
+            <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+              Reset
+            </Button>
+          )}
+        </ButtonsGroup>
+      )}
 
       {(hasSelection || toolbarEnd || showCreateScorer) && (
         <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -558,7 +594,7 @@ export function DatasetReview({
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
-            <Txt variant="ui-xs" className="text-neutral3">
+            <Txt variant="ui-xs" className="text-muted-foreground">
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
@@ -608,7 +644,7 @@ export function DatasetReview({
                       }
                     />
                     <div className="min-w-0 flex-1">
-                      <Txt variant="ui-xs" className="text-neutral4 block truncate">
+                      <Txt variant="ui-xs" className="text-muted-foreground block truncate">
                         {item
                           ? typeof item.input === 'string'
                             ? item.input.slice(0, 100)
@@ -636,7 +672,7 @@ export function DatasetReview({
                         ))}
                       </div>
                       {proposal.reason && (
-                        <Txt variant="ui-xs" className="text-neutral3 mt-1 block italic">
+                        <Txt variant="ui-xs" className="text-muted-foreground mt-1 block italic">
                           {proposal.reason}
                         </Txt>
                       )}
@@ -671,7 +707,7 @@ export function DatasetReview({
           ) : displayItems.length === 0 ? (
             <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
               <EmptyState
-                iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+                iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
                 titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
                 descriptionSlot={
                   showCompleted

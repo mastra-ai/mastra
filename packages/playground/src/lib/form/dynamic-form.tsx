@@ -1,11 +1,12 @@
 import type { ButtonProps } from '@mastra/playground-ui/components/Button';
 import { Label } from '@mastra/playground-ui/components/Label';
 import type { ReactNode } from 'react';
-import { useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { AutoForm } from './auto-form';
 import { FormSubmitRow } from './components/form-submit-row';
+import type { FormSubmitRowProps } from './components/form-submit-row';
 import { ROOT_FIELD_KEY } from './field-context';
 import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
@@ -28,13 +29,30 @@ interface DynamicFormProps {
   leftActions?: React.ReactNode;
 }
 
-function isZodObjectLike(schema: any): boolean {
-  return getShape(schema) !== undefined;
-}
-
 function getFormInput(values: Record<string, unknown>, isWrapped: boolean) {
   return isWrapped ? values[ROOT_FIELD_KEY] : values;
 }
+
+function normalizeSchema(schema: z.ZodType, isWrapped: boolean) {
+  if (isEmptyZodObject(schema)) return z.object({});
+  if (!isWrapped) return schema;
+  return z.object({ [ROOT_FIELD_KEY]: schema.description ? schema : schema.describe('Input') });
+}
+
+const SubmitRowContext = createContext<FormSubmitRowProps | null>(null);
+
+// Defined once, outside any hook: AutoForm renders `uiComponents.SubmitButton` as a component
+// type, so recreating it per render would unmount and remount everything in `submitActions`.
+const SubmitButton = ({ children }: { children: ReactNode }) => {
+  const rowProps = useContext(SubmitRowContext);
+  return rowProps ? <FormSubmitRow {...rowProps}>{children}</FormSubmitRow> : null;
+};
+
+const uiComponents = { SubmitButton };
+
+const formComponents = {
+  Label: ({ value }: { value: string }) => <Label className="font-normal">{value}</Label>,
+};
 
 export function DynamicForm({
   schema,
@@ -52,90 +70,48 @@ export function DynamicForm({
   submitActions,
   leftActions,
 }: DynamicFormProps) {
+  const isWrapped = getShape(schema) === undefined;
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
-  const formRef = useRef<UseFormReturn<any> | null>(null);
-  const isNotZodObject = !isZodObjectLike(schema);
   const onValuesChangeRef = useRef(onValuesChange);
   useLayoutEffect(() => {
     onValuesChangeRef.current = onValuesChange;
   }, [onValuesChange]);
 
-  useEffect(() => {
-    return () => {
-      subscriptionRef.current?.unsubscribe();
-    };
-  }, []);
+  useEffect(() => () => subscriptionRef.current?.unsubscribe(), []);
 
-  const subscribeToValues = useCallback(
+  const hasValuesListener = Boolean(onValuesChange);
+
+  const handleFormInit = useCallback(
     (form: UseFormReturn<any>) => {
       subscriptionRef.current?.unsubscribe();
       subscriptionRef.current = null;
 
-      if (!onValuesChangeRef.current) return;
+      if (!hasValuesListener) return;
 
-      subscriptionRef.current = form.watch(values => {
-        onValuesChangeRef.current?.(getFormInput(values, isNotZodObject));
-      });
+      subscriptionRef.current = form.watch(values => onValuesChangeRef.current?.(getFormInput(values, isWrapped)));
+      onValuesChangeRef.current?.(getFormInput(form.getValues(), isWrapped));
     },
-    [isNotZodObject],
+    [hasValuesListener, isWrapped],
   );
 
-  const shouldSubscribeToValues = Boolean(onValuesChange);
-
-  useEffect(() => {
-    if (formRef.current) {
-      subscribeToValues(formRef.current);
-    }
-  }, [shouldSubscribeToValues, subscribeToValues]);
-
-  const handleFormInit = useCallback(
-    (form: UseFormReturn<any>) => {
-      formRef.current = form;
-      subscribeToValues(form);
-      onValuesChangeRef.current?.(getFormInput(form.getValues(), isNotZodObject));
-    },
-    [subscribeToValues, isNotZodObject],
+  const schemaProvider = useMemo(
+    () => (schema ? new CustomZodProvider(normalizeSchema(schema, isWrapped)) : null),
+    [schema, isWrapped],
   );
 
-  const schemaProvider = useMemo(() => {
-    if (!schema) {
-      return null;
-    }
-
-    const normalizeSchema = (s: any) => {
-      if (isEmptyZodObject(s)) {
-        return z.object({});
-      }
-      if (isNotZodObject) {
-        const rootSchema = s.description ? s : s.describe('Input');
-
-        return z.object({
-          [ROOT_FIELD_KEY]: rootSchema,
-        });
-      }
-      return s;
-    };
-
-    return new CustomZodProvider(normalizeSchema(schema));
-  }, [schema, isNotZodObject]);
-
-  const uiComponents = useMemo(
-    () => ({
-      SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
-        onSubmit ? (
-          <FormSubmitRow
-            isSubmitLoading={isSubmitLoading}
-            submitButtonLabel={submitButtonLabel}
-            submitButtonIcon={submitButtonIcon}
-            submitButtonVariant={submitButtonVariant}
-            submitButtonFullWidth={submitButtonFullWidth}
-            submitActions={submitActions}
-            leftActions={leftActions}
-          >
-            {buttonChildren}
-          </FormSubmitRow>
-        ) : null,
-    }),
+  const submitRow = useMemo<FormSubmitRowProps | null>(
+    () =>
+      onSubmit
+        ? {
+            isSubmitLoading,
+            submitButtonLabel,
+            submitButtonIcon,
+            submitButtonVariant,
+            submitButtonFullWidth,
+            submitActions,
+            leftActions,
+          }
+        : null,
     [
       onSubmit,
       isSubmitLoading,
@@ -148,32 +124,16 @@ export function DynamicForm({
     ],
   );
 
-  const formComponents = useMemo(
-    () => ({
-      Label: ({ value }: { value: string }) => <Label className="font-normal">{value}</Label>,
-    }),
-    [],
-  );
-
-  const formPropsObj = useMemo(
-    () => ({
-      className,
-      noValidate: true,
-    }),
-    [className],
-  );
-
   const normalizedDefaultValues = useMemo(
-    () =>
-      isNotZodObject ? (defaultValues === undefined ? undefined : { [ROOT_FIELD_KEY]: defaultValues }) : defaultValues,
-    [isNotZodObject, defaultValues],
+    () => (isWrapped ? (defaultValues === undefined ? undefined : { [ROOT_FIELD_KEY]: defaultValues }) : defaultValues),
+    [isWrapped, defaultValues],
   );
 
   const handleSubmit = useCallback(
     async (values: any) => {
-      await onSubmit?.(getFormInput(values, isNotZodObject));
+      await onSubmit?.(getFormInput(values, isWrapped));
     },
-    [onSubmit, isNotZodObject],
+    [onSubmit, isWrapped],
   );
 
   if (!schemaProvider) {
@@ -182,18 +142,20 @@ export function DynamicForm({
   }
 
   return (
-    <AutoForm
-      schema={schemaProvider}
-      onSubmit={handleSubmit}
-      onFormInit={handleFormInit}
-      defaultValues={normalizedDefaultValues}
-      formProps={formPropsObj}
-      uiComponents={uiComponents}
-      formComponents={formComponents}
-      withSubmit={true}
-      readOnly={readOnly}
-    >
-      {children}
-    </AutoForm>
+    <SubmitRowContext.Provider value={submitRow}>
+      <AutoForm
+        schema={schemaProvider}
+        onSubmit={handleSubmit}
+        onFormInit={handleFormInit}
+        defaultValues={normalizedDefaultValues}
+        formProps={{ className, noValidate: true }}
+        uiComponents={uiComponents}
+        formComponents={formComponents}
+        withSubmit={true}
+        readOnly={readOnly}
+      >
+        {children}
+      </AutoForm>
+    </SubmitRowContext.Provider>
   );
 }

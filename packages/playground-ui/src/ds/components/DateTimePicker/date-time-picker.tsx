@@ -282,9 +282,9 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
         {...props}
       >
         {value ? (
-          <span className="text-neutral6">{format(value, 'PP p')}</span>
+          <span className="text-foreground">{format(value, 'PP p')}</span>
         ) : (
-          <span className="text-neutral3">{placeholder ?? 'Pick a date'}</span>
+          <span className="text-muted-foreground">{placeholder ?? 'Pick a date'}</span>
         )}
       </Button>
     );

@@ -442,6 +442,8 @@ export async function analyzeBundle(
       shouldCheckTransitiveDependencies: true,
       analyzeCache,
       activeEntries: activeAnalyzeEntries,
+      externals: mergedExternals,
+      externalsPreset,
     });
 
     // Detect pino transports in the bundled output

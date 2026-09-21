@@ -75,7 +75,7 @@ export default function AgentBuilderAgentsPage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+            iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
             titleSlot="No agents yet"
             descriptionSlot="Start building your first agent with the Agent Builder."
             actionSlot={

@@ -225,7 +225,7 @@ export function SelectDataFilter({
           {activeFilterCount > 0 && (
             <span
               className={cn(
-                'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-accent1/50 text-ui-sm text-neutral5',
+                'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-accent1/50 text-ui-sm text-foreground',
               )}
             >
               {activeFilterCount}

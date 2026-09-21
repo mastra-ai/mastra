@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../memory';
 import { InternalSpans } from '../observability';
@@ -497,7 +496,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         injectFeedback: feedback => {
           messageList.add(
             {
-              id: rt.mastra?.generateId() || randomUUID(),
+              id: rt.mastra?.generateId() || globalThis.crypto.randomUUID(),
               createdAt: new Date(),
               type: 'text',
               role: 'assistant',

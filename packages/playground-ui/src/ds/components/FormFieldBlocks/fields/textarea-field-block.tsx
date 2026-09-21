@@ -67,7 +67,7 @@ export function TextareaFieldBlock({
             aria-describedby={describedBy}
             {...props}
           />
-          <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} />
+          {helpText || errorMsg ? <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} /> : null}
         </FieldBlock.Column>
       </FieldBlock.Column>
     </FieldBlock.Layout>

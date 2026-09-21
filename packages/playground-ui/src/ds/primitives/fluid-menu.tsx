@@ -3,7 +3,7 @@ import * as React from 'react';
 
 import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
 import { useFluidHover } from '@/hooks/use-fluid-hover';
-import type { UseFluidHoverReturn } from '@/hooks/use-fluid-hover';
+import type { UseFluidHoverOptions, UseFluidHoverReturn } from '@/hooks/use-fluid-hover';
 import { cn } from '@/lib/utils';
 
 /**
@@ -30,13 +30,19 @@ type FluidMenuContextValue = {
   setActiveIndex: UseFluidHoverReturn['setActiveIndex'];
   activeAttr: string;
   allocateIndex: () => number;
+  releaseIndex: (index: number) => void;
 };
 
 const FluidMenuContext = React.createContext<FluidMenuContextValue | null>(null);
 
-// Base UI sets a bare `data-disabled`; cmdk sets `data-disabled="true" | "false"`.
+// Base UI sets a bare `data-disabled`; cmdk sets `data-disabled="true" | "false"`;
+// native controls (DataList rows) use the `disabled` property.
 function isMenuItemDisabled(element: HTMLElement) {
-  return isAttrActive(element, 'data-disabled') || element.getAttribute('aria-disabled') === 'true';
+  return (
+    isAttrActive(element, 'data-disabled') ||
+    element.getAttribute('aria-disabled') === 'true' ||
+    (element as HTMLButtonElement).disabled === true
+  );
 }
 
 function isAttrActive(element: HTMLElement, attr: string) {
@@ -52,6 +58,8 @@ type MouseHandlers = Pick<
 export type UseFluidMenuOptions = {
   /** Attribute the underlying library sets on its highlighted row. */
   activeAttr?: 'data-highlighted' | 'data-selected';
+  /** Forwarded to `useFluidHover`; lists with inert rows (subheaders, pagination) pass `false`. */
+  gapClick?: UseFluidHoverOptions['gapClick'];
 };
 
 export type FluidMenu<T extends HTMLElement = HTMLElement> = {
@@ -68,16 +76,28 @@ export type FluidMenu<T extends HTMLElement = HTMLElement> = {
 
 export function useFluidMenu<T extends HTMLElement = HTMLDivElement>({
   activeAttr = 'data-highlighted',
+  gapClick,
 }: UseFluidMenuOptions = {}): FluidMenu<T> {
   const containerRef = React.useRef<T>(null);
-  const hover = useFluidHover(containerRef, { isItemDisabled: isMenuItemDisabled });
+  const hover = useFluidHover(containerRef, { isItemDisabled: isMenuItemDisabled, gapClick });
   const counterRef = React.useRef(0);
+  // Indices released by unmounted rows, reused first so virtualized lists that
+  // mount/unmount rows while scrolling keep the index space bounded.
+  const freeRef = React.useRef<number[]>([]);
 
   // Only the stable pieces go into context so item callback refs do not churn
   // (and re-register) on every hover-state render.
   const { registerItem, setActiveIndex, handlers } = hover;
   const context = React.useMemo<FluidMenuContextValue>(
-    () => ({ registerItem, setActiveIndex, activeAttr, allocateIndex: () => counterRef.current++ }),
+    () => ({
+      registerItem,
+      setActiveIndex,
+      activeAttr,
+      allocateIndex: () => freeRef.current.pop() ?? counterRef.current++,
+      releaseIndex: index => {
+        freeRef.current.push(index);
+      },
+    }),
     [registerItem, setActiveIndex, activeAttr],
   );
 
@@ -150,14 +170,22 @@ export function useFluidMenuItemRef<T extends HTMLElement>(forwardedRef: React.F
       else if (forwardedRef) forwardedRef.current = element;
 
       if (!ctx) return;
-      const { registerItem, setActiveIndex, activeAttr, allocateIndex } = ctx;
-      if (indexRef.current === null) indexRef.current = allocateIndex();
-      const index = indexRef.current;
-
+      const { registerItem, setActiveIndex, activeAttr, allocateIndex, releaseIndex } = ctx;
       observerRef.current?.disconnect();
       observerRef.current = null;
+
+      if (!element) {
+        if (indexRef.current !== null) {
+          registerItem(indexRef.current, null);
+          releaseIndex(indexRef.current);
+          indexRef.current = null;
+        }
+        return;
+      }
+
+      if (indexRef.current === null) indexRef.current = allocateIndex();
+      const index = indexRef.current;
       registerItem(index, element);
-      if (!element) return;
 
       const sync = () => {
         if (isAttrActive(element, activeAttr)) setActiveIndex(index);
