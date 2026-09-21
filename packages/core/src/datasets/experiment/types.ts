@@ -1,5 +1,6 @@
 import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer, ScorerStepName } from '../../evals/base';
+import type { NotScorableOutcome } from '../../evals/not-scorable';
 import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
@@ -350,6 +351,12 @@ export interface ScorerResult {
   reason: string | null;
   /** Error message if scorer failed */
   error: string | null;
+  /**
+   * Set when the scorer declared the item not scorable via `notScorable()`.
+   * `score` is `null` and `error` is `null`: this is neither a score nor a
+   * failure, and the item is left out of the scorer's aggregates.
+   */
+  notScorable?: NotScorableOutcome;
   /** Scorer stage that failed, when the scorer exposes stage context */
   failedStep?: ScorerStepName;
   /** Scorer stages that completed before the failure */

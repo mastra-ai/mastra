@@ -305,6 +305,59 @@ describe('WorkflowsList', () => {
     });
   });
 
+  describe('when sorted from the Name column', () => {
+    const rootNames = () =>
+      Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-row-index] > a')).map(link =>
+        link.getAttribute('href')?.replace('/workflows/', ''),
+      );
+
+    it('orders root workflows A to Z, then Z to A when the header is toggled', async () => {
+      useRunCountsHandler();
+      const onSortChange = vi.fn();
+      const { queryClient, rerender } = renderList({ onSortChange });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Name, not sorted, sort ascending' }));
+      expect(onSortChange).toHaveBeenCalledWith('asc', 'name');
+
+      rerender(
+        <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={paths}>
+          <WorkflowsList
+            workflows={workflowsFixture}
+            isLoading={false}
+            sort={{ key: 'name', direction: 'asc' }}
+            onSortChange={onSortChange}
+          />
+        </LinkComponentProvider>,
+      );
+      expect(rootNames()).toEqual([
+        'engRunner',
+        'loopA',
+        'loopB',
+        'prdFixProduct',
+        'prdGroomProduct',
+        'prdShipProduct',
+      ]);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Name, sorted ascending, sort descending' }));
+      expect(onSortChange).toHaveBeenLastCalledWith('desc', 'name');
+
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
+  describe('when sorted from the Running column', () => {
+    it('puts the workflow with the most running runs first when descending', async () => {
+      useRunCountsHandler();
+      const { queryClient } = renderList({ sort: { key: 'running', direction: 'desc' }, onSortChange: () => {} });
+
+      await screen.findByLabelText('3 runs in progress');
+      const firstRow = document.querySelector<HTMLElement>('[data-row-index="0"]');
+      expect(firstRow?.textContent).toContain('eng-runner');
+
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
   describe('when workflows carry an origin field', () => {
     it("shows the Dynamic badge only for origin: 'dynamic'", async () => {
       useRunCountsHandler();

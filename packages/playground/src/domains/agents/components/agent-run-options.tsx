@@ -15,7 +15,7 @@ export function AgentRunOptionsContent({ requestContextSchema }: AgentRunOptions
   return (
     <ScrollArea className="w-full" maxHeight="min(600px, calc(100dvh - 8rem))">
       <div className="space-y-4 p-4">
-        <Txt as="h3" variant="ui-md" className="text-neutral3">
+        <Txt as="h3" variant="ui-md" className="text-muted-foreground">
           Run options
         </Txt>
 

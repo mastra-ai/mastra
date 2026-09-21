@@ -25,12 +25,29 @@ import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
 import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+
+const LOGS_SORT_KEYS = ['timestamp'] as const;
+const DEFAULT_LOGS_SORT = { key: 'timestamp', direction: 'desc' } as const;
 
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const url = useLogsUrlState(searchParams, setSearchParams);
+  const { sort, onSortChange } = useUrlSort({
+    searchParams,
+    setSearchParams,
+    allowedKeys: LOGS_SORT_KEYS,
+    defaultSort: DEFAULT_LOGS_SORT,
+  });
+  const orderBy = useMemo(
+    () => ({
+      field: 'timestamp' as const,
+      direction: sort?.direction === 'asc' ? ('ASC' as const) : ('DESC' as const),
+    }),
+    [sort?.direction],
+  );
   const persistence = useLogsFilterPersistence(searchParams, setSearchParams);
 
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
@@ -88,7 +105,7 @@ export default function LogsPage() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useLogs({ filters: logsFilters });
+  } = useLogs({ filters: logsFilters, orderBy });
 
   const { logIdMap, featuredLog, handleLogClick, handlePreviousLog, handleNextLog } = useLogsListNavigation(
     logs,
@@ -200,6 +217,8 @@ export default function LogsPage() {
             logIdMap={logIdMap}
             featuredLogId={url.featuredLogId}
             onLogClick={handleLogClick}
+            timestampSort={sort?.direction}
+            onSortChange={onSortChange}
           />
         }
         logPanelSlot={

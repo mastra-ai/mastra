@@ -3,9 +3,10 @@ import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
 import { useInfiniteDatasets } from '@/domains/datasets/hooks/use-datasets';
@@ -13,8 +14,23 @@ import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
 import { RouteHeaderActions } from '@/lib/route-header';
 
+const DATASETS_SORT_KEYS = ['name', 'updatedAt'] as const;
+
 export default function Datasets() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { sort, onSortChange } = useUrlSort({
+    searchParams,
+    setSearchParams,
+    allowedKeys: DATASETS_SORT_KEYS,
+  });
+  const orderBy = useMemo(
+    () =>
+      sort
+        ? { field: sort.key, direction: sort.direction === 'asc' ? ('ASC' as const) : ('DESC' as const) }
+        : undefined,
+    [sort],
+  );
   const [search, setSearch] = useState('');
   const [experimentFilter, setExperimentFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
@@ -27,7 +43,7 @@ export default function Datasets() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useInfiniteDatasets({ targetType, targetId });
+  } = useInfiniteDatasets({ targetType, targetId }, orderBy);
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
 
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
@@ -120,6 +136,8 @@ export default function Datasets() {
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         setEndOfListElement={setEndOfListElement}
+        sort={sort}
+        onSortChange={onSortChange}
       />
     </PageLayout>
   );

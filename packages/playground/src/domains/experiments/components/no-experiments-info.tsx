@@ -22,10 +22,8 @@ export const NoExperimentsInfo = ({ onRunExperiment }: { onRunExperiment?: () =>
           )}
           <Button
             variant="ghost"
-            as="a"
-            href="https://mastra.ai/docs/evals/experiments"
-            target="_blank"
-            rel="noopener noreferrer"
+            render={<a href="https://mastra.ai/docs/evals/experiments" target="_blank" rel="noopener noreferrer" />}
+
             icon={<ExternalLinkIcon />}
           >
             Experiments Documentation

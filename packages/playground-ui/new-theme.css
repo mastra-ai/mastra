@@ -6,26 +6,18 @@
   --muted: var(--gray-1);
   --foreground: var(--gray-10);
   --muted-foreground: var(--gray-9);
+  --placeholder: var(--gray-7);
   --border: var(--gray-alpha-2);
   --ring: var(--gray-8);
   --sidebar-accent: var(--gray-alpha-1);
   --selected: var(--gray-alpha-2);
+
+  --destructive: oklch(0.637 0.237 25.331);
+  --destructive-foreground: oklch(0 0 0);
 }
 
 html.light .new-theme {
   --border: var(--gray-alpha-3);
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-sidebar: var(--sidebar);
-  --color-card: var(--card);
-  --color-popover: var(--popover);
-  --color-muted: var(--muted);
-  --color-foreground: var(--foreground);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-ring: var(--ring);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-selected: var(--selected);
+  --destructive: oklch(0.47 0.19 27.325);
+  --destructive-foreground: oklch(1 0 0);
 }

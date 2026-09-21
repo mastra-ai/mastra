@@ -1,36 +1,40 @@
 import { useEffect, useState } from 'react';
 import { Txt } from '@/ds/components/Txt';
-import { toSigFigs } from '@/utils/number';
+import { formatDuration } from '@/utils/duration';
 
 interface WorkflowClockProps {
   startedAt: number;
   endedAt?: number;
   isRunning?: boolean;
+  spansSuspension?: boolean;
 }
 
-export const WorkflowClock = ({ startedAt, endedAt, isRunning = false }: WorkflowClockProps) => {
+export const WorkflowClock = ({ startedAt, endedAt, isRunning = false, spansSuspension }: WorkflowClockProps) => {
   if (isRunning && endedAt === undefined && Number.isFinite(startedAt)) {
-    return <RunningWorkflowClock key={startedAt} startedAt={startedAt} />;
+    return <RunningWorkflowClock key={startedAt} startedAt={startedAt} spansSuspension={spansSuspension} />;
   }
-  return <ElapsedTime startedAt={startedAt} endedAt={endedAt} />;
+  return <ElapsedTime startedAt={startedAt} endedAt={endedAt} spansSuspension={spansSuspension} />;
 };
 
-function RunningWorkflowClock({ startedAt }: Pick<WorkflowClockProps, 'startedAt'>) {
+function RunningWorkflowClock({ startedAt, spansSuspension }: Omit<WorkflowClockProps, 'isRunning'>) {
   const [time, setTime] = useState(() => Date.now());
   useEffect(() => {
     const interval = setInterval(() => setTime(Date.now()), 100);
     return () => clearInterval(interval);
   }, []);
-  return <ElapsedTime startedAt={startedAt} endedAt={time} />;
+  return <ElapsedTime startedAt={startedAt} endedAt={time} spansSuspension={spansSuspension} />;
 }
 
-function ElapsedTime({ startedAt, endedAt }: Pick<WorkflowClockProps, 'startedAt' | 'endedAt'>) {
-  const duration = endedAt === undefined ? NaN : endedAt - startedAt;
-  const timeDiff = Number.isFinite(duration) && duration >= 0 ? duration : undefined;
+function ElapsedTime({ startedAt, endedAt, spansSuspension }: Omit<WorkflowClockProps, 'isRunning'>) {
+  const elapsed = endedAt === undefined ? undefined : formatDuration(endedAt - startedAt);
 
   return (
-    <Txt variant="ui-xs" className="text-neutral3 font-mono whitespace-nowrap">
-      {timeDiff === undefined ? <span aria-label="Timing unavailable">—</span> : `${toSigFigs(timeDiff, 3)}ms`}
+    <Txt
+      variant="ui-xs"
+      className="text-muted-foreground font-mono whitespace-nowrap"
+      title={elapsed && spansSuspension ? 'Includes time spent suspended waiting for input' : undefined}
+    >
+      {elapsed === undefined ? <span aria-label="Timing unavailable">—</span> : elapsed}
     </Txt>
   );
 }

@@ -24,8 +24,9 @@ export const SuggestedPromptList = ({ prompts }: SuggestedPromptListProps) => {
         <Button
           key={prompt}
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
+          className="h-auto"
           disabled={isDisabled}
           onClick={() => send({ message: prompt })}
         >

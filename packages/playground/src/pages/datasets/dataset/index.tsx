@@ -88,7 +88,7 @@ function DatasetPage() {
           titleSlot="Dataset not found"
           descriptionSlot={`No dataset with id "${datasetId}".`}
           actionSlot={
-            <Button as={Link} to="/datasets" icon={<ArrowLeft />}>
+            <Button render={<Link to="/datasets" />} icon={<ArrowLeft />}>
               Back to Datasets
             </Button>
           }
@@ -127,13 +127,13 @@ function DatasetPage() {
               onAddItemClick={() => setAddItemDialogOpen(true)}
               belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
               leftSlot={
-                <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
+                <span className="text-ui-sm text-muted-foreground mr-3 whitespace-nowrap">
                   {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
                 </span>
               }
               rightSlot={
                 <ButtonsGroup>
-                  <Button as={Link} to={`/experiments?dataset=${datasetId}`} icon={<FlaskConical />}>
+                  <Button render={<Link to={`/experiments?dataset=${datasetId}`} />} icon={<FlaskConical />}>
                     View experiments
                   </Button>
                   <DatasetVersions

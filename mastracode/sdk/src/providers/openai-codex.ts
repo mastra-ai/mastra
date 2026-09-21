@@ -130,22 +130,28 @@ async function getCodexBearer(
   const storage = authStorage ?? getAuthStorage();
   storage.reload();
 
-  const cred = storage.get('openai-codex');
+  let cred = storage.get('openai-codex');
   if (!cred || cred.type !== 'oauth') {
     throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
   }
 
-  let accessToken = cred.access;
-  if (Date.now() >= cred.expires) {
+  if (storage.getOAuthCredential) {
+    cred = await storage.getOAuthCredential('openai-codex');
+    if (!cred) throw new ProviderAuthRequiredError('Failed to refresh the OpenAI Codex token.');
+  } else if (Date.now() >= cred.expires) {
     const refreshedToken = await storage.getApiKey('openai-codex');
     if (!refreshedToken) {
       throw new ProviderAuthRequiredError('Failed to refresh the OpenAI Codex token.');
     }
-    accessToken = refreshedToken;
     storage.reload();
+    const reloaded = storage.get('openai-codex');
+    if (!reloaded || reloaded.type !== 'oauth') {
+      throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
+    }
+    cred = { ...reloaded, access: refreshedToken };
   }
 
-  return { accessToken, accountId: (cred as any).accountId as string | undefined };
+  return { accessToken: cred.access, accountId: (cred as any).accountId as string | undefined };
 }
 
 /**
@@ -160,31 +166,14 @@ export function buildOpenAICodexOAuthFetch(
 ): typeof fetch {
   return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
     const { accessToken, accountId } = await getCodexBearer(opts.authStorage);
+    const { headers: initHeaders, ...requestInit } = init ?? {};
+    const request = new Request(url, requestInit);
 
-    // Preserve non-authorization headers
-    const headers = new Headers();
-    if (init?.headers) {
-      if (init.headers instanceof Headers) {
-        init.headers.forEach((value, key) => {
-          if (key.toLowerCase() !== 'authorization') {
-            headers.set(key, value);
-          }
-        });
-      } else if (Array.isArray(init.headers)) {
-        for (const [key, value] of init.headers) {
-          if (key!.toLowerCase() !== 'authorization' && value !== undefined) {
-            headers.set(key!, String(value));
-          }
-        }
-      } else {
-        for (const [key, value] of Object.entries(init.headers)) {
-          if (key.toLowerCase() !== 'authorization' && value !== undefined) {
-            headers.set(key, String(value));
-          }
-        }
-      }
-    }
-
+    // Preserve Request headers and let explicit init headers override them.
+    const headers = new Headers(url instanceof Request ? url.headers : undefined);
+    if (initHeaders) new Headers(initHeaders).forEach((value, key) => headers.set(key, value));
+    headers.delete('authorization');
+    headers.delete('x-api-key');
     headers.set('Authorization', `Bearer ${accessToken}`);
     if (!headers.has('originator')) {
       headers.set('originator', CODEX_ORIGINATOR);
@@ -197,14 +186,24 @@ export function buildOpenAICodexOAuthFetch(
     }
 
     // URL rewriting — only when rewriteUrl !== false
-    const parsed = url instanceof URL ? url : new URL(typeof url === 'string' ? url : (url as Request).url);
+    const parsed = new URL(request.url);
     const shouldRewrite =
       opts.rewriteUrl !== false &&
       (parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions'));
     const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
 
+    const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body;
+    const finalRequest = new Request(finalUrl, {
+      method: request.method,
+      headers,
+      body,
+      signal: request.signal,
+      redirect: request.redirect,
+      integrity: request.integrity,
+      ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
+    });
     try {
-      return await fetch(finalUrl, { ...init, headers });
+      return await fetch(finalRequest);
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {
@@ -236,27 +235,34 @@ export function buildOpenAICodexOAuthFetch(
  */
 export function buildCodexStagehandFetch(authStorage: AuthStorage): typeof fetch {
   return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
-    // Refresh + inject the OAuth bearer per call
+    // Refresh + inject the OAuth bearer per call.
     const { accessToken } = await getCodexBearer(authStorage);
-    const headers = new Headers(init?.headers);
+    const { headers: initHeaders, ...requestInit } = init ?? {};
+    const request = new Request(url, requestInit);
+    const headers = new Headers(url instanceof Request ? url.headers : undefined);
+    if (initHeaders) new Headers(initHeaders).forEach((value, key) => headers.set(key, value));
+    headers.delete('authorization');
+    headers.delete('x-api-key');
     headers.set('Authorization', `Bearer ${accessToken}`);
     headers.set('Accept', 'text/event-stream');
 
-    // Force stream: true on the request body
-    type FetchBody = NonNullable<Parameters<typeof fetch>[1]>['body'];
-    let body: FetchBody | undefined = init?.body;
-    if (typeof init?.body === 'string') {
-      try {
-        const parsed = JSON.parse(init.body) as Record<string, unknown>;
-        parsed.stream = true;
-        body = JSON.stringify(parsed);
-        if (!headers.has('content-type')) headers.set('content-type', 'application/json');
-      } catch {
-        // Not JSON; leave as-is
-      }
+    // Stagehand sends JSON; force stream: true while preserving Request bodies.
+    let body = await request.clone().text();
+    try {
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      parsed.stream = true;
+      body = JSON.stringify(parsed);
+      if (!headers.has('content-type')) headers.set('content-type', 'application/json');
+    } catch {
+      // Not JSON; leave as-is.
     }
 
-    const upstream = await fetch(url, { ...init, headers, body });
+    const upstream = await fetch(
+      new Request(request, {
+        headers,
+        ...(request.method === 'GET' || request.method === 'HEAD' ? {} : { body }),
+      }),
+    );
     if (!upstream.ok) return upstream;
 
     // Aggregate SSE -> synthesized non-streaming Response

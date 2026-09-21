@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
+import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
 import { cn } from '@/lib/utils';
 
 /**
@@ -73,8 +74,18 @@ const dataListGridStyles = [
   '[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg',
   '[&_.data-list-subheader+.data-list-row>.data-list-sticky-start]:rounded-tl-lg',
   '[&_.data-list-row:has(+.data-list-subheader)>.data-list-sticky-start]:rounded-bl-lg',
+  // The fluid highlight follows the same ends: rounded only when the active
+  // row is the first/last of its section, square everywhere else. `:has()`
+  // cannot nest, so "last" is written as "no row follows the active one".
+  '[&:has(.data-list-row[data-fluid-hover-active]:not(.data-list-row~.data-list-row))_[data-slot=fluid-hover-highlight]]:rounded-t-lg',
+  '[&:has(.data-list-row[data-fluid-hover-active]):not(:has(.data-list-row[data-fluid-hover-active]~.data-list-row))_[data-slot=fluid-hover-highlight]]:rounded-b-lg',
+  '[&:has(.data-list-subheader+.data-list-row[data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:rounded-t-lg',
+  '[&:has(.data-list-row[data-fluid-hover-active]+.data-list-subheader)_[data-slot=fluid-hover-highlight]]:rounded-b-lg',
   '[&_.data-list-top]:bg-(--data-list-background)',
   '[&_.data-list-row>.data-list-sticky-start]:bg-surface2',
+  // A sticky cell must stay opaque over horizontally scrolled cells, so it
+  // cannot show the fluid highlight through; it takes the hover color instead.
+  '[&_.data-list-row[data-fluid-hover-active]>.data-list-sticky-start]:bg-surface3',
   '[&_.data-list-row>.data-list-sticky-start]:after:right-0',
   '[&_.data-list-top>.data-list-sticky-start]:after:right-0',
 ] as const;
@@ -111,13 +122,23 @@ export function DataListRoot({
     gridTemplateColumns: columns,
   };
 
+  // One hover surface travels between rows (same primitive as menus/selects).
+  // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
+  const menu = useFluidMenu<HTMLDivElement>({ gapClick: false });
+
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
-      className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit])}
+      // It is also the offsetParent rows are measured against and the highlight is positioned in.
+      className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit], menu.containerClassName)}
       style={gridStyle}
+      {...menu.getContainerProps({})}
     >
-      {children}
+      {/* The highlight is the old row hover color. It sits between each row's
+          `before` surface (-z-2) and the row content (see `dataListRowOuterStyles`). */}
+      <FluidMenuItems menu={menu} className="bg-surface3 rounded-none">
+        {children}
+      </FluidMenuItems>
     </div>
   );
 

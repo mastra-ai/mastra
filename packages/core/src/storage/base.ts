@@ -117,6 +117,53 @@ const _domainKeysExhaustive: MissingDomainKeys extends never ? true : never = tr
 void _domainKeysExhaustive;
 
 /**
+ * Resolve a caller-supplied `orderBy` into a concrete `{ field, direction }`,
+ * falling back to the defaults and rejecting fields outside `allowedFields`.
+ * Storage adapters must interpolate only the returned values into SQL.
+ */
+export function resolveListOrderBy<TField extends string>(
+  orderBy: { field?: TField; direction?: 'ASC' | 'DESC' } | undefined,
+  allowedFields: readonly TField[],
+  defaults: { field: TField; direction: 'ASC' | 'DESC' },
+): { field: TField; direction: 'ASC' | 'DESC' } {
+  const field = orderBy?.field ?? defaults.field;
+  if (!allowedFields.includes(field)) {
+    throw new Error(`Invalid orderBy field: ${String(field)}. Allowed: ${allowedFields.join(', ')}`);
+  }
+  const direction = orderBy?.direction ?? defaults.direction;
+  if (direction !== 'ASC' && direction !== 'DESC') {
+    throw new Error(`Invalid orderBy direction: ${String(direction)}`);
+  }
+  return { field, direction };
+}
+
+/**
+ * Build a comparator for in-memory list sorting. Sorts by `field` in `direction`
+ * (Dates compare by time, strings by locale-aware compare, nulls last) and breaks
+ * ties by `id ASC` so pagination is stable across pages.
+ */
+export function compareByField<T extends { id: string }>(
+  field: keyof T,
+  direction: 'ASC' | 'DESC' = 'ASC',
+): (a: T, b: T) => number {
+  const sign = direction === 'DESC' ? -1 : 1;
+  const compare = (left: unknown, right: unknown): number => {
+    if (left == null && right == null) return 0;
+    if (left == null) return 1;
+    if (right == null) return -1;
+    if (left instanceof Date && right instanceof Date) return left.getTime() - right.getTime();
+    if (typeof left === 'number' && typeof right === 'number') return left - right;
+    return String(left).localeCompare(String(right));
+  };
+  return (a, b) => {
+    const result = compare(a[field], b[field]);
+    // Nulls stay last regardless of direction.
+    if (a[field] == null || b[field] == null) return result || a.id.localeCompare(b.id);
+    return result * sign || a.id.localeCompare(b.id);
+  };
+}
+
+/**
  * Normalizes perPage input for pagination queries.
  *
  * @param perPageInput - The raw perPage value from the user

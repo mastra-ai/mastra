@@ -1,6 +1,7 @@
 'use client';
 
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JSONSchema7 } from 'json-schema';
@@ -90,11 +91,14 @@ export function SchemaField({
     }
   };
 
+  const fieldName = `${schemaType}-schema`;
+  const errorMessage = parseError ?? error;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Switch checked={isEnabled} onCheckedChange={handleToggle} id={`${schemaType}-schema-toggle`} />
-        <label htmlFor={`${schemaType}-schema-toggle`} className="text-ui-md font-medium">
+        <label htmlFor={`${schemaType}-schema-toggle`} className="text-ui-sm font-medium">
           {label}
         </label>
       </div>
@@ -102,13 +106,16 @@ export function SchemaField({
       {isEnabled && (
         <div className="space-y-2">
           <CodeEditor
+            id={`input-${fieldName}`}
+            aria-label={`${label} JSON`}
+            aria-invalid={errorMessage ? true : undefined}
+            aria-describedby={errorMessage ? fieldErrorId(fieldName) : undefined}
             value={jsonText}
             onChange={handleJsonChange}
             showCopyButton={false}
-            className={cn('h-48 border rounded-md', (parseError || error) && 'border-destructive')}
+            className={cn('h-48 border rounded-md', errorMessage && 'border-destructive')}
           />
-          {parseError && <p className="text-destructive text-ui-sm">{parseError}</p>}
-          {error && !parseError && <p className="text-destructive text-ui-sm">{error}</p>}
+          {errorMessage && <FieldBlock.ErrorMsg name={fieldName}>{errorMessage}</FieldBlock.ErrorMsg>}
         </div>
       )}
     </div>

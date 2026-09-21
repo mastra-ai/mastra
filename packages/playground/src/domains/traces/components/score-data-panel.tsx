@@ -20,12 +20,12 @@ function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
 function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ClientScoreRowData) {
   return (
     <>
-      <span className="text-neutral2 flex items-center gap-1.5 tracking-widest uppercase [&>svg]:size-3.5">
+      <span className="text-placeholder flex items-center gap-1.5 tracking-widest uppercase [&>svg]:size-3.5">
         {icon}
         {sectionTitle}
       </span>
       <span>
-        › Score <b className="text-neutral3">#{score.id}</b>
+        › Score <b className="text-muted-foreground">#{score.id}</b>
       </span>
     </>
   );
@@ -52,17 +52,18 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
         {score && (
           <>
             <DataPanel.Header>
+              <DataPanel.CloseButton onClick={onClose} />
               <DataPanel.Heading>
-                Score <b># {score.id}</b>
+                Score
+                <DataPanel.CopyId id={score.id} />
               </DataPanel.Heading>
               <DataPanel.HeaderActions>
                 <DataPanel.NextPrevNav
                   onPrevious={onPrevious}
                   onNext={onNext}
-                  previousLabel="Previous score"
-                  nextLabel="Next score"
+                  previousLabel="Go to previous score"
+                  nextLabel="Go to next score"
                 />
-                <DataPanel.CloseButton onClick={onClose} />
               </DataPanel.HeaderActions>
             </DataPanel.Header>
 
@@ -112,16 +113,16 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 </Button>
               </div>
 
-              <div className="text-neutral4 mb-6">
+              <div className="text-muted-foreground mb-6">
                 <div
                   className={cn(
-                    'text-neutral2 text-ui-md flex gap-2 items-baseline',
+                    'text-placeholder text-ui-md flex gap-2 items-baseline',
                     '[&>svg]:w-5 [&>svg]:h-5 [&>svg]:translate-y-1',
                   )}
                 >
                   <GaugeIcon />
                   <span className="">Score:</span>
-                  <b className="text-neutral3 font-mono">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
+                  <b className="text-muted-foreground font-mono">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
                 </div>
                 <div className="text-ui-smd mt-2 font-mono">
                   {score.reason ||

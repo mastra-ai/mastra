@@ -7,6 +7,7 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useMemo, useRef } from 'react';
 import type { ReactNode, SyntheticEvent } from 'react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
@@ -36,7 +37,12 @@ export interface DatasetsListProps {
    * fall back to the default experiments badge.
    */
   renderTrailingCell?: (dataset: DatasetRecord) => ReactNode | null;
+  /** Server-side sort; headers are only sortable when `onSortChange` is provided. */
+  sort?: ListSort<DatasetsSortKey>;
+  onSortChange?: (direction: 'asc' | 'desc', key: DatasetsSortKey) => void;
 }
+
+export type DatasetsSortKey = 'name' | 'updatedAt';
 
 const COLUMNS = 'auto 1fr auto 5rem 10rem 7rem';
 
@@ -68,10 +74,10 @@ function TagsCell({ tags: rawTags }: { tags: DatasetRecord['tags'] }) {
           {tags.slice(0, 2).map(tag => (
             <ComputedTag key={tag} value={tag} className="shrink-0" />
           ))}
-          {tags.length > 2 && <span className="text-neutral2 text-ui-xs shrink-0">+{tags.length - 2}</span>}
+          {tags.length > 2 && <span className="text-placeholder text-ui-xs shrink-0">+{tags.length - 2}</span>}
         </div>
       ) : (
-        <span className="text-neutral2">—</span>
+        <span className="text-placeholder">—</span>
       )}
     </EntityList.Cell>
   );
@@ -111,7 +117,7 @@ function SelectableDatasetRow({
       <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
       <EntityList.Cell>
         {trailingCell ??
-          (ds.experimentCount > 0 ? <ExperimentsBadge dataset={ds} /> : <span className="text-neutral2">—</span>)}
+          (ds.experimentCount > 0 ? <ExperimentsBadge dataset={ds} /> : <span className="text-placeholder">—</span>)}
       </EntityList.Cell>
     </EntityList.RowButton>
   );
@@ -147,8 +153,8 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
 
       {hasExperimentsAction ? (
         <Button
-          as={Link}
-          to={`/experiments?dataset=${ds.id}`}
+          render={<Link href={`/experiments?dataset=${ds.id}`} />}
+
           variant="ghost"
           size="sm"
           className="h-full w-full rounded-lg p-0!"
@@ -175,6 +181,8 @@ export function DatasetsList({
   selectedDatasetId,
   keyboardGlobal = true,
   renderTrailingCell,
+  sort,
+  onSortChange,
 }: DatasetsListProps) {
   const enrichedDatasets = useMemo(() => {
     return datasets.map(ds => {
@@ -208,11 +216,31 @@ export function DatasetsList({
   return (
     <EntityList columns={COLUMNS} scrollRef={containerRef}>
       <EntityList.Top>
-        <EntityList.TopCell>Name</EntityList.TopCell>
+        {onSortChange ? (
+          <EntityList.SortableTopCell
+            sortKey="name"
+            sort={sort?.key === 'name' ? sort.direction : undefined}
+            onSortChange={onSortChange}
+          >
+            Name
+          </EntityList.SortableTopCell>
+        ) : (
+          <EntityList.TopCell>Name</EntityList.TopCell>
+        )}
         <EntityList.TopCell>Description</EntityList.TopCell>
         <EntityList.TopCell>Tags</EntityList.TopCell>
         <EntityList.TopCell>Version</EntityList.TopCell>
-        <EntityList.TopCell>Last Updated</EntityList.TopCell>
+        {onSortChange ? (
+          <EntityList.SortableTopCell
+            sortKey="updatedAt"
+            sort={sort?.key === 'updatedAt' ? sort.direction : undefined}
+            onSortChange={onSortChange}
+          >
+            Last Updated
+          </EntityList.SortableTopCell>
+        ) : (
+          <EntityList.TopCell>Last Updated</EntityList.TopCell>
+        )}
         <EntityList.TopCell>Experiments</EntityList.TopCell>
       </EntityList.Top>
 

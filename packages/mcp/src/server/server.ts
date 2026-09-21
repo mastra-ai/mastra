@@ -1,149 +1,128 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
-import type { ToolsInput, Agent } from '@mastra/core/agent';
+import type { Agent, ToolsInput } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
-  MCPAuthInfoToUserMapper,
+  MCPServerConfig as CoreMCPServerConfig,
   MCPServerFGAConfig,
-  MCPServerConfig,
-  ServerInfo,
+  MCPToolExecutionResultV2,
   ServerDetailInfo,
-  MCPServerHonoSSEOptions,
-  MCPServerSSEOptions,
+  ServerInfo,
 } from '@mastra/core/mcp';
+import { EntityType, SpanType, getOrCreateSpan } from '@mastra/core/observability';
+import type { TracingContext } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
-import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
+import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import { createTool, isValidationError } from '@mastra/core/tools';
-import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
+import type { InternalCoreTool, MCPToolExecutionContext, MCPToolType, ToolAction } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
-import type { Workflow } from '@mastra/core/workflows';
+import type { SuspendOptions, Workflow } from '@mastra/core/workflows';
 import { PromptSchema } from '@modelcontextprotocol/core';
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
+import { hostHeaderValidation, originValidation, toNodeHandler } from '@modelcontextprotocol/node';
+import type { NodeMcpRequestHandler } from '@modelcontextprotocol/node';
 import {
-  hostHeaderValidation,
-  NodeStreamableHTTPServerTransport,
-  originValidation,
-  toNodeHandler,
-} from '@modelcontextprotocol/node';
-import type { StreamableHTTPServerTransportOptions, NodeMcpRequestHandler } from '@modelcontextprotocol/node';
-import { Server, ProtocolError, ProtocolErrorCode, createMcpHandler } from '@modelcontextprotocol/server';
+  Server,
+  ProtocolError,
+  ProtocolErrorCode,
+  createMcpHandler,
+  createRequestStateCodec,
+  inputRequired,
+  specTypeSchemas,
+} from '@modelcontextprotocol/server';
 import type {
-  McpHttpHandler,
-  RequestOptions,
-  TextResourceContents,
   BlobResourceContents,
+  CallToolResult,
+  InputRequiredResult,
+  McpHttpHandler,
+  RequestStateCodec,
   Resource,
   ServerCapabilities,
   ServerContext,
-  CallToolResult,
-  ElicitResult,
-  ElicitRequest,
-  LoggingLevel,
+  ServerNotifier,
+  TextResourceContents,
+  Tool as MCPTool,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/server';
-import { StdioServerTransport, serveStdio } from '@modelcontextprotocol/server/stdio';
-import { SSEServerTransport } from '@modelcontextprotocol/server-legacy/sse';
-import type { Context } from 'hono';
-import type { SSEStreamingApi } from 'hono/streaming';
-import { streamSSE } from 'hono/streaming';
-import { SSETransport } from 'hono-mcp-server-sse-transport';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
 import {
-  createReplayElicitation,
-  ElicitationReplayInterrupt,
-  isModernEraRequest,
-  replayInterruptToInputRequired,
-} from './mrtrElicitation';
-import { broadcastNotification } from './notificationBroadcast';
-import { ServerPromptActions } from './promptActions';
-import { ServerResourceActions } from './resourceActions';
-import { ServerToolActions } from './toolActions';
+  INPUT_KEY,
+  hashArguments,
+  principalOf,
+  readContinuation,
+  toRequestContext,
+  toToolExecutionContext,
+} from './request';
+import type { ContinuationEnvelope } from './request';
 import type {
-  MCPServerPrompts,
-  MCPServerResources,
-  MCPRequestHandlerExtra,
-  ElicitationActions,
   AppResources,
-  MCPServerProtocolVersion,
+  MCPAuthInfoToUserMapper,
   MCPServerCacheHints,
+  MCPServerHTTPRequestOptions,
+  MCPServerPrompts,
+  MCPServerRequest,
+  MCPServerRequestStateOptions,
+  MCPServerResources,
 } from './types';
 
-type HonoSSEStreamingApi = {
-  readonly closed: boolean;
-  abort(): void;
-  onAbort(listener: () => void | Promise<void>): void;
-  sleep(ms: number): Promise<unknown>;
-  write(input: Uint8Array | string): Promise<unknown>;
-  writeSSE(message: Parameters<SSEStreamingApi['writeSSE']>[0]): Promise<void>;
+export interface MCPServerConfig extends CoreMCPServerConfig {
+  resources?: MCPServerResources;
+  prompts?: MCPServerPrompts;
+  /** MCP Apps (SEP-1865) HTML resources served under `ui://`. */
+  appResources?: AppResources;
+  /** Custom JSON Schema validator, for runtimes where the SDK default is unavailable. */
+  jsonSchemaValidator?: jsonSchemaValidator;
+  cacheHints?: MCPServerCacheHints;
+  /** Integrity protection for `input_required` continuation state. */
+  requestState?: MCPServerRequestStateOptions;
+}
+
+export interface MCPServerHTTPOptions {
+  url: URL;
+  httpPath: string;
+  req: http.IncomingMessage;
+  res: http.ServerResponse<http.IncomingMessage>;
+  options?: MCPServerHTTPRequestOptions;
+}
+
+/** The JSON Schema form a suspended handler asks the client to fill in. */
+type JSONSchema7 = NonNullable<Extract<MCPToolExecutionResultV2, { status: 'suspended' }>['resumeSchema']>;
+
+const EMPTY_OBJECT_SCHEMA = { type: 'object', properties: {} } as const;
+
+/** Tool description served over Mastra's REST routes; `id` is what Studio keys tools by. */
+type ToolInfo = {
+  id: string;
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  toolType?: MCPToolType;
+  _meta?: Record<string, unknown>;
 };
-type HonoSSEContext = {
-  req: Pick<Context['req'], 'header' | 'json'>;
-  text: Context['text'];
-};
-type HonoSSETransport = Omit<SSETransport, 'handlePostMessage'> & {
-  handlePostMessage(context: HonoSSEContext): Promise<Response>;
-};
+
+/** Where a suspended handler is resumed from and what the client is asked. */
+interface Suspension {
+  method: ContinuationEnvelope['method'];
+  name: string;
+  argsHash: string;
+  round: number;
+  suspendPayload: unknown;
+  resumeSchema: JSONSchema7 | undefined;
+}
 
 /**
- * Flattens the MCP `ServerContext` into the shape Mastra tools receive as `extra`.
- *
- * MCP 2.0 nests per-request plumbing under `ctx.mcpReq` and transport details under
- * `ctx.http`, while Mastra tools have always read `signal`, `requestId`, `authInfo`,
- * `sendNotification`, `sendRequest`, and `_meta` off the top level. Both the nested and
- * flattened members are kept so tools written against either shape keep working.
- */
-const toMCPRequestHandlerExtra = (ctx: ServerContext): MCPRequestHandlerExtra => {
-  return {
-    ...ctx,
-    signal: ctx.mcpReq.signal,
-    requestId: ctx.mcpReq.id,
-    authInfo: ctx.http?.authInfo,
-    sendNotification: ctx.mcpReq.notify,
-    sendRequest: ctx.mcpReq.send,
-    _meta: ctx.mcpReq._meta,
-  };
-};
-
-// RFC 5424 syslog severity ordering used by the MCP logging utility.
-// Higher numbers are more severe; messages below a client's minimum level are dropped.
-const LOG_LEVEL_SEVERITY: Record<LoggingLevel, number> = {
-  debug: 0,
-  info: 1,
-  notice: 2,
-  warning: 3,
-  error: 4,
-  critical: 5,
-  alert: 6,
-  emergency: 7,
-};
-
-type MCPServerStreamableHTTPOptions = Partial<StreamableHTTPServerTransportOptions> & {
-  serverless?: boolean;
-  /**
-   * Opt into request-scoped SSE streaming for legacy serverless requests.
-   *
-   * The `2026-07-28` handler accepts `true` as a compatibility declaration because
-   * its automatic response mode already streams request-scoped messages when needed.
-   */
-  serverlessStreaming?: boolean;
-};
-
-const ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS = new Set([
-  'allowedHosts',
-  'allowedOrigins',
-  'enableDnsRebindingProtection',
-  'serverless',
-  'serverlessStreaming',
-  'sessionIdGenerator',
-]);
-
-/**
- * Exposes Mastra tools, agents, and workflows to Model Context Protocol (MCP) clients.
- * Supports stdio, SSE, and Streamable HTTP transports; start or mount a transport
- * to accept client connections.
+ * Exposes Mastra tools, agents, workflows, resources and prompts to Model Context
+ * Protocol (MCP) clients using protocol revision 2026-07-28: self-contained requests
+ * over Streamable HTTP or stdio, native `input_required` continuation and
+ * per-request logging.
  *
  * @example
  * `yourTool` is a tool you have already configured.
@@ -156,6 +135,7 @@ const ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS = new Set([
  *   version: '1.0.0',
  *   tools: { yourTool },
  * });
+ * await server.startStdio();
  * ```
  *
  * @see For documentation bundled with your installed package, locate
@@ -167,590 +147,243 @@ const ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS = new Set([
  * if packaged docs are unavailable.
  */
 export class MCPServer extends MCPServerBase {
-  private server: Server;
-  private stdioTransport?: StdioServerTransport;
-  private sseTransport?: SSEServerTransport;
-  private sseHonoTransports: Map<string, SSETransport>;
-  /** Auth info for the in-flight Hono SSE message POST, keyed by session id. */
-  private sseHonoAuthInfo: Map<string, unknown> = new Map();
-  private streamableHTTPTransports: Map<string, NodeStreamableHTTPServerTransport> = new Map();
-  // Track server instances for each HTTP session
-  private httpServerInstances: Map<string, Server> = new Map();
+  override readonly mcpVersion = 2 as const;
 
-  private resourceOptions?: MCPServerResources;
-  // Whether any UI (`ui://`) app resources are configured. Captured at construction so
-  // per-request server instances can advertise the MCP Apps extension without relying on
-  // a shared, per-caller resource cache.
-  private hasUiResources: boolean = false;
-  private promptOptions?: MCPServerPrompts;
-  private jsonSchemaValidator?: jsonSchemaValidator;
-  private mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
-  private fga?: MCPServerFGAConfig;
-  // Resource subscriptions per server instance (main + per HTTP session), set via
-  // resources/subscribe. Note: legacy SSE sessions share the main instance, so they
-  // share one subscription set; streamable HTTP sessions are isolated per session.
-  private subscriptionsByInstance: WeakMap<Server, Set<string>> = new WeakMap();
-  // Minimum logging level per server instance (main + per HTTP session), set via logging/setLevel
-  private loggingLevels: WeakMap<Server, LoggingLevel> = new WeakMap();
-  // Protocol revision the server is pinned to. Undefined or '2025-11-25' keeps the
-  // legacy (2025) era behavior exactly; '2026-07-28' routes HTTP/serverless/stdio
-  // through the SDK's dual-era serving entries.
-  private protocolVersion?: MCPServerProtocolVersion;
-  // Cache hints advertised on cacheable 2026-07-28 results. Only applied under the flag.
-  private cacheHints?: MCPServerCacheHints;
-  // Lazily created dual-era HTTP handler (modern era native + stateless legacy fallback).
-  private modernEraHandler?: McpHttpHandler;
-  // Node (req, res) adapter over modernEraHandler.fetch.
-  private modernEraNodeHandler?: NodeMcpRequestHandler;
-  // Handle and connected Server instance for the dual-era stdio serving entry.
-  // The instance is retained so runtime notifications can reach stdio subscriptions.
-  private stdioHandle?: { close(): Promise<void> };
-  private stdioServerInstance?: Server;
+  readonly resources: ServerResourceActions;
+  readonly prompts: ServerPromptActions;
+  readonly toolActions: ServerToolActions;
 
-  /**
-   * Provides methods to notify clients about resource changes.
-   *
-   * @example
-   * ```typescript
-   * // Notify that a specific resource was updated
-   * await server.resources.notifyUpdated({ uri: 'file://data.txt' });
-   *
-   * // Notify that the resource list changed
-   * await server.resources.notifyListChanged();
-   * ```
-   */
-  public readonly resources: ServerResourceActions;
+  private readonly resourceOptions?: MCPServerResources;
+  private readonly promptOptions?: MCPServerPrompts;
+  private readonly appResourceList: Resource[] = [];
+  private readonly appResourceHtml = new Map<string, string>();
+  private readonly jsonSchemaValidator?: jsonSchemaValidator;
+  private readonly cacheHints?: MCPServerCacheHints;
+  private readonly mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
+  private readonly fga?: MCPServerFGAConfig;
+  private readonly requestStateCodec: RequestStateCodec<ContinuationEnvelope>;
 
-  /**
-   * Provides methods to notify clients about prompt changes.
-   *
-   * @example
-   * ```typescript
-   * // Notify that the prompt list changed
-   * await server.prompts.notifyListChanged();
-   * ```
-   */
-  public readonly prompts: ServerPromptActions;
+  private httpHandler?: McpHttpHandler;
+  private nodeHandler?: NodeMcpRequestHandler;
+  private stdioHandle?: StdioServerHandle;
+  private stdioInstance?: Server;
 
-  /**
-   * Provides methods to dynamically manage tools and notify clients about
-   * tool list changes. Named `toolActions` because `tools()` is the tool
-   * registry getter inherited from `MCPServerBase`.
-   *
-   * @example
-   * ```typescript
-   * // Register a new tool at runtime and notify clients
-   * await server.toolActions.add({ myNewTool });
-   *
-   * // Remove a tool and notify clients
-   * await server.toolActions.remove(['myNewTool']);
-   *
-   * // Notify that the tool list changed (e.g. authorization changes)
-   * await server.toolActions.notifyListChanged();
-   * ```
-   */
-  public readonly toolActions: ServerToolActions;
+  constructor(config: MCPServerConfig) {
+    super(config);
+    this.jsonSchemaValidator = config.jsonSchemaValidator;
+    this.cacheHints = config.cacheHints;
+    this.mapAuthInfoToUser = config.mapAuthInfoToUser;
+    this.fga = config.fga;
+    this.promptOptions = config.prompts;
+    this.resourceOptions = config.resources;
+    this.loadAppResources(config.appResources);
+    this.requestStateCodec = this.createRequestStateCodec(config.requestState);
+    if (config.resources?.resumeSchema) this.assertFormRepresentable('resources', config.resources.resumeSchema);
+    if (config.prompts?.resumeSchema) this.assertFormRepresentable('prompts', config.prompts.resumeSchema);
 
-  /**
-   * Provides methods for interactive user input collection during tool execution.
-   *
-   * @example
-   * ```typescript
-   * // Within a tool's execute function
-   * const result = await options.elicitation.sendRequest({
-   *   message: 'Please provide your email address',
-   *   requestedSchema: {
-   *     type: 'object',
-   *     properties: {
-   *       email: { type: 'string', format: 'email' }
-   *     },
-   *     required: ['email']
-   *   }
-   * });
-   * ```
-   */
-  public readonly elicitation: ElicitationActions;
-
-  /**
-   * Gets the stdio transport instance if the server was started using stdio.
-   *
-   * This is primarily for internal checks or testing purposes.
-   *
-   * @returns The stdio transport instance, or undefined if not using stdio transport
-   */
-  public getStdioTransport(): StdioServerTransport | undefined {
-    return this.stdioTransport;
-  }
-
-  /**
-   * Gets the SSE transport instance if the server was started using SSE.
-   *
-   * This is primarily for internal checks or testing purposes.
-   *
-   * @returns The SSE transport instance, or undefined if not using SSE transport
-   */
-  public getSseTransport(): SSEServerTransport | undefined {
-    return this.sseTransport;
-  }
-
-  /**
-   * Gets the Hono SSE transport instance for a specific session.
-   *
-   * This is primarily for internal checks or testing purposes.
-   *
-   * @param sessionId - The session identifier
-   * @returns The Hono SSE transport instance, or undefined if session not found
-   */
-  public getSseHonoTransport(sessionId: string): HonoSSETransport | undefined {
-    return this.sseHonoTransports.get(sessionId) as HonoSSETransport | undefined;
-  }
-
-  /**
-   * Gets the underlying MCP Server instance.
-   *
-   * This provides access to the low-level server instance for advanced use cases.
-   *
-   * @returns The Server instance from @modelcontextprotocol/server
-   */
-  public getServer(): Server {
-    return this.server;
-  }
-
-  /**
-   * Creates a new MCPServer instance.
-   *
-   * The server exposes tools, agents, and workflows to MCP clients. Agents are automatically
-   * converted to tools named `ask_<agentKey>`, and workflows become tools named `run_<workflowKey>`.
-   *
-   * @param opts - Configuration options for the server
-   * @param opts.name - Descriptive name for the server (e.g., 'My Weather Server')
-   * @param opts.version - Semantic version of the server (e.g., '1.0.0')
-   * @param opts.tools - Object mapping tool names to tool definitions
-   * @param opts.agents - Optional object mapping agent identifiers to Agent instances
-   * @param opts.workflows - Optional object mapping workflow identifiers to Workflow instances
-   * @param opts.resources - Optional resource configuration for exposing data and content
-   * @param opts.prompts - Optional prompt configuration for exposing reusable templates
-   * @param opts.id - Optional unique identifier (generated if not provided)
-   * @param opts.description - Optional description of what the server does
-   * @param opts.mapAuthInfoToUser - Optional mapper from MCP `extra.authInfo` to the FGA user context
-   *
-   * @example
-   * ```typescript
-   * import { MCPServer } from '@mastra/mcp';
-   * import { Agent } from '@mastra/core/agent';
-   * import { createTool } from '@mastra/core/tools';
-   * import { z } from 'zod';
-   *
-   * const myAgent = new Agent({
-   *   id: 'helper',
-   *   name: 'Helper Agent',
-   *   description: 'A helpful assistant',
-   *   instructions: 'You are helpful.',
-   *   model: 'openai/gpt-4o-mini',
-   * });
-   *
-   * const server = new MCPServer({
-   *   name: 'My Server',
-   *   version: '1.0.0',
-   *   tools: {
-   *     weatherTool: createTool({
-   *       id: 'getWeather',
-   *       description: 'Gets weather',
-   *       inputSchema: z.object({ location: z.string() }),
-   *       execute: async (inputData) => `Sunny in ${inputData.location}`,
-   *     })
-   *   },
-   *   agents: { myAgent },
-   * });
-   * ```
-   */
-  constructor(
-    opts: MCPServerConfig & {
-      resources?: MCPServerResources;
-      prompts?: MCPServerPrompts;
-      /**
-       * Optional MCP App resources configuration.
-       *
-       * Registers `ui://` resources that serve interactive HTML UIs as defined
-       * by the MCP Apps extension (SEP-1865). These are automatically merged
-       * into the resource system and served alongside any user-provided resources.
-       *
-       * @example
-       * ```typescript
-       * const server = new MCPServer({
-       *   name: 'My Server',
-       *   version: '1.0.0',
-       *   tools: { ... },
-       *   appResources: {
-       *     'ui://weather/dashboard': {
-       *       name: 'Weather Dashboard',
-       *       html: '<html>...</html>',
-       *       meta: { csp: { connectDomains: ['https://api.weather.com'] } },
-       *     },
-       *   },
-       * });
-       * ```
-       */
-      appResources?: AppResources;
-      /**
-       * Optional custom JSON Schema validator forwarded to the underlying MCP
-       * server. Use this to opt into a non-default validator implementation.
-       *
-       * Pass `CfWorkerJsonSchemaValidator` (from
-       * `@modelcontextprotocol/server/validators/cf-worker`) when running in
-       * Cloudflare Workers / V8 isolates: the default
-       * `AjvJsonSchemaValidator` compiles validators with `new Function(...)`,
-       * which workerd refuses to evaluate when a registered tool has an
-       * `outputSchema`.
-       *
-       * @example
-       * ```typescript
-       * import { MCPServer } from '@mastra/mcp';
-       * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/server/validators/cf-worker';
-       *
-       * const server = new MCPServer({
-       *   name: 'My Server',
-       *   version: '1.0.0',
-       *   tools: { ... },
-       *   jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
-       * });
-       * ```
-       */
-      jsonSchemaValidator?: jsonSchemaValidator;
-      /**
-       * Opt-in MCP protocol revision.
-       *
-       * Omitted (or `'2025-11-25'`) keeps today's behavior exactly. Set to
-       * `'2026-07-28'` to serve the stateless MCP revision: HTTP and serverless
-       * requests go through the SDK's dual-era handler (modern clients served
-       * natively, legacy clients via the built-in stateless fallback on the same
-       * endpoint), and stdio serves both eras via the `server/discover` probe.
-       *
-       * @example
-       * ```typescript
-       * const server = new MCPServer({
-       *   name: 'My Server',
-       *   version: '1.0.0',
-       *   tools: { ... },
-       *   protocolVersion: '2026-07-28',
-       * });
-       * ```
-       */
-      protocolVersion?: MCPServerProtocolVersion;
-      /**
-       * Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results of the
-       * `2026-07-28` protocol revision, keyed by operation (e.g. `'tools/list'`).
-       * Only applied when `protocolVersion: '2026-07-28'` is set; legacy responses
-       * are never affected.
-       *
-       * @example
-       * ```typescript
-       * const server = new MCPServer({
-       *   name: 'My Server',
-       *   version: '1.0.0',
-       *   tools: { ... },
-       *   protocolVersion: '2026-07-28',
-       *   cacheHints: { 'tools/list': { ttlMs: 60_000, cacheScope: 'private' } },
-       * });
-       * ```
-       */
-      cacheHints?: MCPServerCacheHints;
-    },
-  ) {
-    super(opts);
-    this.protocolVersion = opts.protocolVersion;
-    this.cacheHints = opts.cacheHints;
-
-    // Merge appResources into the resource system
-    this.resourceOptions = this.mergeAppResources(opts.resources, opts.appResources);
-    // App resources are auto-registered as `ui://` resources, so their presence is what
-    // gates the MCP Apps extension. Capture it here instead of inferring it from a cached
-    // (and potentially per-caller) resource list.
-    this.hasUiResources = !!opts.appResources && Object.keys(opts.appResources).length > 0;
-    this.promptOptions = opts.prompts;
-    this.jsonSchemaValidator = opts.jsonSchemaValidator;
-    this.mapAuthInfoToUser = opts.mapAuthInfoToUser;
-    this.fga = opts.fga;
-
-    const capabilities: ServerCapabilities = {
-      tools: { listChanged: true },
-      logging: { enabled: true },
-    };
-
-    if (this.resourceOptions) {
-      capabilities.resources = { subscribe: true, listChanged: true };
-    }
-
-    if (opts.prompts) {
-      capabilities.prompts = { listChanged: true };
-    }
-
-    // Advertise MCP Apps extension if any tool has UI metadata or appResources are configured
-    const hasUiTools = Object.values(this.convertedTools).some(
-      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
-    );
-    if (hasUiTools || opts.appResources) {
-      capabilities.extensions = {
-        ...capabilities.extensions,
-        'io.modelcontextprotocol/ui': {},
-      };
-    }
-
-    this.server = new Server(
-      {
-        name: this.name,
-        version: this.version,
-      },
-      {
-        capabilities,
-        ...(this.instructions ? { instructions: this.instructions } : {}),
-        ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
-        // Cache hints only apply to cacheable 2026-07-28 results; the 2025 codec has
-        // no cache path, but gate on the flag anyway so it is the single opt-in.
-        ...(this.servesModernEra() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
-      },
-    );
-
-    this.logger.info('Initialized MCPServer', {
-      name: this.name,
-      version: this.version,
-      id: this.id,
-      tools: Object.keys(this.convertedTools),
-      capabilities,
-    });
-
-    this.sseHonoTransports = new Map();
-
-    // Register all handlers on the main server instance
-    this.registerHandlersOnServer(this.server);
-
-    // Only notify the 2026-07-28 subscription bus when the flag is on and the
-    // handler was actually created (no HTTP served yet means no subscribers).
-    const getModernEraNotifier = () => (this.servesModernEra() ? this.modernEraHandler?.notify : undefined);
-
-    this.resources = new ServerResourceActions({
-      getSubscribedServers: (uri: string) =>
-        this.getAllSdkServers().filter(server => this.subscriptionsByInstance.get(server)?.has(uri)),
-      getLogger: () => this.logger,
-      getSdkServers: () => this.getAllSdkServers(),
-      getModernEraNotifier,
-    });
-
-    this.prompts = new ServerPromptActions({
-      getLogger: () => this.logger,
-      getSdkServers: () => this.getAllSdkServers(),
-      getModernEraNotifier,
-    });
-
+    const deps = { getLogger: () => this.logger, getNotifier: () => this.notifier() };
     this.toolActions = new ServerToolActions({
-      getLogger: () => this.logger,
-      getSdkServers: () => this.getAllSdkServers(),
+      ...deps,
       addTools: tools => this.addTools(tools),
-      removeTools: toolIds => this.removeTools(toolIds),
-      getModernEraNotifier,
+      removeTools: keys => this.removeTools(keys),
     });
+    this.resources = new ServerResourceActions(deps);
+    this.prompts = new ServerPromptActions(deps);
+  }
 
-    this.elicitation = {
-      sendRequest: async (request, options) => {
-        return this.handleElicitationRequest(request, undefined, options);
-      },
+  private createRequestStateCodec(options: MCPServerRequestStateOptions | undefined) {
+    let key = options?.key;
+    if (key === undefined) {
+      key = randomBytes(32);
+      this.logger.warn(
+        'No requestState.key configured: continuation state is signed with a per-process key, so a suspended request can only be resumed on this process. Set requestState.key in multi-instance and serverless deployments.',
+      );
+    }
+    return createRequestStateCodec<ContinuationEnvelope>({ key, ttlSeconds: options?.ttlSeconds });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Catalogue
+
+  convertTools(
+    tools: ToolsInput,
+    agents?: Record<string, Agent>,
+    workflows?: Record<string, Workflow>,
+  ): Record<string, InternalCoreTool> {
+    const converted: Record<string, InternalCoreTool> = {};
+    const convert = (name: string, tool: NonNullable<ToolsInput[string]>) => {
+      const coreTool = makeCoreTool(tool, {
+        name,
+        requestContext: new RequestContext(),
+        tracingContext: {},
+        mastra: this.mastra,
+        logger: this.logger,
+        description: 'description' in tool ? tool.description : undefined,
+      }) as InternalCoreTool;
+      converted[name] = { ...coreTool, id: name } as InternalCoreTool;
     };
+
+    for (const [name, tool] of Object.entries(tools)) {
+      if (!tool || !('execute' in tool) || typeof tool.execute !== 'function') {
+        this.logger.warn('Tool has no execute function, skipping', { tool: name });
+        continue;
+      }
+      if ('resumeSchema' in tool && tool.resumeSchema)
+        this.assertFormRepresentable(`tool '${name}'`, tool.resumeSchema);
+      convert(name, tool);
+    }
+
+    for (const [key, agent] of Object.entries(agents ?? {})) {
+      const description = agent.getDescription();
+      if (!description) {
+        throw new MastraError({
+          id: 'MCP_SERVER_AGENT_OR_WORKFLOW_TOOL_CONVERSION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          text: `Agent '${agent.name}' (key: '${key}') must have a non-empty description to be used in an MCPServer.`,
+        });
+      }
+      const name = `ask_${key}`;
+      if (converted[name]) {
+        this.logger.warn(`Tool '${name}' already exists; agent '${key}' is not exposed.`);
+        continue;
+      }
+      convert(
+        name,
+        createTool({
+          id: name,
+          description: `Ask agent '${agent.name}' a question. Agent description: ${description}`,
+          inputSchema: {
+            type: 'object' as const,
+            properties: { message: { type: 'string', description: 'The question or input for the agent.' } },
+            required: ['message'],
+            additionalProperties: false,
+          },
+          mcp: { toolType: 'agent' },
+          execute: async (inputData, context) => {
+            const { message } = inputData as { message: string };
+            return agent.generate(message, {
+              requestContext: context?.requestContext,
+              tracingContext: context?.tracingContext,
+              abortSignal: context?.abortSignal,
+            });
+          },
+        }),
+      );
+    }
+
+    for (const [key, workflow] of Object.entries(workflows ?? {})) {
+      if (!workflow.description) {
+        throw new MastraError({
+          id: 'MCP_SERVER_AGENT_OR_WORKFLOW_TOOL_CONVERSION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          text: `Workflow '${workflow.id}' (key: '${key}') must have a non-empty description to be used in an MCPServer.`,
+        });
+      }
+      const name = `run_${key}`;
+      if (converted[name]) {
+        this.logger.warn(`Tool '${name}' already exists; workflow '${key}' is not exposed.`);
+        continue;
+      }
+      convert(
+        name,
+        createTool({
+          id: name,
+          description: `Run workflow '${key}'. Workflow description: ${workflow.description}`,
+          inputSchema: workflow.inputSchema,
+          mcp: { toolType: 'workflow' },
+          execute: async (inputData, context) => {
+            const run = await workflow.createRun({ runId: context?.requestContext?.get('runId') });
+            return run.start({
+              inputData,
+              requestContext: context?.requestContext,
+              tracingContext: context?.tracingContext,
+            });
+          },
+        }),
+      );
+    }
+
+    this.logger.info(`${Object.keys(converted).length} tools registered`);
+    return converted;
   }
 
   /**
-   * Returns every connected SDK server instance: the main instance (stdio/SSE
-   * transports) plus one instance per streamable HTTP session. Used to
-   * broadcast notifications to all connected clients. Instances without a
-   * connected transport are skipped.
-   *
-   * Note: stateless/serverless requests use transient server instances and
-   * cannot receive notifications.
+   * A suspended handler's `resumeSchema` becomes the form the client fills in, and
+   * the protocol only allows a flat object of primitives there. Checked at registration
+   * so a tool cannot suspend into a request no client can answer.
    */
-  private getAllSdkServers(): Server[] {
-    return [this.server, this.stdioServerInstance, ...this.httpServerInstances.values()].filter(
-      (server): server is Server => server?.transport !== undefined,
-    );
-  }
-
-  /**
-   * Whether the server is pinned to the `2026-07-28` protocol revision.
-   * When false (the default), all behavior is byte-identical to the legacy era.
-   */
-  private servesModernEra(): boolean {
-    return this.protocolVersion === '2026-07-28';
-  }
-
-  private assertModernEraHTTPOptions(options?: MCPServerStreamableHTTPOptions): void {
-    if (!options) return;
-
-    const incompatibleOptions = new Set(
-      Object.keys(options).filter(option => !ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS.has(option)),
-    );
-
-    if (options.sessionIdGenerator !== undefined) incompatibleOptions.add('sessionIdGenerator');
-    if (options.serverless === false) incompatibleOptions.add('serverless');
-    if (options.serverlessStreaming === false) incompatibleOptions.add('serverlessStreaming');
-
-    if (incompatibleOptions.size === 0) return;
-
-    const names = [...incompatibleOptions].sort();
-    throw new MastraError({
-      id: 'MCP_SERVER_MODERN_HTTP_OPTIONS_INCOMPATIBLE',
-      domain: ErrorDomain.MCP,
-      category: ErrorCategory.USER,
-      text: `startHTTP options ${names.map(name => `"${name}"`).join(', ')} are incompatible with protocolVersion "2026-07-28"`,
-      details: { incompatibleOptions: names.join(', ') },
+  private assertFormRepresentable(owner: string, resumeSchema: unknown): void {
+    const requestedSchema = this.formSchema(resumeSchema);
+    const validation = specTypeSchemas.ElicitRequestFormParams['~standard'].validate({
+      message: owner,
+      requestedSchema,
     });
-  }
-
-  private validateHTTPRequestHeaders(
-    req: http.IncomingMessage,
-    res: http.ServerResponse<http.IncomingMessage>,
-    options?: MCPServerStreamableHTTPOptions,
-  ): boolean {
-    if (!options?.enableDnsRebindingProtection) return true;
-
-    if (options.allowedHosts?.length) {
-      const allowedHostnames = options.allowedHosts.map(host => new URL(`http://${host}`).hostname);
-      if (!hostHeaderValidation(allowedHostnames)(req, res)) return false;
-    }
-
-    if (options.allowedOrigins?.length) {
-      const allowedOriginHostnames = options.allowedOrigins.map(origin => new URL(origin).hostname);
-      if (!originValidation(allowedOriginHostnames)(req, res)) return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * Lazily creates the dual-era HTTP handler used when `protocolVersion: '2026-07-28'`
-   * is set: modern (per-request envelope) clients are served natively and legacy
-   * clients are served through the SDK's built-in stateless fallback, both from the
-   * same endpoint. Each request gets a fresh server instance from
-   * `createServerInstance()`, so all registered handlers apply to both eras.
-   */
-  private getModernEraHandler(): McpHttpHandler {
-    if (!this.modernEraHandler) {
-      this.modernEraHandler = createMcpHandler(() => this.createServerInstance(), {
-        legacy: 'stateless',
-        onerror: error => {
-          this.logger.error('MCP handler error', { error: error.toString() });
-        },
+    if (validation instanceof Promise || validation.issues) {
+      throw new MastraError({
+        id: 'MCP_SERVER_RESUME_SCHEMA_NOT_REPRESENTABLE',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        text: `The resumeSchema of ${owner} cannot be presented as an input request: it must be an object whose properties are strings, numbers, booleans or enums.`,
+        details: { owner, issues: JSON.stringify(validation instanceof Promise ? 'async' : validation.issues) },
       });
     }
-    return this.modernEraHandler;
   }
 
   /**
-   * Node `(req, res)` adapter over the dual-era handler's web-standard `fetch`.
+   * Input-request forms are a restricted flat-object subset of JSON Schema, so
+   * the dialect declaration is left off the requested schema.
    */
-  private getModernEraNodeHandler(): NodeMcpRequestHandler {
-    if (!this.modernEraNodeHandler) {
-      this.modernEraNodeHandler = toNodeHandler(this.getModernEraHandler(), {
-        onerror: error => {
-          this.logger.error('MCP Node handler adapter error', { error: error.toString() });
-        },
-      });
-    }
-    return this.modernEraNodeHandler;
+  private formSchema(resumeSchema: unknown): Record<string, unknown> {
+    const schema = isStandardSchemaWithJSON(resumeSchema)
+      ? resumeSchema
+      : toStandardSchema(resumeSchema as Parameters<typeof toStandardSchema>[0]);
+    const { $schema: _dialect, ...form } = this.jsonSchema(schema, { io: 'input' }) ?? {};
+    return Object.keys(form).length ? form : { type: 'object', properties: {} };
   }
 
   /**
-   * Determines whether a log message at the given level should be sent to the
-   * client connected to the given server instance, honoring the minimum level
-   * the client set via `logging/setLevel` (RFC 5424 severity ordering).
-   * When the client never set a level, all messages are sent.
+   * Converts a tool schema to JSON Schema 2020-12, the dialect MCP 2026-07-28
+   * assumes when none is declared. The dialect declaration is kept so validators
+   * that dispatch on `$schema` pick the same draft on both sides.
    */
-  private shouldSendLog(serverInstance: Server, level: LoggingLevel): boolean {
-    const minimumLevel = this.loggingLevels.get(serverInstance);
-    if (minimumLevel === undefined) return true;
-    return LOG_LEVEL_SEVERITY[level] >= LOG_LEVEL_SEVERITY[minimumLevel];
+  private jsonSchema(schema: unknown, options?: { io: 'input' | 'output' }): Record<string, unknown> | undefined {
+    if (!schema) return undefined;
+    return isStandardSchemaWithJSON(schema)
+      ? (standardSchemaToJSONSchema(schema, { ...options, target: 'draft-2020-12' }) as Record<string, unknown>)
+      : ((schema as { jsonSchema?: Record<string, unknown> }).jsonSchema ?? (schema as Record<string, unknown>));
   }
 
-  /**
-   * Sends a `notifications/message` log notification to connected clients.
-   *
-   * The notification is broadcast to every active server instance, honoring
-   * the minimum logging level each client set via `logging/setLevel`.
-   *
-   * @param params - Log message parameters
-   * @param params.level - Log severity level
-   * @param params.data - Arbitrary JSON-serializable data to log
-   * @param params.logger - Optional logger name
-   * @throws {MastraError} If sending the notification fails on all eligible server instances
-   *
-   * @example
-   * ```typescript
-   * await server.sendLoggingMessage({
-   *   level: 'info',
-   *   data: { message: 'Sync completed', itemsProcessed: 42 },
-   * });
-   * ```
-   */
-  public async sendLoggingMessage(params: { level: LoggingLevel; data: unknown; logger?: string }): Promise<void> {
-    const eligibleServers = this.getAllSdkServers().filter(server => this.shouldSendLog(server, params.level));
-    if (eligibleServers.length === 0) {
-      this.logger.debug('No eligible clients for log message; skipping.', { level: params.level });
-      return;
-    }
-    await broadcastNotification({
-      servers: eligibleServers,
-      send: server => server.sendLoggingMessage(params),
-      logger: this.logger,
-      errorId: 'MCP_SERVER_LOGGING_MESSAGE_NOTIFICATION_FAILED',
-      errorText: 'Failed to send logging message notification',
-      errorDetails: { level: params.level },
-    });
-  }
-
-  /**
-   * Registers new tools on the running server. Tools are merged into both the
-   * converted tool registry (used by list/call handlers) and the original
-   * tools config so they survive tool re-conversion when the server is
-   * registered with a Mastra instance.
-   */
   private addTools(tools: ToolsInput): void {
     const converted = this.convertTools(tools);
     for (const key of Object.keys(converted)) {
-      if (this.convertedTools[key]) {
-        this.logger.warn(`Tool '${key}' already exists and will be replaced.`);
-      }
+      if (this.convertedTools[key]) this.logger.warn(`Tool '${key}' already exists and will be replaced.`);
     }
     this.convertedTools = { ...this.convertedTools, ...converted };
     this.originalTools = { ...this.originalTools, ...tools };
-    // Keep the Mastra instance's tool registry in sync, mirroring the
-    // auto-registration done in __registerMastra.
     if (this.mastra) {
       for (const [key, tool] of Object.entries(tools)) {
-        if (tool && typeof tool === 'object' && 'id' in tool) {
-          this.mastra.addTool(tool as any, this.mastraToolKey(key, tool));
-        }
+        if (isRegistrableTool(tool)) this.mastra.addTool(tool, this.mastraToolKey(key, tool));
       }
     }
   }
 
-  /**
-   * Removes tools from the running server by tool ID.
-   *
-   * @returns The IDs of the tools that were actually removed
-   */
   private removeTools(toolIds: string[]): string[] {
     const removed: string[] = [];
     const convertedTools = { ...this.convertedTools };
     const originalTools = { ...this.originalTools };
     for (const toolId of toolIds) {
-      if (convertedTools[toolId]) {
-        const originalTool = originalTools[toolId];
-        delete convertedTools[toolId];
-        delete originalTools[toolId];
-        removed.push(toolId);
-        // Keep the Mastra instance's tool registry in sync.
-        if (this.mastra && originalTool && typeof originalTool === 'object' && 'id' in originalTool) {
-          this.mastra.removeTool(this.mastraToolKey(toolId, originalTool));
-        }
-      } else {
+      if (!convertedTools[toolId]) {
         this.logger.warn(`Cannot remove tool '${toolId}': tool not found.`);
+        continue;
+      }
+      const original = originalTools[toolId];
+      delete convertedTools[toolId];
+      delete originalTools[toolId];
+      removed.push(toolId);
+      if (this.mastra && original && typeof original === 'object' && 'id' in original) {
+        this.mastra.removeTool(this.mastraToolKey(toolId, original));
       }
     }
     this.convertedTools = convertedTools;
@@ -758,1883 +391,643 @@ export class MCPServer extends MCPServerBase {
     return removed;
   }
 
-  /**
-   * The key a tool is registered under in the Mastra instance's tool
-   * registry: the tool's intrinsic ID when present (avoids collisions across
-   * MCP servers), falling back to its record key. Mirrors __registerMastra.
-   */
+  /** Mirrors `__registerMastra`: the tool's intrinsic id when it has one, else its key. */
   private mastraToolKey(key: string, tool: NonNullable<ToolsInput[string]>): string {
-    return 'id' in tool && typeof (tool as any).id === 'string' ? (tool as any).id : key;
+    return 'id' in tool && typeof tool.id === 'string' ? tool.id : key;
+  }
+
+  /** Schema-less tools advertise an open empty object rather than the default validator schema. */
+  private hasInputSchema(name: string): boolean {
+    const original = this.originalTools[name];
+    return !original || !('inputSchema' in original) || original.inputSchema !== undefined;
+  }
+
+  private resumeSchemaOf(name: string): JSONSchema7 | undefined {
+    const original = this.originalTools[name];
+    if (!original || !('resumeSchema' in original) || !original.resumeSchema) return undefined;
+    return this.formSchema(original.resumeSchema);
   }
 
   /**
-   * Handle an elicitation request by sending it to the connected client.
-   * This method sends an elicitation/create request to the client and waits for the response.
-   *
-   * @param request - The elicitation request containing message and schema
-   * @param serverInstance - Optional server instance to use; defaults to main server for backward compatibility
-   * @param options - Optional request options (timeout, signal, etc.)
-   * @returns Promise that resolves to the client's response
+   * Prefers the tool's own schema over the converted core tool's, which has
+   * already been lowered to draft-07, so 2020-12 shapes survive advertisement.
    */
-  private async handleElicitationRequest(
-    request: ElicitRequest['params'],
-    serverInstance?: Server,
-    options?: RequestOptions,
-  ): Promise<ElicitResult> {
-    this.logger.debug('Sending elicitation request', { message: request.message });
-
-    const server = serverInstance || this.server;
-    const response = await server.elicitInput(request, options);
-
-    this.logger.debug('Received elicitation response', { response });
-
-    return response;
-  }
-
-  /**
-   * Reads and parses the JSON body from an HTTP request.
-   * If the request body was already parsed by middleware (e.g., express.json()),
-   * it uses the pre-parsed body from req.body. Otherwise, it reads from the stream.
-   *
-   * This allows the MCP server to work with Express apps that use express.json()
-   * globally without requiring special route exclusions.
-   *
-   * @param req - The incoming HTTP request
-   * @param options - Optional configuration
-   * @param options.preParsedOnly - If true, only return pre-parsed body from middleware,
-   *   returning undefined if not available. This allows the caller to fall back to
-   *   their own body reading logic (e.g., SDK's getRawBody with size limits).
-   */
-  private async readJsonBody(
-    req: http.IncomingMessage,
-    options?: { preParsedOnly?: boolean },
-  ): Promise<unknown | undefined> {
-    // Check if body was already parsed by middleware (e.g., express.json())
-    const reqWithBody = req as http.IncomingMessage & { body?: unknown };
-    if (reqWithBody.body !== undefined) {
-      return reqWithBody.body;
-    }
-
-    // If preParsedOnly is set, return undefined to let caller handle raw stream
-    if (options?.preParsedOnly) {
-      return undefined;
-    }
-
-    // Read and parse body from stream
-    return new Promise((resolve, reject) => {
-      let data = '';
-      req.on('data', chunk => (data += chunk));
-      req.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(e);
-        }
-      });
-      req.on('error', reject);
+  private advertisedSchema(name: string, field: 'inputSchema' | 'outputSchema', converted: unknown) {
+    const original = this.originalTools[name];
+    const own = original && field in original ? (original as Record<string, unknown>)[field] : undefined;
+    return this.jsonSchema(isStandardSchemaWithJSON(own) ? own : converted, {
+      io: field === 'inputSchema' ? 'input' : 'output',
     });
   }
 
-  /**
-   * Merges appResources into the resource system alongside any user-provided resources.
-   *
-   * App resources are auto-registered as `ui://` resources with the MCP Apps MIME type.
-   * If the user also provides a `resources` config, the two are merged — user callbacks
-   * take precedence for overlapping URIs.
-   */
-  private mergeAppResources(
-    userResources: MCPServerResources | undefined,
-    appResources: AppResources | undefined,
-  ): MCPServerResources | undefined {
-    if (!appResources || Object.keys(appResources).length === 0) {
-      return userResources;
-    }
-
-    // Resolve HTML content for all app resources (read files once at startup)
-    const resolvedAppResources = new Map<string, { resource: Resource; html: string }>();
-    for (const [uri, appResource] of Object.entries(appResources)) {
-      let html: string;
-      if (appResource.html) {
-        html = appResource.html;
-      } else if (appResource.htmlPath) {
-        html = readFileSync(appResource.htmlPath, 'utf-8');
-      } else {
-        this.logger.warn(`App resource '${uri}' has neither html nor htmlPath — skipping`);
-        continue;
-      }
-
-      const resource: Resource = {
-        uri,
-        name: appResource.name,
-        ...(appResource.description ? { description: appResource.description } : {}),
-        mimeType: RESOURCE_MIME_TYPE,
-        ...(appResource.meta ? { _meta: { ui: appResource.meta } } : {}),
-      };
-
-      resolvedAppResources.set(uri, { resource, html });
-    }
-
-    if (resolvedAppResources.size === 0) {
-      return userResources;
-    }
-
-    // Build merged resource callbacks
-    const appListResources = async () => {
-      return Array.from(resolvedAppResources.values()).map(r => r.resource);
-    };
-
-    const appGetResourceContent = async ({ uri }: { uri: string }) => {
-      const appRes = resolvedAppResources.get(uri);
-      if (appRes) {
-        return { text: appRes.html };
-      }
-      throw new Error(`App resource not found: ${uri}`);
-    };
-
-    if (!userResources) {
-      return {
-        listResources: appListResources,
-        getResourceContent: appGetResourceContent,
-      };
-    }
-
-    // Merge: user resources take precedence, app resources are appended
+  private toolInfo(name: string, tool: InternalCoreTool): ToolInfo {
     return {
-      listResources: async ({ extra }) => {
-        const userResourceList = await userResources.listResources({ extra });
-        const appResourceList = await appListResources();
-        // Filter out app resources that conflict with user-defined ones
-        const userUris = new Set(userResourceList.map(r => r.uri));
-        const nonConflicting = appResourceList.filter(r => !userUris.has(r.uri));
-        return [...userResourceList, ...nonConflicting];
-      },
-      getResourceContent: async ({ uri, extra }) => {
-        // Try user resources first, fall back to app resources
-        const appRes = resolvedAppResources.get(uri);
-        if (appRes) {
-          // Check if user also defines this URI — if so, prefer user
-          try {
-            const userResourceList = await userResources.listResources({ extra });
-            if (userResourceList.some(r => r.uri === uri)) {
-              return userResources.getResourceContent({ uri, extra });
-            }
-          } catch {
-            // If user listResources fails, fall through to app resource
-          }
-          return { text: appRes.html };
-        }
-        return userResources.getResourceContent({ uri, extra });
-      },
-      ...(userResources.resourceTemplates ? { resourceTemplates: userResources.resourceTemplates } : {}),
+      id: name,
+      name,
+      description: tool.description,
+      inputSchema: this.hasInputSchema(name)
+        ? (this.advertisedSchema(name, 'inputSchema', tool.parameters) ?? EMPTY_OBJECT_SCHEMA)
+        : EMPTY_OBJECT_SCHEMA,
+      outputSchema: this.advertisedSchema(name, 'outputSchema', tool.outputSchema),
+      toolType: tool.mcp?.toolType,
+      _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
     };
   }
 
-  /**
-   * Creates a new Server instance configured with all handlers for HTTP sessions.
-   * Each HTTP client connection gets its own Server instance to avoid routing conflicts.
-   */
-  private createServerInstance(): Server {
+  /** Builds the wire tool description, validated against the spec schema. */
+  private toMCPTool(name: string, tool: InternalCoreTool): MCPTool {
+    const info = this.toolInfo(name, tool);
+    const validation = specTypeSchemas.Tool['~standard'].validate({
+      name,
+      description: info.description,
+      inputSchema: info.inputSchema,
+      outputSchema: info.outputSchema,
+      annotations: tool.mcp?.annotations,
+      _meta: normalizeUiMeta(info._meta),
+    });
+    if (validation instanceof Promise || validation.issues) {
+      throw new Error(`Tool '${name}' does not describe a valid MCP tool (input schemas must be objects)`);
+    }
+    return validation.value;
+  }
+
+  private hasUiMetadata(): boolean {
+    return Object.values(this.convertedTools).some(tool => {
+      const meta = tool.mcp?._meta as { ui?: { resourceUri?: string } } | undefined;
+      return Boolean(meta?.ui?.resourceUri);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Protocol instance
+
+  private capabilities(): ServerCapabilities {
     const capabilities: ServerCapabilities = {
       tools: { listChanged: true },
-      logging: { enabled: true },
+      // Static declaration required by the 2026-07-28 logging utility; delivery
+      // itself is gated per request by the caller's `_meta` log-level opt-in.
+      logging: {},
     };
-
-    if (this.resourceOptions) {
+    if (this.resourceOptions || this.appResourceList.length > 0) {
       capabilities.resources = { subscribe: true, listChanged: true };
     }
-
-    if (this.promptOptions) {
-      capabilities.prompts = { listChanged: true };
+    if (this.promptOptions) capabilities.prompts = { listChanged: true };
+    if (this.appResourceList.length > 0 || this.hasUiMetadata()) {
+      capabilities.extensions = { 'io.modelcontextprotocol/ui': {} };
     }
-
-    // Re-apply extension capabilities for the new server instance
-    const hasUiTools = Object.values(this.convertedTools).some(
-      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
-    );
-    if (hasUiTools || this.hasUiResources) {
-      capabilities.extensions = {
-        ...capabilities.extensions,
-        'io.modelcontextprotocol/ui': {},
-      };
-    }
-
-    const serverInstance = new Server(
-      {
-        name: this.name,
-        version: this.version,
-      },
-      {
-        capabilities,
-        ...(this.instructions ? { instructions: this.instructions } : {}),
-        ...(this.jsonSchemaValidator ? { jsonSchemaValidator: this.jsonSchemaValidator } : {}),
-        // Cache hints only apply to cacheable 2026-07-28 results; the 2025 codec has
-        // no cache path, but gate on the flag anyway so it is the single opt-in.
-        ...(this.servesModernEra() && this.cacheHints ? { cacheHints: this.cacheHints } : {}),
-      },
-    );
-
-    // Register all handlers on the new server instance
-    this.registerHandlersOnServer(serverInstance);
-
-    return serverInstance;
+    return capabilities;
   }
 
-  /**
-   * Registers all MCP handlers on a given server instance.
-   * This allows us to create multiple server instances with identical functionality.
-   */
-  private registerHandlersOnServer(serverInstance: Server) {
-    // List tools handler
-    serverInstance.setRequestHandler('tools/list', async (_request, ctx) => {
-      const proxiedContext = await this.createProxiedRequestContext(toMCPRequestHandlerExtra(ctx));
-      const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
-      return {
-        tools: tools.map(([, tool]) => {
-          const toolSpec: any = {
-            name: tool.id || 'unknown',
-            description: tool.description,
-            inputSchema: this.convertInputSchema(tool.parameters),
-          };
-          if (tool.outputSchema) {
-            toolSpec.outputSchema = this.convertSchema(tool.outputSchema);
-          }
-          // Include MCP tool annotations if present
-          if (tool.mcp?.annotations) {
-            toolSpec.annotations = tool.mcp.annotations;
-          }
-          const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
-          if (toolMeta) {
-            // Normalize UI metadata for backward compatibility with older hosts:
-            // If _meta.ui.resourceUri is set, also set the legacy flat key and vice versa
-            const uiMeta = toolMeta.ui as { resourceUri?: string } | undefined;
-            const legacyUri = toolMeta[RESOURCE_URI_META_KEY] as string | undefined;
-            if (uiMeta?.resourceUri && !legacyUri) {
-              toolSpec._meta = { ...toolMeta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
-            } else if (legacyUri && !uiMeta?.resourceUri) {
-              toolSpec._meta = { ...toolMeta, ui: { ...((toolMeta.ui as object) ?? {}), resourceUri: legacyUri } };
-            } else {
-              toolSpec._meta = toolMeta;
-            }
-          }
-          return toolSpec;
+  private createServerInstance(): Server {
+    const server = new Server(
+      { name: this.name, version: this.version },
+      {
+        capabilities: this.capabilities(),
+        instructions: this.instructions,
+        jsonSchemaValidator: this.jsonSchemaValidator,
+        cacheHints: this.cacheHints,
+        // Continuation state is verified before any handler runs; a tampered,
+        // expired or foreign envelope answers the round with -32602.
+        requestState: { verify: this.requestStateCodec.verify },
+      },
+    );
+    // Deprecated session-level log control (SEP-2577): not served.
+    server.removeRequestHandler('logging/setLevel');
+    this.registerToolHandlers(server);
+    this.registerResourceHandlers(server);
+    this.registerPromptHandlers(server);
+    return server;
+  }
+
+  /** Answers a suspended round: one keyed form derived from the handler's `resumeSchema`. */
+  private async inputRequired(
+    ctx: ServerContext,
+    requestContext: RequestContext,
+    suspension: Suspension,
+  ): Promise<InputRequiredResult> {
+    const payload = suspension.suspendPayload as { message?: unknown } | undefined;
+    const message =
+      typeof payload?.message === 'string'
+        ? payload.message
+        : typeof suspension.resumeSchema?.description === 'string'
+          ? suspension.resumeSchema.description
+          : `"${suspension.name}" needs more input`;
+    const { method, name, argsHash, round, suspendPayload } = suspension;
+    return inputRequired({
+      inputRequests: {
+        [INPUT_KEY]: inputRequired.elicit({
+          message,
+          requestedSchema: (suspension.resumeSchema ?? { type: 'object', properties: {} }) as never,
         }),
-      };
+      },
+      requestState: await this.requestStateCodec.mint({
+        method,
+        name,
+        argsHash,
+        round,
+        suspendPayload,
+        principal: principalOf(ctx, requestContext),
+        iat: Math.floor(Date.now() / 1000),
+      }),
+    });
+  }
+
+  private async serverRequest(
+    ctx: ServerContext,
+    method: ContinuationEnvelope['method'],
+    name: string,
+    args: unknown,
+    resumeSchema: StandardSchemaWithJSON | undefined,
+  ): Promise<{
+    request: MCPServerRequest;
+    continuation: ReturnType<typeof readContinuation>;
+    suspended: () => { payload: unknown } | undefined;
+    argsHash: string;
+  }> {
+    const argsHash = hashArguments(args);
+    const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+    const continuation = readContinuation(ctx, requestContext, { method, name, argsHash });
+    if (continuation?.outcome === 'accept' && resumeSchema) {
+      const validation = await resumeSchema['~standard'].validate(continuation.resumeData);
+      if (validation.issues) {
+        throw new ProtocolError(
+          ProtocolErrorCode.InvalidParams,
+          `Input response for ${method} "${name}" does not match its resumeSchema: ${validation.issues.map(issue => issue.message).join('; ')}`,
+        );
+      }
+      continuation.resumeData = validation.value;
+    }
+    let suspension: { payload: unknown } | undefined;
+    const request: MCPServerRequest = {
+      extra: toToolExecutionContext(ctx, this.name).extra,
+      requestContext,
+      suspend: async payload => void (suspension = { payload }),
+      resumeData: continuation?.resumeData,
+      suspendPayload: continuation?.suspendPayload,
+    };
+    return { request, continuation, suspended: () => suspension, argsHash };
+  }
+
+  private registerToolHandlers(server: Server): void {
+    server.setRequestHandler('tools/list', async (_request, ctx) => {
+      const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+      const entries = await this.authorizedToolEntries(requestContext);
+      return { tools: entries.map(([name, tool]) => this.toMCPTool(name, tool)) };
     });
 
-    // Call tool handler
-    serverInstance.setRequestHandler('tools/call', async (request, ctx) => {
-      const startTime = Date.now();
-      const extra = toMCPRequestHandlerExtra(ctx);
-      let replayInterrupt: ElicitationReplayInterrupt | undefined;
+    server.setRequestHandler('tools/call', async (request, ctx) => {
+      const name = request.params.name;
+      const tool = this.convertedTools[name];
+      if (!tool) {
+        this.logger.warn('Unknown tool requested', { tool: name });
+        return errorResult(`Unknown tool: ${name}`);
+      }
+      const args = request.params.arguments ?? {};
+      const argsHash = hashArguments(args);
+      const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+      const continuation = readContinuation(ctx, requestContext, { method: 'tools/call', name, argsHash });
+      const mcp = toToolExecutionContext(ctx, this.name);
+      const span = getOrCreateSpan({
+        type: SpanType.TOOL_CALL,
+        name: `tool: '${name}'`,
+        input: args,
+        entityType: EntityType.TOOL,
+        entityId: name,
+        entityName: name,
+        attributes: { toolType: 'tool', toolDescription: tool.description },
+        requestContext,
+        mastra: this.mastra,
+      });
+      const startedAt = Date.now();
       try {
-        const tool = this.convertedTools[request.params.name];
-        if (!tool) {
-          this.logger.warn('Unknown tool requested', { tool: request.params.name });
-          return {
-            content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
-            isError: true,
-          };
+        // Every round is authorized on its own; nothing is trusted from the envelope.
+        await this.enforceToolExecutionFGA(name, requestContext);
+        if (continuation && continuation.outcome !== 'accept') {
+          span?.end({ attributes: { success: false } });
+          return errorResult(`Tool '${name}' was ${continuation.outcome === 'decline' ? 'declined' : 'cancelled'}`);
         }
-
-        const validation = await tool.parameters.validate?.(request.params.arguments ?? {});
-        if (validation && !validation.success) {
-          this.logger.warn('Invalid tool arguments', {
-            tool: request.params.name,
-            errors: validation.error,
+        const execution = await this.runTool(name, tool, args, {
+          requestContext,
+          mcp,
+          tracingContext: { currentSpan: span },
+          resumeData: continuation?.resumeData,
+          suspendPayload: continuation?.suspendPayload,
+        });
+        if (execution.status === 'suspended') {
+          span?.end({ attributes: { success: true } });
+          this.logger.debug(`Tool '${name}' requires client input.`);
+          return this.inputRequired(ctx, requestContext, {
+            method: 'tools/call',
+            name,
+            argsHash,
+            round: (continuation?.round ?? 0) + 1,
+            suspendPayload: execution.suspendPayload,
+            resumeSchema: execution.resumeSchema,
           });
-
-          // Format validation errors for agent understanding
-          let errorMessages = 'Validation failed';
-          if ('errors' in validation.error && Array.isArray(validation.error.errors)) {
-            errorMessages = validation.error.errors
-              .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-              .join('\n');
-          } else if (validation.error instanceof Error) {
-            errorMessages = validation.error.message;
-          }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(request.params.arguments, null, 2)}`,
-              },
-            ],
-            isError: true, // Set to true so the LLM sees the error and can self-correct
-          };
         }
-        if (!tool.execute) {
-          this.logger.warn('Tool does not have an execute function', { tool: request.params.name });
-          return {
-            content: [{ type: 'text', text: `Tool '${request.params.name}' does not have an execute function.` }],
-            isError: true,
-          };
-        }
-
-        // Create session-aware elicitation for this tool execution.
-        // On a 2026-07-28 request there is no server→client request channel, so
-        // elicitation runs through the multi-round-trip replay seam instead of
-        // the legacy elicitation/create push. The interrupt is captured out of
-        // band because tool wrappers re-wrap thrown errors.
-        const sessionElicitation: ElicitationActions = isModernEraRequest(extra)
-          ? createReplayElicitation(extra, interrupt => {
-              replayInterrupt = interrupt;
-            })
-          : {
-              sendRequest: async (request: ElicitRequest['params'], options?: RequestOptions) => {
-                return this.handleElicitationRequest(request, serverInstance, options);
-              },
-            };
-
-        const proxiedContext = await this.createProxiedRequestContext(extra);
-
-        // Session-aware log emission: sends notifications/message to the calling
-        // client, honoring the minimum level it set via logging/setLevel.
-        // On the 2026-07-28 path, delivery goes through the per-request log context
-        // instead, which honors the caller's per-request `logLevel` opt-in (messages
-        // are dropped when the caller did not opt in).
-        const sessionLog = async (
-          level: LoggingLevel,
-          message: string,
-          data?: Record<string, unknown>,
-        ): Promise<void> => {
-          if (this.servesModernEra()) {
-            await extra.mcpReq.log(level, { message, ...data }, this.name);
-            return;
-          }
-          if (!this.shouldSendLog(serverInstance, level)) return;
-          await extra.sendNotification({
-            method: 'notifications/message',
-            params: {
-              level,
-              logger: this.name,
-              data: { message, ...data },
-            },
-          });
-        };
-
-        // Session-aware progress emission: sends notifications/progress with the
-        // progressToken the caller provided. No-op when no token was sent, per spec.
-        const progressToken = extra._meta?.progressToken;
-        const sessionProgress = async (params: {
-          progress: number;
-          total?: number;
-          message?: string;
-        }): Promise<void> => {
-          if (progressToken === undefined) {
-            this.logger.debug('Tool attempted to send progress but the caller sent no progressToken; skipping.', {
-              tool: request.params.name,
-            });
-            return;
-          }
-          await extra.sendNotification({
-            method: 'notifications/progress',
-            params: {
-              progressToken,
-              ...params,
-            },
-          });
-        };
-
-        const mcpOptions: MastraToolInvocationOptions = {
-          messages: [],
-          toolCallId: '',
-          requestContext: proxiedContext,
-          // Pass MCP-specific context through the mcp property
-          mcp: {
-            elicitation: sessionElicitation,
-            extra,
-            log: sessionLog,
-            progress: sessionProgress,
-          },
-          // @ts-expect-error this is to let people know that the elicitation and extra keys are now nested under mcp.elicitation and mcp.extra in tool arguments
-          get elicitation() {
-            throw new Error(`The "elicitation" key is now nested under "mcp.elicitation" in tool arguments`);
-          },
-          get extra() {
-            throw new Error(`The "extra" key is now nested under "mcp.extra" in tool arguments`);
-          },
-        };
-
-        await this.enforceToolExecutionFGA(request.params.name, proxiedContext);
-
-        const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, mcpOptions);
-
-        const duration = Date.now() - startTime;
-
-        // Check if the tool builder returned a validation error (e.g. input failed Zod validation
-        // after passing the JSON Schema first-pass validation above)
-        if (isValidationError(result)) {
-          this.logger.warn(`CallTool: Tool '${request.params.name}' returned a validation error in ${duration}ms.`, {
-            error: result.message,
-          });
-          return {
-            content: [{ type: 'text', text: result.message }],
-            isError: true,
-          };
-        }
-
-        this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
-        this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
-
-        const response: CallToolResult = { isError: false, content: [] };
-
-        if (tool.outputSchema) {
-          // Handle both cases: tools that return { structuredContent: ... } and tools that return the plain object
-          let structuredContent;
-          if (result && typeof result === 'object' && 'structuredContent' in result) {
-            // Tool returned { structuredContent: ... } format (MCP-aware tool)
-            structuredContent = result.structuredContent;
-          } else {
-            // Tool returned plain object, wrap it automatically for backward compatibility
-            structuredContent = result;
-          }
-
-          const outputValidation = await tool.outputSchema.validate?.(structuredContent ?? {});
-          if (outputValidation && !outputValidation.success) {
-            this.logger.warn('Invalid structured content', {
-              tool: request.params.name,
-              errors: outputValidation.error,
-            });
-            throw new Error(
-              `Invalid structured content for tool ${request.params.name}: ${JSON.stringify(outputValidation.error)}`,
-            );
-          }
-          response.structuredContent = structuredContent;
-        }
-
-        if (response.structuredContent !== undefined) {
-          const authorContent =
-            result && typeof result === 'object' && 'content' in result && Array.isArray(result.content)
-              ? result.content
-              : undefined;
-          response.content =
-            authorContent && authorContent.length > 0
-              ? authorContent
-              : [{ type: 'text', text: JSON.stringify(response.structuredContent) }];
-        } else {
-          response.content = [
-            {
-              type: 'text',
-              text: typeof result === 'string' ? result : JSON.stringify(result),
-            },
-          ];
-        }
-
-        return response;
+        const result = this.toCallToolResult(name, tool, execution.output);
+        span?.end({ output: execution.output, attributes: { success: !result.isError } });
+        this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
+        return result;
       } catch (error) {
-        // Tool wrappers may re-wrap the interrupt (e.g. into MastraError), so the
-        // out-of-band capture — not instanceof on the thrown error — is the signal.
-        if (replayInterrupt !== undefined) {
-          // Not an error: the tool asked for user input on a 2026-07-28 request.
-          // Return input_required so the client answers and retries the call.
-          this.logger.debug(`CallTool: Tool '${request.params.name}' requires client input (multi-round-trip).`, {
-            key: replayInterrupt.key,
-          });
-          return replayInterruptToInputRequired(replayInterrupt);
-        }
-        const duration = Date.now() - startTime;
-        if (error instanceof Error && 'issues' in error && Array.isArray((error as any).issues)) {
-          const issues: Array<{ path: string[]; message: string }> = (error as any).issues;
-          this.logger.warn('Invalid tool arguments', {
-            tool: request.params.name,
-            errors: issues,
-            duration: `${duration}ms`,
-          });
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Invalid arguments: ${issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        this.logger.error('Tool execution failed', { tool: request.params.name, error });
-        if (error instanceof MastraError) {
-          return {
-            content: [{ type: 'text', text: JSON.stringify(error.toJSON()) }],
-            isError: true,
-          };
-        }
-        return {
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-          isError: true,
-        };
+        span?.error({ error: error as Error, attributes: { success: false } });
+        if (error instanceof ProtocolError) throw error;
+        this.logger.error('Tool execution failed', { tool: name, error });
+        const mastraError =
+          error instanceof MastraError
+            ? error
+            : new MastraError(
+                {
+                  id: 'TOOL_EXECUTION_FAILED',
+                  domain: ErrorDomain.TOOL,
+                  category: ErrorCategory.USER,
+                  details: { toolName: name },
+                },
+                error,
+              );
+        return errorResult(JSON.stringify(mastraError.toJSON()));
       }
     });
-
-    // Set logging level handler. The level is tracked per server instance so
-    // each HTTP session (which gets its own instance) can set its own level.
-    serverInstance.setRequestHandler('logging/setLevel', async request => {
-      this.loggingLevels.set(serverInstance, request.params.level);
-      this.logger.debug('Logging level set', { level: request.params.level });
-      return {};
-    });
-
-    // Register resource handlers if resources are configured
-    if (this.resourceOptions) {
-      this.registerResourceHandlersOnServer(serverInstance);
-    }
-
-    // Register prompt handlers if prompts are configured
-    if (this.promptOptions) {
-      this.registerPromptHandlersOnServer(serverInstance);
-    }
   }
 
   /**
-   * Registers resource-related handlers on a server instance.
+   * Runs one round of a tool. The tool sees the same `suspend` / `resumeData` /
+   * `suspendPayload` vocabulary as under an agent or workflow; nothing else is
+   * carried between rounds.
    */
-  private registerResourceHandlersOnServer(serverInstance: Server) {
-    const capturedResourceOptions = this.resourceOptions;
-    if (!capturedResourceOptions) return;
-
-    // List resources handler
-    if (capturedResourceOptions.listResources) {
-      serverInstance.setRequestHandler('resources/list', async (_request, ctx) => {
-        // Always re-evaluate the provider with the current request's `extra`. The result
-        // must never be cached on the shared instance: dynamic providers scope resources
-        // per caller (e.g. via `extra.authInfo`), so caching would leak one caller's
-        // resource index to the next. See https://github.com/mastra-ai/mastra/issues/17609
-        try {
-          const resources = await capturedResourceOptions.listResources!({ extra: toMCPRequestHandlerExtra(ctx) });
-          this.logger.debug('Fetched resources', { count: resources.length });
-          return { resources };
-        } catch (error) {
-          this.logger.error('Error fetching resources', { error });
-          throw error;
-        }
-      });
+  private async runTool(
+    name: string,
+    tool: InternalCoreTool,
+    args: unknown,
+    options: {
+      requestContext?: RequestContext;
+      mcp?: MCPToolExecutionContext;
+      tracingContext?: TracingContext;
+      resumeData?: unknown;
+      suspendPayload?: unknown;
+    },
+  ): Promise<MCPToolExecutionResultV2> {
+    if (!tool.execute) throw new Error(`Tool '${name}' cannot be executed.`);
+    let suspension: { payload: unknown; resumeSchema?: string } | undefined;
+    const output = await tool.execute(args, {
+      // The 1.x idiom: an empty toolCallId keeps CoreToolBuilder on the MCP path.
+      toolCallId: '',
+      messages: [],
+      requestContext: options.requestContext,
+      tracingContext: options.tracingContext,
+      abortSignal: options.mcp?.extra.signal,
+      ...(options.mcp ? { mcp: options.mcp } : {}),
+      suspend: async (payload: unknown, suspendOptions?: SuspendOptions) => {
+        suspension = { payload, resumeSchema: suspendOptions?.resumeSchema };
+      },
+      resumeData: options.resumeData,
+      suspendPayload: options.suspendPayload,
+    });
+    if (suspension) {
+      const { payload, resumeSchema } = suspension as { payload: unknown; resumeSchema?: string };
+      // The core builder serializes the resume schema as draft-07 JSON; forms carry no dialect.
+      const { $schema: _dialect, ...fromBuilder } = resumeSchema ? JSON.parse(resumeSchema) : {};
+      return {
+        status: 'suspended',
+        suspendPayload: payload,
+        resumeSchema: this.resumeSchemaOf(name) ?? (resumeSchema ? fromBuilder : undefined),
+      };
     }
+    return { status: 'completed', output };
+  }
 
-    // Read resource handler
-    if (capturedResourceOptions.getResourceContent) {
-      serverInstance.setRequestHandler('resources/read', async (request, ctx) => {
-        const startTime = Date.now();
-        const uri = request.params.uri;
-        this.logger.debug('Handling ReadResource request', { uri });
-
-        // Resolve the resource list for the current caller's `extra` on every request
-        // rather than from a shared cache, so URI resolution respects per-caller auth.
-        const resources = await capturedResourceOptions.listResources?.({ extra: toMCPRequestHandlerExtra(ctx) });
-        if (!resources) throw new Error('Failed to load resources');
-        const resource = resources.find(r => r.uri === uri);
-
-        if (!resource) {
-          this.logger.warn('Unknown resource URI requested', { uri });
-          throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
-        }
-
-        try {
-          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({
-            uri,
-            extra: toMCPRequestHandlerExtra(ctx),
-          });
-          const resourcesContent = Array.isArray(resourcesOrResourceContent)
-            ? resourcesOrResourceContent
-            : [resourcesOrResourceContent];
-          // Preserve the resource's `_meta` on the read contents. MCP Apps hosts
-          // read the UI CSP (connectDomains) from `contents[]._meta.ui.csp`, so
-          // dropping it here silently ignores appResources CSP config.
-          const resourceMeta = resource._meta ? { _meta: resource._meta } : {};
-          const contents: (TextResourceContents | BlobResourceContents)[] = resourcesContent.map(resourceContent => {
-            if ('text' in resourceContent && resourceContent.text !== undefined) {
-              return {
-                uri: resource.uri,
-                mimeType: resource.mimeType,
-                ...resourceMeta,
-                text: resourceContent.text,
-              } as TextResourceContents;
-            }
-
-            const blob = (resourceContent as { blob?: string }).blob;
-            if (blob === undefined) {
-              throw new Error(`Resource '${uri}' returned content with neither text nor blob`);
-            }
-
-            return {
-              uri: resource.uri,
-              mimeType: resource.mimeType,
-              ...resourceMeta,
-              blob,
-            } as BlobResourceContents;
-          });
-          const duration = Date.now() - startTime;
-          this.logger.info('Resource read successfully', { uri, duration });
-          return {
-            contents,
-          };
-        } catch (error) {
-          const duration = Date.now() - startTime;
-          this.logger.error('Failed to get content for resource', { uri, duration, error });
-          throw error;
-        }
-      });
+  private toCallToolResult(name: string, tool: InternalCoreTool, value: unknown): CallToolResult {
+    if (isValidationError(value)) {
+      this.logger.warn(`Tool '${name}' rejected its input.`, { error: value.message });
+      return errorResult(value.message);
     }
-
-    // Resource templates handler
-    if (capturedResourceOptions.resourceTemplates) {
-      serverInstance.setRequestHandler('resources/templates/list', async (_request, ctx) => {
-        // Always re-evaluate the provider with the current request's `extra`, never from a
-        // shared cache. Like resource lists, dynamic template providers can scope templates
-        // per caller (e.g. via `extra.authInfo`), so caching would leak across callers.
-        // See https://github.com/mastra-ai/mastra/issues/17609
-        try {
-          const templates = await capturedResourceOptions.resourceTemplates!({ extra: toMCPRequestHandlerExtra(ctx) });
-          this.logger.debug('Fetched resource templates', { count: templates.length });
-          return { resourceTemplates: templates };
-        } catch (error) {
-          this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
-          throw error;
-        }
-      });
+    if (!tool.outputSchema) {
+      return {
+        isError: false,
+        content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+      };
     }
+    // Tools with an output schema already validated `value` against it.
+    const structuredContent = value as Record<string, unknown>;
+    return { isError: false, structuredContent, content: [{ type: 'text', text: JSON.stringify(structuredContent) }] };
+  }
 
-    // Subscribe/unsubscribe handlers
-    serverInstance.setRequestHandler('resources/subscribe', async (request: { params: { uri: string } }) => {
+  private registerResourceHandlers(server: Server): void {
+    const options = this.resourceOptions;
+    const hasAppResources = this.appResourceList.length > 0;
+    if (!options && !hasAppResources) return;
+
+    const listResources = async (ctx: ServerContext): Promise<Resource[]> => [
+      ...this.appResourceList,
+      ...((await options?.listResources({
+        extra: toToolExecutionContext(ctx, this.name).extra,
+        requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+      })) ?? []),
+    ];
+
+    // Providers are re-evaluated with the current request every time; resource
+    // lists are scoped per caller and never cached on the shared server.
+    server.setRequestHandler('resources/list', async (_request, ctx) => ({ resources: await listResources(ctx) }));
+
+    server.setRequestHandler('resources/read', async (request, ctx) => {
       const uri = request.params.uri;
-      this.logger.info('Received resources/subscribe request', { uri });
-      let subscriptions = this.subscriptionsByInstance.get(serverInstance);
-      if (!subscriptions) {
-        subscriptions = new Set();
-        this.subscriptionsByInstance.set(serverInstance, subscriptions);
+      const resource = (await listResources(ctx)).find(r => r.uri === uri);
+      if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
+
+      const html = this.appResourceHtml.get(uri);
+      if (html !== undefined) return { contents: [this.resourceContents(resource, { text: html })] };
+      if (!options) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
+
+      const {
+        request: serverRequest,
+        continuation,
+        suspended,
+        argsHash,
+      } = await this.serverRequest(ctx, 'resources/read', uri, {}, options.resumeSchema);
+      if (continuation && continuation.outcome !== 'accept') {
+        throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Reading '${uri}' was ${continuation.outcome}ed`);
       }
-      subscriptions.add(uri);
-      return {};
+      const result = await options.getResourceContent({ uri, ...serverRequest });
+      const suspension = suspended();
+      if (suspension) {
+        return this.inputRequired(ctx, serverRequest.requestContext, {
+          method: 'resources/read',
+          name: uri,
+          argsHash,
+          round: (continuation?.round ?? 0) + 1,
+          suspendPayload: suspension.payload,
+          resumeSchema: options.resumeSchema ? this.formSchema(options.resumeSchema) : undefined,
+        });
+      }
+      if (result === undefined) throw new Error(`Resource '${uri}' returned no content`);
+      const contents = (Array.isArray(result) ? result : [result]).map(content =>
+        this.resourceContents(resource, content),
+      );
+      return { contents };
     });
 
-    serverInstance.setRequestHandler('resources/unsubscribe', async (request: { params: { uri: string } }) => {
-      const uri = request.params.uri;
-      this.logger.info('Received resources/unsubscribe request', { uri });
-      this.subscriptionsByInstance.get(serverInstance)?.delete(uri);
-      return {};
+    if (options?.resourceTemplates) {
+      server.setRequestHandler('resources/templates/list', async (_request, ctx) => ({
+        resourceTemplates: await options.resourceTemplates!({
+          extra: toToolExecutionContext(ctx, this.name).extra,
+          requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+        }),
+      }));
+    }
+  }
+
+  private resourceContents(
+    resource: Resource,
+    content: { text?: string } | { blob?: string },
+  ): TextResourceContents | BlobResourceContents {
+    // `_meta` is preserved on contents: MCP Apps hosts read the UI CSP from it.
+    const base = {
+      uri: resource.uri,
+      mimeType: resource.mimeType,
+      ...(resource._meta ? { _meta: resource._meta } : {}),
+    };
+    if ('text' in content && content.text !== undefined) return { ...base, text: content.text };
+    if ('blob' in content && content.blob !== undefined) return { ...base, blob: content.blob };
+    throw new Error(`Resource '${resource.uri}' returned content with neither text nor blob`);
+  }
+
+  private registerPromptHandlers(server: Server): void {
+    const options = this.promptOptions;
+    if (!options) return;
+
+    const listPrompts = async (ctx: ServerContext) => {
+      const prompts = await options.listPrompts({
+        extra: toToolExecutionContext(ctx, this.name).extra,
+        requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+      });
+      for (const prompt of prompts) PromptSchema.parse(prompt);
+      return prompts;
+    };
+
+    server.setRequestHandler('prompts/list', async (_request, ctx) => ({ prompts: await listPrompts(ctx) }));
+
+    if (!options.getPromptMessages) return;
+    server.setRequestHandler('prompts/get', async (request, ctx) => {
+      const { name, arguments: args } = request.params;
+      const prompt = (await listPrompts(ctx)).find(p => p.name === name);
+      if (!prompt) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Prompt "${name}" not found`);
+      for (const arg of prompt.arguments ?? []) {
+        if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
+          throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Missing required argument: ${arg.name}`);
+        }
+      }
+      const {
+        request: serverRequest,
+        continuation,
+        suspended,
+        argsHash,
+      } = await this.serverRequest(ctx, 'prompts/get', name, args ?? {}, options.resumeSchema);
+      if (continuation && continuation.outcome !== 'accept') {
+        throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Prompt "${name}" was ${continuation.outcome}ed`);
+      }
+      const messages = await options.getPromptMessages!({ name, args, ...serverRequest });
+      const suspension = suspended();
+      if (suspension) {
+        return this.inputRequired(ctx, serverRequest.requestContext, {
+          method: 'prompts/get',
+          name,
+          argsHash,
+          round: (continuation?.round ?? 0) + 1,
+          suspendPayload: suspension.payload,
+          resumeSchema: options.resumeSchema ? this.formSchema(options.resumeSchema) : undefined,
+        });
+      }
+      if (messages === undefined) throw new Error(`Prompt "${name}" returned no messages`);
+      return { description: prompt.description, messages };
     });
   }
 
-  /**
-   * Registers prompt-related handlers on a server instance.
-   */
-  private registerPromptHandlersOnServer(serverInstance: Server) {
-    const capturedPromptOptions = this.promptOptions;
-    if (!capturedPromptOptions) return;
+  // ---------------------------------------------------------------------------
+  // App resources
 
-    // List prompts handler
-    if (capturedPromptOptions.listPrompts) {
-      serverInstance.setRequestHandler('prompts/list', async (_request, ctx) => {
-        this.logger.debug('Handling ListPrompts request');
+  private loadAppResources(appResources: AppResources | undefined): void {
+    for (const [uri, appResource] of Object.entries(appResources ?? {})) {
+      const html = appResource.html ?? (appResource.htmlPath ? readFileSync(appResource.htmlPath, 'utf-8') : undefined);
+      if (html === undefined) {
+        this.logger.warn(`App resource '${uri}' has neither html nor htmlPath; skipping`);
+        continue;
+      }
+      this.appResourceHtml.set(uri, html);
+      this.appResourceList.push({
+        uri,
+        name: appResource.name,
+        description: appResource.description,
+        mimeType: RESOURCE_MIME_TYPE,
+        ...(appResource.meta ? { _meta: { ui: appResource.meta } } : {}),
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Authorization
+
+  private async enforceToolExecutionFGA(toolId: string, requestContext: RequestContext): Promise<void> {
+    const fgaProvider = this.mastra?.getServer?.()?.fga;
+    if (!fgaProvider) return;
+
+    const { getMCPToolFGAResourceId, requireFGA, FGADeniedError, MastraFGAPermissions } =
+      await import('@mastra/core/auth/ee');
+    const resourceId = getMCPToolFGAResourceId(this.id, toolId);
+    const user = requestContext.get('user');
+    if (!user) {
+      throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
+    }
+    const permission =
+      this.fga?.permissionMapping?.[MastraFGAPermissions.TOOLS_EXECUTE] ?? MastraFGAPermissions.TOOLS_EXECUTE;
+    const mapping = this.fga?.resourceMapping?.tool ?? this.fga?.resourceMapping?.tools;
+    const resource = mapping
+      ? { type: mapping.fgaResourceType, id: mapping.deriveId?.({ user, resourceId, requestContext }) ?? resourceId }
+      : { type: 'tool', id: resourceId };
+
+    await requireFGA({
+      fgaProvider,
+      user,
+      resource,
+      permission,
+      requestContext,
+      context: { resourceId },
+      metadata: { mcpServerId: this.id, mcpServerName: this.name, toolId },
+    });
+  }
+
+  private async authorizedToolEntries(requestContext: RequestContext): Promise<Array<[string, InternalCoreTool]>> {
+    const entries = Object.entries(this.convertedTools);
+    if (!this.mastra?.getServer?.()?.fga) return entries;
+    if (!requestContext.get('user')) return [];
+    const accessible = await Promise.all(
+      entries.map(async entry => {
         try {
-          const prompts = await capturedPromptOptions.listPrompts({ extra: toMCPRequestHandlerExtra(ctx) });
-          for (const prompt of prompts) {
-            PromptSchema.parse(prompt);
-          }
-          this.logger.debug('Fetched prompts', { count: prompts.length });
-          return { prompts };
+          await this.enforceToolExecutionFGA(entry[0], requestContext);
+          return entry;
         } catch (error) {
-          this.logger.error('Error fetching prompts via listPrompts():', {
-            error: error instanceof Error ? error.message : String(error),
-          });
+          if (error instanceof Error && error.name === 'FGADeniedError') return undefined;
           throw error;
         }
-      });
-    }
-
-    // Get prompt handler
-    if (capturedPromptOptions.getPromptMessages) {
-      serverInstance.setRequestHandler(
-        'prompts/get',
-        async (request: { params: { name: string; arguments?: any } }, ctx) => {
-          const startTime = Date.now();
-          const { name, arguments: args } = request.params;
-          const extra = toMCPRequestHandlerExtra(ctx);
-          const prompts = await capturedPromptOptions.listPrompts?.({ extra });
-          if (!prompts) throw new Error('Failed to load prompts');
-          for (const definedPrompt of prompts) {
-            PromptSchema.parse(definedPrompt);
-          }
-          // Select prompt by name
-          const prompt = prompts.find(p => p.name === name);
-          if (!prompt) throw new Error(`Prompt "${name}" not found`);
-          // Validate required arguments
-          if (prompt.arguments) {
-            for (const arg of prompt.arguments) {
-              if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
-                throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Missing required argument: ${arg.name}`);
-              }
-            }
-          }
-          try {
-            let messages: any[] = [];
-            if (capturedPromptOptions.getPromptMessages) {
-              messages = await capturedPromptOptions.getPromptMessages({
-                name,
-                version: prompt.version,
-                args,
-                extra,
-              });
-            }
-            const duration = Date.now() - startTime;
-            this.logger.info('Prompt retrieved successfully', { prompt: name, duration });
-            return { description: prompt.description, messages };
-          } catch (error) {
-            const duration = Date.now() - startTime;
-            this.logger.error('Failed to get prompt content', { prompt: name, duration, error });
-            throw error;
-          }
-        },
-      );
-    }
-  }
-
-  private convertAgentsToTools(
-    agentsConfig?: Record<string, Agent>,
-    definedConvertedTools?: Record<string, InternalCoreTool>,
-  ): Record<string, InternalCoreTool> {
-    const agentTools: Record<string, InternalCoreTool> = {};
-    if (!agentsConfig) {
-      return agentTools;
-    }
-
-    for (const agentKey in agentsConfig) {
-      const agent = agentsConfig[agentKey];
-      if (!agent || !('generate' in agent)) {
-        this.logger.warn('Invalid agent instance, skipping', { agentKey });
-        continue;
-      }
-
-      const agentDescription = agent.getDescription();
-
-      if (!agentDescription) {
-        throw new Error(
-          `Agent '${agent.name}' (key: '${agentKey}') must have a non-empty description to be used in an MCPServer.`,
-        );
-      }
-
-      const agentToolName = `ask_${agentKey}`;
-      if (definedConvertedTools?.[agentToolName] || agentTools[agentToolName]) {
-        this.logger.warn('Duplicate tool name, skipping agent', { tool: agentToolName, agentKey });
-        continue;
-      }
-
-      const agentToolDefinition = createTool({
-        id: agentToolName,
-        description: `Ask agent '${agent.name}' a question. Agent description: ${agentDescription}`,
-        inputSchema: {
-          type: 'object' as const,
-          properties: {
-            message: { type: 'string', description: 'The question or input for the agent.' },
-          },
-          required: ['message'],
-          additionalProperties: false,
-        },
-        execute: async (inputData, context) => {
-          const { message } = inputData as { message: string };
-          this.logger.debug('Executing agent tool', { tool: agentToolName, agent: agent.name, message });
-          try {
-            const proxiedContext = context?.requestContext || new RequestContext();
-            if (context?.mcp?.extra) {
-              // Spread all keys from extra directly onto the RequestContext
-              Object.entries(context.mcp.extra).forEach(([key, value]) => {
-                proxiedContext.set(key, value);
-              });
-            }
-
-            const response = await agent.generate(message, {
-              ...(context ?? {}),
-              requestContext: proxiedContext,
-            });
-            return response;
-          } catch (error) {
-            this.logger.error('Error executing agent tool', { tool: agentToolName, agent: agent.name, error });
-            throw error;
-          }
-        },
-      });
-
-      const options = {
-        name: agentToolName,
-        logger: this.logger,
-        mastra: this.mastra,
-        requestContext: new RequestContext(),
-        tracingContext: {},
-        description: agentToolDefinition.description,
-      };
-      const coreTool = makeCoreTool(agentToolDefinition, options) as InternalCoreTool;
-
-      agentTools[agentToolName] = {
-        ...coreTool,
-        id: agentToolName,
-        mcp: {
-          toolType: 'agent',
-        },
-      } as InternalCoreTool;
-      this.logger.info('Registered agent as tool', { agent: agent.name, key: agentKey, tool: agentToolName });
-    }
-    return agentTools;
-  }
-
-  private convertWorkflowsToTools(
-    workflowsConfig?: Record<string, Workflow>,
-    definedConvertedTools?: Record<string, InternalCoreTool>,
-  ): Record<string, InternalCoreTool> {
-    const workflowTools: Record<string, InternalCoreTool> = {};
-    if (!workflowsConfig) {
-      return workflowTools;
-    }
-
-    for (const workflowKey in workflowsConfig) {
-      const workflow = workflowsConfig[workflowKey];
-      if (!workflow || typeof workflow.createRun !== 'function') {
-        this.logger.warn(
-          `Workflow instance for '${workflowKey}' is invalid or missing a createRun function. Skipping.`,
-        );
-        continue;
-      }
-
-      const workflowDescription = workflow.description;
-      if (!workflowDescription) {
-        throw new Error(
-          `Workflow '${workflow.id}' (key: '${workflowKey}') must have a non-empty description to be used in an MCPServer.`,
-        );
-      }
-
-      const workflowToolName = `run_${workflowKey}`;
-      if (definedConvertedTools?.[workflowToolName] || workflowTools[workflowToolName]) {
-        this.logger.warn(
-          `Tool with name '${workflowToolName}' already exists. Workflow '${workflowKey}' will not be added as a duplicate tool.`,
-        );
-        continue;
-      }
-
-      const workflowToolDefinition = createTool({
-        id: workflowToolName,
-        description: `Run workflow '${workflowKey}'. Workflow description: ${workflowDescription}`,
-        inputSchema: workflow.inputSchema,
-        execute: async (inputData, context) => {
-          this.logger.debug(
-            `Executing workflow tool '${workflowToolName}' for workflow '${workflow.id}' with input:`,
-            inputData,
-          );
-          try {
-            const proxiedContext = context?.requestContext || new RequestContext();
-            if (context?.mcp?.extra) {
-              // Spread all keys from extra directly onto the RequestContext
-              Object.entries(context.mcp.extra).forEach(([key, value]) => {
-                proxiedContext.set(key, value);
-              });
-            }
-
-            const run = await workflow.createRun({ runId: proxiedContext?.get('runId') });
-
-            const response = await run.start({
-              inputData: inputData,
-              requestContext: proxiedContext,
-              tracingContext: context?.tracingContext,
-            });
-            return response;
-          } catch (error) {
-            this.logger.error(
-              `Error executing workflow tool '${workflowToolName}' for workflow '${workflow.id}':`,
-              error,
-            );
-            throw error;
-          }
-        },
-      });
-
-      const options = {
-        name: workflowToolName,
-        logger: this.logger,
-        mastra: this.mastra,
-        requestContext: new RequestContext(),
-        tracingContext: {},
-        description: workflowToolDefinition.description,
-      };
-
-      const coreTool = makeCoreTool(workflowToolDefinition, options) as InternalCoreTool;
-
-      workflowTools[workflowToolName] = {
-        ...coreTool,
-        id: workflowToolName,
-        mcp: {
-          toolType: 'workflow',
-        },
-      } as InternalCoreTool;
-      this.logger.info('Registered workflow as tool', {
-        workflow: workflow.id,
-        key: workflowKey,
-        tool: workflowToolName,
-      });
-    }
-    return workflowTools;
-  }
-
-  /**
-   * Convert and validate all provided tools, logging registration status.
-   * Also converts agents and workflows into tools.
-   * @param tools Tool definitions
-   * @param agentsConfig Agent definitions to be converted to tools, expected from MCPServerConfig
-   * @param workflowsConfig Workflow definitions to be converted to tools, expected from MCPServerConfig
-   * @returns Converted tools registry
-   */
-  convertTools(
-    tools: ToolsInput,
-    agentsConfig?: Record<string, Agent>,
-    workflowsConfig?: Record<string, Workflow>,
-  ): Record<string, InternalCoreTool> {
-    const definedConvertedTools: Record<string, InternalCoreTool> = {};
-
-    for (const toolName of Object.keys(tools)) {
-      const toolInstance = tools[toolName];
-      if (!toolInstance) {
-        this.logger.warn('Tool instance is undefined, skipping', { tool: toolName });
-        continue;
-      }
-
-      if (
-        (typeof toolInstance !== 'object' && typeof toolInstance !== 'function') ||
-        !('execute' in toolInstance) ||
-        typeof toolInstance.execute !== 'function'
-      ) {
-        this.logger.warn('Tool has no execute function, skipping', { tool: toolName });
-        continue;
-      }
-
-      const options = {
-        name: toolName,
-        requestContext: new RequestContext(),
-        tracingContext: {},
-        mastra: this.mastra,
-        logger: this.logger,
-        description: 'description' in toolInstance ? toolInstance.description : undefined,
-      };
-
-      const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
-
-      definedConvertedTools[toolName] = {
-        ...coreTool,
-        id: toolName,
-      } as InternalCoreTool;
-      this.logger.info('Registered explicit tool', { tool: toolName });
-    }
-    this.logger.info('Total defined tools registered', { count: Object.keys(definedConvertedTools).length });
-
-    let agentDerivedTools: Record<string, InternalCoreTool> = {};
-    let workflowDerivedTools: Record<string, InternalCoreTool> = {};
-    try {
-      agentDerivedTools = this.convertAgentsToTools(agentsConfig, definedConvertedTools);
-      workflowDerivedTools = this.convertWorkflowsToTools(workflowsConfig, definedConvertedTools);
-    } catch (e) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_AGENT_OR_WORKFLOW_TOOL_CONVERSION_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.USER,
-        },
-        e,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('Failed to convert tools:', {
-        error: mastraError.toString(),
-      });
-      throw mastraError;
-    }
-
-    const allConvertedTools = { ...definedConvertedTools, ...agentDerivedTools, ...workflowDerivedTools };
-
-    const finalToolCount = Object.keys(allConvertedTools).length;
-    const definedCount = Object.keys(definedConvertedTools).length;
-    const fromAgentsCount = Object.keys(agentDerivedTools).length;
-    const fromWorkflowsCount = Object.keys(workflowDerivedTools).length;
-    this.logger.info(
-      `${finalToolCount} total tools registered (${definedCount} defined + ${fromAgentsCount} agents + ${fromWorkflowsCount} workflows)`,
+      }),
     );
-
-    return allConvertedTools;
+    return accessible.filter((entry): entry is [string, InternalCoreTool] => entry !== undefined);
   }
 
-  /**
-   * Starts the MCP server using standard input/output (stdio) transport.
-   *
-   * This is typically used when running the server as a command-line program that MCP clients
-   * spawn as a subprocess (e.g., integration with Windsurf, Cursor, or Claude Desktop).
-   *
-   * @throws {MastraError} If the stdio connection fails
-   *
-   * @example
-   * ```typescript
-   * const server = new MCPServer({
-   *   name: 'My Server',
-   *   version: '1.0.0',
-   *   tools: { weatherTool },
-   * });
-   *
-   * await server.startStdio();
-   * ```
-   */
-  public async startStdio(): Promise<void> {
-    if (this.servesModernEra()) {
-      // Dual-era stdio: the opening exchange selects the era (server/discover probe
-      // for modern clients, initialize handshake for legacy clients) and one fresh
-      // instance from the factory is pinned for the connection lifetime.
-      this.stdioHandle = serveStdio(
-        () => {
-          const serverInstance = this.createServerInstance();
-          this.stdioServerInstance = serverInstance;
-          return serverInstance;
-        },
-        {
-          onerror: error => {
-            this.logger.error('MCP stdio handler error', { error: error.toString() });
-          },
-        },
-      );
-      this.logger.info('Started MCP Server (stdio, 2026-07-28 dual-era)');
-      return;
-    }
-    this.stdioTransport = new StdioServerTransport();
-    try {
-      await this.server.connect(this.stdioTransport);
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_STDIO_CONNECTION_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('Failed to connect MCP server using stdio transport:', {
-        error: mastraError.toString(),
+  // ---------------------------------------------------------------------------
+  // Transports
+
+  private notifier(): ServerNotifier | undefined {
+    if (this.httpHandler) return this.httpHandler.notify;
+    const stdio = this.stdioInstance;
+    if (!stdio) return undefined;
+    const report = (error: unknown) => this.logger.error('Failed to publish stdio notification', { error });
+    return {
+      toolsChanged: () => void stdio.sendToolListChanged().catch(report),
+      promptsChanged: () => void stdio.sendPromptListChanged().catch(report),
+      resourcesChanged: () => void stdio.sendResourceListChanged().catch(report),
+      resourceUpdated: uri => void stdio.sendResourceUpdated({ uri }).catch(report),
+    };
+  }
+
+  private getNodeHandler(): NodeMcpRequestHandler {
+    if (!this.nodeHandler) {
+      this.httpHandler = createMcpHandler(() => this.createServerInstance(), {
+        legacy: 'reject',
+        onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
-      throw mastraError;
+      this.nodeHandler = toNodeHandler(this.httpHandler, {
+        onerror: error => this.logger.error('MCP Node handler adapter error', { error: error.toString() }),
+      });
     }
-    this.logger.info('Started MCP Server (stdio)');
+    return this.nodeHandler;
+  }
+
+  /** Serves the current process's stdio. Legacy openings are rejected. */
+  async startStdio(): Promise<void> {
+    this.stdioHandle = serveStdio(
+      () => {
+        this.stdioInstance = this.createServerInstance();
+        return this.stdioInstance;
+      },
+      {
+        legacy: 'reject',
+        onerror: error => this.logger.error('MCP stdio handler error', { error: error.toString() }),
+      },
+    );
+    this.logger.info('Started MCP Server (stdio, 2026-07-28)');
   }
 
   /**
-   * Integrates the MCP server with an existing HTTP server using Server-Sent Events (SSE).
-   *
-   * Call this method from your web server's request handler for both the SSE and message paths.
-   * This enables web-based MCP clients to connect to your server.
-   *
-   * @param options - Configuration for SSE integration
-   * @param options.url - Parsed URL of the incoming request
-   * @param options.ssePath - Path for establishing SSE connection (e.g., '/sse')
-   * @param options.messagePath - Path for POSTing client messages (e.g., '/message')
-   * @param options.req - Incoming HTTP request object
-   * @param options.res - HTTP response object (must support .write/.end)
-   *
-   * @throws {MastraError} If SSE connection setup fails
-   *
-   * @example
-   * ```typescript
-   * import http from 'node:http';
-   *
-   * const httpServer = http.createServer(async (req, res) => {
-   *   await server.startSSE({
-   *     url: new URL(req.url || '', `http://localhost:1234`),
-   *     ssePath: '/sse',
-   *     messagePath: '/message',
-   *     req,
-   *     res,
-   *   });
-   * });
-   *
-   * httpServer.listen(1234, () => {
-   *   console.log('MCP server listening on http://localhost:1234/sse');
-   * });
-   * ```
+   * Handles one Streamable HTTP request at `httpPath`. Every request is
+   * self-contained; requests without a 2026-07-28 envelope are rejected.
    */
-  public async startSSE({ url, ssePath, messagePath, req, res }: MCPServerSSEOptions): Promise<void> {
-    try {
-      if (url.pathname === ssePath) {
-        await this.connectSSE({
-          messagePath,
-          res,
-        });
-      } else if (url.pathname === messagePath) {
-        this.logger.debug('Received message');
-        if (!this.sseTransport) {
-          res.writeHead(503);
-          res.end('SSE connection not established');
-          return;
-        }
-        // Check for pre-parsed body from middleware like express.json()
-        // If not available, let the SDK's handlePostMessage read from the stream
-        // (which has built-in size limits and charset handling)
-        const parsedBody = await this.readJsonBody(req, { preParsedOnly: true });
-        await this.sseTransport.handlePostMessage(req, res, parsedBody);
-      } else {
-        this.logger.debug('Unknown path:', { path: url.pathname });
-        res.writeHead(404);
-        res.end();
-      }
-    } catch (e) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_SSE_START_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.USER,
-          details: {
-            url: url.toString(),
-            ssePath,
-            messagePath,
-          },
-        },
-        e,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('Failed to start MCP Server (SSE):', { error: mastraError.toString() });
-      throw mastraError;
-    }
-  }
-
-  /**
-   * Integrates the MCP server with a Hono web framework using Server-Sent Events (SSE).
-   *
-   * Call this method from your Hono server's request handler for both the SSE and message paths.
-   * This enables Hono-based web applications to expose MCP servers.
-   *
-   * @param options - Configuration for Hono SSE integration
-   * @param options.url - Parsed URL of the incoming request
-   * @param options.ssePath - Path for establishing SSE connection (e.g., '/hono-sse')
-   * @param options.messagePath - Path for POSTing client messages (e.g., '/message')
-   * @param options.context - Hono context object
-   *
-   * @throws {MastraError} If Hono SSE connection setup fails
-   *
-   * @example
-   * ```typescript
-   * import { Hono } from 'hono';
-   *
-   * const app = new Hono();
-   *
-   * app.all('*', async (c) => {
-   *   const url = new URL(c.req.url);
-   *   return await server.startHonoSSE({
-   *     url,
-   *     ssePath: '/hono-sse',
-   *     messagePath: '/message',
-   *     context: c,
-   *   });
-   * });
-   *
-   * export default app;
-   * ```
-   */
-  public async startHonoSSE({ url, ssePath, messagePath, context, authInfo }: MCPServerHonoSSEOptions) {
-    const honoContext = context as unknown as Context;
-
-    try {
-      if (url.pathname === ssePath) {
-        return streamSSE(honoContext, async stream => {
-          await this.connectHonoSSE({
-            messagePath,
-            stream,
-          });
-        });
-      } else if (url.pathname === messagePath) {
-        this.logger.debug('Received message');
-        const sessionId = honoContext.req.query('sessionId');
-        this.logger.debug('Received message for sessionId', { sessionId });
-        if (!sessionId) {
-          return honoContext.text('No sessionId provided', 400);
-        }
-        if (!this.sseHonoTransports.has(sessionId)) {
-          return honoContext.text(`No transport found for sessionId ${sessionId}`, 400);
-        }
-        if (authInfo) {
-          this.sseHonoAuthInfo.set(sessionId, authInfo);
-        } else {
-          this.sseHonoAuthInfo.delete(sessionId);
-        }
-        const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(honoContext);
-        if (!message) {
-          return honoContext.text('Transport not found', 400);
-        }
-        return message;
-      } else {
-        this.logger.debug('Unknown path:', { path: url.pathname });
-        return honoContext.text('Unknown path', 404);
-      }
-    } catch (e) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_HONO_SSE_START_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.USER,
-          details: {
-            url: url.toString(),
-            ssePath,
-            messagePath,
-          },
-        },
-        e,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('Failed to start MCP Server (Hono SSE):', { error: mastraError.toString() });
-      throw mastraError;
-    }
-  }
-
-  /**
-   * Integrates the MCP server with an existing HTTP server using streamable HTTP transport.
-   *
-   * This is the recommended modern transport method, providing better session management and
-   * reliability compared to SSE. Call this from your HTTP server's request handler.
-   *
-   * @param options - Configuration for HTTP integration
-   * @param options.url - Parsed URL of the incoming request
-   * @param options.httpPath - Path for the MCP endpoint (e.g., '/mcp')
-   * @param options.req - Incoming HTTP request (http.IncomingMessage)
-   * @param options.res - HTTP response object (http.ServerResponse)
-   * @param options.options - Optional transport options
-   * @param options.options.sessionIdGenerator - Function to generate unique session IDs (defaults to randomUUID)
-   * @param options.options.onsessioninitialized - Callback when a new session is initialized
-   * @param options.options.enableJsonResponse - If true, return JSON instead of SSE streaming
-   * @param options.options.eventStore - Event store for message resumability
-   * @param options.options.serverless - If true, run in stateless mode without session management (ideal for serverless environments)
-   *
-   * @throws {MastraError} If HTTP connection setup fails
-   *
-   * @example
-   * ```typescript
-   * import http from 'node:http';
-   * import { randomUUID } from 'node:crypto';
-   *
-   * const httpServer = http.createServer(async (req, res) => {
-   *   await server.startHTTP({
-   *     url: new URL(req.url || '', 'http://localhost:1234'),
-   *     httpPath: '/mcp',
-   *     req,
-   *     res,
-   *     options: {
-   *       sessionIdGenerator: () => randomUUID(),
-   *       onsessioninitialized: (sessionId) => {
-   *         console.log(`New MCP session: ${sessionId}`);
-   *       },
-   *     },
-   *   });
-   * });
-   *
-   * httpServer.listen(1234);
-   * ```
-   *
-   * @example Serverless mode (Cloudflare Workers, Vercel Edge, etc.)
-   * ```typescript
-   * export default {
-   *   async fetch(request: Request) {
-   *     const url = new URL(request.url);
-   *     if (url.pathname === '/mcp') {
-   *       await server.startHTTP({
-   *         url,
-   *         httpPath: '/mcp',
-   *         req: request,
-   *         res: response,
-   *         options: { serverless: true },
-   *       });
-   *     }
-   *     return new Response('Not found', { status: 404 });
-   *   },
-   * };
-   * ```
-   */
-  public async startHTTP({
-    url,
-    httpPath,
-    req,
-    res,
-    options,
-  }: {
-    url: URL;
-    httpPath: string;
-    req: http.IncomingMessage;
-    res: http.ServerResponse<http.IncomingMessage>;
-    /**
-     * Streamable HTTP transport options for the legacy protocol path.
-     *
-     * With `protocolVersion: '2026-07-28'`, stateless declarations and DNS rebinding
-     * protection remain supported. Session and response-mode options are rejected
-     * because they cannot configure the shared modern-era handler per request.
-     */
-    options?: MCPServerStreamableHTTPOptions;
-  }) {
-    this.logger.debug('Received HTTP request', { method: req.method, path: url.pathname });
-
+  async startHTTP({ url, httpPath, req, res, options }: MCPServerHTTPOptions): Promise<void> {
     if (url.pathname !== httpPath) {
-      this.logger.debug('Pathname does not match httpPath, returning 404', { path: url.pathname, httpPath });
       res.writeHead(404);
       res.end();
       return;
     }
-
-    if (this.servesModernEra()) this.assertModernEraHTTPOptions(options);
-    if (!this.validateHTTPRequestHeaders(req, res, options)) return;
-
-    // 2026-07-28 revision: serve every request through the SDK's dual-era handler.
-    // Modern clients are served natively (stateless, per-request envelope); legacy
-    // clients are served by the handler's built-in stateless fallback on the same
-    // endpoint. Stateless declarations and request security guards remain valid;
-    // session and handler-lifetime options fail explicitly instead of being ignored.
-    if (this.servesModernEra()) {
-      try {
-        await this.getModernEraNodeHandler()(req, res);
-      } catch (error) {
-        const mastraError = new MastraError(
-          {
-            id: 'MCP_SERVER_HTTP_CONNECTION_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.USER,
-            text: 'Failed to handle MCP request on the 2026-07-28 protocol path',
-          },
-          error,
-        );
-        this.logger.trackException(mastraError);
-        this.logger.error('Error handling HTTP request (2026-07-28 path)', { error: mastraError });
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              jsonrpc: '2.0',
-              error: { code: -32603, message: 'Internal server error' },
-              id: null,
-            }),
-          );
-        }
+    if (options?.enableDnsRebindingProtection) {
+      if (options.allowedHosts?.length) {
+        const hostnames = options.allowedHosts.map(host => new URL(`http://${host}`).hostname);
+        if (!hostHeaderValidation(hostnames)(req, res)) return;
       }
-      return;
+      if (options.allowedOrigins?.length) {
+        const hostnames = options.allowedOrigins.map(origin => new URL(origin).hostname);
+        if (!originValidation(hostnames)(req, res)) return;
+      }
     }
-
-    // Serverless/stateless mode: single request/response without session management
-    // Triggered by either: serverless: true OR sessionIdGenerator: undefined
-    const isStatelessMode =
-      options?.serverless || (options && 'sessionIdGenerator' in options && options.sessionIdGenerator === undefined);
-
-    if (isStatelessMode) {
-      this.logger.debug('Running in stateless mode');
-      // Default to JSON responses for backward compatibility. Opt into request-scoped
-      // SSE streaming (e.g. notifications/progress) via serverlessStreaming or an explicit
-      // enableJsonResponse: false. An explicit enableJsonResponse always takes precedence.
-      const enableJsonResponse = options?.enableJsonResponse ?? !options?.serverlessStreaming;
-      await this.handleServerlessRequest(req, res, { enableJsonResponse });
-      return;
-    }
-
-    const mergedOptions = {
-      sessionIdGenerator: () => randomUUID(), // default: enabled
-      ...options, // user-provided overrides default
-    };
-
-    const sessionId = req.headers['mcp-session-id'] as string | undefined;
-    let transport: NodeStreamableHTTPServerTransport | undefined;
-
-    this.logger.debug('Session ID from headers', {
-      sessionId,
-      activeTransports: Array.from(this.streamableHTTPTransports.keys()),
-    });
-
     try {
-      if (sessionId && this.streamableHTTPTransports.has(sessionId)) {
-        // Found existing session
-        transport = this.streamableHTTPTransports.get(sessionId)!;
-        this.logger.debug('Using existing transport for session', { sessionId });
-
-        if (req.method === 'GET') {
-          this.logger.debug('Handling GET request for existing session', { sessionId });
-        }
-
-        // Handle the request using the existing transport
-        // Need to parse body for POST requests before passing to handleRequest
-        const body = req.method === 'POST' ? await this.readJsonBody(req) : undefined;
-
-        await transport.handleRequest(req, res, body);
-      } else if (sessionId) {
-        // Session ID provided but not found (e.g. server restarted, session expired).
-        // Per MCP spec: server MUST respond with 404 so the client knows to re-initialize.
-        this.logger.warn('Session ID not found, returning 404', { sessionId, method: req.method });
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            error: {
-              code: -32000,
-              message: 'Session not found',
-            },
-            id: null,
-          }),
-        );
-      } else {
-        // No session ID provided
-        this.logger.debug('No session ID provided', { method: req.method });
-
-        // Only allow new sessions via POST initialize request
-        if (req.method === 'POST') {
-          const body = await this.readJsonBody(req);
-
-          // Import isInitializeRequest from the correct path
-          const { isInitializeRequest } = await import('@modelcontextprotocol/server');
-
-          if (isInitializeRequest(body)) {
-            this.logger.debug('Received initialize request, creating new transport');
-
-            // Create a new server instance for this HTTP session
-            const sessionServerInstance = this.createServerInstance();
-
-            // Create a new transport for the new session.
-            // The session ID is only assigned while the transport handles the
-            // initialize request, so the transport and server instance must be
-            // registered in the onsessioninitialized callback.
-            transport = new NodeStreamableHTTPServerTransport({
-              ...mergedOptions,
-              sessionIdGenerator: mergedOptions.sessionIdGenerator,
-              onsessioninitialized: id => {
-                this.streamableHTTPTransports.set(id, transport!);
-                this.httpServerInstances.set(id, sessionServerInstance);
-                this.logger.debug('Session initialized and stored', { sessionId: id });
-              },
-            });
-
-            // Set up onclose handler to clean up transport when closed
-            transport.onclose = () => {
-              const closedSessionId = transport?.sessionId;
-              if (closedSessionId && this.streamableHTTPTransports.has(closedSessionId)) {
-                this.logger.debug('Transport closed for session, removing from map', { sessionId: closedSessionId });
-                this.streamableHTTPTransports.delete(closedSessionId);
-                // Also clean up the server instance for this session
-                if (this.httpServerInstances.has(closedSessionId)) {
-                  this.httpServerInstances.delete(closedSessionId);
-                  this.logger.debug('Cleaned up server instance for closed session', { sessionId: closedSessionId });
-                }
-              }
-            };
-
-            // Connect the new server instance to the new transport
-            await sessionServerInstance.connect(transport);
-
-            // Handle the initialize request. This assigns the session ID and
-            // triggers onsessioninitialized, which stores the transport and
-            // server instance for the session.
-            return await transport.handleRequest(req, res, body);
-          } else {
-            // POST request but not initialize, and no session ID
-            this.logger.warn('Received non-initialize POST request without session ID');
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(
-              JSON.stringify({
-                jsonrpc: '2.0',
-                error: {
-                  code: -32000,
-                  message: 'Bad Request: No valid session ID provided for non-initialize request',
-                },
-                id: (body as any)?.id ?? null, // Include original request ID if available
-              }),
-            );
-          }
-        } else {
-          // Non-POST request (GET/DELETE) without a session ID
-          this.logger.warn('Received request without session ID', { method: req.method });
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              jsonrpc: '2.0',
-              error: {
-                code: -32000,
-                message: `Bad Request: ${req.method} request requires a valid session ID`,
-              },
-              id: null,
-            }),
-          );
-        }
-      }
+      // Body-parsing middleware (express.json(), Fastify) leaves the stream consumed.
+      const parsedBody = (req as http.IncomingMessage & { body?: unknown }).body;
+      await this.getNodeHandler()(req, res, parsedBody);
     } catch (error) {
       const mastraError = new MastraError(
         {
           id: 'MCP_SERVER_HTTP_CONNECTION_FAILED',
           domain: ErrorDomain.MCP,
           category: ErrorCategory.USER,
-          text: 'Failed to connect MCP server using HTTP transport',
+          text: 'Failed to handle MCP request',
         },
         error,
       );
       this.logger.trackException(mastraError);
-      this.logger.error('Error handling HTTP request', { error: mastraError });
-      // If headers haven't been sent, send an error response
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            error: {
-              code: -32603,
-              message: 'Internal server error',
-            },
-            id: null, // Cannot determine original request ID in catch
-          }),
+          JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null }),
         );
       }
     }
   }
 
-  /**
-   * Handles a stateless, serverless HTTP request without session management.
-   *
-   * This method bypasses all session/transport state and handles each request independently.
-   * For serverless environments (Cloudflare Workers, Vercel Edge, etc.) where
-   * persistent connections and session state cannot be maintained across requests.
-   *
-   * Each request gets a fresh transport and server instance that are discarded after the response.
-   *
-   * @param req - Incoming HTTP request
-   * @param res - HTTP response object
-   * @param options - Transport options for this request
-   * @param options.enableJsonResponse - When `true` (default), buffers and returns a single
-   *   JSON-RPC response. When `false`, the request is handled with request-scoped SSE streaming,
-   *   so in-request `notifications/progress` reach the client before the final result.
-   * @private
-   */
-  private async handleServerlessRequest(
-    req: http.IncomingMessage,
-    res: http.ServerResponse<http.IncomingMessage>,
-    { enableJsonResponse = true }: { enableJsonResponse?: boolean } = {},
-  ) {
-    try {
-      this.logger.debug('Received serverless request', { method: req.method });
-
-      // Parse the request body (for POST requests)
-      const body =
-        req.method === 'POST' ? ((await this.readJsonBody(req)) as { method?: string; id?: unknown }) : undefined;
-
-      this.logger.debug('Processing serverless request', {
-        method: req.method,
-        bodyMethod: body?.method,
-        id: body?.id,
-        enableJsonResponse,
-      });
-
-      // Create a transient server instance for this single request
-      const transientServer = this.createServerInstance();
-
-      // Create a one-time transport that handles this single request.
-      // sessionIdGenerator: undefined disables session management entirely.
-      // enableJsonResponse: true (default) buffers a single JSON-RPC response; false enables
-      // request-scoped SSE streaming so notifications/progress can reach the client.
-      const tempTransport = new NodeStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse,
-      });
-
-      // Connect the transient server to the temporary transport
-      await transientServer.connect(tempTransport);
-
-      // Handle the request through the transport
-      // The transport will send the response and this instance will be garbage collected
-      await tempTransport.handleRequest(req, res, body);
-
-      this.logger.debug('Completed serverless request', { method: body?.method, id: body?.id });
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_SERVERLESS_REQUEST_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.USER,
-          text: 'Failed to handle serverless MCP request',
-        },
-        error,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('Error handling serverless request', { error: mastraError });
-
-      // If headers haven't been sent, send an error response
-      if (!res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        // Error details are logged above; don't echo them to the client
-        // (CodeQL js/stack-trace-exposure)
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            error: {
-              code: -32603,
-              message: 'Internal server error',
-            },
-            id: null,
-          }),
-        );
-      }
+  async close(): Promise<void> {
+    if (this.stdioHandle) {
+      await this.stdioHandle.close();
+      this.stdioHandle = undefined;
+      this.stdioInstance = undefined;
+    }
+    if (this.httpHandler) {
+      await this.httpHandler.close();
+      this.httpHandler = undefined;
+      this.nodeHandler = undefined;
     }
   }
 
-  /**
-   * Establishes the SSE connection for the MCP server.
-   *
-   * This is a lower-level method called internally by `startSSE()`. In most cases,
-   * you should use `startSSE()` instead which handles both connection establishment
-   * and message routing.
-   *
-   * @param params - Connection parameters
-   * @param params.messagePath - Path for POST requests from the client
-   * @param params.res - HTTP response object for the SSE stream
-   * @throws {MastraError} If SSE connection establishment fails
-   *
-   * @example
-   * ```typescript
-   * // Usually called internally by startSSE()
-   * await server.connectSSE({
-   *   messagePath: '/message',
-   *   res: response
-   * });
-   * ```
-   */
-  public async connectSSE({
-    messagePath,
-    res,
-  }: {
-    messagePath: string;
-    res: http.ServerResponse<http.IncomingMessage>;
-  }) {
-    try {
-      this.logger.debug('Received SSE connection');
+  // ---------------------------------------------------------------------------
+  // Registry information and direct execution
 
-      // Close the previous transport so the underlying protocol accepts a new one.
-      if (this.sseTransport) {
-        await this.sseTransport.close?.();
-        this.sseTransport = undefined;
-      }
-
-      this.sseTransport = new SSEServerTransport(messagePath, res);
-      await this.server.connect(this.sseTransport);
-
-      this.server.onclose = async () => {
-        this.sseTransport = undefined;
-        await this.server.close();
-      };
-
-      res.on('close', () => {
-        this.sseTransport = undefined;
-      });
-    } catch (e) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_SSE_CONNECT_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.USER,
-          details: {
-            messagePath,
-          },
-        },
-        e,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('Failed to connect to MCP Server (SSE):', { error: mastraError });
-      throw mastraError;
-    }
-  }
-
-  /**
-   * Establishes the Hono SSE connection for the MCP server.
-   *
-   * This is a lower-level method called internally by `startHonoSSE()`. In most cases,
-   * you should use `startHonoSSE()` instead which handles both connection establishment
-   * and message routing.
-   *
-   * @param params - Connection parameters
-   * @param params.messagePath - Path for POST requests from the client
-   * @param params.stream - Hono SSE streaming API object
-   * @throws {MastraError} If Hono SSE connection establishment fails
-   *
-   * @example
-   * ```typescript
-   * // Usually called internally by startHonoSSE()
-   * await server.connectHonoSSE({
-   *   messagePath: '/message',
-   *   stream: sseStream
-   * });
-   * ```
-   */
-  public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: HonoSSEStreamingApi }) {
-    this.logger.debug('Received SSE connection');
-    const sseTransport = new SSETransport(messagePath, stream as SSEStreamingApi);
-    const sessionId = sseTransport.sessionId;
-    this.logger.debug('SSE Transport created with sessionId:', { sessionId });
-    this.sseHonoTransports.set(sessionId, sseTransport);
-
-    stream.onAbort(() => {
-      this.logger.debug('SSE Transport aborted with sessionId:', { sessionId });
-      this.sseHonoTransports.delete(sessionId);
-      this.sseHonoAuthInfo.delete(sessionId);
-    });
-    try {
-      await this.server.connect(sseTransport);
-
-      // The Hono SSE transport has no Node request to carry `req.auth`, so the
-      // SDK never receives auth info for these messages. Inject whatever the
-      // adapter resolved for the current POST so tools still see
-      // `extra.authInfo`, matching the streamable HTTP transport.
-      const onmessage = sseTransport.onmessage?.bind(sseTransport);
-      if (onmessage) {
-        sseTransport.onmessage = (message: Parameters<typeof onmessage>[0], extra?: unknown) => {
-          const authInfo = this.sseHonoAuthInfo.get(sessionId);
-          (onmessage as (message: unknown, extra?: unknown) => void)(
-            message,
-            authInfo ? { ...(extra as Record<string, unknown> | undefined), authInfo } : extra,
-          );
-        };
-      }
-
-      this.server.onclose = async () => {
-        this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
-        this.sseHonoTransports.delete(sessionId);
-        this.sseHonoAuthInfo.delete(sessionId);
-        await this.server.close();
-      };
-
-      while (true) {
-        // This will keep the connection alive
-        // You can also await for a promise that never resolves
-        await stream.sleep(60_000);
-        const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
-        this.logger.debug('Active Hono SSE sessions:', { sessionIds });
-        await stream.write(':keep-alive\n\n');
-      }
-    } catch (e) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_HONO_SSE_CONNECT_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.USER,
-          details: {
-            messagePath,
-          },
-        },
-        e,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('Failed to connect to MCP Server (Hono SSE):', { error: mastraError });
-      throw mastraError;
-    }
-  }
-
-  /**
-   * Closes the MCP server and releases all resources.
-   *
-   * This method cleanly shuts down all active transports (stdio, SSE, HTTP) and their
-   * associated connections. Call this when your application is shutting down.
-   *
-   * @throws {MastraError} If closing the server fails
-   *
-   * @example
-   * ```typescript
-   * // Graceful shutdown
-   * process.on('SIGTERM', async () => {
-   *   await server.close();
-   *   process.exit(0);
-   * });
-   * ```
-   */
-  async close() {
-    try {
-      if (this.stdioHandle) {
-        await this.stdioHandle.close();
-        this.stdioHandle = undefined;
-        this.stdioServerInstance = undefined;
-      }
-      if (this.modernEraHandler) {
-        await this.modernEraHandler.close();
-        this.modernEraHandler = undefined;
-        this.modernEraNodeHandler = undefined;
-      }
-      if (this.stdioTransport) {
-        await this.stdioTransport.close?.();
-        this.stdioTransport = undefined;
-      }
-      if (this.sseTransport) {
-        await this.sseTransport.close?.();
-        this.sseTransport = undefined;
-      }
-      if (this.sseHonoTransports) {
-        for (const transport of this.sseHonoTransports.values()) {
-          await transport.close?.();
-        }
-        this.sseHonoTransports.clear();
-      }
-      // Close all active Streamable HTTP transports and their server instances
-      if (this.streamableHTTPTransports) {
-        for (const transport of this.streamableHTTPTransports.values()) {
-          await transport.close?.();
-        }
-        this.streamableHTTPTransports.clear();
-      }
-      // Close all HTTP server instances
-      if (this.httpServerInstances) {
-        for (const serverInstance of this.httpServerInstances.values()) {
-          await serverInstance.close?.();
-        }
-        this.httpServerInstances.clear();
-      }
-      await this.server.close();
-      this.logger.info('MCP server closed.');
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_CLOSE_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('Error closing MCP server:', { error: mastraError });
-      throw mastraError;
-    }
-  }
-
-  /**
-   * Gets basic information about the server.
-   *
-   * Returns metadata including server ID, name, description, repository, and version details.
-   * This information conforms to the MCP Server schema.
-   *
-   * @returns Server information object
-   *
-   * @example
-   * ```typescript
-   * const info = server.getServerInfo();
-   * console.log(`${info.name} v${info.version_detail.version}`);
-   * // Output: My Weather Server v1.0.0
-   * ```
-   */
-  public getServerInfo(): ServerInfo {
+  getServerInfo(): ServerInfo {
     return {
       id: this.id,
       name: this.name,
       description: this.description,
       repository: this.repository,
-      version_detail: {
-        version: this.version,
-        release_date: this.releaseDate,
-        is_latest: this.isLatest,
-      },
+      version_detail: { version: this.version, release_date: this.releaseDate, is_latest: this.isLatest },
     };
   }
 
-  /**
-   * Gets detailed information about the server including packaging and deployment metadata.
-   *
-   * Returns extended server information with package details, remotes, and deployment configurations.
-   * This information conforms to the MCP ServerDetail schema.
-   *
-   * @returns Detailed server information object
-   *
-   * @example
-   * ```typescript
-   * const detail = server.getServerDetail();
-   * console.log(detail.package_canonical); // 'npm'
-   * console.log(detail.packages); // Package installation info
-   * ```
-   */
-  public getServerDetail(): ServerDetailInfo {
+  getServerDetail(): ServerDetailInfo {
     return {
       ...this.getServerInfo(),
       package_canonical: this.packageCanonical,
@@ -2643,408 +1036,72 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
-  private convertSchema(schema: any) {
-    const jsonSchema = isStandardSchemaWithJSON(schema)
-      ? standardSchemaToJSONSchema(schema)
-      : (schema?.jsonSchema ?? schema);
-    // The MCP 2.0 SDK default validator only supports the JSON Schema 2020-12
-    // dialect and rejects schemas declaring draft-07, so strip the dialect
-    // declaration before advertising the schema to clients.
-    if (jsonSchema && typeof jsonSchema === 'object' && '$schema' in jsonSchema) {
-      const { $schema: _dialect, ...rest } = jsonSchema;
-      return rest;
+  getToolListInfo(requestContext?: RequestContext): { tools: ToolInfo[] } | Promise<{ tools: ToolInfo[] }> {
+    const toInfo = (entries: Array<[string, InternalCoreTool]>) => ({
+      tools: entries.map(([name, tool]) => this.toolInfo(name, tool)),
+    });
+    if (this.mastra?.getServer?.()?.fga) {
+      return requestContext ? this.authorizedToolEntries(requestContext).then(toInfo) : { tools: [] };
     }
-    return jsonSchema;
+    return toInfo(Object.entries(this.convertedTools));
   }
 
-  private convertInputSchema(schema: any) {
-    return this.convertSchema(schema) ?? { type: 'object', properties: {} };
+  getToolInfo(toolId: string): ToolInfo | undefined {
+    const tool = this.convertedTools[toolId];
+    return tool ? this.toolInfo(toolId, tool) : undefined;
   }
 
   /**
-   * Gets a list of all tools provided by this MCP server with their schemas.
-   *
-   * Returns information about all registered tools including explicit tools, agent-derived tools,
-   * and workflow-derived tools. Includes input/output schemas and tool types.
-   *
-   * @returns Object containing array of tool information
-   *
-   * @example
-   * ```typescript
-   * const toolList = server.getToolListInfo();
-   * toolList.tools.forEach(tool => {
-   *   console.log(`${tool.name}: ${tool.description}`);
-   *   console.log(`Type: ${tool.toolType || 'tool'}`);
-   * });
-   * ```
+   * Runs a tool without a protocol client (the Studio/REST route). A tool that
+   * suspends is reported as such; the caller continues by sending the same
+   * arguments with `resumeData` and `suspendPayload`.
    */
-  public getToolListInfo(requestContext?: RequestContext):
-    | {
-        tools: Array<{
-          name: string;
-          description?: string;
-          inputSchema: any;
-          outputSchema?: any;
-          toolType?: MCPToolType;
-          _meta?: Record<string, unknown>;
-        }>;
-      }
-    | Promise<{
-        tools: Array<{
-          name: string;
-          description?: string;
-          inputSchema: any;
-          outputSchema?: any;
-          toolType?: MCPToolType;
-          _meta?: Record<string, unknown>;
-        }>;
-      }> {
-    const fgaProvider = this.mastra?.getServer?.()?.fga;
-    if (fgaProvider && requestContext) {
-      return this.getAuthorizedConvertedToolEntries(requestContext).then(tools => ({
-        tools: tools.map(([toolId, tool]) => ({
-          id: toolId,
-          name: tool.id || toolId,
-          description: tool.description,
-          inputSchema: this.convertInputSchema(tool.parameters),
-          outputSchema: this.convertSchema(tool.outputSchema),
-          toolType: tool.mcp?.toolType,
-          _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
-        })),
-      }));
-    }
-
-    if (fgaProvider && !requestContext) {
-      return { tools: [] };
-    }
-
-    this.logger.debug('Getting tool list', { server: this.name });
-    return {
-      tools: Object.entries(this.convertedTools).map(([toolId, tool]) => ({
-        id: toolId,
-        name: tool.id || toolId,
-        description: tool.description,
-        inputSchema: this.convertInputSchema(tool.parameters),
-        outputSchema: this.convertSchema(tool.outputSchema),
-        toolType: tool.mcp?.toolType,
-        _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
-      })),
-    };
-  }
-
-  /**
-   * Gets information for a specific tool provided by this MCP server.
-   *
-   * Returns detailed information about a single tool including its name, description, schemas, and type.
-   * Returns undefined if the tool is not found.
-   *
-   * @param toolId - The ID/name of the tool to retrieve
-   * @returns Tool information object or undefined if not found
-   *
-   * @example
-   * ```typescript
-   * const toolInfo = server.getToolInfo('getWeather');
-   * if (toolInfo) {
-   *   console.log(toolInfo.description);
-   *   console.log(toolInfo.inputSchema);
-   * }
-   * ```
-   */
-  public getToolInfo(toolId: string):
-    | {
-        name: string;
-        description?: string;
-        inputSchema: any;
-        outputSchema?: any;
-        toolType?: MCPToolType;
-        _meta?: Record<string, unknown>;
-      }
-    | undefined {
+  async executeTool(
+    toolId: string,
+    args: unknown,
+    executionContext: Parameters<MCPServerBase['executeTool']>[2] = {},
+  ): Promise<MCPToolExecutionResultV2> {
     const tool = this.convertedTools[toolId];
     if (!tool) {
-      this.logger.debug('Tool not found', { tool: toolId, server: this.name });
-      return undefined;
-    }
-    this.logger.debug('Getting tool info', { tool: toolId, server: this.name });
-    return {
-      name: tool.id || toolId,
-      description: tool.description,
-      inputSchema: this.convertInputSchema(tool.parameters),
-      outputSchema: this.convertSchema(tool.outputSchema),
-      toolType: tool.mcp?.toolType,
-      _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
-    };
-  }
-
-  private async createProxiedRequestContext(extra?: unknown): Promise<RequestContext> {
-    const proxiedContext = new RequestContext();
-    let extraRecord: Record<string, unknown> | undefined;
-    if (extra && typeof extra === 'object') {
-      extraRecord = extra as Record<string, unknown>;
-      Object.entries(extraRecord).forEach(([key, value]) => {
-        proxiedContext.set(key, value);
+      this.logger.warn('Unknown tool requested', { tool: toolId, server: this.name });
+      throw new MastraError({
+        id: 'MCP_SERVER_TOOL_EXECUTE_PREPARATION_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        text: `Unknown tool: ${toolId}`,
+        details: { toolId },
       });
-      const http = extraRecord.http;
-      if (http && typeof http === 'object' && 'authInfo' in http) {
-        proxiedContext.set('authInfo', http.authInfo);
-      }
     }
-    await this.resolveMappedFGAUser(proxiedContext, extraRecord);
-    return proxiedContext;
-  }
-
-  private async resolveMappedFGAUser(
-    requestContext?: RequestContext,
-    extra?: Record<string, unknown>,
-  ): Promise<unknown> {
-    if (!requestContext) {
-      return undefined;
-    }
-
-    const existingUser = requestContext.get('user');
-    if (existingUser) {
-      return existingUser;
-    }
-
-    if (!this.mapAuthInfoToUser) {
-      return undefined;
-    }
-
-    const authInfo = extra && 'authInfo' in extra ? extra.authInfo : requestContext.get('authInfo');
-    if (!authInfo) {
-      return undefined;
-    }
-
-    const user = await this.mapAuthInfoToUser({
-      authInfo,
-      extra: extra ?? { authInfo },
-      requestContext,
-    });
-    if (user) {
-      requestContext.set('user', user);
-    }
-
-    return user;
-  }
-
-  private async getAuthorizedConvertedToolEntries(
-    requestContext: RequestContext,
-  ): Promise<Array<[string, (typeof this.convertedTools)[string]]>> {
-    const entries = Object.entries(this.convertedTools);
-    const fgaProvider = this.mastra?.getServer?.()?.fga;
-    if (!fgaProvider) {
-      return entries;
-    }
-
-    const user = await this.resolveMappedFGAUser(requestContext);
-    if (!user) {
-      return [];
-    }
-
-    const accessible = await Promise.all(
-      entries.map(async ([toolId, tool]) => {
-        try {
-          await this.enforceToolExecutionFGA(toolId, requestContext);
-          return [toolId, tool] as [string, (typeof this.convertedTools)[string]];
-        } catch (error) {
-          if (error instanceof Error && error.name === 'FGADeniedError') {
-            return null;
-          }
-          throw error;
-        }
-      }),
-    );
-
-    return accessible.filter((entry): entry is [string, (typeof this.convertedTools)[string]] => entry !== null);
-  }
-
-  private async enforceToolExecutionFGA(toolId: string, requestContext?: RequestContext): Promise<void> {
-    const fgaProvider = this.mastra?.getServer?.()?.fga;
-    if (!fgaProvider) {
-      return;
-    }
-
-    const { getMCPToolFGAResourceId, requireFGA, FGADeniedError, MastraFGAPermissions } =
-      await import('@mastra/core/auth/ee');
-    const resourceId = getMCPToolFGAResourceId(this.id, toolId);
-    const user = await this.resolveMappedFGAUser(requestContext);
-    if (!user) {
-      throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
-    }
-    const { resource, permission } = this.resolveToolFGAParams({
-      user,
-      resourceId,
-      requestContext,
-      permission: MastraFGAPermissions.TOOLS_EXECUTE,
-    });
-
-    await requireFGA({
-      fgaProvider,
-      user,
-      resource,
-      permission,
-      requestContext,
-      context: {
-        resourceId,
-      },
-      metadata: {
-        mcpServerId: this.id,
-        mcpServerName: this.name,
-        toolId,
-      },
-    });
-  }
-
-  private resolveToolFGAParams({
-    user,
-    resourceId,
-    requestContext,
-    permission,
-  }: {
-    user: unknown;
-    resourceId: string;
-    requestContext?: RequestContext;
-    permission: string;
-  }): { resource: { type: string; id: string }; permission: string } {
-    const mappedPermission = this.fga?.permissionMapping?.[permission] ?? permission;
-    const resourceMapping = this.fga?.resourceMapping?.tool ?? this.fga?.resourceMapping?.tools;
-
-    if (!resourceMapping) {
-      return {
-        resource: { type: 'tool', id: resourceId },
-        permission: mappedPermission,
-      };
-    }
-
-    return {
-      resource: {
-        type: resourceMapping.fgaResourceType,
-        id: resourceMapping.deriveId?.({ user, resourceId, requestContext }) ?? resourceId,
-      },
-      permission: mappedPermission,
-    };
-  }
-
-  /**
-   * Executes a specific tool provided by this MCP server.
-   *
-   * This method validates the tool arguments against the input schema and executes the tool.
-   * If validation fails, returns an error object instead of throwing.
-   *
-   * @param toolId - The ID/name of the tool to execute
-   * @param args - The arguments to pass to the tool's execute function
-   * @param executionContext - Optional context including messages and toolCallId
-   * @returns Promise resolving to the tool execution result
-   * @throws {MastraError} If the tool is not found or execution fails
-   *
-   * @example
-   * ```typescript
-   * const result = await server.executeTool(
-   *   'getWeather',
-   *   { location: 'London' },
-   *   { toolCallId: 'call_123' }
-   * );
-   * console.log(result);
-   * ```
-   */
-  public async executeTool(
-    toolId: string,
-    args: any,
-    executionContext?: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext },
-  ): Promise<any> {
-    const tool = this.convertedTools[toolId];
-    let validatedArgs = args;
+    const requestContext = executionContext.requestContext ?? new RequestContext();
+    // A denial is reported as such, not as a failed execution.
+    await this.enforceToolExecutionFGA(toolId, requestContext);
     try {
-      if (!tool) {
-        this.logger.warn('Unknown tool requested', { tool: toolId, server: this.name });
-        throw new Error(`Unknown tool: ${toolId}`);
-      }
-
-      this.logger.debug('Invoking tool', { tool: toolId, args });
-
-      const paramsSchema = tool.parameters as {
-        validate?: (value: unknown) => any;
-        safeParse?: (value: unknown) => any;
-      };
-
-      const validation =
-        typeof paramsSchema?.validate === 'function'
-          ? paramsSchema.validate(args ?? {})
-          : typeof paramsSchema?.safeParse === 'function'
-            ? paramsSchema.safeParse(args ?? {})
-            : null;
-
-      if (validation) {
-        const success = typeof validation.success === 'boolean' ? validation.success : !validation.issues?.length;
-
-        if (!success) {
-          const issues = validation.error?.issues ?? validation.error?.errors ?? validation.issues ?? [];
-          const errorMessages = issues
-            .map(
-              (e: { path?: (string | number)[]; message: string }) => `- ${e.path?.join('.') || 'root'}: ${e.message}`,
-            )
-            .join('\n');
-          const validationErrors = validation.error?.format?.() ?? validation.error ?? validation.issues;
-
-          this.logger.warn('Invalid tool arguments', {
-            tool: toolId,
-            errorMessages,
-            errors: validationErrors,
-          });
-          // Return validation error as a result instead of throwing
-          return {
-            error: true,
-            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages || 'Validation failed'}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
-            validationErrors,
-          };
-        }
-
-        validatedArgs = validation.data ?? validation.value ?? args;
-      } else {
-        this.logger.debug('Tool parameters missing schema, skipping validation', { tool: toolId });
-      }
-
-      if (!tool.execute) {
-        this.logger.error('Tool does not have an execute function', { tool: toolId });
-        throw new Error(`Tool '${toolId}' cannot be executed.`);
-      }
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_TOOL_EXECUTE_PREPARATION_FAILED',
+      const execution = await this.runTool(toolId, tool, args, {
+        requestContext,
+        tracingContext: { currentSpan: undefined },
+        resumeData: executionContext.resumeData,
+        suspendPayload: executionContext.suspendPayload,
+      });
+      // Invalid input or resume data is the caller's error, not a completed call.
+      if (execution.status === 'completed' && isValidationError(execution.output)) {
+        throw new MastraError({
+          id: 'MCP_SERVER_TOOL_INVALID_INPUT',
           domain: ErrorDomain.MCP,
           category: ErrorCategory.USER,
-          details: {
-            toolId,
-            args,
-          },
-        },
-        error,
-      );
-      this.logger.trackException(mastraError);
-      throw mastraError;
-    }
-
-    try {
-      const finalExecutionContext = {
-        messages: executionContext?.messages || [],
-        toolCallId: executionContext?.toolCallId || randomUUID(),
-        requestContext: executionContext?.requestContext,
-      };
-      await this.enforceToolExecutionFGA(toolId, finalExecutionContext.requestContext);
-      const result = await tool.execute(validatedArgs, finalExecutionContext);
+          text: execution.output.message,
+          details: { toolId },
+        });
+      }
       this.logger.info('Tool executed successfully', { tool: toolId });
-      return result;
+      return execution;
     } catch (error) {
+      if (error instanceof MastraError && error.id === 'MCP_SERVER_TOOL_INVALID_INPUT') throw error;
       const mastraError = new MastraError(
         {
           id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
           domain: ErrorDomain.MCP,
           category: ErrorCategory.USER,
-          details: {
-            toolId,
-            validatedArgs: validatedArgs,
-          },
+          details: { toolId, args: JSON.stringify(args) },
         },
         error,
       );
@@ -3053,51 +1110,44 @@ export class MCPServer extends MCPServerBase {
     }
   }
 
-  /**
-   * Reads the content of a resource by URI.
-   *
-   * Used by the Studio API to proxy `ui://` resource reads for MCP Apps rendering.
-   *
-   * @param uri - The resource URI to read (e.g. `ui://weather/dashboard`)
-   * @returns Promise resolving to the resource content
-   */
-  public async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
-    if (!this.resourceOptions?.getResourceContent) {
+  /** Reads an `ui://` app resource; application resources require a protocol request. */
+  async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+    const html = this.appResourceHtml.get(uri);
+    if (html === undefined) {
       throw new MastraError({
-        id: 'MCP_SERVER_RESOURCES_NOT_CONFIGURED',
+        id: 'MCP_SERVER_RESOURCE_NOT_FOUND',
         domain: ErrorDomain.MCP,
         category: ErrorCategory.USER,
+        text: `Resource '${uri}' not found; application resources are only readable through an MCP request`,
         details: { uri },
       });
     }
-
-    const extra = {} as any;
-    const result = await this.resourceOptions.getResourceContent({ uri, extra });
-    const contents = Array.isArray(result) ? result : [result];
-
-    return {
-      contents: contents.map(c => ({
-        uri,
-        ...('text' in c && c.text !== undefined ? { text: c.text } : {}),
-        ...('blob' in c && c.blob !== undefined ? { blob: c.blob } : {}),
-      })),
-    };
+    return { contents: [{ uri, text: html }] };
   }
 
-  /**
-   * Lists all resources available on this MCP server.
-   *
-   * Used by the Studio API to discover `ui://` resources for MCP Apps.
-   *
-   * @returns Promise resolving to the list of resources
-   */
-  public async listResources(): Promise<{ resources: Resource[] }> {
-    if (!this.resourceOptions?.listResources) {
-      return { resources: [] };
-    }
-
-    const extra = {} as any;
-    const resources = await this.resourceOptions.listResources({ extra });
-    return { resources };
+  /** Lists `ui://` app resources; application resources require a protocol request. */
+  async listResources(): Promise<{ resources: Resource[] }> {
+    return { resources: [...this.appResourceList] };
   }
 }
+
+/** Tools with an intrinsic id are also registered on the Mastra instance, like `__registerMastra` does. */
+function isRegistrableTool(tool: ToolsInput[string]): tool is ToolAction<any, any, any, any> {
+  return !!tool && typeof tool === 'object' && 'id' in tool && typeof tool.id === 'string';
+}
+
+function errorResult(text: string): CallToolResult {
+  return { content: [{ type: 'text', text }], isError: true };
+}
+
+/** Keeps `_meta.ui.resourceUri` and the flat MCP Apps key in sync for older hosts. */
+function normalizeUiMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!meta) return undefined;
+  const ui = meta.ui as { resourceUri?: string } | undefined;
+  const flat = meta[RESOURCE_URI_META_KEY] as string | undefined;
+  if (ui?.resourceUri && !flat) return { ...meta, [RESOURCE_URI_META_KEY]: ui.resourceUri };
+  if (flat && !ui?.resourceUri) return { ...meta, ui: { ...(ui ?? {}), resourceUri: flat } };
+  return meta;
+}
+
+export { ServerPromptActions, ServerResourceActions, ServerToolActions };

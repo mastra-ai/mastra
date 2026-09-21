@@ -396,15 +396,26 @@ describe('Agents page', () => {
     });
   });
 
-  describe('when agents are sorted alphabetically', () => {
-    it('shows agents from A to Z in the selected card view', async () => {
+  describe('when agents are sorted from the Name column', () => {
+    it('shows agents from A to Z in the list view', async () => {
       useAgentsResponse();
       renderPage();
 
-      fireEvent.click(await screen.findByRole('combobox', { name: 'Sort agents' }));
-      const option = await screen.findByRole('option', { name: 'Name: A–Z' });
-      fireEvent.pointerDown(option, { pointerType: 'mouse' });
-      fireEvent.click(option, { detail: 1 });
+      fireEvent.click(await screen.findByRole('button', { name: 'Name, not sorted, sort ascending' }));
+
+      const rowNames = [screen.getByTitle('Analysis Agent'), screen.getByTitle('Research Agent')];
+      const orderedNames = rowNames
+        .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+        .map(el => el.textContent);
+
+      expect(orderedNames).toEqual(['Analysis Agent', 'Research Agent']);
+    });
+
+    it('keeps the A to Z order when switching to the compact view', async () => {
+      useAgentsResponse();
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Name, not sorted, sort ascending' }));
       fireEvent.click(screen.getByRole('button', { name: 'Compact view' }));
 
       const grid = screen.getByRole('list', { name: 'Agents compact grid' });
@@ -415,14 +426,12 @@ describe('Agents page', () => {
       expect(cardLabels).toEqual(['Open Analysis Agent', 'Open Research Agent']);
     });
 
-    it('shows agents from Z to A in the selected card view', async () => {
+    it('shows agents from Z to A after a second click', async () => {
       useAgentsResponse();
       renderPage();
 
-      fireEvent.click(await screen.findByRole('combobox', { name: 'Sort agents' }));
-      const option = await screen.findByRole('option', { name: 'Name: Z–A' });
-      fireEvent.pointerDown(option, { pointerType: 'mouse' });
-      fireEvent.click(option, { detail: 1 });
+      fireEvent.click(await screen.findByRole('button', { name: 'Name, not sorted, sort ascending' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Name, sorted ascending, sort descending' }));
       fireEvent.click(screen.getByRole('button', { name: 'Compact view' }));
 
       const grid = screen.getByRole('list', { name: 'Agents compact grid' });

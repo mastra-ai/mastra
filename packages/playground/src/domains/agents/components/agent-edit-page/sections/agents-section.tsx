@@ -85,9 +85,9 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="bg-surface3 flex items-center justify-between p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="text-neutral3 h-4 w-4" />
+                    <ChevronRight className="text-muted-foreground h-4 w-4" />
                     <SectionTitle icon={<AgentIcon className="text-accent1" />}>
-                      Sub-Agents{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+                      Sub-Agents{count > 0 && <span className="text-muted-foreground font-normal">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
                 </div>
@@ -97,6 +97,8 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                     <div className="flex flex-col gap-2">
                       <Combobox
                         multiple
+                        name="agents"
+                        aria-label="Agents"
                         options={options}
                         value={selectedIds}
                         onValueChange={handleValueChange}
