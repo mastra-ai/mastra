@@ -6,7 +6,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 // Stub out side-effects so login() doesn't open a browser or write to disk.
 vi.mock('@clack/prompts', () => ({
   select: vi.fn(),
-  isCancel: (value: unknown) => typeof value === 'symbol',
+  isCancel: () => false,
 }));
 
 vi.mock('./client.js', () => ({
@@ -37,7 +37,7 @@ const selectMock = vi.mocked(select);
 /** Extract the URL that openBrowser passed to execFileSync. */
 function extractUrl(index = 0): string {
   const urls = execFileSyncMock.mock.calls.flatMap(call => {
-    const args = call[1] as string[] | undefined;
+    const args = call[1];
     return args?.filter(arg => arg.includes('cli_port=')) ?? [];
   });
   const url = urls[index];
@@ -82,14 +82,16 @@ const validParams = {
   org: 'org-1',
 };
 
-function mockInteractiveStdin() {
+function mockTerminal(isTTY = true) {
   const isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+  const stdoutIsTTYDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
   const setRawModeDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'setRawMode');
   const setRawMode = vi.fn().mockReturnValue(process.stdin);
   Object.defineProperties(process.stdin, {
-    isTTY: { configurable: true, value: true },
+    isTTY: { configurable: true, value: isTTY },
     setRawMode: { configurable: true, value: setRawMode },
   });
+  Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: isTTY });
   vi.spyOn(process.stdin, 'isPaused').mockReturnValue(true);
   vi.spyOn(process.stdin, 'resume').mockReturnValue(process.stdin);
   vi.spyOn(process.stdin, 'pause').mockReturnValue(process.stdin);
@@ -98,9 +100,11 @@ function mockInteractiveStdin() {
     setRawMode,
     restore() {
       if (isTTYDescriptor) Object.defineProperty(process.stdin, 'isTTY', isTTYDescriptor);
-      else delete (process.stdin as Partial<NodeJS.ReadStream>).isTTY;
+      else Reflect.deleteProperty(process.stdin, 'isTTY');
+      if (stdoutIsTTYDescriptor) Object.defineProperty(process.stdout, 'isTTY', stdoutIsTTYDescriptor);
+      else Reflect.deleteProperty(process.stdout, 'isTTY');
       if (setRawModeDescriptor) Object.defineProperty(process.stdin, 'setRawMode', setRawModeDescriptor);
-      else delete (process.stdin as Partial<NodeJS.ReadStream>).setRawMode;
+      else Reflect.deleteProperty(process.stdin, 'setRawMode');
     },
   };
 }
@@ -191,7 +195,7 @@ describe('login() server lifecycle', () => {
   });
 
   it('skips login when any key is pressed', async () => {
-    const stdin = mockInteractiveStdin();
+    const stdin = mockTerminal();
     try {
       const { login, LoginCancelledError } = await import('./credentials.js');
       const loginPromise = login(undefined, { skipOnInput: true });
@@ -216,7 +220,7 @@ describe('login() server lifecycle', () => {
   });
 
   it('forwards Ctrl+C as SIGINT instead of treating it as a skip key', async () => {
-    const stdin = mockInteractiveStdin();
+    const stdin = mockTerminal();
     const controller = new AbortController();
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
       controller.abort();
@@ -242,40 +246,67 @@ describe('login() server lifecycle', () => {
   });
 
   it('retries with a fresh callback server after login times out', async () => {
-    selectMock.mockResolvedValueOnce('retry');
-    const { login } = await import('./credentials.js');
-    const loginPromise = login(undefined, { timeoutMs: 1000 });
+    const terminal = mockTerminal();
+    try {
+      selectMock.mockResolvedValueOnce('retry');
+      const { login } = await import('./credentials.js');
+      const loginPromise = login(undefined, { timeoutMs: 1000 });
 
-    await vi.waitFor(() => expect(selectMock).toHaveBeenCalledOnce(), { timeout: 5000 });
-    await vi.waitFor(() => expect(execFileSyncMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
+      await vi.waitFor(() => expect(selectMock).toHaveBeenCalledOnce(), { timeout: 5000 });
+      await vi.waitFor(() => expect(execFileSyncMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
 
-    await sendCallback(extractPort(1), { ...validParams, state: extractState(1) });
+      await sendCallback(extractPort(1), { ...validParams, state: extractState(1) });
 
-    await expect(loginPromise).resolves.toMatchObject({ token: 'test-token' });
+      await expect(loginPromise).resolves.toMatchObject({ token: 'test-token' });
+    } finally {
+      terminal.restore();
+    }
   });
 
   it('offers to cancel a standalone login after it times out', async () => {
-    selectMock.mockResolvedValueOnce('cancel');
-    const { login, LoginCancelledError } = await import('./credentials.js');
+    const terminal = mockTerminal();
+    try {
+      selectMock.mockResolvedValueOnce('cancel');
+      const { login, LoginCancelledError } = await import('./credentials.js');
 
-    await expect(login(undefined, { timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
-    expect(selectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        options: expect.arrayContaining([expect.objectContaining({ value: 'cancel', label: 'Cancel login' })]),
-      }),
-    );
+      await expect(login(undefined, { timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
+      expect(selectMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.arrayContaining([expect.objectContaining({ value: 'cancel', label: 'Cancel login' })]),
+        }),
+      );
+    } finally {
+      terminal.restore();
+    }
   });
 
   it('offers to skip platform setup after it times out during project creation', async () => {
-    selectMock.mockResolvedValueOnce('skip');
-    const { login, LoginCancelledError } = await import('./credentials.js');
+    const terminal = mockTerminal();
+    try {
+      selectMock.mockResolvedValueOnce('skip');
+      const { login, LoginCancelledError } = await import('./credentials.js');
 
-    await expect(login(undefined, { skipOnInput: true, timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
-    expect(selectMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        options: expect.arrayContaining([expect.objectContaining({ value: 'skip', label: 'Skip platform setup' })]),
-      }),
-    );
+      await expect(login(undefined, { skipOnInput: true, timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
+      expect(selectMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.arrayContaining([expect.objectContaining({ value: 'skip', label: 'Skip platform setup' })]),
+        }),
+      );
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('cancels a timed-out login without prompting in a non-interactive terminal', async () => {
+    const terminal = mockTerminal(false);
+    try {
+      const { login, LoginCancelledError } = await import('./credentials.js');
+
+      await expect(login(undefined, { timeoutMs: 10 })).rejects.toBeInstanceOf(LoginCancelledError);
+      expect(selectMock).not.toHaveBeenCalled();
+    } finally {
+      terminal.restore();
+    }
   });
 
   it('returns 400 when callback params are missing', async () => {

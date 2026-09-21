@@ -349,6 +349,8 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
       if (!(error instanceof LoginTimedOutError)) throw error;
     }
 
+    if (!process.stdin.isTTY || !process.stdout.isTTY) throw new LoginCancelledError();
+
     const cancelValue = options.skipOnInput ? 'skip' : 'cancel';
     const choice = await p.select({
       message: 'Browser sign-in timed out.',
