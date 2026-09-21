@@ -137,7 +137,7 @@ function planWorkItem(context: FactoryStageRuleContext) {
 function buildWorkItem(context: FactoryStageRuleContext) {
   const reference = JSON.stringify(sourceRef(context.item));
   const fromApprovedPlan = context.fromStage === 'planning';
-  const changeRequest = context.item.source === 'gitlab-issue' ? 'merge request' : 'pull request';
+  const changeRequest = context.item.source?.startsWith('gitlab') ? 'merge request' : 'pull request';
   const task = fromApprovedPlan
     ? 'Implement the approved plan for the work item.'
     : `Investigate the root cause, implement a fix with tests, and open a ${changeRequest}.`;
