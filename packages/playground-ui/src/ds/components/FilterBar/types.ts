@@ -73,4 +73,14 @@ export type FilterBarItem = {
   value: FilterBarValue;
 };
 
+/**
+ * The filter being built in the typeahead input. Its `id` is kept when it becomes an
+ * item, so the chip rendered for the draft is the very node the committed chip lands on.
+ */
+export type FilterBarDraft = {
+  id: string;
+  fieldId: string;
+  operatorId?: string;
+};
+
 export type FilterBarSegment = 'field' | 'operator' | 'value' | 'remove';

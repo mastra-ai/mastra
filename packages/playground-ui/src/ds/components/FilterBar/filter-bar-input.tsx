@@ -1,20 +1,20 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { Search } from 'lucide-react';
+import { ListFilterIcon, Search } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { FilterBarFieldLabel } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
-import { FilterBarDraftChip } from './filter-bar-draft-chip';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
 import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
+import { comboboxTriggerClass } from '@/ds/components/Combobox/combobox-styles';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { unstyledFormElementStyle } from '@/ds/primitives/form-element';
+import { inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
@@ -22,15 +22,7 @@ import { cn } from '@/lib/utils';
 
 type Step = 'field' | 'operator' | 'value';
 
-type Draft = {
-  step: Step;
-  fieldId?: string;
-  operatorId?: string;
-};
-
 type Item = FilterBarField | FilterBarOperator | FilterBarOption;
-
-const INITIAL_DRAFT: Draft = { step: 'field' };
 
 const getItemLabel = (item: Item) => ('label' in item && item.label ? item.label : 'value' in item ? item.value : '');
 
@@ -54,19 +46,21 @@ export function FilterBarInput({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
   const [highlighted, setHighlighted] = useState<Item | null>(null);
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
 
-  const field = draft.fieldId ? ctx.getField(draft.fieldId) : undefined;
-  const operator = draft.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
+  // The draft lives in the provider so the chip list can render it; the step follows from it.
+  const { draft, setDraft, commitDraft } = ctx;
+  const step: Step = !draft ? 'field' : !draft.operatorId ? 'operator' : 'value';
+  const field = draft ? ctx.getField(draft.fieldId) : undefined;
+  const operator = draft?.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
   const visibleFields = useMemo(() => ctx.fields.filter(f => !f.hidden), [ctx.fields]);
 
   const reset = useCallback(() => {
-    setDraft(INITIAL_DRAFT);
+    setDraft(null);
     setQuery('');
-  }, []);
+  }, [setDraft]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -75,11 +69,11 @@ export function FilterBarInput({
 
   const commit = useCallback(
     (fieldId: string, operatorId: string, value: FilterBarValue) => {
-      ctx.addItem({ fieldId, operatorId, value });
-      reset();
+      commitDraft({ fieldId, operatorId }, value);
+      setQuery('');
       inputRef.current?.focus();
     },
-    [ctx, reset],
+    [commitDraft],
   );
 
   const selectOperator = useCallback(
@@ -88,10 +82,10 @@ export function FilterBarInput({
         commit(fieldId, next.id, '');
         return;
       }
-      setDraft({ step: 'value', fieldId, operatorId: next.id });
+      setDraft({ fieldId, operatorId: next.id });
       setQuery('');
     },
-    [commit],
+    [commit, setDraft],
   );
 
   const selectField = useCallback(
@@ -102,36 +96,36 @@ export function FilterBarInput({
         selectOperator(next.id, only);
         return;
       }
-      setDraft({ step: 'operator', fieldId: next.id });
+      setDraft({ fieldId: next.id });
       setQuery('');
     },
-    [ctx, selectOperator],
+    [ctx, selectOperator, setDraft],
   );
 
   const valueStep = useValueStep({
     field,
     operator,
     query,
-    enabled: open && draft.step === 'value',
+    enabled: open && step === 'value',
     onCommit: value => {
-      if (draft.fieldId && draft.operatorId) commit(draft.fieldId, draft.operatorId, value);
+      if (draft?.operatorId) commit(draft.fieldId, draft.operatorId, value);
     },
   });
 
   const stepBack = useCallback(() => {
-    if (draft.step === 'value') {
+    if (step === 'value' && draft) {
       // Back to the field step when the operator was implied (single operator).
       const skipOperator = field ? fieldOperators.length === 1 : false;
-      setDraft(skipOperator ? INITIAL_DRAFT : { step: 'operator', fieldId: draft.fieldId });
-    } else if (draft.step === 'operator') setDraft(INITIAL_DRAFT);
+      setDraft(skipOperator ? null : { fieldId: draft.fieldId });
+    } else if (step === 'operator') setDraft(null);
     else setOpen(false);
     setQuery('');
-  }, [draft, field, fieldOperators]);
+  }, [step, draft, field, fieldOperators, setDraft]);
 
   // Selection is routed per step and never kept by Base UI (`value` stays null).
   const handleSelect = (item: Item) => {
-    if (draft.step === 'field') selectField(item as FilterBarField);
-    else if (draft.step === 'operator' && draft.fieldId) selectOperator(draft.fieldId, item as FilterBarOperator);
+    if (step === 'field') selectField(item as FilterBarField);
+    else if (step === 'operator' && draft) selectOperator(draft.fieldId, item as FilterBarOperator);
     else valueStep.handleSelect(item as FilterBarOption);
   };
 
@@ -153,27 +147,27 @@ export function FilterBarInput({
       if (event.key === 'Backspace') {
         event.preventDefault();
         event.preventBaseUIHandler();
-        if (draft.step !== 'field') stepBack();
+        if (step !== 'field') stepBack();
         else {
           const last = ctx.items[ctx.items.length - 1];
           if (last) ctx.removeItem(last.id);
         }
         return;
       }
-      if (event.key === 'ArrowLeft' && draft.step === 'field') {
+      if (event.key === 'ArrowLeft' && step === 'field') {
         if (ctx.focusChip(ctx.items.length - 1, -1, 'remove')) event.preventDefault();
         return;
       }
     }
     if (!open) return;
 
-    if (event.key === 'Tab' && highlighted && draft.step !== 'value' && (draft.step === 'operator' || query !== '')) {
+    if (event.key === 'Tab' && highlighted && step !== 'value' && (step === 'operator' || query !== '')) {
       event.preventDefault();
       event.preventBaseUIHandler();
       handleSelect(highlighted);
       return;
     }
-    if (draft.step === 'value') {
+    if (step === 'value') {
       const highlightedOption = valueStep.hasSuggestions ? (highlighted as FilterBarOption | null) : null;
       const handled = valueStep.handleKeyDown(event, highlightedOption);
       // Base UI closes on Enter when nothing is highlighted (form submission); the draft must stay open.
@@ -182,15 +176,15 @@ export function FilterBarInput({
   };
 
   const items: readonly Item[] =
-    draft.step === 'field' ? visibleFields : draft.step === 'operator' ? fieldOperators : valueStep.options;
+    step === 'field' ? visibleFields : step === 'operator' ? fieldOperators : valueStep.options;
 
   const searchPlaceholder =
-    draft.step === 'field' ? 'Search fields…' : draft.step === 'operator' ? 'Search operators…' : 'Search values…';
+    step === 'field' ? 'Search fields…' : step === 'operator' ? 'Search operators…' : 'Search values…';
 
   const inputPlaceholder =
-    draft.step === 'field'
+    step === 'field'
       ? placeholder
-      : draft.step === 'operator'
+      : step === 'operator'
         ? 'Operator…'
         : valueStep.hasSuggestions && valueStep.allowFreeText
           ? 'Search or type a value…'
@@ -200,12 +194,11 @@ export function FilterBarInput({
 
   return (
     <>
-      <FilterBarDraftChip field={field} operator={fieldOperators.length === 1 ? undefined : operator} />
       <ComboboxPrimitive.Root<Item>
         items={items}
         itemToStringLabel={getItemLabel}
         // The value step is already filtered (locally or server-side) by useValueSuggestions.
-        filter={draft.step === 'value' ? null : matchesQueryFilter}
+        filter={step === 'value' ? null : matchesQueryFilter}
         value={null}
         onValueChange={(item, details) => {
           // Never let Base UI keep the selection, fill the input or close: each step routes it.
@@ -240,28 +233,41 @@ export function FilterBarInput({
         autoHighlight={'always' as unknown as boolean}
         modal={false}
       >
-        <ComboboxPrimitive.Input
-          ref={el => {
-            inputRef.current = el;
-            ctx.registerInput(el);
-          }}
-          aria-label={ariaLabel}
-          spellCheck={false}
-          data-slot="filter-bar-input"
-          data-step={draft.step}
-          inputMode={draft.step === 'value' && field?.type === 'number' ? 'decimal' : undefined}
-          placeholder={inputPlaceholder}
+        <div
+          data-slot="filter-bar-input-trigger"
           className={cn(
-            // Naked control inside the styled FilterBar surface — same baseline as the DS Input `unstyled` variant.
-            unstyledFormElementStyle,
-            'flex-1 px-1 text-ui-smd leading-ui-sm text-neutral6',
-            'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
-            draft.step === 'field' ? 'min-w-32' : 'min-w-24 pl-0',
+            // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
+            // and the Button icon offset); the bar itself has no chrome. Focus lives on the
+            // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
+            comboboxTriggerClass({ variant: 'default', size: 'sm' }),
+            'w-auto cursor-text',
+            'focus-within:bg-foreground/14',
+            inputFocusBorderWithin,
+            step === 'field' ? 'min-w-40' : 'min-w-28',
             className,
           )}
-          onFocus={() => setOpen(true)}
-          onKeyDown={handleKeyDown}
-        />
+        >
+          <ListFilterIcon aria-hidden className="text-muted-foreground -ml-[.3em] shrink-0" />
+          <ComboboxPrimitive.Input
+            ref={el => {
+              inputRef.current = el;
+              ctx.registerInput(el);
+            }}
+            aria-label={ariaLabel}
+            spellCheck={false}
+            data-slot="filter-bar-input"
+            data-step={step}
+            inputMode={step === 'value' && field?.type === 'number' ? 'decimal' : undefined}
+            placeholder={inputPlaceholder}
+            className={cn(
+              unstyledFormElementStyle,
+              'min-w-0 flex-1 bg-transparent',
+              'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
+            )}
+            onFocus={() => setOpen(true)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
         <ComboboxPrimitive.Portal container={container}>
           <ComboboxPrimitive.Positioner
             align="start"
@@ -273,7 +279,7 @@ export function FilterBarInput({
               className={cn(comboboxStyles.popup, 'min-w-56')}
               data-slot="filter-bar-editor"
             >
-              {(draft.step !== 'value' || valueStep.hasSuggestions) && (
+              {(step !== 'value' || valueStep.hasSuggestions) && (
                 // Search row mirroring the bar input, so the popup reads as a searchable combobox.
                 // The bar input stays the only real input: focus and keyboard navigation never move.
                 <div
@@ -294,7 +300,7 @@ export function FilterBarInput({
                   </span>
                 </div>
               )}
-              {draft.step === 'field' && (
+              {step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"
                   getKey={f => f.id}
@@ -302,7 +308,7 @@ export function FilterBarInput({
                   emptyText="No matching field."
                 />
               )}
-              {draft.step === 'operator' && (
+              {step === 'operator' && (
                 <FilterBarOptionList<FilterBarOperator>
                   aria-label="Operators"
                   getKey={o => o.id}
@@ -310,7 +316,7 @@ export function FilterBarInput({
                   emptyText="No matching operator."
                 />
               )}
-              {draft.step === 'value' && valueStep.hasSuggestions && (
+              {step === 'value' && valueStep.hasSuggestions && (
                 <FilterBarOptionList<FilterBarOption>
                   aria-label="Values"
                   aria-multiselectable={valueStep.isMany || undefined}
@@ -324,7 +330,7 @@ export function FilterBarInput({
                   }
                 />
               )}
-              {draft.step === 'value' && !valueStep.hasSuggestions && (
+              {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
                   <Txt variant="ui-sm" className="text-neutral3">
                     Type a value
@@ -341,7 +347,7 @@ export function FilterBarInput({
                   </Button>
                 </div>
               )}
-              {draft.step === 'value' && valueStep.isMany && (
+              {step === 'value' && valueStep.isMany && (
                 <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
                   <Button
                     size="xs"

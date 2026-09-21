@@ -1,7 +1,14 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { FilterBarField, FilterBarItem, FilterBarOperator, FilterBarSegment } from './types';
+import type {
+  FilterBarDraft,
+  FilterBarField,
+  FilterBarItem,
+  FilterBarOperator,
+  FilterBarSegment,
+  FilterBarValue,
+} from './types';
 
 type SegmentKey = `${string}:${FilterBarSegment}`;
 
@@ -12,7 +19,12 @@ export type FilterBarContextValue = {
   fields: FilterBarField[];
   operators: FilterBarOperator[];
   items: FilterBarItem[];
-  addItem: (item: Omit<FilterBarItem, 'id'>) => void;
+  /** Filter under construction in the input, once a field is picked; `null` otherwise. */
+  draft: FilterBarDraft | null;
+  /** Progress or reset the draft. Its id is assigned on first field pick and kept afterwards. */
+  setDraft: (next: Omit<FilterBarDraft, 'id'> | null) => void;
+  /** Append an item for the draft, reusing its id so the draft chip becomes the item's chip. */
+  commitDraft: (next: Required<Omit<FilterBarDraft, 'id'>>, value: FilterBarValue) => void;
   updateItem: (id: string, patch: Partial<Omit<FilterBarItem, 'id'>>) => void;
   removeItem: (id: string) => void;
   /** Removes every removable item (chips rendered with `removable={false}` stay). */
@@ -97,9 +109,20 @@ export function FilterBarProvider({
 
   const announce = useCallback((message: string) => setAnnouncement(message), []);
 
-  const addItem = useCallback(
-    (item: Omit<FilterBarItem, 'id'>) => {
-      onValueChange([...itemsRef.current, { ...item, id: createFilterId() }]);
+  const [draft, setDraftState] = useState<FilterBarDraft | null>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
+  const setDraft = useCallback((next: Omit<FilterBarDraft, 'id'> | null) => {
+    setDraftState(prev => (next ? { ...next, id: prev?.id ?? createFilterId() } : null));
+  }, []);
+
+  const commitDraft = useCallback(
+    ({ fieldId, operatorId }: Required<Omit<FilterBarDraft, 'id'>>, value: FilterBarValue) => {
+      // Operators without a value commit straight from the operator step, before a draft exists.
+      const id = draftRef.current?.id ?? createFilterId();
+      onValueChange([...itemsRef.current, { id, fieldId, operatorId, value }]);
+      setDraftState(null);
       announce('Filter added');
     },
     [onValueChange, announce],
@@ -193,7 +216,9 @@ export function FilterBarProvider({
       fields,
       operators,
       items: value,
-      addItem,
+      draft,
+      setDraft,
+      commitDraft,
       updateItem,
       removeItem,
       clear,
@@ -215,7 +240,9 @@ export function FilterBarProvider({
       fields,
       operators,
       value,
-      addItem,
+      draft,
+      setDraft,
+      commitDraft,
       updateItem,
       removeItem,
       clear,

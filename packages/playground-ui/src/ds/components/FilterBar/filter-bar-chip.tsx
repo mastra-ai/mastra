@@ -3,7 +3,7 @@ import type { BaseUIEvent } from '@base-ui/react/types';
 import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import type { CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
@@ -22,15 +22,24 @@ import { getFieldSuggestions } from './use-value-suggestions';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Kbd } from '@/ds/components/Kbd/kbd';
+import { controlHeight } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
+// `filter-bar-segment` carries the left-to-right entrance (see filter-bar-chip.css).
 export const segmentClass = cn(
-  'flex max-w-48 min-w-0 items-center gap-1 px-2 text-ui-sm leading-ui-sm whitespace-nowrap outline-none',
-  'first:rounded-l-lg last:rounded-r-lg',
+  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-ui-sm leading-ui-sm whitespace-nowrap outline-none',
+  'first:rounded-l-full last:rounded-r-full',
+);
+
+// A chip shares the `sm` control height (border-box, like the typeahead pill beside it).
+export const chipClass = cn(
+  'filter-bar-chip flex max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface5 text-neutral5',
+  controlHeight.sm,
 );
 
 export const editableSegmentClass = cn(
@@ -69,6 +78,8 @@ type ChipContext = {
   openSegment: FilterBarSegment | null;
   setOpenSegment: (segment: FilterBarSegment | null) => void;
   readOnly: boolean;
+  /** Filter still being built in the input: segments are inert labels. */
+  draft: boolean;
   /** The field allows a single operator, so the operator segment is not shown. */
   operatorImplied: boolean;
 };
@@ -86,6 +97,12 @@ export type FilterBarChipProps = {
   readOnly?: boolean;
   /** `false` keeps the chip editable but drops the remove button and ignores Backspace/Delete. */
   removable?: boolean;
+  /**
+   * Render the filter being built in the input (see `FilterBarContextValue.draft`): only
+   * the picked segments show, as inert labels. Keyed by the draft id, the same element
+   * carries on as the editable chip once the value is committed.
+   */
+  draft?: boolean;
   className?: string;
   /** Custom segment composition; defaults to Field · Operator · Value · Remove. */
   children?: ReactNode;
@@ -95,7 +112,14 @@ function isInsidePopup(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest('[data-slot="filter-bar-editor"]'));
 }
 
-export function FilterBarChip({ item, readOnly = false, removable = true, className, children }: FilterBarChipProps) {
+export function FilterBarChip({
+  item,
+  readOnly = false,
+  removable = true,
+  draft = false,
+  className,
+  children,
+}: FilterBarChipProps) {
   const ctx = useFilterBarContext();
   const [openSegment, setOpenSegment] = useState<FilterBarSegment | null>(null);
   const field = ctx.getField(item.fieldId);
@@ -103,7 +127,7 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
   const index = ctx.items.findIndex(i => i.id === item.id);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const pinned = readOnly || !removable;
+  const pinned = !draft && (readOnly || !removable);
   const { registerNonRemovable } = ctx;
   useEffect(() => {
     registerNonRemovable(item.id, pinned);
@@ -114,14 +138,26 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
   const label = [
     field?.label ?? item.fieldId,
     operatorImplied ? '' : (operator?.label ?? item.operatorId),
-    formatValue(item.value, field),
+    draft ? '' : formatValue(item.value, field),
   ]
     .filter(Boolean)
     .join(' ');
 
+  // Segments of the default composition currently shown. When that number grows (the
+  // draft gaining its operator, then becoming an item), the entrance stagger resumes
+  // after the ones already on screen (see filter-bar-chip.css).
+  const segmentCount =
+    (readOnly ? 1 : 0) +
+    1 +
+    (operatorImplied || (draft && !operator) ? 0 : 1) +
+    (draft || (operator?.arity ?? 'one') === 'none' ? 0 : 1) +
+    (readOnly || draft || !removable ? 0 : 1);
+  const [segments, setSegments] = useState({ settled: 0, count: segmentCount });
+  if (segments.count !== segmentCount) setSegments({ settled: segments.count, count: segmentCount });
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (readOnly || isInsidePopup(event.target)) return;
+      if (readOnly || draft || isInsidePopup(event.target)) return;
       const segments = Array.from(rootRef.current?.querySelectorAll<HTMLElement>('[data-filter-bar-segment]') ?? []);
       const current = segments.findIndex(el => el === event.target);
 
@@ -150,12 +186,12 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
         default:
       }
     },
-    [readOnly, removable, ctx, index, item.id],
+    [readOnly, draft, removable, ctx, index, item.id],
   );
 
   const chipValue = useMemo<ChipContext>(
-    () => ({ item, index, field, operator, openSegment, setOpenSegment, readOnly, operatorImplied }),
-    [item, index, field, operator, openSegment, readOnly, operatorImplied],
+    () => ({ item, index, field, operator, openSegment, setOpenSegment, readOnly, draft, operatorImplied }),
+    [item, index, field, operator, openSegment, readOnly, draft, operatorImplied],
   );
   const content = children ?? (
     <>
@@ -171,17 +207,21 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
         ref={rootRef}
         role="group"
         aria-label={label}
+        // The input already announces the draft's progress through its placeholder.
+        aria-hidden={draft || undefined}
         data-slot="filter-bar-chip"
+        data-draft={draft || undefined}
         data-readonly={readOnly || undefined}
-        className={cn(
-          'flex max-w-full items-stretch divide-x divide-border1 rounded-lg border border-border1 bg-surface5 text-neutral5',
-          className,
-        )}
+        className={cn(chipClass, className)}
+        style={{ '--filter-bar-segments-settled': segments.settled } as CSSProperties}
         onKeyDown={handleKeyDown}
         onClick={(event: MouseEvent) => event.stopPropagation()}
       >
         {readOnly && (
-          <span className={cn(segmentClass, 'pr-0 text-neutral3')} title="This filter is locked">
+          <span
+            className={cn(segmentClass, 'pr-0 text-neutral3 [--filter-bar-segment-padding:0.5rem_0]')}
+            title="This filter is locked"
+          >
             <LockIcon className="size-[1.1em]" />
           </span>
         )}
@@ -273,7 +313,7 @@ function SegmentCombobox<T>({
     <span className="truncate">{label}</span>
   );
 
-  if (chip.readOnly) {
+  if (chip.readOnly || chip.draft) {
     return (
       <span
         className={cn(segmentClass, isField && 'text-neutral6')}
@@ -575,19 +615,20 @@ export function FilterBarChipField() {
 export function FilterBarChipOperator() {
   const chip = useChip();
   if (chip.operatorImplied) return null;
+  if (chip.draft && !chip.operator) return null;
   return <OperatorEditor />;
 }
 
 export function FilterBarChipValue() {
   const chip = useChip();
-  if ((chip.operator?.arity ?? 'one') === 'none') return null;
+  if (chip.draft || (chip.operator?.arity ?? 'one') === 'none') return null;
   return <ValueEditor />;
 }
 
 export function FilterBarChipRemove() {
   const ctx = useFilterBarContext();
   const chip = useChip();
-  if (chip.readOnly) return null;
+  if (chip.readOnly || chip.draft) return null;
   const label = `Remove ${chip.field?.label ?? chip.item.fieldId} filter`;
   return (
     <button
@@ -597,7 +638,7 @@ export function FilterBarChipRemove() {
       aria-label={label}
       title={label}
       ref={el => ctx.registerSegment(chip.item.id, 'remove', el)}
-      className={cn(editableSegmentClass, 'px-1.5 text-neutral3')}
+      className={cn(editableSegmentClass, 'px-1.5 text-neutral3 [--filter-bar-segment-padding:0.375rem]')}
       onClick={() => {
         ctx.removeItem(chip.item.id);
         ctx.focusAfterRemove(chip.index);

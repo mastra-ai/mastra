@@ -281,19 +281,24 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         aria-label="Trace filters"
         className="min-w-64 flex-1"
       >
-        <TraceTimeRangeChip
-          preset={url.datePreset}
-          onPresetChange={url.handleDatePresetChange}
-          dateFrom={url.selectedDateFrom}
-          dateTo={url.selectedDateTo}
-          onDateChange={url.handleDateChange}
-          onDateRangeChange={url.handleDateRangeChange}
-          disabled={isTracesLoading}
-          presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+        <FilterBar.Chips
+          renderChip={item =>
+            item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
+              <TraceTimeRangeChip
+                preset={url.datePreset}
+                onPresetChange={url.handleDatePresetChange}
+                dateFrom={url.selectedDateFrom}
+                dateTo={url.selectedDateTo}
+                onDateChange={url.handleDateChange}
+                onDateRangeChange={url.handleDateRangeChange}
+                disabled={isTracesLoading}
+                presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+              />
+            ) : (
+              <FilterBar.Chip item={item} />
+            )
+          }
         />
-        {filterBarItems.map(item => (
-          <FilterBar.Chip key={item.id} item={item} />
-        ))}
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
       <div className="min-h-form-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
