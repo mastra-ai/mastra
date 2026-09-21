@@ -24,6 +24,7 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { useParams } from 'react-router';
 
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
@@ -32,6 +33,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { useTriggerKnowledgeImport } from '../../../../hooks/useKnowledgeImports';
 import {
   useKnowledgeImporterRoutingQuery,
   usePlatformCatalogQuery,
@@ -250,6 +252,18 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const description = PROVIDER_DESCRIPTIONS[provider];
   const connectionsQuery = usePlatformConnectionsQuery(provider);
+  // The settings URL's factoryId doubles as the Factory project id — used to
+  // kick off the connection's first import without waiting for the next cron
+  // tick. Best-effort: a failed trigger is silent because the scheduled sync
+  // covers it anyway.
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const trigger = useTriggerKnowledgeImport(factoryId);
+  const startFirstSync = (connection: PlatformProviderConnection | null) => {
+    if (!connection) return; // still activating server-side — the cron picks it up
+    trigger.mutate(`connect:${provider}:${connection.id}`, {
+      onSuccess: () => toast.success(`${meta.displayName} sync started`),
+    });
+  };
 
   const isLoading = connectionsQuery.isPending;
   const isError = connectionsQuery.isError;
@@ -268,7 +282,12 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
           </Txt>
         </div>
         {!isLoading && !isError && !isConnected && (
-          <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} size="xs" />
+          <ProviderConnectControl
+            provider={provider}
+            label={`Connect ${meta.displayName}`}
+            size="xs"
+            onCompleted={startFirstSync}
+          />
         )}
       </header>
       <Txt as="p" variant="ui-xs" className="text-icon3">

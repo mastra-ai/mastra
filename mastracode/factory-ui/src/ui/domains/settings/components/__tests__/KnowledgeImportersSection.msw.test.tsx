@@ -2,6 +2,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -101,12 +102,25 @@ function useConnectSessionSpy() {
   return minted;
 }
 
+const FACTORY_ID = 'fp-settings-1';
+
 function renderSection() {
+  // The section reads the settings URL's `factoryId` param to kick off a
+  // connection's first import — render behind the real route shape.
   return renderWithProviders(
-    <>
-      <KnowledgeImportersSection />
-      <Toaster position="bottom-right" />
-    </>,
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/knowledge`]}>
+      <Routes>
+        <Route
+          path="/factories/:factoryId/settings/knowledge"
+          element={
+            <>
+              <KnowledgeImportersSection />
+              <Toaster position="bottom-right" />
+            </>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
@@ -488,6 +502,66 @@ describe('KnowledgeImportersSection', () => {
         expect(nangoAuthCalls[0]?.integrationId).toBe('zendesk');
         expect(nangoAuthCalls[0]?.options.params).toEqual({ subdomain: 'acme' });
       });
+    });
+
+    it('kicks off the first import as soon as a new connection activates', async () => {
+      useFeaturesHandler(true);
+      // The connection list is empty until auth completes, then reports the
+      // new connection active — mirroring the vendor's webhook confirmation.
+      let authorized = false;
+      for (const provider of IMPORTER_PROVIDERS) {
+        server.use(
+          http.get(`${TEST_BASE_URL}/web/integrations/platform/${provider}/connections`, () =>
+            HttpResponse.json({
+              connections:
+                provider === 'notion' && authorized
+                  ? [
+                      {
+                        id: 'notion-conn',
+                        integrationId: 'notion',
+                        status: 'active',
+                        accountLabel: 'acme-workspace',
+                      },
+                    ]
+                  : [],
+            }),
+          ),
+        );
+      }
+      server.use(
+        http.post(`${TEST_BASE_URL}/web/integrations/platform/notion/connect-session`, () => {
+          authorized = true;
+          return HttpResponse.json(
+            {
+              connectionId: 'notion-conn',
+              integrationId: 'notion',
+              connectUrl: 'https://connect.nango.dev/notion',
+              sessionToken: 'session-notion',
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            },
+            { status: 201 },
+          );
+        }),
+      );
+      const triggered: string[] = [];
+      server.use(
+        http.post(
+          `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Anotion-conn/run`,
+          ({ request }) => {
+            triggered.push(new URL(request.url).pathname);
+            return HttpResponse.json({ runs: [{ id: 'kh_run_first', status: 'queued' }] }, { status: 202 });
+          },
+        ),
+      );
+
+      renderSection();
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: 'Connect Notion' }));
+
+      // The new connection's importer is triggered against the settings URL's
+      // Factory project — no waiting for the next cron tick.
+      await waitFor(() => expect(triggered).toHaveLength(1));
+      expect(await screen.findByText('Notion sync started')).toBeInTheDocument();
     });
   });
 });

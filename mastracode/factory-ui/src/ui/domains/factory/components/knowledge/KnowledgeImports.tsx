@@ -13,6 +13,7 @@ import {
   useKnowledgeImporters,
   useKnowledgeImportRun,
   useKnowledgeImportRuns,
+  useTriggerKnowledgeImport,
 } from '../../../../../hooks/useKnowledgeImports';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 import type {
@@ -333,6 +334,7 @@ export function KnowledgeImports({
   const importers = useKnowledgeImporters(factoryProjectId, threadId);
   const [requestedImporterId, setRequestedImporterId] = useState<string | undefined>(initialImporterId);
   const { factoryId } = useParams<{ factoryId: string }>();
+  const trigger = useTriggerKnowledgeImport(factoryProjectId, threadId);
   if (!factoryProjectId) return null;
   if (importers.isPending) return <SkeletonRows label="Loading knowledge importers" rows={5} />;
   if (importers.isError) return <Notice variant="destructive">{importers.error.message}</Notice>;
@@ -372,7 +374,18 @@ export function KnowledgeImports({
           </SelectContent>
         </Select>
         <Badge size="xs">{importer.importKind}</Badge>
+        {importer.triggers.includes('cron') ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={trigger.isPending}
+            onClick={() => trigger.mutate(importer.id)}
+          >
+            {trigger.isPending ? 'Starting sync…' : 'Sync now'}
+          </Button>
+        ) : null}
       </div>
+      {trigger.isError ? <Notice variant="destructive">{trigger.error.message}</Notice> : null}
       <ImportRuns
         key={importer.id}
         factoryProjectId={factoryProjectId}

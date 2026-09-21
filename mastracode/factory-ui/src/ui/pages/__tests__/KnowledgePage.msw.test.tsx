@@ -763,6 +763,96 @@ describe('KnowledgePage', () => {
     expect(screen.queryByText('connect:notion:conn-abc123')).toBeNull();
   });
 
+  it('triggers a manual import run from the Sync now button', async () => {
+    stubKnowledgeRoute();
+    const triggered: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({
+          importers: [
+            {
+              id: 'connect:notion:conn-abc123',
+              importKind: 'static',
+              triggers: ['cron'],
+              bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+            },
+          ],
+        }),
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/runs`,
+        () => HttpResponse.json({ runs: [] }),
+      ),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/run`,
+        ({ request }) => {
+          triggered.push(new URL(request.url).pathname);
+          return HttpResponse.json(
+            {
+              runs: [
+                {
+                  id: 'kh_run_manual',
+                  reference: 'run-manual',
+                  importerId: 'connect:notion:conn-abc123',
+                  binding: 'kh_binding',
+                  source: 'notion:workspace',
+                  importKind: 'static',
+                  triggerKind: 'cron',
+                  status: 'queued',
+                  queuedAt: '2026-09-21T09:52:00.000Z',
+                },
+              ],
+            },
+            { status: 202 },
+          );
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    const syncButton = await screen.findByRole('button', { name: 'Sync now' });
+    await user.click(syncButton);
+
+    await waitFor(() => expect(triggered).toHaveLength(1));
+    // The button settles back into its idle state so another sync can be requested.
+    expect(await screen.findByRole('button', { name: 'Sync now' })).toBeEnabled();
+  });
+
+  it('surfaces the server error when a manual sync cannot start', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({
+          importers: [
+            {
+              id: 'connect:notion:conn-abc123',
+              importKind: 'static',
+              triggers: ['cron'],
+              bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+            },
+          ],
+        }),
+      ),
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/runs`,
+        () => HttpResponse.json({ runs: [] }),
+      ),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123/run`,
+        () => HttpResponse.json({ error: 'import_trigger_failed' }, { status: 503 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    await user.click(await screen.findByRole('button', { name: 'Sync now' }));
+
+    expect(await screen.findByText('import_trigger_failed')).toBeInTheDocument();
+  });
+
   it('explains when relationship data reached a terminal server bound', async () => {
     stubKnowledgeRoute({
       ...graphFixture,

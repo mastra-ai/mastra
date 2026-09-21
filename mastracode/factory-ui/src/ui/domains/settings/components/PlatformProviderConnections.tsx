@@ -162,8 +162,12 @@ export interface ProviderConnectControlProps {
   variant?: 'default' | 'ghost' | 'primary';
   /** Leading icon inside the button, e.g. the provider's logomark. */
   icon?: ReactNode;
-  /** Called after the provider confirmed the authorization. */
-  onCompleted?: () => void;
+  /**
+   * Called after the provider confirmed the authorization. Receives the
+   * activated connection, or `null` when activation is still pending
+   * server-side.
+   */
+  onCompleted?: (connection: PlatformProviderConnection | null) => void;
 }
 
 /**
@@ -196,7 +200,7 @@ export function ProviderConnectControl({
       } else {
         toast.success(`${meta.displayName} authorization completed — the connection is activating`);
       }
-      onCompleted?.();
+      onCompleted?.(connection);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Failed to connect ${meta.displayName}`);
     }
