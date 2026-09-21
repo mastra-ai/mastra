@@ -131,7 +131,7 @@ function Actor({ by, avatarUrl, name }: { by: string | undefined; avatarUrl?: st
   const Glyph = ACTOR_GLYPHS.find(([prefix]) => by?.startsWith(prefix))?.[1] ?? User;
 
   return (
-    <span className="border-border1 bg-surface3 text-icon3 h-avatar-sm w-avatar-sm grid shrink-0 place-items-center rounded-full border">
+    <span className="border-border bg-card text-icon3 h-avatar-sm w-avatar-sm grid shrink-0 place-items-center rounded-full border">
       <Glyph className="size-[13px]" aria-hidden />
     </span>
   );
@@ -143,7 +143,7 @@ function StageChain({ stages }: { stages: string[] }) {
 
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {folded > 0 ? <span className="text-ui-xs text-icon3 tabular-nums">+{folded}</span> : null}
+      {folded > 0 ? <span className="text-meta text-icon3 tabular-nums">+{folded}</span> : null}
       {shown.map((stage, index) => (
         <span key={`${stage}-${index}`} className="flex items-center gap-1">
           {index > 0 || folded > 0 ? <ChevronRight size={11} className="text-icon2 shrink-0" aria-hidden /> : null}
@@ -187,7 +187,7 @@ function EntryPanel({ entries, factoryProjectId }: { entries: ActivityEntry[]; f
         const target = entryTarget(entry);
         const body = (
           <>
-            <Txt as="span" variant="ui-sm" className="text-icon4 min-w-0 flex-1 truncate">
+            <Txt as="span" variant="caption" className="text-icon4 min-w-0 flex-1 truncate">
               {entry.title === '' ? <span className="text-icon2">—</span> : entry.title}
             </Txt>
             <Time at={entry.at} />
@@ -227,7 +227,7 @@ function Block({
 
   return (
     <RailRow mark={<Node entry={first} />} connected={connected}>
-      <Txt as="div" variant="ui-sm" className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
+      <Txt as="div" variant="caption" className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
         <Actor by={first.by} avatarUrl={roster.get(first.by ?? '')?.avatarUrl} name={name} />
         <span className="text-icon6 shrink-0 font-medium">{name}</span>
         <span className="text-icon3 shrink-0">
@@ -239,7 +239,7 @@ function Block({
           <>
             {first.title === '' ? null : <EntryTitle entry={first} factoryProjectId={factoryProjectId} />}
             {grouped ? (
-              <span className="text-ui-xs text-icon3 shrink-0 tabular-nums">+{block.entries.length - 1}</span>
+              <span className="text-meta text-icon3 shrink-0 tabular-nums">+{block.entries.length - 1}</span>
             ) : null}
           </>
         )}

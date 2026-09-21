@@ -35,13 +35,13 @@ const FOLDER_CLASS = 'text-neutral4!';
 
 function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'additions' | 'deletions' | 'binary'>) {
   if (binary) {
-    return <span className="text-ui-xs text-icon3 shrink-0 font-medium">Binary</span>;
+    return <span className="text-meta text-icon3 shrink-0">Binary</span>;
   }
   if (additions === undefined || deletions === undefined) return null;
 
   return (
     <span
-      className="text-ui-xs flex shrink-0 items-center gap-1 font-mono tabular-nums"
+      className="text-meta flex shrink-0 items-center gap-1 font-mono tabular-nums"
       aria-label={`${additions} ${additions === 1 ? 'addition' : 'additions'} and ${deletions} ${
         deletions === 1 ? 'deletion' : 'deletions'
       }`}
@@ -55,7 +55,7 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
 function ChangesEmptyState({ available }: { available: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <Txt variant="ui-sm" className="text-icon3">
+      <Txt variant="caption" className="text-icon3">
         {available ? 'No changes' : 'No sandbox running. Changes appear once the session sandbox starts.'}
       </Txt>
     </div>
@@ -172,7 +172,7 @@ function ChangeTreeItem({ node, openFolders, onFolderOpenChange }: ChangeTreeIte
         {node.change.previousPath ? `${splitPath(node.change.previousPath).name} → ${node.name}` : node.name}
       </Tree.Label>
       <span className="ml-auto flex shrink-0 items-center gap-2">
-        <span className={cn('text-ui-xs shrink-0 font-medium', STATUS_CLASSES[node.change.status])}>
+        <span className={cn('text-meta shrink-0', STATUS_CLASSES[node.change.status])}>
           {STATUS_LABELS[node.change.status]}
         </span>
         <ChangeCounts {...node.change} />
@@ -213,16 +213,16 @@ function DiffViewer({
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
-          <Txt variant="ui-sm" font="mono" className="text-icon6 truncate font-medium">
+          <Txt variant="column" font="mono" className="text-icon6 truncate">
             {name}
           </Txt>
-          <Txt variant="ui-xs" font="mono" className="text-icon3 truncate">
+          <Txt variant="meta" font="mono" className="text-icon3 truncate">
             {directory || 'Repository root'}
           </Txt>
         </div>
         {change ? (
           <span className="flex shrink-0 items-center gap-2">
-            <span className={cn('text-ui-xs shrink-0 font-medium', STATUS_CLASSES[change.status])}>
+            <span className={cn('text-meta shrink-0', STATUS_CLASSES[change.status])}>
               {STATUS_LABELS[change.status]}
             </span>
             <ChangeCounts {...change} />
@@ -245,7 +245,7 @@ function DiffViewer({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="ui-sm" className="text-error">
+          <Txt variant="caption" className="text-error">
             {error.message}
           </Txt>
         </div>
@@ -321,11 +321,11 @@ export function WorkspaceChangesPanel({
           <ArrowLeft />
         </Button>
         <FileDiff className="text-icon3" size={14} />
-        <Txt as="h2" variant="ui-sm" className="text-icon6">
+        <Txt as="h2" variant="column" className="text-icon6">
           Changes
         </Txt>
         {!isLoading && !error ? (
-          <Txt variant="ui-xs" className="text-icon3 ml-auto">
+          <Txt variant="meta" className="text-icon3 ml-auto">
             {changes?.changes.length ?? 0} {changes?.changes.length === 1 ? 'file' : 'files'}
           </Txt>
         ) : null}
@@ -350,7 +350,7 @@ export function WorkspaceChangesPanel({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="ui-sm" className="text-error">
+          <Txt variant="caption" className="text-error">
             {error.message}
           </Txt>
         </div>

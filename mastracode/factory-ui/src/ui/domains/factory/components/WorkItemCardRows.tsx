@@ -56,11 +56,11 @@ export function WorkItemCardRows({
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
-          <span className="text-ui-xs text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
+          <span className="text-meta text-icon2 min-w-0 truncate">{workItemMeta(item)}</span>
           {relatedLinks}
           {item.commentCount > 0 && (
             <span
-              className="text-ui-xs text-icon2 flex shrink-0 items-center gap-1"
+              className="text-meta text-icon2 flex shrink-0 items-center gap-1"
               aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
             >
               <MessageSquare size={11} aria-hidden />
@@ -74,7 +74,7 @@ export function WorkItemCardRows({
           ) : (
             <SourceIcon source={item.source} />
           )}
-          <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-[550]">
+          <span className="text-label text-icon6 min-w-0 flex-1 truncate font-[550]">
             <SourceTitle source={item.source} title={item.title} id={titleId} />
           </span>
         </div>
@@ -83,7 +83,7 @@ export function WorkItemCardRows({
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
-            <span key={stage} className="border-border1 text-ui-xs text-icon4 rounded-full border px-2 py-0.5">
+            <span key={stage} className="border-border text-meta text-icon4 rounded-full border px-2 py-0.5">
               {itemStageLabel(item, stage)}
             </span>
           ))}

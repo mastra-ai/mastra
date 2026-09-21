@@ -49,11 +49,11 @@ function rungLabel(stage: string): string {
 function Row({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <>
-      <span className="text-ui-xs text-icon3 flex items-center gap-1.5">
+      <span className="text-meta text-icon3 flex items-center gap-1.5">
         <Icon aria-hidden className="text-icon2 size-3.5 shrink-0" />
         {label}
       </span>
-      <span className="text-ui-xs text-icon5 text-right tabular-nums">{value}</span>
+      <span className="text-meta text-icon5 text-right tabular-nums">{value}</span>
     </>
   );
 }
@@ -136,7 +136,7 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
   return (
     <div
       role="tooltip"
-      className="border-border1 bg-surface3 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg border px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
+      className="bg-card shadow-overlay text-caption text-neutral5 animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
       style={{
         left: cursor.x,
         top: cursor.y,
@@ -152,7 +152,7 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
 
 function Key({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <span className="text-ui-xs text-icon3 flex items-center gap-1.5">
+    <span className="text-meta text-icon3 flex items-center gap-1.5">
       {children}
       {label}
     </span>
@@ -208,7 +208,7 @@ export function StageFunnel({
 
   if (entered === 0) {
     return (
-      <Txt as="p" variant="ui-sm" className={EMPTY}>
+      <Txt as="p" variant="caption" className={EMPTY}>
         Nothing new in this window
       </Txt>
     );
@@ -236,16 +236,16 @@ export function StageFunnel({
             <div key={step.stage} className={`flex min-w-0 flex-col gap-1 ${down ? 'justify-center' : ''}`}>
               <span className="flex min-w-0 items-center gap-1.5">
                 {stage ? <BoardStageIcon stage={stage} /> : null}
-                <Txt as="span" variant="ui-xs" className="text-icon5 truncate font-semibold">
+                <Txt as="span" variant="meta" className="text-icon5 truncate font-semibold">
                   {rungLabel(step.stage)}
                 </Txt>
               </span>
               <span
-                className={`text-neutral6/70 leading-none font-semibold tracking-tight tabular-nums ${down ? 'text-[1.5rem]' : 'text-[clamp(1.25rem,2.5cqw,2rem)]'}`}
+                className={`text-foreground leading-none font-semibold tracking-tight tabular-nums ${down ? 'text-[1.5rem]' : 'text-[clamp(1.25rem,2.5cqw,2rem)]'}`}
               >
                 {step.reached}
               </span>
-              <Txt as="span" variant="ui-xs" className="text-icon3 truncate tabular-nums">
+              <Txt as="span" variant="meta" className="text-icon3 truncate tabular-nums">
                 {step.medianHoldMs === undefined ? ' ' : `${formatDuration(step.medianHoldMs)} typical`}
               </Txt>
             </div>
@@ -306,7 +306,7 @@ export function StageFunnel({
                 d={hoveredArm ? hoveredArm.path : flowPath}
                 clipPath={hoveredArm ? undefined : `url(#${clipId}-${hovered.index})`}
                 mask={hoveredArm ? `url(#${maskId})` : undefined}
-                fill="var(--surface2)"
+                fill="var(--background)"
                 opacity="0.18"
                 pointerEvents="none"
               />
@@ -387,13 +387,13 @@ export function StageFunnel({
         </Key>
         <span className="ml-auto flex flex-col items-end gap-0.5">
           {pullRequests > 0 ? (
-            <Txt as="span" variant="ui-xs" className="text-icon3 tabular-nums">
+            <Txt as="span" variant="meta" className="text-icon3 tabular-nums">
               {[`${pullRequests} opened a pull request`, merged > 0 ? `${merged} merged` : null]
                 .filter(Boolean)
                 .join(' · ')}
             </Txt>
           ) : null}
-          <Txt as="span" variant="ui-xs" className="text-icon3">
+          <Txt as="span" variant="meta" className="text-icon3">
             created in this window, by furthest stage reached
           </Txt>
         </span>

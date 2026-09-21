@@ -178,10 +178,10 @@ export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectM
   return (
     <section
       aria-label="Project management connections"
-      className={`border-border1 bg-surface2/80 rounded-2xl border p-5 ${paneCount === 3 ? 'max-w-5xl' : paneCount === 2 ? 'max-w-3xl' : 'max-w-xl'}`}
+      className={`border-border bg-background/80 rounded-2xl border p-5 ${paneCount === 3 ? 'max-w-5xl' : paneCount === 2 ? 'max-w-3xl' : 'max-w-xl'}`}
     >
       {paneCount > 1 ? (
-        <div className={`divide-border1 grid divide-x ${paneCount === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <div className={`divide-border grid divide-x ${paneCount === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <div className="pr-6">
             <LinearPane onConnect={onConnect} />
           </div>

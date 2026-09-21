@@ -102,10 +102,10 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="attention-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 id="attention-heading" className="text-ui-lg text-icon6 m-0 font-semibold">
+          <h1 id="attention-heading" className="text-heading text-icon6 m-0 font-semibold">
             Needs attention
           </h1>
-          <p className="text-ui-sm text-icon3 mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
+          <p className="text-caption text-icon3 mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
         </div>
         {!normalizedSearch && view !== 'archived' && unreadCount > 0 ? (
           <Button
@@ -121,7 +121,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <ButtonsGroup spacing="close" role="group" aria-label="Attention filter">
+        <ButtonsGroup role="group" aria-label="Attention filter">
           {VIEWS.map(option => {
             const Icon = option.icon;
             return (
@@ -158,7 +158,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           </Button>
         </Notice>
       ) : items.length === 0 ? (
-        <div className="text-ui-sm text-icon2 flex min-h-40 items-center justify-center text-center">
+        <div className="text-caption text-icon2 flex min-h-40 items-center justify-center text-center">
           {attention.hasNextPage
             ? 'Loading older items…'
             : search
@@ -178,11 +178,11 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
             return (
               <section key={section.group} aria-labelledby={section.headingId} className="flex flex-col gap-4">
                 <span className="flex items-center gap-2">
-                  <h2 id={section.headingId} className="text-ui-sm text-icon3 m-0 font-medium">
+                  <h2 id={section.headingId} className="text-column text-icon3 m-0">
                     {section.heading}
                   </h2>
                   {unread > 0 ? (
-                    <span className="bg-surface4 text-ui-xs text-icon3 min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none font-medium tabular-nums">
+                    <span className="bg-fill text-meta text-icon3 min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none tabular-nums">
                       {unread}
                     </span>
                   ) : null}

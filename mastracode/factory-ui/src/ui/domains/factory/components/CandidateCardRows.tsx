@@ -28,10 +28,10 @@ export function CandidateCardRows({
     <>
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="text-ui-xs text-icon2 truncate pr-16">{candidate.meta}</span>
+        <span className="text-meta text-icon2 truncate pr-16">{candidate.meta}</span>
         <div className="flex min-w-0 items-center gap-1.5">
           <SourceIcon source={candidate.source} />
-          <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
+          <span className="text-label text-icon6 min-w-0 flex-1 truncate font-semibold">
             <SourceTitle source={candidate.source} title={candidate.title} id={titleId} />
           </span>
           {/* Triage reads the source before deciding, so keep it one click away. */}

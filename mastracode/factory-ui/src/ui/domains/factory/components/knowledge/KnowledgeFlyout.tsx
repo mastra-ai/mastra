@@ -19,10 +19,10 @@ const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Proj
 
 function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
-    <CollapsibleTrigger className="group border-surface5 flex w-full items-center gap-2 border-t px-4 py-3 text-left">
+    <CollapsibleTrigger className="group border-border flex w-full items-center gap-2 border-t px-4 py-3 text-left">
       <span className="text-icon6 text-sm font-semibold">{title}</span>
       {count !== undefined ? (
-        <span className="bg-surface4 text-icon4 rounded-full px-1.5 py-0.5 text-[10px]">{count}</span>
+        <span className="bg-fill text-icon4 rounded-full px-1.5 py-0.5 text-[10px]">{count}</span>
       ) : null}
       <ChevronDown size={14} className="text-icon3 ml-auto transition-transform group-data-[state=open]:rotate-180" />
     </CollapsibleTrigger>
@@ -109,14 +109,14 @@ function RecordCard({
         'rounded-lg border transition-colors',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
-        record.pinned ? 'bg-amber-400/10' : 'bg-surface3/60',
+        record.pinned ? 'bg-amber-400/10' : 'bg-card/60',
         expanded
           ? record.pinned
             ? 'border-amber-400/70'
             : 'border-purple-400/50'
           : record.pinned
             ? 'border-amber-400/40'
-            : 'border-surface5',
+            : 'border-border',
       ].join(' ')}
     >
       <div
@@ -144,7 +144,7 @@ function RecordCard({
         </div>
       </div>
       {expanded ? (
-        <div data-testid="knowledge-record-detail" className="border-surface5 border-t px-3 py-2.5 text-[11px]">
+        <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5 text-[11px]">
           <dl className="text-icon4 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
             <dt>Captured in session</dt>
             <dd>
@@ -233,7 +233,7 @@ export function KnowledgeFlyout({
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-surface5 bg-surface2/95 absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l shadow-2xl backdrop-blur transition-transform duration-300"
+      className="border-border bg-background/95 absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l shadow-2xl backdrop-blur transition-transform duration-300"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
@@ -248,9 +248,7 @@ export function KnowledgeFlyout({
             <div className="min-w-0">
               <h2 className="text-icon6 truncate text-base font-semibold">{nodeQuery.data.node.name}</h2>
               <div className="mt-1 flex items-center gap-2">
-                <span className="bg-surface4 text-icon4 rounded px-1.5 py-0.5 text-[10px]">
-                  {nodeQuery.data.node.kind}
-                </span>
+                <span className="bg-fill text-icon4 rounded px-1.5 py-0.5 text-[10px]">{nodeQuery.data.node.kind}</span>
                 <RungBadge rung={nodeQuery.data.node.rung} />
               </div>
             </div>

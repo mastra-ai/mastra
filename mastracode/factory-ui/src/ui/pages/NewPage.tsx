@@ -140,7 +140,7 @@ function DraftStart({
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <div className="flex flex-col items-center gap-3 text-center">
         <BrandLockup />
-        <h1 id="draft-start-heading" className="text-icon6 m-0 text-2xl">
+        <h1 id="draft-start-heading" className="text-title text-icon6 m-0">
           What do you want to work on?
         </h1>
         <FactoryContext activeFactory={activeFactory} />
@@ -194,7 +194,7 @@ function BrandLockup() {
   return (
     <div className="text-icon3 inline-flex items-center gap-2">
       <LogoWithoutText aria-hidden className="h-4 w-auto" />
-      <span className="text-ui-sm font-medium tracking-widest uppercase">Mastra Code</span>
+      <span className="text-column tracking-widest uppercase">Mastra Code</span>
     </div>
   );
 }
@@ -208,7 +208,7 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
   const projectPath = sessionQuery.data?.sessionId;
   const gitBranch = repository?.gitBranch;
   return (
-    <div className="text-ui-sm text-icon3 flex max-w-full items-center justify-center gap-1.5">
+    <div className="text-caption text-icon3 flex max-w-full items-center justify-center gap-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
         <FolderIcon size={13} className="text-icon2 shrink-0" />
         <span className="shrink-0 font-medium">{activeFactory?.name ?? 'Factory'}</span>

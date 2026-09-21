@@ -9,7 +9,7 @@ import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
 const RELATED_ITEM_LINK_CLASS =
-  'text-ui-xs text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm outline-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2';
+  'text-meta text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm outline-none hover:underline focus-visible:outline-2 focus-visible:outline-offset-2';
 
 export function RelatedWorkItemLink({
   item,

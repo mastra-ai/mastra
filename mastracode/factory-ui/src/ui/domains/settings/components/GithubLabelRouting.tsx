@@ -165,7 +165,7 @@ function BoardSelect({
       onValueChange={next => onChange(next === NO_BOARD ? null : next)}
     >
       <SelectTrigger variant="outline" size="sm" aria-label={ariaLabel} className="w-auto">
-        <Txt as="span" variant="ui-sm">
+        <Txt as="span" variant="caption">
           {current?.title ?? placeholder}
         </Txt>
       </SelectTrigger>

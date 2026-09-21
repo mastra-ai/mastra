@@ -40,7 +40,9 @@ export interface WorkflowInputDataProps {
 }
 
 type InputDraft =
-  { type: 'json'; value: string } | { type: 'form'; value: unknown } | { type: 'simple'; value: ProcessorDraft };
+  | { type: 'json'; value: string }
+  | { type: 'form'; value: unknown }
+  | { type: 'simple'; value: ProcessorDraft };
 
 type DraftValue = { ok: true; value: unknown } | { ok: false; error: string };
 

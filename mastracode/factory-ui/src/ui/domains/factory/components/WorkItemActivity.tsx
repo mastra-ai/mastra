@@ -72,11 +72,11 @@ export function ActivityEvent({
     <div className={cn('flex items-start gap-2', className)}>
       <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-ui-xs text-icon5 truncate font-medium">
+        <span className="text-meta text-icon5 truncate">
           {actor.name}
           {modelId ? <span className="text-icon3 font-normal"> · {modelId}</span> : null}
         </span>
-        <span className="text-ui-xs text-icon3 flex items-baseline justify-between gap-3">
+        <span className="text-meta text-icon3 flex items-baseline justify-between gap-3">
           <span className={cn('min-w-0', isCreated ? 'normal-case' : 'truncate first-letter:uppercase')}>
             {isCreated ? (
               <time dateTime={event.occurredAt}>
@@ -118,7 +118,7 @@ export function WorkItemActivity({
           <button
             type="button"
             draggable={false}
-            className="text-ui-xs text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="text-meta text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
           >
@@ -140,8 +140,8 @@ export function WorkItemActivity({
           <div className="flex items-center gap-2">
             <History size={14} className="text-icon3" aria-hidden />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-ui-sm text-icon6 font-medium">Activity</span>
-              <span className="text-ui-xs text-icon3 truncate">Last worked on by {worker.name}</span>
+              <span className="text-column text-icon6">Activity</span>
+              <span className="text-meta text-icon3 truncate">Last worked on by {worker.name}</span>
             </div>
           </div>
           {timeline.length > 0 ? (
@@ -153,7 +153,7 @@ export function WorkItemActivity({
               ))}
             </ol>
           ) : (
-            <span className="text-ui-xs text-icon3">No recorded activity yet.</span>
+            <span className="text-meta text-icon3">No recorded activity yet.</span>
           )}
         </div>
       </HoverCardContent>

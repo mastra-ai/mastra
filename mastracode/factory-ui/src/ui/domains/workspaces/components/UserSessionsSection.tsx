@@ -188,7 +188,7 @@ export function UserSessionsSection() {
         </MainSidebar.NavList>
         {sessionsQuery.isError && (
           <div className="flex items-center gap-2 px-2 py-1">
-            <Txt as="p" variant="ui-xs" className="text-error m-0">
+            <Txt as="p" variant="meta" className="text-error m-0">
               Couldn’t load sessions
             </Txt>
             <Button variant="ghost" size="xs" onClick={() => void sessionsQuery.refetch()}>
@@ -197,7 +197,7 @@ export function UserSessionsSection() {
           </div>
         )}
         {sessionsQuery.isSuccess && sessions.length === 0 && (
-          <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
+          <Txt as="p" variant="meta" className="text-icon3 m-0 px-2 py-1">
             {allSessions.length === 0 ? 'No sessions yet' : 'No sessions match these filters'}
           </Txt>
         )}
@@ -210,7 +210,7 @@ export function UserSessionsSection() {
               <DialogTitle>Delete session?</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
+              <Txt as="p" variant="caption" className="text-icon4 m-0">
                 This deletes the <span className="text-icon6">{getUserSessionLabel(confirmDelete)}</span> session and
                 its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
               </Txt>

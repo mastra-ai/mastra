@@ -125,7 +125,7 @@ export function OMSection({
   return (
     <>
       {error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg px-4 py-3">
+        <Txt as="p" variant="caption" className="text-notice-destructive-fg px-4 py-3">
           {error}
         </Txt>
       )}
@@ -135,7 +135,7 @@ export function OMSection({
           <Badge size="md" variant="yellow">
             Model credentials required
           </Badge>
-          <Txt as="p" variant="ui-xs" className="text-icon3">
+          <Txt as="p" variant="meta" className="text-icon3">
             Observational-memory model calls may fail until credentials are configured.
           </Txt>
         </div>

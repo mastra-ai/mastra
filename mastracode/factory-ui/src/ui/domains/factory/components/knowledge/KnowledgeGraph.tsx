@@ -22,6 +22,7 @@ import {
 } from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { Boxes, Globe, Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -240,7 +241,7 @@ function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
   return (
     <div
       data-testid="knowledge-truncation-banner"
-      className="border-surface5 bg-surface3/90 text-icon4 pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
+      className="border-border bg-card/90 text-icon4 pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
     >
       Partial view — {parts.join(' · ')}
     </div>
@@ -271,7 +272,7 @@ function FilterChip({
           ? accent
             ? 'border-amber-400/70 bg-amber-400/15 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.15)]'
             : 'border-purple-400/70 bg-purple-500/20 text-purple-200 shadow-[0_0_12px_rgba(139,92,246,0.2)]'
-          : 'border-surface5 bg-surface3/60 text-icon3 hover:text-icon5',
+          : 'border-border bg-card/60 text-icon3 hover:text-icon5',
       ].join(' ')}
     >
       {icon}
@@ -487,7 +488,7 @@ function KnowledgeGraphInner({
 
   return (
     <div
-      className="border-surface5 relative h-full w-full overflow-hidden rounded-xl border"
+      className="border-border relative h-full w-full overflow-hidden rounded-xl border"
       style={{ background: '#0b0b12' }}
       data-testid="knowledge-graph"
     >
@@ -611,7 +612,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     return (
       <div
         data-testid="knowledge-hover-card"
-        className="border-surface5 bg-surface3 pointer-events-none fixed z-50 min-w-48 rounded-lg border p-3 text-xs shadow-xl"
+        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 min-w-48 rounded-lg p-3 text-xs`}
         style={style}
       >
         <div className="mb-1 flex items-center gap-1.5">
@@ -647,7 +648,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     return (
       <div
         data-testid="knowledge-hover-card"
-        className="border-surface5 bg-surface3 pointer-events-none fixed z-50 max-w-72 rounded-lg border p-3 text-xs shadow-xl"
+        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3 text-xs`}
         style={style}
       >
         <div className="text-icon6 mb-1 flex items-center gap-1.5">
@@ -665,7 +666,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     return (
       <div
         data-testid="knowledge-hover-card"
-        className="border-surface5 bg-surface3 pointer-events-none fixed z-50 max-w-72 rounded-lg border p-3 text-xs shadow-xl"
+        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3 text-xs`}
         style={style}
       >
         <div className="text-icon6">{source && target ? `${source} → ${target}` : 'Record'}</div>

@@ -87,9 +87,9 @@ function SupervisorMain({
   const findings = health.data?.findings ?? [];
 
   const header = (
-    <ChatHeader className="border-border1 border-b md:px-5">
+    <ChatHeader className="border-border border-b md:px-5">
       <div role="region" aria-label="Supervisor session" className="flex min-w-0 flex-1 items-center gap-2">
-        <nav className="text-ui-sm flex min-w-0 items-center gap-2" aria-label="Supervisor session breadcrumb">
+        <nav className="text-caption flex min-w-0 items-center gap-2" aria-label="Supervisor session breadcrumb">
           <Link
             to={`/factories/${factoryProjectId}/overview`}
             className="text-icon4 hover:text-icon6 shrink-0 font-medium hover:underline"
@@ -115,7 +115,7 @@ function SupervisorMain({
     </ChatHeader>
   );
   const healthError = health.isError ? (
-    <Txt variant="ui-sm" className="text-accent2 px-3 py-2">
+    <Txt variant="caption" className="text-accent2 px-3 py-2">
       Couldn't run the health check: {health.error.message}
     </Txt>
   ) : undefined;
@@ -171,13 +171,10 @@ function SupervisorEmptyState() {
       aria-labelledby="supervisor-empty-title"
     >
       <Logo size="md" aria-label="Mastra Code" />
-      <h1
-        id="supervisor-empty-title"
-        className="text-header-xl text-icon6 mt-7 font-medium tracking-tight text-balance"
-      >
+      <h1 id="supervisor-empty-title" className="text-display text-icon6 mt-7 tracking-tight text-balance">
         What needs your attention?
       </h1>
-      <p className="text-ui-lg text-icon3 mt-2 max-w-lg leading-relaxed text-pretty">
+      <p className="text-body text-icon3 mt-2 max-w-lg leading-relaxed text-pretty">
         Ask why a card is stuck, what changed overnight, or how to safely repair a Factory issue.
       </p>
       <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label="Suggested prompts">

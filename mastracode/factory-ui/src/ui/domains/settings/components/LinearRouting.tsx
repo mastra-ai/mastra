@@ -71,7 +71,7 @@ export function IntakeSourceRouting({
                 }}
               >
                 <SelectTrigger variant="outline" size="sm" aria-label={`Factory for ${name}`} className="w-auto">
-                  <Txt as="span" variant="ui-sm">
+                  <Txt as="span" variant="caption">
                     {routedFactory?.name ?? 'Not routed'}
                   </Txt>
                 </SelectTrigger>
@@ -157,7 +157,7 @@ function BoardPicker({
       onValueChange={value => onChange(value === NO_BOARD ? null : value)}
     >
       <SelectTrigger variant="outline" size="sm" aria-label={`Board for ${name}`} className="w-auto">
-        <Txt as="span" variant="ui-sm">
+        <Txt as="span" variant="caption">
           {label}
         </Txt>
       </SelectTrigger>

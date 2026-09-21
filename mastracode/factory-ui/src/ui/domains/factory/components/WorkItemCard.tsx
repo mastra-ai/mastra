@@ -240,7 +240,7 @@ export function WorkItemCard({
           if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
         }}
         className={cn(
-          'group relative flex min-h-36 flex-col gap-3 rounded-card border border-border1/50 bg-neutral6/5 p-2 outline-none transition-colors hover:bg-surface3',
+          'group relative flex min-h-36 flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',
           // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
           wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',

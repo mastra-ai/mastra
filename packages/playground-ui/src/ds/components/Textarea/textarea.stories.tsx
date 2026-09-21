@@ -38,7 +38,7 @@ export const Default: Story = {
 
 export const Variants: Story = {
   render: () => (
-    <div className="w-75 flex flex-col gap-3">
+    <div className="flex w-75 flex-col gap-3">
       <Textarea variant="default" placeholder="default" />
       <Textarea variant="outline" placeholder="outline" />
       <Textarea variant="unstyled" placeholder="unstyled" />
@@ -48,7 +48,7 @@ export const Variants: Story = {
 
 export const Sizes: Story = {
   render: () => (
-    <div className="w-75 flex flex-col gap-3">
+    <div className="flex w-75 flex-col gap-3">
       <Textarea size="xs" placeholder="xs" />
       <Textarea size="sm" placeholder="sm" />
       <Textarea size="md" placeholder="md" />

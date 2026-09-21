@@ -38,7 +38,7 @@ export function FactorySwitcher() {
         )}
       >
         <FactoryIcon size={16} className="text-icon3 shrink-0" />
-        <Txt as="span" variant="ui-sm" className="text-icon6 min-w-0 flex-1 truncate">
+        <Txt as="span" variant="caption" className="text-icon6 min-w-0 flex-1 truncate">
           {activeFactory?.name ?? 'Select a factory…'}
         </Txt>
         <ChevronsUpDown size={13} className="text-icon3 shrink-0" />

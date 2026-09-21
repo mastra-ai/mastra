@@ -15,7 +15,7 @@ type Story = StoryObj<typeof ScrollArea>;
 
 export const Default: Story = {
   render: () => (
-    <ScrollArea className="w-75 border-border h-50 rounded-md border p-4">
+    <ScrollArea className="border-border h-50 w-75 rounded-md border p-4">
       <div className="space-y-4">
         {Array.from({ length: 20 }).map((_, i) => (
           <p key={i} className="text-foreground text-body">
@@ -29,7 +29,7 @@ export const Default: Story = {
 
 export const WithMaxHeight: Story = {
   render: () => (
-    <ScrollArea maxHeight="150px" className="w-75 border-border rounded-md border p-4">
+    <ScrollArea maxHeight="150px" className="border-border w-75 rounded-md border p-4">
       <div className="space-y-4">
         {Array.from({ length: 15 }).map((_, i) => (
           <p key={i} className="text-foreground text-body">
@@ -43,7 +43,7 @@ export const WithMaxHeight: Story = {
 
 export const HorizontalScroll: Story = {
   render: () => (
-    <ScrollArea orientation="horizontal" className="w-75 border-border h-25 rounded-md border p-4">
+    <ScrollArea orientation="horizontal" className="border-border h-25 w-75 rounded-md border p-4">
       <div className="flex w-200 gap-4">
         {Array.from({ length: 20 }).map((_, i) => (
           <div key={i} className="bg-muted flex size-16 shrink-0 items-center justify-center rounded-md">
@@ -57,7 +57,7 @@ export const HorizontalScroll: Story = {
 
 export const HorizontalScrollButtons: Story = {
   render: () => (
-    <ScrollArea orientation="horizontal" scrollButtons className="w-75 border-border h-25 rounded-md border p-4">
+    <ScrollArea orientation="horizontal" scrollButtons className="border-border h-25 w-75 rounded-md border p-4">
       <div className="flex w-200 gap-4">
         {Array.from({ length: 20 }).map((_, i) => (
           <div key={i} className="bg-muted flex size-16 shrink-0 items-center justify-center rounded-md">
@@ -137,7 +137,7 @@ const config = {
 
 export const ChatMessages: Story = {
   render: () => (
-    <ScrollArea className="h-75 border-border w-[350px] rounded-md border p-4">
+    <ScrollArea className="border-border h-75 w-[350px] rounded-md border p-4">
       <div className="space-y-4">
         {Array.from({ length: 10 }).map((_, i) => (
           <div key={i} className={`rounded-lg p-3 ${i % 2 === 0 ? 'bg-card ml-8' : 'bg-muted mr-8'}`}>

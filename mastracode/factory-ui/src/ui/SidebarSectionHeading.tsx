@@ -12,8 +12,8 @@ export function SidebarSectionHeading({
   action?: ReactNode;
 }) {
   return (
-    <div className="text-neutral6/40 mt-4 flex min-h-6 items-center justify-between pr-1 pl-3">
-      <Txt as="span" variant="ui-sm" className="flex items-center gap-2 font-semibold [&_svg]:size-4">
+    <div className="text-muted-foreground mt-4 flex min-h-6 items-center justify-between pr-1 pl-3">
+      <Txt as="span" variant="column" className="flex items-center gap-2 font-semibold [&_svg]:size-4">
         {icon}
         {children}
       </Txt>

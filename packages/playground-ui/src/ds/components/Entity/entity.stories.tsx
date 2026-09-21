@@ -61,7 +61,7 @@ export const WithCustomContent: Story = {
 
 export const EntityList: Story = {
   render: () => (
-    <div className="w-75 flex flex-col gap-2">
+    <div className="flex w-75 flex-col gap-2">
       <Entity onClick={() => console.log('Agent 1 clicked')}>
         <EntityIcon>
           <Bot />

@@ -74,7 +74,7 @@ export function CreateFactoryPalette({
       </div>
 
       <div className="flex shrink-0 items-center gap-3 px-1">
-        <Txt key={step} as="h1" variant="ui-md" className={cn('text-icon6 min-w-0 flex-1 truncate', stepTransition)}>
+        <Txt key={step} as="h1" variant="body" className={cn('text-icon6 min-w-0 flex-1 truncate', stepTransition)}>
           {title}
         </Txt>
         <ol className="flex shrink-0 gap-1" aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
@@ -82,10 +82,7 @@ export function CreateFactoryPalette({
             <li
               key={item}
               aria-current={item === step ? 'step' : undefined}
-              className={cn(
-                'h-1 w-6 rounded-full transition-colors',
-                index <= stepIndex ? 'bg-accent1' : 'bg-surface4',
-              )}
+              className={cn('h-1 w-6 rounded-full transition-colors', index <= stepIndex ? 'bg-accent1' : 'bg-fill')}
             />
           ))}
         </ol>
@@ -99,7 +96,7 @@ export function CreateFactoryPalette({
         onValueChange={onValueChange}
         rightSlot={<Kbd size="sm">Esc</Kbd>}
         wrapperClassName={cn(
-          'border-border1 bg-surface3 h-14 shrink-0 rounded-xl border px-4',
+          'border-border bg-card h-14 shrink-0 rounded-xl border px-4',
           !searchable && '[&>svg]:hidden',
         )}
       />
@@ -128,7 +125,7 @@ export function CreateFactoryPalette({
 
 export function CreateFactoryPaletteAlert({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" role="alert" variant="ui-sm" className="text-notice-destructive-fg m-0 px-3 py-2">
+    <Txt as="p" role="alert" variant="caption" className="text-notice-destructive-fg m-0 px-3 py-2">
       {children}
     </Txt>
   );
@@ -136,7 +133,7 @@ export function CreateFactoryPaletteAlert({ children }: { children: ReactNode })
 
 export function CreateFactoryPaletteMessage({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" variant="ui-sm" className="text-icon3 m-0 px-3 py-2">
+    <Txt as="p" variant="caption" className="text-icon3 m-0 px-3 py-2">
       {children}
     </Txt>
   );

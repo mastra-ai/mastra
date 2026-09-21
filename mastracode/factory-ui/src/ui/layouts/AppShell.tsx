@@ -22,18 +22,18 @@ const STICKY_TOP_CLASS =
 export function AppShell({ sidebar, header, children, scroll }: AppShellProps) {
   const documentScroll = scroll === 'document';
   const stickyHeader = header ? (
-    <div data-page-header className="bg-surface2 sticky top-0 z-2 shrink-0">
+    <div data-page-header className="bg-background sticky top-0 z-2 shrink-0">
       {header}
     </div>
   ) : null;
 
   return (
-    <div className={cn('bg-surface1 relative z-1 flex', documentScroll ? 'min-h-dvh' : 'h-dvh')}>
+    <div className={cn('bg-sidebar relative z-1 flex', documentScroll ? 'min-h-dvh' : 'h-dvh')}>
       <aside className={cn('min-h-0 shrink-0 py-2', documentScroll ? 'sticky top-0 h-dvh' : 'h-full')}>{sidebar}</aside>
       <div
         className={cn(
           HEADER_HEIGHT_CLASS,
-          'border-border1 bg-surface2 relative z-1 flex min-w-0 flex-1 flex-col border-l',
+          'border-border bg-background relative z-1 flex min-w-0 flex-1 flex-col border-l',
           documentScroll && STICKY_TOP_CLASS,
         )}
       >

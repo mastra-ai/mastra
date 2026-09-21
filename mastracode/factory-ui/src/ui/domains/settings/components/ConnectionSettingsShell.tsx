@@ -25,10 +25,10 @@ export function ConnectionSettingsShell({
           {backLabel}
         </Button>
         <header className="flex flex-col gap-2">
-          <Txt as="h1" variant="header-sm" className="text-icon6">
+          <Txt as="h1" variant="heading" className="text-icon6">
             {title}
           </Txt>
-          <Txt as="p" variant="ui-md" className="text-icon3">
+          <Txt as="p" variant="body" className="text-icon3">
             {description}
           </Txt>
         </header>

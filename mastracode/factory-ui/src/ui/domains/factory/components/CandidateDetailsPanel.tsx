@@ -117,7 +117,7 @@ export function CandidateDetailsPanel({
     >
       <ScrollArea className="flex min-h-0 grow flex-col" viewPortClassName="min-h-0 grow">
         <div className="stream-landing flex flex-col gap-2 p-3">
-          <h3 className="text-ui-smd text-icon6 m-0 font-[550] wrap-anywhere">{candidate.title}</h3>
+          <h3 className="text-label text-icon6 m-0 font-[550] wrap-anywhere">{candidate.title}</h3>
           <CardSourceDescription
             item={candidate}
             projectRepositoryId={projectRepositoryId}

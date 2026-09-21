@@ -88,7 +88,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-2" aria-labelledby="rule-decisions-heading">
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-        <Txt as="h2" variant="ui-sm" className="text-icon6 m-0" id="rule-decisions-heading">
+        <Txt as="h2" variant="column" className="text-icon6 m-0" id="rule-decisions-heading">
           Rule decisions
         </Txt>
         <div className="w-full lg:hidden">
@@ -108,7 +108,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             </SelectContent>
           </Select>
         </div>
-        <ButtonsGroup className="hidden lg:flex" spacing="close" role="group" aria-label="Rule decision filter">
+        <ButtonsGroup className="hidden lg:flex" role="group" aria-label="Rule decision filter">
           {DECISION_GROUPS.map(entry => {
             const Icon = entry.icon;
             return (
@@ -225,7 +225,7 @@ function DecisionRow({
 
   return (
     <div className={cn('flex min-h-7 min-w-0 items-center gap-2 py-0.5', RAIL_ROW_BODY)}>
-      <Txt as="span" variant="ui-sm" className="text-icon6 shrink-0 truncate font-medium">
+      <Txt as="span" variant="column" className="text-icon6 shrink-0 truncate">
         {decision.type}
       </Txt>
       <Badge size="xs" variant={tone} emphasis="muted" {...(live ? { indicator: 'pulse' as const } : {})}>
@@ -237,7 +237,7 @@ function DecisionRow({
         </Badge>
       ) : null}
       {decision.lastError ? (
-        <Txt as="span" variant="ui-xs" className="text-icon3 min-w-0 flex-1 truncate" title={decision.lastError}>
+        <Txt as="span" variant="meta" className="text-icon3 min-w-0 flex-1 truncate" title={decision.lastError}>
           {decision.lastError}
         </Txt>
       ) : null}

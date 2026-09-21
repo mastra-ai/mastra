@@ -53,7 +53,7 @@ export const WithLongContent: Story = {
 
 export const MultipleEntries: Story = {
   render: () => (
-    <div className="w-75 flex flex-col gap-4">
+    <div className="flex w-75 flex-col gap-4">
       <Entry label="Name">
         <Txt variant="body" className="text-foreground">
           My Agent

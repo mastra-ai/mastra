@@ -28,7 +28,7 @@ export function SettingsHeader({ autoFocus = false, placement }: SettingsHeaderP
           {SETTINGS_SECTION_LABELS[section]}
         </MobilePageTitle>
       ) : (
-        <Txt as="h1" variant="header-sm" ref={titleRef} tabIndex={-1} className="text-icon6">
+        <Txt as="h1" variant="heading" ref={titleRef} tabIndex={-1} className="text-icon6">
           {SETTINGS_SECTION_LABELS[section]}
         </Txt>
       )}

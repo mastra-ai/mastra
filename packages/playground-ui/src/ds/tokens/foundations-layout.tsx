@@ -27,7 +27,7 @@ export const FoundationPage = ({
   noteAside,
   children,
 }: FoundationPageProps) => (
-  <div className="max-w-320 bg-background px-5 sm:px-8">
+  <div className="bg-background max-w-320 px-5 sm:px-8">
     <header
       className={cn(
         'grid gap-5 border-y border-border py-6 sm:py-8',

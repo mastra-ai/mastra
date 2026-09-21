@@ -63,7 +63,7 @@ export function FactorySessionHeader() {
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
 
   return (
-    <ChatHeader className={cn(hasSession && 'border-border1 border-b md:px-5')}>
+    <ChatHeader className={cn(hasSession && 'border-border border-b md:px-5')}>
       {hasSession ? (
         <div role="region" aria-label="Factory session" className="flex min-w-0 flex-1 items-center gap-2">
           {currentItem ? <WorkItemBreadcrumb item={currentItem} factoryId={factoryId} /> : null}
@@ -90,7 +90,7 @@ function WorkItemBreadcrumb({ item, factoryId }: { item: WorkItem; factoryId?: s
   const isReview = item.source === 'github-pr';
 
   return (
-    <nav className="text-ui-sm flex min-w-0 items-center gap-2" aria-label="Factory session breadcrumb">
+    <nav className="text-caption flex min-w-0 items-center gap-2" aria-label="Factory session breadcrumb">
       <Link
         to={isReview ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`}
         className="text-icon4 hover:text-icon6 shrink-0 font-medium hover:underline"
@@ -153,7 +153,7 @@ function WorkItemActions({
             <Link
               key={related.id}
               to={relationshipPath(related, factoryId)}
-              className="text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6 flex items-center gap-1.5 rounded-md px-2 py-1"
+              className="text-caption text-icon4 hover:bg-fill hover:text-icon6 flex items-center gap-1.5 rounded-md px-2 py-1"
               aria-label={`Open ${label}: ${related.title}`}
             >
               <Link2 size={13} aria-hidden />

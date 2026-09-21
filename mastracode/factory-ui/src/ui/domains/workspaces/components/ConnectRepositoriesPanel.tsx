@@ -78,7 +78,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </div>
 
           {error && (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg px-4 pb-2">
+            <Txt as="p" variant="caption" className="text-notice-destructive-fg px-4 pb-2">
               {error.message}
             </Txt>
           )}
@@ -89,11 +89,11 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
               {visibleLinked.map(repo => (
                 <div key={repo.projectRepositoryId} className="flex w-full items-center gap-3 rounded-md px-2 py-2">
                   <span className="min-w-0 flex-1">
-                    <span className="text-ui-md text-icon6 flex items-center gap-1.5">
+                    <span className="text-body text-icon6 flex items-center gap-1.5">
                       <GithubIcon className="text-icon5 size-3.5 shrink-0" />
                       <span className="min-w-0 truncate">{repo.slug}</span>
                     </span>
-                    {repo.gitBranch && <span className="text-ui-sm text-icon3 block truncate">{repo.gitBranch}</span>}
+                    {repo.gitBranch && <span className="text-caption text-icon3 block truncate">{repo.gitBranch}</span>}
                   </span>
                   <Button
                     variant="ghost"
@@ -114,7 +114,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 </div>
               ) : available.length === 0 ? (
                 visibleLinked.length === 0 && (
-                  <Txt as="p" variant="ui-sm" className="text-icon3 px-2 py-2">
+                  <Txt as="p" variant="caption" className="text-icon3 px-2 py-2">
                     {repos.length > 0 ? 'All available repositories are linked.' : 'No repositories found.'}
                   </Txt>
                 )
@@ -131,15 +131,15 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                       onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="text-ui-md text-icon5 flex items-center gap-1.5">
+                        <span className="text-body text-icon5 flex items-center gap-1.5">
                           <FolderIcon size={14} className="text-icon3 shrink-0" />
                           <span className="min-w-0 truncate">{repo.fullName}</span>
                         </span>
-                        <span className="text-ui-sm text-icon3 block truncate">
+                        <span className="text-caption text-icon3 block truncate">
                           {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
                         </span>
                       </span>
-                      {busyRepoId === repo.id && <span className="text-ui-sm text-icon3">Linking…</span>}
+                      {busyRepoId === repo.id && <span className="text-caption text-icon3">Linking…</span>}
                     </button>
                   ))}
                 </>
@@ -154,7 +154,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
 
 function ListHeading({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" variant="ui-xs" className="text-icon3 px-2 pt-3 pb-1 first:pt-0">
+    <Txt as="p" variant="meta" className="text-icon3 px-2 pt-3 pb-1 first:pt-0">
       {children}
     </Txt>
   );
@@ -166,7 +166,7 @@ function ListHeading({ children }: { children: ReactNode }) {
  * booleans, and public URLs.
  */
 function StatusCallout({ status, connected, empty }: { status: GithubStatus; connected: boolean; empty: boolean }) {
-  const calloutClass = 'px-4 py-3 text-ui-sm leading-relaxed text-icon3';
+  const calloutClass = 'px-4 py-3 text-caption leading-relaxed text-icon3';
 
   // Auth required: the session expired or was never established.
   if (status.authRequired) {

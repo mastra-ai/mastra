@@ -39,7 +39,7 @@ export function ScopeSwitch({ value, options, disabledReasons, onChange }: Scope
     <div
       role="group"
       aria-label="Who these settings apply to"
-      className="border-border1 inline-flex items-center gap-0.5 rounded-[9px] border p-0.5"
+      className="border-border inline-flex items-center gap-0.5 rounded-[9px] border p-0.5"
     >
       {options.map(scope => (
         <ScopeOption
@@ -83,7 +83,7 @@ function ScopeOption({
       {selected ? (
         <ScopeBadge scope={scope} />
       ) : (
-        <span className="text-ui-xs inline-flex h-5 items-center gap-1 px-1.5 font-medium">
+        <span className="text-meta inline-flex h-5 items-center gap-1 px-1.5">
           <Icon aria-hidden="true" className="h-icon-sm w-icon-sm" />
           {label}
         </span>

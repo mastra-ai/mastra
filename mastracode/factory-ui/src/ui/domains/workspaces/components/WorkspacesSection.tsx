@@ -224,7 +224,7 @@ export function WorkspacesSection() {
               <DialogTitle>Delete workspace?</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
+              <Txt as="p" variant="caption" className="text-icon4 m-0">
                 This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout and its uncommitted
                 changes. This can’t be undone. Threads from this workspace are kept.
               </Txt>

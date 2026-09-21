@@ -58,7 +58,7 @@ function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps
 
         {config.github.enabled &&
           (slugs.length === 0 ? (
-            <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
+            <Txt as="p" variant="caption" className="text-icon3 px-4 py-3">
               No linked repositories yet — link a repository to a factory to add one.
             </Txt>
           ) : (
@@ -126,7 +126,7 @@ function LinearIntakeSection({
     </Button>
   ) : (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="ui-sm" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-icon3">
         Connected to {status?.workspace?.name ?? 'a Linear workspace'}
       </Txt>
       <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
@@ -228,7 +228,7 @@ function JiraIntakeSection({
   );
   const action = configured ? (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="ui-sm" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-icon3">
         {connectionLabel}
       </Txt>
       {actionButton}
@@ -312,7 +312,7 @@ function IncidentioIntakeSection({
       <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
     ) : (
       <span className="flex items-center gap-2">
-        <Txt as="span" variant="ui-sm" className="text-icon3">
+        <Txt as="span" variant="caption" className="text-icon3">
           {active.length === 1
             ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
             : `${active.length} ${meta.displayName} accounts connected`}
@@ -435,7 +435,7 @@ export function IntakeSection() {
   }
   if (configQuery.isError || !config) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-icon3">
+      <Txt as="p" variant="caption" className="text-icon3">
         Intake configuration is unavailable. Connect GitHub, Linear, Jira, or incident.io first.
       </Txt>
     );

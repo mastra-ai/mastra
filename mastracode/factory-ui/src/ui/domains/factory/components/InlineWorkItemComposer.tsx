@@ -50,12 +50,12 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       aria-label={`New work item in ${stageLabel}`}
       aria-busy={submitting}
       className={cn(
-        'relative flex flex-col gap-3 rounded-card border border-border1/50 bg-neutral6/5 p-2 outline-none transition-colors focus-within:border-neutral5/50 motion-reduce:transition-none',
+        'relative flex flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors focus-within:border-neutral5/50 motion-reduce:transition-none',
         error !== undefined && 'border-error',
       )}
       onSubmit={event => void submit(event)}
     >
-      <span className="text-ui-xs text-icon2 truncate pr-14">Manual · new</span>
+      <span className="text-meta text-icon2 truncate pr-14">Manual · new</span>
       <div className="flex min-w-0 items-center gap-1.5">
         <IntakeIcon className="text-icon3 shrink-0" />
         <Input
@@ -64,7 +64,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           autoFocus
           aria-label="Work item title"
           autoComplete="off"
-          className="text-ui-smd text-icon6 placeholder:text-icon4 h-auto min-w-0 flex-1 p-0 font-semibold"
+          className="text-label text-icon6 placeholder:text-icon4 h-auto min-w-0 flex-1 p-0 font-semibold"
           value={title}
           onChange={event => {
             setTitle(event.target.value);
@@ -102,7 +102,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
         </Button>
       </div>
       {error ? (
-        <p className="text-ui-xs text-notice-destructive-fg m-0" role="alert">
+        <p className="text-meta text-notice-destructive-fg m-0" role="alert">
           {error}
         </p>
       ) : null}

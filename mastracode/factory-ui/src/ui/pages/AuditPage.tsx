@@ -139,7 +139,7 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
             <AuditTimeline events={events} bounds={bounds} range={selectedRange} />
           </AuditRangePicker>
         ) : (
-          <p className="text-ui-xs text-neutral2 flex h-28 items-center justify-center">Nothing recorded yet</p>
+          <p className="text-meta text-neutral2 flex h-28 items-center justify-center">Nothing recorded yet</p>
         )}
         <AuditCategoryFilter
           selectedCategories={selectedCategories}

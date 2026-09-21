@@ -80,7 +80,7 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
       <DrawerContent aria-label="Install this app">
         <DrawerHeader>
           <div className="flex items-center gap-3">
-            <div className="border-border1 bg-surface5 text-icon6 flex size-10 shrink-0 items-center justify-center rounded-lg border">
+            <div className="border-border bg-fill text-icon6 flex size-10 shrink-0 items-center justify-center rounded-lg border">
               <Smartphone className="size-5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
@@ -95,11 +95,11 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
               <li key={index} className="flex items-center gap-3 py-3">
                 <span
                   aria-hidden="true"
-                  className="bg-surface5 text-icon6 text-ui-xs flex size-6 shrink-0 items-center justify-center rounded-full font-medium tabular-nums"
+                  className="bg-fill text-icon6 text-meta flex size-6 shrink-0 items-center justify-center rounded-full tabular-nums"
                 >
                   {index + 1}
                 </span>
-                <Txt as="span" variant="ui-md" className="text-icon5 min-w-0 flex-1">
+                <Txt as="span" variant="body" className="text-icon5 min-w-0 flex-1">
                   {step.label}
                 </Txt>
                 <span className="text-icon3 shrink-0">{step.icon}</span>

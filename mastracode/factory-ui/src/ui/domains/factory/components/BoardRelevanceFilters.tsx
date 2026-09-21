@@ -3,6 +3,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { inputSurfaceAndFocusStyle } from '@mastra/playground-ui/primitives/form-element';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ListFilter, RotateCcw, Tag, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 
@@ -153,7 +155,7 @@ export function BoardRelevanceFilters({
                 onKeyDown={event => event.stopPropagation()}
                 placeholder="Search labels..."
                 aria-label="Search labels"
-                className="border-border-1 bg-surface-3 focus:border-border-2 w-full rounded-md border px-2 py-1 text-xs outline-none"
+                className={cn(inputSurfaceAndFocusStyle, 'text-caption w-full rounded-md px-2 py-1 bg-fill')}
               />
             </div>
           </div>

@@ -65,7 +65,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
           <DialogDescription>Authorize your account and paste the returned code.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
-          <Txt as="p" variant="ui-sm" className="text-icon4">
+          <Txt as="p" variant="caption" className="text-icon4">
             {session.instructions}
           </Txt>
           <Button variant="outline" onClick={() => openAuthorizationUrl(session.url)}>
@@ -83,7 +83,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
             }}
           />
           {completeMutation.error instanceof Error && (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+            <Txt as="p" variant="caption" className="text-notice-destructive-fg">
               {completeMutation.error.message}
             </Txt>
           )}
@@ -158,7 +158,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
         <DialogBody className="flex flex-col items-center gap-4 text-center">
           {session.userCode && (
             <div className="flex w-full min-w-0 items-center justify-center gap-2">
-              <span className="text-header-lg min-w-0 flex-1 font-mono tracking-widest break-all select-all">
+              <span className="text-title min-w-0 flex-1 font-mono tracking-widest break-all select-all">
                 {session.userCode}
               </span>
               <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip="Copy code" />
@@ -171,13 +171,13 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
         </DialogBody>
         <DialogFooter className="sm:justify-between">
           {flowError ? (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg min-w-0 break-words">
+            <Txt as="p" variant="caption" className="text-notice-destructive-fg min-w-0 break-words">
               {flowError}
             </Txt>
           ) : (
             <div className="text-icon4 flex items-center gap-2" role="status">
               <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
-              <Txt as="span" variant="ui-sm">
+              <Txt as="span" variant="caption">
                 Waiting for authorization…
               </Txt>
             </div>

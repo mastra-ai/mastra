@@ -67,7 +67,7 @@ function parseDiff(patch: string): ParsedDiffLine[] {
 function diffLineClass(line: string) {
   if (line.startsWith('+')) return 'bg-notice-success/10 text-icon6';
   if (line.startsWith('-')) return 'bg-notice-destructive/10 text-icon6';
-  if (line.startsWith('@@')) return 'bg-surface3 text-accent1';
+  if (line.startsWith('@@')) return 'bg-card text-accent1';
   return 'text-icon6';
 }
 
@@ -76,10 +76,10 @@ function DiffLine({ line, oldNumber, newNumber }: ParsedDiffLine) {
 
   return (
     <div className={cn('flex w-full min-w-0', className)}>
-      <span className="border-border1 text-icon2 inline-block w-11 shrink-0 border-r px-2 text-right select-none">
+      <span className="border-border text-icon2 inline-block w-11 shrink-0 border-r px-2 text-right select-none">
         {oldNumber}
       </span>
-      <span className="border-border1 text-icon2 inline-block w-11 shrink-0 border-r px-2 text-right select-none">
+      <span className="border-border text-icon2 inline-block w-11 shrink-0 border-r px-2 text-right select-none">
         {newNumber}
       </span>
       <span className="min-w-0 flex-1 px-3 break-words whitespace-pre-wrap">{line || ' '}</span>
@@ -93,14 +93,14 @@ export function WorkspaceDiffLines({ patch, truncated }: { patch: string; trunca
   return (
     <>
       {lines.length === 0 ? (
-        <Txt variant="ui-sm" className="text-icon3 block p-4 text-center">
+        <Txt variant="caption" className="text-icon3 block p-4 text-center">
           No textual changes.
         </Txt>
       ) : (
         lines.map((line, index) => <DiffLine key={index} {...line} />)
       )}
       {truncated ? (
-        <Txt variant="ui-xs" className="text-icon3 block p-3">
+        <Txt variant="meta" className="text-icon3 block p-3">
           Diff truncated at 512 KB.
         </Txt>
       ) : null}

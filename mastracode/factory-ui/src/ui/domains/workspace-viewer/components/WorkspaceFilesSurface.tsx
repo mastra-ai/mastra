@@ -1,3 +1,4 @@
+import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
@@ -15,9 +16,9 @@ export function WorkspaceFilesSurface() {
       inert={!open}
       data-testid="workspace-files-card"
       className={cn(
-        'border-border1 bg-surface3 absolute top-3 right-3 z-20 flex flex-col overflow-hidden border',
+        'absolute top-3 right-3 z-20 flex flex-col overflow-hidden',
         cardRadiusClass,
-        'shadow-dialog',
+        overlaySurfaceStyle,
         '[interpolate-size:allow-keywords] duration-360 ease-out-custom transition-[translate,scale,opacity,width,height,min-height]',
         'will-change-[translate,opacity] motion-reduce:transition-none',
         'w-(--workspace-files-card) max-h-[calc(100%-1.5rem)]',

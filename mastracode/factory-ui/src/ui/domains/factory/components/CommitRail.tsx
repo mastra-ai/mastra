@@ -19,7 +19,7 @@ const SHORT_SHA = 7;
 const ROW_HEIGHT = 'h-8';
 
 /** Rows touch, so each draws the line across its own height — halved at the ends, where it stops at the mark. */
-const RAIL_SEGMENT = 'bg-border2 absolute left-[0.875rem] w-px -translate-x-1/2';
+const RAIL_SEGMENT = 'bg-border-strong absolute left-[0.875rem] w-px -translate-x-1/2';
 
 function segment(first: boolean, last: boolean) {
   if (first && last) return null;
@@ -31,9 +31,9 @@ function segment(first: boolean, last: boolean) {
 /** The ring is filled with the page colour so the rail does not show through its hole. */
 function CommitMark({ head }: { head: boolean }) {
   return head ? (
-    <span className="border-accent1 bg-surface2 size-2.5 rounded-full border-2" aria-label="Tip of the branch" />
+    <span className="border-accent1 bg-background size-2.5 rounded-full border-2" aria-label="Tip of the branch" />
   ) : (
-    <span className="bg-border2 size-1.5 rounded-full" aria-hidden />
+    <span className="bg-border-strong size-1.5 rounded-full" aria-hidden />
   );
 }
 
@@ -53,7 +53,7 @@ function CommitRow({ commit, first, last }: { commit: RepositoryCommit; first: b
         rel="noreferrer"
         className={`${RAIL_ROW_BODY} flex items-center ${ROW_HEIGHT}`}
       >
-        <Txt as="span" variant="ui-sm" className="flex min-w-0 flex-1 items-center gap-2 pr-4">
+        <Txt as="span" variant="caption" className="flex min-w-0 flex-1 items-center gap-2 pr-4">
           <Avatar src={commit.avatarUrl ?? undefined} name={author} size="sm" />
           <span className="text-icon6 min-w-0 truncate font-medium">{commit.message}</span>
         </Txt>
@@ -71,7 +71,7 @@ function CommitRow({ commit, first, last }: { commit: RepositoryCommit; first: b
 function Note({ children }: { children: string }) {
   return (
     <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="ui-sm" className="text-icon3 m-0 text-center">
+      <Txt as="p" variant="caption" className="text-icon3 m-0 text-center">
         {children}
       </Txt>
     </div>

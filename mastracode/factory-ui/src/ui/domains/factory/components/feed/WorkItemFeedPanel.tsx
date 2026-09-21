@@ -38,10 +38,10 @@ export function WorkItemFeedPanel({
           <ArrowLeft />
         </Button>
         <MessageSquare className="text-icon3" size={14} />
-        <Txt as="h2" variant="ui-sm" className="text-icon6">
+        <Txt as="h2" variant="column" className="text-icon6">
           Comments
         </Txt>
-        <Txt variant="ui-xs" className="text-icon3 ml-auto">
+        <Txt variant="meta" className="text-icon3 ml-auto">
           {item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}
         </Txt>
         <Button

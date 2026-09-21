@@ -174,11 +174,11 @@ export function ProviderConnectionsList({ provider, connections }: ProviderConne
       {connections.map(connection => (
         <li key={connection.id} className="flex items-center justify-between gap-2 px-4 py-2">
           <span className="flex min-w-0 items-center gap-2">
-            <Txt as="span" variant="ui-sm" className="truncate">
+            <Txt as="span" variant="caption" className="truncate">
               {connectionName(connection)}
             </Txt>
             {connection.status === 'needs_reauth' && (
-              <Txt as="span" variant="ui-xs" className="text-red-400">
+              <Txt as="span" variant="meta" className="text-red-400">
                 Needs reauthorization
               </Txt>
             )}
