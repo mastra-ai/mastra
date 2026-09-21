@@ -1391,6 +1391,23 @@ describe('DatasetsInMemory', () => {
       expect(result.datasets.map(d => d.name)).toEqual(['alpha', 'bravo', 'charlie']);
     });
 
+    it('rejects unknown orderBy fields for datasets and items', async () => {
+      const dataset = await storage.createDataset({ name: 'ds' });
+      await expect(
+        storage.listDatasets({
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'nope' as any, direction: 'ASC' },
+        }),
+      ).rejects.toThrow(/Invalid orderBy field/);
+      await expect(
+        storage.listItems({
+          datasetId: dataset.id,
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'name' as any, direction: 'ASC' },
+        }),
+      ).rejects.toThrow(/Invalid orderBy field/);
+    });
+
     it('lists datasets by createdAt ascending when requested', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));

@@ -1,4 +1,4 @@
-import { calculatePagination, compareByField, normalizePerPage } from '../../base';
+import { calculatePagination, compareByField, normalizePerPage, resolveListOrderBy } from '../../base';
 import type {
   DatasetRecord,
   DatasetItem,
@@ -210,7 +210,11 @@ export class DatasetsInMemory extends DatasetsStorage {
       });
     }
 
-    datasets.sort(compareByField(args.orderBy?.field ?? 'createdAt', args.orderBy?.direction ?? 'DESC'));
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
+    datasets.sort(compareByField(orderBy.field, orderBy.direction));
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
@@ -518,7 +522,11 @@ export class DatasetsInMemory extends DatasetsStorage {
       });
     }
 
-    items.sort(compareByField(args.orderBy?.field ?? 'createdAt', args.orderBy?.direction ?? 'DESC'));
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
+    items.sort(compareByField(orderBy.field, orderBy.direction));
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);

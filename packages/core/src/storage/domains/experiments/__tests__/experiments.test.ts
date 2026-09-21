@@ -803,6 +803,23 @@ describe('ExperimentsInMemory', () => {
       expect(result.experiments.map(e => e.targetId)).toEqual(['old', 'new']);
     });
 
+    it('rejects unknown orderBy fields for experiments and results', async () => {
+      const exp = await makeExperiment('exp');
+      await expect(
+        storage.listExperiments({
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'nope' as any, direction: 'ASC' },
+        }),
+      ).rejects.toThrow(/Invalid orderBy field/);
+      await expect(
+        storage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'status' as any, direction: 'ASC' },
+        }),
+      ).rejects.toThrow(/Invalid orderBy field/);
+    });
+
     it('lists experiment results newest started first when requested', async () => {
       const experiment = await makeExperiment('a1');
       const base = {

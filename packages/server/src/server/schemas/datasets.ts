@@ -277,7 +277,8 @@ const createOrderByQuerySchema = <const T extends readonly [string, ...string[]]
         try {
           return JSON.parse(val);
         } catch {
-          return undefined;
+          // Let the object schema reject it so the caller gets a 400.
+          return val;
         }
       },
       z

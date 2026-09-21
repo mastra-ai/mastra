@@ -248,6 +248,10 @@ describe('Datasets Handlers', () => {
       ).toThrow();
     });
 
+    it('rejects malformed orderBy JSON instead of silently dropping it', () => {
+      expect(() => listDatasetsQuerySchema.parse({ orderBy: '{not json' })).toThrow();
+    });
+
     it('accepts orderBy fields per list', () => {
       expect(listItemsQuerySchema.parse({ orderBy: { field: 'updatedAt', direction: 'ASC' } }).orderBy).toEqual({
         field: 'updatedAt',
