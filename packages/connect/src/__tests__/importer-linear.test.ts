@@ -8,10 +8,12 @@ interface LinearDocumentFixture {
   id: string;
   title: string;
   content?: string;
+  slugId?: string;
   updatedAt: string;
   archivedAt?: string | null;
   trashed?: boolean | null;
   project?: string;
+  projectId?: string;
   initiative?: string;
   url?: string;
 }
@@ -22,10 +24,14 @@ function documentNode(fixture: LinearDocumentFixture) {
     title: fixture.title,
     content: fixture.content ?? null,
     url: fixture.url ?? `https://linear.app/docs/${fixture.id}`,
+    slugId: fixture.slugId ?? null,
     updatedAt: fixture.updatedAt,
     archivedAt: fixture.archivedAt ?? null,
     trashed: fixture.trashed === undefined ? false : fixture.trashed,
-    project: fixture.project ? { name: fixture.project } : null,
+    project:
+      fixture.project || fixture.projectId
+        ? { id: fixture.projectId ?? null, name: fixture.project ?? null }
+        : null,
     initiative: fixture.initiative ? { name: fixture.initiative } : null,
   };
 }
@@ -233,5 +239,119 @@ describe('linear importer', () => {
     });
     await expect(runImporter(linearImporterRegistration.createImporter(ctx), { importer, state })).rejects.toThrow();
     expect(await state.get('linear:documents:watermark')).toBeUndefined();
+  });
+
+  it('requests slugId and project id in the GraphQL selection', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(documentsResponse([]));
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+    const call = request.mock.calls[0]![0]! as { body: { query: string } };
+    expect(call.body.query).toContain('slugId');
+    expect(call.body.query).toContain('project { id name }');
+  });
+
+  it('stamps doc nodes with their address and slug alias', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      documentsResponse([{ id: 'd1', title: 'A', content: 'x', slugId: 'abc123', updatedAt: '2026-09-01T00:00:00Z' }]),
+    );
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+    expect(importer.nodes.get('linear:document:d1')!.input.metadata).toEqual({
+      address: 'linear:document:d1',
+      addressAliases: ['linear:document:slug:abc123'],
+    });
+  });
+
+  it('upserts a project container node and links the doc into it', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      documentsResponse([
+        {
+          id: 'd1',
+          title: 'A',
+          content: 'x',
+          project: 'Payments',
+          projectId: 'p1',
+          updatedAt: '2026-09-01T00:00:00Z',
+        },
+      ]),
+    );
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+
+    const project = importer.nodes.get('linear:project:p1')!;
+    expect(project.input).toMatchObject({
+      name: 'Payments',
+      kind: 'connect:linear:project',
+      metadata: { address: 'linear:project:p1' },
+    });
+    expect(project.records.size).toBe(1);
+    const record = [...importer.nodes.get('linear:document:d1')!.records.values()][0]!;
+    expect((record.metadata as { links: unknown[] }).links).toEqual([{ address: 'linear:project:p1', rel: 'in' }]);
+  });
+
+  it('extracts doc→doc URL links as slug-alias addresses', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      documentsResponse([
+        {
+          id: 'd1',
+          title: 'A',
+          content: 'See [the retry PRD](https://linear.app/acme/document/retry-prd-xyz789) for details.',
+          updatedAt: '2026-09-01T00:00:00Z',
+        },
+      ]),
+    );
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+
+    const record = [...importer.nodes.get('linear:document:d1')!.records.values()][0]!;
+    expect((record.metadata as { links: unknown[] }).links).toEqual([
+      { address: 'linear:document:slug:xyz789', rel: 'references' },
+    ]);
+  });
+
+  it('a doc without a project gets no in link, and self-referencing URLs are dropped', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      documentsResponse([
+        {
+          id: 'd1',
+          title: 'A',
+          content: 'My own link: https://linear.app/acme/document/self-doc-own1 and [[Bracketed]] text',
+          slugId: 'own1',
+          updatedAt: '2026-09-01T00:00:00Z',
+        },
+      ]),
+    );
+    await runImporter(linearImporterRegistration.createImporter(ctx), { importer, state });
+
+    const record = [...importer.nodes.get('linear:document:d1')!.records.values()][0]!;
+    expect((record.metadata as { links?: unknown[] }).links).toBeUndefined();
+    expect(record.text).toContain('［［Bracketed］］');
+    expect(record.text).not.toContain('[[');
+  });
+
+  it('a link change alone produces a new content-hash record', async () => {
+    const { ctx, request, importer, state } = makeContext();
+    request.mockResolvedValueOnce(
+      documentsResponse([
+        { id: 'd1', title: 'A', content: 'x', project: 'Alpha', projectId: 'pA', updatedAt: '2026-09-01T00:00:00Z' },
+      ]),
+    );
+    const definition = linearImporterRegistration.createImporter(ctx);
+    await runImporter(definition, { importer, state });
+    const firstId = [...importer.nodes.get('linear:document:d1')!.records.keys()][0]!;
+
+    // Doc moved to a different project — same title/content/timestamp, ONLY the
+    // links differ, proving the link array is part of the content-hash payload.
+    request.mockResolvedValueOnce(
+      documentsResponse([
+        { id: 'd1', title: 'A', content: 'x', project: 'Beta', projectId: 'pB', updatedAt: '2026-09-01T00:00:00Z' },
+      ]),
+    );
+    await runImporter(definition, { importer, state });
+
+    const ids = [...importer.nodes.get('linear:document:d1')!.records.keys()];
+    expect(ids).toHaveLength(1);
+    expect(ids[0]).not.toBe(firstId);
   });
 });
