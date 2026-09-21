@@ -1,0 +1,32 @@
+{
+  "name": "template-connect-agent",
+  "version": "1.0.0",
+  "description": "An assistant powered by @mastra/connect: your Mastra platform integration connections (Linear, Notion, and more) become live agent tools with no per-provider setup, plus a workflow that builds a cross-integration activity digest.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/connect": "alpha",
+    "@mastra/core": "alpha",
+    "@mastra/libsql": "alpha",
+    "@mastra/loggers": "alpha",
+    "@mastra/memory": "alpha",
+    "@mastra/observability": "alpha",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "mastra": "alpha",
+    "typescript": "^5.9.3"
+  }
+}
