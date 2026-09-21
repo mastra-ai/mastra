@@ -49,6 +49,14 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
   return itemNumber;
 }
 
+/** The change-request number a review card carries: a GitHub PR number or a GitLab MR iid. */
+export function changeRequestNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>): number | undefined {
+  if (item.source === 'github-pr') return githubNumberForItem(item);
+  if (item.source !== 'gitlab-pr') return;
+  const iid = item.metadata.gitlabMergeRequestIid;
+  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? iid : undefined;
+}
+
 export function gitlabIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   if (item.source === 'gitlab-issue' && typeof item.metadata.identifier === 'string') return item.metadata.identifier;
   if (item.source !== 'gitlab-pr') return;

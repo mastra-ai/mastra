@@ -179,18 +179,13 @@ function WorkItemActions({
           </Button>
         );
       })}
-      {item.source === 'github-pr' ? (
+      {isPullRequestSource(item.source) ? (
         <FactoryReviewPullRequestLinks
           factoryId={factoryId}
           projectRepositoryId={projectRepositoryId}
           reviewItem={item}
           threadId={threadId}
         />
-      ) : null}
-      {item.source === 'gitlab-pr' && item.url ? (
-        <Button as="a" variant="ghost" size="sm" href={item.url} target="_blank" rel="noreferrer">
-          {externalWorkItemLabel(item)}
-        </Button>
       ) : null}
     </>
   );

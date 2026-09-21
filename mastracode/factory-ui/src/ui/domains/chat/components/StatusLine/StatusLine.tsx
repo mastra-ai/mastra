@@ -46,9 +46,7 @@ export function StatusLine() {
       <ConnectionActivity />
       <QueuedFollowUps />
       <GoalStatus />
-      {!workItemsPending &&
-      repository?.provider !== 'gitlab' &&
-      (!currentItem || !isPullRequestSource(currentItem.source)) ? (
+      {!workItemsPending && (!currentItem || !isPullRequestSource(currentItem.source)) ? (
         <PullRequestLinks repository={repository} threadId={threadId} />
       ) : null}
     </div>
