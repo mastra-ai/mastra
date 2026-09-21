@@ -1,4 +1,4 @@
-import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
+import { KnowledgeConflictError, knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
 import type { KnowledgeNode, KnowledgeRecord } from '../../storage/domains/knowledge';
 import { assertKnowledgeTargetCapability } from '../access/mutations';
 import type { KnowledgeCapability } from '../access/types';
@@ -361,27 +361,36 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   async upsertNode(address: string, input: StaticKnowledgeNodeInput): Promise<StaticKnowledgeNodeHandle> {
     let expectedAccessEpoch = await this.#assertCapability('append');
     const normalized = normalizeAddress(address);
+    const fallbackName = disambiguatedNodeName(input.name, normalized);
     const storage = await this.#knowledge.getStorageInternal();
     const binding = await storage.getNodeAddress({ source: this.#importer.source, address: normalized });
+    const createNode = async (name: string) =>
+      storage.createNodeWithAddress({
+        source: this.#importer.source,
+        address: normalized,
+        node: {
+          name,
+          kind: input.kind,
+          metadata: input.metadata,
+          scopeIds: [this.#importer.scopeId],
+          contextScopeId: this.#importer.scopeId,
+          importRunId: this.#importRunId,
+          expectedAccessEpoch,
+        },
+      });
     const existing = binding
       ? await this.#knowledge.getNodeInternal(binding.nodeId)
-      : await storage.createNodeWithAddress({
-          source: this.#importer.source,
-          address: normalized,
-          node: {
-            name: input.name,
-            kind: input.kind,
-            metadata: input.metadata,
-            scopeIds: [this.#importer.scopeId],
-            contextScopeId: this.#importer.scopeId,
-            importRunId: this.#importRunId,
-            expectedAccessEpoch,
-          },
+      : await createNode(input.name).catch(error => {
+          // A same-named node already lives in the scope (names are unique per scope,
+          // but two distinct source entities can share a title). Retry with a
+          // deterministic address-derived suffix instead of coalescing onto it.
+          if (!isKnowledgeConflictError(error)) throw error;
+          return createNode(fallbackName);
         });
     if (!existing) throw new Error(`Knowledge node address points to a missing node: ${normalized}`);
     const existingScopeIds = await storage.getNodeScopeIds(existing.id);
     const matchesImporterState =
-      existing.name === input.name.trim() &&
+      (existing.name === input.name.trim() || existing.name === fallbackName) &&
       existing.kind === input.kind &&
       JSON.stringify(existing.metadata) === JSON.stringify(input.metadata) &&
       existingScopeIds.length === 1 &&
@@ -410,16 +419,23 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       records: await existingHandle.snapshotTrackedRecords(),
     };
     await this.#setPendingRecordTrackingRefresh(normalized, pendingRefresh);
-    const updated = await storage.updateNode({
-      id: existing.id,
-      version: existing.version,
-      name: input.name,
-      kind: input.kind,
-      metadata: input.metadata,
-      scopeIds: [this.#importer.scopeId],
-      contextScopeId: this.#importer.scopeId,
-      importRunId: this.#importRunId,
-      expectedAccessEpoch,
+    const updateNode = (name: string) =>
+      storage.updateNode({
+        id: existing.id,
+        version: existing.version,
+        name,
+        kind: input.kind,
+        metadata: input.metadata,
+        scopeIds: [this.#importer.scopeId],
+        contextScopeId: this.#importer.scopeId,
+        importRunId: this.#importRunId,
+        expectedAccessEpoch,
+      });
+    // Prefer the plain name (self-heals a previously disambiguated node once the
+    // collision is gone); fall back to the address-derived suffix on conflict.
+    const updated = await updateNode(input.name).catch(error => {
+      if (!isKnowledgeConflictError(error)) throw error;
+      return updateNode(fallbackName);
     });
     await this.#setTrackedNode(normalized, updated);
     const handle = this.#handle(normalized, updated);
@@ -619,6 +635,24 @@ function normalizeAddress(address: string): string {
   const normalized = address.trim();
   if (!normalized) throw new Error('Knowledge importer node address cannot be empty');
   return normalized;
+}
+
+/**
+ * Deterministic per-address variant of a node name, used when a distinct source
+ * entity shares its title with an existing node in the same scope (names are
+ * unique per scope). The suffix is derived from the node's stable address so
+ * every run produces the same disambiguated name.
+ */
+function disambiguatedNodeName(name: string, address: string): string {
+  const tail = address
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(-6)
+    .toLowerCase();
+  return `${name.trim()} (${tail || 'alt'})`;
+}
+
+function isKnowledgeConflictError(error: unknown): boolean {
+  return error instanceof KnowledgeConflictError || (error instanceof Error && error.name === 'KnowledgeConflictError');
 }
 
 function roleRank(role: KnowledgeImporterBindingHandle['role'] | 'readonly'): number {

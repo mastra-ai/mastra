@@ -1693,7 +1693,9 @@ export class KnowledgePG extends KnowledgeStorage {
         if (!existing) throw new KnowledgeNotFoundError('node', String(binding.rows[0].nodeId));
         return existing;
       }
-      const node = await this.#createNode(tx, input.node);
+      // Address-bound nodes are identified by address, not name — never coalesce onto
+      // an existing same-named node. Callers disambiguate the name on conflict.
+      const node = await this.#createNode(tx, input.node, { coalesceByName: false });
       await tx.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" (source,address,nodeId) VALUES (?,?,?)`,
         args: [input.source, input.address, node.id],
@@ -2961,12 +2963,19 @@ export class KnowledgePG extends KnowledgeStorage {
   async #transaction<T>(operation: (tx: Executor) => Promise<T>): Promise<T> {
     return this.#client.tx(tx => operation(createExecutor(tx, this.#schemaName)));
   }
-  async #createNode(executor: Executor, input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+  async #createNode(
+    executor: Executor,
+    input: CreateKnowledgeNodeInput,
+    options?: { coalesceByName?: boolean },
+  ): Promise<KnowledgeNode> {
     const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds);
     await this.#lockSiblingName(executor, input.name, scopeIds);
     const existing = await this.#getNodeByName(executor, input.name, scopeIds, true);
     if (existing?.deletedAt) throw new KnowledgeConflictError(existing.id);
-    if (existing) return existing;
+    if (existing) {
+      if (options?.coalesceByName === false) throw new KnowledgeConflictError(existing.id);
+      return existing;
+    }
     await this.#assertNoSiblingNameCollision(executor, input.name, scopeIds);
     const now = new Date();
     const node: KnowledgeNode = {

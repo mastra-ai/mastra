@@ -80,6 +80,51 @@ describe('static Knowledge importer operations', () => {
     expect(await (await knowledge.getStorageInternal()).getNodeScopeIds(first.id)).toEqual([projectScopeId]);
   });
 
+  it('disambiguates node names when distinct addresses share a title', async () => {
+    const { operations } = await createFixture();
+    const first = await operations.upsertNode('event:100', { name: 'Dynamic Workflows' });
+    const second = await operations.upsertNode('event:200', { name: 'Dynamic Workflows' });
+
+    // Two distinct addresses must never coalesce onto one node.
+    expect(second.id).not.toBe(first.id);
+    expect(first.node.name).toBe('Dynamic Workflows');
+    // Deterministic address-derived suffix: last 6 alphanumerics of 'event:200'.
+    expect(second.node.name).toBe('Dynamic Workflows (ent200)');
+
+    // Replaying both upserts is idempotent — no version churn on either node.
+    const firstReplayed = await operations.upsertNode('event:100', { name: 'Dynamic Workflows' });
+    const secondReplayed = await operations.upsertNode('event:200', { name: 'Dynamic Workflows' });
+    expect(firstReplayed.node).toEqual(first.node);
+    expect(secondReplayed.node).toEqual(second.node);
+
+    // Content updates on the disambiguated node keep the disambiguated name.
+    const updated = await operations.upsertNode('event:200', {
+      name: 'Dynamic Workflows',
+      metadata: { revised: true },
+    });
+    expect(updated.node).toMatchObject({
+      id: second.id,
+      version: 2,
+      name: 'Dynamic Workflows (ent200)',
+      metadata: { revised: true },
+    });
+  });
+
+  it('self-heals a disambiguated name once the colliding node is gone', async () => {
+    const { knowledge, operations, projectScopeId } = await createFixture();
+    const storage = await knowledge.getStorageInternal();
+    await operations.upsertNode('event:100', { name: 'Quarterly Review' });
+    const second = await operations.upsertNode('event:200', { name: 'Quarterly Review' });
+    expect(second.node.name).toBe('Quarterly Review (ent200)');
+
+    await storage.deleteNodeByAddress({ source, address: 'event:100', scopeId: projectScopeId });
+    const healed = await operations.upsertNode('event:200', {
+      name: 'Quarterly Review',
+      metadata: { touched: true },
+    });
+    expect(healed.node).toMatchObject({ id: second.id, name: 'Quarterly Review' });
+  });
+
   it('uses ordinary records with source provenance and binding-bounded removal', async () => {
     const { knowledge, operations, run, orgScopeId, projectScopeId } = await createFixture('owner');
     const node = await operations.upsertNode('event:42', { name: 'Planning' });

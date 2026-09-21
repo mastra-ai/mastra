@@ -774,7 +774,11 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         if (!node) throw new KnowledgeConflictError(input.address);
         return nodeFromDocument(node);
       }
-      const node = await this.#createNode({ ...input.node, expectedAccessEpoch: undefined }, session);
+      // Address-bound nodes are identified by address, not name — never coalesce onto
+      // an existing same-named node. Callers disambiguate the name on conflict.
+      const node = await this.#createNode({ ...input.node, expectedAccessEpoch: undefined }, session, {
+        coalesceByName: false,
+      });
       await addresses.insertOne(
         { source: input.source, address: input.address, nodeId: node.id },
         sessionOptions(session),
@@ -1015,7 +1019,11 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     }
   }
 
-  async #createNode(input: CreateKnowledgeNodeInput, session: ClientSession): Promise<KnowledgeNode> {
+  async #createNode(
+    input: CreateKnowledgeNodeInput,
+    session: ClientSession,
+    options?: { coalesceByName?: boolean },
+  ): Promise<KnowledgeNode> {
     const scopeIds = await this.#assertScopeNodes(input.scopeIds, session);
     const normalizedName = canonicalName(input.name);
     await (
@@ -1033,7 +1041,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     for (const row of sameName) {
       const existingScopeIds = await this.#getNodeScopeIds(String(row.id), session);
       if (knowledgeScopeIdsKey(existingScopeIds) === knowledgeScopeIdsKey(scopeIds)) {
-        if (row.deletedAt) throw new KnowledgeConflictError(String(row.id));
+        if (row.deletedAt || options?.coalesceByName === false) throw new KnowledgeConflictError(String(row.id));
         return nodeFromDocument(row);
       }
       if (!row.deletedAt && existingScopeIds.some(scopeId => scopeIds.includes(scopeId))) {
