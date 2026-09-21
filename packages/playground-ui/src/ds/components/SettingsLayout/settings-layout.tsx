@@ -43,7 +43,7 @@ export function SettingsLayout({
               <Txt
                 as="h1"
                 variant="heading"
-                className={cn('min-w-0 truncate', 'font-sans tracking-normal text-muted-foreground')}
+                className={cn('min-w-0 truncate', 'font-body tracking-normal text-muted-foreground')}
               >
                 {title}
               </Txt>

@@ -101,7 +101,7 @@ export const InlineVercelStyle: Story = {
         <CommandInput
           placeholder="Find..."
           rightSlot={
-            <Kbd className="border-border bg-muted text-muted-foreground text-meta min-w-0 rounded px-1.5 py-0">
+            <Kbd className="bg-muted text-muted-foreground text-meta min-w-0 rounded px-1.5 py-0">
               Esc
             </Kbd>
           }

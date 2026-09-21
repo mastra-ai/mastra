@@ -134,7 +134,7 @@ const ExtractedValuesPanel = ({
   if (entries.length === 0 && failures.length === 0) return null;
 
   return (
-    <div className="mt-2 border-t border-neutral-700 pt-2">
+    <div className="border-border mt-2 border-t pt-2">
       <button
         onClick={onToggle}
         className="text-foreground text-meta flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
@@ -145,14 +145,14 @@ const ExtractedValuesPanel = ({
       {isExpanded && (
         <div className="mt-1 space-y-2">
           {entries.map(([slug, value]) => (
-            <div key={slug} className="rounded border border-neutral-700/60 bg-black/5 p-2 dark:bg-white/5">
+            <div key={slug} className="border-border bg-fill-subtle rounded border p-2">
               <div className="text-foreground/70 text-meta tracking-wide uppercase">{slug}</div>
               {isStructuredExtractedValue(value) ? (
                 <pre className="text-foreground/80 text-caption mt-1 max-h-40 overflow-auto break-words whitespace-pre-wrap">
                   {formatExtractedValue(value)}
                 </pre>
               ) : (
-                <div className="[&_code]:text-meta mt-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5">
+                <div className="[&_code]:text-meta mt-1 [&_code]:rounded [&_code]:bg-fill [&_code]:px-1 [&_code]:py-0.5">
                   <MarkdownRenderer className="text-foreground/80 text-caption">
                     {formatExtractedValue(value)}
                   </MarkdownRenderer>
@@ -317,7 +317,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                 {durationMs && <span>Duration: {(durationMs / 1000).toFixed(2)}s</span>}
               </div>
               {observations && (
-                <div className={`mt-1 border-t border-neutral-700 pt-1`}>
+                <div className="border-border mt-1 border-t pt-1">
                   {/* If there's no currentTask or suggestedResponse, show observations directly without collapsible wrapper */}
                   {!currentTask && !suggestedResponse ? (
                     <ObservationRenderer observations={observations} maxHeight="500px" />
@@ -344,7 +344,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                 </div>
               )}
               {currentTask && (
-                <div className={`mt-2 border-t border-neutral-700 pt-2`}>
+                <div className="border-border mt-2 border-t pt-2">
                   <button
                     onClick={() => setIsTaskExpanded(!isTaskExpanded)}
                     className="text-foreground text-meta flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
@@ -353,14 +353,14 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     Current Task
                   </button>
                   {isTaskExpanded && (
-                    <div className="[&_code]:text-meta mt-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5">
+                    <div className="[&_code]:text-meta mt-1 [&_code]:rounded [&_code]:bg-fill [&_code]:px-1 [&_code]:py-0.5">
                       <MarkdownRenderer className="text-foreground text-caption">{currentTask}</MarkdownRenderer>
                     </div>
                   )}
                 </div>
               )}
               {suggestedResponse && (
-                <div className={`mt-2 border-t border-neutral-700 pt-2`}>
+                <div className="border-border mt-2 border-t pt-2">
                   <button
                     onClick={() => setIsResponseExpanded(!isResponseExpanded)}
                     className="text-foreground text-meta flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
@@ -369,7 +369,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     Suggested Response
                   </button>
                   {isResponseExpanded && (
-                    <div className="[&_code]:text-meta mt-1 italic [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5">
+                    <div className="[&_code]:text-meta mt-1 italic [&_code]:rounded [&_code]:bg-fill [&_code]:px-1 [&_code]:py-0.5">
                       <MarkdownRenderer className="text-foreground/80 text-caption">
                         {suggestedResponse}
                       </MarkdownRenderer>
@@ -592,7 +592,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                 {compressionRatio && compressionRatio > 1 && <span>Compression: {compressionRatio}x</span>}
               </div>
               {observations && (
-                <div className="mt-1 border-t border-neutral-700 pt-1">
+                <div className="border-border mt-1 border-t pt-1">
                   <ObservationRenderer observations={observations} maxHeight="500px" />
                 </div>
               )}
@@ -611,7 +611,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
       data-om-state={state}
       data-om-type={isReflection ? 'reflection' : 'observation'}
     >
-      <div className="text-column my-1 inline-flex items-center gap-1.5 rounded-md bg-gray-500/10 px-2 py-1 text-gray-600">
+      <div className="text-column bg-fill text-muted-foreground my-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1">
         <Brain className="size-3" />
         <span>{toolName}</span>
       </div>

@@ -118,12 +118,12 @@
 
 @layer utilities {
   .shiki-token {
-    color: var(--shiki-light, var(--neutral6));
+    color: var(--shiki-light, var(--foreground));
     background-color: var(--shiki-light-bg, transparent);
   }
 
   .dark .shiki-token {
-    color: var(--shiki-dark, var(--neutral6));
+    color: var(--shiki-dark, var(--foreground));
     background-color: var(--shiki-dark-bg, transparent);
   }
 }
@@ -134,7 +134,7 @@
   }
   body {
     background-color: var(--sidebar);
-    color: var(--neutral6);
+    color: var(--foreground);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -190,9 +190,11 @@
 }
 
 .react-flow__controls-button {
-  color: #e6e6e6 !important;
-  background-color: #121212 !important;
-  border: none !important;
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-color-hover: var(--foreground);
+  --xy-controls-button-background-color: var(--surface-panel);
+  --xy-controls-button-background-color-hover: var(--gray-2);
+  --xy-controls-button-border-color: transparent;
 }
 
 @keyframes click-ripple {

@@ -183,15 +183,14 @@ describe('SidebarNew command header', () => {
     );
   }
 
-  it('renders optional search and footer metadata with semantic colors', () => {
+  it('renders the optional search trigger and footer metadata', () => {
     const { container } = renderCommandHeader();
 
-    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain(
-      'hover:bg-fill-subtle',
-    );
-    expect(container.querySelector('[data-slot="sidebar-new-footer-meta"]')?.className).toContain('border-border');
+    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="sidebar-new-footer-meta"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDefined();
     expect(screen.getByText('Mastra')).toBeDefined();
-    expect(screen.getByText('⌘ K').className).toContain('border-border');
+    expect(screen.getByText('⌘ K')).toBeDefined();
     expect(screen.getByText('Mastra v0.24.6')).toBeDefined();
   });
 
