@@ -13,7 +13,6 @@ import {
   TABLE_FEEDBACK_EVENTS,
   TABLE_FEEDBACK_EVENTS_DELTA,
 } from './ddl';
-import { recordDeletionRequest } from './deletion-requests';
 import { createFeedback, deleteFeedback, listFeedback, updateFeedbackReviewStatus } from './feedback';
 
 function gate() {
@@ -82,7 +81,7 @@ describe('feedback deletion with lagging replicas', () => {
   }
 
   it.each([true, false])(
-    'preserves deletion state when the post-update guard reaches a stale replica (deleted: %s)',
+    'keeps deleted feedback hidden when the post-update guard reads a stale replica (deleted: %s)',
     async deleted => {
       const [writer, , lagging] = clients as [ClickHouseClient, ClickHouseClient, ClickHouseClient];
       await createFeedback(writer, {
@@ -104,11 +103,9 @@ describe('feedback deletion with lagging replicas', () => {
       const command = writer.command.bind(writer);
       const query = writer.query.bind(writer);
       let guards = 0;
+      // Once the pending request is written, stop the lagging replica from
+      // receiving the applied marker that follows.
       vi.spyOn(writer, 'insert').mockImplementation(async args => {
-        if (args.table === TABLE_FEEDBACK_EVENTS) {
-          ready.open();
-          await release.opened;
-        }
         const result = await insert(args);
         const row = (args.values as Array<{ lastAppliedAt?: string }>)[0];
         if (args.table === TABLE_DELETION_REQUESTS && row?.lastAppliedAt === '1970-01-01T00:00:00.000Z') {
@@ -117,6 +114,7 @@ describe('feedback deletion with lagging replicas', () => {
         }
         return result;
       });
+      // Hold the mutation until the delete has run.
       vi.spyOn(writer, 'command').mockImplementation(async args => {
         if (args.query.startsWith(`ALTER TABLE ${TABLE_FEEDBACK_EVENTS} UPDATE`)) {
           ready.open();
@@ -124,26 +122,23 @@ describe('feedback deletion with lagging replicas', () => {
         }
         return command(args);
       });
+      // Answer the post-write guard from the replica that never saw the marker.
       vi.spyOn(writer, 'query').mockImplementation(args => {
         if (args.query.includes('has(predicateValues') && ++guards === 2) return lagging.query(args);
         return query(args);
       });
-      const updating = updateFeedbackReviewStatus(
-        writer,
-        { feedbackId: 'feedback-race', reviewStatus: 'reviewed' },
-        {},
-      );
-      const outcome = updating.then(
-        value => ({ value }),
-        error => ({ error }),
-      );
+      const updating = updateFeedbackReviewStatus(writer, { feedbackId: 'feedback-race', reviewStatus: 'reviewed' });
       try {
         await Promise.race([ready.opened, updating]);
         await deleteFeedback(writer, { feedbackIds: [deleted ? 'feedback-race' : 'unrelated-feedback'] }, {});
       } finally {
         release.open();
       }
-      expect(await outcome).toMatchObject({ error: { code: '289' } });
+      // The stale guard cannot see the applied marker, but the mutation kept
+      // the delete mask: the read-back finds no visible row, the next pass
+      // reports not found, and the deleted row stays hidden on every replica.
+      if (deleted) await expect(updating).rejects.toThrow('Feedback record not found');
+      else await expect(updating).resolves.toMatchObject({ feedbackId: 'feedback-race', reviewStatus: 'reviewed' });
       await lagging.command({ query: `SYSTEM START FETCHES ${TABLE_DELETION_REQUESTS}` });
       await syncReceipts();
       for (const client of clients) {
@@ -152,7 +147,7 @@ describe('feedback deletion with lagging replicas', () => {
           deleted ? [] : [{ feedbackId: 'feedback-race', reviewStatus: 'reviewed' }],
         );
       }
-      const retry = updateFeedbackReviewStatus(writer, { feedbackId: 'feedback-race', reviewStatus: 'reviewed' }, {});
+      const retry = updateFeedbackReviewStatus(writer, { feedbackId: 'feedback-race', reviewStatus: 'reviewed' });
       if (deleted) {
         await expect(retry).rejects.toThrow('Feedback record not found');
         expect(await visibleFeedback(writer)).toEqual([]);
@@ -186,7 +181,7 @@ describe('feedback deletion with lagging replicas', () => {
         let cursor = (await listFeedback(writer, { mode: 'delta' }, strategy)).deltaCursor!;
         for (const reviewStatus of ['reviewed', 'needs-review'] as const) {
           await expect(
-            updateFeedbackReviewStatus(writer, { feedbackId: 'review-delta', reviewStatus }, {}, strategy),
+            updateFeedbackReviewStatus(writer, { feedbackId: 'review-delta', reviewStatus }, strategy),
           ).resolves.toMatchObject({ reviewStatus });
           const delta = await listFeedback(writer, { mode: 'delta', after: cursor }, strategy);
           expect(delta.feedback).toHaveLength(1);
@@ -238,14 +233,14 @@ describe('feedback deletion with lagging replicas', () => {
       expect(await requestStates()).toEqual([{ applied: 0 }]);
       expect(await visibleFeedback(writer)).toHaveLength(1);
       await expect(
-        updateFeedbackReviewStatus(limited, { feedbackId: 'real-delete-failure', reviewStatus: 'reviewed' }, {}),
+        updateFeedbackReviewStatus(limited, { feedbackId: 'real-delete-failure', reviewStatus: 'reviewed' }),
       ).resolves.toMatchObject({ reviewStatus: 'reviewed' });
       await writer.command({ query: `GRANT ALTER DELETE ON ${database}.* TO ${username}` });
       await deleteFeedback(limited, { feedbackIds: ['real-delete-failure'] }, {});
       expect(await requestStates()).toEqual([{ applied: 0 }, { applied: 1 }]);
       for (const client of clients) expect(await visibleFeedback(client)).toEqual([]);
       await expect(
-        updateFeedbackReviewStatus(limited, { feedbackId: 'real-delete-failure', reviewStatus: 'reviewed' }, {}),
+        updateFeedbackReviewStatus(limited, { feedbackId: 'real-delete-failure', reviewStatus: 'reviewed' }),
       ).rejects.toThrow('Feedback record not found');
     } finally {
       await limited.close();
@@ -277,7 +272,7 @@ describe('feedback deletion with lagging replicas', () => {
       await writer.command({ query: `GRANT SELECT ON ${database}.* TO ${username}` });
       const cursor = (await listFeedback(writer, { mode: 'delta' }, 'fallback')).deltaCursor!;
       const update = () =>
-        updateFeedbackReviewStatus(limited, { feedbackId: 'delta-failure', reviewStatus: 'reviewed' }, {}, 'fallback');
+        updateFeedbackReviewStatus(limited, { feedbackId: 'delta-failure', reviewStatus: 'reviewed' }, 'fallback');
       await expect(update()).rejects.toMatchObject({ code: '497' });
       expect(await visibleFeedback(writer)).toEqual([{ feedbackId: 'delta-failure', reviewStatus: 'needs-review' }]);
       await writer.command({ query: `GRANT ALTER UPDATE ON ${database}.${TABLE_FEEDBACK_EVENTS} TO ${username}` });
@@ -293,56 +288,6 @@ describe('feedback deletion with lagging replicas', () => {
       if (!enabled) coreFeatures.delete('observability-delta-polling');
       await limited.close();
       await writer.command({ query: `DROP USER IF EXISTS ${username}` });
-    }
-  }, 60_000);
-
-  it('waits out another serialized quorum insert instead of rejecting a concurrent deletion request', async () => {
-    const [writer, second, third] = clients as [ClickHouseClient, ClickHouseClient, ClickHouseClient];
-    for (const client of [second, third])
-      await client.command({ query: `SYSTEM STOP FETCHES ${TABLE_DELETION_REQUESTS}` });
-    const insert = writer.insert.bind(writer);
-    let secondAttempts = 0;
-    vi.spyOn(writer, 'insert').mockImplementation(async args => {
-      if ((args.values as Array<{ requestId?: string }>)[0]?.requestId === 'second') secondAttempts++;
-      return insert(args);
-    });
-    const args = {
-      signal: 'feedback' as const,
-      predicateType: 'itemIds' as const,
-      predicateValues: ['feedback-1'],
-      requestedAt: new Date().toISOString(),
-      replication: {},
-    };
-    const first = recordDeletionRequest(writer, { ...args, requestId: 'first' });
-    let other: Promise<unknown> | undefined;
-    try {
-      await vi.waitFor(async () => {
-        const result = await writer.query({
-          query: `SELECT requestId FROM ${TABLE_DELETION_REQUESTS}`,
-          format: 'JSONEachRow',
-        });
-        expect(await result.json()).toEqual([{ requestId: 'first' }]);
-      });
-      other = recordDeletionRequest(writer, { ...args, requestId: 'second', organizationId: 'other-org' });
-      // Attach immediately so a regression is an assertion failure, not an
-      // unhandled rejection while the first write is still waiting for quorum.
-      const outcome = other.then(
-        value => ({ value }),
-        error => ({ error }),
-      );
-      // The first write still waits for quorum, so the second is rejected with
-      // UNSATISFIED_QUORUM_FOR_PREVIOUS_WRITE and retried. Release the lagging
-      // replicas only once that retry has been observed.
-      await vi.waitFor(() => expect(secondAttempts).toBeGreaterThanOrEqual(2), { timeout: 2_000 });
-      for (const client of [second, third])
-        await client.command({ query: `SYSTEM START FETCHES ${TABLE_DELETION_REQUESTS}` });
-      await first;
-      expect(await outcome).toMatchObject({ value: { requestId: 'second' } });
-      expect(secondAttempts).toBeGreaterThanOrEqual(2);
-    } finally {
-      for (const client of [second, third])
-        await client.command({ query: `SYSTEM START FETCHES ${TABLE_DELETION_REQUESTS}` });
-      await Promise.allSettled([first, ...(other ? [other] : [])]);
     }
   }, 60_000);
 });

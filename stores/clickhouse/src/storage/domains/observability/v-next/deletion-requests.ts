@@ -33,26 +33,6 @@ export interface RecordDeletionRequestArgs {
 
 const EPOCH = '1970-01-01T00:00:00.000Z';
 
-/**
- * Quorum settings for deletion-request writes on replicated clusters.
- *
- * `select_sequential_consistency` on the mutation guard only holds when quorum
- * inserts are serialized: parallel quorum inserts can land on different replica
- * sets, so no single replica is guaranteed to hold every write. ClickHouse also
- * rejects quorum inserts when `async_insert` is enabled (for example through a
- * user profile), so the audit write is pinned synchronous here. Both are
- * required together; relaxing either silently drops the guard's read guarantee.
- *
- * Serialized quorum inserts reject a write that overlaps an in-flight one with
- * `UNSATISFIED_QUORUM_FOR_PREVIOUS_WRITE`; the caller's documented recovery is
- * to call the delete API again.
- */
-const QUORUM_INSERT_SETTINGS = {
-  insert_quorum: 'auto',
-  insert_quorum_parallel: 0,
-  async_insert: 0,
-} as const;
-
 export async function recordDeletionRequest(
   client: ClickHouseClient,
   args: RecordDeletionRequestArgs,
@@ -91,7 +71,11 @@ export async function markDeletionRequestApplied(
 ): Promise<DeletionRequestRow> {
   // Strictly newer than the pending version so ReplacingMergeTree(updatedAt)
   // never has to tie-break, even when the delete finished within the same ms.
-  const appliedAt = new Date(Math.max(Date.now(), Date.parse(row.updatedAt) + 1)).toISOString();
+  // A pending version with an unparsable timestamp falls back to now.
+  const pendingAt = Date.parse(row.updatedAt);
+  const appliedAt = new Date(
+    Number.isFinite(pendingAt) ? Math.max(Date.now(), pendingAt + 1) : Date.now(),
+  ).toISOString();
   const applied: DeletionRequestRow = { ...row, lastAppliedAt: appliedAt, updatedAt: appliedAt };
 
   await insertDeletionRequest(client, applied, replication);
@@ -99,42 +83,24 @@ export async function markDeletionRequestApplied(
   return applied;
 }
 
-/** Retries after `UNSATISFIED_QUORUM_FOR_PREVIOUS_WRITE` before the error propagates. */
-const QUORUM_BUSY_RETRIES = 5;
-
 /**
- * Retry only the rejection of a write while an earlier serialized quorum is
- * pending. Reuse the exact row and version. Timeouts and ambiguous insert
- * failures still propagate to the caller; OSS recovery is a delete API retry.
+ * Replicated clusters insert with parallel quorum, the same as every other
+ * deletion-request write on main, so concurrent deletes never reject each other.
+ * The guard that reads these rows is advisory: review updates mutate feedback
+ * in place and preserve the delete mask, so a replica that has not yet received
+ * a marker can only mis-report a status, never bring deleted feedback back.
  */
 async function insertDeletionRequest(
   client: ClickHouseClient,
   row: DeletionRequestRow,
   replication?: ClickhouseReplicationConfig,
 ): Promise<void> {
-  const replicated = isReplicationConfigured(replication);
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await client.insert({
-        table: TABLE_DELETION_REQUESTS,
-        values: [row],
-        format: 'JSONEachRow',
-        clickhouse_settings: replicated ? { ...CH_INSERT_SETTINGS, ...QUORUM_INSERT_SETTINGS } : CH_INSERT_SETTINGS,
-      });
-      return;
-    } catch (error) {
-      // UNSATISFIED_QUORUM_FOR_PREVIOUS_WRITE: this insert was rejected before
-      // it could write. Do not retry a timeout of this insert's own quorum.
-      if (
-        !replicated ||
-        attempt >= QUORUM_BUSY_RETRIES ||
-        !(error instanceof Error) ||
-        !('code' in error) ||
-        String(error.code) !== '286'
-      ) {
-        throw error;
-      }
-      await new Promise(resolve => setTimeout(resolve, Math.min(100 * 2 ** attempt, 1_000)));
-    }
-  }
+  await client.insert({
+    table: TABLE_DELETION_REQUESTS,
+    values: [row],
+    format: 'JSONEachRow',
+    clickhouse_settings: isReplicationConfigured(replication)
+      ? { ...CH_INSERT_SETTINGS, insert_quorum: 'auto', insert_quorum_parallel: 1 }
+      : CH_INSERT_SETTINGS,
+  });
 }

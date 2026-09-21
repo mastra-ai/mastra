@@ -1341,7 +1341,6 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       return await feedbackOps.updateFeedbackReviewStatus(
         this.#client,
         args,
-        this.#replication,
         deltaPollingSupported(this.#deltaCursorStrategy) ? this.#deltaCursorStrategy : null,
       );
     } catch (error) {

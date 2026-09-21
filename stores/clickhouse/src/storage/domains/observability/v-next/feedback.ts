@@ -310,20 +310,20 @@ function feedbackConflictError(feedbackId: string): MastraError {
 const REVIEW_UPDATE_ATTEMPTS = 3;
 
 /**
- * Applied markers are inserted with quorum. On replicated clusters the guard
- * reads with `select_sequential_consistency` so it cannot answer from a replica
- * that has not yet received a quorum-inserted marker; single-node deployments
- * keep the plain read.
+ * Only applied requests block a review update. The guard decides the reply,
+ * not data safety: the update mutates the row in place and preserves the
+ * delete mask, so a replica that has not received a marker yet can only
+ * mis-report a status, never bring deleted feedback back.
  */
 async function hasFeedbackDeletionRequest(
   client: ClickHouseClient,
   feedbackId: string,
   organizationId: string | null,
   resourceId: string | null,
-  replication?: ClickhouseReplicationConfig,
 ): Promise<boolean> {
-  const result = await client.query({
-    query: `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
+  const rows = await queryJson<{ found: number }>(
+    client,
+    `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
      WHERE signal = 'feedback'
        AND predicateType = 'itemIds'
        AND has(predicateValues, {feedbackId:String})
@@ -331,20 +331,14 @@ async function hasFeedbackDeletionRequest(
        AND (organizationId = '' OR organizationId = {organizationId:String})
        AND (resourceId = '' OR resourceId = {resourceId:String})
      LIMIT 1`,
-    query_params: { feedbackId, organizationId: organizationId ?? '', resourceId: resourceId ?? '' },
-    format: 'JSONEachRow',
-    clickhouse_settings: isReplicationConfigured(replication)
-      ? { ...CH_SETTINGS, select_sequential_consistency: '1' }
-      : CH_SETTINGS,
-  });
-  const rows = (await result.json()) as Array<{ found: number }>;
+    { feedbackId, organizationId: organizationId ?? '', resourceId: resourceId ?? '' },
+  );
   return rows.length > 0;
 }
 
 export async function updateFeedbackReviewStatus(
   client: ClickHouseClient,
   args: UpdateFeedbackReviewStatusArgs,
-  replication?: ClickhouseReplicationConfig,
   strategy: ClickHouseDeltaCursorStrategy | null = null,
 ): Promise<FeedbackRecord> {
   const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
@@ -353,22 +347,22 @@ export async function updateFeedbackReviewStatus(
   // a newer version at any time, which turns that mutation into a no-op; re-read
   // and re-apply to the newest row instead of reporting a false not-found.
   for (let attempt = 1; ; attempt++) {
-    const updated = await applyReviewStatus(client, feedbackId, reviewStatus, replication, strategy);
+    const updated = await applyReviewStatus(client, feedbackId, reviewStatus, strategy);
     if (updated) return updated;
     if (attempt >= REVIEW_UPDATE_ATTEMPTS) throw feedbackConflictError(feedbackId);
   }
 }
 
 /**
- * One read-guard-mutate-verify pass. Returns `null` when the observed version
- * vanished under `FINAL` before the read-back: a newer version superseded it,
- * or a delete hid it after the guard read (the next pass then reports not found).
+ * One read-guard-mutate-verify pass. Returns `null` when the read-back does not
+ * show the new status: a newer version superseded the observed row, a delete
+ * hid it after the guard read (the next pass then reports not found), or the
+ * mutation left the row untouched.
  */
 async function applyReviewStatus(
   client: ClickHouseClient,
   feedbackId: string,
   reviewStatus: FeedbackRecord['reviewStatus'],
-  replication: ClickhouseReplicationConfig | undefined,
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<FeedbackRecord | null> {
   const existing = await queryJson<Record<string, any>>(
@@ -384,24 +378,16 @@ async function applyReviewStatus(
     throw feedbackNotFoundError(feedbackId);
   }
 
-  if (
-    await hasFeedbackDeletionRequest(
-      client,
-      feedbackId,
-      existingRow.organizationId,
-      existingRow.resourceId,
-      replication,
-    )
-  ) {
+  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
     throw feedbackNotFoundError(feedbackId);
   }
 
   // Mutate the observed row instead of inserting a replacement. ClickHouse
-  // mutations preserve the delete mask, so even a failed post-write guard
+  // mutations preserve the delete mask, so even a stale post-write guard
   // cannot leave a deleted record visible again. Wait for the server that
   // receives the write only: other replicas apply the mutation through the
-  // replication log, and waiting for all of them fails with UNFINISHED while
-  // any replica is inactive even though the status already changed.
+  // replication log, and waiting for all of them fails while any replica is
+  // inactive even though the status already changed.
   const identity = `feedbackId = {feedbackId:String}
     AND timestamp = parseDateTime64BestEffort({timestamp:String}, 3, 'UTC')
     AND (traceId = {traceId:Nullable(String)} OR (isNull(traceId) AND isNull({traceId:Nullable(String)})))
@@ -436,24 +422,19 @@ async function applyReviewStatus(
     });
   }
 
-  if (
-    await hasFeedbackDeletionRequest(
-      client,
-      feedbackId,
-      existingRow.organizationId,
-      existingRow.resourceId,
-      replication,
-    )
-  ) {
+  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
     throw feedbackNotFoundError(feedbackId);
   }
 
+  // Under heavy concurrent mutation of the same part, ClickHouse can report a
+  // mutation done while the row is left untouched (about 0.2% at 100 in-flight
+  // updates on 26.6). Treat an unchanged row like a superseded one and re-apply.
   const current = await queryJson<Record<string, any>>(
     client,
     `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE ${identity} LIMIT 1`,
     params,
   );
-  return current[0] ? rowToFeedbackRecord(current[0]) : null;
+  return current[0]?.reviewStatus === reviewStatus ? rowToFeedbackRecord(current[0]) : null;
 }
 
 // ============================================================================
