@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import { createBackgroundTask } from '../../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../../background-tasks/resolve-config';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
@@ -16,6 +17,8 @@ import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
+import type { CoreTool } from '../../../../tools/types';
+import { validateToolOutput } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -1109,19 +1112,39 @@ export function createDurableToolCallStep() {
               context: {
                 executor: {
                   execute: async (taskArgs: any, taskContext: any) => {
-                    return tool.execute!(taskArgs, {
-                      ...toolOptions,
-                      ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
-                      suspendedToolRunId: taskContext?.suspendedToolRunId,
-                      suspend: async (data?: unknown, options?: SuspendOptions) => {
-                        await toolOptions.suspend?.(data, options);
-                        return taskContext?.suspend?.(data, options);
-                      },
-                      outputWriter: async (chunk: any) => {
-                        await taskContext?.onProgress?.(chunk);
-                        return toolOptions.outputWriter?.(chunk);
-                      },
+                    const execution = await executeAdoptedBackgroundOperation({
+                      taskId: bgTask.task.id,
+                      disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                      abortSignal: taskContext?.abortSignal ?? toolOptions.abortSignal,
+                      onCancelError: error => logger?.warn('Failed to cancel adopted background operation', error),
+                      execute: background =>
+                        tool.execute!(taskArgs, {
+                          ...toolOptions,
+                          isBackgroundTask: true,
+                          background,
+                          ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                          suspendedToolRunId: taskContext?.suspendedToolRunId,
+                          suspend: async (data?: unknown, options?: SuspendOptions) => {
+                            await toolOptions.suspend?.(data, options);
+                            return taskContext?.suspend?.(data, options);
+                          },
+                          outputWriter: async (chunk: any) => {
+                            await taskContext?.onProgress?.(chunk);
+                            return toolOptions.outputWriter?.(chunk);
+                          },
+                          abortSignal: taskContext?.abortSignal ?? toolOptions.abortSignal,
+                        }),
                     });
+
+                    if (!execution.adopted) return execution.result;
+
+                    const outputValidation = validateToolOutput(
+                      (tool as unknown as CoreTool).outputValidationSchema,
+                      execution.result,
+                      toolName,
+                      false,
+                    );
+                    return outputValidation.error ?? outputValidation.data;
                   },
                 },
                 onChunk: (chunk: any) => {

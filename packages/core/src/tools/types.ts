@@ -15,7 +15,7 @@ import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { PublicSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { Workspace } from '../workspace/workspace';
 import type { ElicitRequest, ElicitResult, ServerContext } from './mcp-types';
@@ -371,7 +371,7 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
     /** Set by the agent tool-call step when the tool runs as a background task. */
     isBackgroundTask?: boolean;
     /** Process-local lifecycle bridge for an operation adopted by the background task. */
-    backgroundTask?: BackgroundTaskAdoptionContext;
+    background?: BackgroundTaskAdoptionContext;
   };
 
 /**
@@ -477,6 +477,8 @@ export type CoreTool = {
   description?: string;
   parameters: FlexibleSchema<any> | Schema;
   outputSchema?: FlexibleSchema<any> | Schema;
+  /** @internal Standard Schema retained for validating adopted background-operation results. */
+  outputValidationSchema?: StandardSchemaWithJSON;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
   /**
    * Enables strict tool input generation for providers that support it.

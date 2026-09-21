@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { globalRunRegistry } from '../../run-registry';
 import { createDurableToolCallStep } from './tool-call';
@@ -145,6 +146,111 @@ describe('durable tool-call background task dispatch', () => {
     expect(result.result).toContain('Background task started');
     expect(result.result).toContain('task-abc');
     expect(result.result).toContain(TOOL_NAME);
+  });
+
+  it('exposes the adoption bridge to durable background tools and waits for completion', async () => {
+    const pubsub = mockPubsub();
+    let resolveCompletion!: (result: { summary: string }) => void;
+    const completion = new Promise<{ summary: string }>(resolve => {
+      resolveCompletion = resolve;
+    });
+    let toolOptions: any;
+    const execute = vi.fn(async (_args: unknown, options: any) => {
+      toolOptions = options;
+      options.background.adopt({ completion });
+      return { summary: 'acknowledged' };
+    });
+    setupRegistry({
+      tools: {
+        [TOOL_NAME]: {
+          execute,
+          backgroundConfig: { enabled: true },
+        },
+      },
+    });
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'deferred',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    let capturedExecutor: any;
+    const mockTask = { id: 'task-adopted' };
+    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
+      capturedExecutor = options.context.executor;
+      return {
+        dispatch: vi.fn().mockResolvedValue({ task: mockTask, fallbackToSync: false }),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
+        task: mockTask,
+        cancel: vi.fn(),
+        waitForCompletion: vi.fn(),
+      } as any;
+    });
+
+    await executeStep(pubsub, initData);
+    let settled = false;
+    const executorResult = capturedExecutor.execute(baseInput().args).finally(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+
+    expect(settled).toBe(false);
+    expect(toolOptions.isBackgroundTask).toBe(true);
+    expect(toolOptions.background).toMatchObject({
+      taskId: 'task-adopted',
+      disposition: 'deferred',
+    });
+
+    resolveCompletion({ summary: 'finished' });
+    await expect(executorResult).resolves.toEqual({ summary: 'finished' });
+  });
+
+  it('validates adopted durable background results against the tool output schema', async () => {
+    const pubsub = mockPubsub();
+    setupRegistry({
+      tools: {
+        [TOOL_NAME]: {
+          backgroundConfig: { enabled: true },
+          outputValidationSchema: z.object({ summary: z.number() }),
+          execute: vi.fn(async (_args: unknown, options: any) => {
+            options.background.adopt({ completion: Promise.resolve({ summary: 'invalid' }) });
+            return { summary: 42 };
+          }),
+        },
+      },
+    });
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'deferred',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    let capturedExecutor: any;
+    const mockTask = { id: 'task-invalid-adopted' };
+    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
+      capturedExecutor = options.context.executor;
+      return {
+        dispatch: vi.fn().mockResolvedValue({ task: mockTask, fallbackToSync: false }),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
+        task: mockTask,
+        cancel: vi.fn(),
+        waitForCompletion: vi.fn(),
+      } as any;
+    });
+
+    await executeStep(pubsub, initData);
+    await expect(capturedExecutor.execute(baseInput().args)).resolves.toMatchObject({
+      error: true,
+      message: expect.stringContaining(`Tool output validation failed for ${TOOL_NAME}`),
+    });
   });
 
   it('falls back to sync execution when fallbackToSync is true', async () => {

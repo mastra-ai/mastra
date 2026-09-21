@@ -1482,6 +1482,7 @@ describe('CoreToolBuilder Output Schema', () => {
 
     const builtTool = builder.build();
     expect(builtTool.outputSchema).toBeDefined();
+    expect(builtTool.outputValidationSchema).toBe(toolWithTupleOutput.outputSchema);
   });
 
   describe('agent-as-tools schema serialization (#13324)', () => {

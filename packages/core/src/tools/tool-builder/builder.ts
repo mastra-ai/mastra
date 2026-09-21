@@ -699,7 +699,7 @@ export class CoreToolBuilder extends MastraBase {
             ),
             ...createObservabilityContext({ currentSpan: toolSpan }),
             abortSignal: execOptions.abortSignal,
-            ...(execOptions.backgroundTask ? { background: execOptions.backgroundTask } : {}),
+            background: execOptions.background,
             suspend: (args: any, suspendOptions?: SuspendOptions) => {
               suspendData = args;
               const newSuspendOptions = {
@@ -1185,6 +1185,7 @@ export class CoreToolBuilder extends MastraBase {
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedInputSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
+      outputValidationSchema: isStandardSchemaWithJSON(outputSchema) ? outputSchema : undefined,
       strict: 'strict' in this.originalTool ? this.originalTool.strict : undefined,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,

@@ -509,12 +509,12 @@ export class Tool<
               resourceId,
               writableStream,
               isBackgroundTask,
-              backgroundTask,
+              background,
               ...rest
             } = baseContext;
             organizedContext = {
               ...rest,
-              ...(backgroundTask ? { background: backgroundTask } : {}),
+              background,
               agent: {
                 agentId: agentId || '',
                 toolCallId,

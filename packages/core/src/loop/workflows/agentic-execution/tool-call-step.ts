@@ -3,13 +3,10 @@ import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
+import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
-import type {
-  BackgroundTaskOperation,
-  BackgroundTaskProgressChunk,
-  ToolBackgroundConfig,
-} from '../../../background-tasks/types';
+import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
@@ -25,7 +22,8 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
-import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import type { CoreTool, MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import { validateToolOutput } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -954,102 +952,64 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // would suspend the AGENT run via tool-call-approval) with
                     // the bg-task workflow's, so calling `suspend()` from the
                     // tool pauses the bg-task run instead.
-                    let adoptedOperation: BackgroundTaskOperation<unknown> | undefined;
-                    let removeAdoptedAbortListener: (() => void) | undefined;
-                    let acceptingAdoption = true;
-                    let toolExecutionCompleted = false;
-
-                    const cancelAdoptedOperation = async (reason?: unknown) => {
-                      await adoptedOperation?.cancel?.(reason);
-                    };
-
-                    try {
-                      let rawResult = await resolvedTool.execute!(bgArgs, {
-                        ...toolOptions,
-                        isBackgroundTask: true,
-                        backgroundTask: {
-                          taskId: bgTask.task.id,
-                          disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
-                          adopt(operation: BackgroundTaskOperation<unknown>) {
-                            if (!acceptingAdoption) {
-                              throw new Error('A background operation must be adopted before the tool returns');
-                            }
-                            if (adoptedOperation) {
-                              throw new Error('A background tool may adopt only one operation');
-                            }
-
-                            const completion = Promise.resolve(operation.completion);
-                            void completion.catch(() => {});
-                            adoptedOperation = { ...operation, completion };
-
-                            const abortSignal = opts?.abortSignal;
-                            if (abortSignal && operation.cancel) {
-                              const onAbort = () => {
-                                void cancelAdoptedOperation(abortSignal.reason).catch(error => {
-                                  logger?.warn('Failed to cancel adopted background operation', error);
-                                });
-                              };
-                              abortSignal.addEventListener('abort', onAbort, { once: true });
-                              removeAdoptedAbortListener = () => abortSignal.removeEventListener('abort', onAbort);
-                              if (abortSignal.aborted) onAbort();
-                            }
+                    const execution = await executeAdoptedBackgroundOperation({
+                      taskId: bgTask.task.id,
+                      disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                      abortSignal: opts?.abortSignal,
+                      onCancelError: error => logger?.warn('Failed to cancel adopted background operation', error),
+                      execute: background =>
+                        resolvedTool.execute!(bgArgs, {
+                          ...toolOptions,
+                          isBackgroundTask: true,
+                          background,
+                          [BACKGROUND_WORK_CONTEXT]: {
+                            originRunId: runId,
+                            originToolCallId: inputData.toolCallId,
+                            taskId: bgTask.task.id,
+                            invocationKind: isAgentTool ? 'agent' : 'tool',
+                            disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
                           },
-                        },
-                        [BACKGROUND_WORK_CONTEXT]: {
-                          originRunId: runId,
-                          originToolCallId: inputData.toolCallId,
-                          taskId: bgTask.task.id,
-                          invocationKind: isAgentTool ? 'agent' : 'tool',
-                          disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
-                        },
-                        ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
-                        suspendedToolRunId: opts?.suspendedToolRunId,
-                        suspend: async (data?: unknown, options?: SuspendOptions) => {
-                          await toolOptions.suspend?.(data, options);
-                          return opts?.suspend?.(data, options);
-                        },
-                        outputWriter: async (chunk: any) => {
-                          await opts?.onProgress?.(chunk);
-                          return toolOptions.outputWriter?.(chunk);
-                        },
-                        abortSignal: opts?.abortSignal,
-                      } as any);
-                      acceptingAdoption = false;
-                      toolExecutionCompleted = true;
+                          ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                          suspendedToolRunId: opts?.suspendedToolRunId,
+                          suspend: async (data?: unknown, options?: SuspendOptions) => {
+                            await toolOptions.suspend?.(data, options);
+                            return opts?.suspend?.(data, options);
+                          },
+                          outputWriter: async (chunk: any) => {
+                            await opts?.onProgress?.(chunk);
+                            return toolOptions.outputWriter?.(chunk);
+                          },
+                          abortSignal: opts?.abortSignal,
+                        } as any),
+                    });
+                    let rawResult = execution.result;
 
-                      if (adoptedOperation) {
-                        rawResult = await adoptedOperation.completion;
-                      }
-
-                      const result = ensureSerializable(rawResult);
-
-                      if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
-                        try {
-                          await (resolvedTool as any).onOutput({
-                            toolCallId: inputData.toolCallId,
-                            toolName: inputData.toolName,
-                            output: result,
-                            abortSignal: opts?.abortSignal,
-                          });
-                        } catch (error) {
-                          logger?.error('Error calling onOutput', error);
-                        }
-                      }
-
-                      return result;
-                    } catch (error) {
-                      if (adoptedOperation && !toolExecutionCompleted) {
-                        try {
-                          await cancelAdoptedOperation(error);
-                        } catch (cancelError) {
-                          logger?.warn('Failed to cancel adopted background operation', cancelError);
-                        }
-                      }
-                      throw error;
-                    } finally {
-                      acceptingAdoption = false;
-                      removeAdoptedAbortListener?.();
+                    if (execution.adopted) {
+                      const outputValidation = validateToolOutput(
+                        (resolvedTool as unknown as CoreTool).outputValidationSchema,
+                        rawResult,
+                        inputData.toolName,
+                        false,
+                      );
+                      rawResult = outputValidation.error ?? outputValidation.data;
                     }
+
+                    const result = ensureSerializable(rawResult);
+
+                    if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
+                      try {
+                        await (resolvedTool as any).onOutput({
+                          toolCallId: inputData.toolCallId,
+                          toolName: inputData.toolName,
+                          output: result,
+                          abortSignal: opts?.abortSignal,
+                        });
+                      } catch (error) {
+                        logger?.error('Error calling onOutput', error);
+                      }
+                    }
+
+                    return result;
                   },
                 },
 

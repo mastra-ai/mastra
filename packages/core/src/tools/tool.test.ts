@@ -393,7 +393,7 @@ describe('AgentToolExecutionContext', () => {
         messages: [],
         suspend: async () => {},
         isBackgroundTask: true,
-        backgroundTask,
+        background: backgroundTask,
       },
     );
 
