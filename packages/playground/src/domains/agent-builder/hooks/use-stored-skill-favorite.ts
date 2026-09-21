@@ -1,7 +1,6 @@
 import type { FavoriteToggleResponse, StoredSkillResponse, ListStoredSkillsResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 type FavoriteContext = {
   previousDetail?: StoredSkillResponse | null;
@@ -24,13 +23,12 @@ const applyFavoriteToSkill = (skill: StoredSkillResponse, favorited: boolean): S
 export const useToggleStoredSkillFavorite = (skillId?: string) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<FavoriteToggleResponse, Error, { favorited: boolean }, FavoriteContext>({
     mutationFn: async ({ favorited }) => {
       if (!skillId) throw new Error('skillId is required to toggle favorite');
       const resource = client.getStoredSkill(skillId);
-      return favorited ? resource.favorite(requestContext) : resource.unfavorite(requestContext);
+      return favorited ? resource.favorite() : resource.unfavorite();
     },
     onMutate: async ({ favorited }) => {
       if (!skillId) return { previousLists: [] };

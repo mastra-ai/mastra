@@ -2,7 +2,6 @@ import type { CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgents
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isModelNotAllowedError } from '@/domains/agent-builder/services/is-model-not-allowed';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useStoredAgents = (params?: ListStoredAgentsParams, options?: { enabled?: boolean }) => {
   const client = useMastraClient();
@@ -16,15 +15,14 @@ export const useStoredAgents = (params?: ListStoredAgentsParams, options?: { ena
 
 export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 'published'; enabled?: boolean }) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
   const { enabled = true, ...queryOptions } = options ?? {};
 
   return useQuery({
-    queryKey: ['stored-agent', agentId, queryOptions.status, requestContext],
+    queryKey: ['stored-agent', agentId, queryOptions.status],
     queryFn: async () => {
       if (!agentId) return null;
       try {
-        return await client.getStoredAgent(agentId).details(requestContext, queryOptions);
+        return await client.getStoredAgent(agentId).details(undefined, queryOptions);
       } catch (error) {
         // 404 is expected for code-only agents that haven't been stored yet
         if (error && typeof error === 'object' && 'status' in error && (error as { status: number }).status === 404) {
@@ -42,12 +40,11 @@ export type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>
 
 export const useStoredAgentDependents = (agentId?: string, options?: { enabled?: boolean }) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
   const enabled = (options?.enabled ?? true) && Boolean(agentId);
 
   return useQuery({
-    queryKey: ['stored-agent-dependents', agentId, requestContext],
-    queryFn: () => client.getStoredAgent(agentId!).dependents(requestContext),
+    queryKey: ['stored-agent-dependents', agentId],
+    queryFn: () => client.getStoredAgent(agentId!).dependents(),
     enabled,
     retry: false,
   });
@@ -56,7 +53,6 @@ export const useStoredAgentDependents = (agentId?: string, options?: { enabled?:
 export const useStoredAgentMutations = (agentId?: string) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   // If the server rejects with HTTP 422 + MODEL_NOT_ALLOWED the admin policy
   // has likely changed under us — refresh the cached settings so the UI
@@ -74,8 +70,8 @@ export const useStoredAgentMutations = (agentId?: string) => {
       // (the edit page) can render the agent on first paint without a refetch.
       // The starter relies on this to immediately mount the conversation panel
       // and dispatch the user's initial message.
-      queryClient.setQueryData(['stored-agent', created.id, 'draft', requestContext], created);
-      queryClient.setQueryData(['stored-agent', created.id, undefined, requestContext], created);
+      queryClient.setQueryData(['stored-agent', created.id, 'draft'], created);
+      queryClient.setQueryData(['stored-agent', created.id, undefined], created);
       // Invalidate both stored-agents list and the merged agents list
       void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
       void queryClient.invalidateQueries({ queryKey: ['agents'] });
@@ -89,7 +85,7 @@ export const useStoredAgentMutations = (agentId?: string) => {
   const updateMutation = useMutation({
     mutationFn: (params: UpdateStoredAgentParams) => {
       if (!agentId) throw new Error('agentId is required for update');
-      return client.getStoredAgent(agentId).update(params, requestContext);
+      return client.getStoredAgent(agentId).update(params);
     },
     onSuccess: () => {
       // Invalidate lists
@@ -107,7 +103,7 @@ export const useStoredAgentMutations = (agentId?: string) => {
   const deleteMutation = useMutation({
     mutationFn: () => {
       if (!agentId) throw new Error('agentId is required for delete');
-      return client.getStoredAgent(agentId).delete(requestContext);
+      return client.getStoredAgent(agentId).delete();
     },
     onSuccess: () => {
       // Invalidate lists so the agents list page refetches without the deleted entry

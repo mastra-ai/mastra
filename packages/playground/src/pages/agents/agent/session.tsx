@@ -3,12 +3,14 @@ import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { RequestContextProvider } from '@mastra/playground-ui/domains/request-context';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentRunOptions } from '@/domains/agents/components/agent-run-options';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
@@ -21,7 +23,6 @@ import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 
 function AgentSession() {
   const { agentId, threadId } = useParams();
@@ -99,7 +100,7 @@ function AgentSession() {
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-        <SchemaRequestContextProvider>
+        <RequestContextProvider key={agentId} entityKey={`agent:${agentId}`}>
           <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
             <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
               <BrowserSessionProvider
@@ -127,6 +128,12 @@ function AgentSession() {
                             messageId={messageId}
                             isNewThread={isNewThread}
                             hideModelSwitcher
+                            runOptionsSlot={
+                              <AgentRunOptions
+                                triggerVariant="icon"
+                                requestContextSchema={agent?.requestContextSchema}
+                              />
+                            }
                           />
                         </div>
                       </MainContentLayout>
@@ -136,7 +143,7 @@ function AgentSession() {
               </BrowserSessionProvider>
             </BrowserToolCallsProvider>
           </WorkingMemoryProvider>
-        </SchemaRequestContextProvider>
+        </RequestContextProvider>
       </AgentSettingsProvider>
     </TracingSettingsProvider>
   );

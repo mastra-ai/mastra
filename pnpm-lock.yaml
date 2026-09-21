@@ -5757,9 +5757,6 @@ importers:
       zod-v4:
         specifier: npm:zod@^4.6.4
         version: zod@4.6.5
-      zustand:
-        specifier: ^5.0.12
-        version: 5.0.13(@types/react@19.2.17)(immer@11.1.9)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -5947,9 +5944,6 @@ importers:
       zod:
         specifier: ^3.25.0
         version: 3.25.76
-      zustand:
-        specifier: ^5.0.12
-        version: 5.0.13(@types/react@19.2.17)(immer@11.1.9)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -33046,24 +33040,6 @@ packages:
       immer:
         optional: true
       react:
-        optional: true
-
-  zustand@5.0.13:
-    resolution: {integrity: sha512-efI2tVaVQPqtOh114loML/Z80Y4NP3yc+Ff0fYiZJPauNeWZeIp/bRFD7I9bfmCOYBh/PHxlglQ9+wvlwnPikQ==}
-    engines: {node: '>=12.20.0'}
-    peerDependencies:
-      '@types/react': '>=18.0.0'
-      immer: 11.1.9
-      react: '>=18.0.0'
-      use-sync-external-store: '>=1.2.0'
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-      immer:
-        optional: true
-      react:
-        optional: true
-      use-sync-external-store:
         optional: true
 
   zwitch@2.0.4:
@@ -60679,12 +60655,5 @@ snapshots:
       '@types/react': 19.2.17
       immer: 11.1.9
       react: 19.2.7
-
-  zustand@5.0.13(@types/react@19.2.17)(immer@11.1.9)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7)):
-    optionalDependencies:
-      '@types/react': 19.2.17
-      immer: 11.1.9
-      react: 19.2.7
-      use-sync-external-store: 1.6.0(react@19.2.7)
 
   zwitch@2.0.4: {}

@@ -1,7 +1,6 @@
 import type { FavoriteToggleResponse, StoredAgentResponse, ListStoredAgentsResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 type FavoriteContext = {
   previousDetail?: StoredAgentResponse | null;
@@ -24,13 +23,12 @@ const applyFavoriteToAgent = (agent: StoredAgentResponse, favorited: boolean): S
 export const useToggleStoredAgentFavorite = (agentId?: string) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<FavoriteToggleResponse, Error, { favorited: boolean }, FavoriteContext>({
     mutationFn: async ({ favorited }) => {
       if (!agentId) throw new Error('agentId is required to toggle favorite');
       const resource = client.getStoredAgent(agentId);
-      return favorited ? resource.favorite(requestContext) : resource.unfavorite(requestContext);
+      return favorited ? resource.favorite() : resource.unfavorite();
     },
     onMutate: async ({ favorited }) => {
       if (!agentId) return { previousLists: [] };

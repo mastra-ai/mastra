@@ -104,7 +104,6 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
         ...fileEntries('src/lib/keyboard', 'keyboard'),
         'lib/springs': resolve(srcDir, 'lib/springs.ts'),
         ...fileEntries('src/components', 'components'),
-        ...fileEntries('src/store', 'store'),
         ...fileEntries('src/ds/icons', 'icons'),
         ...fileEntries('src/hooks', 'hooks'),
         ...componentEntries('src/ds/components', 'components'),

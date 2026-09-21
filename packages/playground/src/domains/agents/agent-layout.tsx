@@ -1,5 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { RequestContextProvider } from '@mastra/playground-ui/domains/request-context';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useParams, useLocation, useNavigate } from 'react-router';
@@ -15,7 +16,6 @@ import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { cleanProviderId } from '@/domains/llm/utils';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 /** Shadows the global "go to" sequences with agent-scoped targets while an agent page is mounted. */
@@ -27,6 +27,17 @@ const AgentShortcuts = ({ agentId }: { agentId: string }) => {
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
+
+  return (
+    <TracingSettingsProvider entityId={agentId!} entityType="agent">
+      <RequestContextProvider key={agentId} entityKey={`agent:${agentId}`}>
+        <AgentLayoutContent agentId={agentId!}>{children}</AgentLayoutContent>
+      </RequestContextProvider>
+    </TracingSettingsProvider>
+  );
+};
+
+const AgentLayoutContent = ({ agentId, children }: { agentId: string; children: React.ReactNode }) => {
   const location = useLocation();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { hasObservability } = useHasObservability();
@@ -71,16 +82,12 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   );
 
   return (
-    <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <SchemaRequestContextProvider>
-        <PlaygroundModelProvider
-          key={`${agentId}:${defaultProvider}/${defaultModel}`}
-          defaultProvider={defaultProvider}
-          defaultModel={defaultModel}
-        >
-          {content}
-        </PlaygroundModelProvider>
-      </SchemaRequestContextProvider>
-    </TracingSettingsProvider>
+    <PlaygroundModelProvider
+      key={`${agentId}:${defaultProvider}/${defaultModel}`}
+      defaultProvider={defaultProvider}
+      defaultModel={defaultModel}
+    >
+      {content}
+    </PlaygroundModelProvider>
   );
 };

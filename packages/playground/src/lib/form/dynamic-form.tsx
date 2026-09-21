@@ -119,33 +119,52 @@ export function DynamicForm({
     return new CustomZodProvider(normalizeSchema(schema));
   }, [schema, isNotZodObject]);
 
+  // SubmitButton is handed to AutoForm as a component. Its identity must stay stable
+  // across re-renders, otherwise React remounts the whole submit row (closing any
+  // popover rendered in submitActions/leftActions). Read live props through a ref
+  // instead of recreating the component when they change.
+  const submitPropsRef = useRef({
+    onSubmit,
+    isSubmitLoading,
+    submitButtonLabel,
+    submitButtonIcon,
+    submitButtonVariant,
+    submitButtonFullWidth,
+    submitActions,
+    leftActions,
+  });
+  submitPropsRef.current = {
+    onSubmit,
+    isSubmitLoading,
+    submitButtonLabel,
+    submitButtonIcon,
+    submitButtonVariant,
+    submitButtonFullWidth,
+    submitActions,
+    leftActions,
+  };
+
   const uiComponents = useMemo(
     () => ({
-      SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
-        onSubmit ? (
+      SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) => {
+        const p = submitPropsRef.current;
+        if (!p.onSubmit) return null;
+        return (
           <FormSubmitRow
-            isSubmitLoading={isSubmitLoading}
-            submitButtonLabel={submitButtonLabel}
-            submitButtonIcon={submitButtonIcon}
-            submitButtonVariant={submitButtonVariant}
-            submitButtonFullWidth={submitButtonFullWidth}
-            submitActions={submitActions}
-            leftActions={leftActions}
+            isSubmitLoading={p.isSubmitLoading}
+            submitButtonLabel={p.submitButtonLabel}
+            submitButtonIcon={p.submitButtonIcon}
+            submitButtonVariant={p.submitButtonVariant}
+            submitButtonFullWidth={p.submitButtonFullWidth}
+            submitActions={p.submitActions}
+            leftActions={p.leftActions}
           >
             {buttonChildren}
           </FormSubmitRow>
-        ) : null,
+        );
+      },
     }),
-    [
-      onSubmit,
-      isSubmitLoading,
-      submitButtonLabel,
-      submitButtonIcon,
-      submitButtonVariant,
-      submitButtonFullWidth,
-      submitActions,
-      leftActions,
-    ],
+    [],
   );
 
   const formComponents = useMemo(

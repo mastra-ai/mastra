@@ -92,8 +92,7 @@
     "superjson": "^2.2.6",
     "use-debounce": "^10.1.0",
     "zod": "^3.25.0",
-    "zod-v4": "npm:zod@^4.6.4",
-    "zustand": "^5.0.12"
+    "zod-v4": "npm:zod@^4.6.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

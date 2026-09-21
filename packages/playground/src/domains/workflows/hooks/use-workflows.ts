@@ -1,15 +1,13 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useWorkflows = (options?: { enabled?: boolean }) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['workflows', requestContext],
+    queryKey: ['workflows'],
     queryFn: async () => {
-      const workflows = await client.listWorkflows(requestContext);
+      const workflows = await client.listWorkflows();
       // Filter out processor workflows - they're shown on the Processors tab instead
       return Object.fromEntries(Object.entries(workflows).filter(([_, workflow]) => !workflow.isProcessorWorkflow));
     },

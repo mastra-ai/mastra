@@ -14,6 +14,7 @@ import {
   AgentChatLoadingSkeleton,
   AgentSidebarLoadingSkeleton,
 } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentRunOptions } from '@/domains/agents/components/agent-run-options';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
 import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
@@ -176,6 +177,12 @@ function AgentThread() {
                             messageId={messageId}
                             suggestedPrompts={suggestedPrompts}
                             isNewThread={isNewThread}
+                            runOptionsSlot={
+                              <AgentRunOptions
+                                triggerVariant="icon"
+                                requestContextSchema={agent?.requestContextSchema}
+                              />
+                            }
                           />
                         </div>
                       </div>

@@ -1,4 +1,5 @@
 import type { GetWorkflowResponse, TimeTravelParams } from '@mastra/client-js';
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useCallback, useContext, useMemo } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
@@ -17,7 +18,6 @@ import {
 } from './utils';
 import { WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
 import type { ResumeStepParams } from './workflow-suspended-steps';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface SuspendedStep {
@@ -101,7 +101,7 @@ export function useWaitingStepKey(): string | undefined {
 export function useNextPerStep() {
   const { result, runId, workflowId, workflow, payload, setDebugMode, timeTravelWorkflowStream } =
     useContext(WorkflowRunContext);
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   const { stepsFlow, stepNodesInOrder, nestedWorkflowStepIds, conditionalStepIds, stepSuccessors } =
     useWorkflowStepGraphInfo(workflow?.stepGraph);
@@ -190,7 +190,7 @@ export function useNextPerStep() {
 
 export function useResumeWorkflow() {
   const { workflowId, workflow, createWorkflowRun, resumeWorkflow } = useContext(WorkflowRunContext);
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   return useCallback(
     async (step: ResumeStepParams) => {

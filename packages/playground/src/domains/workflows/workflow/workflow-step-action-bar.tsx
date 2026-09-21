@@ -13,12 +13,12 @@ import {
   WorkflowStepAction,
 } from '@mastra/playground-ui/components/Workflow';
 
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useContext, useMemo, useState } from 'react';
 import type { TripwireData } from '../context/use-current-run';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface WorkflowStepActionBarProps {
   resumeData?: any;
@@ -63,7 +63,7 @@ export const WorkflowStepActionBar = ({
     setDebugMode,
   } = useContext(WorkflowRunContext);
   const { showMapConfig, stepDetail, closeStepDetail } = useWorkflowStepDetail();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   const workflowStatus = result?.status ?? runSnapshot?.status;
 

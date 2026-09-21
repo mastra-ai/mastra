@@ -1,10 +1,10 @@
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { RequestContextProvider } from '@mastra/playground-ui/domains/request-context';
 import { useParams } from 'react-router';
 import { WorkflowHeader } from './workflow-header';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { WorkflowInformation } from '@/domains/workflows/components/workflow-information';
 import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/components/workflow-layout';
 import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-provider';
@@ -49,7 +49,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
 
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
-      <SchemaRequestContextProvider>
+      <RequestContextProvider key={workflowId} entityKey={`workflow:${workflowId}`}>
         <WorkflowStepDetailProvider key={workflowId}>
           <WorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
             <WorkflowSelectedStepProvider>
@@ -62,7 +62,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
             </WorkflowSelectedStepProvider>
           </WorkflowRunProvider>
         </WorkflowStepDetailProvider>
-      </SchemaRequestContextProvider>
+      </RequestContextProvider>
     </TracingSettingsProvider>
   );
 }

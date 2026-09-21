@@ -1,4 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
+import { RequestContextSchemaFormRendererProvider } from '@mastra/playground-ui/domains/request-context';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
@@ -76,7 +77,6 @@ import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import PromptBlocks from './pages/prompt-blocks';
-import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
@@ -116,6 +116,7 @@ import {
   WorkflowRunCrumb,
   WorkflowSwitcherAction,
 } from '@/domains/workflows/workflow-crumbs';
+import { RequestContextSchemaFormRenderer } from '@/lib/form/request-context-schema-form-renderer';
 import { LinkComponentProvider } from '@/lib/framework';
 import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
 import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
@@ -730,7 +731,6 @@ export const routes: RouteObject[] = [
         element: <StudioIndexRedirect />,
         handle: { crumbs: [{ id: 'home', label: 'Home' }] },
       },
-      { path: '/request-context', element: <RequestContext />, handle: navHandle('/request-context') },
     ],
   },
 ];
@@ -761,9 +761,11 @@ function App() {
     <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
       <RoleImpersonationProvider>
         <PostHogProvider>
-          <RoutePermissionsGate baseUrl={baseUrl}>
-            <RouterProvider router={router} />
-          </RoutePermissionsGate>
+          <RequestContextSchemaFormRendererProvider render={RequestContextSchemaFormRenderer}>
+            <RoutePermissionsGate baseUrl={baseUrl}>
+              <RouterProvider router={router} />
+            </RoutePermissionsGate>
+          </RequestContextSchemaFormRendererProvider>
         </PostHogProvider>
       </RoleImpersonationProvider>
     </MastraReactProvider>

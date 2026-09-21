@@ -22,6 +22,7 @@ import {
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -44,7 +45,6 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
@@ -139,7 +139,7 @@ export const Thread = ({
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useOptionalRequestContext();
   const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
 
   const { hasSession, viewMode } = useBrowserSession();
@@ -359,7 +359,7 @@ const AgentComposer = ({
 };
 
 const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useOptionalRequestContext();
   const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
 
   useEffect(() => {
