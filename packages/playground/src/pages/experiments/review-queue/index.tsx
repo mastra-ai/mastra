@@ -8,7 +8,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
-import { DatasetReview } from '@/domains/review/components/dataset-review';
+import { DatasetReview, type ReviewListFilters } from '@/domains/review/components/dataset-review';
 import { ReviewQueueFilterBar, type ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
 import { TARGET_ID_PARAM, TARGET_TYPE_PARAM } from '@/domains/shared/hooks/use-target-filter-params';
 import { useLinkComponent } from '@/lib/framework';
@@ -33,7 +33,9 @@ function ReviewQueuePage() {
   const { data, error } = useExperimentsForDatasetFilter(undefined, { targetType, targetId });
   const selected = data?.experiments.find(experiment => experiment.id === selectedId);
 
-  const handleFiltersChange = (next: ReviewQueueFilters) => {
+  const handleFiltersChange = (next: ReviewQueueFilters, list: ReviewListFilters) => {
+    if (next.status !== list.status) list.onStatusChange(next.status);
+    if (next.tag !== list.tag) list.onTagChange(next.tag);
     setSearchParams(
       prev => {
         const params = new URLSearchParams(prev);
@@ -90,15 +92,18 @@ function ReviewQueuePage() {
         targetType={targetType}
         targetId={targetId}
         featuredItemId={featuredResultId}
-        toolbarStart={
+        renderFilters={list => (
           <ReviewQueueFilterBar
             targetType={targetType}
             targetId={targetId}
             experimentId={selectedId ?? ''}
+            status={list.status}
+            tag={list.tag}
             experiments={data?.experiments ?? []}
-            onChange={handleFiltersChange}
+            tagOptions={list.tagOptions}
+            onChange={next => handleFiltersChange(next, list)}
           />
-        }
+        )}
         toolbarEnd={
           selectedId ? (
             <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>

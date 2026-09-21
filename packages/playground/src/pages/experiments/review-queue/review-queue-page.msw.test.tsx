@@ -78,16 +78,17 @@ const getChips = () => document.querySelectorAll<HTMLElement>('[data-slot="filte
 const typeFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
 const pressFilterKey = (key: string) => fireEvent.keyDown(getFilterInput(), { key });
 
-/** Builds an `Experiment is <name>` filter through the typeahead input. */
-const pickExperiment = async (name: string) => {
+/** Builds a `<field> is <value>` filter through the typeahead input. */
+const pickFilter = async (field: string, value: string) => {
   getFilterInput().focus();
-  typeFilter('experiment');
-  await screen.findByRole('option', { name: 'Experiment' });
+  typeFilter(field);
+  await screen.findByRole('option', { name: field });
   pressFilterKey('Enter');
-  typeFilter(name);
-  await screen.findByRole('option', { name });
+  typeFilter(value);
+  await screen.findByRole('option', { name: value });
   pressFilterKey('Enter');
 };
+const pickExperiment = (name: string) => pickFilter('Experiment', name);
 
 const renderPage = (search = '') => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -179,6 +180,53 @@ describe('Review Queue page', () => {
       await waitFor(() => expect(router.state.location.search).toBe(''));
       await screen.findByText(/third question/);
       await screen.findByText(/other question/);
+    });
+  });
+
+  describe('when the user picks the "Completed" status', () => {
+    it('shows reviewed items instead of the queue, as a Status chip', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) =>
+          HttpResponse.json({
+            results: params.experimentId === EXPERIMENT_ID ? [results[2], { ...results[0], status: 'complete' }] : [],
+            pagination: { total: 2, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderPage();
+
+      await screen.findByText(/third question/);
+      expect(screen.queryByText(/first question/)).toBeNull();
+
+      await pickFilter('Status', 'Completed');
+
+      await screen.findByRole('group', { name: 'Status Completed' });
+      await screen.findByText(/first question/);
+      expect(screen.queryByText(/third question/)).toBeNull();
+    });
+  });
+
+  describe('when the user picks a tag', () => {
+    it('narrows the queue to items carrying that tag', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) =>
+          HttpResponse.json({
+            results:
+              params.experimentId === EXPERIMENT_ID ? [results[2], { ...results[1], status: 'needs-review' }] : [],
+            pagination: { total: 2, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderPage();
+
+      await screen.findByText(/third question/);
+      await screen.findByText(/second question/);
+
+      await pickFilter('Tag', 'alpha');
+
+      await screen.findByRole('group', { name: 'Tag alpha' });
+      await waitFor(() => expect(screen.queryByText(/third question/)).toBeNull());
+      expect(screen.getByText(/second question/)).toBeTruthy();
     });
   });
 
