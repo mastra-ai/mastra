@@ -1,8 +1,8 @@
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAgentVersions } from '../hooks/use-agent-versions';
 

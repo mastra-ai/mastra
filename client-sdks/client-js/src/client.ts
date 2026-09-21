@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import {
   Agent,
   MemoryThread,
+  memoryMessagesQuery,
   Tool,
   Processor,
   Workflow,
@@ -143,6 +144,7 @@ import type {
   SaveScoreResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
+  ListMemoryThreadMessagesParams,
   ListMemoryThreadMessagesResponse,
   MemorySearchResponse,
   ListAgentsModelProvidersResponse,
@@ -429,25 +431,16 @@ export class MastraClient extends BaseResource {
    */
   public listThreadMessages(
     threadId: string,
-    opts: {
-      agentId?: string;
-      networkId?: string;
-      requestContext?: RequestContext | Record<string, any>;
-      includeSystemReminders?: boolean;
-    } = {},
+    opts: ListMemoryThreadMessagesParams = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    let url = '';
-    const includeSystemRemindersQuery =
-      opts.includeSystemReminders === undefined ? '' : `includeSystemReminders=${opts.includeSystemReminders}`;
-
     if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '&')}`;
-    } else if (opts.agentId) {
-      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, '&')}`;
-    } else {
-      url = `/memory/threads/${threadId}/messages${includeSystemRemindersQuery ? `?${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '?')}`;
+      const query = memoryMessagesQuery(opts);
+      query.set('networkId', opts.networkId);
+      return this.request(
+        `/memory/network/threads/${threadId}/messages?${query.toString()}${requestContextQueryString(opts.requestContext, '&')}`,
+      );
     }
-    return this.request(url);
+    return this.getMemoryThread({ threadId, agentId: opts.agentId }).listMessages(opts);
   }
 
   public deleteThread(

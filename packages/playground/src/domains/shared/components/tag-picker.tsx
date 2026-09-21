@@ -1,8 +1,8 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus, X } from 'lucide-react';
 import { useState, useRef } from 'react';

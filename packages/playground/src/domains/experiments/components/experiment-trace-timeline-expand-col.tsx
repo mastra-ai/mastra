@@ -1,5 +1,5 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDownIcon, ChevronsDownIcon, ChevronsUpIcon, ChevronUpIcon } from 'lucide-react';
 
 type ExperimentTraceTimelineExpandColProps = {

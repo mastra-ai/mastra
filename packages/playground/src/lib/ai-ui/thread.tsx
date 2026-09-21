@@ -13,7 +13,6 @@ import {
 } from '@mastra/playground-ui/components/Composer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import {
   buildThreadRailTurns,
   getClientMessageKey,
@@ -22,6 +21,7 @@ import {
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -122,6 +122,8 @@ export interface ThreadProps {
    * only replaces the welcome screen; live messages that arrive earlier take precedence.
    */
   isHistoryLoading?: boolean;
+  onLoadPrevious?: () => void | Promise<void>;
+  isLoadingPrevious?: boolean;
 }
 
 export const Thread = ({
@@ -134,6 +136,8 @@ export const Thread = ({
   runOptionsSlot,
   refreshThreadList,
   isHistoryLoading,
+  onLoadPrevious,
+  isLoadingPrevious,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -161,11 +165,29 @@ export const Thread = ({
 
   return (
     <ComposerAttachmentsProvider>
-      <ChatShell className="h-full" scroller={{ defaultScrollPosition: 'last-anchor' }} data-testid="thread-wrapper">
+      <ChatShell
+        className="h-full"
+        scroller={{
+          defaultScrollPosition: 'last-anchor',
+          onReachStart: onLoadPrevious,
+          preserveScrollOnPrepend: Boolean(onLoadPrevious),
+        }}
+        data-testid="thread-wrapper"
+      >
         <ChatShell.Stage>
           <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
             <ThreadRailLayer turns={threadRailTurns} />
             <ChatShell.Content>
+              {isLoadingPrevious && (
+                <ChatShell.Column
+                  data-testid="thread-history-older-skeleton"
+                  aria-busy="true"
+                  aria-label="Loading older messages"
+                  className="py-3"
+                >
+                  <ChatMessagesLoadingSkeleton />
+                </ChatShell.Column>
+              )}
               {isEmpty && isHistoryLoading ? (
                 <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
                   <ChatMessagesLoadingSkeleton />

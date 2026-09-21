@@ -2,10 +2,10 @@ import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog
 import * as React from 'react';
 
 import { buttonVariants } from '@/ds/components/Button/Button';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import '@/ds/components/Dialog/dialog.css';
 
 const AlertDialogRoot = AlertDialogPrimitive.Root;
@@ -92,7 +92,7 @@ const AlertDialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDiv
 AlertDialogFooter.displayName = 'AlertDialogFooter';
 
 const AlertDialogBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('max-h-[50vh] overflow-y-auto px-3 py-3', className)} {...props} />
+  <div className={cn('max-h-[50vh] overflow-y-auto p-3', className)} {...props} />
 );
 AlertDialogBody.displayName = 'AlertDialogBody';
 

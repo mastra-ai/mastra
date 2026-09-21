@@ -30,8 +30,6 @@ const inputGroupBaseClassName = cn(
   '[&>[data-slot=input-group-control]]:min-w-0 [&>[data-slot=input-group-control]]:flex-1',
   'text-foreground',
   'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-muted-foreground',
-  // Invalid is per variant: the field material has no border to recolour, and the
-  // outline variant has no rim.
   // Height is on the root (border-box) so the group matches a same-size sibling control.
   // Auto height when vertical (block-* addon) or wrapping a textarea.
   'has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col',
@@ -69,6 +67,7 @@ const inputGroupVariants = cva(inputGroupBaseClassName, {
       default: inputGroupFilledVariant,
       outline: cn(
         'rounded-full border border-border-strong bg-transparent',
+        'has-[:disabled]:border-border has-[:disabled]:bg-fill-subtle',
         'has-[[aria-invalid=true]]:border-destructive',
         inputHoverBorderWithin,
         'outline-hidden focus-within:outline-hidden',

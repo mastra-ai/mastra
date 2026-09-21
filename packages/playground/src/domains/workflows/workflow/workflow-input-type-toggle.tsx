@@ -1,8 +1,8 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Braces, FormInput } from 'lucide-react';
 
 export type WorkflowInputType = 'simple' | 'form' | 'json';

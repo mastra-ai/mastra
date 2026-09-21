@@ -6,8 +6,8 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
 import { Braces, Wrench, Cpu } from 'lucide-react';

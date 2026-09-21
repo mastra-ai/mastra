@@ -2,8 +2,8 @@ import { PanelRightIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { Kbd } from '@/ds/components/Kbd';
-import { focusRing } from '@/ds/primitives/transitions';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarTriggerProps = ComponentPropsWithoutRef<'button'>;

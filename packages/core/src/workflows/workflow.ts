@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
@@ -2088,7 +2087,7 @@ export class Workflow<
   ) {
     const id =
       options?.id ||
-      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep' }) || randomUUID()}`;
+      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep' }) || globalThis.crypto.randomUUID()}`;
     // Only the display fields: `id` is spelled explicitly from the normalized
     // value above, so a falsy caller id can never override the generated one.
     const displayFields = toEntryOptionFields({ description: options?.description, metadata: options?.metadata });
@@ -2138,7 +2137,7 @@ export class Workflow<
   ) {
     const id =
       options?.id ||
-      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep-until' }) || randomUUID()}`;
+      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep-until' }) || globalThis.crypto.randomUUID()}`;
     // Only the display fields: `id` is spelled explicitly from the normalized
     // value above, so a falsy caller id can never override the generated one.
     const displayFields = toEntryOptionFields({ description: options?.description, metadata: options?.metadata });
@@ -2732,7 +2731,7 @@ export class Workflow<
         entityId: this.id,
         resourceId: options?.resourceId,
       }) ||
-      randomUUID();
+      globalThis.crypto.randomUUID();
 
     // Return a new Run instance with object parameters
     const run =

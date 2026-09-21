@@ -8,8 +8,8 @@ import type { DialogIntent, DialogVariant } from './dialog-context';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { asChildRenderProps } from '@/lib/as-child';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 import './dialog.css';

@@ -2,8 +2,8 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { forwardRef } from 'react';
 import { useMaybeSidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
 import type { SidebarState } from '@/ds/components/MainSidebar/main-sidebar-context';
-import type { LinkComponent } from '@/ds/types/link-component';
 import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export type SidebarNewMeterTone = 'neutral' | 'warning' | 'danger';
@@ -146,7 +146,7 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       >
         <Bloom tone={tone} />
         {href ? <Link href={href} className="absolute inset-0 rounded-lg" aria-label={linkLabel} /> : null}
-        <span className="text-meta text-foreground pointer-events-none relative tabular-nums">{value}</span>
+        <span className="pointer-events-none relative text-meta text-foreground tabular-nums">{value}</span>
       </div>
     );
   }
@@ -175,10 +175,10 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
           {action ? <span className="pointer-events-auto">{action}</span> : null}
         </div>
 
-        <p className="text-heading text-foreground mt-0.5 leading-tight tabular-nums">{value}</p>
+        <p className="mt-0.5 text-heading leading-tight text-foreground tabular-nums">{value}</p>
 
         {status ? (
-          <div className="text-meta mt-1">
+          <div className="mt-1 text-meta">
             <p className={cn('truncate', current.text)}>{status}</p>
           </div>
         ) : null}

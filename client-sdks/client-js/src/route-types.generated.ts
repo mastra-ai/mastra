@@ -8517,6 +8517,10 @@ export type GetMemoryThreadsThreadIdMessages_QueryParams = {
 export type GetMemoryThreadsThreadIdMessages_Response = {
   messages: unknown[];
   uiMessages: unknown[] | null;
+  total?: number | undefined;
+  page?: number | undefined;
+  perPage?: (number | false) | undefined;
+  hasMore?: boolean | undefined;
 };
 
 export type GetMemoryThreadsThreadIdMessages_Request = Simplify<

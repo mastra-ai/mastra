@@ -19,9 +19,9 @@ import {
   isUserSignalType,
   toReactiveSignalData,
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MastraDBMessageMetadata, RequireApprovalEntry } from '@mastra/react';
 import { MessageFactory } from '@mastra/react/ui';

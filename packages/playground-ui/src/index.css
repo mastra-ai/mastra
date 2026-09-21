@@ -204,3 +204,44 @@
 .animate-row-highlight {
   animation: fade-row-highlight 2000ms ease-out forwards;
 }
+
+/* Sort arrows are "drawn" in their pointing direction: asc reveals from the
+   bottom up, desc from the top down. */
+@keyframes sort-arrow-reveal-up {
+  0% {
+    clip-path: inset(100% 0 0 0);
+    transform: translateY(20%);
+  }
+
+  100% {
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes sort-arrow-reveal-down {
+  0% {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-20%);
+  }
+
+  100% {
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
+
+.animate-sort-arrow-up {
+  animation: sort-arrow-reveal-up 200ms var(--ease-out-custom) both;
+}
+
+.animate-sort-arrow-down {
+  animation: sort-arrow-reveal-down 200ms var(--ease-out-custom) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sort-arrow-up,
+  .animate-sort-arrow-down {
+    animation: none;
+  }
+}

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
 import { Txt } from '../components/Txt/Txt';
+import { cn } from '@/lib/utils';
 
 // Shared shell for the foundation stories, so the whole token guideline reads
 // as one document: a page header, sections built from a label column plus a
@@ -27,7 +27,7 @@ export const FoundationPage = ({
   noteAside,
   children,
 }: FoundationPageProps) => (
-  <div className="bg-background max-w-320 px-5 sm:px-8">
+  <div className="max-w-320 bg-background px-5 sm:px-8">
     <header
       className={cn(
         'grid gap-5 border-y border-border py-6 sm:py-8',

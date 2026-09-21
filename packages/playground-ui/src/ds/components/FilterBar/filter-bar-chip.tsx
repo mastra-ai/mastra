@@ -33,14 +33,14 @@ import { cn } from '@/lib/utils';
 
 // `filter-bar-segment` carries the left-to-right entrance (see filter-bar-chip.css).
 export const segmentClass = cn(
-  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-caption whitespace-nowrap outline-none',
+  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-label whitespace-nowrap outline-none',
   'first:rounded-l-full last:rounded-r-full',
 );
 
-// A chip shares the `sm` control height (border-box, like the typeahead pill beside it).
+// A chip shares the `md` control height (border-box, like the typeahead pill beside it and the default Button).
 export const chipClass = cn(
   'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border rounded-full border border-border bg-fill text-foreground',
-  controlHeight.sm,
+  controlHeight.md,
 );
 
 export const editableSegmentClass = cn(
