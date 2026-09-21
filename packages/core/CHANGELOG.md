@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.68.0-alpha.10
+
+### Patch Changes
+
+- Improved runtime portability by using Web Crypto for cryptographic operations that do not require changes to existing synchronous APIs. ([#24369](https://github.com/mastra-ai/mastra/pull/24369))
+
 ## 1.68.0-alpha.9
 
 ### Patch Changes
