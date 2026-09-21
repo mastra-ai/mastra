@@ -1221,11 +1221,6 @@ export const mastra = new Mastra({
             `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
           );
 
-          const mastraConfigPath = join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
-          const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
-          // Exercise workspace resolution rather than bypassing it through explicit externals.
-          await writeFile(mastraConfigPath, mastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'));
-
           const transitiveDependencyPath = join(isolatedFixturePath, 'packages', 'transitive-c', 'src', 'index.js');
           const transitiveDependencySource = await readFile(transitiveDependencyPath, 'utf-8');
           await writeFile(
