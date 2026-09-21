@@ -735,6 +735,267 @@ describe('Session.message() — default path', () => {
     expect(intent?.terminalResult).toMatchObject({ status: 'completed' });
   });
 
+  it('rejects a terminal admission that would fold into an active run', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    let releaseRun!: () => void;
+    const runGate = new Promise<void>(resolve => {
+      releaseRun = resolve;
+    });
+    agent.enqueueRun({ holdUntil: runGate, text: 'first done' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const first = session.message({ content: 'first', admissionId: 'first-run' });
+    await vi.waitFor(() => expect(agent.streamCalls).toHaveLength(1));
+
+    // The admission binds its grant to a fresh run — folding into the live one
+    // would leave the grant keyed to a runId that never owns its settlement.
+    await expect(
+      session.message({
+        content: 'fold me',
+        admissionId: 'fold-admission',
+        executionAuthorityGrant: { key: 'usage-claim-fold', generation: 1 },
+        terminalAdmissionSeed: { v: 1 },
+      }),
+    ).rejects.toBeInstanceOf(HarnessConfigError);
+    expect(agent.streamCalls).toHaveLength(1);
+
+    releaseRun();
+    await expect(first).resolves.toMatchObject({ text: 'first done' });
+  });
+
+  it('replays the durable receipt to a settled retry’s terminal observer', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const { harness, agent } = setupHarness({
+      agents: { default: new MockAgent({ id: 'default', defaultOutput: { text: 'done' } }) },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-replay', generation: 1 };
+    const opts = {
+      content: 'once',
+      admissionId: 'replay-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    } as const;
+    await session.message({ ...opts });
+
+    const receipts: string[] = [];
+    const retry = await session.message({ ...opts, onTerminalCommit: r => receipts.push(r.status) });
+    expect(retry.text).toBe('done');
+    expect(receipts).toEqual(['duplicate']);
+    expect(agent.streamCalls).toHaveLength(1);
+  });
+
+  it('notifies a live stream duplicate’s terminal observers when the winner commits', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    let releaseRun!: () => void;
+    const runGate = new Promise<void>(resolve => {
+      releaseRun = resolve;
+    });
+    agent.enqueueRun({ holdUntil: runGate, text: 'streamed done' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-stream', generation: 1 };
+    const opts = {
+      content: 'stream go',
+      admissionId: 'stream-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      stream: true,
+    } as const;
+    const first = await session.message({ ...opts });
+    await vi.waitFor(() => expect(agent.streamCalls).toHaveLength(1));
+
+    const receipts: string[] = [];
+    const duplicate = await session.message({ ...opts, onTerminalCommit: r => receipts.push(r.status) });
+    expect(duplicate).toBe(first);
+
+    releaseRun();
+    await vi.waitFor(() => expect(receipts.length).toBeGreaterThan(0));
+    expect(receipts[0]).toBe('committed');
+  });
+
+  it('re-drives dispatch when the admission row exists but no run ever started', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default', defaultOutput: { text: 'recovered' } });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-lost-ack', generation: 1 };
+    const opts = {
+      content: 'lost ack',
+      admissionId: 'lost-ack-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    } as const;
+
+    // The first attempt persists the admission row, then dies inside dispatch
+    // before a run ever starts — the stranded state the retry must recover.
+    const sendSpy = vi.spyOn(agent, 'sendSignal').mockImplementationOnce(() => {
+      throw new Error('dispatch acknowledgement lost');
+    });
+    await expect(session.message({ ...opts })).rejects.toBeTruthy();
+    sendSpy.mockRestore();
+    const pending = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'lost-ack-admission',
+      executionGrant: grant,
+    });
+    expect(pending?.status).toBe('pending');
+    expect(agent.streamCalls).toHaveLength(0);
+
+    const second = await session.message({ ...opts });
+    expect(second.text).toBe('recovered');
+    expect(agent.streamCalls).toHaveLength(1);
+    const committed = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'lost-ack-admission',
+      executionGrant: grant,
+    });
+    expect(committed?.status).toBe('committed');
+  });
+
+  it('keeps resume recovery state when resumed terminal settlement fails', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'resumed answer' });
+    let finalizeAttempts = 0;
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => {
+              finalizeAttempts += 1;
+              if (finalizeAttempts === 1) throw new Error('transient finalizer failure');
+              return {
+                projectionKind: 'chat.summary',
+                projectionId: 'response-1',
+                payload: {},
+              };
+            },
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-resume-fail', generation: 1 };
+    const result = await session.message({
+      content: 'needs approval',
+      admissionId: 'resume-fail-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(result.finishReason).toBe('suspended');
+
+    // The deferred commit fails — the pending resume state must survive so a
+    // later approval (after the stale-admission recovery window) can still
+    // reach the settlement. If the flush had already cleared pendingResume and
+    // marked the response applied, the admission would be stranded forever.
+    await expect(session.respondToToolApproval({ approved: true })).rejects.toBeTruthy();
+    const admission = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'resume-fail-admission',
+      executionGrant: grant,
+    });
+    expect(admission?.status).toBe('pending');
+    const record = await storage.loadSession({ harnessName: 'default', sessionId: session.id });
+    expect(record?.pendingResume).toBeDefined();
+    expect(record?.pendingResume?.runId).toBe(admission!.runId);
+  });
+
   it('binds logical identity to the admitted message hash', async () => {
     const { harness, agent } = setup();
     const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });

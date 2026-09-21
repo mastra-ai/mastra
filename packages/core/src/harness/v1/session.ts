@@ -682,6 +682,7 @@ const ASK_USER_TOOL_NAME = ASK_USER_TOOL_ID;
 const SUBMIT_PLAN_TOOL_NAME = SUBMIT_PLAN_TOOL_ID;
 const MESSAGE_ADMISSION_DURABLE_WAIT_TIMEOUT_MS = 30_000;
 const MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS = 100;
+const MESSAGE_ADMISSION_DURABLE_WAIT_EXTENDED_INTERVAL_MS = 1_000;
 const SIGNAL_DISPATCH_CLAIM_TTL_MS = 30_000;
 const SIGNAL_DISPATCH_CLAIM_RENEW_MS = 10_000;
 const SIGNAL_ACCEPTED_RECOVERY_STALE_MS = 30_000;
@@ -1839,6 +1840,22 @@ export class Session {
   private readonly _messageAdmissionStarts = new Map<string, MessageAdmissionStart>();
   /** Serializes terminal evidence + event projection for one admitted signal. */
   private readonly _signalResultSettlements = new Map<string, Promise<AgentSignalResultEvidence | undefined>>();
+  /**
+   * Receipt/failure observers registered for terminal admissions that have not
+   * settled yet, keyed by the admission's run id. Populated by callers whose
+   * own `message()` invocation cannot await the commit barrier — a suspended
+   * run's settlement is deferred to resume, and a duplicate that returns a live
+   * stream leaves settlement to the winner. `_commitTerminalHandoff` drains the
+   * list when the admission commits or fails so every observer sees the durable
+   * outcome exactly once.
+   */
+  private readonly _terminalObserversByRunId = new Map<
+    string,
+    {
+      onReceipt?: (receipt: HarnessTerminalCommitReceipt) => void;
+      onFailure?: (error: HarnessTerminalHandoffError) => void;
+    }[]
+  >();
   private _eventPersistenceTail: Promise<void> = Promise.resolve();
   /** HARD latch — unrecoverable durable-log failure (id unparseable, or §S4.1 backlog overflow). */
   private _eventPersistenceError: unknown;
@@ -7881,7 +7898,7 @@ export class Session {
     // letting the native default active-delivery policy silently drop the
     // response identity. Idempotent retries still attach to their durable
     // duplicate before this guard rejects new work.
-    if (logicalMessageIdentity !== undefined && sub.activeRunId() !== null) {
+    if ((logicalMessageIdentity !== undefined || terminalIdentity !== undefined) && sub.activeRunId() !== null) {
       const duplicate = duplicateProbe !== undefined ? await duplicateProbe.catch(() => undefined) : undefined;
       if (duplicate) {
         if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
@@ -7893,8 +7910,10 @@ export class Session {
         }
       }
       const err = new HarnessConfigError(
-        'message().logicalMessageIdentity',
-        'a full logical message identity cannot be delivered into an active run',
+        logicalMessageIdentity !== undefined ? 'message().logicalMessageIdentity' : 'message().executionAuthorityGrant',
+        logicalMessageIdentity !== undefined
+          ? 'a full logical message identity cannot be delivered into an active run'
+          : 'a native terminal admission must own a fresh run; it cannot be delivered into an active run',
       );
       failOwnedMessageTurnBeforeDispatch(err);
       throw err;
@@ -7932,21 +7951,33 @@ export class Session {
           if (existing) {
             admissionStart.resolve(existing);
             // The original attempt may have died after the durable reservation
-            // but before terminal admission/dispatch. Retrying through the
-            // duplicate path would wait on a settlement that can never arrive,
-            // so re-drive the admission and fall through into dispatch.
-            const terminalAdmissionMissing =
+            // but before terminal admission/dispatch — or admitted the row and
+            // then lost the dispatch acknowledgement before a run ever
+            // started. An admission row alone is not proof that a run is
+            // driving settlement, so when the admission is missing entirely or
+            // still pending behind a run that is not live, fall through to
+            // re-drive the admission and dispatch instead of waiting on a
+            // settlement that cannot arrive. sendSignal dedupes the identical
+            // signal id if the earlier dispatch did land.
+            const probedTerminalAdmission =
               terminalIdentity !== undefined &&
               this._terminalFinalizer !== undefined &&
               'status' in existing &&
-              existing.status === 'pending' &&
-              (await this._storage.loadTerminalAdmission({
-                harnessName: this._record.harnessName,
-                sessionId: this.id,
-                admissionId: opts.admissionId!,
-                executionGrant: opts.executionAuthorityGrant!,
-              })) === null;
-            if (!terminalAdmissionMissing) {
+              existing.status === 'pending'
+                ? await this._storage.loadTerminalAdmission({
+                    harnessName: this._record.harnessName,
+                    sessionId: this.id,
+                    admissionId: opts.admissionId!,
+                    executionGrant: opts.executionAuthorityGrant!,
+                  })
+                : undefined;
+            const existingRunId = (existing as AgentSignalResultEvidence).runId;
+            const strandedPendingTerminal =
+              probedTerminalAdmission !== undefined &&
+              (probedTerminalAdmission === null ||
+                (probedTerminalAdmission.status === 'pending' &&
+                  (existingRunId === undefined || !this._hasLiveMessageRun(agent, existingRunId))));
+            if (!strandedPendingTerminal) {
               try {
                 return await this._returnDuplicateMessageResult(existing, opts);
               } finally {
@@ -7991,7 +8022,11 @@ export class Session {
           ...(admissionIdentity ? { runId: admissionIdentity.runId } : {}),
           resourceId: this.resourceId,
           threadId: this.threadId,
-          ...(logicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
+          // A terminal admission binds the grant to the run this dispatch
+          // starts — folding into an already-active run would leave the
+          // admission keyed to a runId that never executes. Discard covers the
+          // race where a run starts between the active-run guard and dispatch.
+          ...(logicalMessageIdentity || terminalIdentity ? { ifActive: { behavior: 'discard' } } : {}),
           ifIdle: {
             behavior: 'wake',
             // The wake branch starts a REAL streamed turn; carry the silent-turn nudge.
@@ -8002,25 +8037,35 @@ export class Session {
           },
         },
       );
-      if (logicalMessageIdentity !== undefined) {
+      if (logicalMessageIdentity !== undefined || terminalIdentity !== undefined) {
+        const acceptanceParam =
+          logicalMessageIdentity !== undefined
+            ? 'message().logicalMessageIdentity'
+            : 'message().executionAuthorityGrant';
         nativeDispatchStarted = true;
         const accepted = await this._awaitSignalNativeAcceptance(
           signal.accepted,
           turnAbortSignal,
           activeTurnWaiter.promise,
-          'message().logicalMessageIdentity',
+          acceptanceParam,
         );
-        if (accepted.action !== 'wake') {
+        // A terminal retry that re-drives dispatch may dedupe onto the signal
+        // the earlier attempt already delivered — `deliver` onto this exact
+        // run is that adoption; every other action means the admission would
+        // bind to a run it does not own.
+        const ownsRun =
+          accepted.action === 'wake' ||
+          (terminalIdentity !== undefined &&
+            logicalMessageIdentity === undefined &&
+            accepted.action === 'deliver' &&
+            accepted.runId === signal.runId);
+        if (!ownsRun) {
           nativeRejected = true;
-          throw lineagedSignalAcceptanceError('message().logicalMessageIdentity', accepted.action);
+          throw lineagedSignalAcceptanceError(acceptanceParam, accepted.action);
         }
         if (accepted.runId !== signal.runId) {
           nativeRejected = true;
-          const mismatch = lineagedSignalRunMismatchError(
-            'message().logicalMessageIdentity',
-            signal.runId,
-            accepted.runId,
-          );
+          const mismatch = lineagedSignalRunMismatchError(acceptanceParam, signal.runId, accepted.runId);
           turnAbortController.abort(mismatch);
           throw mismatch;
         }
@@ -8746,11 +8791,39 @@ export class Session {
                 );
               }
             }
-            if (output) return output;
+            if (output) {
+              // The returned stream settles through the original caller's
+              // commit barrier — retain this retry's terminal observers so the
+              // durable receipt/failure reaches it instead of waiting forever.
+              if (
+                this._terminalFinalizer !== undefined &&
+                opts.executionAuthorityGrant !== undefined &&
+                runId !== undefined
+              ) {
+                this._retainTerminalObservers(runId, {
+                  onReceipt: opts.onTerminalCommit,
+                  onFailure: opts.onTerminalCommitError,
+                });
+              }
+              return output;
+            }
           }
           throw new HarnessValidationError('message().admissionId', 'duplicate stream is no longer live');
         }
-        if (evidence.status === 'completed') return evidence.result as AgentResult;
+        if (evidence.status === 'completed') {
+          // A terminal caller still needs its durable receipt replayed — the
+          // committed fast-path converges on the stored winner without
+          // recomputing it.
+          if (this._terminalFinalizer !== undefined && opts.executionAuthorityGrant !== undefined) {
+            await this._commitCachedDuplicateTerminal(
+              evidence.result as FullOutput<unknown>,
+              evidence,
+              opts,
+              activeDeleted,
+            );
+          }
+          return evidence.result as AgentResult;
+        }
         if (evidence.status === 'failed') throw publicErrorProjectionToError(evidence.error);
         const runId = await this._pendingMessageRunId(evidence);
         if (runId) {
@@ -8786,7 +8859,15 @@ export class Session {
             return cached.full;
           }
           if (!this._hasLiveMessageRun(agent, runId)) {
-            return this._raceActiveTurnWaiter(this._awaitDurableMessageResult(evidence, opts), activeDeleted);
+            const durable = await this._raceActiveTurnWaiter(
+              this._awaitDurableMessageResult(evidence, opts),
+              activeDeleted,
+            );
+            // The durable wait resolved because the admission committed — the
+            // committed fast-path replays the stored receipt so this retry's
+            // terminal observers see the same outcome as the winner's caller.
+            await this._commitCachedDuplicateTerminal(durable as FullOutput<unknown>, evidence, opts, activeDeleted);
+            return durable;
           }
           const live = await this._raceActiveTurnWaiter(this._awaitRunCompletion(runId), activeDeleted);
           if (evidence.admissionId !== undefined && evidence.admissionHash !== undefined) {
@@ -8907,6 +8988,40 @@ export class Session {
     await this._commitTerminalHandoff(admission, full, options);
   }
 
+  private _retainTerminalObservers(
+    runId: string,
+    options: {
+      onReceipt?: (receipt: HarnessTerminalCommitReceipt) => void;
+      onFailure?: (error: HarnessTerminalHandoffError) => void;
+    },
+  ): void {
+    if (options.onReceipt === undefined && options.onFailure === undefined) return;
+    const list = this._terminalObserversByRunId.get(runId) ?? [];
+    list.push({
+      ...(options.onReceipt !== undefined ? { onReceipt: options.onReceipt } : {}),
+      ...(options.onFailure !== undefined ? { onFailure: options.onFailure } : {}),
+    });
+    this._terminalObserversByRunId.set(runId, list);
+  }
+
+  private _drainTerminalObservers(
+    runId: string,
+    outcome: HarnessTerminalCommitReceipt | HarnessTerminalHandoffError,
+  ): void {
+    const list = this._terminalObserversByRunId.get(runId);
+    if (list === undefined) return;
+    this._terminalObserversByRunId.delete(runId);
+    for (const observer of list) {
+      try {
+        if (outcome instanceof HarnessTerminalHandoffError) observer.onFailure?.(outcome);
+        else observer.onReceipt?.(outcome);
+      } catch {
+        // Retained observers are diagnostics only; a buggy observer must not
+        // hide the durable outcome from the caller or other subscribers.
+      }
+    }
+  }
+
   private _messageDuplicateModeId(evidence: AgentSignalResultEvidence, opts: MessageOptions): string {
     const starting = evidence.admissionId ? this._messageAdmissionStarts.get(evidence.admissionId) : undefined;
     return starting?.modeId ?? evidence.modeId ?? opts.mode ?? this._record.modeId;
@@ -8946,6 +9061,7 @@ export class Session {
       } else {
         throw new HarnessValidationError('message().admissionId', 'duplicate message result evidence has expired');
       }
+      let pastDeadline = false;
       if (Date.now() >= deadline) {
         // A terminal-mode message whose run is parked in `pendingResume`
         // legitimately stays pending until the approval-gated resume settles
@@ -8957,8 +9073,12 @@ export class Session {
         if (!suspendedOnThisRun) {
           throw new HarnessValidationError('message().admissionId', 'pending message admission is not live');
         }
+        pastDeadline = true;
       }
-      await delay(MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS, opts.abortSignal);
+      await delay(
+        pastDeadline ? MESSAGE_ADMISSION_DURABLE_WAIT_EXTENDED_INTERVAL_MS : MESSAGE_ADMISSION_DURABLE_WAIT_INTERVAL_MS,
+        opts.abortSignal,
+      );
     }
   }
 
@@ -9102,6 +9222,7 @@ export class Session {
         // authority; a buggy observer must not hide the durable indeterminate
         // result from the caller/reconciler.
       }
+      this._drainTerminalObservers(identity.runId, terminalError);
       throw terminalError;
     };
     let admission;
@@ -9155,6 +9276,7 @@ export class Session {
       } catch {
         // Receipt observers are diagnostics only and cannot change the durable winner.
       }
+      this._drainTerminalObservers(identity.runId, receipt);
       return receipt;
     }
     const finishReason = typeof full.finishReason === 'string' ? full.finishReason : undefined;
@@ -9162,7 +9284,9 @@ export class Session {
     if (endReason === 'suspended') {
       // A suspended run has not reached a terminal outcome — the approval-gated
       // resume settles this admission later, so defer instead of sealing a
-      // false 'completed' winner.
+      // false 'completed' winner. The original caller's observers outlive this
+      // settlement attempt, so retain them for the resume-side commit.
+      this._retainTerminalObservers(identity.runId, options);
       return undefined;
     }
     const terminalResult: HarnessTerminalResult = {
@@ -9237,6 +9361,7 @@ export class Session {
     } catch {
       // Receipt observers are diagnostics only and cannot change the durable winner.
     }
+    this._drainTerminalObservers(identity.runId, receipt);
     return receipt;
   }
 
@@ -14340,6 +14465,20 @@ export class Session {
           accountedCumulative: pending.accountedTokenUsage,
         });
       }
+      // A terminal-handoff `message()` that suspended deferred its durable
+      // admission rather than sealing a false 'completed' winner. The resumed
+      // run's terminal outcome is that admission's answer — the deterministic
+      // run id is the same — so settle it through the commit barrier now. This
+      // must complete BEFORE the flush below clears `pendingResume` and marks
+      // the inbox response applied: a finalization failure leaves the admission
+      // pending and recoverable only while a retry of the same responseId can
+      // still reach this settlement.
+      if (full.finishReason !== 'suspended') {
+        await this._settleResumedTerminalHandoff(pending, full, {
+          modeId: resumeModeId,
+          modelId: resumeRuntimeDependencies.modelId,
+        });
+      }
       const queueCompletedAt = Date.now();
       const responseAppliedAt = queueCompletedAt;
       await Promise.race([
@@ -14439,15 +14578,6 @@ export class Session {
             result: full as AgentResult,
           });
         }
-
-        // A terminal-handoff `message()` that suspended deferred its durable
-        // admission rather than sealing a false 'completed' winner. The resumed
-        // run's terminal outcome is that admission's answer — the deterministic
-        // run id is the same — so settle it through the commit barrier now.
-        await this._settleResumedTerminalHandoff(pending, full, {
-          modeId: resumeModeId,
-          modelId: resumeRuntimeDependencies.modelId,
-        });
 
         // If this was the terminal completion of a queued turn, settle the
         // resolver, remove the head item, clear current, then kick the drain

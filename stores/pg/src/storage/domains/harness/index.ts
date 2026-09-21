@@ -676,6 +676,37 @@ function harnessIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
       columns: ['harness_name', 'session_id', 'session_incarnation', 'revision'],
       unique: true,
     },
+    {
+      // A grant generation binds to at most one admission across the harness;
+      // admitTerminalHandoff/cancelTerminalHandoff resolve this tuple on every
+      // call, and the unique index enforces the binding under the grant lock.
+      name: harnessIndexName(schemaPrefix, 'idx_harness_terminal_admissions_grant'),
+      table: TABLE_HARNESS_TERMINAL_ADMISSIONS,
+      columns: ['harness_name', 'grant_key', 'grant_generation'],
+      unique: true,
+    },
+    {
+      // loadPendingTerminalAdmission probes (session, run) on every suspended
+      // resume; fenceTerminalHandoffsForSession/deleteSessions sweep by the
+      // (harness_name, session_id) prefix.
+      name: harnessIndexName(schemaPrefix, 'idx_harness_terminal_admissions_session'),
+      table: TABLE_HARNESS_TERMINAL_ADMISSIONS,
+      columns: ['harness_name', 'session_id', 'run_id'],
+    },
+    {
+      // claimTerminalIntents scans claimable rows by (harness_name, status) and
+      // its NOT EXISTS ordering probe resolves (session, incarnation, revision);
+      // fencing and delete sweeps use the same session prefix.
+      name: harnessIndexName(schemaPrefix, 'idx_harness_terminal_intents_claim'),
+      table: TABLE_HARNESS_TERMINAL_INTENTS,
+      columns: ['harness_name', 'status', 'next_attempt_at'],
+    },
+    {
+      name: harnessIndexName(schemaPrefix, 'idx_harness_terminal_intents_order'),
+      table: TABLE_HARNESS_TERMINAL_INTENTS,
+      columns: ['harness_name', 'session_id', 'session_incarnation', 'revision'],
+      unique: true,
+    },
   ];
 }
 
@@ -1018,6 +1049,7 @@ export class HarnessPG extends HarnessStorage {
     await this.#ensureWakeupTable();
     await this.#ensurePlanTasksTable();
     await this.#ensureRunSummariesTable();
+    await this.#ensureTerminalHandoffTables();
     this.#localThreadDeleteFences.clear();
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_RUN_SUMMARIES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_PLAN_TASKS}`);
@@ -2316,6 +2348,66 @@ export class HarnessPG extends HarnessStorage {
       }
 
       const retiredProjectionCapacity = new Map<string, { pendingIntents: number; pendingBytes: number }>();
+      const retiredTerminalCapacity = new Map<string, { pendingIntents: number; pendingBytes: number }>();
+      const deletionNow = Date.now();
+      // Fence the whole batch's terminal admissions and intents before any
+      // pressure-row lock is taken. Lock order is intent rows before the
+      // pressure row — the same order acknowledgement and failure transitions
+      // use — so a batch fence cannot deadlock with a concurrent ack holding a
+      // later session's intent. Candidates run in sorted order so overlapping
+      // batches take the row locks in a canonical order, and UPDATE ...
+      // RETURNING returns exactly the fenced set so a concurrent commit
+      // inserting an intent mid-transaction cannot skew the pressure
+      // accounting.
+      for (const key of [...deleteCandidates.keys()].sort()) {
+        const candidate = deleteCandidates.get(key)!;
+        const terminalArgs: (string | number)[] = [candidate.namespace, candidate.sessionId];
+        const terminalIncarnationPredicate =
+          candidate.sessionIncarnation === undefined ? '' : ' AND session_incarnation = ?';
+        if (candidate.sessionIncarnation !== undefined) terminalArgs.push(candidate.sessionIncarnation);
+        await tx.execute({
+          sql: `UPDATE ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
+                SET status = 'fenced', updated_at = ?
+                WHERE harness_name = ? AND session_id = ?${terminalIncarnationPredicate}
+                  AND status = 'pending'`,
+          args: [deletionNow, ...terminalArgs],
+        });
+        const fencedIntents = await tx.execute({
+          sql: `UPDATE ${TABLE_HARNESS_TERMINAL_INTENTS}
+                SET status = 'fenced', claim_id = NULL, claim_expires_at = NULL, updated_at = ?
+                WHERE harness_name = ? AND session_id = ?${terminalIncarnationPredicate}
+                  AND status IN ('pending', 'claimed', 'failed')
+                RETURNING payload_bytes`,
+          args: [deletionNow, ...terminalArgs],
+        });
+        if (fencedIntents.rows.length > 0) {
+          const previous = retiredTerminalCapacity.get(candidate.namespace) ?? {
+            pendingIntents: 0,
+            pendingBytes: 0,
+          };
+          previous.pendingIntents += fencedIntents.rows.length;
+          previous.pendingBytes += fencedIntents.rows.reduce(
+            (sum, row) => sum + Number((row as Record<string, unknown>).payload_bytes ?? 0),
+            0,
+          );
+          retiredTerminalCapacity.set(candidate.namespace, previous);
+        }
+      }
+      // Retire the fenced capacity once per namespace — after every intent row
+      // in the batch is locked — and in sorted order so concurrent batches take
+      // the shared pressure row deterministically.
+      for (const [namespace, capacity] of [...retiredTerminalCapacity.entries()].sort(([left], [right]) =>
+        left < right ? -1 : left > right ? 1 : 0,
+      )) {
+        await this.#lockTerminalPressure(tx, namespace, deletionNow);
+        await this.#adjustTerminalPressure(
+          tx,
+          namespace,
+          -capacity.pendingIntents,
+          -capacity.pendingBytes,
+          deletionNow,
+        );
+      }
       for (const {
         namespace,
         sessionId,
@@ -2325,47 +2417,6 @@ export class HarnessPG extends HarnessStorage {
         sessionIncarnation,
         attachmentRows,
       } of deleteCandidates.values()) {
-        const terminalArgs: (string | number)[] = [namespace, sessionId];
-        const terminalIncarnationPredicate = sessionIncarnation === undefined ? '' : ' AND session_incarnation = ?';
-        if (sessionIncarnation !== undefined) terminalArgs.push(sessionIncarnation);
-        const deletionNow = Date.now();
-        // Lock order is intents before the pressure row — acknowledgement and
-        // failure paths acquire them in that order, so fencing must match or
-        // concurrent transactions can deadlock.
-        const pendingTerminalIntents = await tx.execute({
-          sql: `SELECT payload_bytes FROM ${TABLE_HARNESS_TERMINAL_INTENTS}
-                WHERE harness_name = ? AND session_id = ?${terminalIncarnationPredicate}
-                  AND status IN ('pending', 'claimed', 'failed') FOR UPDATE`,
-          args: terminalArgs,
-        });
-        await this.#lockTerminalPressure(tx, namespace, deletionNow);
-        await tx.execute({
-          sql: `UPDATE ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
-                SET status = 'fenced', updated_at = ?
-                WHERE harness_name = ? AND session_id = ?${terminalIncarnationPredicate}
-                  AND status = 'pending'`,
-          args: [deletionNow, ...terminalArgs],
-        });
-        await tx.execute({
-          sql: `UPDATE ${TABLE_HARNESS_TERMINAL_INTENTS}
-                SET status = 'fenced', claim_id = NULL, claim_expires_at = NULL, updated_at = ?
-                WHERE harness_name = ? AND session_id = ?${terminalIncarnationPredicate}
-                  AND status IN ('pending', 'claimed', 'failed')`,
-          args: [deletionNow, ...terminalArgs],
-        });
-        if (pendingTerminalIntents.rows.length > 0) {
-          const pendingBytes = pendingTerminalIntents.rows.reduce(
-            (sum, row) => sum + Number(row.payload_bytes ?? 0),
-            0,
-          );
-          await this.#adjustTerminalPressure(
-            tx,
-            namespace,
-            -pendingTerminalIntents.rows.length,
-            -pendingBytes,
-            deletionNow,
-          );
-        }
         let retired: { pendingIntents: number; pendingBytes: number } | undefined;
         if (this.sessionRecordProjection.enabled && sessionIncarnation !== undefined) {
           retired = await this.#retireProjectionIntentsTx(tx, namespace, sessionId, sessionIncarnation, Date.now());
@@ -4871,7 +4922,7 @@ export class HarnessPG extends HarnessStorage {
           !existingIntent ||
           !sameHarnessTerminalIntent(existingIntent, terminalResult, projection) ||
           currentEvidence.status !== 'completed' ||
-          JSON.stringify(currentEvidence.result) !== JSON.stringify(resultEvidence.result)
+          stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)
         ) {
           throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
         }
@@ -4963,7 +5014,7 @@ export class HarnessPG extends HarnessStorage {
       }
 
       if (currentEvidence.status === 'completed') {
-        if (JSON.stringify(currentEvidence.result) !== JSON.stringify(resultEvidence.result)) {
+        if (stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)) {
           throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
         }
       } else if (currentEvidence.status === 'pending') {
@@ -5209,7 +5260,7 @@ export class HarnessPG extends HarnessStorage {
     const tx = await this.#client.transaction('write');
     try {
       const current = await this.#loadTerminalClaimForUpdate(tx, input);
-      if (!current || !sameTerminalClaimIdentity(current, input)) {
+      if (!sameTerminalClaimIdentity(current, input)) {
         throw new HarnessTerminalHandoffFencedError(input.sessionId);
       }
       if (
@@ -5240,7 +5291,7 @@ export class HarnessPG extends HarnessStorage {
     const tx = await this.#client.transaction('write');
     try {
       const current = await this.#loadTerminalClaimForUpdate(tx, input);
-      if (!current || !sameTerminalClaimIdentity(current, input)) {
+      if (!sameTerminalClaimIdentity(current, input)) {
         throw new HarnessTerminalHandoffFencedError(input.sessionId);
       }
       if (current.status === 'fenced') {
@@ -5293,7 +5344,7 @@ export class HarnessPG extends HarnessStorage {
     const tx = await this.#client.transaction('write');
     try {
       const current = await this.#loadTerminalClaimForUpdate(tx, input);
-      if (!current || !sameTerminalClaimIdentity(current, input)) {
+      if (!sameTerminalClaimIdentity(current, input)) {
         throw new HarnessTerminalHandoffFencedError(input.sessionId);
       }
       if (current.status === 'fenced') {
@@ -5350,23 +5401,16 @@ export class HarnessPG extends HarnessStorage {
   async getTerminalQueuePressure(input: { harnessName?: string }): Promise<HarnessTerminalQueuePressure> {
     await this.#ensureTerminalHandoffTables();
     const harnessName = this.#resolveHarnessName(input.harnessName);
-    const tx = await this.#client.transaction('write');
-    try {
-      const result = await tx.execute({
-        sql: `SELECT pending_intents, pending_bytes
-              FROM ${TABLE_HARNESS_TERMINAL_PRESSURE}
-              WHERE id = ? LIMIT 1`,
-        args: [harnessName],
-      });
-      const row = result.rows[0] as Record<string, unknown> | undefined;
-      await tx.commit();
-      return row
-        ? { pendingIntents: Number(row.pending_intents), pendingBytes: Number(row.pending_bytes) }
-        : { pendingIntents: 0, pendingBytes: 0 };
-    } catch (err) {
-      if (!tx.closed) await tx.rollback();
-      throw err;
-    }
+    const result = await this.#client.execute({
+      sql: `SELECT pending_intents, pending_bytes
+            FROM ${TABLE_HARNESS_TERMINAL_PRESSURE}
+            WHERE id = ? LIMIT 1`,
+      args: [harnessName],
+    });
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    return row
+      ? { pendingIntents: Number(row.pending_intents), pendingBytes: Number(row.pending_bytes) }
+      : { pendingIntents: 0, pendingBytes: 0 };
   }
 
   async fenceTerminalHandoffsForSession(input: {
@@ -5388,28 +5432,27 @@ export class HarnessPG extends HarnessStorage {
         args.push(input.sessionIncarnation);
       }
       // Intents lock before the pressure row — the same order acknowledgement
-      // and failure transitions use — so fencing cannot deadlock with them.
-      const pendingRows = await tx.execute({
-        sql: `SELECT payload_bytes FROM ${TABLE_HARNESS_TERMINAL_INTENTS}
-              WHERE ${predicates.join(' AND ')} FOR UPDATE`,
-        args,
-      });
-      await this.#lockTerminalPressure(tx, harnessName, now);
+      // and failure transitions use — so fencing cannot deadlock with them. The
+      // UPDATE ... RETURNING returns exactly the set that was pending at update
+      // time, so a concurrent commit inserting an intent mid-transaction cannot
+      // be fenced without also being counted in the pressure decrement.
       await tx.execute({
         sql: `UPDATE ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
               SET status = 'fenced', updated_at = ?
               WHERE ${predicates.join(' AND ')}`,
         args: [now, ...args],
       });
-      await tx.execute({
+      const fencedRows = await tx.execute({
         sql: `UPDATE ${TABLE_HARNESS_TERMINAL_INTENTS}
               SET status = 'fenced', claim_id = NULL, claim_expires_at = NULL, updated_at = ?
-              WHERE ${predicates.join(' AND ')}`,
+              WHERE ${predicates.join(' AND ')}
+              RETURNING payload_bytes`,
         args: [now, ...args],
       });
-      if (pendingRows.rows.length > 0) {
-        const bytes = pendingRows.rows.reduce((sum, row) => sum + Number(row.payload_bytes ?? 0), 0);
-        await this.#adjustTerminalPressure(tx, harnessName, -pendingRows.rows.length, -bytes, now);
+      if (fencedRows.rows.length > 0) {
+        const bytes = fencedRows.rows.reduce((sum, row) => sum + Number(row.payload_bytes ?? 0), 0);
+        await this.#lockTerminalPressure(tx, harnessName, now);
+        await this.#adjustTerminalPressure(tx, harnessName, -fencedRows.rows.length, -bytes, now);
       }
       await tx.commit();
     } catch (err) {
@@ -5421,7 +5464,7 @@ export class HarnessPG extends HarnessStorage {
   async #loadTerminalClaimForUpdate(
     tx: PgHarnessClient,
     input: HarnessTerminalClaimIdentity,
-  ): Promise<HarnessTerminalIntent | null> {
+  ): Promise<HarnessTerminalIntent> {
     const result = await tx.execute({
       sql: `SELECT * FROM ${TABLE_HARNESS_TERMINAL_INTENTS}
             WHERE id = ? AND harness_name = ? LIMIT 1 FOR UPDATE`,
@@ -8690,6 +8733,12 @@ export class HarnessPG extends HarnessStorage {
           compositePrimaryKey: config?.compositePrimaryKey,
         });
       }
+      await this.#createDefaultIndexes([
+        'idx_harness_terminal_admissions_grant',
+        'idx_harness_terminal_admissions_session',
+        'idx_harness_terminal_intents_claim',
+        'idx_harness_terminal_intents_order',
+      ]);
     })().catch(error => {
       this.#terminalHandoffReady = undefined;
       throw error;
@@ -11115,7 +11164,7 @@ function sameHarnessTerminalIntent(
   const { completedAt: _incomingAt, ...incomingResult } = terminalResult;
   return (
     intent.terminalResult.status === terminalResult.status &&
-    canonicalJson(storedResult) === canonicalJson(incomingResult) &&
+    stableJsonString(storedResult) === stableJsonString(incomingResult) &&
     intent.projection.projectionKind === projection.projectionKind &&
     intent.projection.projectionId === projection.projectionId &&
     intent.projection.payloadHash === projection.payloadHash &&

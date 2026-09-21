@@ -1592,7 +1592,7 @@ export class InMemoryHarness extends HarnessStorage {
         !existingIntent ||
         !sameTerminalIntentValue(existingIntent, terminalResult, projection) ||
         currentEvidence.status !== 'completed' ||
-        JSON.stringify(currentEvidence.result) !== JSON.stringify(resultEvidence.result)
+        stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)
       ) {
         throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
       }
@@ -1608,7 +1608,7 @@ export class InMemoryHarness extends HarnessStorage {
       }
       if (
         currentEvidence.status === 'completed' &&
-        JSON.stringify(currentEvidence.result) !== JSON.stringify(resultEvidence.result)
+        stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)
       ) {
         throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
       }
@@ -4615,7 +4615,7 @@ function sameTerminalIntentValue(
   const { completedAt: _storedAt, ...storedResult } = intent.terminalResult;
   const { completedAt: _incomingAt, ...incomingResult } = terminalResult;
   return (
-    canonicalJson(storedResult) === canonicalJson(incomingResult) &&
+    stableJsonString(storedResult) === stableJsonString(incomingResult) &&
     intent.projection.projectionKind === projection.projectionKind &&
     intent.projection.projectionId === projection.projectionId &&
     intent.projection.payloadHash === projection.payloadHash &&
