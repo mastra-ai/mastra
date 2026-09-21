@@ -82,10 +82,7 @@ export interface BackgroundTaskEvent extends BackgroundTask {
 }
 
 export type UpdateBackgroundTask = Partial<
-  Omit<
-    BackgroundTask,
-    'id' | 'createdAt' | 'threadId' | 'resourceId' | 'runId' | 'agentId' | 'toolCallId' | 'toolName' | 'args'
-  >
+  Omit<BackgroundTask, 'id' | 'createdAt' | 'threadId' | 'resourceId' | 'runId' | 'agentId' | 'toolCallId' | 'toolName'>
 >;
 
 /**

@@ -507,6 +507,57 @@ describe('BackgroundTaskManager', () => {
       expect(result?.args).toHaveProperty('__mastra_requiresToolPermissionHook', true);
     });
 
+    it('persists the hook marker when a flagged handle attaches to a row enqueued without it', async () => {
+      // Rows written before the marker existed (or by a producer that did not
+      // thread a hook) carry no `__mastra_requiresToolPermissionHook`. When a
+      // later hook-gated leg attaches via checkIfSuspended/resume, the
+      // requirement must be backfilled onto the stored args *before* the
+      // resume event becomes claimable — otherwise a foreign worker or cold
+      // recovery resolves the static executor and executes without
+      // revalidation.
+      const execute = vi.fn(async (_args: any, opts: any) => {
+        if (!opts.resumeData) return opts.suspend({ waiting: 'approval' });
+        return 'resumed';
+      });
+      const { task } = await manager.enqueue(
+        {
+          toolName: 'approval-tool',
+          toolCallId: 'call-pre-marker',
+          args: { q: 1 },
+          agentId: 'agent-1',
+          runId: 'run-pre-marker',
+        },
+        ctx(execute),
+      );
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('suspended'));
+      expect((await manager.getTask(task.id))?.args).not.toHaveProperty('__mastra_requiresToolPermissionHook');
+
+      const handle = createBackgroundTask(manager, {
+        toolName: 'approval-tool',
+        toolCallId: 'call-pre-marker',
+        args: { q: 1 },
+        agentId: 'agent-1',
+        runId: 'run-pre-marker',
+        requiresToolPermissionHook: true,
+        context: ctx(execute),
+      });
+      await expect(
+        handle.checkIfSuspended({
+          toolCallId: 'call-pre-marker',
+          runId: 'run-pre-marker',
+          agentId: 'agent-1',
+          toolName: 'approval-tool',
+        }),
+      ).resolves.toBe(true);
+
+      // Marker is durable before any resume event can be claimed by a worker.
+      const marked = await manager.getTask(task.id);
+      expect(marked?.args).toHaveProperty('__mastra_requiresToolPermissionHook', true);
+
+      await handle.resume({ approved: true });
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('completed'));
+    });
+
     it('keeps task context when dispatch claim loses to another worker', async () => {
       const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
       const taskId = 'claim-race';

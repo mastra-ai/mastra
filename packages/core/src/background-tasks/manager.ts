@@ -858,6 +858,31 @@ export class BackgroundTaskManager {
     return task;
   }
 
+  /**
+   * Persists the tool-permission-hook requirement onto an existing task's
+   * stored args. `enqueue` folds the marker in at create time, but a handle
+   * carrying `requiresToolPermissionHook` that attaches to a row it did not
+   * create (resume/restart legs, or a row written before the marker existed)
+   * must backfill it so a later cold recovery still fails closed instead of
+   * executing without revalidation. Verifies the write by re-reading — a
+   * store that cannot persist `args` updates throws so the caller refuses
+   * the attach rather than leaving a claimable-but-unmarked row.
+   */
+  async markTaskRequiresToolPermissionHook(taskId: string): Promise<void> {
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
+    if (!task || task.args?.[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY] === true) return;
+    await storage.updateTask(taskId, {
+      args: { ...(task.args ?? {}), [BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY]: true },
+    });
+    const persisted = await storage.getTask(taskId);
+    if (persisted && persisted.args?.[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY] !== true) {
+      throw new Error(
+        `Unable to persist permission-hook requirement on background task "${taskId}" — refusing to attach`,
+      );
+    }
+  }
+
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const storage = await this.getStorage();
     return storage.getTask(taskId);

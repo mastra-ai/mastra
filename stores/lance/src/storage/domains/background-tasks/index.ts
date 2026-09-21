@@ -127,6 +127,7 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
     if ('result' in update) values.result = serializeJson(update.result) ?? null;
     if ('error' in update) values.error = serializeJson(update.error) ?? null;
     if ('suspendPayload' in update) values.suspend_payload = serializeJson(update.suspendPayload) ?? null;
+    if ('args' in update) values.args = serializeJson(update.args) ?? null;
     if ('retryCount' in update) values.retry_count = update.retryCount!;
     if ('startedAt' in update) values.startedAt = update.startedAt?.getTime() ?? 0;
     if ('suspendedAt' in update) values.suspendedAt = update.suspendedAt?.getTime() ?? 0;

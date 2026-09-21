@@ -206,6 +206,10 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
       setClauses.push(`${quoteIdentifier('suspend_payload', 'column name')} = ?`);
       params.push(serializeJson(update.suspendPayload));
     }
+    if ('args' in update) {
+      setClauses.push(`${quoteIdentifier('args', 'column name')} = ?`);
+      params.push(serializeJson(update.args));
+    }
     if ('retryCount' in update) {
       setClauses.push(`${quoteIdentifier('retry_count', 'column name')} = ?`);
       params.push(update.retryCount as number);

@@ -84,6 +84,7 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
     if ('result' in update) patch.result = update.result ?? null;
     if ('error' in update) patch.error = update.error ?? null;
     if ('suspendPayload' in update) patch.suspend_payload = update.suspendPayload ?? null;
+    if ('args' in update) patch.args = update.args ?? null;
     if ('retryCount' in update) patch.retry_count = update.retryCount;
     if ('startedAt' in update) patch.startedAt = update.startedAt?.toISOString() ?? null;
     if ('suspendedAt' in update) patch.suspendedAt = update.suspendedAt?.toISOString() ?? null;

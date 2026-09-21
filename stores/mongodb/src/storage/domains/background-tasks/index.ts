@@ -164,6 +164,7 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     if ('result' in update) $set.result = update.result ?? null;
     if ('error' in update) $set.error = update.error ?? null;
     if ('suspendPayload' in update) $set.suspend_payload = update.suspendPayload ?? null;
+    if ('args' in update) $set.args = update.args ?? null;
     if ('retryCount' in update) $set.retry_count = update.retryCount;
     if ('startedAt' in update) $set.startedAt = update.startedAt?.toISOString() ?? null;
     if ('suspendedAt' in update) $set.suspendedAt = update.suspendedAt?.toISOString() ?? null;

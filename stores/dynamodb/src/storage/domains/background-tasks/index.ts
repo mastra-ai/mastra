@@ -228,6 +228,9 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
           setFields.suspendPayload = serializeJson(update.suspendPayload);
         }
       }
+      if ('args' in update && update.args !== undefined && update.args !== null) {
+        setFields.args = serializeJson(update.args);
+      }
       if ('startedAt' in update) {
         if (update.startedAt === undefined || update.startedAt === null) {
           removeFields.push('startedAtIso');

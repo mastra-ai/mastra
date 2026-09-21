@@ -147,6 +147,10 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
       sets.push('suspend_payload = ?');
       params.push(serializeJson(update.suspendPayload));
     }
+    if ('args' in update) {
+      sets.push('args = ?');
+      params.push(serializeJson(update.args));
+    }
     if ('retryCount' in update) {
       sets.push('retry_count = ?');
       params.push(update.retryCount);
