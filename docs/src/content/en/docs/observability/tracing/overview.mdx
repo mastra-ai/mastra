@@ -301,7 +301,7 @@ const run = await mastra.getWorkflow('skillAnalyze').createRun()
 await run.start({
   inputData: { skillId: 'typescript' },
   tracingOptions: {
-    name: 'skill-analyze: typescript',
+    rootSpanName: 'skill-analyze: typescript',
   },
 })
 ```
