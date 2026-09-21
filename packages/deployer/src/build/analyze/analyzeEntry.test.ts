@@ -166,10 +166,15 @@ describe('analyzeEntry', () => {
       await Promise.all([
         writeFile(
           join(packageDir, 'package.json'),
-          JSON.stringify({ name: 'analysis-unsafe', version: '1.0.0', type: 'module', exports: './index.js' }),
+          JSON.stringify({
+            name: 'analysis-unsafe',
+            version: '1.0.0',
+            type: 'module',
+            exports: { './subpath': './subpath.js' },
+          }),
         ),
-        writeFile(join(packageDir, 'index.js'), 'export const broken = ;'),
-        writeFile(entryFilePath, `import { broken } from 'analysis-unsafe';\nexport { broken };\n`),
+        writeFile(join(packageDir, 'subpath.js'), 'export const broken = ;'),
+        writeFile(entryFilePath, `import { broken } from 'analysis-unsafe/subpath';\nexport { broken };\n`),
       ]);
 
       const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
@@ -180,13 +185,37 @@ describe('analyzeEntry', () => {
         externals: ['analysis-unsafe'],
       });
 
-      const external = vi.mocked(rollup).mock.calls.at(-1)?.[0].external;
-      expect(typeof external).toBe('function');
-      if (typeof external === 'function') {
-        expect(external('analysis-unsafe/subpath', undefined, false)).toBe(true);
-      }
-      expect(result.dependencies.get('analysis-unsafe')?.exports).toEqual(['broken']);
-      expect(result.output.code).toContain(`from 'analysis-unsafe'`);
+      expect(result.dependencies.get('analysis-unsafe/subpath')?.exports).toEqual(['broken']);
+      expect(result.output.code).toContain(`from 'analysis-unsafe/subpath'`);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('should resolve tsconfig aliases before applying the externals preset', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-tsconfig-alias-'));
+    const srcDir = join(root, 'src');
+    const entryFilePath = join(srcDir, 'entry.ts');
+
+    try {
+      await mkdir(srcDir, { recursive: true });
+      await Promise.all([
+        writeFile(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { paths: { '~/*': ['src/*'] } } })),
+        writeFile(join(srcDir, 'value.ts'), 'export const value = 42;'),
+        writeFile(entryFilePath, `import { value } from '~/value.js';\nexport { value };\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+        externalsPreset: true,
+      });
+
+      expect(result.dependencies.has('~')).toBe(false);
+      expect(result.output.code).not.toContain('~/value.js');
+      expect(result.output.code).toContain('42');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -377,18 +406,11 @@ describe('analyzeEntry', () => {
           workspaceMap,
           projectRoot: root,
           analyzeCache,
-          externals: ['analysis-unsafe', '@internal/a'],
+          externals: ['@internal/a'],
         },
       );
 
       expect(rollup).toHaveBeenCalledTimes(3);
-      for (const [options] of vi.mocked(rollup).mock.calls) {
-        expect(typeof options.external).toBe('function');
-        if (typeof options.external === 'function') {
-          expect(options.external('analysis-unsafe/subpath', undefined, false)).toBe(true);
-          expect(options.external('@internal/a', undefined, false)).toBe(false);
-        }
-      }
       expect(result.dependencies.size).toBe(2);
       expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
       expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);

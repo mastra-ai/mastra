@@ -17,6 +17,36 @@ import type { DependencyMetadata } from '../types';
 import { getPackageName, isBareModuleSpecifier, isDependencyPartOfPackage, slash } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
 
+function analysisExternals({
+  workspaceMap,
+  externals,
+  externalsPreset,
+}: {
+  workspaceMap: Map<string, WorkspacePackageInfo>;
+  externals: string[];
+  externalsPreset: boolean;
+}): Plugin {
+  return {
+    name: 'analysis-externals',
+    resolveId(source) {
+      if (!isBareModuleSpecifier(source)) {
+        return null;
+      }
+
+      const packageName = getPackageName(source);
+      if (packageName && workspaceMap.has(packageName)) {
+        return null;
+      }
+
+      if (externalsPreset || externals.some(external => isDependencyPartOfPackage(source, external))) {
+        return { id: source, external: true };
+      }
+
+      return null;
+    },
+  };
+}
+
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
  * Sets up module resolution, transpilation, and custom alias handling for Mastra-specific imports.
@@ -24,7 +54,19 @@ import { DEPS_TO_IGNORE } from './constants';
 function getInputPlugins(
   { entry, isVirtualFile }: { entry: string; isVirtualFile: boolean },
   mastraEntry: string,
-  { sourcemapEnabled, env }: { sourcemapEnabled: boolean; env: Record<string, string> },
+  {
+    sourcemapEnabled,
+    env,
+    workspaceMap,
+    externals,
+    externalsPreset,
+  }: {
+    sourcemapEnabled: boolean;
+    env: Record<string, string>;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+    externals: string[];
+    externalsPreset: boolean;
+  },
 ): Plugin[] {
   let virtualPlugin = null;
   if (isVirtualFile) {
@@ -45,6 +87,7 @@ function getInputPlugins(
       mastraInternalAliasPlugin(mastraEntry),
       mastraToolsAliasPlugin(),
       tsConfigPaths(),
+      analysisExternals({ workspaceMap, externals, externalsPreset }),
       json(),
       esbuild({ define: env }),
       commonjs({
@@ -334,24 +377,14 @@ export async function analyzeEntry(
       input: isVirtualFile ? '#entry' : entry,
       treeshake: false,
       preserveSymlinks: true,
-      plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled, env }),
-      external: id => {
-        if (DEPS_TO_IGNORE.some(dep => isDependencyPartOfPackage(id, dep))) {
-          return true;
-        }
-
-        if (!isBareModuleSpecifier(id)) {
-          return false;
-        }
-
-        const packageName = getPackageName(id);
-        const isWorkspaceDependency = packageName ? workspaceMap.has(packageName) : false;
-        if (isWorkspaceDependency) {
-          return false;
-        }
-
-        return externalsPreset || externals.some(external => isDependencyPartOfPackage(id, external));
-      },
+      plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, {
+        sourcemapEnabled,
+        env,
+        workspaceMap,
+        externals,
+        externalsPreset,
+      }),
+      external: id => DEPS_TO_IGNORE.some(dep => isDependencyPartOfPackage(id, dep)),
     });
 
     const { output } = await (async () => {
