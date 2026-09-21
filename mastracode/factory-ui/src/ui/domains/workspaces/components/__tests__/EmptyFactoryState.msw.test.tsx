@@ -61,6 +61,9 @@ describe('EmptyFactoryState', () => {
       server.use(
         http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
         http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
+        http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+          HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' }),
+        ),
         http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
           creates.push(await request.json());
           return HttpResponse.json({ project: { id: 'fp-1', name: 'hello' } });
@@ -94,6 +97,8 @@ describe('EmptyFactoryState', () => {
 
       renderOnboarding();
 
+      // The codebase step offers a provider choice before listing repositories.
+      await user.click(await screen.findByRole('button', { name: /Connect GitHub/ }));
       await user.click(await screen.findByRole('button', { name: /octo\/hello/ }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Failed to connect GitHub installation (502)');
