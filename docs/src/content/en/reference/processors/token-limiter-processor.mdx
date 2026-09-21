@@ -110,7 +110,7 @@ const processor = new TokenLimiterProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit. Mutates the messageList directly, walking newest-first and dropping what does not fit the remaining budget, or in `contiguous` mode everything from the first non-fit onward, while preserving system messages. In `best-fit` and `contiguous` modes, tool calls and tool results produced by the run in progress are never trimmed, so the model always sees the tool traffic it just produced; if that traffic alone exceeds the budget remaining after system messages and conversation overhead, a non-retryable `TripWire` is thrown instead of silently dropping the tool call the loop depends on.',
+      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit, mutating the messageList directly and always preserving system messages. In `best-fit` it walks newest-first and drops what does not fit the remaining budget; in `contiguous` it drops everything from the first non-fit onward. Neither mode trims the tool calls and tool results produced by the run in progress, so the model always sees the tool traffic it just produced, and if that traffic alone exceeds the budget remaining after system messages and conversation overhead a non-retryable `TripWire` is thrown instead of silently dropping the tool call the loop depends on. In `memory-only` it leaves the current run untouched and trims only eligible remembered messages, oldest first.',
     isOptional: false,
   },
   {

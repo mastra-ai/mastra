@@ -12,10 +12,10 @@ Trimming ran newest-first with no notion of which messages belonged to the run i
 
 Tool calls and results produced by the run in progress are now kept, and older history gives up its budget first. A call and its result are kept together.
 
-When that tool traffic alone exceeds the budget left after system messages, nothing remains that can safely be removed, so the processor now fails with a non-retryable `TripWire` naming that as the cause. Previously `best-fit` silently re-ran the tool, and `contiguous` stopped but blamed it on "No messages fit within the remaining token budget".
+When that tool traffic alone exceeds the budget left after system messages and conversation overhead, nothing remains that can safely be removed, so the processor now fails with a non-retryable `TripWire` naming that as the cause. Previously `best-fit` removed the tool messages instead, leaving the model to re-issue the same tool call, and `contiguous` stopped but blamed it on "No messages fit within the remaining token budget".
 
 **Behavior change to note**
 
-Protection adds up across steps. A long multi-step run whose combined tool output crosses the limit now stops with that error, rather than quietly dropping its earlier tool traffic.
+Protection adds up across steps. A long multi-step run whose current-run tool calls and results exceed that remaining budget now stops with that error, rather than quietly dropping its earlier tool traffic.
 
 Applies to `best-fit` and `contiguous`. The `memory-only` mode is unchanged.

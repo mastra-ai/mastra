@@ -256,8 +256,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
 
     // Tool calls and results the current run produced are never trimmed. The agent loop needs them on
     // the next step, the model gets no signal that they were removed (so it re-calls the same tool
-    // until maxSteps), and removing them also drops them from the response set, so they never reach
-    // memory. Older history gives up its budget first, and if that is not enough we trip below.
+    // until maxSteps), and removing them also drops them from the response set, which can stop them
+    // being saved to memory. Older history gives up its budget first, and if that is not enough we trip below.
     const currentRunIds = this.currentRunToolMessageIds(messageList, messages);
     const currentRunMessages = messages.filter(message => currentRunIds.has(message.id));
 
