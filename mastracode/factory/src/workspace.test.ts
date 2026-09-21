@@ -129,16 +129,14 @@ const tempDirs: string[] = [];
 function lastGhToken(): string | undefined {
   const calls = mocks.setEnv.mock.calls;
   const update = calls[calls.length - 1]?.[0] as
-    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
-    | undefined;
+    ((env: Record<string, string | undefined>) => Record<string, string | undefined>) | undefined;
   return update?.({}).GH_TOKEN;
 }
 
 function lastSandboxEnv(): Record<string, string | undefined> {
   const calls = mocks.setEnv.mock.calls;
   const update = calls[calls.length - 1]?.[0] as
-    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
-    | undefined;
+    ((env: Record<string, string | undefined>) => Record<string, string | undefined>) | undefined;
   return update?.({}) ?? {};
 }
 
@@ -664,6 +662,72 @@ describe('bundled Factory skill assets', () => {
     expect(phase4).toContain('compare against the shared interface or base contract');
   });
 
+  it('makes Factory reviews commit to their own design before the diff and scrutinize their own requests', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const review = await fs.readFile(path.join(assetRoot, 'factory-review', 'SKILL.md'), 'utf8');
+    const section = (heading: string, nextHeading: string) => {
+      const start = review.indexOf(heading);
+      expect(start, `section "${heading}" exists`).toBeGreaterThan(-1);
+      const end = review.indexOf(nextHeading, start);
+      expect(end, `section "${heading}" ends at "${nextHeading}"`).toBeGreaterThan(start);
+      return review.slice(start, end);
+    };
+
+    // Phase 1 is ordered: the reviewer's own design is recorded before the
+    // diff, commits, or file list are opened, so the independent model cannot
+    // be a restatement of the author's implementation.
+    const phase1 = section('## Phase 1: PR Goal & Context', '## Phase 2');
+    const designAt = phase1.indexOf('Write your own design before reading theirs');
+    const diffAt = phase1.indexOf('gh pr diff <number>');
+    expect(designAt).toBeGreaterThan(-1);
+    expect(diffAt).toBeGreaterThan(designAt);
+    expect(phase1).toContain('Do not open the diff, commits, or changed-file list yet');
+    expect(phase1).toContain('the simplest design that satisfies those requirements');
+    expect(phase1).toContain('what you would deliberately not add');
+    expect(phase1).toContain('not a forecast of the author');
+    expect(phase1).toContain('Agreement is valid when independently justified; disagreement needs evidence');
+    expect(phase1).not.toContain('Gauge the author');
+
+    // Probes must be able to detect the claimed failure, and never mutate the
+    // session checkout in place.
+    const phase3 = section('## Phase 3: Quality Gate', '## Phase 4');
+    expect(phase3).toContain('A probe must be able to fail');
+    expect(phase3).toContain('test a relevant broken control as well as the fix');
+    expect(phase3).toContain("capture the command's own exit status rather than a pipeline's or wrapper's");
+    expect(phase3).toContain(
+      'disposable worktree or temporary project, never by editing the session checkout in place',
+    );
+
+    // Approach is judged against the recorded design, not only the implementation.
+    const phase4 = section('## Phase 4: History & Architecture', '## Phase 5');
+    expect(phase4).toContain('against the design you recorded in Phase 1');
+    expect(phase4).toContain('is there a simpler way to achieve the required outcome');
+    expect(phase4).toContain('fewer lines or several implementation defects alone do not prove a better design');
+
+    // The self-scrutiny step precedes the adversarial check and the gates, and
+    // requires tracing the reviewer's own requests through affected callers.
+    const verdict = section('## Phase 5: Verdict', '## Phase 6');
+    const scrutinyAt = verdict.indexOf('Scrutinize your own requests as critically as the PR');
+    const adversarialAt = verdict.indexOf('Adversarial check — required before every approve');
+    expect(scrutinyAt).toBeGreaterThan(-1);
+    expect(adversarialAt).toBeGreaterThan(scrutinyAt);
+    expect(verdict).toContain(
+      'whether the approach and scope are justified, not just whether the implementation works',
+    );
+    expect(verdict).toContain('Establish why each requested change belongs in this PR');
+    expect(verdict).toContain('assume the author follows your requests exactly as written');
+    expect(verdict).toContain('without introducing another failure or unnecessary change');
+    expect(verdict).toContain('The verdict and the requests must tell the same story');
+
+    // The handoff carries the approach judgment and unhedged requests.
+    const handoff = section('## Phase 6: Handoff & Transition', '## Behavior Rules');
+    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('imperative and present tense');
+    expect(handoff).toContain('No softened requests');
+    expect(handoff).toContain('Preserve qualifications that express real limits of evidence');
+    expect(review).toContain('**Your design before theirs.**');
+  });
+
   it('keeps Factory re-reviews aligned with current-head evidence requirements', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const instructions = await fs.readFile(path.join(assetRoot, 'factory-rereview', 'SKILL.md'), 'utf8');
@@ -736,6 +800,32 @@ describe('bundled Factory skill assets', () => {
     expect(handoff).toContain('- **Issue and intent**');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
+
+    // Design-first ordering and self-scrutiny mirror factory-review: the
+    // design is recovered from the prior pass (or rewritten) before the
+    // cumulative diff opens, and every carried-forward request is re-justified.
+    const designAt = goalAndPriorPass.indexOf('Recover or write your own design before reading theirs');
+    const diffAt = goalAndPriorPass.indexOf('gh pr diff <number>');
+    expect(designAt).toBeGreaterThan(-1);
+    expect(diffAt).toBeGreaterThan(designAt);
+    expect(goalAndPriorPass).toContain('Do not open the cumulative diff, commits, or changed-file list yet');
+    expect(goalAndPriorPass).toContain('a push does not soften that standard');
+    expect(qualityGate).toContain('A probe must be able to fail');
+    expect(qualityGate).toContain('never by editing the session checkout in place');
+    expect(freshPass).toContain('against the design you recorded in Phase 1');
+    expect(freshPass).toContain('a push that patched the repairs has not answered it');
+    const verdict = section('## Phase 6: Verdict', '## Phase 7');
+    const scrutinyAt = verdict.indexOf('Scrutinize your own requests as critically as the PR');
+    const adversarialAt = verdict.indexOf('Adversarial check — required before every approve');
+    expect(scrutinyAt).toBeGreaterThan(-1);
+    expect(adversarialAt).toBeGreaterThan(scrutinyAt);
+    expect(verdict).toContain('carried forward or new');
+    expect(verdict).toContain(
+      'A prior-pass request that the push showed to be wrong is corrected here, not carried out of loyalty',
+    );
+    expect(handoff).toContain('- **Approach**');
+    expect(handoff).toContain('No softened requests');
+    expect(instructions).toContain('**Your design before theirs.**');
   });
 });
 
