@@ -729,6 +729,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // already ran once on that attempt, so raise the real suspension from this — the
         // owning foreach iteration — instead of running the tool again. The intent wins over
         // any value or error the tool produced after swallowing the bailout.
+        // This deliberately skips `approvalGated` below: an approval-requiring tool is never
+        // dispatched eagerly (the eligibility check excludes every approval source), so there is
+        // no approval decision to re-make here. A runtime `suspend({ requireToolApproval })` is
+        // still honoured — the intent's options carry it into the approval branch of the helper.
         if (eagerSuspensionIntent) {
           return await raiseToolSuspension(eagerSuspensionIntent.suspendPayload, eagerSuspensionIntent.options);
         }

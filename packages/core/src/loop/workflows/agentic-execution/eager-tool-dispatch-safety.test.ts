@@ -569,10 +569,10 @@ describe('eager tool dispatch — excluded tool classes', () => {
 
   it('announces onInputAvailable once when an eager attempt hands the call back', async () => {
     // The hook is announced immediately before `execute`, so a bailout raised from
-    // inside the tool body has already fired it. The foreach then re-runs the same
-    // `execute` from the top: without a marker travelling with the rejection it
-    // announces the same toolCallId twice, which is one more call than the tool gets
-    // with eager dispatch off.
+    // inside the tool body has already fired it. The foreach then adopts that call and
+    // raises the real suspension from the carried intent: without a marker travelling
+    // with the rejection it would announce the same toolCallId twice, which is one more
+    // call than the tool gets with eager dispatch off.
     const run = async (eager: boolean) => {
       const { record, events } = createRecorder();
       let inputAvailable = 0;
@@ -678,11 +678,11 @@ describe('eager tool dispatch — excluded tool classes', () => {
     // never happens, and the value the tool returned after being denied is recorded as
     // though the call had succeeded.
     const run = async (eager: boolean) => {
-      const { record } = createRecorder();
+      const { record, events } = createRecorder();
       const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
       // `onOutput` is the tool's own "this produced a result" hook. A denied eager attempt
-      // must not reach it: the value handed to it belongs to a call that never legitimately
-      // completed, and the foreach is about to run the call again.
+      // must not reach it: the value handed to it belongs to a call that asked to suspend,
+      // and the foreach raises that suspension from the carried intent instead.
       let onOutputCalls = 0;
       const agent = new Agent({
         id: 'eager-swallowed-suspend-agent',
@@ -699,6 +699,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
               onOutputCalls += 1;
             },
             execute: async ({ value }, options?: any) => {
+              record('body');
               try {
                 await options?.agent?.suspend?.({ reason: 'needs input' });
               } catch {
@@ -711,7 +712,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
       });
 
       const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
-      return { types: chunks.map(chunk => chunk.type), onOutputCalls };
+      return { types: chunks.map(chunk => chunk.type), onOutputCalls, events };
     };
 
     const base = await run(false);
@@ -719,6 +720,12 @@ describe('eager tool dispatch — excluded tool classes', () => {
 
     expect(eager.types).toEqual(base.types);
     expect(eager.types).toContain('tool-call-suspended');
+    // Chunk parity alone would still hold if eager dispatch silently stopped happening —
+    // the eager run would simply be the base run. Only an eager dispatch starts the body
+    // before the model stream finishes, so assert that directly.
+    expect(eager.events.indexOf('body')).toBeGreaterThanOrEqual(0);
+    expect(eager.events.indexOf('body')).toBeLessThan(eager.events.indexOf('finish'));
+    expect(base.events.indexOf('body')).toBeGreaterThan(base.events.indexOf('finish'));
     // The carried suspension intent wins over the value the tool returned after swallowing
     // the bailout: the eager path suspends from that intent and discards the value, so
     // `onOutput` never fires for it. The non-eager path's `suspend()` returns normally, the
@@ -733,7 +740,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
     // own. That failure belongs to a call that was denied, so it must not be resolved as this
     // call's error result. Adoption would record it and the suspension would never happen.
     const run = async (eager: boolean) => {
-      const { record } = createRecorder();
+      const { record, events } = createRecorder();
       const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
       const agent = new Agent({
         id: 'eager-swallowed-suspend-throw-agent',
@@ -747,6 +754,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
             inputSchema: z.object({ value: z.string() }),
             outputSchema: z.object({ value: z.string() }),
             execute: async (_input, options?: any) => {
+              record('body');
               try {
                 await options?.agent?.suspend?.({ reason: 'needs input' });
               } catch {
@@ -759,14 +767,19 @@ describe('eager tool dispatch — excluded tool classes', () => {
       });
 
       const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
-      return chunks.map(chunk => chunk.type);
+      return { types: chunks.map(chunk => chunk.type), events };
     };
 
     const base = await run(false);
     const eager = await run(true);
 
-    expect(eager).toEqual(base);
-    expect(eager).toContain('tool-call-suspended');
+    expect(eager.types).toEqual(base.types);
+    expect(eager.types).toContain('tool-call-suspended');
+    // Chunk parity alone would also hold if eager dispatch silently stopped happening, so
+    // prove the body really started inside the model stream on the eager path only.
+    expect(eager.events.indexOf('body')).toBeGreaterThanOrEqual(0);
+    expect(eager.events.indexOf('body')).toBeLessThan(eager.events.indexOf('finish'));
+    expect(base.events.indexOf('body')).toBeGreaterThan(base.events.indexOf('finish'));
   });
 
   it('does not eagerly execute an agent-derived tool, which can suspend without a suspend schema', async () => {
@@ -2338,6 +2351,7 @@ describe('eager tool dispatch — runtime suspension handback', () => {
     // Snapshot placement alone does not prove the resume coordinate works end to end.
     const storage = new InMemoryStore();
     let siblingRuns = 0;
+    let resumeDataSeen: unknown;
     const { record } = createRecorder();
     const model = createOneShotToolCallModel(
       [
@@ -2371,7 +2385,8 @@ describe('eager tool dispatch — runtime suspension handback', () => {
             if (options?.agent?.resumeData === undefined) {
               await options?.agent?.suspend?.({ reason: 'needs input' });
             }
-            return { value };
+            resumeDataSeen = options?.agent?.resumeData;
+            return { value: `${value}-done` };
           },
         }),
       },
@@ -2379,12 +2394,20 @@ describe('eager tool dispatch — runtime suspension handback', () => {
     new Mastra({ agents: { agent }, logger: false, storage });
 
     const stream = await agent.stream('go', { maxSteps: 1, eagerToolExecution: true });
-    await drain(stream);
+    const firstChunks = await drain(stream);
     expect(siblingRuns).toBe(1);
+    expect(firstChunks.map(chunk => chunk.type)).toContain('tool-call-suspended');
 
     const resumed = await agent.resumeStream({ ok: true }, { runId: stream.runId, toolCallId: 'call-b' });
-    await drain(resumed);
+    const resumedChunks = await drain(resumed);
 
+    // The resumed call must actually reach the tool with the resume data and finish — a
+    // no-op resume would otherwise satisfy the sibling assertion below on its own.
+    expect(resumeDataSeen).toEqual({ ok: true });
+    const resumedResult = resumedChunks.find(
+      chunk => chunk.type === 'tool-result' && (chunk as any).payload?.toolCallId === 'call-b',
+    );
+    expect((resumedResult as any)?.payload?.result).toMatchObject({ value: 'b-done' });
     // The sibling already produced its result; resuming call-b must not run it again.
     expect(siblingRuns).toBe(1);
   }, 30000);
