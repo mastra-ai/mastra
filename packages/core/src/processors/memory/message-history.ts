@@ -1,6 +1,7 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
+import type { IMastraLogger } from '../../logger';
 import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
@@ -18,6 +19,13 @@ export interface MessageHistoryOptions {
   lastMessages?: number | false;
   tokenLimit?: { maxTokens: number; atMaxRemoveTokens: number };
   tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
+  /**
+   * Late-bound logger accessor. Resolved at call time rather than captured at
+   * construction, because the owning component's logger is replaced after
+   * construction (`__setLogger` on the core path, `__registerMastra` on the
+   * observational-memory path).
+   */
+  getLogger?: () => IMastraLogger | undefined;
 }
 
 /**
@@ -62,12 +70,14 @@ export class MessageHistory implements Processor {
   private lastMessages?: number | false;
   private tokenLimit?: MessageHistoryOptions['tokenLimit'];
   private tokenCounter?: MessageHistoryOptions['tokenCounter'];
+  private getLogger?: MessageHistoryOptions['getLogger'];
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
     this.tokenLimit = options.tokenLimit;
     this.tokenCounter = options.tokenCounter;
+    this.getLogger = options.getLogger;
   }
 
   /**
@@ -382,6 +392,18 @@ export class MessageHistory implements Processor {
       const foreignIds = new Set(
         storedInput.filter(message => message.id && !belongsHere(message)).map(message => message.id as string),
       );
+      // The reconciler drops these silently by design; report them here so a
+      // client reusing an ID across threads is not losing messages invisibly.
+      const droppedIds = messageIds.filter(id => foreignIds.has(id));
+      span?.update({ attributes: { reconciliationDroppedMessageCount: droppedIds.length } });
+      if (droppedIds.length > 0) {
+        this.getLogger?.()?.warn('MessageHistory: dropped client-echoed messages with foreign-thread IDs', {
+          threadId,
+          resourceId,
+          droppedMessageIds: droppedIds,
+          reason: 'foreign-thread ID collision: the ID belongs to a record on another thread',
+        });
+      }
       return reconcileClientEchoes(messages, storedById, foreignIds);
     } catch (error) {
       // Fail closed: a transient read failure must not fall back to an

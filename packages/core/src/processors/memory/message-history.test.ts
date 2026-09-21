@@ -2200,6 +2200,125 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
+    it('should warn when a foreign-thread ID is dropped so the loss is not silent', async () => {
+      const foreign = assistantMessage({ threadId: 'thread-2' });
+      mockStorage.setMessages([foreign]);
+
+      const warn = vi.fn();
+      processor = new MessageHistory({
+        storage: mockStorage,
+        getLogger: () => ({ warn }) as any,
+      });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      const foreignEcho = assistantMessage({ threadId: 'thread-1' });
+      const genuinelyNew = assistantMessage({
+        id: 'msg-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next turn' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime),
+      });
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([foreignEcho, genuinelyNew], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      const [message, context] = warn.mock.calls[0]!;
+      expect(message).toContain('foreign-thread');
+      expect(context).toMatchObject({
+        threadId: 'thread-1',
+        droppedMessageIds: ['msg-1'],
+      });
+      expect(String((context as any).reason)).toContain('foreign-thread ID collision');
+
+      saveSpy.mockRestore();
+    });
+
+    it('should stamp the dropped-message count on the memory span and stay quiet when nothing is dropped', async () => {
+      const foreign = assistantMessage({ threadId: 'thread-2' });
+      mockStorage.setMessages([foreign]);
+
+      const warn = vi.fn();
+      const currentSpan = { update: vi.fn() };
+      processor = new MessageHistory({
+        storage: mockStorage,
+        getLogger: () => ({ warn }) as any,
+      });
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([assistantMessage({ threadId: 'thread-1' })], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+        tracingContext: { currentSpan } as any,
+      });
+
+      expect(currentSpan.update).toHaveBeenCalledWith({ attributes: { reconciliationDroppedMessageCount: 1 } });
+
+      // Nothing foreign in the second batch: the attribute is still stamped, as
+      // zero, and no warn is emitted.
+      currentSpan.update.mockClear();
+      warn.mockClear();
+      await processor.processOutputResult({
+        messageList: new MessageList().add(
+          [
+            assistantMessage({
+              id: 'msg-3',
+              role: 'user',
+              content: { format: 2, parts: [{ type: 'text', text: 'Fresh' }] },
+              threadId: 'thread-1',
+              createdAt: new Date(baseTime),
+            }),
+          ],
+          'input',
+        ),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+        tracingContext: { currentSpan } as any,
+      });
+
+      expect(currentSpan.update).toHaveBeenCalledWith({ attributes: { reconciliationDroppedMessageCount: 0 } });
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('should still drop the foreign-thread echo when no logger is reachable', async () => {
+      const foreign = assistantMessage({ threadId: 'thread-2' });
+      mockStorage.setMessages([foreign]);
+
+      // No getLogger option: observability is additive, the drop policy is not
+      // conditional on a logger being available.
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      const genuinelyNew = assistantMessage({
+        id: 'msg-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next turn' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime),
+      });
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([assistantMessage({ threadId: 'thread-1' }), genuinelyNew], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      expect(savedMessages.map(m => m.id)).toEqual(['msg-2']);
+      // The foreign canonical record is untouched.
+      expect((await mockStorage.listMessagesById({ messageIds: ['msg-1'] })).messages[0]!.threadId).toBe('thread-2');
+
+      saveSpy.mockRestore();
+    });
+
     it('should drop an echoed ID from another resource in the same thread instead of clobbering it', async () => {
       const foreign = assistantMessage({ resourceId: 'resource-2' });
       mockStorage.setMessages([foreign]);

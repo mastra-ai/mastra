@@ -701,7 +701,7 @@ export class ObservationalMemory {
     // Create internal MessageHistory for message persistence
     // OM handles message saving itself (in processOutputStep) instead of relying on
     // the Memory class's MessageHistory processor
-    this.messageHistory = new MessageHistory({ storage: this.storage });
+    this.messageHistory = new MessageHistory({ storage: this.storage, getLogger: () => this.mastra?.getLogger() });
 
     this.observer = new ObserverRunner({
       observationConfig: this.observationConfig,

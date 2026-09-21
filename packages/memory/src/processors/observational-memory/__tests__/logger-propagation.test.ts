@@ -1,9 +1,30 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { ConsoleLogger, noopLogger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
+import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ObservationalMemory } from '../observational-memory';
 import { ObserverRunner } from '../observer-runner';
 import { ReflectorRunner } from '../reflector-runner';
+
+function createInMemoryStorage(): InMemoryMemory {
+  return new InMemoryMemory({ db: new InMemoryDB() });
+}
+
+function createNoopModel(modelId: string) {
+  return new MockLanguageModelV2({
+    modelId,
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      text: '<observations>* noop</observations>',
+      content: [{ type: 'text' as const, text: '<observations>* noop</observations>' }],
+      warnings: [],
+    }),
+  });
+}
 
 function createObserverRunner(mastra?: Mastra) {
   return new ObserverRunner({
@@ -77,6 +98,65 @@ describe('OM agent logger propagation', () => {
 
     expect(agent.logger).toBe(mastra.getLogger());
     expect(agent.logger instanceof ConsoleLogger).toBe(false);
+  });
+
+  it('foreign-thread drop warns on the logger installed after construction', async () => {
+    const storage = createInMemoryStorage();
+    // Constructed BEFORE any Mastra exists: a constructor-time logger snapshot
+    // would capture `undefined` and never warn.
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: createNoopModel('mock-observer'), messageTokens: 1000 },
+    } as any);
+
+    const warn = vi.fn();
+    const mastra = new Mastra({ logger: { ...noopLogger, warn } as any });
+    om.__registerMastra(mastra as any);
+
+    const sharedId = 'shared-message-id';
+    await storage.saveThread({
+      thread: {
+        id: 'thread-b',
+        resourceId: 'resource-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      } as any,
+    });
+    await storage.saveMessages({
+      messages: [
+        {
+          id: sharedId,
+          threadId: 'thread-b',
+          resourceId: 'resource-1',
+          role: 'user',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'canonical' }] },
+        } as any,
+      ],
+    });
+
+    await om.persistClientInputMessages(
+      [
+        {
+          id: sharedId,
+          threadId: 'thread-a',
+          resourceId: 'resource-1',
+          role: 'user',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'echo' }] },
+        } as any,
+      ],
+      [],
+      'thread-a',
+      'resource-1',
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('foreign-thread IDs'),
+      expect.objectContaining({ threadId: 'thread-a', droppedMessageIds: [sharedId] }),
+    );
   });
 
   it('observer agent registered via __registerMastra uses the configured logger', () => {

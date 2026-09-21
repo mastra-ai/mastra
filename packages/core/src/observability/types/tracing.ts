@@ -733,6 +733,11 @@ export interface MemoryOperationAttributes extends AIBaseAttributes, ProcessorPi
   messageCount?: number;
   /** Number of client-echoed message IDs considered during reconciliation. */
   reconciliationMessageCount?: number;
+  /**
+   * Number of client-echoed message IDs dropped during reconciliation because
+   * the ID already belongs to a record on a different thread.
+   */
+  reconciliationDroppedMessageCount?: number;
   embeddingTokens?: number;
   semanticRecallEnabled?: boolean;
   vectorResultCount?: number;

@@ -839,6 +839,7 @@ https://mastra.ai/en/docs/memory/overview`,
         processors.push(
           new MessageHistory({
             storage: memoryStore,
+            getLogger: () => this.logger,
             lastMessages: lastMessages.maxMessages ?? false,
             tokenLimit:
               lastMessages.maxTokens === undefined
@@ -1051,6 +1052,7 @@ https://mastra.ai/en/docs/memory/overview`,
         processors.push(
           new MessageHistory({
             storage: memoryStore,
+            getLogger: () => this.logger,
             lastMessages: lastMessages.maxMessages ?? false,
             tokenLimit:
               lastMessages.maxTokens === undefined
