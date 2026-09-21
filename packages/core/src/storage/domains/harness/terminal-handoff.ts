@@ -12,6 +12,7 @@ export const DEFAULT_HARNESS_TERMINAL_MAX_PENDING_INTENTS = 10_000;
 export const DEFAULT_HARNESS_TERMINAL_MAX_PENDING_BYTES = 64 * 1024 * 1024;
 export const DEFAULT_HARNESS_TERMINAL_CLAIM_LEASE_MS = 30_000;
 export const MAX_HARNESS_TERMINAL_ID_CHARS = 1024;
+export const MAX_HARNESS_TERMINAL_JSON_DEPTH = 64;
 
 export type HarnessTerminalOutcomeStatus = 'completed' | 'aborted' | 'failed';
 export type HarnessTerminalAdmissionStatus = 'pending' | 'committed' | 'cancelled' | 'fenced';
@@ -502,14 +503,17 @@ function sortJson(value: JsonValue): JsonValue {
   return value;
 }
 
-function assertJsonValue(value: unknown, path: string): asserts value is JsonValue {
+function assertJsonValue(value: unknown, path: string, depth = 0): asserts value is JsonValue {
+  if (depth > MAX_HARNESS_TERMINAL_JSON_DEPTH) {
+    throw new HarnessTerminalHandoffValidationError(path, `exceeds ${MAX_HARNESS_TERMINAL_JSON_DEPTH} nesting levels`);
+  }
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number') {
     if (Number.isFinite(value)) return;
     throw new HarnessTerminalHandoffValidationError(path, 'must contain only finite numbers');
   }
   if (Array.isArray(value)) {
-    value.forEach((entry, index) => assertJsonValue(entry, `${path}[${index}]`));
+    value.forEach((entry, index) => assertJsonValue(entry, `${path}[${index}]`, depth + 1));
     return;
   }
   if (typeof value === 'object') {
@@ -520,7 +524,7 @@ function assertJsonValue(value: unknown, path: string): asserts value is JsonVal
           `key must be at most ${MAX_HARNESS_TERMINAL_ID_CHARS} characters`,
         );
       }
-      assertJsonValue(entry, `${path}.${key}`);
+      assertJsonValue(entry, `${path}.${key}`, depth + 1);
     }
     return;
   }

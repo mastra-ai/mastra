@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../../agent';
+import { AgentThreadOutputDrainError } from '../../agent/thread-stream-runtime';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import {
   HarnessStorageAdmissionConflictError,
@@ -3942,6 +3943,387 @@ describe('Session.message() — default path', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('does not clear a newer pendingResume when a stale settlement retry finishes late', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent.enqueueRun({ finishReason: 'stop', text: 'resumed answer' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-2', toolName: 'shell', args: { cmd: 'pwd' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-stale-flush', generation: 1 };
+    const first = await session.message({
+      content: 'needs approval',
+      admissionId: 'stale-flush-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(first.finishReason).toBe('suspended');
+
+    // Hold the winner inside its pendingResume-clearing flush AFTER the
+    // durable commit seals, and hold the settlement retry at its by-run
+    // admission probe — that probe only observes 'committed' once the winner
+    // has sealed, so gating on it cannot catch the winner's own calls.
+    let releaseWinnerFlush!: () => void;
+    const winnerFlushGate = new Promise<void>(resolve => (releaseWinnerFlush = resolve));
+    let releaseProbe!: () => void;
+    const probeGate = new Promise<void>(resolve => (releaseProbe = resolve));
+    let commitSealed = false;
+    let winnerFlushHeld = false;
+    let probeHeld = false;
+    const originalCommit = storage.commitTerminalHandoff.bind(storage);
+    vi.spyOn(storage, 'commitTerminalHandoff').mockImplementation(async input => {
+      const receipt = await originalCommit(input);
+      if (receipt.status === 'committed') commitSealed = true;
+      return receipt;
+    });
+    const originalSave = storage.saveSession.bind(storage);
+    vi.spyOn(storage, 'saveSession').mockImplementation(async (record: any, opts?: any) => {
+      if (commitSealed && record.pendingResume === undefined && !winnerFlushHeld) {
+        winnerFlushHeld = true;
+        await winnerFlushGate;
+      }
+      return originalSave(record, opts);
+    });
+    const originalProbe = storage.loadTerminalAdmissionByRun.bind(storage);
+    vi.spyOn(storage, 'loadTerminalAdmissionByRun').mockImplementation(async input => {
+      const admission = await originalProbe(input);
+      if (admission?.status === 'committed' && !probeHeld) {
+        probeHeld = true;
+        await probeGate;
+      }
+      return admission;
+    });
+
+    const respond1 = session.respondToToolApproval({ approved: true });
+    await vi.waitFor(() => expect(commitSealed).toBe(true));
+    const respond2 = session.respondToToolApproval({ approved: true });
+    await vi.waitFor(() => expect(probeHeld).toBe(true));
+    await vi.waitFor(() => expect(winnerFlushHeld).toBe(true));
+
+    // Release the winner so gen-A's pendingResume clears, then park a NEWER
+    // suspension before the stale retry resumes past its probe. The retry's
+    // finalize flush must leave the newer generation untouched.
+    releaseWinnerFlush();
+    await expect(respond1).resolves.toMatchObject({ text: 'resumed answer' });
+    const second = await session.message({ content: 'suspend again' });
+    expect(second.finishReason).toBe('suspended');
+    expect(session.getRecord().pendingResume?.toolCallId).toBe('tc-2');
+
+    releaseProbe();
+    await expect(respond2).resolves.toMatchObject({ text: 'resumed answer' });
+    expect(session.getRecord().pendingResume?.toolCallId).toBe('tc-2');
+    expect(
+      (await storage.loadSession({ harnessName: 'default', sessionId: session.id }))?.pendingResume?.toolCallId,
+    ).toBe('tc-2');
+  });
+
+  it('cancels the deferred terminal admission when a resumed re-suspension is undeliverable', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    agent.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const grant = { key: 'usage-claim-undeliverable-resuspend', generation: 1 };
+    const failures: Error[] = [];
+    const result = await session.message({
+      content: 'needs approval',
+      admissionId: 'undeliverable-resuspend-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+      onTerminalCommitError: err => failures.push(err),
+    });
+    expect(result.finishReason).toBe('suspended');
+    const admission = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'undeliverable-resuspend-admission',
+      executionGrant: grant,
+    });
+    expect(admission?.status).toBe('pending');
+
+    // Stamp `resumedAt` exactly as the resume admission CAS does, then drive
+    // the undeliverable-resuspension teardown directly: the thread runtime has
+    // already discarded the segment, so the parked interaction is removed —
+    // the deferred grant it was bound to must be cancelled with it or it
+    // would strand 'pending' forever with no recoverable interaction.
+    const resumedAt = Date.now();
+    await (session as any)._flushUpdate((prev: any) => ({
+      ...prev,
+      pendingResume: { ...prev.pendingResume, resumedAt },
+    }));
+    const stamped = session.getRecord().pendingResume!;
+    const terminalized = await (session as any)._terminalizeUndeliverableResuspension({
+      pending: stamped,
+      resumedAt,
+      previousModeId: session.getRecord().modeId,
+      full: { finishReason: 'suspended', runId: stamped.runId } as any,
+      error: new AgentThreadOutputDrainError('terminal-publish-failed', 'publication lost'),
+    });
+    expect(terminalized).toBe(true);
+    expect(session.getRecord().pendingResume).toBeUndefined();
+
+    const after = await storage.loadTerminalAdmission({
+      harnessName: 'default',
+      sessionId: session.id,
+      admissionId: 'undeliverable-resuspend-admission',
+      executionGrant: grant,
+    });
+    expect(after?.status).toBe('cancelled');
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.name).toBe('HarnessTerminalHandoffError:harness.terminal_cancelled');
+  });
+
+  it('marks the responding inbox receipt applied when the committed winner is recovered without its responseId', async () => {
+    const db = new InMemoryDB();
+    const storage1 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent1 = new MockAgent({ id: 'default' });
+    agent1.enqueueRun({
+      finishReason: 'suspended',
+      suspendPayload: { toolCallId: 'tc-1', toolName: 'shell', args: { cmd: 'ls' } },
+    });
+    agent1.enqueueRun({ finishReason: 'stop', text: 'resumed answer' });
+    const { harness: harness1 } = setupHarness({
+      agents: { default: agent1 },
+      sessions: {
+        storage: storage1,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session1 = await harness1.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const sessionId = session1.id;
+    const grant = { key: 'usage-claim-receipt-recovery', generation: 1 };
+    const result = await session1.message({
+      content: 'needs approval',
+      admissionId: 'receipt-recovery-admission',
+      executionAuthorityGrant: grant,
+      terminalAdmissionSeed: { v: 1 },
+    });
+    expect(result.finishReason).toBe('suspended');
+    const pending = session1.getRecord().pendingResume!;
+
+    // The durable commit seals, then the pendingResume-clearing flush is lost —
+    // the admitted inbox receipt stays 'accepted'.
+    const originalCommit = storage1.commitTerminalHandoff.bind(storage1);
+    let commitSealed = false;
+    vi.spyOn(storage1, 'commitTerminalHandoff').mockImplementation(async input => {
+      const receipt = await originalCommit(input);
+      commitSealed = true;
+      return receipt;
+    });
+    const originalSave = storage1.saveSession.bind(storage1);
+    let failedOnce = false;
+    vi.spyOn(storage1, 'saveSession').mockImplementation(async (record: any, opts?: any) => {
+      if (commitSealed && record.pendingResume === undefined && !failedOnce) {
+        failedOnce = true;
+        throw new Error('pendingResume flush lost');
+      }
+      return originalSave(record, opts);
+    });
+    await expect(
+      session1.respondToToolApproval({
+        itemId: pending.itemId!,
+        runId: pending.runId,
+        toolCallId: pending.toolCallId,
+        pendingRequestedAt: pending.requestedAt,
+        responseId: 'committed-winner-receipt',
+        approved: true,
+      }),
+    ).rejects.toThrow('An internal harness error occurred');
+    vi.restoreAllMocks();
+    await harness1.shutdown();
+    const stranded = await storage1.loadSession({ harnessName: 'default', sessionId });
+    expect(stranded?.inboxResponseReceipts?.['committed-winner-receipt']?.status).toBe('accepted');
+
+    // Forge the resume-recovery deadline into the past so the cold sweep
+    // generation picks the parked row up.
+    const fixtureOwner = 'receipt-recovery-fixture';
+    const lease = await storage1.acquireSessionLease({ sessionId, ownerId: fixtureOwner, ttlMs: 30_000 });
+    const stored = await storage1.loadSession({ harnessName: 'default', sessionId });
+    if (!stored?.pendingResume?.resumedAt) throw new Error('expected resumed pending fixture');
+    await storage1.saveSession(
+      {
+        ...stored,
+        ownerId: fixtureOwner,
+        leaseExpiresAt: lease.expiresAt,
+        pendingResume: { ...stored.pendingResume, resumeRecoveryAt: Date.now() - 1 },
+      },
+      { ownerId: fixtureOwner, ifVersion: lease.version },
+    );
+    await storage1.releaseSessionLease({ sessionId, ownerId: fixtureOwner });
+    const generation = (await storage1.listDuePendingInteractions({ now: Date.now(), limit: 1 })).items[0];
+    if (!generation) throw new Error('expected stale due-scan generation');
+
+    // Cold owner: the sweep recovers the sealed winner. The recovered path
+    // has no `responseId`, so the receipt admitted by the crashed respond must
+    // be matched to the pending generation and marked applied — a retry of
+    // the same responseId must not read a nonterminal 'accepted' forever.
+    const storage2 = new InMemoryHarness({
+      db,
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent2 = new MockAgent({ id: 'default' });
+    const { harness: harness2 } = setupHarness({
+      agents: { default: agent2 },
+      sessions: {
+        storage: storage2,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    try {
+      (harness2 as any)._stopPendingInteractionExpirySweepLoop();
+      (harness2 as any)._pendingInteractionExpirySweepRunning = true;
+      await (harness2 as any)._runPendingInteractionExpiryGeneration(storage2, generation);
+      (harness2 as any)._pendingInteractionExpirySweepRunning = false;
+
+      const after = await storage2.loadSession({ harnessName: 'default', sessionId });
+      expect(after?.pendingResume).toBeUndefined();
+      const receipt = after?.inboxResponseReceipts?.['committed-winner-receipt'];
+      expect(receipt?.status).toBe('applied');
+      expect(receipt?.result).toMatchObject({ text: 'resumed answer' });
+      expect(agent2.resumeCalls).toHaveLength(0);
+    } finally {
+      await harness2.shutdown();
+    }
+  });
+
+  it('drains adopted-stream terminal observers when run completion rejects', async () => {
+    const storage = new InMemoryHarness({
+      db: new InMemoryDB(),
+      terminalHandoff: { enabled: true },
+      sessionRecordProjection: { enabled: true },
+    });
+    const agent = new MockAgent({ id: 'default' });
+    const { harness } = setupHarness({
+      agents: { default: agent },
+      sessions: {
+        storage,
+        terminalHandoff: {
+          finalizer: {
+            id: 'doxa.chat',
+            version: '2026-09-20',
+            finalize: async () => ({
+              projectionKind: 'chat.summary',
+              projectionId: 'response-1',
+              payload: {},
+            }),
+          },
+        },
+      },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    // Adopt a live run, then reject the shared completion barrier: the
+    // retained terminal observers must see the indeterminate outcome rather
+    // than wait forever on a collector failure that never reached the
+    // commit helper.
+    const output = buildFakeOutput({ runId: 'adopted-run', fullOutput: agent.fullOutput });
+    vi.spyOn(agent, 'getRunOutput').mockReturnValue(output);
+    let rejectCompletion!: (err: unknown) => void;
+    const completionPromise = new Promise<unknown>((_, reject) => {
+      rejectCompletion = reject;
+    });
+    (session as any)._runCompletionPromises.set('adopted-run', {
+      promise: completionPromise,
+      resolve: vi.fn(),
+      reject: rejectCompletion,
+    });
+    const failures: Error[] = [];
+    const adopted = await (session as any)._returnDuplicateMessageResult(
+      {
+        status: 'pending',
+        signalId: 'adopted-signal',
+        runId: 'adopted-run',
+        admissionId: 'adopted-admission',
+        admissionHash: 'adopted-hash',
+      },
+      {
+        stream: true,
+        executionAuthorityGrant: { key: 'usage-claim-adopted', generation: 1 },
+        onTerminalCommitError: (err: Error) => failures.push(err),
+      },
+    );
+    expect(adopted).toBe(output);
+
+    rejectCompletion(new Error('collector died'));
+    await vi.waitFor(() => expect(failures).toHaveLength(1));
+    expect(failures[0]!.name).toBe('HarnessTerminalHandoffError:harness.terminal_pending');
   });
 });
 

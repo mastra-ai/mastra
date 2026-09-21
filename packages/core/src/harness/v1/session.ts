@@ -7678,10 +7678,24 @@ export class Session {
       // The seed is bound into the admission hash AND persisted on the durable
       // admission row, but the admit happens after awaits. Snapshot it here —
       // before the first yield — so a caller mutating its object mid-flight
-      // cannot split the hashed value from the persisted one.
+      // cannot split the hashed value from the persisted one. The clone is also
+      // the first thing that can reject an unserializable or unboundedly deep
+      // seed, so surface the typed terminal validation error rather than a raw
+      // RangeError/DataCloneError.
       ...(opts.terminalAdmissionSeed === undefined
         ? {}
-        : { terminalAdmissionSeed: structuredClone(opts.terminalAdmissionSeed) }),
+        : {
+            terminalAdmissionSeed: (() => {
+              try {
+                return structuredClone(opts.terminalAdmissionSeed);
+              } catch {
+                throw new HarnessTerminalHandoffValidationError(
+                  'terminalAdmissionSeed',
+                  'must be JSON serializable within the terminal handoff bounds',
+                );
+              }
+            })(),
+          }),
     };
 
     if (opts.stream === true && opts.output !== undefined) {
@@ -9056,10 +9070,13 @@ export class Session {
                     this._terminalFailure(err, undefined, runId);
                   }
                 })
-                .catch(() => {
-                  // Settlement failures drain retained observers inside the
-                  // commit helper or the pre-commit barrier above; the
-                  // admission stays pending for recovery.
+                .catch(err => {
+                  // A rejection here means `_awaitRunCompletion` itself failed
+                  // (collector or output-drain) — the `.then` never ran, so no
+                  // settlement helper saw the failure. Drain the retained
+                  // observers with the indeterminate outcome; the admission
+                  // stays pending for recovery either way.
+                  this._terminalFailure(err, undefined, runId);
                 });
               return output;
             }
@@ -9597,10 +9614,10 @@ export class Session {
         // A terminal-mode message whose run is parked in `pendingResume`
         // legitimately stays pending until the approval-gated resume settles
         // the deferred admission — waiting past the probe deadline is correct.
-        const suspendedOnThisRun =
-          this._terminalFinalizer !== undefined &&
-          evidence.runId !== undefined &&
-          this._record.pendingResume?.runId === evidence.runId;
+        // Key off the durable parked state, not local finalizer registration —
+        // a reopened session that has not re-registered a finalizer must still
+        // extend the wait for a run durably parked in pendingResume.
+        const suspendedOnThisRun = evidence.runId !== undefined && this._record.pendingResume?.runId === evidence.runId;
         if (!suspendedOnThisRun) {
           throw new HarnessValidationError('message().admissionId', 'pending message admission is not live');
         }
@@ -15280,14 +15297,31 @@ export class Session {
     }
     const queueCompletedAt = Date.now();
     const responseAppliedAt = queueCompletedAt;
+    const capturedPendingGenerationKey = pendingInteractionGenerationKey({
+      kind: pending.kind,
+      itemId: pending.itemId,
+      runId: pending.runId,
+      toolCallId: pending.toolCallId,
+      requestedAt: pending.requestedAt,
+    });
     await Promise.race([
       this._flushUpdate(
         prev => {
           const next: SessionRecord = { ...prev };
-          if (full.finishReason === 'suspended' && suspendedPending !== undefined) {
-            next.pendingResume = suspendedPending;
-          } else {
-            delete next.pendingResume;
+          // Fence the pending write to the captured generation: a settlement
+          // retry can pause on its storage probe and resume after the winner
+          // cleared `pendingResume` and a later turn parked a NEWER pending.
+          // Clearing or replacing here would strand that newer interaction —
+          // and re-parking over an already-cleared field would resurrect an
+          // aborted or expired one.
+          const prevPendingGenerationKey =
+            prev.pendingResume === undefined ? undefined : pendingInteractionGenerationKey(prev.pendingResume);
+          if (prevPendingGenerationKey === capturedPendingGenerationKey) {
+            if (full.finishReason === 'suspended' && suspendedPending !== undefined) {
+              next.pendingResume = suspendedPending;
+            } else {
+              delete next.pendingResume;
+            }
           }
           const receipt =
             responseId !== undefined ? getOwnRecordValue(prev.inboxResponseReceipts, responseId) : undefined;
@@ -15302,6 +15336,39 @@ export class Session {
                 updatedAt: responseAppliedAt,
               },
             });
+          } else if (responseId === undefined) {
+            // Recovery path: the committed outcome was recovered without the
+            // responding caller's `responseId`. Any receipt still `accepted`
+            // for THIS pending generation was admitted against the response
+            // that committed — mark it applied so a late retry resolves the
+            // durable result instead of reading a nonterminal `accepted`
+            // forever. Match on the full generation identity, not just runId.
+            const generationReceipts = Object.values(prev.inboxResponseReceipts ?? {}).filter(
+              candidate =>
+                candidate.status === 'accepted' &&
+                candidate.kind === pending.kind &&
+                candidate.runId === pending.runId &&
+                candidate.toolCallId === pending.toolCallId &&
+                candidate.pendingRequestedAt === pending.requestedAt &&
+                candidate.itemId === (pending.itemId ?? pending.toolCallId),
+            );
+            if (generationReceipts.length > 0) {
+              next.inboxResponseReceipts = pruneInboxResponseReceipts({
+                ...(prev.inboxResponseReceipts ?? {}),
+                ...Object.fromEntries(
+                  generationReceipts.map(candidate => [
+                    candidate.responseId,
+                    {
+                      ...candidate,
+                      status: 'applied' as const,
+                      result: boundInboxReceiptResult(full) as typeof full,
+                      appliedAt: candidate.appliedAt ?? responseAppliedAt,
+                      updatedAt: responseAppliedAt,
+                    },
+                  ]),
+                ),
+              });
+            }
           }
           if (modeFlipTarget) {
             next.modeId = modeFlipTarget;
@@ -15355,7 +15422,10 @@ export class Session {
       });
     }
 
-    if (suspendedPending !== undefined) {
+    // Emit only when this caller's park actually persisted — a stale retry
+    // fenced out of the pending write must not announce a suspension that
+    // durable state never recorded.
+    if (suspendedPending !== undefined && this._record.pendingResume === suspendedPending) {
       this._emitPendingEvent(suspendedPending);
     }
 
@@ -15504,6 +15574,14 @@ export class Session {
 
     if (!terminalized) return false;
     this._pendingReplacementToolSurfaces.delete(pending.runId);
+
+    // The pending row is gone — the interaction that could settle this run's
+    // deferred terminal admission no longer exists, so cancel the grant and
+    // drain its retained observers now. This runs only after `terminalized`
+    // confirmed OUR generation was removed: a winner that re-parked a newer
+    // suspension of the same run leaves `terminalized` false, and its live
+    // admission must not be cancelled.
+    await this._cancelTerminalizedPendingAdmission(pending, projectedError);
 
     if (queuedItemId !== undefined) {
       const settledReceipt = this._record.queueAdmissionReceipts?.[queuedItemId] ?? failedQueueReceipt;

@@ -7,6 +7,7 @@ import {
   HarnessTerminalHandoffFencedError,
   HarnessTerminalHandoffIdentityConflictError,
   HarnessTerminalHandoffUnsupportedError,
+  HarnessTerminalHandoffValidationError,
   HarnessTerminalFinalizationPendingError,
   InMemoryHarness,
   harnessTerminalAdmissionId,
@@ -774,6 +775,26 @@ describe('native chat terminal handoff', () => {
       pendingIntents: 0,
       pendingBytes: 0,
     });
+  });
+
+  it('rejects a deeply nested admission seed with a typed validation error instead of RangeError', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    let deepSeed: Record<string, unknown> = { leaf: true };
+    for (let i = 0; i < 10_000; i++) deepSeed = { nested: deepSeed };
+    const input = { ...admission(), seed: deepSeed };
+    await storage.writeMessageResultEvidence(pendingEvidence(input));
+    await expect(storage.admitTerminalHandoff(input)).rejects.toBeInstanceOf(HarnessTerminalHandoffValidationError);
+    // The rejection must be the typed depth error, not a stack-overflow RangeError.
+    await expect(storage.admitTerminalHandoff(input)).rejects.toThrow('nesting levels');
+    await expect(
+      storage.loadTerminalAdmission({
+        harnessName: input.harnessName,
+        sessionId: input.sessionId,
+        admissionId: input.admissionId,
+        executionGrant: input.executionGrant,
+      }),
+    ).resolves.toBeNull();
   });
 
   it('reports terminal handoff as unsupported and rejects terminal operations when disabled', async () => {
