@@ -782,6 +782,7 @@ export const subscribeAgentThreadBodySchema = z.object({
 export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema.extend({
   threadId: z.string().min(1),
   clearPendingSignals: z.boolean().optional(),
+  expectedRunId: z.string().optional(),
 });
 
 export const cancelPendingAgentSignalsBodySchema = subscribeAgentThreadBodySchema.extend({

@@ -105,7 +105,7 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
     recognition.lang = language;
 
     recognition.onstart = () => {
-      setState(prev => ({ ...prev, isListening: true, error: null }));
+      setState(prev => ({ ...prev, isListening: true, error: null, transcript: '' }));
     };
 
     recognition.onresult = (event: any) => {
@@ -118,7 +118,10 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
         }
       }
 
-      setState(prev => ({ ...prev, transcript: finalTranscript }));
+      if (!finalTranscript) return;
+      // Continuous mode emits one event per finalized phrase with an advancing
+      // resultIndex, so append to the session transcript instead of replacing it.
+      setState(prev => ({ ...prev, transcript: prev.transcript + finalTranscript }));
     };
 
     recognition.onerror = (event: any) => {

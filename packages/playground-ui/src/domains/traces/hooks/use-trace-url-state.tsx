@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef } from 'react';
+import type { TraceSpanView } from '../components/trace-data-panel-view';
 import type { SpanTab, TraceDatePreset } from '../index';
 import {
   ROOT_ENTITY_TYPE_OPTIONS,
@@ -7,22 +8,20 @@ import {
   TRACE_DATE_PRESET_PARAM,
   TRACE_DATE_PRESET_VALUES,
   TRACE_DATE_TO_PARAM,
-  TRACE_PROPERTY_FILTER_FIELD_IDS,
   TRACE_LIST_MODE_PARAM,
   TRACE_LIST_MODE_VALUES,
-  TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
   TRACE_ROOT_ENTITY_TYPE_PARAM,
   TRACE_STATUS_PARAM,
   TRACE_STATUS_VALUES,
   applyTracePropertyFilterTokens,
   getTracePropertyFilterTokens,
 } from '../trace-filters';
-import type { EntityOptions, TraceListMode, TraceStatusFilter } from '../trace-filters';
-import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import type { EntityOptions, TraceFilterToken, TraceListMode, TraceStatusFilter } from '../trace-filters';
 
 const TRACE_ID_PARAM = 'traceId';
 const SPAN_ID_PARAM = 'spanId';
 const TAB_PARAM = 'tab';
+const SPAN_VIEW_PARAM = 'spanView';
 const SCORE_ID_PARAM = 'scoreId';
 const HIGHLIGHT_SPAN_IDS_PARAM = 'highlightSpanIds';
 
@@ -78,6 +77,8 @@ export interface UseTraceUrlStateResult {
    *  user navigates between spans inside the panel (which only changes `spanIdParam`). */
   anchorSpanIdParam: string | undefined;
   spanTabParam: SpanTab | undefined;
+  /** Which view the trace column shows; `tree` is the default and is not written to the URL. */
+  spanViewParam: TraceSpanView;
   scoreIdParam: string | undefined;
   /** Span ids featured in the timeline (e.g. the spans behind a reconstructed message). Empty when unset. */
   highlightSpanIdsParam: string[];
@@ -86,7 +87,7 @@ export interface UseTraceUrlStateResult {
   listMode: TraceListMode;
   selectedEntityOption: EntityOptions | undefined;
   selectedStatus: TraceStatusFilter | undefined;
-  filterTokens: PropertyFilterToken[];
+  filterTokens: TraceFilterToken[];
 
   // URL-modifying handlers
   /**
@@ -102,6 +103,7 @@ export interface UseTraceUrlStateResult {
   /** Convenience: clears the featured span selection. Equivalent to `handleSpanChange(null)`. */
   handleSpanClose: () => void;
   handleSpanTabChange: (tab: SpanTab) => void;
+  handleSpanViewChange: (view: TraceSpanView) => void;
   /** Selects a span AND switches its panel tab in a single URL update. Use when both must change
    *  from one interaction (e.g. "Evaluate Trace"). Calling `handleSpanChange` + `handleSpanTabChange`
    *  separately races: each functional `setSearchParams` updater reads the same pre-update
@@ -113,7 +115,7 @@ export interface UseTraceUrlStateResult {
   handleHighlightSpans: (spanIds: string[]) => void;
   /** Switches the list view between traces and branches. Clears the current selection. */
   handleListModeChange: (mode: TraceListMode) => void;
-  handleFilterTokensChange: (nextTokens: PropertyFilterToken[]) => void;
+  handleFilterTokensChange: (nextTokens: TraceFilterToken[]) => void;
   handleDateChange: (value: Date | undefined, type: 'from' | 'to') => void;
   /** Writes both ends of a custom range in one URL update (two `handleDateChange` calls in the
    *  same tick would clobber each other through react-router's closure-bound setter). */
@@ -122,7 +124,7 @@ export interface UseTraceUrlStateResult {
   handleRemoveAll: () => void;
 
   /** Lower-level helper used by `handleClear`: writes a token set and clears the trace/span selection. */
-  applyFilterTokens: (tokens: PropertyFilterToken[]) => void;
+  applyFilterTokens: (tokens: TraceFilterToken[]) => void;
 }
 
 /**
@@ -180,6 +182,7 @@ export function useTraceUrlState(
   const tabParam = searchParams.get(TAB_PARAM);
   const spanTabParam: SpanTab | undefined =
     tabParam === 'feedback' ? 'feedback' : tabParam === 'details' ? 'details' : undefined;
+  const spanViewParam: TraceSpanView = searchParams.get(SPAN_VIEW_PARAM) === 'timeline' ? 'timeline' : 'tree';
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
   const highlightSpanIdsRaw = searchParams.get(HIGHLIGHT_SPAN_IDS_PARAM);
   const highlightSpanIdsParam = useMemo(
@@ -259,6 +262,24 @@ export function useTraceUrlState(
   );
 
   const handleSpanClose = useCallback(() => handleSpanChange(null), [handleSpanChange]);
+
+  const handleSpanViewChange = useCallback(
+    (view: TraceSpanView) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          if (view === 'timeline') {
+            next.set(SPAN_VIEW_PARAM, view);
+          } else {
+            next.delete(SPAN_VIEW_PARAM);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const handleSpanTabChange = useCallback(
     (tab: SpanTab) => {
@@ -356,7 +377,7 @@ export function useTraceUrlState(
   );
 
   const applyFilterTokens = useCallback(
-    (tokens: PropertyFilterToken[]) => {
+    (tokens: TraceFilterToken[]) => {
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
@@ -473,11 +494,8 @@ export function useTraceUrlState(
       prev => {
         const next = new URLSearchParams(prev);
         next.delete(TRACE_LIST_MODE_PARAM);
-        next.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
-        next.delete(TRACE_STATUS_PARAM);
-        for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
-          next.delete(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId]);
-        }
+        // Wipes rootEntityType/status, every filter* param, their `.op` siblings and metadata params.
+        applyTracePropertyFilterTokens(next, []);
         clearSelectionParams(next);
         return next;
       },
@@ -497,6 +515,7 @@ export function useTraceUrlState(
     spanIdParam,
     anchorSpanIdParam,
     spanTabParam,
+    spanViewParam,
     scoreIdParam,
     highlightSpanIdsParam,
     listMode,
@@ -508,6 +527,7 @@ export function useTraceUrlState(
     handleSpanChange,
     handleSpanClose,
     handleSpanTabChange,
+    handleSpanViewChange,
     handleSpanChangeWithTab,
     handleScoreChange,
     handleHighlightSpans,

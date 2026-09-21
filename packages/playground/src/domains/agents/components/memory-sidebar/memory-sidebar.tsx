@@ -56,7 +56,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
         <span
           className={cn(
             'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
-            enabled ? 'border-border1 bg-surface4 text-neutral6' : 'border-border1/40 text-neutral3/50',
+            enabled ? 'border-border1 bg-surface4 text-foreground' : 'border-border1/40 text-muted-foreground/50',
           )}
         >
           <Icon className="h-3 w-3 shrink-0" />
@@ -240,10 +240,10 @@ export function MemorySidebarBody({
                 actionSlot={
                   <Button
                     icon={<ExternalLink />}
-                    as="a"
-                    href="https://mastra.ai/docs/memory/overview"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    render={
+                      <a href="https://mastra.ai/docs/memory/overview" target="_blank" rel="noopener noreferrer" />
+                    }
+
                     variant="outline"
                   >
                     View documentation
@@ -275,16 +275,16 @@ export function MemorySidebarBody({
               className="group/memory-card w-full shrink-0 cursor-pointer bg-transparent px-3 py-2.5 text-left"
             >
               <span className="flex items-center justify-between gap-2">
-                <span className="text-neutral6 flex min-w-0 items-center gap-1.5">
+                <span className="text-foreground flex min-w-0 items-center gap-1.5">
                   <MemoryIcon className="h-4 w-4 shrink-0" />
                   <Txt as="span" variant="ui-sm" className="font-medium">
                     Memory
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <ChevronDown className="text-neutral3 h-4 w-4 shrink-0" />
+                  <ChevronDown className="text-muted-foreground h-4 w-4 shrink-0" />
                 ) : (
-                  <ChevronUp className="text-neutral3 h-4 w-4 shrink-0" />
+                  <ChevronUp className="text-muted-foreground h-4 w-4 shrink-0" />
                 )}
               </span>
 

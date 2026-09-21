@@ -131,6 +131,89 @@ describe('useSpeechRecognition (browser path)', () => {
     expect(lastRecognition.stop).toHaveBeenCalledTimes(1);
   });
 
+  describe('when two phrases are finalized in one continuous session', () => {
+    it('keeps both phrases in the transcript', async () => {
+      installSpeechRecognition();
+      const { result } = renderHook(() => useSpeechRecognition({}), { wrapper });
+      act(() => result.current.start());
+
+      const first = { 0: { transcript: 'Accept the newer address.' }, isFinal: true };
+      act(() => {
+        lastRecognition.onresult?.({ resultIndex: 0, results: [first] });
+      });
+      await waitFor(() => expect(result.current.transcript).toBe('Accept the newer address. '));
+
+      act(() => {
+        lastRecognition.onresult?.({
+          resultIndex: 1,
+          results: [first, { 0: { transcript: 'And note that Sentinel confirmed it.' }, isFinal: true }],
+        });
+      });
+      await waitFor(() =>
+        expect(result.current.transcript).toBe('Accept the newer address. And note that Sentinel confirmed it. '),
+      );
+    });
+
+    it('keeps identical consecutive phrases', async () => {
+      installSpeechRecognition();
+      const { result } = renderHook(() => useSpeechRecognition({}), { wrapper });
+      act(() => result.current.start());
+
+      const phrase = { 0: { transcript: 'again.' }, isFinal: true };
+      act(() => {
+        lastRecognition.onresult?.({ resultIndex: 0, results: [phrase] });
+      });
+      act(() => {
+        lastRecognition.onresult?.({ resultIndex: 1, results: [phrase, phrase] });
+      });
+      await waitFor(() => expect(result.current.transcript).toBe('again. again. '));
+    });
+  });
+
+  describe('when a new dictation session starts', () => {
+    it('resets the transcript from the previous session', async () => {
+      installSpeechRecognition();
+      const { result } = renderHook(() => useSpeechRecognition({}), { wrapper });
+      act(() => result.current.start());
+      act(() => {
+        lastRecognition.onresult?.({ resultIndex: 0, results: [{ 0: { transcript: 'old' }, isFinal: true }] });
+      });
+      await waitFor(() => expect(result.current.transcript).toBe('old '));
+
+      act(() => result.current.stop());
+      act(() => result.current.start());
+      await waitFor(() => expect(result.current.transcript).toBe(''));
+
+      act(() => {
+        lastRecognition.onresult?.({ resultIndex: 0, results: [{ 0: { transcript: 'new' }, isFinal: true }] });
+      });
+      await waitFor(() => expect(result.current.transcript).toBe('new '));
+    });
+  });
+
+  describe('when an event only carries interim results', () => {
+    it('does not change the transcript', async () => {
+      installSpeechRecognition();
+      const { result } = renderHook(() => useSpeechRecognition({}), { wrapper });
+      act(() => result.current.start());
+      act(() => {
+        lastRecognition.onresult?.({ resultIndex: 0, results: [{ 0: { transcript: 'done' }, isFinal: true }] });
+      });
+      await waitFor(() => expect(result.current.transcript).toBe('done '));
+
+      act(() => {
+        lastRecognition.onresult?.({
+          resultIndex: 1,
+          results: [
+            { 0: { transcript: 'done' }, isFinal: true },
+            { 0: { transcript: 'typ' }, isFinal: false },
+          ],
+        });
+      });
+      expect(result.current.transcript).toBe('done ');
+    });
+  });
+
   it('stops recognition and clears handlers on unmount', async () => {
     installSpeechRecognition();
     const { unmount } = renderHook(() => useSpeechRecognition({}), { wrapper });

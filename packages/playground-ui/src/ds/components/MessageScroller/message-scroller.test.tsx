@@ -572,7 +572,7 @@ describe('MessageScroller older history', () => {
     });
   });
 
-  it('does not request older history before the transcript has settled at the end', () => {
+  it('does not request older history for a mount that lands at the top without the reader moving', () => {
     const onReachStart = vi.fn();
     render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
 
@@ -586,7 +586,7 @@ describe('MessageScroller older history', () => {
     expect(onReachStart).not.toHaveBeenCalled();
   });
 
-  it('requests older history once the reader settles at the end and returns to the start', () => {
+  it('requests older history once the reader scrolls back from the end to the start', () => {
     const onReachStart = vi.fn();
     render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
 
@@ -603,6 +603,25 @@ describe('MessageScroller older history', () => {
 
     // Still at the start with the fetch in flight — no second request.
     fireEvent.scroll(viewport);
+    expect(onReachStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('requests older history from a transcript that opened above its bottom, with no trip to the end', () => {
+    const onReachStart = vi.fn();
+    render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+
+    // A last turn taller than the viewport parks the reader short of the bottom,
+    // so the end is never reached — scrolling up must still ask for older messages.
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+    fireEvent.scroll(viewport);
+    expect(onReachStart).not.toHaveBeenCalled();
+
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+    fireEvent.scroll(viewport);
+
     expect(onReachStart).toHaveBeenCalledTimes(1);
   });
 

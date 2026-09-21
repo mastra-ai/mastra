@@ -137,14 +137,22 @@ const semanticEntries: [string, string][] = [
   ['selected', Colors.selected],
 ];
 
-const semanticBorderEntries: [string, string][] = [['border', BorderColors.border]];
+const semanticChromaticEntries: [string, string][] = [
+  ['destructive', Colors.destructive],
+  ['destructive-foreground', Colors['destructive-foreground']],
+];
+
+const semanticBorderEntries: [string, string][] = [
+  ['border', BorderColors.border],
+  ['sidebar-divider', BorderColors['sidebar-divider']],
+];
 
 const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
   return (
     <div
       className={cn(
         'grid min-h-80 grid-cols-[9rem_1fr] overflow-hidden rounded-lg border',
-        semantic ? 'new-theme border-border text-foreground' : 'border-border1 text-neutral6',
+        semantic ? 'new-theme border-border text-foreground' : 'border-border1 text-foreground',
       )}
     >
       <div className={cn('p-4', semantic ? 'bg-sidebar' : 'bg-surface1')}>
@@ -221,6 +229,16 @@ export const SemanticNeutrals: Story = {
         Semantic neutrals
       </SectionTitle>
       <SwatchGrid entries={[...semanticEntries, ...semanticBorderEntries]} />
+      <SectionTitle note="Use `destructive` for validation text and borders. Pair it with `destructive-foreground` on destructive action surfaces.">
+        Semantic destructive
+      </SectionTitle>
+      <SwatchGrid entries={semanticChromaticEntries} />
+      <div className="mb-6 flex items-center gap-3">
+        <span className="text-ui-sm text-destructive">Field is required.</span>
+        <span className="bg-destructive text-ui-sm text-destructive-foreground inline-flex rounded-full px-3 py-1 font-medium">
+          Delete thread
+        </span>
+      </div>
       <SectionTitle note="Use these combinations after a consumer opts into the semantic layer.">
         Representative combinations
       </SectionTitle>

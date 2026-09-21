@@ -24,12 +24,7 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
-import type {
-  AgentAbortThreadOptions,
-  AgentModelManagerConfig,
-  AgentThreadIdentityOptions,
-  ToolsInput,
-} from '../types';
+import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
 
 import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
@@ -1829,7 +1824,7 @@ export class DurableAgent<
     // after which the thread no longer has an active run to look up.
     const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
     const aborted = super.abortThreadStream(options);
-    if (!runId) return aborted;
+    if (!aborted || !runId) return aborted;
 
     this.#abortDurableRun(runId);
     return true;

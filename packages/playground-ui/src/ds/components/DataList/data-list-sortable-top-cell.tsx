@@ -2,74 +2,72 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DataListTopCell } from './data-list-top-cell';
 import type { DataListTopCellProps } from './data-list-top-cell';
-import { focusRing, transitions } from '@/ds/primitives/transitions';
+import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
-export type DataListSortDirection = 'ascending' | 'descending';
+export type DataListSort = 'asc' | 'desc';
 
 const sortIcons = {
-  ascending: ArrowUp,
-  descending: ArrowDown,
+  asc: ArrowUp,
+  desc: ArrowDown,
   none: ArrowUpDown,
 };
 
-function getNextDirection(
-  sortDirection: DataListSortDirection | undefined,
-  defaultSortDirection: DataListSortDirection,
-) {
-  if (!sortDirection) return defaultSortDirection;
-  return sortDirection === 'ascending' ? 'descending' : 'ascending';
-}
+const sortLabels = {
+  asc: 'ascending',
+  desc: 'descending',
+};
 
-export type DataListSortableTopCellProps = Omit<
-  DataListTopCellProps,
-  'aria-sort' | 'as' | 'children' | 'onClick' | 'role'
-> & {
+const sortAnimations = {
+  asc: 'animate-sort-arrow-up',
+  desc: 'animate-sort-arrow-down',
+};
+
+const sortTooltips = {
+  asc: 'Asc',
+  desc: 'Desc',
+  none: 'Sort',
+};
+
+export type DataListSortableTopCellProps = Omit<DataListTopCellProps, 'aria-sort' | 'as' | 'children' | 'onClick'> & {
   children: ReactNode;
-  sortDirection?: DataListSortDirection;
-  defaultSortDirection?: DataListSortDirection;
-  onSortChange: (direction: DataListSortDirection) => void;
+  sortKey: string;
+  sort?: DataListSort;
+  onSortChange: (sort: DataListSort, key: string) => void;
   align?: 'start' | 'end';
 };
 
 export function DataListSortableTopCell({
   children,
-  sortDirection,
-  defaultSortDirection = 'ascending',
+  sortKey,
+  sort,
   onSortChange,
   align = 'start',
   className,
   ...props
 }: DataListSortableTopCellProps) {
-  const nextDirection = getNextDirection(sortDirection, defaultSortDirection);
-  const SortIcon = sortIcons[sortDirection ?? 'none'];
-  const currentDirection = sortDirection ? `, sorted ${sortDirection}` : ', not sorted';
+  const next: DataListSort = sort === 'asc' ? 'desc' : 'asc';
+  const SortIcon = sortIcons[sort ?? 'none'];
+  const label = typeof children === 'string' ? children : sortKey;
+  const current = sort ? `sorted ${sortLabels[sort]}` : 'not sorted';
 
   return (
     <DataListTopCell
-      as="div"
-      data-sort-direction={sortDirection ?? 'none'}
-      className={cn('overflow-visible py-0', className)}
+      data-sort={sort ?? 'none'}
+      className={cn('gap-1 overflow-visible', align === 'end' && 'flex-row-reverse', className)}
       {...props}
     >
-      <button
-        type="button"
-        onClick={() => onSortChange(nextDirection)}
-        className={cn(
-          'relative flex h-10 w-full touch-manipulation items-center gap-1 overflow-visible rounded-sm outline-none',
-          align === 'start' ? 'justify-start text-left' : 'justify-end text-right',
-          sortDirection ? 'text-neutral4' : 'text-neutral3',
-          'hover:text-neutral4',
-          transitions.colors,
-          focusRing.visible,
-        )}
+      <span className="min-w-0 truncate">{children}</span>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={`${label}, ${current}, sort ${sortLabels[next]}`}
+        tooltip={sortTooltips[sort ?? 'none']}
+        onClick={() => onSortChange(next, sortKey)}
+        className={cn('shrink-0', sort ? 'text-foreground' : 'text-muted-foreground')}
       >
-        <span className="min-w-0 truncate">{children}</span>
-        <span className="sr-only">
-          {currentDirection}, sort {nextDirection}
-        </span>
-        <SortIcon aria-hidden="true" className="size-3 shrink-0" />
-      </button>
+        <SortIcon key={sort ?? 'none'} className={sort && sortAnimations[sort]} />
+      </Button>
     </DataListTopCell>
   );
 }

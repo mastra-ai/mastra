@@ -141,7 +141,7 @@ export function AgentPlaygroundVersionBar({
             className="min-w-0 flex-1"
           />
         ) : (
-          <Txt variant="ui-xs" className="text-neutral3">
+          <Txt variant="ui-xs" className="text-muted-foreground">
             {isCodeSourceAgent ? 'No filesystem saves yet' : 'No versions yet'}
           </Txt>
         )}
@@ -151,7 +151,7 @@ export function AgentPlaygroundVersionBar({
         <Tooltip>
           <TooltipTrigger
             aria-label="Version information"
-            className="text-neutral3 hover:text-neutral5 shrink-0 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
+            className="text-muted-foreground hover:text-foreground shrink-0 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
           >
             <Icon size="sm">
               <Info />

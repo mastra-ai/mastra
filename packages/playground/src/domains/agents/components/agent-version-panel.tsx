@@ -41,7 +41,7 @@ export function AgentVersionPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="border-border1 border-b px-3 py-3">
-        <Txt variant="ui-sm" className="text-neutral5 font-medium">
+        <Txt variant="ui-sm" className="text-foreground font-medium">
           Version history
         </Txt>
       </div>
@@ -49,7 +49,7 @@ export function AgentVersionPanel({
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
           <div className="px-3 py-4">
-            <Txt variant="ui-xs" className="text-neutral2">
+            <Txt variant="ui-xs" className="text-placeholder">
               Loading versions...
             </Txt>
           </div>
@@ -69,8 +69,8 @@ export function AgentVersionPanel({
                     className={cn(
                       'w-full text-left px-3 py-2.5 text-ui-md transition-colors border-l-2',
                       isSelected
-                        ? 'bg-surface2 text-neutral5 border-accent1'
-                        : 'border-transparent text-neutral3 hover:bg-surface3 hover:text-neutral5',
+                        ? 'bg-surface2 text-foreground border-accent1'
+                        : 'border-transparent text-muted-foreground hover:bg-surface3 hover:text-foreground',
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -80,7 +80,7 @@ export function AgentVersionPanel({
                       {isPublished && <Badge variant="green">Published</Badge>}
                       {isDraft && <Badge variant="blue">Draft</Badge>}
                     </div>
-                    <Txt variant="ui-xs" className="text-neutral2 mt-0.5">
+                    <Txt variant="ui-xs" className="text-placeholder mt-0.5">
                       {formatTimestamp(version.createdAt)}
                     </Txt>
                   </button>

@@ -34,10 +34,14 @@ export type DeprecatedLineTabListVariant = Extract<TabListVariantValue, 'line'>;
 
 export type TabListVariant = DeprecatedLineTabListVariant | Exclude<TabListVariantValue, DeprecatedLineTabListVariant>;
 
+export type TabListSize = 'sm' | 'md';
+
 export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   children: React.ReactNode;
   className?: string;
   sticky?: boolean;
+  /** Control height of each tab; `sm` lines up with `size="sm"` buttons (e.g. inside a `DataPanel.Header`). */
+  size?: TabListSize;
   /**
    * Visual treatment for the tab list.
    *
@@ -53,7 +57,7 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   style?: React.CSSProperties;
 };
 
-export const TabList = ({ children, className, variant, sticky, style }: TabListProps) => {
+export const TabList = ({ children, className, variant, size = 'md', sticky, style }: TabListProps) => {
   const resolvedVariant = variant ?? 'line';
   const tabs = useContext(TabsContext);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -123,8 +127,8 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
     .reduce((sum, tab) => sum + tab.width + gap, tabs?.frame === 'inset' ? 4 : 0);
   const visibleClosableTabs = measurements.filter(tab => !hiddenValues.has(tab.value) && tab.onClose);
   const listContext = useMemo(
-    () => ({ variant: resolvedVariant, hiddenValues, register, unregister }),
-    [resolvedVariant, hiddenValues, register, unregister],
+    () => ({ variant: resolvedVariant, size, hiddenValues, register, unregister }),
+    [resolvedVariant, size, hiddenValues, register, unregister],
   );
   useLayoutEffect(() => {
     const nextPositions = new Map(tabPositions.current);
@@ -186,6 +190,7 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
             data-slot="tabs-list"
             data-overflow={hiddenTabs.length > 0 || undefined}
             data-variant={resolvedVariant}
+            data-size={size}
             className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }), className)}
             style={style}
           >

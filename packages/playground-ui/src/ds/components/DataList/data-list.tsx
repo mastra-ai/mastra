@@ -33,7 +33,7 @@ import {
 import { DataListTopCells } from './data-list-top-cells';
 
 export type { DataListRootProps, DataListVariant } from './data-list-root';
-export type { DataListSortableTopCellProps, DataListSortDirection } from './data-list-sortable-top-cell';
+export type { DataListSortableTopCellProps, DataListSort } from './data-list-sortable-top-cell';
 
 export const DataList = Object.assign(DataListRoot, {
   Top: DataListTop,

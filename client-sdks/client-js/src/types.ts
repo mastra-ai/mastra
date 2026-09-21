@@ -556,7 +556,11 @@ export type UpdateMemoryThreadParams = Omit<
     agentId?: string;
   };
 
-export type ListMemoryThreadMessagesParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>>;
+export type ListMemoryThreadMessagesParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>> &
+  RequestContextOptions & {
+    /** Optional network ID. When provided, uses the network memory endpoint. */
+    networkId?: string;
+  };
 
 /** The route schema intentionally keeps persisted message payloads opaque. */
 export type ListMemoryThreadMessagesResponse = GeneratedResponse<'GET /memory/threads/:threadId/messages'> & {
@@ -793,8 +797,12 @@ export interface SemanticRecallConfig {
 export type TitleGenerationConfig =
   | boolean
   | {
-      model: string; // Model ID in format provider/model-name
+      model?: string; // Model ID in format provider/model-name; defaults to the agent's own model
       instructions?: string;
+      /** Minimum number of thread messages required before a title is generated */
+      minMessages?: number;
+      /** Emit the generated title as a transient `data-thread-title` chunk on the run stream, before `finish` */
+      emitEvent?: boolean;
     };
 
 /**

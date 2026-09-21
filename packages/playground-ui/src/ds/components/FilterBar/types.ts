@@ -73,4 +73,29 @@ export type FilterBarItem = {
   value: FilterBarValue;
 };
 
+/**
+ * The filter being built in the typeahead input. Its `id` is kept when it becomes an
+ * item, so the chip rendered for the draft is the very node the committed chip lands on.
+ */
+export type FilterBarDraft = {
+  id: string;
+  fieldId: string;
+  operatorId?: string;
+  /** What the draft chip showed before this step, so only the new segments animate in. */
+  from: DraftStage;
+};
+
+/** How far a draft had progressed: nothing yet, its field, or its field and operator. */
+export type DraftStage = 'none' | 'field' | 'operator';
+
+/**
+ * The draft that just became an item. The provider keeps showing it until the consumer's
+ * `value` includes it (URL-backed consumers update a tick later); the chip glints once, then settles.
+ */
+export type FilterBarCommit = {
+  item: FilterBarItem;
+  from: DraftStage;
+  glint: boolean;
+};
+
 export type FilterBarSegment = 'field' | 'operator' | 'value' | 'remove';

@@ -981,10 +981,15 @@ export class Agent extends BaseResource {
    * @experimental Agent signals are experimental and may change in a future release.
    */
   async abortThread(params: AbortAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
-    const { resourceId, threadId, clearPendingSignals } = params;
+    const { resourceId, threadId, clearPendingSignals, expectedRunId } = params;
     return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {
       method: 'POST',
-      body: { resourceId, threadId, ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }) },
+      body: {
+        resourceId,
+        threadId,
+        ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
+        ...(expectedRunId === undefined ? {} : { expectedRunId }),
+      },
     });
   }
 

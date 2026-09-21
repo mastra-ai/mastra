@@ -50,6 +50,20 @@ describe('Workflow execution clock', () => {
   });
 });
 
+describe('Workflow execution clock on a span that covers a suspension', () => {
+  it('says the duration includes the wait rather than passing it off as execution time', () => {
+    render(<WorkflowClock startedAt={1_000} endedAt={86_401_000} spansSuspension />);
+    expect(screen.getByText('1d')).not.toBeNull();
+    expect(screen.getByTitle('Includes time spent suspended waiting for input')).not.toBeNull();
+  });
+
+  it('claims nothing about a plain span', () => {
+    render(<WorkflowClock startedAt={1_000} endedAt={1_022} />);
+    expect(screen.getByText('22ms')).not.toBeNull();
+    expect(screen.queryByTitle('Includes time spent suspended waiting for input')).toBeNull();
+  });
+});
+
 describe('Workflow execution clock fallback', () => {
   describe('when a caller has no execution status', () => {
     it('does not assume that a missing completion time means running', () => {

@@ -17,6 +17,7 @@ import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
 } from './chat-boundary-reconciliation.js';
+import { AccountSwitchNoticeComponent, PackFallbackNoticeComponent } from './components/account-switch-notice.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
@@ -472,6 +473,10 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);
+    // Register before any of the insertion paths below return: the
+    // addUserMessage dedup guard keys on this map, so an unregistered reminder
+    // would render again if the same signal message is dispatched twice.
+    state.messageComponentsById.set(message.id, reminderComponent);
 
     // If the reminder anchors before a user message that has not been rendered
     // yet (its id is not mapped), fall back to inserting it before the latest
@@ -1218,6 +1223,12 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.allToolComponents.push(toolComponent);
           } else {
           }
+        } else if (part.kind === 'account-switch') {
+          flushAccumulated();
+          state.chatContainer.addChild(new AccountSwitchNoticeComponent(part));
+        } else if (part.kind === 'pack-fallback') {
+          flushAccumulated();
+          state.chatContainer.addChild(new PackFallbackNoticeComponent(part));
         } else if (part.kind === 'om') {
           // Skip start markers in history — only show completed/failed results
           if (part.event === 'start') continue;

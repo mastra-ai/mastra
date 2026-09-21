@@ -2202,6 +2202,7 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
     resourceId,
     threadId,
     clearPendingSignals,
+    expectedRunId,
     requestContext: serverRequestContext,
   }) => {
     try {
@@ -2240,6 +2241,7 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
+        expectedRunId,
       });
       return { aborted };
     } catch (error) {

@@ -2851,6 +2851,7 @@ describe('Agent Routes Authorization', () => {
             clearPendingSignals,
             resourceId: 'ignored-resource',
             threadId: 'ignored-thread',
+            expectedRunId: 'run-a',
           } as any),
         ).resolves.toEqual({ aborted: true });
 
@@ -2858,6 +2859,7 @@ describe('Agent Routes Authorization', () => {
           resourceId: 'user-a',
           threadId: 'abort-thread-owned-by-context',
           ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
+          expectedRunId: 'run-a',
         });
       },
     );
