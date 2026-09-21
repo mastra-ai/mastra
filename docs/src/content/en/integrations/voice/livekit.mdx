@@ -146,6 +146,8 @@ export default createLiveKitWorker({
 
 See the [LiveKit turn detection docs](https://docs.livekit.io/agents/logic/turns/) for all options.
 
+To disable voice activity detection, set `vad: false` on `createLiveKitWorker()`. The worker passes `null` to LiveKit, which otherwise enables its bundled detector when `vad` is omitted. Choose a turn detection mode that doesn't require VAD, such as `'manual'`, when disabling it. Values in `sessionOptions` override the worker's generated options, including `vad`.
+
 ### Per-call voices and transcription
 
 The top-level `stt` and `tts` options apply to every call. To pick them per call, one voice or language per tenant, set the `configuration.stt` and `configuration.tts` resolvers instead. Each resolver runs once per call with the dispatch metadata, request context, room name, and job context, and returns a value accepted by the matching top-level option. The value is either a plugin instance or an inference model string. Return `undefined` to fall back to the top-level option.
@@ -486,6 +488,83 @@ Conversation history lives in Mastra Memory, so voice sessions and text chat can
 - [Speech to Speech](/reference/voice/speech-to-speech)
 - [Agent Memory](/docs/memory/overview)
 - [LiveKit Agents docs](https://docs.livekit.io/agents/)
+
+## Upgrade to 1.0
+
+The 1.0 prerelease targets LiveKit Agents 1.9. Test the supplied prerelease version or package archive before deploying it. Updating a dependency range doesn't update an existing lockfile: check the installed versions after installation.
+
+### Install compatible packages
+
+Use the same exact release for Agents and its plugins. The tested baseline is:
+
+| Package | Version |
+| - | - |
+| `@livekit/agents` | `1.9.0` |
+| `@livekit/agents-plugin-livekit` | `1.9.0` |
+| `@livekit/agents-plugin-silero` | `1.9.0` |
+| `@livekit/rtc-node` | `0.13.35` |
+| `livekit-server-sdk` | `2.19.1` |
+
+For a local prerelease archive, install it with the matching LiveKit packages:
+
+```bash npm2yarn
+npm install ./mastra-livekit-1.0.0-next.0.tgz @livekit/agents@1.9.0 @livekit/agents-plugin-livekit@1.9.0 @livekit/agents-plugin-silero@1.9.0 @livekit/rtc-node@0.13.35
+```
+
+Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.9 and Silero 1.9 require RTC `^0.13.34`; RTC 1.x doesn't satisfy that requirement. Don't override peer dependency errors to install it.
+
+Keep Node.js 22.13 or newer and use a Zod version accepted by Agents: `^3.25.76 || ^4.1.8`. Verify the installed dependency tree and initialize the worker's models:
+
+```bash npm2yarn
+npm ls @mastra/livekit @livekit/agents @livekit/agents-plugin-livekit @livekit/agents-plugin-silero @livekit/rtc-node
+npx tsx src/mastra/voice-worker.ts download-files
+```
+
+Use a single installed copy of Agents for both the integration and a custom `voice.AgentSession`. Multiple copies can fail LiveKit's runtime class checks.
+
+### Check VAD and turn detection
+
+`vad: false` now disables VAD at session creation. Previously, the worker skipped plugin prewarming but passed `undefined` to LiveKit, which could enable its bundled VAD. If an application relied on that behavior, configure a detector explicitly.
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+import { mastra } from './index'
+
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  vad: false,
+  turnDetection: 'manual',
+})
+```
+
+The default still loads the Silero plugin during prewarm. The `'english'` and `'multilingual'` turn detection options still select their existing text models. LiveKit's newer `inference.VAD` and `inference.TurnDetector` APIs are available through the existing instance and resolver options; switching to them is a separate choice that can change endpointing, model downloads, and cloud usage.
+
+### Review custom LiveKit tools and speech providers
+
+Mastra tools continue to run through the Mastra agent. If you also implement LiveKit tools or a custom LiveKit plugin, account for the changes since Agents 1.4:
+
+- `ToolContext` is a class. Use its accessors and `flatten()` instead of enumerating or mutating it as a plain object.
+- Named tool lists and duplicate-name checks are supported. Object shorthand with anonymous tools remains supported; converting every tool map isn't required.
+- Provider tools use subclasses of `ProviderTool` instead of the older `ProviderDefinedTool` API.
+
+See the [LiveKit tool API](https://github.com/livekit/agents-js/blob/main/agents/src/llm/tool_context.ts) for custom plugin migration details.
+
+ElevenLabs models no longer route through LiveKit Inference. Replace affected inference model strings with a supported provider or pass an instance from the standalone ElevenLabs plugin, configured with that provider's credentials. The standalone plugin remains available. See [LiveKit's provider change](https://github.com/livekit/agents-js/pull/2415).
+
+### Review tokens, telemetry, and shutdown
+
+Server SDK 2.19.1 rejects signed tokens without an `exp` claim. Tokens from `liveKitConnectionRoute()` already include an expiry, with a default lifetime of 15 minutes. Update custom token issuers and webhook fixtures that omit expiry. Cloud server API calls also support automatic region failover, which can change request latency and the region handling a retry.
+
+Agents 1.8 added OpenTelemetry GenAI attributes for conversations and tool activity. Check exporter settings and any dashboards that read LiveKit attributes. To withhold conversational content from third-party exporters, set `LIVEKIT_TELEMETRY_ALLOW_PII=0`, or configure LiveKit's tracer provider with `allowPii: false`. Project redaction settings still apply. These controls don't configure Mastra's own exporters or room recordings. See [LiveKit's telemetry change](https://github.com/livekit/agents-js/pull/2411).
+
+The `onCallEnd` hook still uses LiveKit's job shutdown callbacks. Keep cleanup within the configured shutdown window, and verify that it completes when a caller disconnects or a worker receives a shutdown signal. LiveKit's newer `onSessionEnd` callback is a separate lifecycle hook; the integration doesn't switch to it automatically.
+
+### Verify recordings and calls
+
+The integration's room-level `recording` configuration and S3 permissions stay the same. LiveKit Agents' `AgentSession.start({ record })` controls separate session recording and telemetry. Disabling one doesn't disable the other.
+
+Before promoting the prerelease, test both a browser call and a phone call through a configured SIP trunk. Verify both speakers, interruptions, tools, greeting and consent behavior, hangup, the completed trace, and `onCallEnd`. When recording is enabled, wait for the S3 object and play it with **Review Audio**. Also test recording disabled and rejection of an existing room name. Run these checks on the deployment image with its model files and native libraries installed.
 
 ## API reference
 
