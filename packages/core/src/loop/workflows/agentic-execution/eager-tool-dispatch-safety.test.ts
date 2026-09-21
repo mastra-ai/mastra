@@ -1347,14 +1347,14 @@ describe('eager tool dispatch — unsafe terminations', () => {
     const { events, record } = createRecorder();
     let releaseSlow: (() => void) | undefined;
     let slowEntered: () => void;
-    const slowHasEntered = Promise.race([
-      new Promise<void>(resolve => {
-        slowEntered = resolve;
-      }),
-      new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error('eager dispatch never entered slow-tool')), 1000),
-      ),
-    ]);
+    const slowHasEntered = new Promise<void>((resolve, reject) => {
+      // Bounded: a dispatch regression fails fast with a named cause rather than hanging.
+      const bound = setTimeout(() => reject(new Error('eager dispatch never entered slow-tool')), 1000);
+      slowEntered = () => {
+        clearTimeout(bound);
+        resolve();
+      };
+    });
 
     const model = new MockLanguageModelV2({
       doStream: async () => ({
