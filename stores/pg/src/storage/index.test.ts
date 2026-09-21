@@ -669,13 +669,19 @@ createDomainIndexTests({
 describe('MemoryPG error propagation (no empty-on-error)', () => {
   // These reads used to swallow DB errors and return an empty page, so an outage
   // looked exactly like "no data". They should throw instead.
+  //
+  // The outage carries a network failure code because MemoryPG deliberately
+  // does not retain the driver error as `cause` (MastraError serialization
+  // would leak query text and connection details). The backend failure is
+  // still observable through the sanitized `details.failureCode`, which exists
+  // only when the read actually reached the backing client — so a broken mock
+  // still can't pass as a real outage.
   const createFailingDomain = () => {
-    const pool = { query: vi.fn().mockRejectedValue(new Error('simulated backend outage')) };
+    const outage = Object.assign(new Error('simulated backend outage'), { code: 'ECONNRESET' });
+    const pool = { query: vi.fn().mockRejectedValue(outage) };
     return new MemoryPG({ pool: pool as any });
   };
 
-  // Also check the cause is the original error, so a broken mock can't pass as
-  // a real outage.
   const expectOutage = async (promise: Promise<unknown>, idPattern: RegExp) => {
     const err: any = await promise.then(
       () => {
@@ -683,8 +689,12 @@ describe('MemoryPG error propagation (no empty-on-error)', () => {
       },
       e => e,
     );
-    expect(err).toMatchObject({ id: expect.stringMatching(idPattern) });
-    expect(String(err?.cause?.message ?? err?.message)).toContain('simulated backend outage');
+    expect(err).toMatchObject({
+      id: expect.stringMatching(idPattern),
+      details: { failureCode: 'ECONNRESET' },
+    });
+    // The sanitized cause must not leak the driver error message.
+    expect(String(err?.cause?.message ?? '')).not.toContain('simulated backend outage');
   };
 
   it('listThreads re-throws backend failures instead of returning empty', async () => {

@@ -1,4 +1,6 @@
 import {
+  TABLE_HARNESS_ATTACHMENT_OPERATIONS,
+  TABLE_HARNESS_ATTACHMENTS,
   TABLE_HARNESS_CHANNEL_INBOX,
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_SESSION_EVENTS,
@@ -145,7 +147,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
 
       const indexes = harness.getDefaultIndexDefinitions();
 
-      expect(indexes.length).toBe(36);
+      expect(indexes.length).toBe(39);
       expect(indexes).toContainEqual({
         name: 'test_schema_idx_harness_sessions_active_key',
         table: TABLE_HARNESS_SESSIONS,
@@ -173,6 +175,26 @@ describe('PostgresStore Domain Performance Indexes', () => {
         table: TABLE_HARNESS_CHANNEL_INBOX,
         columns: ['harness_name', 'channel_id', 'idempotency_key'],
         unique: true,
+      });
+      // Native attachment ownership: per-incarnation operation lifecycle,
+      // claim polling, and blob_ref equality lookups.
+      expect(indexes).toContainEqual({
+        name: 'test_schema_idx_harness_attachment_operations_scope',
+        table: TABLE_HARNESS_ATTACHMENT_OPERATIONS,
+        columns: ['harness_name', 'session_id', 'attachment_id', 'session_incarnation', 'kind'],
+        unique: true,
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_idx_harness_attachment_operations_claim',
+        table: TABLE_HARNESS_ATTACHMENT_OPERATIONS,
+        columns: ['harness_name', 'kind', 'status', 'next_attempt_at', 'claim_expires_at', 'created_at'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_idx_harness_attachments_blob_ref',
+        table: TABLE_HARNESS_ATTACHMENTS,
+        columns: ['blob_ref'],
+        where: '"blob_ref" IS NOT NULL',
+        method: 'hash',
       });
     });
   });
@@ -249,7 +271,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
         observability.getDefaultIndexDefinitions().length +
         harness.getDefaultIndexDefinitions().length;
 
-      expect(totalIndexes).toBe(49);
+      expect(totalIndexes).toBe(52);
     });
   });
 });
