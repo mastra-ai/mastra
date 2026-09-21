@@ -228,23 +228,33 @@
   --brand-green-800: oklch(45% 0.13 142);
   --brand-green-900: oklch(33% 0.09 144);
   --brand-green-950: oklch(22% 0.06 145);
-  --brand-green-badge-bg: oklch(32.3% 0.04 140);
-  --brand-green-badge-fg: oklch(83.6% 0.126 140);
 
-  /* Chart palette (recharts). blue-600/amber-500/purple-500/red-500; chart-2 = brand green. */
-  --chart-1: oklch(0.546 0.245 262.881);
-  --chart-2: var(--color-green-500);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.637 0.237 25.331);
+  --chart-blue: oklch(0.63 0.174 263);
+  --chart-blue-deep: oklch(0.519 0.199 264);
+  --chart-green: oklch(0.723 0.192 150);
+  --chart-purple: oklch(0.606 0.219 293);
+  --chart-orange: oklch(0.758 0.159 56);
+  --chart-pink: oklch(0.725 0.175 350);
+  --chart-red: oklch(0.711 0.166 22);
+  --chart-yellow: oklch(0.861 0.173 92);
 
-  /* Sequential ramp for one measure read at five depths — one hue, lightness carries the
-   * reading. The palette above is categorical: five series, no order between them. */
   --chart-soft-1: oklch(0.62 0.19 285);
   --chart-soft-2: oklch(0.7 0.145 285);
   --chart-soft-3: oklch(0.78 0.1 285);
   --chart-soft-4: oklch(0.85 0.06 285);
   --chart-soft-5: oklch(0.9 0.03 285);
+
+  --span-type-agent: oklch(0.75 0.15 250);
+  --span-type-workflow: oklch(0.75 0.15 200);
+  --span-type-model: oklch(0.75 0.15 320);
+  --span-type-mcp: oklch(0.75 0.15 160);
+  --span-type-tool: oklch(0.75 0.15 100);
+  --span-type-provider: oklch(0.75 0.15 60);
+  --span-type-memory: oklch(0.75 0.12 50);
+  --span-type-workspace: oklch(0.75 0.15 40);
+  --span-type-skill: oklch(0.75 0.15 130);
+  --span-type-scorer: oklch(0.75 0.15 280);
+  --span-type-other: var(--muted-foreground);
 }
 
 html.light {
@@ -373,12 +383,31 @@ html.light {
   --brand-green-900: oklch(24% 0.075 146);
   --brand-green-950: oklch(17% 0.05 147);
 
-  /* The ramp inverts per theme: it darkens on white, brightens on near-black. */
+  --chart-blue: oklch(0.55 0.2 263);
+  --chart-blue-deep: oklch(0.42 0.16 264);
+  --chart-green: oklch(0.55 0.15 150);
+  --chart-purple: oklch(0.52 0.24 293);
+  --chart-orange: oklch(0.62 0.15 56);
+  --chart-pink: oklch(0.57 0.2 350);
+  --chart-red: oklch(0.55 0.21 22);
+  --chart-yellow: oklch(0.62 0.12 92);
+
   --chart-soft-1: oklch(0.52 0.2 285);
   --chart-soft-2: oklch(0.64 0.16 285);
   --chart-soft-3: oklch(0.75 0.11 285);
   --chart-soft-4: oklch(0.85 0.065 285);
   --chart-soft-5: oklch(0.92 0.035 285);
+
+  --span-type-agent: oklch(0.55 0.15 250);
+  --span-type-workflow: oklch(0.55 0.15 200);
+  --span-type-model: oklch(0.55 0.15 320);
+  --span-type-mcp: oklch(0.55 0.15 160);
+  --span-type-tool: oklch(0.55 0.15 100);
+  --span-type-provider: oklch(0.55 0.15 60);
+  --span-type-memory: oklch(0.55 0.12 50);
+  --span-type-workspace: oklch(0.55 0.15 40);
+  --span-type-skill: oklch(0.55 0.15 130);
+  --span-type-scorer: oklch(0.55 0.15 280);
 }
 
 @theme {
@@ -550,8 +579,6 @@ html.light {
   --color-green-800: var(--brand-green-800);
   --color-green-900: var(--brand-green-900);
   --color-green-950: var(--brand-green-950);
-  --color-green-badge-bg: var(--brand-green-badge-bg);
-  --color-green-badge-fg: var(--brand-green-badge-fg);
 
   /*
    * Role-based font tokens. Components reference --font-display (headlines,
@@ -576,12 +603,6 @@ html.light {
   --ease-out-custom: cubic-bezier(0.33, 1, 0.68, 1);
 
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
-
-  @keyframes shimmer {
-    100% {
-      transform: translateX(100%);
-    }
-  }
 }
 
 :root {

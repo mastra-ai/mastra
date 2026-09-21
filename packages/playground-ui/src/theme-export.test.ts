@@ -502,6 +502,16 @@ describe('theme.css export', () => {
     }
   });
 
+  it('registers every @theme color with tailwind-merge, so cn() can resolve a conflict between two of them', () => {
+    const exported = new Set(Object.keys({ ...Colors, ...BorderColors }));
+    const themed = [...themeCss.matchAll(/--color-([\w-]+):/g)]
+      .map(([, name = '']) => name)
+      .filter(name => !name.endsWith('*'));
+
+    expect(themed.length).toBeGreaterThan(50);
+    expect(themed.filter(name => !exported.has(name))).toEqual([]);
+  });
+
   it('ships the theme layer as a raw stylesheet', () => {
     expect(pkg.exports['./theme.css']).toBe('./theme.css');
     expect(pkg.exports['./theme.css']).not.toContain('dist');

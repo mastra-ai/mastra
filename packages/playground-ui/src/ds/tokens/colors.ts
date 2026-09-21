@@ -25,6 +25,8 @@ export const Colors = {
   card: 'var(--card)',
   popover: 'var(--popover)',
   'surface-panel': 'var(--surface-panel)',
+  'surface-overlay-soft': 'var(--surface-overlay-soft)',
+  'surface-overlay-strong': 'var(--surface-overlay-strong)',
   'fill-subtle': 'var(--fill-subtle)',
   fill: 'var(--fill)',
   'fill-hover': 'var(--fill-hover)',
@@ -41,6 +43,52 @@ export const Colors = {
   error: 'var(--error)',
 
   scrim: 'var(--scrim)',
+
+  text1: 'var(--text1)',
+  warning1: 'var(--warning1)',
+  positive1: 'var(--positive1)',
+  negative1: 'var(--negative1)',
+
+  'notice-success': 'var(--notice-success)',
+  'notice-success-fg': 'var(--notice-success-fg)',
+  'notice-destructive': 'var(--notice-destructive)',
+  'notice-destructive-fg': 'var(--notice-destructive-fg)',
+  'notice-warning': 'var(--notice-warning)',
+  'notice-warning-fg': 'var(--notice-warning-fg)',
+  'notice-info': 'var(--notice-info)',
+  'notice-info-fg': 'var(--notice-info-fg)',
+  'notice-note': 'var(--notice-note)',
+  'notice-note-fg': 'var(--notice-note-fg)',
+
+  'badge-neutral-fg': 'var(--badge-neutral-fg)',
+  'badge-green': 'var(--badge-green)',
+  'badge-green-fg': 'var(--badge-green-fg)',
+  'badge-red': 'var(--badge-red)',
+  'badge-red-fg': 'var(--badge-red-fg)',
+  'badge-blue': 'var(--badge-blue)',
+  'badge-blue-fg': 'var(--badge-blue-fg)',
+  'badge-yellow': 'var(--badge-yellow)',
+  'badge-yellow-fg': 'var(--badge-yellow-fg)',
+  'badge-purple': 'var(--badge-purple)',
+  'badge-purple-fg': 'var(--badge-purple-fg)',
+  'badge-orange': 'var(--badge-orange)',
+  'badge-orange-fg': 'var(--badge-orange-fg)',
+  'badge-cyan': 'var(--badge-cyan)',
+  'badge-cyan-fg': 'var(--badge-cyan-fg)',
+  'badge-pink': 'var(--badge-pink)',
+  'badge-pink-fg': 'var(--badge-pink-fg)',
+
+  'green-50': 'var(--brand-green-50)',
+  'green-100': 'var(--brand-green-100)',
+  'green-200': 'var(--brand-green-200)',
+  'green-300': 'var(--brand-green-300)',
+  'green-400': 'var(--brand-green-400)',
+  'green-500': 'var(--brand-green-500)',
+  'green-600': 'var(--brand-green-600)',
+  'green-700': 'var(--brand-green-700)',
+  'green-800': 'var(--brand-green-800)',
+  'green-900': 'var(--brand-green-900)',
+  'green-950': 'var(--brand-green-950)',
 };
 
 export const BorderColors = {
@@ -49,3 +97,5 @@ export const BorderColors = {
   'border-hover': 'var(--border-hover)',
   'border-focus': 'var(--border-focus)',
 };
+
+export const CHART_LABEL_COLOR = 'var(--muted-foreground)';
