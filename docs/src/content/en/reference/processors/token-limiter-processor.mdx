@@ -159,7 +159,7 @@ When used as an input processor (both `processInput` and `processInputStep`), `T
 
 - **Empty messages**: If there are no messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
 - **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you can't send an LLM request with only system messages and no user/assistant messages.
-- **Current run tool traffic exceeds limit** (`processInputStep` only): If the tool calls and results produced by the run in progress alone exceed the remaining budget, a non-retryable TripWire is thrown. There is nothing left that can be removed without dropping the tool call the loop depends on, so the run fails with the real cause instead of silently re-running the tool.
+- **Current run tool traffic exceeds limit** (`processInputStep` only): If the tool calls and results produced by the run in progress alone exceed the remaining budget, a non-retryable TripWire is thrown. Nothing else can be removed without dropping the tool call the loop depends on, so the run fails with the real cause instead of silently re-running the tool.
 
 ```typescript
 import { TripWire } from '@mastra/core/agent'
