@@ -38,7 +38,9 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   const client = useMastraClient();
   const baseUrl = client.options.baseUrl;
   // MCP v2 servers only serve Streamable HTTP; 1.x servers are listed by their SSE endpoint.
-  const transportPath = server.transports.includes('sse') ? 'sse' : 'mcp';
+  // Servers that predate transport reporting are 1.x, so absence means SSE is available.
+  const hasSse = server.transports?.includes('sse') ?? true;
+  const transportPath = hasSse ? 'sse' : 'mcp';
   const serverUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/${transportPath}` : '';
 
   const { data: tools } = useMCPServerTools(server);

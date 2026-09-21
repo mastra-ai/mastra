@@ -23,6 +23,13 @@ export const v2Server: McpServerInfo = {
   transports: ['streamable-http'],
 };
 
+/** A server that predates transport reporting: Studio treats it as 1.x. */
+export const legacyServerWithoutTransports: McpServerInfo = {
+  id: 'older',
+  name: 'Older Server',
+  version_detail: versionDetail,
+};
+
 export const echoTool: McpToolInfo = {
   id: 'echo',
   name: 'echo',

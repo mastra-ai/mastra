@@ -22,6 +22,7 @@ import {
   readResourceResponseSchema,
   listResourcesResponseSchema,
 } from '../schemas/mcp';
+import type { MCPServerTransport } from '../schemas/mcp';
 import type { ServerContext } from '../server-adapter';
 import type { SetMcpRequestAuth } from '../server-adapter/mcp-auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -37,9 +38,6 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 function hasSSETransport(server: MastraMCPServerImplementation): boolean {
   return server.mcpVersion !== 2;
 }
-
-/** Protocol transports the Studio/REST API exposes for a registered MCP server. */
-export type MCPServerTransport = 'streamable-http' | 'sse';
 
 export interface MCPServerInfoResponse extends ServerInfo {
   /** Endpoints served under `/mcp/:serverId`; 2026-07-28 servers speak Streamable HTTP only. */

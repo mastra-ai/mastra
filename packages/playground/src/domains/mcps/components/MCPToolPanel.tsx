@@ -1,3 +1,4 @@
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -26,6 +27,14 @@ function getAppResourceUri(meta?: Record<string, unknown>): string | undefined {
   const legacy = meta['ui/resourceUri'];
   if (typeof legacy === 'string') return legacy;
   return undefined;
+}
+
+/**
+ * An MCP 2.x tool answers with `{ status: 'suspended' }` when it needs more input before it can finish.
+ * Studio has no way to collect that input, so the response is explained rather than shown as the tool's output.
+ */
+function isSuspendedResult(result: unknown): boolean {
+  return typeof result === 'object' && result !== null && (result as { status?: unknown }).status === 'suspended';
 }
 
 /** Execution failures are shown in the result panel instead of leaving it empty. */
@@ -125,6 +134,14 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
       {appHtml && (
         <div className="border-border1 border-b p-4">
           <McpAppViewer html={appHtml} toolName={tool.name} onToolCall={handleToolCall} />
+        </div>
+      )}
+      {isSuspendedResult(result) && (
+        <div className="px-4 pt-4">
+          <Notice variant="warning">
+            This tool asked for more input, which Studio cannot provide. The suspend payload below shows what it
+            needs. Call it from an MCP client with an <code>inputRequests</code> handler to finish the request.
+          </Notice>
         </div>
       )}
       <ToolExecutor

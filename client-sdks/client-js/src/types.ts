@@ -673,7 +673,7 @@ export type McpServerInfo = McpServerListResponse['servers'][number];
 export type McpServerDetailInfo = GeneratedResponse<'GET /mcp/v0/servers/:id'>;
 
 /** Protocol transports the Mastra server exposes for a registered MCP server. */
-export type McpServerTransport = McpServerInfo['transports'][number];
+export type McpServerTransport = NonNullable<McpServerInfo['transports']>[number];
 
 export type McpToolInfo = GeneratedResponse<'GET /mcp/:serverId/tools/:toolId'>;
 

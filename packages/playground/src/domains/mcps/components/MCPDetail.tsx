@@ -66,7 +66,8 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
     );
 
   // MCP v2 servers speak Streamable HTTP only; the SSE endpoint exists for 1.x servers.
-  const hasSse = server.transports.includes('sse');
+  // Servers that predate transport reporting are 1.x, so absence means SSE is available.
+  const hasSse = server.transports?.includes('sse') ?? true;
   const commandLineConfig = `npx -y mcp-remote ${hasSse ? sseUrl : httpStreamUrl}`;
 
   return (

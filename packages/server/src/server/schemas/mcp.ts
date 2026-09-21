@@ -44,11 +44,15 @@ export const versionDetailSchema = z.object({
 
 export const mcpServerTransportSchema = z.enum(['streamable-http', 'sse']);
 
+/** Protocol transports the Studio/REST API exposes for a registered MCP server. */
+export type MCPServerTransport = z.infer<typeof mcpServerTransportSchema>;
+
 export const serverInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
   version_detail: versionDetailSchema,
-  transports: z.array(mcpServerTransportSchema),
+  /** Omitted by servers that predate transport reporting; treat absence as `['streamable-http', 'sse']`. */
+  transports: z.array(mcpServerTransportSchema).optional(),
 });
 
 export const listMcpServersResponseSchema = z.object({
@@ -65,11 +69,14 @@ export const serverDetailSchema = z.object({
   package_canonical: z.string().optional(),
   packages: z.array(z.unknown()).optional(),
   remotes: z.array(z.unknown()).optional(),
-  transports: z.array(mcpServerTransportSchema),
+  /** Omitted by servers that predate transport reporting; treat absence as `['streamable-http', 'sse']`. */
+  transports: z.array(mcpServerTransportSchema).optional(),
 });
 
 // Tool schemas
 export const mcpToolInfoSchema = z.object({
+  /** Tool id as registered on the server; present when the MCP server reports it. */
+  id: z.string().optional(),
   name: z.string(),
   description: z.string().optional(),
   inputSchema: z.unknown(),
