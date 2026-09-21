@@ -79,7 +79,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         type={type}
         className={cn(
           inputVariants({ variant: resolveFieldVariant(variant), size }),
-          error && 'border-error focus-visible:border-error',
+          error && 'border-destructive focus-visible:border-destructive',
           className,
         )}
         data-testid={testId}

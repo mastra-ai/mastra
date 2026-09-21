@@ -16,8 +16,12 @@ describe('FieldBlock error wiring', () => {
 
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(input.getAttribute('aria-describedby')).toBe('error-email');
+    expect(input.className).toContain('border-destructive');
+    expect(input.parentElement?.className).toContain('gap-1');
+    expect(input.parentElement?.parentElement?.className).toContain('gap-2');
     expect(message.id).toBe('error-email');
     expect(message.textContent).toContain('@ symbol');
+    expect(message.parentElement?.className).toContain('h-[1lh]');
   });
 
   it('ties a textarea message to its control', () => {
@@ -64,8 +68,7 @@ describe('FieldBlock error wiring', () => {
 
     const message = screen.getByRole('alert');
     expect(message.id).toBe('error-token');
-    // Error state carries an icon as well as colour, so it survives colour blindness.
-    expect(message.querySelector('svg')).not.toBeNull();
+    expect(message.className).toContain('text-destructive');
   });
 
   it('matches the generated error ID for an empty field name', () => {
@@ -87,19 +90,39 @@ describe('FieldBlock error wiring', () => {
     expect(screen.getByLabelText('Schema').id).toBe('schema-editor');
   });
 
-  it('labels a field at the secondary text role, with required as metadata', () => {
+  it('labels a field as primary control text with a required asterisk', () => {
     render(
       <FieldBlock.Label name="email" required>
         Email
       </FieldBlock.Label>,
     );
 
-    const label = screen.getByText('Email');
-    expect(label.className).toContain('text-ui-sm');
-    expect(label.className).toContain('text-muted-foreground');
+    const label = screen.getByText('(required)').closest('label');
+    expect(label?.className).toContain('text-ui-smd');
+    expect(label?.className).toContain('font-medium');
+    expect(label?.className).toContain('text-foreground');
+    expect(screen.getByText('*').getAttribute('aria-hidden')).toBe('true');
+    expect(screen.getByText('(required)').className).toContain('sr-only');
+  });
 
-    const required = screen.getByText('(required)');
-    expect(required.tagName).toBe('SPAN');
-    expect(required.className).toContain('text-ui-xs');
+  it('mutes a disabled field label and required marker', () => {
+    render(
+      <FieldBlock.Label name="email" required disabled>
+        Email
+      </FieldBlock.Label>,
+    );
+
+    expect(screen.getByText('(required)').closest('label')?.className).toContain('text-muted-foreground');
+    expect(screen.getByText('*').className).toContain('text-muted-foreground');
+  });
+
+  it('uses one reserved line for helper text or an error', () => {
+    const { container } = render(
+      <FieldBlock.Message name="email" helpText="Use your work email." errorMsg="Email is required." />,
+    );
+
+    expect(container.firstElementChild?.className).toContain('h-[1lh]');
+    expect(screen.getByRole('alert').textContent).toBe('Email is required.');
+    expect(screen.queryByText('Use your work email.')).toBeNull();
   });
 });

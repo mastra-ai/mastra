@@ -297,7 +297,8 @@ describe('Combobox', () => {
 
   it('applies the error border when an error is provided', () => {
     render(<Combobox options={options} placeholder="Pick provider" error="Required" />);
-    expect(screen.getByRole('combobox').className).toContain('border-error');
+    expect(screen.getByRole('combobox').className).toContain('border-destructive');
+    expect(screen.getByRole('combobox').className).toContain('font-normal');
   });
 
   it('says what went wrong under the field, and nothing when nothing did', () => {

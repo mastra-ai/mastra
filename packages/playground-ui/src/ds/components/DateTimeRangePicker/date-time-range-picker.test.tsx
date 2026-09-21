@@ -42,7 +42,7 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 
     const error = screen.getByRole('alert');
-    expect(error.className).toContain('text-foreground');
-    expect(error.className).toContain('[&>svg]:text-destructive');
+    expect(error.className).toContain('text-destructive');
+    expect(error.querySelector('svg')).toBeNull();
   });
 });

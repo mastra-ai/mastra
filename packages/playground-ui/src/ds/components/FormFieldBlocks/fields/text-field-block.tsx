@@ -46,35 +46,33 @@ export function TextFieldBlock({
     <FieldBlock.Layout layout={layout} labelColumnWidth={labelColumnWidth} className={className}>
       {layout === 'horizontal' ? (
         <FieldBlock.Column>
-          <FieldBlock.Label name={name} required={required} size={labelSize || 'bigger'}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled} size={labelSize || 'bigger'}>
             {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
           </FieldBlock.Label>
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column>
         {!labelIsHidden && layout === 'vertical' ? (
-          <FieldBlock.Label name={name} required={required} size={labelSize || 'default'}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled} size={labelSize || 'default'}>
             {label}
           </FieldBlock.Label>
         ) : null}
-        <Input
-          id={`input-${name}`}
-          name={name}
-          disabled={disabled}
-          required={required}
-          value={value}
-          placeholder={placeholder}
-          data-testid={testId}
-          size={size}
-          // An error is three signals, not one: the field draws its error border and
-          // reports `aria-invalid`, the message carries the icon, and the two are tied
-          // together so a screen reader reads the reason with the field.
-          error={error || Boolean(errorMsg)}
-          aria-describedby={describedBy}
-          {...props}
-        />
-        {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg name={name}>{errorMsg}</FieldBlock.ErrorMsg>}
+        <FieldBlock.Column className="gap-1">
+          <Input
+            id={`input-${name}`}
+            name={name}
+            disabled={disabled}
+            required={required}
+            value={value}
+            placeholder={placeholder}
+            data-testid={testId}
+            size={size}
+            error={error || Boolean(errorMsg)}
+            aria-describedby={describedBy}
+            {...props}
+          />
+          <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} />
+        </FieldBlock.Column>
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );

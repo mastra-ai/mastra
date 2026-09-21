@@ -47,42 +47,43 @@ export function SelectFieldBlock({
     <FieldBlock.Layout layout={layout} labelColumnWidth={labelColumnWidth} className={className}>
       {layout === 'horizontal' ? (
         <FieldBlock.Column>
-          <FieldBlock.Label name={name} required={required}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled}>
             {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
           </FieldBlock.Label>
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column>
         {layout === 'vertical' && label && !labelIsHidden ? (
-          <FieldBlock.Label name={name} required={required}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled}>
             {label}
           </FieldBlock.Label>
         ) : null}
-        <Select
-          aria-label={labelIsHidden ? label : undefined}
-          name={name}
-          value={value}
-          onValueChange={onValueChange}
-          disabled={disabled}
-        >
-          <SelectTrigger
-            id={`input-${name}`}
-            size={size}
-            aria-invalid={errorMsg ? true : undefined}
-            aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
+        <FieldBlock.Column className="gap-1">
+          <Select
+            aria-label={labelIsHidden ? label : undefined}
+            name={name}
+            value={value}
+            onValueChange={onValueChange}
+            disabled={disabled}
           >
-            <SelectValue placeholder={placeholder} />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map(option => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg name={name}>{errorMsg}</FieldBlock.ErrorMsg>}
+            <SelectTrigger
+              id={`input-${name}`}
+              size={size}
+              aria-invalid={errorMsg ? true : undefined}
+              aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
+            >
+              <SelectValue placeholder={placeholder} />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} />
+        </FieldBlock.Column>
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );

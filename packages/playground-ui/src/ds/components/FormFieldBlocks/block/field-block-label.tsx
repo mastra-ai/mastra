@@ -6,6 +6,7 @@ export type FieldBlockLabelProps = {
   name: string;
   htmlFor?: string;
   required?: boolean;
+  disabled?: boolean;
   size?: 'default' | 'bigger';
   className?: string;
 };
@@ -15,27 +16,32 @@ export function FieldBlockLabel({
   name,
   htmlFor = `input-${name}`,
   required,
+  disabled = false,
   size = 'default',
   className,
 }: FieldBlockLabelProps) {
   return (
     <label
       htmlFor={htmlFor}
-      // A field label is secondary text describing its control, so it sits at `ui-sm`.
-      // `bigger` promotes it to body size for a field that leads a section.
       className={cn(
-        'new-theme flex items-center justify-between text-ui-sm text-muted-foreground',
-        'in-[.horizontal-field-block]:grid in-[.horizontal-field-block]:content-start',
+        'new-theme inline-flex items-center text-ui-smd font-medium',
         {
           'text-ui-md': size === 'bigger',
+          'text-foreground': !disabled,
+          'text-muted-foreground': disabled,
         },
         className,
       )}
     >
       {children}
-      {/* Metadata beside the label, so `ui-xs`. Not italic: italic marks citations and
-          linguistic stress, and reads as emphasis the label does not intend. */}
-      {required && <span className="text-ui-xs text-muted-foreground">(required)</span>}
+      {required ? (
+        <>
+          <span aria-hidden className={cn('ml-0.5', disabled ? 'text-muted-foreground' : 'text-destructive')}>
+            *
+          </span>
+          <span className="sr-only"> (required)</span>
+        </>
+      ) : null}
     </label>
   );
 }

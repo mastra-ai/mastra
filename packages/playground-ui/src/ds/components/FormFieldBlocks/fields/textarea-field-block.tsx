@@ -44,30 +44,31 @@ export function TextareaFieldBlock({
     <FieldBlock.Layout layout={layout} labelColumnWidth={labelColumnWidth} className={className}>
       {layout === 'horizontal' ? (
         <FieldBlock.Column>
-          <FieldBlock.Label name={name} required={required} size={labelSize || 'bigger'}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled} size={labelSize || 'bigger'}>
             {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
           </FieldBlock.Label>
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column>
         {!labelIsHidden && layout === 'vertical' ? (
-          <FieldBlock.Label name={name} required={required} size={labelSize || 'default'}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled} size={labelSize || 'default'}>
             {label}
           </FieldBlock.Label>
         ) : null}
-        <Textarea
-          id={`input-${name}`}
-          name={name}
-          disabled={disabled}
-          required={required}
-          size={size}
-          data-testid={testId}
-          error={error || Boolean(errorMsg)}
-          aria-describedby={describedBy}
-          {...props}
-        />
-        {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg name={name}>{errorMsg}</FieldBlock.ErrorMsg>}
+        <FieldBlock.Column className="gap-1">
+          <Textarea
+            id={`input-${name}`}
+            name={name}
+            disabled={disabled}
+            required={required}
+            size={size}
+            data-testid={testId}
+            error={error || Boolean(errorMsg)}
+            aria-describedby={describedBy}
+            {...props}
+          />
+          <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} />
+        </FieldBlock.Column>
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );
