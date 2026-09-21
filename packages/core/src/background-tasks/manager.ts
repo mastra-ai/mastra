@@ -871,12 +871,18 @@ export class BackgroundTaskManager {
   async markTaskRequiresToolPermissionHook(taskId: string): Promise<void> {
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
-    if (!task || task.args?.[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY] === true) return;
+    if (task?.args?.[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY] === true) return;
+    // A null read is ambiguous — the row may be gone or the store may have
+    // failed. The caller is attaching a permission requirement; skipping the
+    // write would leave a claimable-but-unmarked row, so fail closed.
+    if (!task) {
+      throw new Error(`Cannot persist permission-hook requirement — background task "${taskId}" not found`);
+    }
     await storage.updateTask(taskId, {
       args: { ...(task.args ?? {}), [BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY]: true },
     });
     const persisted = await storage.getTask(taskId);
-    if (persisted && persisted.args?.[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY] !== true) {
+    if (!persisted || persisted.args?.[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY] !== true) {
       throw new Error(
         `Unable to persist permission-hook requirement on background task "${taskId}" — refusing to attach`,
       );

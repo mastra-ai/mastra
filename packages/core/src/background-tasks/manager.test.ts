@@ -558,6 +558,54 @@ describe('BackgroundTaskManager', () => {
       await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('completed'));
     });
 
+    it('fails closed when the marker-persistence read returns null', async () => {
+      // A null getTask is ambiguous — row gone or store failed. A flagged
+      // attach must refuse rather than proceed leaving an unmarked row that a
+      // cold worker could execute without revalidation.
+      const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+      const execute = vi.fn(async (_args: any, opts: any) => {
+        if (!opts.resumeData) return opts.suspend({ waiting: 'approval' });
+        return 'resumed';
+      });
+      const { task } = await manager.enqueue(
+        {
+          toolName: 'approval-tool',
+          toolCallId: 'call-null-read',
+          args: { q: 1 },
+          agentId: 'agent-1',
+          runId: 'run-null-read',
+        },
+        ctx(execute),
+      );
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('suspended'));
+      const suspended = await manager.getTask(task.id);
+      expect(suspended).toBeTruthy();
+
+      const handle = createBackgroundTask(manager, {
+        toolName: 'approval-tool',
+        toolCallId: 'call-null-read',
+        args: { q: 1 },
+        agentId: 'agent-1',
+        runId: 'run-null-read',
+        requiresToolPermissionHook: true,
+        context: ctx(execute),
+      });
+      const getTaskSpy = vi.spyOn(backgroundTasksStore!, 'getTask').mockResolvedValueOnce(null);
+      try {
+        await expect(
+          handle.checkIfSuspended({
+            toolCallId: 'call-null-read',
+            runId: 'run-null-read',
+            agentId: 'agent-1',
+            toolName: 'approval-tool',
+          }),
+        ).rejects.toThrow('not found');
+        expect((await manager.getTask(suspended!.id))?.status).toBe('suspended');
+      } finally {
+        getTaskSpy.mockRestore();
+      }
+    });
+
     it('keeps task context when dispatch claim loses to another worker', async () => {
       const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
       const taskId = 'claim-race';
