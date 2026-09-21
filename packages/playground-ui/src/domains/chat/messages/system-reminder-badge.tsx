@@ -25,8 +25,8 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
       >
         <FileText className="text-icon3 mt-0.5 size-4 shrink-0" />
         <div className="min-w-0 flex-1">
-          <p className="text-ui-sm leading-ui-sm text-foreground font-medium">System reminder</p>
-          <p className="text-ui-xs leading-ui-xs text-muted-foreground mt-1 break-all">{title}</p>
+          <p className="text-ui-sm text-foreground font-medium">System reminder</p>
+          <p className="text-ui-xs text-muted-foreground mt-1 break-all">{title}</p>
         </div>
         {isExpanded ? (
           <ChevronDown className="text-icon3 size-4 shrink-0" />
@@ -37,9 +37,7 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
 
       {isExpanded && reminder.body && (
         <div className="border-border1 bg-surface1 border-t px-4 py-3">
-          <pre className="text-ui-xs leading-ui-md text-foreground font-mono break-words whitespace-pre-wrap">
-            {reminder.body}
-          </pre>
+          <pre className="text-ui-xs text-foreground font-mono break-words whitespace-pre-wrap">{reminder.body}</pre>
         </div>
       )}
     </div>

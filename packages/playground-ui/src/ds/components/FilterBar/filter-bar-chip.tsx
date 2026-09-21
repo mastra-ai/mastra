@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils';
 
 // `filter-bar-segment` carries the left-to-right entrance (see filter-bar-chip.css).
 export const segmentClass = cn(
-  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-ui-smd leading-ui-smd whitespace-nowrap outline-none',
+  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-ui-smd whitespace-nowrap outline-none',
   'first:rounded-l-full last:rounded-r-full',
 );
 

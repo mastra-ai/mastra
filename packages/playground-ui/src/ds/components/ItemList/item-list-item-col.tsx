@@ -33,7 +33,7 @@ export function ItemListItemStatus({ status }: ItemListItemStatusProps) {
           })}
         ></div>
       ) : (
-        <div className="text-ui-sm text-placeholder leading-none">-</div>
+        <div className="text-ui-sm text-placeholder">-</div>
       )}
       <VisuallyHidden>Status: {status ? status : 'not provided'}</VisuallyHidden>
     </div>

@@ -76,7 +76,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                 aria-label="System prompt source"
                 tabIndex={0}
                 className={cn(
-                  'text-ui-sm text-foreground min-w-0 overflow-x-auto font-mono leading-relaxed focus-visible:outline-neutral3 focus-visible:outline-1 focus-visible:outline-offset-2',
+                  'text-ui-sm text-foreground min-w-0 overflow-x-auto font-mono focus-visible:outline-neutral3 focus-visible:outline-1 focus-visible:outline-offset-2',
                   wrapSource ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'whitespace-pre',
                 )}
               />

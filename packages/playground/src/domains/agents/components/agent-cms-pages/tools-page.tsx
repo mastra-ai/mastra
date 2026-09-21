@@ -151,7 +151,7 @@ export function ToolsPage() {
     return (
       <Entity key={tool.value} className="bg-surface2">
         <EntityContent>
-          <EntityName className="text-ui-md! leading-ui-md! font-medium">{tool.label}</EntityName>
+          <EntityName className="text-ui-md! font-medium">{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"

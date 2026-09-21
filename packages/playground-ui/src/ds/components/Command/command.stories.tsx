@@ -45,8 +45,8 @@ const InlineResult = ({
       {icon}
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-ui-sm leading-ui-sm text-foreground truncate font-medium">{title}</span>
-      <span className="text-ui-xs leading-ui-xs text-muted-foreground truncate">{subtitle}</span>
+      <span className="text-ui-sm text-foreground truncate font-medium">{title}</span>
+      <span className="text-ui-xs text-muted-foreground truncate">{subtitle}</span>
     </span>
   </CommandItem>
 );

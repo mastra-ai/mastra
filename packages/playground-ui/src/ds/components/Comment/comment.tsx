@@ -169,9 +169,9 @@ export const CommentItemAuthor = forwardRef<HTMLElement, CommentItemAuthorProps>
 CommentItemAuthor.displayName = 'CommentItemAuthor';
 
 const commentItemTimestampTone: Record<CommentVariant, string> = {
-  default: 'text-ui-sm leading-ui-sm text-muted-foreground',
-  embed: 'text-ui-sm leading-ui-sm text-muted-foreground',
-  thread: 'text-ui-xs leading-ui-xs text-placeholder shrink-0',
+  default: 'text-ui-sm text-muted-foreground',
+  embed: 'text-ui-sm text-muted-foreground',
+  thread: 'text-ui-xs text-placeholder shrink-0',
 };
 
 export type CommentItemTimestampProps = ComponentPropsWithoutRef<'time'>;

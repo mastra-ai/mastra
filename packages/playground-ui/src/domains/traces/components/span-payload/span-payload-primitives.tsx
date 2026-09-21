@@ -20,7 +20,7 @@ export function SpanPayloadField({ label, children }: { label: ReactNode; childr
 
 export function SpanPayloadMarkdown({ children }: { children: string }) {
   return (
-    <div data-slot="span-payload-markdown" className="text-ui-md leading-ui-md text-foreground">
+    <div data-slot="span-payload-markdown" className="text-ui-md text-foreground">
       <MarkdownRenderer>{children}</MarkdownRenderer>
     </div>
   );

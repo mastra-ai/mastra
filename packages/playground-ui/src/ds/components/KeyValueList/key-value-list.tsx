@@ -67,7 +67,7 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
             <dd
               className={cn(
                 'flex min-h-9 flex-wrap items-center gap-2 py-1 text-ui-md text-wrap text-foreground',
-                'truncate [&>a]:flex [&>a]:min-h-7 [&>a]:w-auto [&>a]:max-w-full [&>a]:items-center [&>a]:gap-2 [&>a]:rounded-md [&>a]:bg-surface4 [&>a]:px-2 [&>a]:py-0.5 [&>a]:text-ui-md [&>a]:leading-none [&>a]:text-foreground [&>a]:transition-colors',
+                'truncate [&>a]:flex [&>a]:min-h-7 [&>a]:w-auto [&>a]:max-w-full [&>a]:items-center [&>a]:gap-2 [&>a]:rounded-md [&>a]:bg-surface4 [&>a]:px-2 [&>a]:py-0.5 [&>a]:text-ui-md [&>a]:text-foreground [&>a]:transition-colors',
                 '[&>a:hover]:bg-surface6 [&>a:hover]:text-foreground',
                 '[&>a>svg]:ml-[-0.5em] [&>a>svg]:size-[1em] [&>a>svg]:text-muted-foreground',
               )}

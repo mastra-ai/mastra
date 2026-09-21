@@ -269,7 +269,7 @@ const StudioSidebarBody = () => {
               {state !== 'collapsed' && (
                 <kbd
                   aria-hidden="true"
-                  className="border-border1 bg-surface4 text-muted-foreground text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                  className="border-border1 bg-surface4 text-muted-foreground text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono"
                 >
                   ⌘K
                 </kbd>
@@ -303,7 +303,7 @@ const StudioSidebarBody = () => {
         {state !== 'collapsed' && (
           <>
             <hr className="bg-border1 mx-6 my-2 h-px border-0" />
-            <span className="bg-sidebar-nav-active text-ui-xs dark:text-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none font-semibold text-black/80">
+            <span className="bg-sidebar-nav-active text-ui-xs dark:text-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans font-semibold text-black/80">
               v0.0.0
             </span>
           </>

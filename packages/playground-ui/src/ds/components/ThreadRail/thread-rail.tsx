@@ -370,8 +370,8 @@ function ThreadRailPreviewContent({
 }: React.HTMLAttributes<HTMLDivElement> & { turn: ThreadRailTurn }) {
   return (
     <div className={className} {...props}>
-      <div className="text-ui-md leading-ui-md text-foreground truncate font-medium">{turn.prompt}</div>
-      {turn.reply && <p className="text-ui-sm leading-ui-sm text-muted-foreground mt-1.5 line-clamp-3">{turn.reply}</p>}
+      <div className="text-ui-md text-foreground truncate font-medium">{turn.prompt}</div>
+      {turn.reply && <p className="text-ui-sm text-muted-foreground mt-1.5 line-clamp-3">{turn.reply}</p>}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
         <div className="border-border1/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
           {turn.files.map(file => (

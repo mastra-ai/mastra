@@ -26,7 +26,7 @@ function TimingReading({
   return (
     <span className="text-foreground mt-1 flex min-h-[108px] items-center justify-between gap-1">
       <span className="z-10 flex min-w-0 flex-col gap-2">
-        <span className="text-header-xl flex items-baseline gap-1 leading-none font-normal tracking-tighter whitespace-nowrap tabular-nums">
+        <span className="text-header-xl flex items-baseline gap-1 font-normal tracking-tighter whitespace-nowrap tabular-nums">
           {value}
           <small className="text-ui-xs text-muted-foreground font-normal tracking-normal">{unit}</small>
         </span>

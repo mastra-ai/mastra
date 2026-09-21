@@ -132,14 +132,10 @@ function IntegrationDialogContent({
                     <span className="text-muted-foreground grid size-8 shrink-0 place-items-center [&>img]:size-full [&>img]:object-contain [&>svg]:size-4">
                       {item.logo ?? <BlocksIcon />}
                     </span>
-                    <span className="text-ui-md leading-ui-md text-foreground min-w-0 truncate font-medium">
-                      {item.name}
-                    </span>
+                    <span className="text-ui-md text-foreground min-w-0 truncate font-medium">{item.name}</span>
                     {item.badge ? <Badge size="sm">{item.badge}</Badge> : null}
                     {item.meta ? (
-                      <span className="text-ui-sm leading-ui-sm text-muted-foreground ml-auto shrink-0">
-                        {item.meta}
-                      </span>
+                      <span className="text-ui-sm text-muted-foreground ml-auto shrink-0">{item.meta}</span>
                     ) : null}
                   </button>
                 </li>

@@ -252,7 +252,7 @@ export function AppSidebar() {
                 {state !== 'collapsed' && (
                   <kbd
                     aria-hidden="true"
-                    className="border-border1 bg-surface4 text-muted-foreground text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                    className="border-border1 bg-surface4 text-muted-foreground text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono"
                   >
                     {commandShortcutLabel}
                   </kbd>
