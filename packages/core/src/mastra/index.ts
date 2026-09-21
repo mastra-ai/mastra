@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
@@ -1291,7 +1290,7 @@ export class Mastra<
       }
       return id;
     }
-    return randomUUID();
+    return globalThis.crypto.randomUUID();
   }
 
   /**
