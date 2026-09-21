@@ -8917,8 +8917,12 @@ export class Session {
                 : undefined;
               const duplicateMode = this._messageDuplicateModeId(evidence, opts);
               const duplicateModel = this._messageDuplicateModelId(evidence, opts);
-              void (output as { getFullOutput: () => Promise<unknown> })
-                .getFullOutput()
+              // Settle through the canonical run-completion barrier, not the raw
+              // stream output — `getFullOutput()` alone misses the output-drain
+              // barrier, tool receipts, and terminal-text materialization, so a
+              // terminal-tool response would commit empty evidence instead of
+              // the authoritative answer.
+              void this._awaitRunCompletion(runId!)
                 .then(async full => {
                   const fullOutput = full as FullOutput<unknown>;
                   await this._prepareCachedDuplicateMessageCompletion(fullOutput, evidence, opts, activeDeleted);
@@ -9091,6 +9095,24 @@ export class Session {
       if (parked !== undefined && (parked.runId !== full.runId || parked.toolCallId !== payload?.toolCallId)) {
         return;
       }
+      // The deferred admission bound to this run may already be terminal
+      // (aborted/cancelled/fenced) or sealed. Re-parking the cached suspension
+      // then resurrects a pending interaction whose grant can never settle —
+      // a later respond would drive the provider against a revoked or finished
+      // grant. Only a still-pending admission may be re-parked here; the
+      // commit helper below reports the terminal outcome to this caller.
+      const admissionRunId = full.runId ?? evidence.runId;
+      if (this._terminalFinalizer !== undefined && evidence.admissionId !== undefined && admissionRunId !== undefined) {
+        const admission = await this._raceActiveTurnWaiter(
+          this._storage.loadTerminalAdmissionByRun({
+            harnessName: this._record.harnessName,
+            sessionId: this.id,
+            runId: admissionRunId,
+          }),
+          activeDeleted,
+        );
+        if (admission !== null && admission.status !== 'pending') return;
+      }
       await this._captureMessageSuspendWithTokenUsage(
         full,
         undefined,
@@ -9121,9 +9143,13 @@ export class Session {
 
   /**
    * Deferred terminal settlement for a message that suspended. The admission's
-   * deterministic `runId` is the resumed run's id, so the durable pending row
-   * is recoverable without persisting extra correlation on `pendingResume`.
-   * A non-pending or absent row means another path already settled the grant.
+   * deterministic `runId` is the resumed run's id, so the durable row is
+   * recoverable without persisting extra correlation on `pendingResume`.
+   * The probe is by-run across statuses: a cancelled or fenced grant must still
+   * surface its terminal outcome (the commit helper throws it and drains
+   * retained observers) instead of letting the resume clear `pendingResume`
+   * and report success on a revoked grant; a committed row replays its durable
+   * receipt through the same barrier.
    */
   private async _settleResumedTerminalHandoff(
     pending: PendingResume,
@@ -9131,7 +9157,7 @@ export class Session {
     options: { modeId?: string; modelId?: string },
   ): Promise<void> {
     if (this._terminalFinalizer === undefined) return;
-    const admission = await this._storage.loadPendingTerminalAdmission({
+    const admission = await this._storage.loadTerminalAdmissionByRun({
       harnessName: this._record.harnessName,
       sessionId: this.id,
       runId: pending.runId,
@@ -9200,8 +9226,6 @@ export class Session {
     },
   ): Promise<AgentResult | InboxResponseResult | undefined> {
     if (this._terminalFinalizer === undefined) return undefined;
-    const cached = this._completedRuns.get(pending.runId);
-    if (cached === undefined || !cached.ok || cached.full.finishReason === 'suspended') return undefined;
     // Probe by run regardless of status: a commit may have sealed the grant
     // while the post-commit bookkeeping (the pendingResume-clearing flush)
     // failed — the admission is then 'committed' rather than 'pending', and
@@ -9213,6 +9237,31 @@ export class Session {
       runId: pending.runId,
     });
     if (!admission || (admission.status !== 'pending' && admission.status !== 'committed')) {
+      return undefined;
+    }
+    const cached = this._completedRuns.get(pending.runId);
+    let full: FullOutput<unknown>;
+    if (cached !== undefined && cached.ok && cached.full.finishReason !== 'suspended') {
+      full = cached.full;
+    } else if (admission.status === 'committed') {
+      // A restart emptied the local run cache — the committed admission's
+      // canonical evidence still carries the authoritative terminal output, so
+      // recover it instead of reporting the resume as abandoned. The cached
+      // entry is repopulated so the per-generation usage marker still dedupes
+      // a second retry.
+      const stored = await this._storage.loadMessageResultEvidence({
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        resourceId: this.resourceId,
+        threadId: this.threadId,
+        signalId: admission.signalId,
+      });
+      if (!stored || !('status' in stored) || stored.status !== 'completed' || stored.result === undefined) {
+        return undefined;
+      }
+      full = stored.result as FullOutput<unknown>;
+      this._rememberCompletedRun(pending.runId, { ok: true, full });
+    } else {
       return undefined;
     }
 
@@ -9234,7 +9283,7 @@ export class Session {
     const completingQueuedItemId = pendingQueuedItemId;
     await this._withActiveDeletedWaiter(async activeTurnWaiter => {
       try {
-        await this._finalizeResumedTurnOutcome(pending, cached.full, {
+        await this._finalizeResumedTurnOutcome(pending, full, {
           responseId,
           pendingQueuedItemId,
           completingQueuedItemId,
@@ -9259,7 +9308,7 @@ export class Session {
         responseId !== undefined ? getOwnRecordValue(this._record.inboxResponseReceipts, responseId) : undefined;
       if (receipt) return this._inboxReceiptResult(receipt, false);
     }
-    return cached.full as AgentResult;
+    return full as AgentResult;
   }
 
   private _retainTerminalObservers(
@@ -9634,6 +9683,17 @@ export class Session {
         ? { error: projectHarnessPublicError(full.error ?? new Error('agent run failed')) }
         : {}),
     };
+    // The admitted finalizer identity is durable — a deployment that
+    // re-registers a different finalizer must not have its output committed
+    // under the recorded identity. Reject as a retryable pending failure so a
+    // corrected registration can still settle the grant.
+    if (finalizer.id !== admission.finalizerId || finalizer.version !== admission.finalizerVersion) {
+      return reportFailure(
+        new Error(
+          `registered terminal finalizer ${finalizer.id}@${finalizer.version} does not match the admitted finalizer ${admission.finalizerId}@${admission.finalizerVersion}`,
+        ),
+      );
+    }
     let projection: HarnessTerminalProjection;
     try {
       projection = await finalizer.finalize({
@@ -14293,6 +14353,50 @@ export class Session {
       throw redactPublicBoundaryRejection(thrown);
     }
 
+    // A deferred terminal admission bound to this pending's run may already be
+    // dead — abort/session-cancel/expiry cancel it while the parked
+    // interaction survives (e.g. a duplicate-path restore raced the teardown).
+    // Stamping `resumedAt` and invoking `resumeStream` against a revoked grant
+    // would re-run the provider for a turn that can never settle; surface the
+    // grant's terminal outcome instead. The probe is by-run across statuses so
+    // cancelled and fenced rows are both seen. Committed rows are left to the
+    // post-output settlement barrier, which replays the durable receipt.
+    if (this._terminalFinalizer !== undefined) {
+      const boundAdmission = await this._storage.loadTerminalAdmissionByRun({
+        harnessName: this._record.harnessName,
+        sessionId: this.id,
+        runId: pending.runId,
+      });
+      if (boundAdmission !== null && (boundAdmission.status === 'cancelled' || boundAdmission.status === 'fenced')) {
+        const terminalError =
+          boundAdmission.status === 'cancelled'
+            ? new HarnessTerminalHandoffCancelledError(boundAdmission.executionGrant.key)
+            : new HarnessTerminalHandoffFencedError(this.id);
+        this._drainTerminalObservers(pending.runId, terminalError);
+        if (responseId !== undefined) {
+          try {
+            await this._recordInboxResponsePreDispatchFailure(
+              {
+                responseId,
+                responseHash: responseHash!,
+                itemId,
+                queuedItemId: pendingQueuedItemId,
+                kind: expectedKind,
+                pending,
+                response: persistedResponse,
+                ...(approvalScope !== undefined ? { approvalScope } : {}),
+              },
+              terminalError,
+            );
+          } catch {
+            // The terminal outcome below is authoritative; a failed
+            // bookkeeping write must not mask it.
+          }
+        }
+        throw terminalError;
+      }
+    }
+
     // Mark resumed under the lease BEFORE calling the agent (idempotency
     // marker per §5.4 / §5.7). On crash here, the next caller observes
     // resumedAt set and rejects rather than double-resuming.
@@ -15018,8 +15122,14 @@ export class Session {
 
     // If the resumed run did NOT suspend again, the turn is complete from
     // the harness's perspective. Surface that to subscribers via agent_end.
+    // A settlement retry (committed admission, failed post-commit bookkeeping)
+    // re-enters this helper — `_finalizedRunIds` is populated synchronously by
+    // the first emit, so the guard keeps the terminal event exactly-once while
+    // the steps below still re-run their own idempotent bookkeeping.
     if (full.finishReason !== 'suspended') {
-      this._emitAgentEnd({ runId: full.runId, finishReason: this._agentEndReasonForFullOutput(full), full });
+      if (full.runId === undefined || !this._finalizedRunIds.has(full.runId)) {
+        this._emitAgentEnd({ runId: full.runId, finishReason: this._agentEndReasonForFullOutput(full), full });
+      }
 
       // §4.2f — an owned `signal()` turn that suspended left its durable
       // per-`signalId` evidence `pending`. The terminal (non-suspended)

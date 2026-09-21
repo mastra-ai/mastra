@@ -917,6 +917,52 @@ describe('HarnessPG native terminal handoff', () => {
     await expect(harness().loadTerminalAdmissionByRun({ ...byRun, runId: 'run-unknown' })).resolves.toBeNull();
   });
 
+  it('replays an identical commit when the result payload holds a Date', async () => {
+    const session = await createNativeSession(harness(), 'date-session');
+    const input = admissionFor(session, 'date');
+    await harness().writeMessageResultEvidence(pendingEvidence(input));
+    await harness().admitTerminalHandoff(input);
+
+    // Postgres persists the evidence via JSON.stringify — a live Date becomes
+    // an ISO string in the row. The replay compare must normalize the incoming
+    // value to its persisted form or an identical lost-ack retry falsely
+    // conflicts on `{} !== "2026-…"`.
+    const args = {
+      ...commitInput(input, 'date'),
+      resultEvidence: {
+        ...pendingEvidence(input),
+        status: 'completed' as const,
+        runId: input.runId,
+        result: { text: 'provider output date', generatedAt: new Date('2026-09-20T12:00:00.000Z') },
+        updatedAt: Date.now(),
+      },
+    };
+    const committed = await harness().commitTerminalHandoff(args);
+    expect(committed.status).toBe('committed');
+
+    const replay = await harness().commitTerminalHandoff({
+      ...args,
+      resultEvidence: {
+        ...args.resultEvidence,
+        result: { text: 'provider output date', generatedAt: new Date('2026-09-20T12:00:00.000Z') },
+      },
+    });
+    expect(replay.status).toBe('duplicate');
+    expect(replay.intent?.id).toBe(committed.intent!.id);
+
+    // A genuinely different result still conflicts — normalization must not
+    // widen the equality.
+    await expect(
+      harness().commitTerminalHandoff({
+        ...args,
+        resultEvidence: {
+          ...args.resultEvidence,
+          result: { text: 'provider output date', generatedAt: new Date('2026-09-21T12:00:00.000Z') },
+        },
+      }),
+    ).rejects.toBeInstanceOf(HarnessTerminalHandoffIdentityConflictError);
+  });
+
   it('reports terminal handoff as unsupported and rejects terminal operations when disabled', async () => {
     const disabledStore = terminalStore('pg-harness-terminal-disabled-store', schemaName, { enabled: false });
     await disabledStore.init();

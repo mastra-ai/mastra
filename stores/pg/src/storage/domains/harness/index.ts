@@ -4948,7 +4948,7 @@ export class HarnessPG extends HarnessStorage {
           !existingIntent ||
           !sameHarnessTerminalIntent(existingIntent, terminalResult, projection) ||
           currentEvidence.status !== 'completed' ||
-          stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)
+          stableJsonString(currentEvidence.result) !== stableJsonString(persistedJsonValue(resultEvidence.result))
         ) {
           throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
         }
@@ -5040,7 +5040,7 @@ export class HarnessPG extends HarnessStorage {
       }
 
       if (currentEvidence.status === 'completed') {
-        if (stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)) {
+        if (stableJsonString(currentEvidence.result) !== stableJsonString(persistedJsonValue(resultEvidence.result))) {
           throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
         }
       } else if (currentEvidence.status === 'pending') {
@@ -11197,7 +11197,7 @@ function sameHarnessTerminalIntent(
   const { completedAt: _incomingAt, ...incomingResult } = terminalResult;
   return (
     intent.terminalResult.status === terminalResult.status &&
-    stableJsonString(storedResult) === stableJsonString(incomingResult) &&
+    stableJsonString(storedResult) === stableJsonString(persistedJsonValue(incomingResult)) &&
     intent.projection.projectionKind === projection.projectionKind &&
     intent.projection.projectionId === projection.projectionId &&
     intent.projection.payloadHash === projection.payloadHash &&
@@ -12088,6 +12088,17 @@ function channelInboxComparableValues(record: ChannelInboxItem): unknown[] {
     record.rawFiles ? stableJsonString(record.rawFiles) : undefined,
     record.lastError ? stableJsonString(record.lastError) : undefined,
   ];
+}
+
+/**
+ * Normalize a live value to the shape its JSONB column persists. The write
+ * path runs `JSON.stringify`, which lowers `Date` and other `toJSON`-able
+ * objects to strings — `stableJsonString` alone would reduce a live `Date`
+ * to `{}` and a replay of identical input would false-conflict against the
+ * stored row.
+ */
+function persistedJsonValue<T>(value: T): T {
+  return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
 }
 
 function stableJsonString(value: unknown): string {

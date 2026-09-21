@@ -657,6 +657,115 @@ describe('native chat terminal handoff', () => {
     await expect(storage.loadTerminalAdmissionByRun({ ...byRun, runId: 'run-other' })).resolves.toBeNull();
   });
 
+  it('preserves completed canonical evidence when a retried commit finds no intent row', async () => {
+    const db = new InMemoryDB();
+    const storage = new InMemoryHarness({ db, terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const input = admission();
+    await storage.writeMessageResultEvidence(pendingEvidence(input));
+    await storage.admitTerminalHandoff(input);
+
+    // A commit that crashed after writing canonical evidence but before the
+    // intent row leaves: admission pending, evidence completed, intent absent.
+    const storedEvidence = [...db.harnessMessageResultEvidence.values()].find(row => row.signalId === input.signalId)!;
+    storedEvidence.status = 'completed';
+    storedEvidence.result = { text: 'canonical winner' };
+
+    // A retried commit carrying a DIFFERENT result must conflict rather than
+    // overwrite the sealed canonical evidence.
+    await expect(
+      storage.commitTerminalHandoff({
+        admission: input,
+        resultEvidence: {
+          ...pendingEvidence(input),
+          status: 'completed',
+          result: { text: 'impostor' },
+          updatedAt: 3_000,
+        },
+        terminalResult: { status: 'completed', runId: input.runId, completedAt: 3_000 },
+        projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'done' } },
+      }),
+    ).rejects.toBeInstanceOf(HarnessTerminalHandoffIdentityConflictError);
+    await expect(
+      storage.loadMessageResultEvidence({
+        harnessName: input.harnessName,
+        sessionId: input.sessionId,
+        resourceId: input.resourceId,
+        threadId: input.threadId,
+        signalId: input.signalId,
+      }),
+    ).resolves.toMatchObject({ status: 'completed', result: { text: 'canonical winner' } });
+
+    // The faithful retry completes the half-applied commit — same result, so
+    // the evidence compare passes and the intent is finally written.
+    const retried = await storage.commitTerminalHandoff({
+      admission: input,
+      resultEvidence: {
+        ...pendingEvidence(input),
+        status: 'completed',
+        result: { text: 'canonical winner' },
+        updatedAt: 3_000,
+      },
+      terminalResult: { status: 'completed', runId: input.runId, completedAt: 3_000 },
+      projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'done' } },
+    });
+    expect(retried.status).toBe('committed');
+    expect(retried.intent?.id).toBe(harnessTerminalIntentId(harnessTerminalAdmissionId(input)));
+  });
+
+  it('leaves admission pending and evidence untouched when the commit payload cannot be cloned', async () => {
+    const db = new InMemoryDB();
+    const storage = new InMemoryHarness({ db, terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const input = admission();
+    await storage.writeMessageResultEvidence(pendingEvidence(input));
+    await storage.admitTerminalHandoff(input);
+
+    // A function inside the provider result fails structuredClone — the throw
+    // must land BEFORE any durable row mutates, or a committed admission with
+    // pending evidence and no intent violates the atomic commit contract.
+    await expect(
+      storage.commitTerminalHandoff({
+        admission: input,
+        resultEvidence: {
+          ...pendingEvidence(input),
+          status: 'completed',
+          result: { text: 'x', callback: () => 'uncloneable' },
+          updatedAt: 3_000,
+        },
+        terminalResult: { status: 'completed', runId: input.runId, completedAt: 3_000 },
+        projection: { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'done' } },
+      }),
+    ).rejects.toBeTruthy();
+    await expect(
+      storage.loadTerminalAdmission({
+        harnessName: input.harnessName,
+        sessionId: input.sessionId,
+        admissionId: input.admissionId,
+        executionGrant: input.executionGrant,
+      }),
+    ).resolves.toMatchObject({ status: 'pending' });
+    await expect(
+      storage.loadMessageResultEvidence({
+        harnessName: input.harnessName,
+        sessionId: input.sessionId,
+        resourceId: input.resourceId,
+        threadId: input.threadId,
+        signalId: input.signalId,
+      }),
+    ).resolves.toMatchObject({ status: 'pending' });
+    await expect(
+      storage.loadTerminalIntent({
+        harnessName: input.harnessName,
+        intentId: harnessTerminalIntentId(harnessTerminalAdmissionId(input)),
+      }),
+    ).resolves.toBeNull();
+    await expect(storage.getTerminalQueuePressure({ harnessName: input.harnessName })).resolves.toEqual({
+      pendingIntents: 0,
+      pendingBytes: 0,
+    });
+  });
+
   it('reports terminal handoff as unsupported and rejects terminal operations when disabled', async () => {
     const disabled = new InMemoryHarness({ db: new InMemoryDB() });
     expect(disabled.supportsTerminalHandoff).toBe(false);

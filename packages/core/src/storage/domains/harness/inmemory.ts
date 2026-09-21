@@ -1642,15 +1642,21 @@ export class InMemoryHarness extends HarnessStorage {
       ) {
         throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
       }
-      if (currentEvidence.status === 'pending') {
-        this.db.harnessMessageResultEvidence.set(evidenceKey, {
-          ...cloneJson(resultEvidence),
-          createdAt: currentEvidence.createdAt,
-        });
+      // Materialize every clone that can throw BEFORE mutating durable rows —
+      // a thrown clone mid-commit would leave a committed admission with
+      // pending evidence, violating the atomic commit contract.
+      const committedEvidence =
+        currentEvidence.status === 'pending'
+          ? { ...cloneJson(resultEvidence), createdAt: currentEvidence.createdAt }
+          : undefined;
+      const committedProjection = cloneHarnessTerminal(existingIntent.projection);
+      const committedTerminalResult = cloneHarnessTerminal(existingIntent.terminalResult);
+      if (committedEvidence !== undefined) {
+        this.db.harnessMessageResultEvidence.set(evidenceKey, committedEvidence);
       }
       stored.status = 'committed';
-      stored.projection = cloneHarnessTerminal(existingIntent.projection);
-      stored.terminalResult = cloneHarnessTerminal(existingIntent.terminalResult);
+      stored.projection = committedProjection;
+      stored.terminalResult = committedTerminalResult;
       stored.revision = existingIntent.revision;
       stored.updatedAt = Date.now();
       return {
@@ -1658,6 +1664,15 @@ export class InMemoryHarness extends HarnessStorage {
         admission: cloneHarnessTerminal(stored),
         intent: cloneHarnessTerminal(existingIntent),
       };
+    }
+    // Canonical evidence that already sealed must be preserved even when no
+    // intent exists yet — the same comparison the committed/existing-intent
+    // branches (and the Postgres adapter) apply before mutating anything.
+    if (
+      currentEvidence.status === 'completed' &&
+      stableJsonString(currentEvidence.result) !== stableJsonString(resultEvidence.result)
+    ) {
+      throw new HarnessTerminalHandoffIdentityConflictError(stored.executionGrant.key);
     }
     const pressure = this.terminalPressure(namespace);
     if (
@@ -1683,17 +1698,24 @@ export class InMemoryHarness extends HarnessStorage {
       createdAt: now,
       updatedAt: now,
     };
-    stored.status = 'committed';
-    stored.terminalResult = cloneHarnessTerminal(terminalResult);
-    stored.projection = cloneHarnessTerminal(projection);
-    stored.revision = revision;
-    stored.updatedAt = now;
-    this.db.harnessMessageResultEvidence.set(evidenceKey, {
+    // Materialize every clone that can throw BEFORE mutating durable rows —
+    // an uncloneable result (e.g. a function in a tool payload) must not leave
+    // a committed admission with pending evidence and no intent.
+    const committedEvidence = {
       ...cloneJson(resultEvidence),
       createdAt: currentEvidence?.createdAt ?? resultEvidence.createdAt,
       updatedAt: resultEvidence.updatedAt,
-    });
-    this.db.harnessTerminalIntents.set(intent.id, cloneHarnessTerminal(intent));
+    };
+    const committedTerminalResult = cloneHarnessTerminal(terminalResult);
+    const committedProjection = cloneHarnessTerminal(projection);
+    const storedIntent = cloneHarnessTerminal(intent);
+    stored.status = 'committed';
+    stored.terminalResult = committedTerminalResult;
+    stored.projection = committedProjection;
+    stored.revision = revision;
+    stored.updatedAt = now;
+    this.db.harnessMessageResultEvidence.set(evidenceKey, committedEvidence);
+    this.db.harnessTerminalIntents.set(intent.id, storedIntent);
     this.adjustTerminalPressure(namespace, 1, intent.projection.payloadBytes);
     return { status: 'committed', admission: cloneHarnessTerminal(stored), intent: cloneHarnessTerminal(intent) };
   }
