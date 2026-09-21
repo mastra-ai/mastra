@@ -167,8 +167,7 @@ function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
 ): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
-    | undefined;
+    AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }> | undefined;
   return agentControllerContext?.getState();
 }
 
@@ -300,8 +299,7 @@ export interface MastraCodeConfig {
   initialState?: Partial<MastraCodeState>;
   /** Trusted host instructions resolved outside mutable session state. */
   hostInstructions?:
-    | string
-    | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
+    string | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
   /** Commit co-author identity included in coding-agent commit guidance. Unspecified fields use core defaults. */
   coAuthor?: { name?: string; email?: string };
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
@@ -373,13 +371,20 @@ export function createAuthStorage() {
 
 /**
  * Resolve cloud observability credentials for the MastraPlatformExporter.
- * Priority: per-resource settings > environment variables > disabled.
+ * Priority: per-resource settings > MASTRACODE_* environment variables > undefined (no exporter).
+ *
+ * The env vars are deliberately namespaced `MASTRACODE_*`, not `MASTRA_*`: the
+ * cwd `.env` is loaded into `process.env`, so reading `MASTRA_PROJECT_ID` /
+ * `MASTRA_CLOUD_ACCESS_TOKEN` would export Mastra Code's own traces into
+ * whatever Mastra project the user happens to be working in (and crash on
+ * project ids the exporter rejects).
  */
-function resolveCloudObservabilityConfig(
+export function resolveCloudObservabilityConfig(
   settings: ReturnType<typeof loadSettings>,
   authStorage: AuthStorage,
   resourceId: string,
-): { accessToken?: string; projectId?: string } {
+  env: NodeJS.ProcessEnv = process.env,
+): { accessToken: string; projectId?: string } | undefined {
   const resourceConfig = settings.observability.resources[resourceId];
   if (resourceConfig) {
     const token = authStorage.getStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`);
@@ -387,11 +392,9 @@ function resolveCloudObservabilityConfig(
       return { accessToken: token, projectId: resourceConfig.projectId };
     }
   }
-  // Fall back to environment variables for backwards compatibility
-  return {
-    accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
-    projectId: process.env.MASTRA_PROJECT_ID,
-  };
+  const accessToken = env.MASTRACODE_CLOUD_ACCESS_TOKEN?.trim();
+  if (!accessToken) return undefined;
+  return { accessToken, projectId: env.MASTRACODE_PROJECT_ID?.trim() || undefined };
 }
 
 /**
@@ -531,6 +534,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     project.resourceIdOverride = true;
   }
 
+  const cloudObservabilityConfig = resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId);
+
   // Stable session id unique to this project/resource, and a machine-bound owner
   // id. resourceId encodes root path + git identity and honors overrides, so it
   // is the right input for scoping the session to the cwd/project.
@@ -652,7 +657,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // exporter falls through to the default libsql backend and silently
           // fills the main database with gigabytes of span data.
           ...(observabilityDomain ? [new MastraStorageExporter({ strategy: 'event-sourced' })] : []),
-          new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
+          // Credentials are always passed explicitly; `resolveFromEnv: false`
+          // stops the exporter from picking up the cwd project's MASTRA_* vars.
+          new MastraPlatformExporter({ ...cloudObservabilityConfig, resolveFromEnv: false }),
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },

@@ -26,8 +26,8 @@ function showStatus(ctx: SlashCommandContext): void {
     lines.push('');
     lines.push(theme.fg('dim', '  Run /observability connect to re-enter credentials.'));
   } else {
-    const envToken = process.env.MASTRA_CLOUD_ACCESS_TOKEN;
-    const envProject = process.env.MASTRA_PROJECT_ID;
+    const envToken = process.env.MASTRACODE_CLOUD_ACCESS_TOKEN;
+    const envProject = process.env.MASTRACODE_PROJECT_ID;
     if (envToken) {
       lines.push(`  ${theme.fg('success', '●')} Connected ${theme.fg('dim', '(via environment variables)')}`);
       if (envProject) {

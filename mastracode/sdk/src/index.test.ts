@@ -129,6 +129,7 @@ vi.mock('./onboarding/om-settings.js', () => ({
 }));
 
 vi.mock('./onboarding/settings.js', () => ({
+  OBSERVABILITY_AUTH_PREFIX: 'observability:',
   getCustomProviderId: vi.fn(),
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
@@ -435,5 +436,42 @@ describe('AgentController session id and ownerId wiring', () => {
 
     expect(createSessionCalls).toHaveLength(2);
     expect(createSessionCalls[0]!.id).not.toBe(createSessionCalls[1]!.id);
+  });
+});
+
+describe('resolveCloudObservabilityConfig', () => {
+  const settings = () => ({ observability: { resources: {}, localTracing: false } }) as any;
+  const noAuth = { getStoredApiKey: () => undefined } as any;
+
+  it('returns undefined when nothing is configured so no platform exporter is constructed', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    expect(resolveCloudObservabilityConfig(settings(), noAuth, 'res', {})).toBeUndefined();
+  });
+
+  it('ignores the host project MASTRA_* env vars loaded from the cwd .env', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    const env = { MASTRA_CLOUD_ACCESS_TOKEN: 'tok', MASTRA_PROJECT_ID: 'ae68feda-c5e2-4637-a148-4d0a020b5de5' };
+    expect(resolveCloudObservabilityConfig(settings(), noAuth, 'res', env)).toBeUndefined();
+  });
+
+  it('reads MASTRACODE_* env vars', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    const env = { MASTRACODE_CLOUD_ACCESS_TOKEN: 'tok', MASTRACODE_PROJECT_ID: 'proj_1' };
+    expect(resolveCloudObservabilityConfig(settings(), noAuth, 'res', env)).toEqual({
+      accessToken: 'tok',
+      projectId: 'proj_1',
+    });
+  });
+
+  it('prefers per-resource settings over env vars', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    const s = settings();
+    s.observability.resources.res = { projectId: 'proj_settings', configuredAt: 0 };
+    const auth = { getStoredApiKey: (k: string) => (k === 'observability:res' ? 'stored' : undefined) } as any;
+    const env = { MASTRACODE_CLOUD_ACCESS_TOKEN: 'tok', MASTRACODE_PROJECT_ID: 'proj_env' };
+    expect(resolveCloudObservabilityConfig(s, auth, 'res', env)).toEqual({
+      accessToken: 'stored',
+      projectId: 'proj_settings',
+    });
   });
 });

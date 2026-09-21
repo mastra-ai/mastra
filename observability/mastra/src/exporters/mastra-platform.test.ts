@@ -915,6 +915,42 @@ describe('MastraPlatformExporter', () => {
       }
     });
 
+    it('ignores environment credentials and project id when resolveFromEnv is false', async () => {
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', createTestJWT({ teamId: 'env', projectId: 'env-project' }));
+      vi.stubEnv('MASTRA_PROJECT_ID', 'not a valid id');
+
+      try {
+        // Would throw on the invalid env project id if env were consulted.
+        const exporter = new MastraPlatformExporter({ endpoint: 'http://localhost:3000', resolveFromEnv: false });
+        try {
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+          await exporter.flush();
+          expect(mockFetchWithRetry).not.toHaveBeenCalled();
+        } finally {
+          await exporter.shutdown();
+        }
+
+        const explicitToken = createTestJWT({ teamId: 'explicit', projectId: 'explicit-project' });
+        const explicit = new MastraPlatformExporter({
+          endpoint: 'http://localhost:3000',
+          accessToken: explicitToken,
+          projectId: 'proj_explicit',
+          resolveFromEnv: false,
+        });
+        try {
+          await explicit.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+          await explicit.flush();
+          const [url, requestOptions] = mockFetchWithRetry.mock.calls[0] as [string, RequestInit];
+          expect(url).toBe('http://localhost:3000/projects/proj_explicit/ai/spans/publish');
+          expect((requestOptions.headers as Record<string, string>).Authorization).toBe(`Bearer ${explicitToken}`);
+        } finally {
+          await explicit.shutdown();
+        }
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('should use MASTRA_PLATFORM_ACCESS_TOKEN from the environment', async () => {
       const envToken = createTestJWT({ teamId: 'platform-env-token', projectId: 'auth-project' });
       vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', envToken);

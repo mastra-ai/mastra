@@ -21,6 +21,14 @@ export interface MastraPlatformExporterConfig extends BaseExporterConfig {
 
   accessToken?: string; // Mastra Observability access token (from env or config)
   projectId?: string; // Project ID for project-scoped collector routes
+  /**
+   * When false, `accessToken` and `projectId` are taken from config only and
+   * `MASTRA_PLATFORM_ACCESS_TOKEN` / `MASTRA_CLOUD_ACCESS_TOKEN` /
+   * `MASTRA_PROJECT_ID` are ignored. Embedding hosts (e.g. Mastra Code) use
+   * this so a user project's `.env` cannot redirect the host's own telemetry.
+   * Default: true.
+   */
+  resolveFromEnv?: boolean;
   endpoint?: string; // Base observability endpoint
   tracesEndpoint?: string; // Explicit traces endpoint override
   logsEndpoint?: string; // Explicit logs endpoint override
@@ -278,11 +286,14 @@ export class MastraPlatformExporter extends BaseExporter {
       throw createInvalidProjectIdError(config.projectId);
     }
 
+    const resolveFromEnv = config.resolveFromEnv ?? true;
     const accessToken =
-      config.accessToken || process.env.MASTRA_PLATFORM_ACCESS_TOKEN || process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+      config.accessToken ||
+      (resolveFromEnv ? process.env.MASTRA_PLATFORM_ACCESS_TOKEN || process.env.MASTRA_CLOUD_ACCESS_TOKEN : undefined);
     // Treat an empty MASTRA_PROJECT_ID as unset so deployments that always
     // export the variable (e.g. CI templates) don't have to special-case it.
-    const envProjectId = process.env.MASTRA_PROJECT_ID === '' ? undefined : process.env.MASTRA_PROJECT_ID;
+    const envProjectId =
+      resolveFromEnv && process.env.MASTRA_PROJECT_ID !== '' ? process.env.MASTRA_PROJECT_ID : undefined;
     const rawProjectId = config.projectId ?? envProjectId;
     if (rawProjectId !== undefined && !VALID_PROJECT_ID.test(rawProjectId)) {
       throw createInvalidProjectIdError(rawProjectId);
