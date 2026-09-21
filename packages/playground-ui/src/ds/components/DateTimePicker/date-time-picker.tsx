@@ -228,7 +228,7 @@ export const DateTimePickerContent = ({
       {localErrorMsg && (
         <div
           className={cn(
-            'm-4 mb-0 text-ui-md text-neutral3',
+            'm-4 mb-0 text-ui-md text-muted-foreground',
             '[&>svg]:float-left [&>svg]:mt-0.5 [&>svg]:mr-2 [&>svg]:size-[1.1em] [&>svg]:text-error',
           )}
         >
@@ -292,9 +292,9 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
         {...props}
       >
         {value ? (
-          <span className="text-neutral6">{format(value, 'PP p')}</span>
+          <span className="text-foreground">{format(value, 'PP p')}</span>
         ) : (
-          <span className="text-neutral3">{placeholder ?? 'Pick a date'}</span>
+          <span className="text-muted-foreground">{placeholder ?? 'Pick a date'}</span>
         )}
       </Button>
     );

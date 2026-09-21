@@ -126,7 +126,7 @@ export function DateTimeRangePicker({
         <PopoverContent align="start" className={cn('w-auto p-0')}>
           <div className={cn('flex')}>
             <div className={cn('border-r border-border1')}>
-              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>Start</span>
+              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-muted-foreground')}>Start</span>
               <DatePicker
                 mode="single"
                 selected={draftDateFrom}
@@ -144,7 +144,7 @@ export function DateTimeRangePicker({
               />
             </div>
             <div>
-              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>End</span>
+              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-muted-foreground')}>End</span>
               <DatePicker
                 mode="single"
                 selected={draftDateTo}

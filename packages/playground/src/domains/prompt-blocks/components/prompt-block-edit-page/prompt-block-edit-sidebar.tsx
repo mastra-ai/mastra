@@ -130,7 +130,7 @@ export function PromptBlockEditSidebar({
 
           {/* Name */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="prompt-block-name" className="text-neutral5 text-ui-sm">
+            <Label htmlFor="prompt-block-name" className="text-foreground text-ui-sm">
               Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -145,7 +145,7 @@ export function PromptBlockEditSidebar({
 
           {/* Description */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="prompt-block-description" className="text-neutral5 text-ui-sm">
+            <Label htmlFor="prompt-block-description" className="text-foreground text-ui-sm">
               Description
             </Label>
             <Textarea
@@ -205,14 +205,14 @@ export function PromptBlockEditSidebar({
                     onClick={() => navigate(paths.agentLink(agent.id))}
                     className="hover:bg-surface3 flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors"
                   >
-                    <Txt variant="ui-sm" className="text-neutral5 truncate">
+                    <Txt variant="ui-sm" className="text-foreground truncate">
                       {agent.name || agent.id}
                     </Txt>
                   </button>
                 ))}
               </div>
             ) : (
-              <Txt variant="ui-sm" className="text-neutral3">
+              <Txt variant="ui-sm" className="text-muted-foreground">
                 Not referenced by any agents yet.
               </Txt>
             )}

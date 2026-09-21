@@ -38,7 +38,7 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
 // ---------------------------------------------------------------------------
 
 function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
-  const iconClass = cn('size-3.5 shrink-0 text-neutral2', className);
+  const iconClass = cn('size-3.5 shrink-0 text-placeholder', className);
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {
@@ -79,7 +79,7 @@ export interface LogsDataListMessageCellProps {
 }
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
-  return <DataListCell className="text-ui-smd text-neutral4 min-w-0 truncate font-mono">{message}</DataListCell>;
+  return <DataListCell className="text-ui-smd text-muted-foreground min-w-0 truncate font-mono">{message}</DataListCell>;
 }
 
 // ---------------------------------------------------------------------------

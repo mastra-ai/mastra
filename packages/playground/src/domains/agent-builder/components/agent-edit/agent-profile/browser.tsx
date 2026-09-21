@@ -35,10 +35,10 @@ export const Browser = ({ editable = true }: BrowserProps) => {
         </div>
 
         <div className="flex flex-col gap-2">
-          <Txt variant="header-sm" className="text-neutral6 font-semibold">
+          <Txt variant="header-sm" className="text-foreground font-semibold">
             Browser access
           </Txt>
-          <Txt variant="ui-md" className="text-neutral3">
+          <Txt variant="ui-md" className="text-muted-foreground">
             Let this agent open a browser session to navigate websites, fill out forms, and read live web content as
             part of a run.
           </Txt>
@@ -53,7 +53,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
             data-testid={TOGGLE_ID}
             style={switchStyle}
           />
-          <label htmlFor={TOGGLE_ID} className="text-ui-md text-neutral6 cursor-pointer font-medium">
+          <label htmlFor={TOGGLE_ID} className="text-ui-md text-foreground cursor-pointer font-medium">
             Enable browser
           </label>
           <Badge variant={browserEnabled ? 'green' : 'neutral'} size="sm" indicator="dot">

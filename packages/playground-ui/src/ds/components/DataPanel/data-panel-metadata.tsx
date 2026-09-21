@@ -42,8 +42,8 @@ export function DataPanelMeta({ as, icon, tooltip, children, className, ...props
         controlSizeClasses.sm,
         transitions.colors,
         isInteractive
-          ? 'cursor-pointer text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10'
-          : cn('text-neutral3', hasTooltip && 'cursor-help'),
+          ? 'cursor-pointer text-muted-foreground hover:bg-neutral6/5 hover:text-foreground active:bg-neutral6/10'
+          : cn('text-muted-foreground', hasTooltip && 'cursor-help'),
         className,
       )}
       {...props}

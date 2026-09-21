@@ -100,7 +100,7 @@ const SidebarLink = ({
         href={href}
         className={cn(
           'flex items-center gap-2.5 px-3 py-2 text-ui-md transition-colors border-r-2 border-transparent',
-          active ? 'bg-surface2 text-neutral5 border-accent1' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
+          active ? 'bg-surface2 text-foreground border-accent1' : 'text-muted-foreground hover:bg-surface3 hover:text-foreground',
         )}
       >
         {done ? (
@@ -109,7 +109,7 @@ const SidebarLink = ({
           </div>
         ) : (
           <Txt
-            className="border-neutral2 text-neutral2 flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
+            className="border-neutral2 text-placeholder flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
             variant="ui-sm"
           >
             {index + 1}
@@ -117,11 +117,11 @@ const SidebarLink = ({
         )}
 
         <div>
-          <Txt variant="ui-sm" className="text-neutral5">
+          <Txt variant="ui-sm" className="text-foreground">
             {name}
           </Txt>
 
-          <Txt variant="ui-xs" className="text-neutral2">
+          <Txt variant="ui-xs" className="text-placeholder">
             {description}
           </Txt>
         </div>

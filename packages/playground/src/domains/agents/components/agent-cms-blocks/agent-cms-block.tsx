@@ -198,7 +198,7 @@ const InlineBlockContent = ({
         {/* Left gutter — drag handle (visible on hover/focus-within) */}
         {!readOnly && (
           <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
-            <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
+            <div {...dragHandleProps} className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Icon>

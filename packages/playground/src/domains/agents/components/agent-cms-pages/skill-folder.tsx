@@ -81,7 +81,7 @@ export function SkillFolder({
       <div className="border-border1 h-full overflow-y-auto border-r p-4">
         {workspaceOptions.length > 0 && (
           <div className="flex flex-col gap-1.5 pb-4">
-            <Txt as="label" variant="ui-sm" className="text-neutral3">
+            <Txt as="label" variant="ui-sm" className="text-muted-foreground">
               Workspace
             </Txt>
             <Combobox
@@ -127,7 +127,7 @@ export function SkillFolder({
             )}
           </>
         ) : (
-          <div className="text-neutral3 text-ui-sm flex h-full items-center justify-center">
+          <div className="text-muted-foreground text-ui-sm flex h-full items-center justify-center">
             Select a file to edit its content
           </div>
         )}

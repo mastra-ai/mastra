@@ -98,37 +98,37 @@ const ProgressBar = ({
 
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-surface4';
   const fillColor = isProcessing ? 'bg-blue-500/10' : barColor;
-  const textColor = isProcessing ? 'text-blue-600' : 'text-neutral4';
+  const textColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
   const textColorFilled = isProcessing ? 'text-blue-600' : 'text-white';
   const tokenBg = isProcessing ? 'bg-blue-500/10' : 'bg-surface5';
-  const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-neutral3';
+  const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
 
   return (
     <div className="min-w-0 flex-1">
       <div className="mb-1 flex h-4 items-center gap-1">
-        <span className="text-neutral4 text-ui-xs font-normal tracking-wider uppercase">{label}</span>
+        <span className="text-muted-foreground text-ui-xs font-normal tracking-wider uppercase">{label}</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" className="inline-flex items-center justify-center">
-              <Info className="text-neutral4 hover:text-neutral3 h-2.5 w-2.5 cursor-help" />
+              <Info className="text-muted-foreground hover:text-muted-foreground h-2.5 w-2.5 cursor-help" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
             <div className="text-ui-sm space-y-1.5">
-              <div className="text-neutral5 font-medium">
+              <div className="text-foreground font-medium">
                 {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
               </div>
               <div className="space-y-0.5">
                 <div>
-                  <span className="text-neutral4">Model:</span>{' '}
-                  <span className="text-neutral5">{model || 'not configured'}</span>
+                  <span className="text-muted-foreground">Model:</span>{' '}
+                  <span className="text-foreground">{model || 'not configured'}</span>
                 </div>
                 {modelRouting?.length ? (
                   <div>
-                    <span className="text-neutral4">Routing:</span>
+                    <span className="text-muted-foreground">Routing:</span>
                     <div className="mt-0.5 space-y-0.5 pl-2">
                       {modelRouting.map(route => (
-                        <div key={`${route.upTo}-${route.model}`} className="text-neutral5">
+                        <div key={`${route.upTo}-${route.model}`} className="text-foreground">
                           ≤{formatTokens(route.upTo)} → {route.model}
                         </div>
                       ))}
@@ -136,14 +136,14 @@ const ProgressBar = ({
                   </div>
                 ) : (
                   <div>
-                    <span className="text-neutral4">Threshold:</span>{' '}
-                    <span className="text-neutral5">{formatTokens(baseThreshold ?? max)} tokens</span>
+                    <span className="text-muted-foreground">Threshold:</span>{' '}
+                    <span className="text-foreground">{formatTokens(baseThreshold ?? max)} tokens</span>
                   </div>
                 )}
                 {isAdaptive && totalBudget && (
                   <div>
-                    <span className="text-neutral4">Mode:</span> <span className="text-amber-400">Adaptive</span>{' '}
-                    <span className="text-neutral4">({formatTokens(totalBudget)} shared budget)</span>
+                    <span className="text-muted-foreground">Mode:</span> <span className="text-amber-400">Adaptive</span>{' '}
+                    <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
                   </div>
                 )}
               </div>
@@ -180,7 +180,7 @@ const ProgressBar = ({
           className={`text-ui-xs ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
           {formatTokens(value)}
-          <span className={isProcessing ? 'text-blue-500' : 'text-neutral4'}>/{formatTokens(max)}</span>
+          <span className={isProcessing ? 'text-blue-500' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -189,8 +189,8 @@ const ProgressBar = ({
               <TooltipContent side="top" className="max-w-xs">
                 <div className="text-ui-sm">
                   <span className="text-amber-400">{formatTokens(baseThreshold)}</span>
-                  <span className="text-neutral4"> is the configured threshold. </span>
-                  <span className="text-neutral5">
+                  <span className="text-muted-foreground"> is the configured threshold. </span>
+                  <span className="text-foreground">
                     Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
                   </span>
                 </div>
@@ -206,18 +206,18 @@ const ProgressBar = ({
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
     <Brain className="h-4 w-4 text-purple-400" />
-    <h3 className="text-neutral5 text-ui-md font-medium">Observational Memory</h3>
+    <h3 className="text-foreground text-ui-md font-medium">Observational Memory</h3>
   </div>
 );
 
 const ObservationalMemoryDisabled = () => (
   <div className="p-4">
     <div className="mb-3 flex items-center gap-2">
-      <Brain className="text-neutral3 h-4 w-4" />
-      <h3 className="text-neutral5 text-ui-md font-medium">Observational Memory</h3>
+      <Brain className="text-muted-foreground h-4 w-4" />
+      <h3 className="text-foreground text-ui-md font-medium">Observational Memory</h3>
     </div>
     <div className="bg-surface3 border-border1 rounded-lg border p-4">
-      <p className="text-neutral3 text-ui-md mb-3">
+      <p className="text-muted-foreground text-ui-md mb-3">
         Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
         from conversations.
       </p>

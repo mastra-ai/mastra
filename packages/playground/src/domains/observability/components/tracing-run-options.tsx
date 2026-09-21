@@ -45,17 +45,17 @@ export const TracingRunOptions = ({
   return (
     <div className={cn('px-5 py-2', !hideTitle && 'space-y-2', className)}>
       {!hideTitle && (
-        <Txt as="h3" variant="ui-md" className="text-neutral3">
+        <Txt as="h3" variant="ui-md" className="text-muted-foreground">
           Tracing Options
         </Txt>
       )}
 
       {showEditorHeader && (
         <div className="flex items-center justify-between pb-2">
-          <Txt as="label" variant="ui-md" className="text-neutral3">
+          <Txt as="label" variant="ui-md" className="text-muted-foreground">
             Tracing Options (JSON)
           </Txt>
-          <Txt as="span" variant="ui-xs" className="text-neutral3">
+          <Txt as="span" variant="ui-xs" className="text-muted-foreground">
             Auto-applied on valid JSON
           </Txt>
         </div>

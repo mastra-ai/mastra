@@ -51,7 +51,7 @@ function FilterBarSurface({
       onClick={ctx.focusInput}
     >
       <span className="flex shrink-0 items-center py-1 pr-1 pl-1.5">
-        <ListFilterIcon aria-hidden className="text-neutral3 size-3" />
+        <ListFilterIcon aria-hidden className="text-muted-foreground size-3" />
       </span>
       <div data-slot="filter-bar-list" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
         {children}

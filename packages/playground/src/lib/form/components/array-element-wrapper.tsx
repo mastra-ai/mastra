@@ -44,10 +44,10 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
           aria-label={invalid ? `${itemLabel}, Needs input` : itemLabel}
           className="text-ui-sm flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left focus-visible:shadow-none focus-visible:ring-inset"
         >
-          <ChevronRight aria-hidden className="text-neutral3 size-3.5 shrink-0" />
-          <span className="text-neutral3 shrink-0">Item {index + 1}</span>
+          <ChevronRight aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
+          <span className="text-muted-foreground shrink-0">Item {index + 1}</span>
           {summary && (
-            <span className="text-neutral5 truncate" title={summary}>
+            <span className="text-foreground truncate" title={summary}>
               {summary}
             </span>
           )}

@@ -56,7 +56,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
           >
             <LinkComponent
               to={`/templates/${template.slug}`}
-              className={cn('grid [&:hover_p]:text-neutral5', {
+              className={cn('grid [&:hover_p]:text-foreground', {
                 'grid-cols-[8rem_1fr] lg:grid-cols-[12rem_1fr]': template.imageURL,
               })}
             >
@@ -71,16 +71,16 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                 </div>
               )}
               <div
-                className={cn('grid py-3 px-4 w-full gap-0.5', '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3')}
+                className={cn('grid py-3 px-4 w-full gap-0.5', '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-muted-foreground')}
               >
-                <h2 className="text-ui-md text-neutral5">{template.title}</h2>
-                <p className="text-ui-md text-neutral4 transition-colors duration-500">{template.description}</p>
-                <div className="text-neutral3 text-ui-md mt-3 hidden flex-wrap items-center gap-4 2xl:flex">
+                <h2 className="text-ui-md text-foreground">{template.title}</h2>
+                <p className="text-ui-md text-muted-foreground transition-colors duration-500">{template.description}</p>
+                <div className="text-muted-foreground text-ui-md mt-3 hidden flex-wrap items-center gap-4 2xl:flex">
                   {hasMetaInfo && (
                     <ul
                       className={cn(
-                        'flex gap-4 text-ui-md text-neutral3 m-0 p-0 list-none',
-                        '[&>li]:flex [&>li]:items-center [&>li]:gap-0.5 text-neutral4',
+                        'flex gap-4 text-ui-md text-muted-foreground m-0 p-0 list-none',
+                        '[&>li]:flex [&>li]:items-center [&>li]:gap-0.5 text-muted-foreground',
                       )}
                     >
                       {template?.agents && template.agents.length > 0 && (
@@ -111,7 +111,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                     </ul>
                   )}
                   {hasMetaInfo && template.supportedProviders && <small>|</small>}
-                  <div className="text-neutral3 flex items-center gap-4">
+                  <div className="text-muted-foreground flex items-center gap-4">
                     {template.supportedProviders.map(provider => (
                       <span key={provider} className="">
                         {provider}
@@ -127,7 +127,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="bg-surface1 group-hover:bg-surface2 text-neutral3 group-hover:text-neutral5 flex items-center gap-2 rounded px-2 py-1 transition-colors">
+              <span className="bg-surface1 group-hover:bg-surface2 text-muted-foreground group-hover:text-foreground flex items-center gap-2 rounded px-2 py-1 transition-colors">
                 <GithubIcon /> {getRepoName(template.githubUrl)}
               </span>
             </a>

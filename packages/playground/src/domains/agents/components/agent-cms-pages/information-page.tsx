@@ -24,7 +24,7 @@ export function InformationPage() {
         <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="agent-name" className="text-neutral5 text-ui-sm">
+          <Label htmlFor="agent-name" className="text-foreground text-ui-sm">
             Name <span className="text-accent2">*</span>
           </Label>
           <Input
@@ -39,7 +39,7 @@ export function InformationPage() {
         </div>
 
         <div className="flex flex-col gap-1.5 pb-8">
-          <Label htmlFor="agent-description" className="text-neutral5 text-ui-sm">
+          <Label htmlFor="agent-description" className="text-foreground text-ui-sm">
             Description
           </Label>
           <Textarea
@@ -58,7 +58,7 @@ export function InformationPage() {
             <SubSectionHeader title="Model Configuration" />
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5 text-ui-sm">
+                <Label className="text-foreground text-ui-sm">
                   Provider <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -76,7 +76,7 @@ export function InformationPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5 text-ui-sm">
+                <Label className="text-foreground text-ui-sm">
                   Model <span className="text-accent2">*</span>
                 </Label>
                 <Controller

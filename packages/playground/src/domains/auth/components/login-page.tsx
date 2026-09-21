@@ -57,7 +57,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   if (isLoadingCapabilities) {
     return (
       <div className="bg-surface1 flex min-h-screen items-center justify-center">
-        <div className="text-neutral3">Loading...</div>
+        <div className="text-muted-foreground">Loading...</div>
       </div>
     );
   }
@@ -65,7 +65,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   if (!capabilities?.enabled || !capabilities?.login) {
     return (
       <div className="bg-surface1 flex min-h-screen items-center justify-center">
-        <div className="text-neutral3">Authentication is not configured</div>
+        <div className="text-muted-foreground">Authentication is not configured</div>
       </div>
     );
   }
@@ -117,8 +117,8 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   const description = login.description ? (
     <div className="border-border1 bg-surface1 flex items-start gap-2.5 rounded-md border p-3">
-      <Lock className="text-neutral4 mt-0.5 h-4 w-4 shrink-0" />
-      <p className="text-neutral3 text-ui-md">{login.description}</p>
+      <Lock className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+      <p className="text-muted-foreground text-ui-md">{login.description}</p>
     </div>
   ) : null;
 
@@ -136,7 +136,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
         <form onSubmit={handleCredentialsSubmit} className="space-y-4">
           {!isSignIn && (
             <div className="space-y-2">
-              <label htmlFor="name" className="text-neutral4 text-ui-md block">
+              <label htmlFor="name" className="text-muted-foreground text-ui-md block">
                 Name
               </label>
               <Input
@@ -152,7 +152,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           )}
 
           <div className="space-y-2">
-            <label htmlFor="email" className="text-neutral4 text-ui-md block">
+            <label htmlFor="email" className="text-muted-foreground text-ui-md block">
               Email
             </label>
             <Input
@@ -168,7 +168,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="password" className="text-neutral4 text-ui-md block">
+            <label htmlFor="password" className="text-muted-foreground text-ui-md block">
               Password
             </label>
             <Input
@@ -191,10 +191,10 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
           {signUpEnabled && (
             <div className="text-ui-md text-center">
-              <span className="text-neutral3">
+              <span className="text-muted-foreground">
                 {isSignIn ? "Don't have an account? " : 'Already have an account? '}
               </span>
-              <button type="button" onClick={toggleMode} className="text-neutral6 hover:underline">
+              <button type="button" onClick={toggleMode} className="text-foreground hover:underline">
                 {isSignIn ? 'Sign up' : 'Sign in'}
               </button>
             </div>
@@ -208,7 +208,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             <div className="border-border1 w-full border-t" />
           </div>
           <div className="text-ui-md relative flex justify-center">
-            <span className="bg-surface1 text-neutral3 px-2">or continue with</span>
+            <span className="bg-surface1 text-muted-foreground px-2">or continue with</span>
           </div>
         </div>
       )}

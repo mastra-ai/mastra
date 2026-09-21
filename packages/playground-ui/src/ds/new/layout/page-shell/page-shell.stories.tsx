@@ -11,8 +11,8 @@ function ExampleContent() {
     <div className="grid gap-4">
       {Array.from({ length: 8 }, (_, index) => (
         <article key={index} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
-          <p className="text-ui-sm text-neutral6 font-medium">Activity {index + 1}</p>
-          <p className="text-ui-xs text-neutral4 mt-1">A representative row that makes the content area scroll.</p>
+          <p className="text-ui-sm text-foreground font-medium">Activity {index + 1}</p>
+          <p className="text-ui-xs text-muted-foreground mt-1">A representative row that makes the content area scroll.</p>
         </article>
       ))}
     </div>

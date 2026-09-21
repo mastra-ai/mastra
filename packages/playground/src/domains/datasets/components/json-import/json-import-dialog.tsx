@@ -126,10 +126,10 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
       <DialogContent className="flex max-h-[90vh] w-[960px] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
         <DialogHeader className="border-border1 border-b px-4 py-4">
           <DialogTitle>Import into dataset</DialogTitle>
-          <DialogDescription className="text-ui-sm text-neutral3 not-sr-only">
+          <DialogDescription className="text-ui-sm text-muted-foreground not-sr-only">
             Add items to{' '}
             {datasetName ? (
-              <code className="bg-surface3 text-ui-xs text-neutral6 rounded px-1 font-mono">{datasetName}</code>
+              <code className="bg-surface3 text-ui-xs text-foreground rounded px-1 font-mono">{datasetName}</code>
             ) : (
               'this dataset'
             )}{' '}
@@ -193,7 +193,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
     case 'ready':
       message = (
         <>
-          <b className="text-neutral6 font-medium">{validation.total}</b> item{validation.total !== 1 ? 's' : ''} ready
+          <b className="text-foreground font-medium">{validation.total}</b> item{validation.total !== 1 ? 's' : ''} ready
           {validation.missingGroundTruthCount > 0 && ` · ${validation.missingGroundTruthCount} without groundTruth`}
         </>
       );
@@ -215,7 +215,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
         case 'missing-input':
           message = (
             <>
-              <b className="text-neutral6 font-medium">{validation.missingInputCount}</b> of {validation.total} item
+              <b className="text-foreground font-medium">{validation.missingInputCount}</b> of {validation.total} item
               {validation.total !== 1 ? 's' : ''} {validation.missingInputCount !== 1 ? 'have' : 'has'} no{' '}
               <code className="font-mono">input</code>
             </>
@@ -226,7 +226,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   }
 
   return (
-    <div role="status" className="text-ui-sm text-neutral4 flex min-w-0 items-center gap-2">
+    <div role="status" className="text-ui-sm text-muted-foreground flex min-w-0 items-center gap-2">
       <span className={dotClassName} />
       <span className="truncate">{message}</span>
     </div>

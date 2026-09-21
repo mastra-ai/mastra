@@ -60,7 +60,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
   if (!processor)
     return (
       <div className="px-4 py-8 text-center">
-        <Txt variant="header-md" className="text-neutral3">
+        <Txt variant="header-md" className="text-muted-foreground">
           Processor not found
         </Txt>
       </div>
@@ -128,7 +128,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
         <div className="space-y-5 p-5">
           <div className="space-y-2">
-            <Txt as="label" variant="ui-sm" className="text-neutral3">
+            <Txt as="label" variant="ui-sm" className="text-muted-foreground">
               Phase
             </Txt>
             <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
@@ -143,14 +143,14 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 ))}
               </SelectContent>
             </Select>
-            <Txt variant="ui-xs" className="text-neutral4">
+            <Txt variant="ui-xs" className="text-muted-foreground">
               {PHASE_LABELS[selectedPhase]}
             </Txt>
           </div>
 
           {processor.configurations.length > 1 && (
             <div className="space-y-2">
-              <Txt as="label" variant="ui-sm" className="text-neutral3">
+              <Txt as="label" variant="ui-sm" className="text-muted-foreground">
                 Agent Configuration
               </Txt>
               <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
@@ -169,7 +169,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           )}
 
           <div className="space-y-2">
-            <Txt as="label" htmlFor={formId} variant="ui-sm" className="text-neutral3">
+            <Txt as="label" htmlFor={formId} variant="ui-sm" className="text-muted-foreground">
               Test Message
             </Txt>
             <textarea
@@ -178,7 +178,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
               placeholder="Enter a test message..."
               rows={4}
-              className="border-border1 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden"
+              className="border-border1 text-ui-sm text-foreground placeholder:text-muted-foreground focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden"
             />
           </div>
 
@@ -199,7 +199,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
           {result && (
             <div className="border-border1 space-y-2 border-t pt-4">
-              <Txt variant="ui-sm" className="text-neutral3">
+              <Txt variant="ui-sm" className="text-muted-foreground">
                 Status
               </Txt>
               <div className="flex items-center gap-2">
@@ -211,7 +211,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                   <Txt variant="ui-sm" className="text-accent6 font-medium">
                     Tripwire Reason
                   </Txt>
-                  <Txt variant="ui-sm" className="text-neutral3 mt-1">
+                  <Txt variant="ui-sm" className="text-muted-foreground mt-1">
                     {result.tripwire.reason}
                   </Txt>
                 </div>
@@ -239,11 +239,11 @@ interface ProcessorInformationProps {
 function ProcessorInformation({ processor }: ProcessorInformationProps) {
   return (
     <div className="border-border1 border-b px-5 pt-5 pb-4">
-      <Txt variant="header-md" className="text-neutral1 mb-2">
+      <Txt variant="header-md" className="text-placeholder mb-2">
         {processor.name || processor.id}
       </Txt>
       {processor.name && processor.name !== processor.id && (
-        <Txt variant="ui-sm" className="text-neutral4 mb-3">
+        <Txt variant="ui-sm" className="text-muted-foreground mb-3">
           {processor.id}
         </Txt>
       )}
@@ -253,7 +253,7 @@ function ProcessorInformation({ processor }: ProcessorInformationProps) {
         ))}
       </div>
       <div className="mt-3">
-        <Txt variant="ui-xs" className="text-neutral4">
+        <Txt variant="ui-xs" className="text-muted-foreground">
           Attached to {processor.configurations.length} agent{processor.configurations.length !== 1 ? 's' : ''}
         </Txt>
       </div>

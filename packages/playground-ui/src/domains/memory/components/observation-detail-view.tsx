@@ -43,7 +43,7 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
   if (nested) {
     return {
       card: 'bg-transparent border-transparent',
-      text: 'text-neutral3',
+      text: 'text-muted-foreground',
       time: 'text-icon3',
     };
   }
@@ -51,31 +51,31 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
     case 'high':
       return {
         card: 'border-purple-400/30 bg-purple-500/10',
-        text: 'text-neutral6',
+        text: 'text-foreground',
         time: 'text-purple-200/80',
       };
     case 'medium':
       return {
         card: 'border-blue-400/30 bg-blue-500/10',
-        text: 'text-neutral6',
+        text: 'text-foreground',
         time: 'text-blue-200/80',
       };
     case 'low':
       return {
         card: 'border-emerald-400/30 bg-emerald-500/10',
-        text: 'text-neutral6',
+        text: 'text-foreground',
         time: 'text-emerald-200/80',
       };
     case 'complete':
       return {
         card: 'border-green-400/30 bg-green-500/10',
-        text: 'text-neutral6',
+        text: 'text-foreground',
         time: 'text-green-200/80',
       };
     default:
       return {
         card: 'border-border1 bg-surface2',
-        text: 'text-neutral6',
+        text: 'text-foreground',
         time: 'text-icon3',
       };
   }
@@ -223,7 +223,7 @@ function ObservationContent({ observations }: { observations: string }) {
         <section key={`${section.title}-${i}`} className="space-y-3">
           <div className="border-border1 flex items-baseline justify-between gap-3 border-b pb-2">
             <div className="min-w-0">
-              <h3 className="text-neutral6 text-ui-sm font-medium">{section.title}</h3>
+              <h3 className="text-foreground text-ui-sm font-medium">{section.title}</h3>
               {section.relativeTime && <p className="text-icon3 text-ui-xs">{section.relativeTime}</p>}
             </div>
           </div>
@@ -248,7 +248,7 @@ function ObservationHistoryPanel({
   return (
     <div className="border-border1 flex w-50 min-w-45 flex-col overflow-hidden border-l">
       <div className="border-border1 border-b px-4 py-2">
-        <p className="text-neutral6 text-ui-md font-normal">History</p>
+        <p className="text-foreground text-ui-md font-normal">History</p>
       </div>
       <div className="flex-1 overflow-y-auto">
         {records.map(record => {

@@ -69,7 +69,7 @@ export function WorkflowSuspendedSteps({
     >
       <div className="max-h-[calc(100cqh-64px)] overflow-y-auto overscroll-contain rounded-[inherit]">
         <div className="border-border1/50 bg-surface2 flex items-center justify-between gap-3 border-b px-5 py-4">
-          <Txt as="h2" variant="ui-sm" className="text-neutral6 flex items-center gap-2 font-medium">
+          <Txt as="h2" variant="ui-sm" className="text-foreground flex items-center gap-2 font-medium">
             <Icon>
               <CirclePause />
             </Icon>
@@ -129,11 +129,11 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
   return (
     <div className="[&+&]:border-border1/50 space-y-5 p-5 [&+&]:border-t">
       <div className="space-y-2">
-        <Txt as="p" variant="ui-md" className="text-neutral6 font-medium break-words">
+        <Txt as="p" variant="ui-md" className="text-foreground font-medium break-words">
           {step.stepId}
         </Txt>
         {description && (
-          <Txt as="p" variant="ui-sm" className="text-neutral3">
+          <Txt as="p" variant="ui-sm" className="text-muted-foreground">
             {description}
           </Txt>
         )}
@@ -141,7 +141,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
 
       {step.suspendPayload !== undefined && (
         <div className="space-y-2">
-          <Txt as="p" variant="ui-sm" className="text-neutral3 flex items-center gap-2">
+          <Txt as="p" variant="ui-sm" className="text-muted-foreground flex items-center gap-2">
             <Icon>
               <MoveDownLeft />
             </Icon>
@@ -153,14 +153,14 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
               <span className="flex min-w-0 items-center gap-2">
                 <Icon>
                   <ChevronRight
-                    className={cn('transition-transform text-neutral3', { 'transform rotate-90': isPayloadOpen })}
+                    className={cn('transition-transform text-muted-foreground', { 'transform rotate-90': isPayloadOpen })}
                   />
                 </Icon>
-                <Txt as="span" variant="ui-md" className="text-neutral6 truncate">
+                <Txt as="span" variant="ui-md" className="text-foreground truncate">
                   {getPayloadLabel(step.suspendPayload, step.stepId)}
                 </Txt>
               </span>
-              <Txt as="span" variant="ui-sm" className="text-neutral3 shrink-0">
+              <Txt as="span" variant="ui-sm" className="text-muted-foreground shrink-0">
                 {formatPayloadSize(step.suspendPayload)}
               </Txt>
             </CollapsibleTrigger>
@@ -179,7 +179,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
       )}
 
       <div className="space-y-3">
-        <Txt as="p" variant="ui-sm" className="text-neutral3 flex items-center gap-2">
+        <Txt as="p" variant="ui-sm" className="text-muted-foreground flex items-center gap-2">
           <Icon>
             <MoveUpRight />
           </Icon>

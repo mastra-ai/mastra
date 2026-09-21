@@ -19,11 +19,11 @@ export function FilterBarDraftChip({ field, operator }: FilterBarDraftChipProps)
       aria-hidden
       data-slot="filter-bar-draft-chip"
       className={cn(
-        'flex max-w-full items-stretch divide-x divide-border1 rounded-lg border border-border1 bg-surface5 text-neutral5',
+        'flex max-w-full items-stretch divide-x divide-border1 rounded-lg border border-border1 bg-surface5 text-foreground',
         'rounded-r-none',
       )}
     >
-      <span className={cn(segmentClass, 'text-neutral6 last:rounded-r-none')} style={fieldSegmentAccentStyle(field)}>
+      <span className={cn(segmentClass, 'text-foreground last:rounded-r-none')} style={fieldSegmentAccentStyle(field)}>
         <FilterBarFieldLabel field={field} />
       </span>
       {operator && <span className={cn(segmentClass, 'last:rounded-r-none')}>{operator.label}</span>}

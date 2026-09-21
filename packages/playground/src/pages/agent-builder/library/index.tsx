@@ -74,7 +74,7 @@ export default function AgentBuilderLibraryPage() {
         return (
           <div className="flex items-center-safe justify-center-safe">
             <EmptyState
-              iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+              iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
               titleSlot="No public agents yet"
               descriptionSlot="Mark an agent as Public to share it with the team library."
             />
@@ -98,7 +98,7 @@ export default function AgentBuilderLibraryPage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+            iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
             titleSlot="No public skills yet"
             descriptionSlot="Mark a skill as Public to share it with the team library."
           />
@@ -135,7 +135,7 @@ export default function AgentBuilderLibraryPage() {
                 <button
                   onClick={() => setTab('agents')}
                   className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
-                    tab === 'agents' ? 'bg-surface4 text-neutral6' : 'bg-surface2 text-neutral3 hover:text-neutral5'
+                    tab === 'agents' ? 'bg-surface4 text-foreground' : 'bg-surface2 text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   Agents
@@ -143,7 +143,7 @@ export default function AgentBuilderLibraryPage() {
                 <button
                   onClick={() => setTab('skills')}
                   className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
-                    tab === 'skills' ? 'bg-surface4 text-neutral6' : 'bg-surface2 text-neutral3 hover:text-neutral5'
+                    tab === 'skills' ? 'bg-surface4 text-foreground' : 'bg-surface2 text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   Skills

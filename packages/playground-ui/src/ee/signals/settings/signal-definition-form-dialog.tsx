@@ -163,7 +163,7 @@ export function SignalDefinitionFormDialog({
               </FieldBlock.Column>
             </FieldBlock.Layout>
             {editing ? (
-              <p className="text-ui-xs text-neutral3">
+              <p className="text-ui-xs text-muted-foreground">
                 Instruction changes create a new version and apply only to new traces. Existing analysis is unchanged.
               </p>
             ) : null}

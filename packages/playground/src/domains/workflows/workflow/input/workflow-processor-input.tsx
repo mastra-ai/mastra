@@ -66,7 +66,7 @@ export const WorkflowProcessorInput = ({
       )}
 
       <div className="space-y-2">
-        <Txt as="label" htmlFor={phaseId} variant="ui-sm" className="text-neutral3">
+        <Txt as="label" htmlFor={phaseId} variant="ui-sm" className="text-muted-foreground">
           Phase
         </Txt>
         <Select
@@ -88,13 +88,13 @@ export const WorkflowProcessorInput = ({
             ))}
           </SelectContent>
         </Select>
-        <Txt variant="ui-xs" className="text-neutral4">
+        <Txt variant="ui-xs" className="text-muted-foreground">
           {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
         </Txt>
       </div>
 
       <div className="space-y-2">
-        <Txt as="label" htmlFor={messageId} variant="ui-sm" className="text-neutral3">
+        <Txt as="label" htmlFor={messageId} variant="ui-sm" className="text-muted-foreground">
           Test Message
         </Txt>
         <textarea
@@ -107,7 +107,7 @@ export const WorkflowProcessorInput = ({
           placeholder="Enter a test message..."
           rows={4}
           disabled={isSubmitLoading}
-          className="border-border1 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden disabled:opacity-50"
+          className="border-border1 text-ui-sm text-foreground placeholder:text-muted-foreground focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden disabled:opacity-50"
         />
       </div>
 

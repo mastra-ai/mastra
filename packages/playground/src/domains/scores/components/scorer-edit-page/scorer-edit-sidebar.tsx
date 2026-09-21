@@ -51,7 +51,7 @@ export function ScorerEditSidebar({
 
           {/* Name */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scorer-name" className="text-neutral5 text-ui-sm">
+            <Label htmlFor="scorer-name" className="text-foreground text-ui-sm">
               Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -66,7 +66,7 @@ export function ScorerEditSidebar({
 
           {/* Description */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scorer-description" className="text-neutral5 text-ui-sm">
+            <Label htmlFor="scorer-description" className="text-foreground text-ui-sm">
               Description <span className="text-accent2">*</span>
             </Label>
             <Textarea
@@ -81,7 +81,7 @@ export function ScorerEditSidebar({
 
           {/* Provider */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-ui-sm">
+            <Label className="text-foreground text-ui-sm">
               Provider <span className="text-accent2">*</span>
             </Label>
             <Controller
@@ -96,7 +96,7 @@ export function ScorerEditSidebar({
 
           {/* Model */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-ui-sm">
+            <Label className="text-foreground text-ui-sm">
               Model <span className="text-accent2">*</span>
             </Label>
             <Controller
@@ -116,7 +116,7 @@ export function ScorerEditSidebar({
 
           {/* Score Range */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-ui-sm">Score Range</Label>
+            <Label className="text-foreground text-ui-sm">Score Range</Label>
             <div className="flex items-center gap-2">
               <Controller
                 name="scoreRange.min"
@@ -131,7 +131,7 @@ export function ScorerEditSidebar({
                   />
                 )}
               />
-              <span className="text-neutral3 text-ui-sm">to</span>
+              <span className="text-muted-foreground text-ui-sm">to</span>
               <Controller
                 name="scoreRange.max"
                 control={control}
@@ -150,7 +150,7 @@ export function ScorerEditSidebar({
 
           {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-ui-sm">Default Sampling</Label>
+            <Label className="text-foreground text-ui-sm">Default Sampling</Label>
             <Controller
               name="defaultSampling.type"
               control={control}
@@ -158,13 +158,13 @@ export function ScorerEditSidebar({
                 <RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange}>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="none" id="sampling-none" />
-                    <Label htmlFor="sampling-none" className="text-neutral5 text-ui-sm">
+                    <Label htmlFor="sampling-none" className="text-foreground text-ui-sm">
                       None
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="ratio" id="sampling-ratio" />
-                    <Label htmlFor="sampling-ratio" className="text-neutral5 text-ui-sm">
+                    <Label htmlFor="sampling-ratio" className="text-foreground text-ui-sm">
                       Ratio
                     </Label>
                   </div>

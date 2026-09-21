@@ -73,14 +73,14 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
     }
   };
 
-  const buttonClass = 'text-neutral3 hover:text-neutral6';
+  const buttonClass = 'text-muted-foreground hover:text-foreground';
 
   return (
     <TooltipProvider>
       <div className="@container/advanced">
         <div className="grid grid-cols-1 gap-2 pb-2 @xs/advanced:grid-cols-2">
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="frequency-penalty">
+            <Txt as="label" className="text-muted-foreground" variant="ui-sm" htmlFor="frequency-penalty">
               Frequency Penalty
             </Txt>
             <Input
@@ -104,7 +104,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="presence-penalty">
+            <Txt as="label" className="text-muted-foreground" variant="ui-sm" htmlFor="presence-penalty">
               Presence Penalty
             </Txt>
             <Input
@@ -128,7 +128,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="top-k">
+            <Txt as="label" className="text-muted-foreground" variant="ui-sm" htmlFor="top-k">
               Top K
             </Txt>
             <Input
@@ -149,7 +149,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-tokens">
+            <Txt as="label" className="text-muted-foreground" variant="ui-sm" htmlFor="max-tokens">
               Max Tokens
             </Txt>
             <Input
@@ -170,7 +170,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-steps">
+            <Txt as="label" className="text-muted-foreground" variant="ui-sm" htmlFor="max-steps">
               Max Steps
             </Txt>
             <Input
@@ -191,7 +191,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-retries">
+            <Txt as="label" className="text-muted-foreground" variant="ui-sm" htmlFor="max-retries">
               Max Retries
             </Txt>
             <Input
@@ -212,7 +212,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="seed">
+            <Txt as="label" className="text-muted-foreground" variant="ui-sm" htmlFor="seed">
               Seed
             </Txt>
             <Input
@@ -235,7 +235,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
 
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="provider-options">
+            <Txt as="label" className="text-muted-foreground" variant="ui-sm" htmlFor="provider-options">
               Provider Options
             </Txt>
 

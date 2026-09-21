@@ -30,11 +30,11 @@ export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>)
 );
 
 export const AskUserQuestion = ({ className, ...props }: ComponentProps<'legend'>) => (
-  <legend className={cn('mb-3 font-medium text-neutral6', className)} {...props} />
+  <legend className={cn('mb-3 font-medium text-foreground', className)} {...props} />
 );
 
 export const AskUserOptionDescription = ({ className, ...props }: ComponentProps<'span'>) => (
-  <span className={cn('block text-ui-xs font-normal text-neutral3', className)} {...props} />
+  <span className={cn('block text-ui-xs font-normal text-muted-foreground', className)} {...props} />
 );
 
 interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'> {
@@ -46,7 +46,7 @@ interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'
 export const AskUserOptionControl = ({ type, label, description, className, ...props }: AskUserOptionControlProps) => (
   <label
     className={cn(
-      'flex cursor-pointer items-start gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2 text-neutral5 transition-colors hover:bg-surface4 has-[:checked]:border-border2 has-[:checked]:bg-surface4 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
+      'flex cursor-pointer items-start gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2 text-foreground transition-colors hover:bg-surface4 has-[:checked]:border-border2 has-[:checked]:bg-surface4 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
       className,
     )}
   >
@@ -65,7 +65,7 @@ export const AskUserSubmit = ({ children = 'Submit answer', ...props }: Componen
 );
 
 export const AskUserPending = ({ children = 'Submitting…', className, ...props }: ComponentProps<'span'>) => (
-  <span role="status" className={cn('text-ui-xs text-neutral3', className)} {...props}>
+  <span role="status" className={cn('text-ui-xs text-muted-foreground', className)} {...props}>
     {children}
   </span>
 );
@@ -77,7 +77,7 @@ export interface AskUserOutputProps extends ComponentProps<'div'> {
 export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProps) => (
   <div
     role={result.isError ? 'alert' : 'status'}
-    className={cn('space-y-2 rounded-md bg-surface3 p-3 text-neutral5', result.isError && 'text-error', className)}
+    className={cn('space-y-2 rounded-md bg-surface3 p-3 text-foreground', result.isError && 'text-error', className)}
     {...props}
   >
     <Badge size="xs" variant={result.isError ? 'red' : 'green'}>
@@ -122,7 +122,7 @@ const AskUserInput = ({
   if (result || isAnswered) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <p className="text-neutral6 mb-2 font-medium">{payload.question}</p>
+        <p className="text-foreground mb-2 font-medium">{payload.question}</p>
         {result ? <AskUserOutput result={result} /> : <Badge variant="green">Answered</Badge>}
       </AskUserContainer>
     );
@@ -143,7 +143,7 @@ const AskUserInput = ({
   if (options.length === 0) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <label className="text-neutral6 mb-2 block font-medium" htmlFor={inputId}>
+        <label className="text-foreground mb-2 block font-medium" htmlFor={inputId}>
           {payload.question}
         </label>
         <div className="flex items-center gap-2">

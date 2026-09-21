@@ -47,7 +47,7 @@ function AuthorBadge({ agent, className }: { agent: StoredAgentResponse; classNa
   return (
     <div className={cn('flex items-center gap-1.5 min-w-0', className)} data-testid="agent-builder-row-author">
       <Avatar name={label} src={avatarUrl} size="sm" />
-      <span className="text-ui-xs text-neutral3 truncate">{label}</span>
+      <span className="text-ui-xs text-muted-foreground truncate">{label}</span>
     </div>
   );
 }
@@ -57,7 +57,7 @@ function PrivateVisibilityIcon() {
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className="text-neutral3 shrink-0"
+          className="text-muted-foreground shrink-0"
           aria-label="Private agent"
           data-testid="agent-builder-private-visibility-icon"
         >
@@ -89,7 +89,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
     return (
       <div className="flex items-center-safe justify-center-safe">
         <EmptyState
-          iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+          iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
           titleSlot="No agents match your search"
           descriptionSlot="Try a different name or description."
         />
@@ -113,11 +113,11 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
+                <div className="text-ui-md text-foreground truncate">{agent.name}</div>
                 {agent.visibility === 'private' && <PrivateVisibilityIcon />}
               </div>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
+                <span className="text-ui-sm text-muted-foreground line-clamp-1">{agent.description || 'No description'}</span>
               </div>
               <AuthorBadge agent={agent} className="mt-2 md:hidden" />
               {showFavorites && (

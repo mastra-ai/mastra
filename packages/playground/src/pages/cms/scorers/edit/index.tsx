@@ -263,9 +263,9 @@ function CmsScorersEditPage() {
     return (
       <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
-          leftSlot={<div className="text-neutral3 flex h-full items-center justify-center">Scorer not found</div>}
+          leftSlot={<div className="text-muted-foreground flex h-full items-center justify-center">Scorer not found</div>}
         >
-          <div className="text-neutral3 flex h-full items-center justify-center">Scorer not found</div>
+          <div className="text-muted-foreground flex h-full items-center justify-center">Scorer not found</div>
         </AgentEditLayout>
       </MainContentLayout>
     );

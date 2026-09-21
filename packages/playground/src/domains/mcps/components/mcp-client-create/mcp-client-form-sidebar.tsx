@@ -76,7 +76,7 @@ export function MCPClientFormSidebar({
           <SectionHeader title="Identity" subtitle="Define the MCP client name and description." />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-name" className="text-neutral5 text-ui-sm">
+            <Label htmlFor="mcp-client-name" className="text-foreground text-ui-sm">
               Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -91,7 +91,7 @@ export function MCPClientFormSidebar({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-description" className="text-neutral5 text-ui-sm">
+            <Label htmlFor="mcp-client-description" className="text-foreground text-ui-sm">
               Description
             </Label>
             <Textarea
@@ -125,7 +125,7 @@ export function MCPClientFormSidebar({
           <SectionHeader title="Server Configuration" subtitle="Configure the MCP server connection details." />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-server-name" className="text-neutral5 text-ui-sm">
+            <Label htmlFor="mcp-server-name" className="text-foreground text-ui-sm">
               Server Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -140,7 +140,7 @@ export function MCPClientFormSidebar({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-ui-sm">Server Type</Label>
+            <Label className="text-foreground text-ui-sm">Server Type</Label>
             <Controller
               name="serverType"
               control={control}
@@ -161,7 +161,7 @@ export function MCPClientFormSidebar({
           {serverType === 'http' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-url" className="text-neutral5 text-ui-sm">
+                <Label htmlFor="mcp-url" className="text-foreground text-ui-sm">
                   URL <span className="text-accent2">*</span>
                 </Label>
                 <Input
@@ -176,7 +176,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-timeout" className="text-neutral5 text-ui-sm">
+                <Label htmlFor="mcp-timeout" className="text-foreground text-ui-sm">
                   Timeout (ms)
                 </Label>
                 <Input
@@ -194,7 +194,7 @@ export function MCPClientFormSidebar({
           {serverType === 'stdio' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-command" className="text-neutral5 text-ui-sm">
+                <Label htmlFor="mcp-command" className="text-foreground text-ui-sm">
                   Command <span className="text-accent2">*</span>
                 </Label>
                 <Input
@@ -209,7 +209,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-args" className="text-neutral5 text-ui-sm">
+                <Label htmlFor="mcp-args" className="text-foreground text-ui-sm">
                   Arguments (one per line)
                 </Label>
                 <Textarea
@@ -222,7 +222,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5 text-ui-sm">Environment Variables</Label>
+                <Label className="text-foreground text-ui-sm">Environment Variables</Label>
                 <div className="flex flex-col gap-2">
                   {env.map((_, index) => (
                     <div key={index} className="flex items-center gap-2">
