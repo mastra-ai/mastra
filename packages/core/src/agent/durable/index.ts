@@ -215,9 +215,13 @@ export {
   type DurableToolPermissionResolverInput,
 } from './workflows/steps';
 export {
+  ON_BEFORE_TOOL_EXECUTION_KEY,
+  ON_BEFORE_TOOL_EXECUTION_REQUIRED_KEY,
+  TOOL_PERMISSION_DENIED_ERROR_NAME,
   TOOL_PERMISSION_POLICY_KEY,
   TOOL_PERMISSION_POLICY_REQUIRED_KEY,
   TOOL_PERMISSION_POLICY_STABLE_KEY,
+  type BeforeToolExecutionHook,
   type ToolPermissionDecision,
   type ToolPermissionPolicy,
 } from '../tool-permission-prefilter';

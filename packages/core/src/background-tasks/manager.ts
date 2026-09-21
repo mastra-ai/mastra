@@ -4,6 +4,7 @@ import type { Mastra } from '..';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
 import { BACKGROUND_TASK_SHUTDOWN_ABORT_MESSAGE } from './shutdown';
+import { BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY } from './types';
 import type {
   BackgroundTask,
   BackgroundTaskManagerConfig,
@@ -451,7 +452,13 @@ export class BackgroundTaskManager {
       status: 'pending',
       toolName: payload.toolName,
       toolCallId: payload.toolCallId,
-      args: payload.args,
+      // The hook requirement persists inside `args` — the only field every
+      // store serializes verbatim — so a foreign worker or recovered run can
+      // tell this call was authorization-gated. run-attempt strips the marker
+      // before the executor sees the args.
+      args: payload.requiresToolPermissionHook
+        ? { ...payload.args, [BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY]: true }
+        : payload.args,
       agentId: payload.agentId,
       threadId: payload.threadId,
       resourceId: payload.resourceId,
@@ -849,6 +856,37 @@ export class BackgroundTaskManager {
     }
 
     return task;
+  }
+
+  /**
+   * Persists the tool-permission-hook requirement onto an existing task's
+   * stored args. `enqueue` folds the marker in at create time, but a handle
+   * carrying `requiresToolPermissionHook` that attaches to a row it did not
+   * create (resume/restart legs, or a row written before the marker existed)
+   * must backfill it so a later cold recovery still fails closed instead of
+   * executing without revalidation. Verifies the write by re-reading — a
+   * store that cannot persist `args` updates throws so the caller refuses
+   * the attach rather than leaving a claimable-but-unmarked row.
+   */
+  async markTaskRequiresToolPermissionHook(taskId: string): Promise<void> {
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
+    if (task?.args?.[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY] === true) return;
+    // A null read is ambiguous — the row may be gone or the store may have
+    // failed. The caller is attaching a permission requirement; skipping the
+    // write would leave a claimable-but-unmarked row, so fail closed.
+    if (!task) {
+      throw new Error(`Cannot persist permission-hook requirement — background task "${taskId}" not found`);
+    }
+    await storage.updateTask(taskId, {
+      args: { ...(task.args ?? {}), [BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY]: true },
+    });
+    const persisted = await storage.getTask(taskId);
+    if (!persisted || persisted.args?.[BACKGROUND_TASK_REQUIRES_PERMISSION_HOOK_KEY] !== true) {
+      throw new Error(
+        `Unable to persist permission-hook requirement on background task "${taskId}" — refusing to attach`,
+      );
+    }
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

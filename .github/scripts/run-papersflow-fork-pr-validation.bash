@@ -4325,6 +4325,8 @@ run_validator_self_tests() {
     "$fixture_repo/packages/server/src/server/server-adapter/routes" \
     "$fixture_repo/pubsub/google-cloud-pubsub/src" \
     "$fixture_repo/pubsub/redis-streams/src" \
+    "$fixture_repo/stores/clickhouse/src/storage/db" \
+    "$fixture_repo/stores/cloudflare/src/kv/storage/db" \
     "$fixture_repo/stores/convex/src/cache" \
     "$fixture_repo/stores/convex/src/server" \
     "$fixture_repo/stores/_test-utils/src/domains/harness" \
@@ -4562,6 +4564,16 @@ run_validator_self_tests() {
       > pubsub/redis-streams/src/pubsub.test.ts
     printf '%s\n' 'services:' '  redis:' '    image: redis:8-alpine' \
       > pubsub/redis-streams/docker-compose.yaml
+    printf '%s\n' '{}' > stores/clickhouse/package.json
+    printf '%s\n' 'export const clickhouseTableEngines = true;' \
+      > stores/clickhouse/src/storage/db/utils.ts
+    printf '%s\n' "import { it } from 'vitest';" "it('clickhouse db ddl', () => {});" \
+      > stores/clickhouse/src/storage/db/index.test.ts
+    printf '%s\n' '{}' > stores/cloudflare/package.json
+    printf '%s\n' 'export type CloudflareRecordTypes = { base: true };' \
+      > stores/cloudflare/src/kv/storage/types.ts
+    printf '%s\n' "import { it } from 'vitest';" "it('cloudflare kv db', () => {});" \
+      > stores/cloudflare/src/kv/storage/db/index.test.ts
     printf '%s\n' '{}' > stores/convex/package.json
     printf '%s\n' 'export const convexCache = true;' > stores/convex/src/cache/index.ts
     printf '%s\n' "import { it } from 'vitest';" "it('convex cache', () => {});" \
@@ -9670,6 +9682,120 @@ NODE
     exit 1
   fi
 
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' 'export const clickhouseTableEngines = "conformance-head";' \
+      > stores/clickhouse/src/storage/db/utils.ts
+    git add .
+    git commit -q -m 'clickhouse exhaustive engine-map conformance change'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  output="$test_root/clickhouse-engine-map-success.log"
+  run_fixture "$head_sha" "$output"
+  assert_contains 'Forcing PF-2044 owned suites to run for source-only changes:' "$output"
+  assert_contains 'stores/clickhouse/src/storage/db/index.test.ts' "$output"
+  assert_contains '--filter ./stores/clickhouse --fail-if-no-match exec tsc --noEmit' "$command_log"
+  assert_contains '--filter ./stores/clickhouse --fail-if-no-match build:lib' "$command_log"
+  assert_contains '--filter ./stores/clickhouse --fail-if-no-match lint' "$command_log"
+  assert_contains '--dir stores/clickhouse exec vitest run' "$command_log"
+  assert_contains 'src/storage/db/index.test.ts' "$command_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' 'export type CloudflareRecordTypes = { head: true };' \
+      > stores/cloudflare/src/kv/storage/types.ts
+    git add .
+    git commit -q -m 'cloudflare exhaustive record-type conformance change'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  output="$test_root/cloudflare-record-types-success.log"
+  run_fixture "$head_sha" "$output"
+  assert_contains 'Forcing PF-2044 owned suites to run for source-only changes:' "$output"
+  assert_contains 'stores/cloudflare/src/kv/storage/db/index.test.ts' "$output"
+  assert_contains '--filter ./stores/cloudflare --fail-if-no-match exec tsc --noEmit' "$command_log"
+  assert_contains '--filter ./stores/cloudflare --fail-if-no-match build:lib' "$command_log"
+  assert_contains '--filter ./stores/cloudflare --fail-if-no-match lint' "$command_log"
+  assert_contains '--dir stores/cloudflare exec vitest run' "$command_log"
+  assert_contains 'src/kv/storage/db/index.test.ts' "$command_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "import { it } from 'vitest';" "it('clickhouse db ddl head', () => {});" \
+      >> stores/clickhouse/src/storage/db/index.test.ts
+    git add .
+    git commit -q -m 'clickhouse owned test-only change'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  output="$test_root/clickhouse-owned-test-success.log"
+  run_fixture "$head_sha" "$output"
+  assert_contains '--filter ./stores/clickhouse --fail-if-no-match exec tsc --noEmit' "$command_log"
+  assert_contains '--filter ./stores/clickhouse --fail-if-no-match build:lib' "$command_log"
+  assert_contains '--filter ./stores/clickhouse --fail-if-no-match lint' "$command_log"
+  assert_contains '--dir stores/clickhouse exec vitest run' "$command_log"
+  assert_contains 'src/storage/db/index.test.ts' "$command_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' 'export const unreviewedClickhouseHelper = true;' \
+      > stores/clickhouse/src/storage/db/unreviewed.ts
+    git add .
+    git commit -q -m 'unreviewed clickhouse source'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  output="$test_root/clickhouse-unknown-source-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Unknown ClickHouse source unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains 'stores/clickhouse/src/storage/db/unreviewed.ts' "$output"
+  assert_contains 'outside the PF-2044 owned source-and-test maps' "$output"
+  if [[ -s "$command_log" ]]; then
+    echo 'Unknown ClickHouse source fixture executed package commands.' >&2
+    cat "$command_log" >&2
+    exit 1
+  fi
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
+    printf '%s\n' "import { it } from 'vitest';" "it('unreviewed cloudflare kv', () => {});" \
+      > stores/cloudflare/src/kv/storage/db/unreviewed.test.ts
+    git add .
+    git commit -q -m 'unreviewed cloudflare test'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  output="$test_root/cloudflare-unknown-test-failure.log"
+  set +e
+  run_fixture "$head_sha" "$output"
+  status=$?
+  set -e
+  if (( status == 0 )); then
+    echo 'Unknown Cloudflare test unexpectedly passed.' >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  assert_contains 'stores/cloudflare/src/kv/storage/db/unreviewed.test.ts' "$output"
+  assert_contains 'outside the PF-2044 owned service and runtime contracts' "$output"
+  if [[ -s "$command_log" ]]; then
+    echo 'Unknown Cloudflare test fixture executed package commands.' >&2
+    cat "$command_log" >&2
+    exit 1
+  fi
+
   echo 'PapersFlow fork validator fixtures passed.'
 }
 
@@ -12479,7 +12605,7 @@ while IFS= read -r workspace; do
     continue
   fi
   case "$workspace" in
-    auth/okta | browser/stagehand | packages/_internal-core | packages/_types-builder | packages/agent-builder | packages/cli | packages/codemod | packages/core | packages/deployer | packages/mcp | packages/memory | packages/server | client-sdks/ai-sdk | client-sdks/client-js | stores/_test-utils | stores/convex | stores/libsql | stores/pg | stores/redis | mastracode | mastracode/sdk | mastracode/tui | pubsub/google-cloud-pubsub | pubsub/redis-streams | workflows/inngest | workflows/temporal | observability/mastra | docs) ;;
+    auth/okta | browser/stagehand | packages/_internal-core | packages/_types-builder | packages/agent-builder | packages/cli | packages/codemod | packages/core | packages/deployer | packages/mcp | packages/memory | packages/server | client-sdks/ai-sdk | client-sdks/client-js | stores/_test-utils | stores/clickhouse | stores/cloudflare | stores/convex | stores/libsql | stores/pg | stores/redis | mastracode | mastracode/sdk | mastracode/tui | pubsub/google-cloud-pubsub | pubsub/redis-streams | workflows/inngest | workflows/temporal | observability/mastra | docs) ;;
     server-adapters/fastify)
       if [[ "$pf3553_selected_route_exports" == false ]]; then
         printf '%s\n' "$workspace" >> "$unsupported_workspaces"
@@ -12759,7 +12885,7 @@ while IFS= read -r path; do
   printf '%s\n' "$path" >> "$unsupported_inputs"
 done < <(
   grep -E \
-    '^(client-sdks/client-js|mastracode/(sdk|tui)|pubsub/(google-cloud-pubsub|redis-streams)|stores/(convex|libsql)|workflows/inngest)/package\.json$' \
+    '^(client-sdks/client-js|mastracode/(sdk|tui)|pubsub/(google-cloud-pubsub|redis-streams)|stores/(clickhouse|cloudflare|convex|libsql)|workflows/inngest)/package\.json$' \
     "$changed_files" || true
 )
 
@@ -13060,7 +13186,7 @@ fi
 # source or test in a newly admitted workspace fails closed until its runtime
 # and service contract are reviewed explicitly.
 while IFS= read -r file; do
-  if [[ "$file" =~ ^(pubsub/(google-cloud-pubsub|redis-streams)|stores/(convex|libsql)|workflows/(inngest|temporal))/ ]] &&
+  if [[ "$file" =~ ^(pubsub/(google-cloud-pubsub|redis-streams)|stores/(clickhouse|cloudflare|convex|libsql)|workflows/(inngest|temporal))/ ]] &&
     ! [[ "$file" =~ \.(cjs|cts|js|jsx|mjs|mts|ts|tsx)$ ]]; then
     if [[ "$file" == 'workflows/inngest/package.json' ]] &&
       { [[ "$inngest_pf2050_coordination" == true ]] ||
@@ -13080,7 +13206,7 @@ while IFS= read -r file; do
     continue
   fi
 
-  if ! [[ "$file" =~ ^(pubsub/(google-cloud-pubsub|redis-streams)|stores/(convex|libsql)|workflows/(inngest|temporal))/.*\.(cjs|cts|js|jsx|mjs|mts|ts|tsx)$ ]]; then
+  if ! [[ "$file" =~ ^(pubsub/(google-cloud-pubsub|redis-streams)|stores/(clickhouse|cloudflare|convex|libsql)|workflows/(inngest|temporal))/.*\.(cjs|cts|js|jsx|mjs|mts|ts|tsx)$ ]]; then
     continue
   fi
 
@@ -13088,6 +13214,8 @@ while IFS= read -r file; do
     case "$file" in
       pubsub/google-cloud-pubsub/src/group.test.ts | \
         pubsub/redis-streams/src/pubsub.test.ts | \
+        stores/clickhouse/src/storage/db/index.test.ts | \
+        stores/cloudflare/src/kv/storage/db/index.test.ts | \
         stores/convex/src/cache/index.test.ts | \
         stores/convex/src/server/cache.test.ts | \
         stores/libsql/src/storage/index.test.ts | \
@@ -13122,6 +13250,18 @@ while IFS= read -r file; do
       ;;
     pubsub/redis-streams/src/index.ts)
       queue_owned_workspace_test "$file" pubsub/redis-streams/src/pubsub.test.ts
+      ;;
+    stores/clickhouse/src/storage/db/utils.ts)
+      # TABLE_ENGINES is an exhaustive Record<TABLE_NAMES, ...> consumed by the
+      # DDL builder in db/index.ts; the fully mocked client suite exercises
+      # that emission in-process and needs no ClickHouse service.
+      queue_owned_workspace_test "$file" stores/clickhouse/src/storage/db/index.test.ts
+      ;;
+    stores/cloudflare/src/kv/storage/types.ts)
+      # RecordTypes is indexed by TABLE_NAMES inside CloudflareKVDB; the
+      # Miniflare binding suite exercises the consuming db module in-process
+      # and needs no Cloudflare account or container.
+      queue_owned_workspace_test "$file" stores/cloudflare/src/kv/storage/db/index.test.ts
       ;;
     stores/convex/src/cache/index.ts | stores/convex/src/cache/types.ts)
       queue_owned_workspace_test "$file" stores/convex/src/cache/index.test.ts
@@ -13922,6 +14062,18 @@ if workspace_changed stores/redis; then
   run_with_validation_budget 600 pnpm --filter ./stores/redis --fail-if-no-match exec tsc --noEmit
   run_with_validation_budget 900 pnpm --filter ./stores/redis --fail-if-no-match build:lib
   run_with_validation_budget 600 pnpm --filter ./stores/redis --fail-if-no-match lint
+fi
+
+if workspace_changed stores/clickhouse; then
+  run_with_validation_budget 600 pnpm --filter ./stores/clickhouse --fail-if-no-match exec tsc --noEmit
+  run_with_validation_budget 900 pnpm --filter ./stores/clickhouse --fail-if-no-match build:lib
+  run_with_validation_budget 600 pnpm --filter ./stores/clickhouse --fail-if-no-match lint
+fi
+
+if workspace_changed stores/cloudflare; then
+  run_with_validation_budget 600 pnpm --filter ./stores/cloudflare --fail-if-no-match exec tsc --noEmit
+  run_with_validation_budget 900 pnpm --filter ./stores/cloudflare --fail-if-no-match build:lib
+  run_with_validation_budget 600 pnpm --filter ./stores/cloudflare --fail-if-no-match lint
 fi
 
 if workspace_changed stores/convex; then
@@ -14896,7 +15048,9 @@ if (( ${#detected_tests[@]} > 0 )); then
       "$file" != packages/deployer/src/deploy/log.integration.test.ts && \
       "$file" != stores/pg/* && "$file" != stores/redis/* ]]; then
       printf '%s\n' "$file" >> "$unsupported_tests"
-    elif [[ "$file" == stores/convex/src/cache/index.test.ts || \
+    elif [[ "$file" == stores/clickhouse/src/storage/db/index.test.ts || \
+      "$file" == stores/cloudflare/src/kv/storage/db/index.test.ts || \
+      "$file" == stores/convex/src/cache/index.test.ts || \
       "$file" == stores/convex/src/server/cache.test.ts || \
       "$file" == stores/libsql/src/storage/index.test.ts || \
       "$file" == stores/libsql/src/storage/domains/harness/index.test.ts || \
@@ -15054,7 +15208,9 @@ NODE
 # A service-backed test is never treated as coverage merely because Vitest can
 # be invoked. Prove the exact disposable endpoint is reachable before running
 # any package command that might retry, skip, or hang when infrastructure is
-# missing. In-process Convex/LibSQL/Inngest tests deliberately need no probe.
+# missing. In-process Convex/LibSQL/Inngest tests deliberately need no probe, and
+# the owned ClickHouse/Cloudflare suites run entirely against a mocked client or
+# an in-process Miniflare binding.
 if grep -Eq '^stores/pg/.*\.(test|spec)\.' "$changed_tests"; then
   require_test_service postgres 127.0.0.1 5434
 fi

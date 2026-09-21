@@ -5,6 +5,7 @@ import type { MastraDBMessage } from '../../agent/message-list';
 import { RequestContext, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
+import { makeCoreTool } from '../../utils';
 import type { ProcessInputStepArgs } from '../index';
 import { ToolSearchProcessor } from './tool-search';
 
@@ -1149,6 +1150,67 @@ describe('ToolSearchProcessor', () => {
       // The next step must fail closed instead of silently replacing either executor.
       const args2 = createMockArgs('thread-1', { weather: existingWeatherTool });
       await expect(processor.processInputStep(args2)).rejects.toThrow('conflicts with an always-available input tool');
+    });
+
+    it('should still reject a foreign tool that mimics a loaded tool definition', async () => {
+      const catalogTool = createMockTool('weather', 'Get weather');
+      const processor = new ToolSearchProcessor({
+        tools: { weather: catalogTool },
+      });
+
+      const args1 = createMockArgs('thread-1');
+      const result1 = await processor.processInputStep(args1);
+      await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // A different object with identical id/description is still a foreign
+      // shadow: provenance is tied to the resolved tool instance, not fields.
+      const foreignTwin = createMockTool('weather', 'Get weather');
+      const args2 = createMockArgs('thread-1', { weather: foreignTwin });
+      await expect(processor.processInputStep(args2)).rejects.toThrow('conflicts with an always-available input tool');
+    });
+
+    it('should tolerate its own loaded tool re-exposed through the input surface', async () => {
+      const catalogTool = createMockTool('weather', 'Get weather');
+      const processor = new ToolSearchProcessor({
+        tools: { weather: catalogTool },
+      });
+
+      const args1 = createMockArgs('thread-1');
+      const result1 = await processor.processInputStep(args1);
+      await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Fence restore / durable replay can re-expose the exact catalog object.
+      const args2 = createMockArgs('thread-1', { weather: catalogTool });
+      const result2 = await processor.processInputStep(args2);
+      expect(result2.tools?.weather).toBeDefined();
+    });
+
+    it('should tolerate a converted makeCoreTool copy of its own loaded tool (resume surface)', async () => {
+      const catalogTool = createMockTool('weather', 'Get weather');
+      const processor = new ToolSearchProcessor({
+        tools: { weather: catalogTool },
+      });
+
+      const args1 = createMockArgs('thread-1');
+      const result1 = await processor.processInputStep(args1);
+      await result1.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Resolution stamps the loaded catalog tool before any conversion, as
+      // production does via collectLoadedTools → getLoadedTools → makeCoreTool.
+      const argsMid = createMockArgs('thread-1');
+      await processor.processInputStep(argsMid);
+
+      // Suspend/resume and durable replay re-expose the loaded executor as a
+      // converted CoreTool copy, not the catalog instance (PF-4374).
+      const converted = makeCoreTool(catalogTool, {
+        name: 'weather',
+        requestContext: new RequestContext(),
+      });
+      expect(converted).not.toBe(catalogTool);
+
+      const args2 = createMockArgs('thread-1', { weather: converted as unknown as Tool<any, any> });
+      const result2 = await processor.processInputStep(args2);
+      expect(result2.tools?.weather).toBeDefined();
     });
   });
 

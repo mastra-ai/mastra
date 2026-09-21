@@ -38,12 +38,14 @@ import type {
   JsonValue,
   PendingResume,
   PermissionRules,
+  QueuedItem,
   SessionRecord as StoredSessionRecord,
 } from '../../storage/domains/harness';
 import type { MastraModelOutput, FullOutput } from '../../stream/base/output';
 import type { GoalEvaluationPayload } from '../../stream/types';
 import type { Workspace } from '../../workspace';
 import type { RequestContextInput } from './request-context-input';
+import type { Session } from './session';
 import type { WorkspaceProvider, WorkspaceProviderContext } from './workspace-provider';
 
 // ---------------------------------------------------------------------------
@@ -1225,6 +1227,64 @@ export interface HarnessConfigCommon {
      * Defaults to 2 hours.
      */
     idleTimeoutMs?: number;
+
+    /**
+     * Optional pre-drain hook invoked once per queued item AFTER the drain
+     * loop selects it and clears its admission receipt's terminal checks, and
+     * BEFORE the turn's permission rule/grant snapshot is captured for
+     * `_resolveToolPolicy` (§4.2e). Intended for converging external durable
+     * authorization state (for example owner-scoped grant stores) onto the
+     * live session record so a grant revoked or expired after queue admission
+     * cannot ride a stale `sessionGrants` copy into tool execution.
+     *
+     * The hook is awaited before any dispatch path (terminal-evidence
+     * recovery, admitted-dispatch recovery, or fresh admission). It fires on
+     * every drain attempt of the item — including retries after deferral —
+     * so it must be idempotent. Grant mutations made through
+     * `session.permissions.*` commit durably under the session lease and are
+     * visible to the snapshot the same turn builds.
+     *
+     * Fail-closed semantics: throwing `HarnessQueuedTurnDeferredError` parks
+     * the item in place and retries at its `retryAt` without consuming the
+     * receipt's attempt budget; any other error fails the item permanently
+     * via the normal queue-failure path. The hook does not run for
+     * `session.message()` turns or for `completed`/`failed`/`dead` receipts.
+     * When unset, drain behavior is unchanged.
+     */
+    onBeforeQueuedTurn?: (opts: { session: Session; item: QueuedItem }) => Promise<void>;
+
+    /**
+     * Awaited per-tool hook invoked at the action-time permission gate on
+     * every tool call the turn is about to execute — after the synchronous
+     * snapshot policy resolves and before approval resolution and `execute()`.
+     * It exists so integrations can revalidate authorization against durable
+     * state that may have changed since the turn's permission snapshot was
+     * captured (e.g. an owner-scoped grant revoked or expired mid-turn).
+     *
+     * `policyDecision` is the snapshot policy's verdict for the tool
+     * (`undefined` when the §4.2e permission gate is not engaged), so the
+     * hook can cheap-return when the snapshot already resolves `ask`/`deny`
+     * and no grant-derived authorization needs revalidation. Returning
+     * `'deny'` blocks the call through the same auditable `tool_denied` path
+     * as a policy deny; `'allow'`/`void` defers to the normal gates.
+     * Throwing or returning an unrecognized value fails closed as `'deny'`.
+     *
+     * The hook fires for every tool call on every session — including
+     * subagent sessions — so implementations that govern only a subset of
+     * tools or only root sessions must cheap-return early for calls they do
+     * not own. Because the gate awaits the hook, implementations must bound
+     * their own IO — a never-settling hook stalls the tool call the same way
+     * a never-settling tool `execute()` would. When unset, tool execution is
+     * unchanged.
+     */
+    onBeforeToolExecution?: (opts: {
+      session: Session;
+      toolName: string;
+      toolCallId?: string;
+      args?: unknown;
+      isResume?: boolean;
+      policyDecision?: 'allow' | 'ask' | 'deny';
+    }) => 'allow' | 'deny' | void | Promise<'allow' | 'deny' | void>;
   };
 
   /**

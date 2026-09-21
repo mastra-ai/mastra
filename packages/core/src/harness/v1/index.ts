@@ -92,6 +92,7 @@ export {
   HarnessQueueItemExpiredError,
   HarnessQueueFullDroppedError,
   HarnessQueueFullError,
+  HarnessQueuedTurnDeferredError,
   HarnessRuntimeDriftError,
   HarnessSessionCancelledError,
   HarnessSessionClosedError,

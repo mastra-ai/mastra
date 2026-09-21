@@ -41,6 +41,16 @@ export function createBackgroundTask(
   const { context, ...payload } = options;
   let taskId: string | undefined;
 
+  // A handle carrying `requiresToolPermissionHook` that attaches to a row it
+  // did not enqueue (the resume/restart legs, or a row written before the
+  // marker existed) must backfill the persisted marker *before* publishing a
+  // claimable event — otherwise a foreign worker or cold recovery resolves a
+  // static executor and executes without revalidation.
+  const ensureHookRequirementPersisted = async () => {
+    if (!taskId || payload.requiresToolPermissionHook !== true) return;
+    await manager.markTaskRequiresToolPermissionHook(taskId);
+  };
+
   return {
     get task() {
       if (!taskId) throw new Error('Task has not been dispatched yet');
@@ -68,6 +78,7 @@ export function createBackgroundTask(
         const task = result.tasks[0];
         if (task) {
           taskId = task.id;
+          await ensureHookRequirementPersisted();
           return true;
         }
       }
@@ -89,6 +100,7 @@ export function createBackgroundTask(
         const task = result.tasks[0];
         if (task) {
           taskId = task.id;
+          await ensureHookRequirementPersisted();
           return true;
         }
       }
@@ -98,6 +110,7 @@ export function createBackgroundTask(
 
     async resume(resumeData?: unknown, resumeOptions?: BackgroundTaskResumeOptions) {
       if (!taskId) throw new Error('Task has not been dispatched yet');
+      await ensureHookRequirementPersisted();
       manager.registerTaskContext(taskId, context);
       try {
         return resumeOptions
@@ -113,6 +126,7 @@ export function createBackgroundTask(
 
     async restart() {
       if (!taskId) throw new Error('Task has not been dispatched yet');
+      await ensureHookRequirementPersisted();
       return manager.restart(taskId, context);
     },
 

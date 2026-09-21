@@ -563,6 +563,34 @@ export class HarnessQueueItemExpiredError extends HarnessError {
 }
 
 /**
+ * Thrown by a `sessions.onBeforeQueuedTurn` hook to defer the selected queue
+ * head without failing it: the item stays in `pendingQueue`, its resolver
+ * remains pending, and the drain retries at `retryAt`. Use for transient
+ * pre-drain reconciliation failures (durable store reads, lease probes). Any
+ * other error thrown by the hook fails the item permanently through the
+ * normal queue-failure path instead.
+ */
+export class HarnessQueuedTurnDeferredError extends HarnessError {
+  readonly name = 'HarnessQueuedTurnDeferredError';
+  readonly code = 'harness.queued_turn_deferred';
+  /** Epoch ms at which the drain should re-attempt the queued item. */
+  readonly retryAt: number;
+  /** Original failure the hook deferred on; kept for diagnostics only. */
+  readonly deferredCause: unknown;
+
+  constructor(opts: { retryAt: number; cause?: unknown }) {
+    super('queued turn deferred by the pre-drain hook');
+    if (!Number.isFinite(opts.retryAt)) {
+      // NaN/Infinity would collapse the park timer to an immediate re-drain
+      // hot loop; a malformed deferral is a hook bug and must fail the item.
+      throw new RangeError('HarnessQueuedTurnDeferredError.retryAt must be a finite epoch-millisecond timestamp');
+    }
+    this.retryAt = opts.retryAt;
+    this.deferredCause = opts.cause;
+  }
+}
+
+/**
  * A durable user interaction reached its deadline before any response won the
  * session CAS. The session remains usable for future turns; only the suspended
  * run is terminalized.
