@@ -79,7 +79,7 @@ export const WorkflowTracingRunOptions = ({
 
   return (
     <div className="space-y-2 px-5 py-2">
-      <Txt as="h3" variant="body" className="text-muted-foreground">
+      <Txt as="h3" variant="body" tone="muted">
         Tracing Options
       </Txt>
 

@@ -44,7 +44,7 @@ export const EntityIcon = ({ children, className, style }: EntityProps) => {
 
 export const EntityName = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="p" variant="heading" className={cn(' text-foreground', className)}>
+    <Txt as="p" variant="heading" tone="ink" className={className}>
       {children}
     </Txt>
   );
@@ -52,7 +52,7 @@ export const EntityName = ({ children, className }: EntityProps) => {
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="div" variant="caption" className={cn('text-muted-foreground', className)}>
+    <Txt as="div" variant="caption" tone="muted" className={className}>
       {children}
     </Txt>
   );

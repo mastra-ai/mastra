@@ -19,7 +19,7 @@ import { useLinkComponent } from '@/lib/framework';
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <Txt variant="meta" className="text-muted-foreground tracking-wide uppercase">
+      <Txt variant="meta" tone="muted" className="tracking-wide uppercase">
         {label}
       </Txt>
       <div className="text-body">{children}</div>

@@ -15,7 +15,7 @@ export function EnvironmentVariablesEditorPasteHint({
   if (readOnly) return null;
 
   return (
-    <Txt as="p" variant="meta" className={cn('text-right text-muted-foreground', className)} {...props}>
+    <Txt as="p" variant="meta" tone="muted" className={cn('text-right', className)} {...props}>
       {children ?? DEFAULT_ENVIRONMENT_VARIABLE_PASTE_HINT}
     </Txt>
   );

@@ -9,7 +9,8 @@ export interface ReasoningStreamingLineProps {
 export const ReasoningStreamingLine = ({ text }: ReasoningStreamingLineProps) => (
   <Txt
     variant="body"
-    className="text-muted-foreground flex max-w-[80%] items-center gap-2 leading-relaxed whitespace-pre-wrap"
+    tone="muted"
+    className="flex max-w-[80%] items-center gap-2 leading-relaxed whitespace-pre-wrap"
     as="div"
   >
     <Loader2 className="text-muted-foreground size-4 motion-safe:animate-spin" />

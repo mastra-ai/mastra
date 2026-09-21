@@ -74,7 +74,7 @@ const Slider = ({
             aria-labelledby={ariaLabelledBy}
             getAriaLabel={getAriaLabel}
             className={cn(
-              'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-neutral6 bg-neutral2 outline-hidden select-none',
+              'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-foreground bg-neutral2 outline-hidden select-none',
               'after:absolute after:-inset-2 after:content-[""]',
               'transition-shadow duration-normal',
               'hover:ring-2 hover:ring-neutral6/30',

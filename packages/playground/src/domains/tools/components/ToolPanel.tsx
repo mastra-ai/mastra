@@ -84,7 +84,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   if (!tool)
     return (
       <div className="px-4 py-8 text-center">
-        <Txt variant="heading" className="text-muted-foreground">
+        <Txt variant="heading" tone="muted">
           Tool not found
         </Txt>
       </div>
@@ -93,7 +93,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   if (!canExecuteTool)
     return (
       <div className="px-4 py-8 text-center">
-        <Txt variant="caption" className="text-muted-foreground">
+        <Txt variant="caption" tone="muted">
           You don't have permission to execute tools.
         </Txt>
       </div>

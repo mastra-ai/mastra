@@ -27,11 +27,11 @@ export function WorkflowStepDetailContent() {
             <WorkflowIcon className="h-4 w-4" style={{ color: BADGE_COLORS.workflow }} />
           )}
           <div className="flex flex-col">
-            <Txt variant="subheading" className="text-foreground">
+            <Txt variant="subheading" tone="ink">
               {stepDetail.type === 'map-config' ? `${stepDetail.stepName} Config` : `${stepDetail.stepName} Workflow`}
             </Txt>
             {stepDetail.type === 'map-config' && stepDetail.stepId && stepDetail.stepId !== stepDetail.stepName && (
-              <Txt variant="meta" className="text-muted-foreground">
+              <Txt variant="meta" tone="muted">
                 {stepDetail.stepId}
               </Txt>
             )}

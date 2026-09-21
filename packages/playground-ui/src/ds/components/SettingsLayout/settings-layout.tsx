@@ -40,11 +40,7 @@ export function SettingsLayout({
         <div className={cn('flex min-w-0 flex-wrap items-start justify-between gap-4', inset && 'pl-4')}>
           <div className="grid min-w-0 gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <Txt
-                as="h1"
-                variant="heading"
-                className={cn('min-w-0 truncate', 'font-body tracking-normal text-muted-foreground')}
-              >
+              <Txt as="h1" variant="heading" tone="muted" className="font-body min-w-0 truncate tracking-normal">
                 {title}
               </Txt>
               {titleAccessory !== undefined && titleAccessory !== null ? (
@@ -52,7 +48,7 @@ export function SettingsLayout({
               ) : null}
             </div>
             {description !== undefined && description !== null ? (
-              <Txt as="p" variant="body" className="text-muted-foreground m-0 wrap-break-word">
+              <Txt as="p" variant="body" tone="muted" className="m-0 wrap-break-word">
                 {description}
               </Txt>
             ) : null}

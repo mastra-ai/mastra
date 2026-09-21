@@ -62,7 +62,7 @@ export function UserMenu({ user }: UserMenuProps) {
                 {displayName}
               </Txt>
               {user.email && (
-                <Txt variant="caption" className="text-muted-foreground truncate">
+                <Txt variant="caption" tone="muted" className="truncate">
                   {user.email}
                 </Txt>
               )}
@@ -73,7 +73,7 @@ export function UserMenu({ user }: UserMenuProps) {
         {/* Preview as role section — only for admins with available roles */}
         {availableRoles && availableRoles.length > 0 && (
           <div className="border-border border-b p-2">
-            <Txt variant="meta" className="text-muted-foreground px-2 py-1 tracking-wider uppercase">
+            <Txt variant="meta" tone="muted" className="px-2 py-1 tracking-wider uppercase">
               Preview as role
             </Txt>
             {availableRoles.map(role => {

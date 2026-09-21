@@ -45,7 +45,7 @@ export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) 
         <ToolCallHeader>
           {leading}
           <ToolCallIcon>
-            <FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-icon2" />
+            <FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-placeholder" />
           </ToolCallIcon>
           <ToolCallLabel>{steps.length} steps</ToolCallLabel>
           {liveDetail && <ToolCallDetail>{liveDetail}</ToolCallDetail>}
@@ -70,7 +70,7 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
   const done = steps.filter(step => step.status !== 'running').length;
   if (done < steps.length) {
     return (
-      <Txt as="span" variant="meta" className="text-icon3 shrink-0 tabular-nums">
+      <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
         {done}/{steps.length}
       </Txt>
     );
@@ -94,7 +94,7 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
   return (
     <>
       {errorIndicator}
-      <Txt as="span" variant="meta" className="text-icon3 shrink-0 tabular-nums">
+      <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
         {summary}
       </Txt>
     </>
@@ -110,7 +110,7 @@ function GroupKinds({ steps }: { steps: ToolCallGroupStep[] }) {
   return (
     <ToolCallSummary role="img" aria-label={kinds.map(([label]) => label).join(', ')} className="shrink-0 gap-1.5">
       {kinds.map(([label, Kind]) => (
-        <Kind key={label} size={12} strokeWidth={1.75} className="text-icon2" />
+        <Kind key={label} size={12} strokeWidth={1.75} className="text-placeholder" />
       ))}
     </ToolCallSummary>
   );

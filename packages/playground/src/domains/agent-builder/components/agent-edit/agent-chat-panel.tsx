@@ -179,7 +179,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <Avatar name={agentName ?? 'Agent'} src={agentAvatarUrl} size="lg" />
             </div>
             <div className="starter-chip" style={{ animationDelay: '150ms' }}>
-              <Txt variant="heading" className="text-foreground" style={{ viewTransitionName: 'agent-name' }}>
+              <Txt variant="heading" tone="ink" style={{ viewTransitionName: 'agent-name' }}>
                 {agentName ?? 'your agent'}
               </Txt>
             </div>
@@ -187,7 +187,8 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <div className="starter-chip" style={{ animationDelay: '220ms' }}>
                 <Txt
                   variant="caption"
-                  className="text-muted-foreground max-w-[40ch]"
+                  tone="muted"
+                  className="max-w-[40ch]"
                   style={{ viewTransitionName: 'agent-description' }}
                 >
                   {agentDescription}
@@ -216,7 +217,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                   <starterPrompt.Icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                  <Txt variant="column" className="text-foreground">
+                  <Txt variant="column" tone="ink">
                     {starterPrompt.title}
                   </Txt>
                   <Txt variant="meta" className={cn('mt-1', quietTextHoverInGroup, controlStateColorTransition)}>

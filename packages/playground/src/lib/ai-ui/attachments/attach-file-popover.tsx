@@ -104,7 +104,7 @@ export const AttachFilePopover = () => {
         <hr className="border-border my-3" />
 
         <div className="space-y-2">
-          <Txt variant="body" className="text-muted-foreground">
+          <Txt variant="body" tone="muted">
             Or from your computer
           </Txt>
           <button

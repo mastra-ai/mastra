@@ -169,13 +169,13 @@ export const VariantSizeMatrix: Story = {
     <div className="grid grid-cols-[6rem_repeat(3,max-content)_max-content] items-center gap-3">
       <span />
       {['sm', 'default', 'lg', 'with icon'].map(label => (
-        <Txt key={label} as="span" variant="meta" className="text-muted-foreground text-center">
+        <Txt key={label} as="span" variant="meta" tone="muted" className="text-center">
           {label}
         </Txt>
       ))}
       {ALL_VARIANTS.map(variant => (
         <Fragment key={variant}>
-          <Txt as="span" variant="meta" className="text-muted-foreground">
+          <Txt as="span" variant="meta" tone="muted">
             {variant}
           </Txt>
           <Button variant={variant} size="sm">

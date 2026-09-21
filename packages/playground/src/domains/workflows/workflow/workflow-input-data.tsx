@@ -40,9 +40,7 @@ export interface WorkflowInputDataProps {
 }
 
 type InputDraft =
-  | { type: 'json'; value: string }
-  | { type: 'form'; value: unknown }
-  | { type: 'simple'; value: ProcessorDraft };
+  { type: 'json'; value: string } | { type: 'form'; value: unknown } | { type: 'simple'; value: ProcessorDraft };
 
 type DraftValue = { ok: true; value: unknown } | { ok: false; error: string };
 
@@ -133,7 +131,7 @@ export const WorkflowInputData = ({
   }
 
   const defaultHeading = (
-    <Txt as="span" variant="subheading" className="text-foreground">
+    <Txt as="span" variant="subheading" tone="ink">
       Trigger a run
     </Txt>
   );
@@ -153,7 +151,7 @@ export const WorkflowInputData = ({
     <>
       {!hideInputTypeLabel && (
         <div className="flex justify-between gap-3 px-5 py-3">
-          <Txt as="p" variant="caption" className="text-muted-foreground">
+          <Txt as="p" variant="caption" tone="muted">
             {inputTypeLabel}
           </Txt>
           {toggleSitsInLabelRow && <div className="shrink-0">{inputTypeToggle}</div>}

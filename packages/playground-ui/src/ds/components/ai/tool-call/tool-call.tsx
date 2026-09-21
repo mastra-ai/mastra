@@ -108,7 +108,7 @@ export const ToolCallIcon = ({ className, ...props }: ComponentProps<'span'>) =>
 );
 
 export const ToolCallLabel = ({ className, ...props }: ComponentProps<typeof Txt>) => (
-  <Txt as="span" variant="caption" className={cn('text-icon3 max-w-[55%] shrink-0 truncate', className)} {...props} />
+  <Txt as="span" variant="caption" tone="muted" className={cn('max-w-[55%] shrink-0 truncate', className)} {...props} />
 );
 
 export const ToolCallDetail = ({ className, ...props }: ComponentProps<typeof Txt>) => {
@@ -118,8 +118,9 @@ export const ToolCallDetail = ({ className, ...props }: ComponentProps<typeof Tx
     <Txt
       as="span"
       variant="meta"
+      tone="muted"
       font="mono"
-      className={cn('text-icon3 min-w-0 truncate', arriving, className)}
+      className={cn('min-w-0 truncate', arriving, className)}
       {...props}
     />
   );
@@ -153,7 +154,7 @@ export const ToolCallDisclosure = ({ className, children, ...props }: ComponentP
       <span
         aria-hidden
         className={cn(
-          'text-icon3 flex shrink-0 items-center opacity-0 transition duration-150 motion-reduce:transition-none',
+          'text-muted-foreground flex shrink-0 items-center opacity-0 transition duration-150 motion-reduce:transition-none',
           'group-hover/row:opacity-100 group-focus-visible/row:opacity-100',
           open && 'rotate-90 opacity-100',
         )}
@@ -192,7 +193,7 @@ export const ToolCallPresentedHeader = ({
           size={14}
           strokeWidth={1.75}
           aria-hidden
-          className={status === 'error' ? 'text-error/80' : 'text-icon2'}
+          className={status === 'error' ? 'text-error/80' : 'text-placeholder'}
         />
       </ToolCallIcon>
       <ToolCallLabel>{label}</ToolCallLabel>
@@ -248,8 +249,8 @@ export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCa
 
 /** A shell command as the body shows it: `$` in the margin, the copy takes the command alone. */
 export const ToolCallCommand = ({ command }: { command: string }) => (
-  <ToolCallMono copyText={command} className="text-icon5">
-    <span className="text-icon3 select-none">$ </span>
+  <ToolCallMono copyText={command} className="text-foreground">
+    <span className="text-muted-foreground select-none">$ </span>
     {command}
   </ToolCallMono>
 );

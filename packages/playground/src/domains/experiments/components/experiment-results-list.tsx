@@ -276,7 +276,7 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
     : Object.values(scores ?? {});
   if (values.length === 0) {
     return (
-      <Txt variant="meta" className="text-placeholder">
+      <Txt variant="meta" tone="faint">
         —
       </Txt>
     );
@@ -286,7 +286,7 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
       <Icon size="xs" className="text-muted-foreground">
         <GaugeIcon />
       </Icon>
-      <Txt variant="meta" className="text-muted-foreground font-mono">
+      <Txt variant="meta" tone="muted" className="font-mono">
         {values[0].toFixed(2)}
       </Txt>
       {values.length > 1 && <Badge>+{values.length - 1}</Badge>}

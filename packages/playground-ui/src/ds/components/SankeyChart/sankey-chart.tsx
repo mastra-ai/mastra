@@ -281,7 +281,7 @@ function SankeyNode({
       <g
         aria-describedby={description ? tooltip.id : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
-        className="focus-visible:[&>rect]:stroke-neutral6 outline-hidden focus-visible:[&>rect]:stroke-2"
+        className="focus-visible:[&>rect]:stroke-foreground outline-hidden focus-visible:[&>rect]:stroke-2"
         onClick={clickable ? onSelect : undefined}
         onKeyDown={clickable ? handleKeyDown : undefined}
         role={clickable ? 'button' : undefined}

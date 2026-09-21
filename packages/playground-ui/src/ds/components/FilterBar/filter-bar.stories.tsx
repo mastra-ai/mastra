@@ -164,7 +164,7 @@ export const LazyValues: Story = {
       <Demo fields={fields}>
         {() => (
           <div className="border-border rounded-lg border p-3">
-            <Txt variant="meta" className="text-muted-foreground">
+            <Txt variant="meta" tone="muted">
               Resolver calls ({calls.length}) — none until a field and operator are chosen:
             </Txt>
             <ul className="text-caption text-foreground mt-1">

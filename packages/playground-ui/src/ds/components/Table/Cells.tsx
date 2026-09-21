@@ -38,7 +38,7 @@ export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
   return (
     <Cell {...props}>
       <div className="shrink-0">
-        <Txt as="span" variant="caption" className="text-muted-foreground">
+        <Txt as="span" variant="caption" tone="muted">
           {day}
         </Txt>{' '}
         <Txt as="span" variant="body">
@@ -67,11 +67,11 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
         )}
 
         <div className="flex flex-col gap-0">
-          <Txt as="span" variant="body" className="text-foreground">
+          <Txt as="span" variant="body" tone="ink">
             {name}
           </Txt>
           {description && (
-            <Txt as="span" variant="meta" className="text-muted-foreground w-full max-w-75 truncate pt-1">
+            <Txt as="span" variant="meta" tone="muted" className="w-full max-w-75 truncate pt-1">
               {description}
             </Txt>
           )}

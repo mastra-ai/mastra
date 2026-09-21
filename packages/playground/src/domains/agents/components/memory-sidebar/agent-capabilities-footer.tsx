@@ -294,7 +294,7 @@ function CapabilitiesSummary({ agentId }: { agentId: string }) {
   const enabledCount = enabledFlags.filter(Boolean).length;
 
   return (
-    <Txt as="span" variant="meta" className="text-muted-foreground shrink-0">
+    <Txt as="span" variant="meta" tone="muted" className="shrink-0">
       {enabledCount}/{enabledFlags.length}
     </Txt>
   );

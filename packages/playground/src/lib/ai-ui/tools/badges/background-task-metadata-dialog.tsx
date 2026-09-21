@@ -89,25 +89,27 @@ const BackgroundTaskMetadata = ({
 
         <DialogBody className="space-y-4">
           <div className="space-y-2">
-            <Txt className="text-muted-foreground">Background Task Duration</Txt>
-            <Txt className="text-foreground text-body">{toSigFigs(timeDiff, 3)}ms</Txt>
+            <Txt tone="muted">Background Task Duration</Txt>
+            <Txt tone="ink" className="text-body">
+              {toSigFigs(timeDiff, 3)}ms
+            </Txt>
           </div>
 
           <div className="space-y-2">
-            <Txt className="text-muted-foreground">Background Task Arguments</Txt>
+            <Txt tone="muted">Background Task Arguments</Txt>
             {argSlot}
           </div>
 
           {suspendPayloadSlot !== undefined && suspendPayload && (
             <div className="space-y-2">
-              <Txt className="text-muted-foreground">Background Task Suspend Data</Txt>
+              <Txt tone="muted">Background Task Suspend Data</Txt>
               {suspendPayloadSlot}
             </div>
           )}
 
           {resultSlot !== undefined && result && (
             <div className="space-y-2">
-              <Txt className="text-muted-foreground">Background Task Result</Txt>
+              <Txt tone="muted">Background Task Result</Txt>
               {resultSlot}
             </div>
           )}

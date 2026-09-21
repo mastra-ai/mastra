@@ -63,11 +63,11 @@ export default function Resources() {
             >
               <div className="flex items-center gap-2.5">
                 <resource.icon
-                  className={cn('text-icon3 group-hover:text-accent1 h-5 w-5', controlStateColorTransition)}
+                  className={cn('text-muted-foreground group-hover:text-accent1 h-5 w-5', controlStateColorTransition)}
                 />
                 <span className="text-subheading text-text1">{resource.title}</span>
                 {resource.external && (
-                  <ExternalLinkIcon className="text-icon3 ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                  <ExternalLinkIcon className="text-muted-foreground ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
               <p className="text-caption text-text3">{resource.description}</p>

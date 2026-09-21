@@ -71,7 +71,7 @@ export const WorkflowBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <ToolCallMono copyText={suspendPayload} className="text-icon3">
+      <ToolCallMono copyText={suspendPayload} className="text-muted-foreground">
         {suspendPayload}
       </ToolCallMono>
     ) : (

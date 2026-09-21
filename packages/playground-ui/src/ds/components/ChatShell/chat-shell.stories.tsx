@@ -17,17 +17,17 @@ const gitRemoteFailure =
   "Failed to prepare the workspace: Failed to set git remote: error: could not lock config file .git/config: File exists fatal: could not set 'remote.origin.url' to 'https://x-access-token:ghs_EXAMPLEtokenaGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9eyJhdWQiOiJhdXRobiIsImRpZ2VzdCI6IlF2QzJWbmNsIjNkbFZtbFBNUXJleDhxdnl2d1RMZ0Z2N2FQbXVlTnJ1TGVn@github.com/mastra-ai/mastra.git'";
 
 const SessionBar = () => (
-  <header className="text-icon5 border-border text-caption flex items-center gap-2 border-b px-3 py-2 md:px-5">
+  <header className="text-foreground border-border text-caption flex items-center gap-2 border-b px-3 py-2 md:px-5">
     Work / Issue #20383: Testing our webhooks
   </header>
 );
 
 const Composer = () => (
-  <div className={`${raisedSurfaceStyle} text-icon3 rounded-[22px] px-4 py-3`}>Ask Mastra Code…</div>
+  <div className={`${raisedSurfaceStyle} text-muted-foreground rounded-[22px] px-4 py-3`}>Ask Mastra Code…</div>
 );
 
 const Turn = ({ children }: { children: React.ReactNode }) => (
-  <div className="text-icon5 text-body py-3">{children}</div>
+  <div className="text-foreground text-body py-3">{children}</div>
 );
 
 const Shell = ({ children }: { children: React.ReactNode }) => (

@@ -43,19 +43,19 @@ export function TokenBudgetDetail({
               {icon}
             </span>
           )}
-          <span className="text-icon5">{label}</span>
+          <span className="text-foreground">{label}</span>
         </span>
-        <span className="text-icon4 tabular-nums">
+        <span className="text-muted-foreground tabular-nums">
           {formatCompactTokens(tokens)}
-          <span className="text-icon2">/{formatCompactTokens(threshold)}k</span>
-          {projected > 0 && <span className="text-icon2"> −{formatCompactTokens(projected)}k</span>}
+          <span className="text-placeholder">/{formatCompactTokens(threshold)}k</span>
+          {projected > 0 && <span className="text-placeholder"> −{formatCompactTokens(projected)}k</span>}
         </span>
       </p>
       <div className="flex h-1.5 overflow-hidden rounded-full bg-current/15">
         <div className="bg-current" style={{ width: `${used - freed}%` }} />
         <div className="token-budget-hatch" style={{ width: `${freed}%` }} />
       </div>
-      {description && <p className="text-meta text-icon2">{description}</p>}
+      {description && <p className="text-meta text-placeholder">{description}</p>}
     </div>
   );
 }

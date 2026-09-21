@@ -13,7 +13,7 @@ export function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetW
       <Icon className="text-muted-foreground shrink-0">
         <WorkflowIcon />
       </Icon>
-      <Txt as="span" variant="subheading" className="text-foreground truncate">
+      <Txt as="span" variant="subheading" tone="ink" className="truncate">
         {workflow.name ?? workflowId}
       </Txt>
       <CopyButton content={workflow.name ?? workflowId} variant="ghost" className="shrink-0" />

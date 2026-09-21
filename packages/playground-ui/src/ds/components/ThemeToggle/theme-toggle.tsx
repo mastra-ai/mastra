@@ -116,7 +116,7 @@ export const ThemeToggle = ({
           className={cn(
             'relative inline-flex cursor-pointer items-center justify-center rounded-full',
             // Base UI exposes `data-checked` instead of Radix's `data-state="checked"`.
-            'text-icon3 hover:text-icon6 data-[checked]:text-icon6',
+            'text-muted-foreground hover:text-foreground data-[checked]:text-foreground',
             sizeConfig.item,
             'focus-visible:outline-hidden',
             'active:scale-90 motion-reduce:transition-none',

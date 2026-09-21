@@ -32,22 +32,22 @@ function buildDarkTheme(): Extension {
       gutterBackground: 'transparent',
       gutterForeground: 'var(--neutral2)',
       background: 'transparent',
-      foreground: 'var(--neutral6)',
-      caret: 'var(--neutral6)',
+      foreground: 'var(--foreground)',
+      caret: 'var(--foreground)',
     },
     styles: [
-      { tag: [t.className, t.propertyName], color: 'var(--neutral6)' },
+      { tag: [t.className, t.propertyName], color: 'var(--foreground)' },
       { tag: t.heading, color: 'var(--accent3)', fontWeight: 'bold' },
       {
         tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
         color: 'var(--accent3)',
         fontWeight: 'bold',
       },
-      { tag: t.emphasis, fontStyle: 'italic', color: 'var(--neutral6)' },
-      { tag: t.strong, fontWeight: 'bold', color: 'var(--neutral6)' },
+      { tag: t.emphasis, fontStyle: 'italic', color: 'var(--foreground)' },
+      { tag: t.strong, fontWeight: 'bold', color: 'var(--foreground)' },
       { tag: t.link, color: 'var(--accent3)', textDecoration: 'underline' },
       { tag: t.url, color: 'var(--accent3)' },
-      { tag: t.monospace, color: 'var(--neutral6)' },
+      { tag: t.monospace, color: 'var(--foreground)' },
       { tag: t.strikethrough, textDecoration: 'line-through' },
       { tag: t.quote, fontStyle: 'italic', color: 'var(--neutral2)' },
     ],
@@ -58,8 +58,8 @@ function buildDarkTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--foreground)',
+      caretColor: 'var(--foreground)',
     },
     '.cm-lineNumbers .cm-gutterElement': {
       color: 'var(--neutral2)',
@@ -68,7 +68,7 @@ function buildDarkTheme(): Extension {
       color: 'var(--neutral3)',
     },
     '.cm-cursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--foreground)',
     },
     '.cm-selectionBackground, .cm-content ::selection': {
       backgroundColor: 'color-mix(in srgb, var(--accent3) 22%, transparent)',
@@ -83,7 +83,7 @@ function buildDarkTheme(): Extension {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
     },
     '.cm-completionDetail': {
       color: 'var(--neutral3)',
@@ -102,7 +102,7 @@ function buildDarkTheme(): Extension {
     },
     'ul.cm-completionList li[aria-selected]': {
       backgroundColor: 'var(--fill-hover)',
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
       color: 'var(--accent6) !important',
@@ -117,7 +117,7 @@ function buildLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
       fontSize: 'var(--text-body-sm)',
     },
     '&.cm-editor .cm-scroller': {
@@ -129,8 +129,8 @@ function buildLightTheme(): Extension {
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--foreground)',
+      caretColor: 'var(--foreground)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -143,7 +143,7 @@ function buildLightTheme(): Extension {
       color: 'var(--neutral3)',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--foreground)',
     },
     '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
       {
@@ -159,7 +159,7 @@ function buildLightTheme(): Extension {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
     },
     '.cm-completionDetail': {
       color: 'var(--neutral3)',
@@ -178,7 +178,7 @@ function buildLightTheme(): Extension {
     },
     'ul.cm-completionList li[aria-selected]': {
       backgroundColor: 'var(--fill-hover)',
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
       color: 'var(--accent6) !important',
@@ -204,11 +204,11 @@ function buildLightTheme(): Extension {
       color: 'var(--accent3)',
       fontWeight: 'bold',
     },
-    { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--neutral6)' },
-    { tag: [t.strong], fontWeight: 'bold', color: 'var(--neutral6)' },
+    { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--foreground)' },
+    { tag: [t.strong], fontWeight: 'bold', color: 'var(--foreground)' },
     { tag: t.link, color: 'var(--accent3)', textDecoration: 'underline' },
     { tag: t.url, color: 'var(--accent3)' },
-    { tag: t.monospace, color: 'var(--neutral6)' },
+    { tag: t.monospace, color: 'var(--foreground)' },
     { tag: t.strikethrough, textDecoration: 'line-through' },
     { tag: [t.deleted], color: 'var(--accent2)' },
     { tag: t.invalid, color: 'var(--error)' },

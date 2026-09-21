@@ -257,7 +257,7 @@ const PackagesModalContent = ({
           <div className="border-border space-y-2 border-t pt-2">
             <div className="flex items-center gap-2 pt-3">
               <Info className="text-muted-foreground h-4 w-4" />
-              <Txt as="span" variant="caption" className="text-muted-foreground">
+              <Txt as="span" variant="caption" tone="muted">
                 Use the command below to update your packages
               </Txt>
             </div>

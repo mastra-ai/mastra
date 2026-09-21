@@ -43,7 +43,7 @@ export function AgentVersionPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="border-border border-b px-3 py-3">
-        <Txt variant="column" className="text-foreground">
+        <Txt variant="column" tone="ink">
           Version history
         </Txt>
       </div>
@@ -51,7 +51,7 @@ export function AgentVersionPanel({
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
           <div className="px-3 py-4">
-            <Txt variant="meta" className="text-placeholder">
+            <Txt variant="meta" tone="faint">
               Loading versions...
             </Txt>
           </div>
@@ -83,7 +83,7 @@ export function AgentVersionPanel({
                       {isPublished && <Badge variant="green">Published</Badge>}
                       {isDraft && <Badge variant="blue">Draft</Badge>}
                     </div>
-                    <Txt variant="meta" className="text-placeholder mt-0.5">
+                    <Txt variant="meta" tone="faint" className="mt-0.5">
                       {formatTimestamp(version.createdAt)}
                     </Txt>
                   </button>

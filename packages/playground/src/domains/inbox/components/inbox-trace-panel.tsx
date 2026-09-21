@@ -126,7 +126,7 @@ function FeedbackSummary({ feedback, onMarkReviewed, isMarkingReviewed }: Feedba
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <div className="min-h-0 overflow-y-auto p-3">
-        <Txt as="p" variant="body" className="text-foreground whitespace-pre-wrap">
+        <Txt as="p" variant="body" tone="ink" className="whitespace-pre-wrap">
           {feedbackDisplayValue(feedback)}
         </Txt>
       </div>

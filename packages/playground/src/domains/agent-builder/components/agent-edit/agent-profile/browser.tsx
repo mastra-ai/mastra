@@ -35,10 +35,10 @@ export const Browser = ({ editable = true }: BrowserProps) => {
         </div>
 
         <div className="flex flex-col gap-2">
-          <Txt variant="heading" className="text-foreground">
+          <Txt variant="heading" tone="ink">
             Browser access
           </Txt>
-          <Txt variant="body" className="text-muted-foreground">
+          <Txt variant="body" tone="muted">
             Let this agent open a browser session to navigate websites, fill out forms, and read live web content as
             part of a run.
           </Txt>

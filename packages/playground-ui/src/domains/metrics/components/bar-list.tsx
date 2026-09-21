@@ -24,11 +24,11 @@ export function BarListContent({
           {legend?.map(l => (
             <div key={l.label} className="flex items-center gap-1.5">
               <div className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
-              <span className="text-icon2 text-caption">{l.label}</span>
+              <span className="text-placeholder text-caption">{l.label}</span>
             </div>
           ))}
         </div>
-        {valueLabel && <span className="text-icon2 text-caption shrink-0">{valueLabel}</span>}
+        {valueLabel && <span className="text-placeholder text-caption shrink-0">{valueLabel}</span>}
       </div>
       <div className="space-y-2.5">
         {sorted.map(d => {
@@ -44,7 +44,7 @@ export function BarListContent({
                   {d.name}
                 </span>
               </div>
-              <span className="text-icon6 text-caption shrink-0 font-mono tabular-nums">{fmt(d.value)}</span>
+              <span className="text-foreground text-caption shrink-0 font-mono tabular-nums">{fmt(d.value)}</span>
             </div>
           );
         })}
@@ -62,14 +62,14 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
         <div className="flex flex-1 items-center gap-4">
           <div className="flex items-center gap-1.5">
             <div className="size-2 rounded-full" style={{ backgroundColor: CHART_COLORS.blue }} />
-            <span className="text-icon2 text-caption">Completed</span>
+            <span className="text-placeholder text-caption">Completed</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="size-2 rounded-full" style={{ backgroundColor: CHART_COLORS.red }} />
-            <span className="text-icon2 text-caption">Errors</span>
+            <span className="text-placeholder text-caption">Errors</span>
           </div>
         </div>
-        <span className="text-icon2 text-caption shrink-0">Total (Success)</span>
+        <span className="text-placeholder text-caption shrink-0">Total (Success)</span>
       </div>
       <div className="space-y-2.5">
         {sorted.map(d => {
@@ -116,7 +116,7 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                   {d.name}
                 </span>
               </div>
-              <span className="text-icon6 text-caption shrink-0 font-mono tabular-nums">
+              <span className="text-foreground text-caption shrink-0 font-mono tabular-nums">
                 {total.toLocaleString()} ({successPct}%)
               </span>
             </div>

@@ -85,7 +85,7 @@ const JsonField = ({
       {isExampleOpen && (
         <div className={cn(raisedSurfaceStyle, 'space-y-2 rounded-lg p-3')}>
           <div className="flex items-center gap-2">
-            <Txt as="p" variant="caption" className="text-muted-foreground">
+            <Txt as="p" variant="caption" tone="muted">
               Example {label}
             </Txt>
             <Tooltip>
@@ -121,7 +121,7 @@ const JsonField = ({
               {label}
             </FieldBlock.Label>
             {helperText && (
-              <Txt variant="meta" className="text-muted-foreground">
+              <Txt variant="meta" tone="muted">
                 {helperText}
               </Txt>
             )}
@@ -289,10 +289,10 @@ export const WorkflowTimeTravelForm = ({
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Txt as="p" variant="heading" className="text-muted-foreground">
+          <Txt as="p" variant="heading" tone="muted">
             Input data
           </Txt>
-          <Txt variant="meta" className="text-muted-foreground">
+          <Txt variant="meta" tone="muted">
             Step: {stepKey}
           </Txt>
         </div>

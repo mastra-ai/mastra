@@ -79,7 +79,7 @@ export const WorkflowProcessorInput = ({
             ))}
           </SelectContent>
         </Select>
-        <Txt variant="meta" className="text-muted-foreground">
+        <Txt variant="meta" tone="muted">
           {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
         </Txt>
       </div>

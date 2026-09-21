@@ -119,7 +119,7 @@ export interface ThreadListEmptyProps {
 
 export const ThreadListEmpty = ({ children }: ThreadListEmptyProps) => {
   return (
-    <Txt as="p" variant="caption" className="text-muted-foreground px-3 py-2">
+    <Txt as="p" variant="caption" tone="muted" className="px-3 py-2">
       {children}
     </Txt>
   );

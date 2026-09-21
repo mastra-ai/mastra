@@ -81,7 +81,7 @@ function buildDiffLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
       fontSize: 'var(--text-body-sm)',
     },
     '&.cm-editor .cm-scroller': {
@@ -93,7 +93,7 @@ function buildDiffLightTheme(): Extension {
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',

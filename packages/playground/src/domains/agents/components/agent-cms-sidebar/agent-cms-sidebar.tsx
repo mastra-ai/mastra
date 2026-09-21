@@ -112,19 +112,20 @@ const SidebarLink = ({
           </div>
         ) : (
           <Txt
-            className="border-neutral2 text-placeholder flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
+            className="border-neutral2 flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
             variant="caption"
+            tone="faint"
           >
             {index + 1}
           </Txt>
         )}
 
         <div>
-          <Txt variant="caption" className="text-foreground">
+          <Txt variant="caption" tone="ink">
             {name}
           </Txt>
 
-          <Txt variant="meta" className="text-placeholder">
+          <Txt variant="meta" tone="faint">
             {description}
           </Txt>
         </div>

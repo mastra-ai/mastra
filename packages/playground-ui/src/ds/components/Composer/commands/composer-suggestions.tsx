@@ -44,7 +44,7 @@ export function ComposerSuggestions({
             <div className="border-border/60 border-b px-1.5 py-1">
               <button
                 type="button"
-                className="text-icon3 hover:text-icon6 text-caption duration-normal ease-out-custom hover:bg-fill-subtle flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-colors motion-reduce:transition-none"
+                className="text-muted-foreground hover:text-foreground text-caption duration-normal ease-out-custom hover:bg-fill-subtle flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-colors motion-reduce:transition-none"
                 aria-label="Back to slash commands"
                 onMouseDown={event => event.preventDefault()}
                 onClick={onBack}
@@ -69,8 +69,8 @@ export function ComposerSuggestions({
                   className={cn(
                     'flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl px-2 py-1.5 text-left text-caption transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
                     index === activeIndex
-                      ? 'text-icon6 bg-fill-subtle'
-                      : 'text-icon3 hover:text-icon6 hover:bg-fill-subtle',
+                      ? 'text-foreground bg-fill-subtle'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-fill-subtle',
                   )}
                   onMouseDown={event => event.preventDefault()}
                   onClick={() => onSelect(index)}

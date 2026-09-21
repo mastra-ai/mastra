@@ -228,7 +228,7 @@ export function WorkflowTrigger({
         )}
 
         {!canExecuteWorkflow && (
-          <Txt variant="caption" className="text-muted-foreground px-5 py-2">
+          <Txt variant="caption" tone="muted" className="px-5 py-2">
             You don't have permission to execute workflows.
           </Txt>
         )}

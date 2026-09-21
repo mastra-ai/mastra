@@ -108,7 +108,7 @@ export function ReviewItemCard({
           />
         )}
         <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
-          <Txt variant="meta" className="text-muted-foreground block truncate">
+          <Txt variant="meta" tone="muted" className="block truncate">
             {inputPreview}
           </Txt>
         </button>
@@ -208,7 +208,7 @@ export function ReviewItemCard({
         <div className="border-border mt-3 space-y-3 border-t pt-3">
           {item.experimentId && (
             <div className="flex items-center gap-1.5">
-              <Txt variant="meta" className="text-muted-foreground">
+              <Txt variant="meta" tone="muted">
                 Experiment:
               </Txt>
               <code className="text-muted-foreground bg-background text-meta rounded px-1.5 py-0.5 font-mono">
@@ -217,7 +217,7 @@ export function ReviewItemCard({
             </div>
           )}
           <div>
-            <Txt variant="meta" className="text-muted-foreground mb-1 block">
+            <Txt variant="meta" tone="muted" className="mb-1 block">
               Input
             </Txt>
             <pre className="text-foreground bg-background text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
@@ -226,7 +226,7 @@ export function ReviewItemCard({
           </div>
           {item.output !== undefined && item.output !== null && (
             <div>
-              <Txt variant="meta" className="text-muted-foreground mb-1 block">
+              <Txt variant="meta" tone="muted" className="mb-1 block">
                 Output
               </Txt>
               <pre className="text-foreground bg-background text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
@@ -236,7 +236,7 @@ export function ReviewItemCard({
           )}
           {Boolean(item.error) && (
             <div>
-              <Txt variant="meta" className="text-muted-foreground mb-1 block">
+              <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
               <pre className="text-negative1 bg-background text-caption max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
@@ -247,7 +247,7 @@ export function ReviewItemCard({
           {/* Comment */}
           {!isCompleted && (
             <div>
-              <Txt variant="meta" className="text-muted-foreground mb-1 block">
+              <Txt variant="meta" tone="muted" className="mb-1 block">
                 Comment
               </Txt>
               <Textarea
@@ -276,10 +276,10 @@ export function ReviewItemCard({
           )}
           {isCompleted && item.comment && (
             <div>
-              <Txt variant="meta" className="text-muted-foreground mb-1 block">
+              <Txt variant="meta" tone="muted" className="mb-1 block">
                 Comment
               </Txt>
-              <Txt variant="meta" className="text-muted-foreground block">
+              <Txt variant="meta" tone="muted" className="block">
                 {item.comment}
               </Txt>
             </div>

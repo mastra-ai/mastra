@@ -61,7 +61,7 @@ const badgeHues: BadgeVariant[] = ['green', 'red', 'blue', 'yellow', 'purple', '
 const greenSteps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
 
 const statusAliases: { token: ColorToken; aliasOf?: ColorToken; note: string }[] = [
-  { token: 'text1', aliasOf: 'neutral6', note: 'Alias of --neutral6 — body ink' },
+  { token: 'text1', aliasOf: 'foreground', note: 'Alias of --foreground — body ink' },
   { token: 'warning1', aliasOf: 'accent6', note: 'Alias of --accent6 — amber' },
   { token: 'positive1', aliasOf: 'accent1', note: 'Alias of --accent1 — green' },
   { token: 'negative1', aliasOf: 'accent2', note: 'Alias of --accent2 — red' },

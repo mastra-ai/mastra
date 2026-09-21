@@ -57,11 +57,11 @@ const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => 
         />
       </div>
       <div className="flex min-w-0 flex-col">
-        <Txt variant="column" className="text-foreground">
+        <Txt variant="column" tone="ink">
           {skill.name}
         </Txt>
         {skill.description && (
-          <Txt variant="meta" className="text-muted-foreground mt-0.5 truncate" title={skill.description}>
+          <Txt variant="meta" tone="muted" className="mt-0.5 truncate" title={skill.description}>
             {skill.description}
           </Txt>
         )}
@@ -73,7 +73,7 @@ const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => 
 const SkillEmptyState = () => {
   return (
     <div className="flex items-center justify-center py-8">
-      <Txt variant="caption" className="text-muted-foreground">
+      <Txt variant="caption" tone="muted">
         No skills available in this project.
       </Txt>
     </div>

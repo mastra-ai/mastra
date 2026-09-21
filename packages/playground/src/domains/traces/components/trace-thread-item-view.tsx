@@ -37,7 +37,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
   if (messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <Txt variant="body" className="text-muted-foreground">
+        <Txt variant="body" tone="muted">
           No agent turn found for this trace.
         </Txt>
       </div>

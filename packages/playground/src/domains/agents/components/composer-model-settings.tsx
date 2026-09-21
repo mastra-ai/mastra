@@ -315,7 +315,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       })
                     }
                   />
-                  <Txt as="p" variant="caption" className="text-muted-foreground">
+                  <Txt as="p" variant="caption" tone="muted">
                     {settings?.modelSettings?.temperature ?? 'n/a'}
                   </Txt>
                 </div>
@@ -337,7 +337,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                     min={-0.1}
                     step={0.1}
                   />
-                  <Txt as="p" variant="caption" className="text-muted-foreground">
+                  <Txt as="p" variant="caption" tone="muted">
                     {settings?.modelSettings?.topP ?? 'n/a'}
                   </Txt>
                 </div>

@@ -18,13 +18,13 @@ type Story = StoryObj<typeof ThemeProvider>;
 const Inspector = () => {
   const { theme, resolvedTheme, systemTheme } = useTheme();
   return (
-    <div className={`${raisedSurfaceStyle} text-icon6 text-body grid gap-3 rounded-lg p-4`}>
+    <div className={`${raisedSurfaceStyle} text-foreground text-body grid gap-3 rounded-lg p-4`}>
       <div className="grid grid-cols-[120px_1fr] gap-2">
-        <span className="text-icon3">theme</span>
+        <span className="text-muted-foreground">theme</span>
         <span className="font-mono">{theme}</span>
-        <span className="text-icon3">resolvedTheme</span>
+        <span className="text-muted-foreground">resolvedTheme</span>
         <span className="font-mono">{resolvedTheme}</span>
-        <span className="text-icon3">systemTheme</span>
+        <span className="text-muted-foreground">systemTheme</span>
         <span className="font-mono">{systemTheme}</span>
       </div>
       <ThemeToggle />

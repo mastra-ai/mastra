@@ -183,14 +183,14 @@ export function PromptBlockEditSidebar({
                     onClick={() => navigate(paths.agentLink(agent.id))}
                     className="hover:bg-fill-subtle flex items-center gap-2 rounded-md px-2 py-1.5 text-left"
                   >
-                    <Txt variant="caption" className="text-foreground truncate">
+                    <Txt variant="caption" tone="ink" className="truncate">
                       {agent.name || agent.id}
                     </Txt>
                   </button>
                 ))}
               </div>
             ) : (
-              <Txt variant="caption" className="text-muted-foreground">
+              <Txt variant="caption" tone="muted">
                 Not referenced by any agents yet.
               </Txt>
             )}

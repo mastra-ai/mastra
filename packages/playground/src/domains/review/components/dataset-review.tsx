@@ -593,7 +593,7 @@ export function DatasetReview({
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
-            <Txt variant="meta" className="text-muted-foreground">
+            <Txt variant="meta" tone="muted">
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
@@ -643,7 +643,7 @@ export function DatasetReview({
                       }
                     />
                     <div className="min-w-0 flex-1">
-                      <Txt variant="meta" className="text-muted-foreground block truncate">
+                      <Txt variant="meta" tone="muted" className="block truncate">
                         {item
                           ? typeof item.input === 'string'
                             ? item.input.slice(0, 100)
@@ -671,7 +671,7 @@ export function DatasetReview({
                         ))}
                       </div>
                       {proposal.reason && (
-                        <Txt variant="meta" className="text-muted-foreground mt-1 block italic">
+                        <Txt variant="meta" tone="muted" className="mt-1 block italic">
                           {proposal.reason}
                         </Txt>
                       )}

@@ -101,7 +101,7 @@ export function TagPicker({
               </button>
             )}
             {filtered.length === 0 && !canCreate && (
-              <Txt variant="meta" className="text-muted-foreground block px-2 py-1">
+              <Txt variant="meta" tone="muted" className="block px-2 py-1">
                 No tags available
               </Txt>
             )}

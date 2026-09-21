@@ -97,7 +97,7 @@ export function TagPicker({
               </button>
             )}
             {filtered.length === 0 && !canCreate && (
-              <Txt variant="meta" className="text-placeholder px-2 py-1">
+              <Txt variant="meta" tone="faint" className="px-2 py-1">
                 {vocabulary.length === 0 ? 'Type to create a tag' : 'No matching tags'}
               </Txt>
             )}

@@ -144,7 +144,7 @@ export function AgentPlaygroundVersionBar({
             className="min-w-0 flex-1"
           />
         ) : (
-          <Txt variant="meta" className="text-muted-foreground">
+          <Txt variant="meta" tone="muted">
             {isCodeSourceAgent ? 'No filesystem saves yet' : 'No versions yet'}
           </Txt>
         )}

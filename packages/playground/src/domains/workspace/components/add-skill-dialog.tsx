@@ -365,7 +365,7 @@ export function AddSkillDialog({
               {/* Mount picker - only shown when multiple writable mounts exist */}
               {writableMounts && writableMounts.length > 1 && (
                 <div className={cn(raisedSurfaceStyle, 'flex items-center gap-3 rounded-lg p-3')}>
-                  <Folder className="text-icon4 h-4 w-4 shrink-0" />
+                  <Folder className="text-muted-foreground h-4 w-4 shrink-0" />
                   <FieldBlock.Label name="mount-select" htmlFor="mount-select" className="whitespace-nowrap">
                     Install to
                   </FieldBlock.Label>
@@ -373,7 +373,7 @@ export function AddSkillDialog({
                     id="mount-select"
                     value={selectedMount ?? ''}
                     onChange={e => setSelectedMount(e.target.value)}
-                    className="border-border bg-background text-icon6 text-body flex-1 rounded-md border px-3 py-1.5"
+                    className="border-border bg-background text-foreground text-body flex-1 rounded-md border px-3 py-1.5"
                   >
                     {writableMounts.map(m => {
                       const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';
@@ -395,7 +395,9 @@ export function AddSkillDialog({
                   (() => {
                     const skillPath = installedSkillPaths[selectedSkill.name]!;
                     const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
-                    return mount ? <span className="text-icon4 text-caption">Installed at {mount.path}</span> : null;
+                    return mount ? (
+                      <span className="text-muted-foreground text-caption">Installed at {mount.path}</span>
+                    ) : null;
                   })()}
                 <Button icon={<X />} variant="default" onClick={() => handleOpenChange(false)}>
                   Cancel

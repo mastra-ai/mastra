@@ -114,7 +114,7 @@ function CompareExperimentsPage() {
         <div className="grid w-full content-start">
           <div className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
-              <Txt as="h1" variant="heading" className="text-foreground">
+              <Txt as="h1" variant="heading" tone="ink">
                 Experiments comparison
               </Txt>
 

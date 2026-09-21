@@ -77,8 +77,8 @@ export function AgentBuilderMobileBottomBar() {
                   'text-caption relative flex flex-col items-center justify-center gap-1 py-2',
                   controlStateColorTransition,
                   isActive
-                    ? 'text-icon6 before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
-                    : 'text-icon3 hover:text-icon6',
+                    ? 'text-foreground before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 <span className="flex size-6 items-center justify-center" aria-hidden="true">

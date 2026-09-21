@@ -84,7 +84,7 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
 
   return (
     <ToolCard testId="agent-builder-chat-tool-approval" className="bg-muted border-transparent">
-      <Txt variant="caption" className="text-foreground pb-2" as="div">
+      <Txt variant="caption" tone="ink" className="pb-2" as="div">
         Approval required for <span className="text-foreground font-mono">{toolName}</span>
       </Txt>
       <div className="flex items-center gap-2">
@@ -282,7 +282,8 @@ export const Txtmessage = ({
     return (
       <Txt
         variant="body"
-        className="text-muted-foreground max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
+        tone="muted"
+        className="max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
         as="div"
       >
         <MessageText text={txt} metadata={metadata} externalLinkTarget={role === 'assistant' ? 'window' : undefined} />
@@ -303,12 +304,13 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
       <div className="flex items-start gap-2.5">
         <AlertTriangle className="text-accent6 mt-0.5 size-4 shrink-0" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
-          <Txt variant="subheading" className="text-icon6" as="div">
+          <Txt variant="subheading" tone="ink" as="div">
             Something went wrong while building the agent.
           </Txt>
           <Txt
             variant="caption"
-            className="text-muted-foreground break-words"
+            tone="muted"
+            className="break-words"
             as="div"
             data-testid="agent-builder-chat-error-summary"
           >
@@ -407,7 +409,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
         >
           <span className="border-border/60 bg-sidebar inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
             <Wrench className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-            <Txt variant="caption" className="text-foreground" as="span">
+            <Txt variant="caption" tone="ink" as="span">
               Executing <span className="text-foreground font-mono">{toolName}</span>
             </Txt>
           </span>
@@ -420,7 +422,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
           <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
             <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
               <div className="border-border/60 border-b px-2 py-1">
-                <Txt variant="caption" className="text-muted-foreground" as="div">
+                <Txt variant="caption" tone="muted" as="div">
                   Input
                 </Txt>
               </div>
@@ -431,7 +433,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
             {hasOutput ? (
               <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
                 <div className="border-border/60 border-b px-2 py-1">
-                  <Txt variant="caption" className="text-muted-foreground" as="div">
+                  <Txt variant="caption" tone="muted" as="div">
                     Output
                   </Txt>
                 </div>
@@ -472,7 +474,7 @@ const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string;
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
-    <Txt variant="body" className="text-muted-foreground min-w-0 flex-1 truncate" as="div">
+    <Txt variant="body" tone="muted" className="min-w-0 flex-1 truncate" as="div">
       {label} <strong className="text-foreground font-medium">{value}</strong>
     </Txt>
   </div>

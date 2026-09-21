@@ -131,7 +131,7 @@ const RefBlockContent = ({
           <>
             {/* Sync-block header — always visible, with Popover on caret */}
             <div className="-ml-1 flex items-center gap-1.5 px-1 py-1">
-              <Txt variant="meta" className="text-muted-foreground truncate">
+              <Txt variant="meta" tone="muted" className="truncate">
                 {promptBlock.name}
               </Txt>
               {isDraft && (
@@ -163,11 +163,11 @@ const RefBlockContent = ({
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-[280px] p-0">
                     <div className="border-border border-b p-3">
-                      <Txt variant="column" className="text-foreground">
+                      <Txt variant="column" tone="ink">
                         {promptBlock.name}
                       </Txt>
                       {promptBlock.description && (
-                        <Txt variant="meta" className="text-muted-foreground mt-0.5 line-clamp-2">
+                        <Txt variant="meta" tone="muted" className="mt-0.5 line-clamp-2">
                           {promptBlock.description}
                         </Txt>
                       )}
@@ -213,12 +213,12 @@ const RefBlockContent = ({
                     </div>
                     {usedByAgents.length > 0 && (
                       <div className="border-border border-t p-3">
-                        <Txt variant="meta" className="text-muted-foreground mb-1.5">
+                        <Txt variant="meta" tone="muted" className="mb-1.5">
                           Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
                         </Txt>
                         <div className="flex flex-col gap-1">
                           {usedByAgents.map(agent => (
-                            <Txt key={agent.id} variant="meta" className="text-foreground truncate">
+                            <Txt key={agent.id} variant="meta" tone="ink" className="truncate">
                               {agent.name}
                             </Txt>
                           ))}

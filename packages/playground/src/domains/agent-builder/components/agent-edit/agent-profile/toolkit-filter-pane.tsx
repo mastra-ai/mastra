@@ -147,8 +147,9 @@ const ProviderToolkitSection = ({
     <div className="flex flex-col gap-0.5">
       <Txt
         variant="meta"
+        tone="muted"
         data-testid={`tools-provider-section-${provider.providerId}`}
-        className="text-muted-foreground px-2 pt-1 tracking-wide uppercase"
+        className="px-2 pt-1 tracking-wide uppercase"
       >
         {provider.providerName}
       </Txt>

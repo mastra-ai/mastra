@@ -81,10 +81,10 @@ export type PlanLabelProps = ComponentProps<'div'>;
 export function PlanLabel({ children = 'Plan', className, ...props }: PlanLabelProps) {
   return (
     <div data-slot="plan-label" className={cn('flex min-w-0 items-center gap-2', className)} {...props}>
-      <Icon size="xs" className="text-icon3">
+      <Icon size="xs" className="text-muted-foreground">
         <ClipboardList />
       </Icon>
-      <Txt as="span" variant="caption" className="text-muted-foreground">
+      <Txt as="span" variant="caption" tone="muted">
         {children}
       </Txt>
     </div>
@@ -166,7 +166,7 @@ export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 
 
 export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
   return (
-    <Txt {...props} as="h3" variant="heading" className={cn('text-neutral7 ', className)}>
+    <Txt {...props} as="h3" variant="heading" tone="ink" className={className}>
       {children}
     </Txt>
   );
@@ -190,9 +190,10 @@ export function PlanPath({ children, className, ...props }: PlanPathProps) {
       {...props}
       as="p"
       variant="meta"
+      tone="muted"
       font="mono"
       title={children}
-      className={cn('max-w-full truncate overflow-hidden text-muted-foreground', className)}
+      className={cn('max-w-full truncate overflow-hidden', className)}
     >
       {getFileName(children)}
     </Txt>
@@ -265,10 +266,10 @@ export interface PlanFileProps extends Omit<ComponentProps<'div'>, 'children'> {
 export function PlanFile({ children, className, ...props }: PlanFileProps) {
   return (
     <div data-slot="plan-file" className={className} {...props}>
-      <Txt as="p" variant="meta" className="text-muted-foreground mb-2">
+      <Txt as="p" variant="meta" tone="muted" className="mb-2">
         Plan file
       </Txt>
-      <Txt as="p" variant="caption" className="text-foreground font-mono break-all">
+      <Txt as="p" variant="caption" tone="ink" className="font-mono break-all">
         {children}
       </Txt>
     </div>

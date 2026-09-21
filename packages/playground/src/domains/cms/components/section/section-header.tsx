@@ -20,14 +20,18 @@ export function SectionHeader({ title, subtitle, icon, className }: SectionHeade
         )}
         {title}
       </Txt>
-      {subtitle && <Txt className="text-body text-muted-foreground">{subtitle}</Txt>}
+      {subtitle && (
+        <Txt tone="muted" className="text-body">
+          {subtitle}
+        </Txt>
+      )}
     </header>
   );
 }
 
 export function SubSectionHeader({ title, icon }: SectionHeaderProps) {
   return (
-    <Txt as="h4" variant="caption" className="text-placeholder flex items-center gap-1 uppercase">
+    <Txt as="h4" variant="caption" tone="faint" className="flex items-center gap-1 uppercase">
       {icon && (
         <Icon size="xs" className="text-placeholder">
           {icon}

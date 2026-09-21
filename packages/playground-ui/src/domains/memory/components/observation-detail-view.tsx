@@ -44,7 +44,7 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
     return {
       card: 'bg-transparent border-transparent',
       text: 'text-muted-foreground',
-      time: 'text-icon3',
+      time: 'text-muted-foreground',
     };
   }
   switch (priority) {
@@ -76,7 +76,7 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
       return {
         card: 'border-border bg-background',
         text: 'text-foreground',
-        time: 'text-icon3',
+        time: 'text-muted-foreground',
       };
   }
 }
@@ -215,7 +215,7 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
 function ObservationContent({ observations }: { observations: string }) {
   const sections = useMemo(() => parseObservations(observations), [observations]);
   if (sections.length === 0) {
-    return <p className="text-icon3 text-caption italic">Initialized</p>;
+    return <p className="text-muted-foreground text-caption italic">Initialized</p>;
   }
   return (
     <div className="space-y-5">
@@ -224,7 +224,7 @@ function ObservationContent({ observations }: { observations: string }) {
           <div className="border-border flex items-baseline justify-between gap-3 border-b pb-2">
             <div className="min-w-0">
               <h3 className="text-column text-foreground">{section.title}</h3>
-              {section.relativeTime && <p className="text-icon3 text-meta">{section.relativeTime}</p>}
+              {section.relativeTime && <p className="text-muted-foreground text-meta">{section.relativeTime}</p>}
             </div>
           </div>
           <ObservationItems items={section.items} />
@@ -258,13 +258,13 @@ function ObservationHistoryPanel({
               key={record.id}
               type="button"
               className={cn(
-                'text-icon3 w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption hover:bg-fill-subtle',
+                'text-muted-foreground w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption hover:bg-fill-subtle',
                 isSelected && 'border-l-accent1 bg-fill-hover',
               )}
               onClick={() => onSelectRecord(record.id)}
             >
               {record.activeObservations || (
-                <span className="text-icon3 italic">
+                <span className="text-muted-foreground italic">
                   {record.isObserving || record.isReflecting ? 'Processing\u2026' : 'Initialized'}
                 </span>
               )}
@@ -340,7 +340,7 @@ export function ObservationDetailView({
             <div className="flex items-start justify-end gap-3">
               <label className="text-caption flex cursor-pointer items-center gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
-                <span className="text-icon3 text-caption">Show diff</span>
+                <span className="text-muted-foreground text-caption">Show diff</span>
               </label>
             </div>
           </div>
@@ -355,7 +355,7 @@ export function ObservationDetailView({
           ) : activeObservations ? (
             <ObservationContent observations={activeObservations} />
           ) : (
-            <p className="text-icon3 text-caption italic">
+            <p className="text-muted-foreground text-caption italic">
               {selected.isObserving || selected.isReflecting ? 'Processing…' : 'Initialized'}
             </p>
           )}

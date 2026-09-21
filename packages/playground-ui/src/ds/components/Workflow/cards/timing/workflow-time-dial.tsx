@@ -75,7 +75,7 @@ export function DurationDial({ amount, unit }: { amount: number; unit: DurationU
       <DialTick
         angle={-120 + (amount / scale) * 240}
         major
-        className="stroke-neutral6 stroke-2"
+        className="stroke-foreground stroke-2"
         strokeLinecap="round"
       />
       <text x={DIAL_CENTER} y={94} textAnchor="middle" className="fill-neutral3 text-meta font-body">

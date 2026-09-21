@@ -55,7 +55,7 @@ export const WorkflowEdgeDataButton = ({
           </DialogHeader>
           <DialogBody className="overflow-auto" style={{ maxHeight: 700 }}>
             <div className="border-border bg-background min-w-0 rounded-lg border p-3">
-              <Txt variant="caption" className="text-foreground mb-2 block">
+              <Txt variant="caption" tone="ink" className="mb-2 block">
                 {dataLabel}
               </Txt>
               <WorkflowCodeContent data={output} />

@@ -49,7 +49,7 @@
   --generated-accent-lightness: 72%;
 
   /* Semantic color aliases. Theme-agnostic: the ramps they point at flip. */
-  --text1: var(--neutral6);
+  --text1: var(--foreground);
   --warning1: var(--accent6);
   --positive1: var(--accent1);
   --negative1: var(--accent2);

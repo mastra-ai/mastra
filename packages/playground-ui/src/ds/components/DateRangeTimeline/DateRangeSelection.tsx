@@ -50,7 +50,7 @@ export function DateRangeSelection({
     >
       {showDuration ? (
         // TODO(ds): Txt needs a compact data-label variant.
-        <Txt as="span" variant="caption" font="mono" className="text-foreground tabular-nums">
+        <Txt as="span" variant="caption" tone="ink" font="mono" className="tabular-nums">
           {duration}
         </Txt>
       ) : null}

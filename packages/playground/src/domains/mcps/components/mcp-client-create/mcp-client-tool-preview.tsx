@@ -35,9 +35,7 @@ export function MCPClientToolPreview({
   if (serverType === 'stdio') {
     return (
       <EmptyState>
-        <Txt className="text-muted-foreground">
-          Tool preview is available for HTTP servers. Stdio servers cannot be previewed.
-        </Txt>
+        <Txt tone="muted">Tool preview is available for HTTP servers. Stdio servers cannot be previewed.</Txt>
       </EmptyState>
     );
   }
@@ -45,9 +43,7 @@ export function MCPClientToolPreview({
   if (!url.trim()) {
     return (
       <EmptyState>
-        <Txt className="text-muted-foreground">
-          Enter a URL and click &quot;Try to connect&quot; to preview available tools.
-        </Txt>
+        <Txt tone="muted">Enter a URL and click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
@@ -55,7 +51,7 @@ export function MCPClientToolPreview({
   if (tryConnect.isIdle) {
     return (
       <EmptyState>
-        <Txt className="text-muted-foreground">Click &quot;Try to connect&quot; to preview available tools.</Txt>
+        <Txt tone="muted">Click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
@@ -65,7 +61,7 @@ export function MCPClientToolPreview({
       {tryConnect.isPending && (
         <div className="flex items-center gap-2">
           <Spinner className="h-3 w-3" />
-          <Txt className="text-muted-foreground">Connecting...</Txt>
+          <Txt tone="muted">Connecting...</Txt>
         </div>
       )}
 
@@ -78,7 +74,7 @@ export function MCPClientToolPreview({
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length === 0 && (
-        <Txt className="text-muted-foreground">Connected successfully but no tools were found.</Txt>
+        <Txt tone="muted">Connected successfully but no tools were found.</Txt>
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (

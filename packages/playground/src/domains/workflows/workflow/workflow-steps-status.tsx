@@ -30,7 +30,7 @@ export function WorkflowStepsStatus({ steps, workflowResult }: WorkflowStepsStat
 
   return (
     <div className="border-border flex flex-col gap-2 border-t pt-5">
-      <Txt variant="meta" className="text-muted-foreground">
+      <Txt variant="meta" tone="muted">
         Status
       </Txt>
       <div className="flex flex-col gap-4">

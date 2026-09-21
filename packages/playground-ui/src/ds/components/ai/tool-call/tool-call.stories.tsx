@@ -31,7 +31,7 @@ export default meta;
 type Story = StoryObj<typeof ToolCall>;
 
 const Code = ({ children }: { children: string }) => (
-  <pre className="text-icon4 bg-sidebar text-caption m-0 max-h-60 overflow-auto rounded-md px-3 py-2 font-mono whitespace-pre-wrap">
+  <pre className="text-muted-foreground bg-sidebar text-caption m-0 max-h-60 overflow-auto rounded-md px-3 py-2 font-mono whitespace-pre-wrap">
     {children}
   </pre>
 );

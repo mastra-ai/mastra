@@ -20,7 +20,7 @@ interface ChatEventProps {
 function ChatEventDetail({ children }: { children: string }) {
   const arriving = useArriving();
   return (
-    <Txt as="span" variant="meta" font="mono" className={cn('text-icon3 min-w-0 truncate', arriving)}>
+    <Txt as="span" variant="meta" tone="muted" font="mono" className={cn('min-w-0 truncate', arriving)}>
       {children}
     </Txt>
   );
@@ -30,14 +30,14 @@ export function ChatEvent({ label, detail, icon, children, defaultOpen, ...props
   const header = (
     <span className="flex w-full min-w-0 items-center gap-2 px-1.5 py-1">
       <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
-      <Txt as="span" variant="caption" className="text-icon3 max-w-[55%] shrink-0 truncate">
+      <Txt as="span" variant="caption" tone="muted" className="max-w-[55%] shrink-0 truncate">
         {label}
       </Txt>
       {detail && <ChatEventDetail>{detail}</ChatEventDetail>}
       <span aria-hidden className="min-w-2 flex-1" />
       <span aria-hidden className="flex size-4 shrink-0 items-center justify-center">
         {children && (
-          <span className="text-icon3 flex opacity-0 group-hover/event:opacity-100 group-focus-visible/event:opacity-100 group-data-[panel-open]/event:rotate-90 group-data-[panel-open]/event:opacity-100 motion-safe:transition motion-safe:duration-150">
+          <span className="text-muted-foreground flex opacity-0 group-hover/event:opacity-100 group-focus-visible/event:opacity-100 group-data-[panel-open]/event:rotate-90 group-data-[panel-open]/event:opacity-100 motion-safe:transition motion-safe:duration-150">
             <ChevronRight size={13} />
           </span>
         )}

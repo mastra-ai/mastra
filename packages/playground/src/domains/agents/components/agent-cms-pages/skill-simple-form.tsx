@@ -50,7 +50,7 @@ export function SkillSimpleForm({
             {instructions ? (
               <MarkdownRenderer>{instructions}</MarkdownRenderer>
             ) : (
-              <Txt variant="caption" className="text-muted-foreground italic">
+              <Txt variant="caption" tone="muted" className="italic">
                 No instructions provided.
               </Txt>
             )}

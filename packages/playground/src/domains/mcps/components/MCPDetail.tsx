@@ -62,7 +62,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   if (!server)
     return (
       <MainContentContent>
-        <Txt as="h1" variant="heading" className="text-muted-foreground py-20 text-center">
+        <Txt as="h1" variant="heading" tone="muted" className="py-20 text-center">
           Server not found
         </Txt>
       </MainContentContent>
@@ -73,7 +73,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   return (
     <MainContentContent isDivided={true}>
       <div className="mx-auto w-full max-w-2xl px-5 py-8">
-        <Txt as="h1" variant="heading" className="text-foreground pb-4">
+        <Txt as="h1" variant="heading" tone="ink" className="pb-4">
           {server.name}
         </Txt>
 
@@ -84,7 +84,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           <Badge size="sm">{server.version_detail.version}</Badge>
         </div>
 
-        <Txt className="text-muted-foreground pb-4">
+        <Txt tone="muted" className="pb-4">
           This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use
           case.
         </Txt>
@@ -96,7 +96,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
               Regular HTTP Endpoint
             </Badge>
 
-            <Txt className="text-muted-foreground pt-1 pb-2">
+            <Txt tone="muted" className="pt-1 pb-2">
               Use for stateless HTTP transport with streamable responses.
             </Txt>
 
@@ -114,7 +114,9 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
               Server-Sent Events
             </Badge>
 
-            <Txt className="text-muted-foreground pt-1 pb-2">Use for real-time communication via SSE.</Txt>
+            <Txt tone="muted" className="pt-1 pb-2">
+              Use for real-time communication via SSE.
+            </Txt>
 
             <div className="flex items-start gap-2">
               <Txt className="bg-muted rounded-lg px-2 py-1">{sseUrl}</Txt>
@@ -128,7 +130,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
             <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">CLI</span>}>Command Line</Badge>
 
-            <Txt className="text-muted-foreground pt-1 pb-2">
+            <Txt tone="muted" className="pt-1 pb-2">
               Use for local command-line access via npx and mcp-remote.
             </Txt>
 

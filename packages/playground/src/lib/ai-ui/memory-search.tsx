@@ -257,13 +257,13 @@ export const MemorySearch = ({
             </div>
           ) : isSearching && results.length === 0 ? (
             <div className="p-4 text-center">
-              <Txt variant="caption" className="text-muted-foreground">
+              <Txt variant="caption" tone="muted">
                 Searching...
               </Txt>
             </div>
           ) : results.length === 0 ? (
             <div className="p-4 text-center">
-              <Txt variant="caption" className="text-muted-foreground">
+              <Txt variant="caption" tone="muted">
                 No results found for "{query}"
               </Txt>
             </div>
@@ -305,17 +305,15 @@ export const MemorySearch = ({
                           >
                             {result.role}
                           </span>
-                          <Txt variant="meta" className="text-muted-foreground">
+                          <Txt variant="meta" tone="muted">
                             {formatRelativeTime(new Date(result.createdAt))}
                           </Txt>
                           {result.threadTitle && (
                             <div className="flex items-center gap-1">
                               <Txt
                                 variant="meta"
-                                className={cn(
-                                  'truncate max-w-[150px]',
-                                  result.threadId !== currentThreadId ? 'text-blue-400 ' : 'text-muted-foreground',
-                                )}
+                                tone={result.threadId !== currentThreadId ? undefined : 'muted'}
+                                className={cn('truncate max-w-[150px]', result.threadId !== currentThreadId && 'text-blue-400')}
                                 title={result.threadTitle}
                               >
                                 • {result.threadTitle}
@@ -326,7 +324,7 @@ export const MemorySearch = ({
                             </div>
                           )}
                         </div>
-                        <Txt variant="caption" className="text-foreground wrap-break-word">
+                        <Txt variant="caption" tone="ink" className="wrap-break-word">
                           {truncateContent(result.content)}
                         </Txt>
                       </div>

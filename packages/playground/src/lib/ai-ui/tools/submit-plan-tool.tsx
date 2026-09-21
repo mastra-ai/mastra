@@ -160,7 +160,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
             </div>
           ) : null}
           {isError ? (
-            <Txt as="p" variant="caption" className="text-muted-foreground">
+            <Txt as="p" variant="caption" tone="muted">
               Unable to load the submitted plan.
             </Txt>
           ) : null}

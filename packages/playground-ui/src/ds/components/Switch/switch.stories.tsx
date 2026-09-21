@@ -86,7 +86,7 @@ function RepositoryVisibilitySwitch() {
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="repository-visibility-icons">Repository visibility</Label>
         <span className="inline-flex items-center gap-2">
-          <span className="text-neutral7 text-column">{isPrivate ? 'Private' : 'Public'}</span>
+          <span className="text-foreground text-column">{isPrivate ? 'Private' : 'Public'}</span>
           <Switch
             id="repository-visibility-icons"
             checked={isPrivate}

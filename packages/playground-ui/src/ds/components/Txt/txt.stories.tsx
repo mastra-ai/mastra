@@ -18,7 +18,7 @@ const meta: Meta<typeof Txt> = {
     },
     tone: {
       control: { type: 'select' },
-      options: [undefined, 'default', 'muted', 'faint'],
+      options: [undefined, 'ink', 'muted', 'faint'],
     },
     font: {
       control: { type: 'select' },
@@ -68,8 +68,8 @@ export const Roles: Story = {
 export const Tones: Story = {
   render: () => (
     <div className="flex flex-col gap-2">
-      <Txt variant="body-sm" tone="default">
-        Default — primary reading tone
+      <Txt variant="body-sm" tone="ink">
+        Ink — the reading tone, inherited by default and written only to lift text back out of a muted block
       </Txt>
       <Txt variant="body-sm" tone="muted">
         Muted — supporting copy

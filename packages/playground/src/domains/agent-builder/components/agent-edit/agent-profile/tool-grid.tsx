@@ -94,7 +94,7 @@ interface ToolListEmptyStateProps {
 export const ToolListEmptyState = ({ details }: ToolListEmptyStateProps) => {
   return (
     <div className="flex min-h-0 items-center justify-center px-3 py-4">
-      <Txt variant="body" className="text-muted-foreground">
+      <Txt variant="body" tone="muted">
         {details}
       </Txt>
     </div>

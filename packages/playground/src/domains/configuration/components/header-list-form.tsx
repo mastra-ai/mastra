@@ -20,7 +20,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeadi
   return (
     <div className="space-y-4">
       {showHeading && (
-        <Txt as="h2" variant="body" className="text-foreground">
+        <Txt as="h2" variant="body" tone="ink">
           Headers
         </Txt>
       )}
@@ -37,7 +37,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeadi
         )}
 
         <div className="flex items-center justify-between gap-2">
-          {headers.length === 0 && <Txt className="text-muted-foreground">No header yet</Txt>}
+          {headers.length === 0 && <Txt tone="muted">No header yet</Txt>}
           <Button
             type="button"
             onClick={() => onAddHeader({ name: '', value: '' })}

@@ -34,7 +34,7 @@ function buildSideDialogLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
       fontSize: 'var(--text-body-sm)',
     },
     '&.cm-editor .cm-scroller': {
@@ -46,8 +46,8 @@ function buildSideDialogLightTheme(): Extension {
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--foreground)',
+      caretColor: 'var(--foreground)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -56,7 +56,7 @@ function buildSideDialogLightTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--foreground)',
     },
   });
 

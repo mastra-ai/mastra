@@ -38,7 +38,8 @@ export const ToolCard = ({ item, editable, onToggle }: ToolCardProps) => {
           needsConnection ? (
             <Txt
               variant="meta"
-              className="text-muted-foreground flex h-7 items-center"
+              tone="muted"
+              className="flex h-7 items-center"
               data-testid={`tool-card-requires-connection-${item.type}-${item.id}`}
             >
               Requires connection

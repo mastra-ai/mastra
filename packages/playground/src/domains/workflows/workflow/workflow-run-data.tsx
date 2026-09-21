@@ -12,7 +12,7 @@ type RunDataTab = 'input' | 'output' | 'execution';
 function RunDataValue({ value }: { value: unknown }) {
   if (value === undefined) {
     return (
-      <Txt className="text-muted-foreground block p-4" variant="caption">
+      <Txt className="block p-4" variant="caption" tone="muted">
         No input recorded
       </Txt>
     );

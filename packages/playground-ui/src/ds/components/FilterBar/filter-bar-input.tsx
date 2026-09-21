@@ -332,7 +332,7 @@ export function FilterBarInput({
               )}
               {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
-                  <Txt variant="caption" className="text-muted-foreground">
+                  <Txt variant="caption" tone="muted">
                     Type a value
                   </Txt>
                   <Button

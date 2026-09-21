@@ -63,7 +63,7 @@ export function ToolApproval({ toolName, children, ...actions }: ToolApprovalPro
       role="group"
       aria-label={`Tool approval for ${toolName}`}
     >
-      <div className="text-icon6 text-subheading mb-1.5">
+      <div className="text-foreground text-subheading mb-1.5">
         Approve <code className="bg-fill-hover text-caption rounded px-1.5 py-px font-mono break-all">{toolName}</code>?
       </div>
       {children}

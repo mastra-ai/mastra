@@ -111,11 +111,11 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                       'hover:bg-fill-subtle active:bg-fill',
                     )}
                   >
-                    <Txt variant="column" className="text-foreground">
+                    <Txt variant="column" tone="ink">
                       {block.name}
                     </Txt>
                     {block.description && (
-                      <Txt variant="meta" className="text-muted-foreground line-clamp-1">
+                      <Txt variant="meta" tone="muted" className="line-clamp-1">
                         {block.description}
                       </Txt>
                     )}

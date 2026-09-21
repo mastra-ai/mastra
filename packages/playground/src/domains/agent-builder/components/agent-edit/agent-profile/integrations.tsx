@@ -58,7 +58,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
   if (platforms.length === 0) {
     return (
       <div className="flex justify-center px-4 py-5" data-testid="integrations-detail-picker">
-        <Txt variant="body" className="text-muted-foreground">
+        <Txt variant="body" tone="muted">
           No integrations configured for this project
         </Txt>
       </div>
@@ -69,10 +69,10 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
     <div className="flex justify-center px-4 py-5" data-testid="integrations-detail-picker">
       <div className="flex w-full max-w-[48rem] flex-col items-center gap-4 text-center">
         <div className="flex flex-col gap-2">
-          <Txt variant="heading" className="text-foreground">
+          <Txt variant="heading" tone="ink">
             Channel integrations
           </Txt>
-          <Txt variant="body" className="text-muted-foreground">
+          <Txt variant="body" tone="muted">
             Publish this agent to external platforms. Each connection installs a bot in the platform that runs this
             agent.
           </Txt>
@@ -133,11 +133,11 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       </div>
 
       <div className="flex flex-col items-center gap-1">
-        <Txt variant="subheading" className="text-foreground">
+        <Txt variant="subheading" tone="ink">
           {platform.name}
         </Txt>
         {description ? (
-          <Txt variant="meta" className="text-muted-foreground">
+          <Txt variant="meta" tone="muted">
             {description}
           </Txt>
         ) : null}

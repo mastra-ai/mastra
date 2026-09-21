@@ -45,7 +45,7 @@ export function SettingsTitle({
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Txt as="h2" id={titleId} variant="subheading" tone="default" className={className} {...props} />
+      <Txt as="h2" id={titleId} variant="subheading" tone="ink" className={className} {...props} />
       {accessory}
     </div>
   );

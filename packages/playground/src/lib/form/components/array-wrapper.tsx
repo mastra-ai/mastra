@@ -12,7 +12,7 @@ export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) 
   return (
     <div className="min-w-0">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <Txt as="h3" variant="caption" className="text-muted-foreground flex items-center gap-1.5">
+        <Txt as="h3" variant="caption" tone="muted" className="flex items-center gap-1.5">
           <Brackets aria-hidden className="size-3.5" />
           {label} <span className="tabular-nums">{count}</span>
         </Txt>
@@ -31,7 +31,7 @@ export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) 
         )}
       </div>
       {count === 0 ? (
-        <Txt as="p" variant="caption" className="text-muted-foreground py-2">
+        <Txt as="p" variant="caption" tone="muted" className="py-2">
           No items added
         </Txt>
       ) : (

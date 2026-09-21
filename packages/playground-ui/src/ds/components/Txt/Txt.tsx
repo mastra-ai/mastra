@@ -36,9 +36,10 @@ const roles: Record<TextRole, string> = {
   meta: 'text-meta',
 };
 
-// Three tones, the same neutral roles every control uses.
+// Three inks, the same ladder every control uses. Omitting `tone` inherits — `body` is
+// already `--foreground`, so ink is written only to lift text back out of a muted block.
 const tones = {
-  default: 'text-foreground',
+  ink: 'text-foreground',
   muted: 'text-muted-foreground',
   faint: 'text-placeholder',
 };

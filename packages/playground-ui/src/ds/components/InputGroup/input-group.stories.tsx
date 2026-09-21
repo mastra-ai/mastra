@@ -248,7 +248,7 @@ export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
       <div className="border-border bg-sidebar rounded-lg border p-4">
-        <Txt variant="caption" className="text-muted-foreground mb-2">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Sidebar
         </Txt>
         <InputGroup>
@@ -259,7 +259,7 @@ export const OnDifferentSurfaces: Story = {
         </InputGroup>
       </div>
       <div className="border-border bg-background rounded-lg border p-4">
-        <Txt variant="caption" className="text-muted-foreground mb-2">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Main canvas
         </Txt>
         <InputGroup>
@@ -270,7 +270,7 @@ export const OnDifferentSurfaces: Story = {
         </InputGroup>
       </div>
       <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
-        <Txt variant="caption" className="text-muted-foreground mb-2">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Card
         </Txt>
         <InputGroup>
@@ -281,7 +281,7 @@ export const OnDifferentSurfaces: Story = {
         </InputGroup>
       </div>
       <div className="border-border bg-popover rounded-lg border p-4">
-        <Txt variant="caption" className="text-muted-foreground mb-2">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Popover
         </Txt>
         <InputGroup>

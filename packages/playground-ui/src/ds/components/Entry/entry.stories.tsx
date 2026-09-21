@@ -25,7 +25,7 @@ export const WithText: Story = {
   args: {
     label: 'Name',
     children: (
-      <Txt variant="body" className="text-foreground">
+      <Txt variant="body" tone="ink">
         John Doe
       </Txt>
     ),
@@ -43,7 +43,7 @@ export const WithLongContent: Story = {
   args: {
     label: 'Description',
     children: (
-      <Txt variant="body" className="text-foreground">
+      <Txt variant="body" tone="ink">
         This is a longer description that contains multiple lines of text to show how the component handles longer
         content.
       </Txt>
@@ -55,7 +55,7 @@ export const MultipleEntries: Story = {
   render: () => (
     <div className="flex w-75 flex-col gap-4">
       <Entry label="Name">
-        <Txt variant="body" className="text-foreground">
+        <Txt variant="body" tone="ink">
           My Agent
         </Txt>
       </Entry>
@@ -63,7 +63,7 @@ export const MultipleEntries: Story = {
         <Badge variant="green">Running</Badge>
       </Entry>
       <Entry label="Created">
-        <Txt variant="body" className="text-foreground">
+        <Txt variant="body" tone="ink">
           Jan 14, 2026
         </Txt>
       </Entry>
@@ -76,13 +76,13 @@ export const WithComplexContent: Story = {
     label: 'Configuration',
     children: (
       <div className="flex flex-col gap-1">
-        <Txt variant="caption" className="text-foreground">
+        <Txt variant="caption" tone="ink">
           Model: GPT-4
         </Txt>
-        <Txt variant="caption" className="text-foreground">
+        <Txt variant="caption" tone="ink">
           Temperature: 0.7
         </Txt>
-        <Txt variant="caption" className="text-foreground">
+        <Txt variant="caption" tone="ink">
           Max tokens: 4096
         </Txt>
       </div>

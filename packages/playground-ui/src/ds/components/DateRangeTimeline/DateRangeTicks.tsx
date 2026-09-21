@@ -35,7 +35,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
     return (
       <div role="group" aria-label={timelineLabel} className="flex h-10 items-start justify-center pt-2">
         {/* TODO(ds): Txt needs a muted timeline-axis variant. */}
-        <Txt as="span" variant="caption" className="text-muted-foreground">
+        <Txt as="span" variant="caption" tone="muted">
           {singleLabel}
         </Txt>
       </div>
@@ -51,7 +51,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
       <div className="absolute top-0 left-0 flex flex-col items-start">
         <span className="bg-border-strong mb-1 h-1.5 w-px" aria-hidden="true" />
         {/* TODO(ds): Txt needs a muted timeline-axis variant. */}
-        <Txt as="span" variant="caption" className="text-muted-foreground whitespace-nowrap">
+        <Txt as="span" variant="caption" tone="muted" className="whitespace-nowrap">
           {startLabel}
         </Txt>
       </div>
@@ -65,7 +65,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
         >
           <span className="bg-border-strong mb-1 h-1.5 w-px" />
           {/* TODO(ds): Txt needs a muted timeline-axis variant. */}
-          <Txt as="span" variant="meta" className="text-muted-foreground whitespace-nowrap">
+          <Txt as="span" variant="meta" tone="muted" className="whitespace-nowrap">
             {tick.label}
           </Txt>
         </div>
@@ -74,7 +74,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
       <div className="absolute top-0 right-0 flex flex-col items-end">
         <span className="bg-border-strong mb-1 h-1.5 w-px" aria-hidden="true" />
         {/* TODO(ds): Txt needs a muted timeline-axis variant. */}
-        <Txt as="span" variant="caption" className="text-muted-foreground whitespace-nowrap">
+        <Txt as="span" variant="caption" tone="muted" className="whitespace-nowrap">
           {endLabel}
         </Txt>
       </div>

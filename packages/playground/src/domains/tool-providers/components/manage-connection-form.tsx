@@ -86,7 +86,7 @@ export const ManageConnectionForm = ({
           </div>
 
           <div className="flex w-full flex-col items-center gap-1.5">
-            <Txt variant="meta" className="text-muted-foreground">
+            <Txt variant="meta" tone="muted">
               {integrationName} connection
             </Txt>
             <div className="relative w-full">

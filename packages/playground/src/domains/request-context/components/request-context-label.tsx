@@ -19,7 +19,7 @@ export function RequestContextLabel({ as = 'span', children, tooltip }: RequestC
 
   return (
     <div className="flex items-center gap-1.5">
-      <Txt as={as} variant="body" className="text-muted-foreground">
+      <Txt as={as} variant="body" tone="muted">
         {children}
       </Txt>
 

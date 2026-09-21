@@ -29,7 +29,7 @@ function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof D
       {lines.map((line, index) => (
         <div key={index} className={cn('flex whitespace-pre', row)}>
           <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
-          <span className="text-icon6 flex-1 pr-2.5">
+          <span className="text-foreground flex-1 pr-2.5">
             {tokens?.[index]?.map((token, tokenIndex) => (
               <span key={tokenIndex} className="shiki-token" style={tokenStyle(token)}>
                 {token.content}
@@ -68,7 +68,7 @@ export function ToolCallEdit({ edit }: { edit: ToolEdit }) {
     >
       <DiffSide lines={removed.lines} side="removed" lang={lang} />
       <DiffSide lines={added.lines} side="added" lang={lang} />
-      {hidden > 0 && <div className="text-icon3 px-2.5 py-1 select-none">… {hidden} more lines</div>}
+      {hidden > 0 && <div className="text-muted-foreground px-2.5 py-1 select-none">… {hidden} more lines</div>}
     </div>
   );
 }

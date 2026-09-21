@@ -62,7 +62,7 @@ export function ScheduleTriggersList({
 
   if (triggers.length === 0) {
     return (
-      <Txt variant="body" className="text-muted-foreground p-4">
+      <Txt variant="body" tone="muted" className="p-4">
         No trigger history yet.
       </Txt>
     );

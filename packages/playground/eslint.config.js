@@ -14,6 +14,20 @@ const restrictedTypographySelectors = [
   { selector: `TemplateElement[value.raw=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
 ];
 
+// Ink on a `<Txt>` is the `tone` prop, not a class: three named tones against any
+// colour Tailwind can spell, and omitting tone inherits rather than restating ink.
+const TXT_TONE_MESSAGE = 'Set ink on <Txt> with tone="ink" | "muted" | "faint", not a text-* colour class.';
+// Anchored at class boundaries: a variant or an alpha (`hover:text-foreground`, `text-foreground/70`)
+// is something `tone` cannot express, so it stays a class.
+const TXT_TONE_PATTERN = '(^|\\s)text-(foreground|muted-foreground|placeholder)(?=\\s|$)';
+// `>` to the attribute: a descendant match would also flag a coloured child rendered inside a `<Txt>`.
+const txtToneSelector = (node, prop) =>
+  `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] ${node}[${prop}=/${TXT_TONE_PATTERN}/]`;
+const restrictedTxtToneSelectors = [
+  { selector: txtToneSelector('Literal', 'value'), message: TXT_TONE_MESSAGE },
+  { selector: txtToneSelector('TemplateElement', 'value.raw'), message: TXT_TONE_MESSAGE },
+];
+
 const PLAYGROUND_UI_BROAD_IMPORT_MESSAGE =
   'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.';
 
@@ -234,6 +248,7 @@ export default [
         'error',
         ...restrictedPlaygroundUiBroadImportSelectors,
         ...restrictedTypographySelectors,
+        ...restrictedTxtToneSelectors,
       ],
     },
   },

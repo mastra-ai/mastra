@@ -166,7 +166,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
               <BlockCopyButton block={block} />
             </div>
           )}
-          <Txt variant="caption" className="text-muted-foreground font-mono whitespace-pre-wrap">
+          <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
             {oldStr || '(empty)'}
           </Txt>
         </div>
@@ -251,7 +251,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                   <BlockCopyButton block={prevBlock} />
                 </div>
               )}
-              <Txt variant="caption" className="text-muted-foreground font-mono whitespace-pre-wrap">
+              <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
                 {oldStr || '(empty)'}
               </Txt>
             </div>
@@ -309,11 +309,11 @@ function RefBlockPreview({ promptBlockId }: { promptBlockId: string }) {
         </div>
       )}
       {promptBlock?.name && (
-        <Txt variant="meta" className="text-muted-foreground mb-1">
+        <Txt variant="meta" tone="muted" className="mb-1">
           {promptBlock.name}
         </Txt>
       )}
-      <Txt variant="caption" className="text-muted-foreground font-mono whitespace-pre-wrap">
+      <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
         {content || '(empty)'}
       </Txt>
     </div>
@@ -325,7 +325,7 @@ function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
 
   if (blocksArr.length === 0) {
     return (
-      <Txt variant="caption" className="text-muted-foreground py-2">
+      <Txt variant="caption" tone="muted" className="py-2">
         No instruction blocks configured
       </Txt>
     );
@@ -347,7 +347,7 @@ function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
                 <CopyButton content={content} tooltip="Copy prompt text" size="sm" />
               </div>
             )}
-            <Txt variant="caption" className="text-muted-foreground font-mono whitespace-pre-wrap">
+            <Txt variant="caption" tone="muted" className="font-mono whitespace-pre-wrap">
               {content || '(empty)'}
             </Txt>
           </div>
@@ -396,7 +396,6 @@ function ToolsDiffView({
                 'font-mono',
                 status === 'removed' && 'text-red-300 line-through',
                 status === 'added' && 'text-green-300',
-                status === 'same' && 'text-foreground',
               )}
             >
               {tool}
@@ -423,7 +422,7 @@ function ReadOnlyTools({ tools }: { tools: Record<string, unknown> | undefined }
 
   if (entries.length === 0) {
     return (
-      <Txt variant="caption" className="text-muted-foreground py-2">
+      <Txt variant="caption" tone="muted" className="py-2">
         No tools configured
       </Txt>
     );
@@ -433,11 +432,11 @@ function ReadOnlyTools({ tools }: { tools: Record<string, unknown> | undefined }
     <div className="flex flex-col gap-1.5">
       {entries.map(([id, config]) => (
         <div key={id} className="border-border bg-background rounded-md border px-3 py-1.5">
-          <Txt variant="caption" className="text-foreground font-mono">
+          <Txt variant="caption" tone="ink" className="font-mono">
             {id}
           </Txt>
           {(config as Record<string, unknown>)?.description ? (
-            <Txt variant="meta" className="text-muted-foreground mt-0.5">
+            <Txt variant="meta" tone="muted" className="mt-0.5">
               {String((config as Record<string, unknown>).description)}
             </Txt>
           ) : null}
@@ -463,7 +462,7 @@ function VariablesDiffView({
 
   if (allKeys.length === 0) {
     return (
-      <Txt variant="caption" className="text-muted-foreground py-2">
+      <Txt variant="caption" tone="muted" className="py-2">
         No variables configured
       </Txt>
     );
@@ -496,7 +495,6 @@ function VariablesDiffView({
                 'font-mono',
                 status === 'removed' && 'text-red-300 line-through',
                 status === 'added' && 'text-green-300',
-                status === 'same' && 'text-foreground',
               )}
             >
               {`{{${name}}}`}
@@ -524,7 +522,7 @@ function ReadOnlyVariables({ variables }: { variables: Record<string, unknown> |
 
   if (entries.length === 0) {
     return (
-      <Txt variant="caption" className="text-muted-foreground py-2">
+      <Txt variant="caption" tone="muted" className="py-2">
         No variables configured
       </Txt>
     );
@@ -534,7 +532,7 @@ function ReadOnlyVariables({ variables }: { variables: Record<string, unknown> |
     <div className="flex flex-col gap-1.5">
       {entries.map(([name, schema]) => (
         <div key={name} className="border-border bg-background flex items-center gap-2 rounded-md border px-3 py-1.5">
-          <Txt variant="caption" className="text-foreground font-mono">
+          <Txt variant="caption" tone="ink" className="font-mono">
             {`{{${name}}}`}
           </Txt>
           {(schema as Record<string, unknown>)?.type ? (
@@ -721,7 +719,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     ))}
                   </div>
                 ) : null}
-                <Txt variant="meta" className="text-muted-foreground mt-1">
+                <Txt variant="meta" tone="muted" className="mt-1">
                   {variableEntries.length > 0
                     ? 'Defined via requestContextSchema in code.'
                     : 'No variables defined. Add a requestContextSchema to your agent to define variables.'}
@@ -731,7 +729,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
 
             <TabContent value="instructions" className="px-4 py-0 pb-4">
               <div className="flex flex-col gap-3 pt-4 pb-2">
-                <Txt variant="caption" className="text-muted-foreground">
+                <Txt variant="caption" tone="muted">
                   Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}
                   <Tooltip>
                     <TooltipTrigger

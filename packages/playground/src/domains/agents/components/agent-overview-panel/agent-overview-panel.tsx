@@ -42,7 +42,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
     >
       {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
       <div className="border-border flex h-10 min-h-10 items-center border-b px-4">
-        <Txt as="h2" variant="subheading" className="text-foreground">
+        <Txt as="h2" variant="subheading" tone="ink">
           Config
         </Txt>
       </div>
@@ -75,7 +75,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
   if (!agent) {
     return (
-      <Txt variant="body" className="text-muted-foreground p-4">
+      <Txt variant="body" tone="muted" className="p-4">
         Agent not found
       </Txt>
     );
