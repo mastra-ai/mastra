@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ExperimentsInMemory } from '../../experiments/inmemory';
 import { InMemoryDB } from '../../inmemory-db';
 import { DatasetsInMemory } from '../inmemory';
@@ -1363,6 +1363,67 @@ describe('DatasetsInMemory', () => {
       });
       expect(item.source?.type).toBe('candidate-screener');
       expect(item.source?.referenceId).toBe('verdict-123');
+    });
+  });
+
+  describe('ordering', () => {
+    it('lists datasets newest first by default', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      await storage.createDataset({ name: 'bravo' });
+      vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
+      await storage.createDataset({ name: 'alpha' });
+      vi.useRealTimers();
+
+      const result = await storage.listDatasets({ pagination: { page: 0, perPage: 10 } });
+      expect(result.datasets.map(d => d.name)).toEqual(['alpha', 'bravo']);
+    });
+
+    it('lists datasets by name ascending when requested', async () => {
+      await storage.createDataset({ name: 'bravo' });
+      await storage.createDataset({ name: 'alpha' });
+      await storage.createDataset({ name: 'charlie' });
+
+      const result = await storage.listDatasets({
+        pagination: { page: 0, perPage: 10 },
+        orderBy: { field: 'name', direction: 'ASC' },
+      });
+      expect(result.datasets.map(d => d.name)).toEqual(['alpha', 'bravo', 'charlie']);
+    });
+
+    it('lists datasets by createdAt ascending when requested', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      await storage.createDataset({ name: 'first' });
+      vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
+      await storage.createDataset({ name: 'second' });
+      vi.useRealTimers();
+
+      const result = await storage.listDatasets({
+        pagination: { page: 0, perPage: 10 },
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(result.datasets.map(d => d.name)).toEqual(['first', 'second']);
+    });
+
+    it('lists items oldest first when requested', async () => {
+      const dataset = await storage.createDataset({ name: 'ds' });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      await storage.addItem({ datasetId: dataset.id, input: 'first' });
+      vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
+      await storage.addItem({ datasetId: dataset.id, input: 'second' });
+      vi.useRealTimers();
+
+      const newest = await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
+      expect(newest.items.map(i => i.input)).toEqual(['second', 'first']);
+
+      const oldest = await storage.listItems({
+        datasetId: dataset.id,
+        pagination: { page: 0, perPage: 10 },
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(oldest.items.map(i => i.input)).toEqual(['first', 'second']);
     });
   });
 });

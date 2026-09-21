@@ -12,6 +12,7 @@ import {
   calculatePagination,
   hasErrorCode,
   normalizePerPage,
+  resolveListOrderBy,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -516,6 +517,10 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'status'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       const conditions: string[] = [];
@@ -589,7 +594,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       const rows = await this.operations.loadMany<ExperimentRow>({
         tableName: TABLE_EXPERIMENTS,
         whereClause,
-        orderBy: `${quoteIdentifier('createdAt', 'column name')} DESC`,
+        orderBy: `${quoteIdentifier(orderBy.field, 'column name')} ${orderBy.direction}, \`id\` ASC`,
         offset,
         limit: limitValue,
       });
@@ -996,6 +1001,10 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['startedAt', 'createdAt'], {
+        field: 'startedAt',
+        direction: 'ASC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       const conditions: string[] = [`${quoteIdentifier('experimentId', 'column name')} = ?`];
@@ -1045,7 +1054,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       const rows = await this.operations.loadMany<ExperimentResultRow>({
         tableName: TABLE_EXPERIMENT_RESULTS,
         whereClause,
-        orderBy: `${quoteIdentifier('startedAt', 'column name')} ASC`,
+        orderBy: `${quoteIdentifier(orderBy.field, 'column name')} ${orderBy.direction}, \`id\` ASC`,
         offset,
         limit: limitValue,
       });
