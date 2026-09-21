@@ -515,6 +515,64 @@ describe('MastraFactory.prepare', () => {
     expect(config.disableSettingsOmSeed).toBe(true);
   });
 
+  it('heals a cold pull request review binding before the SDK reads repository instructions', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    (config.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+    const workItems = assembleFactoryApiRoutesSpy.mock.calls[0]![0].domains.workItems;
+    await workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'octo/repo#17' },
+          title: 'Pull request 17',
+          stages: ['intake'],
+          sessions: {},
+          metadata: { authorTrusted: true, baseBranch: 'main' },
+        },
+      },
+      role: 'review',
+      session: { sessionId: 'session-1', branch: 'review/pr-17', threadId: 'session-1' },
+      resourceId: 'session-1',
+      kickoffKey: 'github-review-17',
+      kickoffMessage: null,
+    });
+    const state: Record<string, unknown> = {};
+    let persistState = true;
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('controller', {
+      resourceId: 'session-1',
+      threadId: 'session-1',
+      getState: () => state,
+      setState: async (updates: Record<string, unknown>) => {
+        if (persistState) Object.assign(state, updates);
+      },
+    });
+
+    await (config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>)({
+      requestContext: context,
+    });
+
+    expect(state).toMatchObject({
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      factoryOrgId: 'org-1',
+      untrustedCheckout: true,
+      baseRef: 'main',
+    });
+
+    // A failed state write must stop prompt creation instead of letting the
+    // SDK read attacker-controlled instructions from the pull request checkout.
+    for (const key of Object.keys(state)) delete state[key];
+    persistState = false;
+    await expect(
+      (config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>)({
+        requestContext: context,
+      }),
+    ).rejects.toThrow('security state could not be restored before prompt creation');
+  });
+
   it('installs a Web Factory session workspace resolver', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));

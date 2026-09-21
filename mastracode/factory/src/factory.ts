@@ -69,6 +69,7 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
+import { resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
@@ -878,11 +879,34 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
-        hostInstructions: ({ requestContext }) => {
+        hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
             | undefined;
-          return parseSupervisorResourceId(context?.resourceId) ? SUPERVISOR_INSTRUCTIONS : undefined;
+          if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
+          // The SDK resolves this callback before it loads repository
+          // AGENTS.md/CLAUDE.md. A controller recreated after restart has
+          // only initialState; heal the bound review's untrusted checkout flag
+          // now, not later when the agent's tools are assembled.
+          if (context?.threadId && context.resourceId && !context.getState().factoryProjectId) {
+            const recovered = await resolveFactorySessionAddress({
+              requestContext,
+              storage: workItemsStorage,
+              ...(storage.isDomainReady('source-control')
+                ? { sessions: sourceControlStorage.forIntegration('github').sessions }
+                : {}),
+            });
+            if (recovered?.binding) {
+              const state = context.getState();
+              if (
+                state.factoryProjectId !== recovered.binding.factoryProjectId ||
+                (recovered.binding.role === 'review' && state.untrustedCheckout !== true)
+              ) {
+                throw new Error('Factory review session security state could not be restored before prompt creation.');
+              }
+            }
+          }
+          return undefined;
         },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller
