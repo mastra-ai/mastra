@@ -38,7 +38,12 @@ import { planDatasetItemBatch as createDatasetItemBatchPlan, validateDatasetItem
 import type { DatasetItemBatchPlan } from './identity';
 import { validateDatasetItemPayloadSerialization } from './serialization';
 import type { DatasetSnapshotImportPlan, DatasetSnapshotImportResult } from './snapshot';
-import { datasetSnapshotStorageError, planDatasetSnapshotImport, validateDatasetSnapshotSchemas } from './snapshot';
+import {
+  assertSafeDatasetSnapshotSchemas,
+  datasetSnapshotStorageError,
+  planDatasetSnapshotImport,
+  validateDatasetSnapshotSchemas,
+} from './snapshot';
 
 const DATASET_IMMUTABLE_FIELDS = ['organizationId', 'projectId', 'candidateKey', 'candidateId'] as const;
 
@@ -165,6 +170,7 @@ export abstract class DatasetsStorage extends StorageDomain {
         error,
       );
     }
+    assertSafeDatasetSnapshotSchemas(prepared.content);
     validateDatasetSnapshotSchemas(prepared.content);
     await this.validateSnapshotImportCapability(prepared);
     return prepared;

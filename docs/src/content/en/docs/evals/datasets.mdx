@@ -191,6 +191,8 @@ Portable identities are stored separately from authored metadata and remain stab
 
 Register referenced agents, workflows, and scorers in the destination before importing. If their identifiers differ, pass explicit `targetMappings` and `scorerMappings` arrays containing `{ from, to }` entries to both preflight and import. Scorer mappings apply to both dataset configuration and item overrides without changing the source artifact, but matching references doesn't establish equivalent behavior in the destination code.
 
+Artifacts arrive from outside the destination, so preflight also vets regular expressions in the captured `inputSchema`, `groundTruthSchema`, and `requestContextSchema` before compiling them. A schema `pattern` or `patternProperties` key is rejected with `DATASET_SNAPSHOT_UNSAFE_SCHEMA` when it uses a backreference, exceeds 512 characters, or can backtrack catastrophically, such as repetition nested inside repetition without a separating literal (`(\w+\s?)+`) or a repeated alternation whose branches overlap (`(a|ab)*`). Fenced shapes like `^(\d{1,3}\.){3}\d{1,3}$` and `^\w+(,\w+)*$` pass. Simplify the source schema and export again to import such a dataset.
+
 Import repeats the reference checks before creating a dataset, though recovering an already completed request doesn't require those references to remain registered. Use `destination: { name, organizationId, projectId }` to override the destination name or tenancy. Source ownership and candidate bindings aren't copied. In server code, derive tenancy from the authenticated caller and apply authorization before calling these APIs.
 
 ### Retry an import

@@ -276,6 +276,22 @@ export function createDatasetSnapshotTransferTests(
     expect((await store.listDatasets({ pagination: { page: 0, perPage: false } })).datasets).toEqual([]);
   });
 
+  it('rejects artifact schemas with catastrophic regular expressions before compiling them', async () => {
+    const store = getStorage();
+    const { digest: _digest, ...content } = fixture();
+    content.configuration.inputSchema = { type: 'string', pattern: '^(\\w+\\s?)+$' };
+    for (const item of content.items) item.payload.input = `${'a'.repeat(40)}!`;
+    const artifact = JSON.stringify(createDatasetSnapshot(content));
+    const startedAt = performance.now();
+    await expect(store.importSnapshot({ snapshot: artifact, idempotencyKey: 'redos' })).rejects.toMatchObject({
+      id: 'DATASET_SNAPSHOT_UNSAFE_SCHEMA',
+      message: expect.stringContaining('/pattern'),
+    });
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+    expect(await store.getSnapshotImport({ idempotencyKey: 'redos' })).toBeNull();
+    expect((await store.listDatasets({ pagination: { page: 0, perPage: false } })).datasets).toEqual([]);
+  });
+
   it('exports a null artifact description as absent and keeps items in a stable order', async () => {
     const store = getStorage();
     const { digest: _digest, ...content } = fixture();
