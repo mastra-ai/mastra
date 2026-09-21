@@ -121,7 +121,10 @@ export class NotificationComponent extends WidthAwareContainer {
     this.clear();
 
     const options = this.options;
-    const quiet = this.quietDisplayMode === 'quiet';
+    // Expanding (ctrl+e) is a request to see everything, so it overrides quiet
+    // trimming. Collapsed background completions are already a single line —
+    // that is their quiet form — and their detail rows only exist once expanded.
+    const quiet = this.quietDisplayMode === 'quiet' && !this.expanded;
     if (options.backgroundCompletion && !this.expanded) {
       const completion = options.backgroundCompletion;
       const failed = options.status === 'failed';

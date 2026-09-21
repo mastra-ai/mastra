@@ -543,6 +543,50 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children.at(-1)).toBe(completionComponents[0]);
   });
 
+  it('keeps background completions to one line in quiet mode and expands them in full', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 1;
+    const longMessage = Array.from({ length: 4 }, (_, i) => `result line ${i + 1}`).join('\n');
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: 'completion-quiet',
+        type: 'notification',
+        tagName: 'notification',
+        contents: longMessage,
+        attributes: { source: 'background-work', kind: 'background-task-completed', priority: 'low', status: 'failed' },
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:task-q:failed',
+            taskId: 'task-q',
+            originRunId: 'run-q',
+            originToolCallId: 'call-q',
+            toolName: 'mastra_expert',
+            status: 'failed',
+            argsSummary: 'question: why',
+            errorSummary: 'boom',
+          },
+        },
+      }).toDBMessage(),
+    );
+
+    const component = state.messageComponentsById.get('completion-quiet') as NotificationComponent;
+    const collapsed = component.render(100).map(line => stripAnsi(line));
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0]).toContain('mastra_expert failed in background');
+
+    // Expanding is a request to see everything: the full message and the detail rows, untrimmed.
+    component.setExpanded(true);
+    const expanded = stripAnsi(component.render(100).join('\n'));
+    expect(expanded).toContain('low · background-task-completed · failed');
+    expect(expanded).toContain('result line 4');
+    expect(expanded).toContain('invocation · question: why');
+    expect(expanded).toContain('failure · boom');
+    expect(expanded).not.toContain('…');
+  });
+
   it.each(['work-deferred', 'work-awaited'] as const)(
     'preserves the background placeholder detail for %s without rendering a notification',
     tagName => {

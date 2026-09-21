@@ -994,17 +994,14 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(1);
   });
 
-  it('keeps the quiet shell box and full command but hides all output', () => {
+  it('shows the quiet shell command plus the last N output lines at the preview limit', () => {
     const command = 'pnpm --filter ./mastracode/tui exec vitest run src/tui --reporter=dot --bail 1 && echo done';
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
-    component.appendStreamingOutput('streaming line\n');
-    expect(stripAnsi(component.render(60).join('\n'))).not.toContain('streaming line');
-
     component.updateResult(
       {
         content: [{ type: 'text', text: Array.from({ length: 16 }, (_, i) => `line ${i + 1}`).join('\n') }],
@@ -1018,12 +1015,73 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(rendered.join('\n')).toContain(theme.fg('success', ' ✓'));
     expect(visible).toContain('╭');
     expect(visible).toContain('╰');
-    expect(visible).not.toContain('├');
-    expect(visible).not.toMatch(/line \d/);
+    expect(visible).toContain('⋯ (+14 lines)');
+    expect(visible).toContain('line 15');
+    expect(visible).toContain('line 16');
+    expect(visible).not.toMatch(/line 1\b/);
+    expect(visible).not.toContain('line 14');
     // The command wraps rather than truncates so the whole thing is still readable.
     expect(visible).toContain('--reporter=dot');
     expect(visible).toContain('echo done');
-    expect(visible).not.toContain('…');
+  });
+
+  it('streams the last N quiet shell output lines while the command is running', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'pnpm test' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.appendStreamingOutput(['stream 1', 'stream 2', 'stream 3'].join('\n'));
+
+    const streaming = stripAnsi(component.render(60).join('\n'));
+    expect(streaming).not.toContain('stream 1');
+    expect(streaming).toContain('stream 2');
+    expect(streaming).toContain('stream 3');
+    expect(streaming).toContain('⋯ (+1 line)');
+  });
+
+  it('hides quiet shell output entirely when the preview limit is None', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'seq 1 5' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: '1\n2\n3\n4\n5' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(60).join('\n'));
+    expect(visible).toContain('$ seq 1 5');
+    expect(visible).not.toMatch(/^\s*│ [1-5]/m);
+    expect(visible).not.toContain('⋯ (+');
+    // top, command line, bottom
+    expect(visible.split('\n')).toHaveLength(3);
+  });
+
+  it('expanding a quiet shell tool reveals the full command and output', () => {
+    const command = ["python3 - <<'EOF'", "p = 'file.ts'", 's = open(p).read()', 'EOF'].join('\n');
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 1 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'out 1\nout 2\nout 3' }], isError: false }, false);
+
+    const collapsed = stripAnsi(component.render(80).join('\n'));
+    expect(collapsed).not.toContain('open(p)');
+    expect(collapsed).not.toContain('out 1');
+    expect(collapsed).toContain('out 3');
+
+    component.setExpanded(true);
+    const expanded = stripAnsi(component.render(80).join('\n'));
+    expect(expanded).toContain('open(p)');
+    expect(expanded).toContain('out 1');
+    expect(expanded).toContain('out 3');
+    expect(expanded).not.toContain('⋯ (+');
+
+    component.setExpanded(false);
+    expect(stripAnsi(component.render(80).join('\n'))).not.toContain('out 1');
   });
 
   it('caps long quiet shell commands at the preview limit with a hidden-line count', () => {
@@ -1043,9 +1101,9 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(visible).toContain("p = 'file.ts'");
     expect(visible).not.toContain('open(p)');
     expect(visible).toContain('⋯ (+3 lines)');
-    expect(visible).not.toContain('ok');
-    // top, 2 command lines, marker (with status suffix), bottom
-    expect(visible.split('\n')).toHaveLength(5);
+    expect(visible).toContain('ok');
+    // top, output line, divider, 2 command lines, marker (with status suffix), bottom
+    expect(visible.split('\n')).toHaveLength(7);
 
     component.setQuietModeDisplay('normal');
     const full = stripAnsi(component.render(80).join('\n'));
@@ -1053,18 +1111,24 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(full).not.toContain('⋯ (+');
   });
 
-  it('still hides quiet shell output when the command fails', () => {
+  it('keeps the error tail visible when a quiet shell command fails', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
-      { command: 'exit 1' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { command: 'ls /definitely-not-a-real-path' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
-    component.updateResult({ content: [{ type: 'text', text: 'boom' }], isError: true }, false);
+    component.updateResult(
+      {
+        content: [{ type: 'text', text: 'ls: /definitely-not-a-real-path: No such file or directory' }],
+        isError: true,
+      },
+      false,
+    );
 
-    const output = component.render(60).join('\n');
+    const output = component.render(80).join('\n');
     expect(output).toContain(theme.fg('error', ' ✗'));
-    expect(stripAnsi(output)).not.toContain('boom');
+    expect(stripAnsi(output)).toContain('No such file or directory');
   });
 
   it('keeps quiet shell box borders aligned for long git output', () => {

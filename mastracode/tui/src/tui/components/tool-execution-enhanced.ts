@@ -388,21 +388,32 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
-  /** Quiet mode keeps the shell box and command but drops the output entirely. */
+  /**
+   * Quiet shell output follows the same rule as every other tool's preview:
+   * `quietPreviewLineLimit` output lines (the tail, since that is where errors
+   * land), or none at all when the limit is 0. Expanding (ctrl+e) shows everything.
+   */
   private limitQuietShellLines(lines: string[]): string[] {
-    return this.quietDisplayMode === 'quiet' ? [] : lines;
+    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
+    const limit = this.quietPreviewLineLimit;
+    if (lines.length <= limit) return lines;
+    if (limit <= 0) return [];
+    return [this.quietHiddenLinesMarker(lines.length - limit), ...lines.slice(-limit)];
   }
 
   /**
-   * Quiet mode also caps the command itself (heredocs and inline scripts can run
-   * to dozens of lines) at the quiet preview limit, ending with a hidden-line count.
+   * The command is the shell tool's header, so at least one line always shows;
+   * the rest of a long command (heredocs, inline scripts) is capped like output.
    */
   private limitQuietShellCommandLines(lines: string[]): string[] {
-    if (this.quietDisplayMode !== 'quiet') return lines;
+    if (this.quietDisplayMode !== 'quiet' || this.expanded) return lines;
     const limit = Math.max(1, this.quietPreviewLineLimit);
     if (lines.length <= limit) return lines;
-    const hidden = lines.length - limit;
-    return [...lines.slice(0, limit), theme.fg('muted', `⋯ (+${hidden} ${hidden === 1 ? 'line' : 'lines'})`)];
+    return [...lines.slice(0, limit), this.quietHiddenLinesMarker(lines.length - limit)];
+  }
+
+  private quietHiddenLinesMarker(hidden: number): string {
+    return theme.fg('muted', `⋯ (+${hidden} ${hidden === 1 ? 'line' : 'lines'})`);
   }
 
   /**

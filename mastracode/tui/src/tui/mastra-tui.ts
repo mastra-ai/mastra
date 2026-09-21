@@ -1684,7 +1684,7 @@ export class MastraTUI {
     const previewLineAnswer = await askModalQuestion(this.state.ui, {
       question: 'How many quiet-mode tool preview lines should be shown?\n\nYou can change this later in /settings.',
       options: [
-        { label: 'None', description: 'Hide compact tool detail previews' },
+        { label: 'None', description: 'Hide tool previews and shell output' },
         { label: '1 line', description: 'Show the latest preview line' },
         { label: '2 lines', description: 'Default' },
         { label: '4 lines', description: 'Show more streaming detail' },

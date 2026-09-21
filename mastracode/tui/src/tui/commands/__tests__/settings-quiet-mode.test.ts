@@ -55,8 +55,6 @@ function createCtx() {
     message: '2 pending notifications',
     pending: 2,
     bySource: { github: 2 },
-    byPriority: { high: 2 },
-    notificationIds: ['a', 'b'],
   });
   const ctx = {
     state: {
