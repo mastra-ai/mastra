@@ -15,6 +15,7 @@ import {
   SpanPayloadMarkdown,
   SpanPayloadToolCalls,
 } from './span-payload-primitives';
+import { SpanPayloadProcessor } from './span-payload-processor';
 import { asCoreSpan, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
 import { Reasoning } from '@/domains/chat/messages/reasoning';
@@ -164,6 +165,7 @@ const SPAN_OUTPUT_RENDERERS = {
   'agent-run-result': SpanAgentRunResultRenderer,
   'model-generation-result': SpanModelGenerationResultRenderer,
   'model-step-result': SpanModelStepResultRenderer,
+  processor: SpanPayloadProcessor,
   text: SpanTextRenderer,
   json: SpanPayloadJson,
 } satisfies PayloadRegistry<SpanOutputDescription>;

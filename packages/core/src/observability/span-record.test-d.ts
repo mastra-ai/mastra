@@ -11,6 +11,9 @@ import type {
   ModelStepInput,
   ModelStepOutput,
   ModelStepResult,
+  ProcessorRunInput,
+  ProcessorRunOutput,
+  ProcessorSpanPayloadPhase,
   SpanErrorInfo,
   UsageStats,
 } from './types';
@@ -77,5 +80,38 @@ describe('describeSpan* types', () => {
     if (output?.type === 'agent-run-result') expectTypeOf(output.value).toEqualTypeOf<AgentRunResult>();
     if (output?.type === 'model-generation-result') expectTypeOf(output.value).toEqualTypeOf<ModelGenerationResult>();
     if (output?.type === 'model-step-result') expectTypeOf(output.value).toEqualTypeOf<ModelStepResult>();
+  });
+});
+
+describe('processor span payload types', () => {
+  it('narrows a processor payload on the phase the span recorded', () => {
+    const input = describeSpanInput({} as SpanRecord);
+    const output = describeSpanOutput({} as SpanRecord);
+
+    if (input?.type === 'processor') {
+      expectTypeOf(input.value.phase).toEqualTypeOf<ProcessorSpanPayloadPhase>();
+      expectTypeOf(input.value.phaseLabel).toEqualTypeOf<string>();
+      expectTypeOf(input.value.data).toEqualTypeOf<ProcessorRunInput>();
+    }
+
+    if (output?.type === 'processor') {
+      expectTypeOf(output.value.data).toEqualTypeOf<ProcessorRunOutput>();
+    }
+  });
+
+  it('types a processor span record through the payload maps', () => {
+    const span = {} as SpanRecord;
+
+    if (isSpanRecordOfType(span, SpanType.PROCESSOR_RUN)) {
+      expectTypeOf(span.input).toEqualTypeOf<ProcessorRunInput | null | undefined>();
+      expectTypeOf(span.output).toEqualTypeOf<ProcessorRunOutput | null | undefined>();
+      expectTypeOf(span.attributes?.processorPhase).toEqualTypeOf<ProcessorSpanPayloadPhase | undefined>();
+    }
+  });
+
+  it('keeps the two output hooks apart in the phase union', () => {
+    expectTypeOf<ProcessorSpanPayloadPhase>().toExtend<'outputStream' | 'outputResult' | ProcessorSpanPayloadPhase>();
+    // The declaration phase collapses them; the recorded phase must not.
+    expectTypeOf<'output'>().not.toExtend<ProcessorSpanPayloadPhase>();
   });
 });

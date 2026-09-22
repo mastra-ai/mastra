@@ -1,9 +1,15 @@
-import { describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
+import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
-import { SpanErrorRenderer, SpanInputRenderer, SpanOutputRenderer, SpanPayloadSection } from './span-payload';
+import {
+  SpanErrorRenderer,
+  SpanInputRenderer,
+  SpanOutputRenderer,
+  SpanPayloadSection,
+  SpanProcessorAttributes,
+} from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
@@ -121,6 +127,7 @@ function SpanDataPanelContent({
   isAnchor?: boolean;
 }) {
   const usage = span.attributes?.usage as TokenUsage | undefined;
+  const hasProcessorAttributes = describeProcessorPipeline(asCoreSpan(span)) !== undefined;
   const hasContext =
     (isAnchor ?? span.parentSpanId == null) &&
     Boolean(
@@ -232,8 +239,13 @@ function SpanDataPanelContent({
         <SpanPayloadSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} hasPreview={false}>
           {null}
         </SpanPayloadSection>
-        <SpanPayloadSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} hasPreview={false}>
-          {null}
+        <SpanPayloadSection
+          title="Attributes"
+          icon={<BracesIcon />}
+          raw={span.attributes}
+          hasPreview={hasProcessorAttributes}
+        >
+          {hasProcessorAttributes ? <SpanProcessorAttributes span={span} /> : null}
         </SpanPayloadSection>
       </div>
     </>

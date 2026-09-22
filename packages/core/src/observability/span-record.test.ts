@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { SpanRecord } from '../storage/domains/observability/tracing';
-import { describeSpanError, describeSpanInput, describeSpanOutput, isSpanRecordOfType } from './span-record';
+import {
+  describeProcessorPhase,
+  describeProcessorPipeline,
+  describeSpanError,
+  describeSpanInput,
+  describeSpanOutput,
+  isSpanRecordOfType,
+} from './span-record';
 import { SpanType } from './types';
 
 describe('isSpanRecordOfType', () => {
@@ -217,5 +224,107 @@ describe('describeSpanError', () => {
     expect(describeSpanError(span(SpanType.TOOL_CALL, { error: null }))).toBeUndefined();
     expect(describeSpanError(span(SpanType.TOOL_CALL, { error: { name: 'x' } }))).toBeUndefined();
     expect(describeSpanError(span(SpanType.TOOL_CALL, { error: 'boom' }))).toBeUndefined();
+  });
+});
+
+describe('processor span descriptions', () => {
+  const processorSpan = (
+    attributes: Record<string, unknown>,
+    fields: Partial<SpanRecord> = {},
+    spanType: SpanType = SpanType.PROCESSOR_RUN,
+  ): SpanRecord => span(spanType, { attributes, ...fields } as Partial<SpanRecord>);
+
+  it('describes a payload by the phase the span recorded', () => {
+    const description = describeSpanInput(
+      processorSpan({ processorPhase: 'toolResult' }, { input: { toolName: 'search', toolCallId: 'call_1' } }),
+    );
+
+    expect(description).toEqual({
+      type: 'processor',
+      value: {
+        phase: 'toolResult',
+        phaseLabel: 'Tool result',
+        data: { toolName: 'search', toolCallId: 'call_1' },
+      },
+    });
+  });
+
+  it('separates the two output hooks, which share one declaration phase', () => {
+    const stream = describeSpanOutput(
+      processorSpan({ processorPhase: 'outputStream' }, { output: { totalChunks: 12, accumulatedText: 'hi' } }),
+    );
+    const result = describeSpanOutput(processorSpan({ processorPhase: 'outputResult' }, { output: { messages: [] } }));
+
+    expect(stream?.type === 'processor' && stream.value.phase).toBe('outputStream');
+    expect(result?.type === 'processor' && result.value.phase).toBe('outputResult');
+  });
+
+  it('describes a processor that retyped its span', () => {
+    const description = describeSpanInput(
+      processorSpan(
+        { processorPhase: 'input', operation: 'inject' },
+        { input: { messages: [] } },
+        SpanType.SKILL_ACTION,
+      ),
+    );
+
+    expect(description?.type).toBe('processor');
+  });
+
+  it('falls back to JSON for a span stored before the phase was recorded', () => {
+    const description = describeSpanInput(processorSpan({ processorIndex: 0 }, { input: { messages: [] } }));
+
+    expect(description?.type).toBe('json');
+  });
+
+  it('ignores a phase it does not know', () => {
+    expect(describeProcessorPhase(processorSpan({ processorPhase: 'someFuturePhase' }))).toBeUndefined();
+  });
+
+  it('splits runner-owned attributes from everything else', () => {
+    const description = describeProcessorPipeline(
+      processorSpan({
+        processorPhase: 'output',
+        processorExecutor: 'workflow',
+        processorIndex: 2,
+        hookDurationMs: 18.5,
+        tripwireAbort: { reason: 'blocked', retry: false },
+        operation: 'inject',
+      }),
+    );
+
+    expect(description).toBeUndefined();
+  });
+
+  it('keeps unknown attributes apart from the ones it explains', () => {
+    const description = describeProcessorPipeline(
+      processorSpan({
+        processorPhase: 'outputResult',
+        processorExecutor: 'workflow',
+        processorIndex: 2,
+        hookDurationMs: 18.5,
+        messageListMutations: [{ type: 'addSystem', tag: 'memory' }],
+        tripwireAbort: { reason: 'blocked', retry: false },
+        operation: 'inject',
+      }),
+    );
+
+    expect(description).toMatchObject({
+      phase: 'outputResult',
+      phaseLabel: 'Output result',
+      executor: 'workflow',
+      processorIndex: 2,
+      hookDurationMs: 18.5,
+      tripwireAbort: { reason: 'blocked' },
+      rest: { operation: 'inject' },
+    });
+    expect(description?.rest).not.toHaveProperty('processorPhase');
+    expect(description?.rest).not.toHaveProperty('messageListMutations');
+  });
+
+  it('omits rest when every attribute is accounted for', () => {
+    const description = describeProcessorPipeline(processorSpan({ processorPhase: 'input', processorIndex: 0 }));
+
+    expect(description?.rest).toBeUndefined();
   });
 });

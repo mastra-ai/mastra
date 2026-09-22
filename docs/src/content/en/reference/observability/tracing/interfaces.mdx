@@ -102,6 +102,7 @@ interface SpanInputMap {
   MODEL_GENERATION: ModelGenerationInput
   MODEL_STEP: ModelStepInput
   MODEL_INFERENCE: ModelStepInput
+  PROCESSOR_RUN: ProcessorRunInput
 }
 
 interface SpanOutputMap {
@@ -109,6 +110,7 @@ interface SpanOutputMap {
   MODEL_GENERATION: ModelGenerationOutput
   MODEL_STEP: ModelStepOutput
   MODEL_INFERENCE: ModelStepResult
+  PROCESSOR_RUN: ProcessorRunOutput
 }
 
 /** The mapped shape when the map lists the type, otherwise `any` */
@@ -141,10 +143,10 @@ import {
 } from '@mastra/core/observability'
 
 const input = describeSpanInput(span)
-// { type: 'text' | 'messages' | 'agent-run-resume' | 'json'; value } | undefined
+// { type: 'text' | 'messages' | 'agent-run-resume' | 'processor' | 'json'; value } | undefined
 
 const output = describeSpanOutput(span)
-// { type: 'interrupted' | 'agent-run-result' | 'model-generation-result' | 'model-step-result' | 'text' | 'json'; value } | undefined
+// { type: 'interrupted' | 'agent-run-result' | 'model-generation-result' | 'model-step-result' | 'processor' | 'text' | 'json'; value } | undefined
 
 switch (output?.type) {
   case 'interrupted':
@@ -155,6 +157,44 @@ switch (output?.type) {
 
 describeSpanError(span) // SpanErrorInfo | undefined
 ```
+
+### Processor spans
+
+A processor span records which pipeline phase produced it, so a reader narrows its
+payloads on that phase instead of on the payload's shape. The recorded phase is finer
+than the one a processor declares: `outputStream` and `outputResult` are separate
+here, because they record different payloads.
+
+```typescript
+import { describeProcessorPipeline, describeSpanInput } from '@mastra/core/observability'
+
+const input = describeSpanInput(span)
+
+if (input?.type === 'processor') {
+  input.value.phase // 'input' | 'inputStep' | 'llmRequest' | 'llmResponse'
+  // | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'requestError'
+  input.value.phaseLabel // 'Tool result'
+  input.value.data // typed for that phase
+}
+```
+
+`describeProcessorPipeline` reads the attributes Mastra owns and keeps everything else
+apart, so a reader can show the known fields without repeating them beside a raw JSON
+view:
+
+```typescript
+const pipeline = describeProcessorPipeline(span)
+
+pipeline?.executor // 'workflow' | 'legacy'
+pipeline?.processorIndex // position in the chain
+pipeline?.hookDurationMs // time spent inside the processor hook
+pipeline?.messageListMutations // 'add' | 'addSystem' | 'removeByIds' | 'clear'
+pipeline?.tripwireAbort?.reason // why the processor blocked the run
+pipeline?.rest // attributes this description does not explain
+```
+
+Both return `undefined` for a span recorded before the phase was tracked, so older
+traces keep their previous untyped shape.
 
 ### Span
 
