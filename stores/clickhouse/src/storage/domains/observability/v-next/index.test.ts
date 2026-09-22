@@ -875,9 +875,11 @@ LIMIT 1`,
       );
       expect(first.scores.map(s => s.scoreId)).toEqual(['delta-score-retry']);
 
-      // The consumer has already seen the score; a retry and a rewrite land afterwards.
+      // The consumer has already seen the score; a retry and a rewrite land
+      // afterwards. The rewrite moves the score to another trace, so the
+      // delta row's original traceId no longer matches the current row.
       await storage.createScore({ score });
-      await storage.createScore({ score: { ...score, score: 0.9 } });
+      await storage.createScore({ score: { ...score, traceId: 'delta-score-retry-trace-2', score: 0.9 } });
 
       const client = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -900,7 +902,68 @@ LIMIT 1`,
       expect(second.deltaCursor).toBe(first.deltaCursor);
 
       const replay = await storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters });
-      expect(replay.scores.map(s => s.scoreId)).toEqual(['delta-score-retry']);
+      expect(replay.scores.map(s => [s.scoreId, s.traceId, s.score])).toEqual([
+        ['delta-score-retry', 'delta-score-retry-trace-2', 0.9],
+      ]);
+      const page = await storage.listScores({ filters });
+      expect(page.scores.map(s => [s.scoreId, s.traceId, s.score])).toEqual([
+        ['delta-score-retry', 'delta-score-retry-trace-2', 0.9],
+      ]);
+    });
+
+    it('collapses duplicate delta rows for one score within a poll', async () => {
+      const filters = { scorerId: 'delta-dup-scorer' } as any;
+      const score = {
+        scoreId: 'delta-score-dup-rows',
+        timestamp: new Date('2026-05-05T00:00:04Z'),
+        traceId: 'delta-score-dup-trace',
+        spanId: null,
+        scorerId: 'delta-dup-scorer',
+        score: 0.4,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      };
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      try {
+        const bootstrap = await storage.listScores({ mode: 'delta', filters });
+        await storage.createScore({ score });
+        await waitForValue(
+          () => storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters }),
+          result => result.scores.length > 0,
+        );
+
+        // Model the delta rows a concurrent-insert race can leave behind by
+        // writing two extra rows for the same score straight into the delta table.
+        await client.command({
+          query: `INSERT INTO ${TABLE_SCORE_EVENTS_DELTA} (cursorId, ingestedAt, traceId, timestamp, scoreId)
+                  SELECT (SELECT max(cursorId) FROM ${TABLE_SCORE_EVENTS_DELTA}) + n, now64(9, 'UTC'), {traceId:String}, parseDateTime64BestEffort({timestamp:String}, 3, 'UTC'), {scoreId:String}
+                  FROM (SELECT arrayJoin([1, 2]) AS n)`,
+          query_params: { traceId: score.traceId, timestamp: score.timestamp.toISOString(), scoreId: score.scoreId },
+        });
+        const deltaRows = await client.query({
+          query: `SELECT count() AS count FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+          format: 'JSONEachRow',
+        });
+        expect((await deltaRows.json<{ count: string | number }>()).map(row => Number(row.count))).toEqual([3]);
+
+        const poll = await storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters });
+        expect(poll.scores.map(s => s.scoreId)).toEqual(['delta-score-dup-rows']);
+        expect(poll.delta?.hasMore).toBe(false);
+      } finally {
+        // Remove the hand-written rows so their cursorIds don't outrun the stream head for later tests.
+        await client.command({
+          query: `DELETE FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE scoreId = {scoreId:String}`,
+          query_params: { scoreId: score.scoreId },
+        });
+        await client.close();
+      }
     });
 
     it('supports page deltaCursor and delta polling for feedback', async () => {
@@ -5432,9 +5495,23 @@ LIMIT 1`,
         const mvDdl = buildAllMvDDL(strategy).find(ddl =>
           ddl.includes(`CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}`),
         );
-        expect(mvDdl).toContain(`WHERE scoreId NOT IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA})`);
+        expect(mvDdl).toContain(`SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}`);
+        expect(mvDdl).toContain(`WHERE scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS})`);
         expect(mvDdl).toContain('LIMIT 1 BY scoreId');
       }
+
+      const deltaTableDdl = buildAllTableDDL().find(ddl =>
+        ddl.includes(`CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_DELTA}`),
+      );
+      expect(deltaTableDdl).toContain('INDEX idx_scoreId scoreId TYPE bloom_filter(0.01) GRANULARITY 1');
+      expect(
+        ALL_MIGRATIONS.find(
+          migration =>
+            migration.kind === 'index' &&
+            migration.table === TABLE_SCORE_EVENTS_DELTA &&
+            migration.name === 'idx_scoreId',
+        ),
+      ).toBeDefined();
     });
 
     it('recreates a score delta view that predates per-scoreId deduplication', async () => {
@@ -5465,7 +5542,7 @@ LIMIT 1`,
       try {
         const strategy = (await readMvDdl()).includes('generateSerialID(') ? 'serial' : 'fallback';
         const legacyMvDdl = buildScoreEventsDeltaMvDDL(strategy)
-          .replace(/\n\s*WHERE scoreId NOT IN \(SELECT scoreId FROM \w+\)/, '')
+          .replace(/\n\s*WHERE scoreId NOT IN \([\s\S]*?\n\s*\)/, '')
           .replace(/\n\s*LIMIT 1 BY scoreId/, '');
         expect(legacyMvDdl).not.toContain('NOT IN');
 

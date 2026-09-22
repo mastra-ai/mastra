@@ -743,7 +743,11 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
 
-      await dropStaleScoreDeltaMv(this.#client, this.#replication);
+      // Skip when delta polling is disabled (mixed cursor schemas): BASE_MV_DDL
+      // would not recreate the view and the stream would silently stop.
+      if (this.#deltaCursorStrategy !== null) {
+        await dropStaleScoreDeltaMv(this.#client, this.#replication);
+      }
 
       const coreMvDdl = this.#deltaCursorStrategy === null ? BASE_MV_DDL : buildAllMvDDL(this.#deltaCursorStrategy);
       for (const ddl of coreMvDdl) {

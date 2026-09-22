@@ -343,6 +343,12 @@ export async function listScores(
   };
 }
 
+/**
+ * Delta reads join the delta stream to the current-state table by scoreId, so
+ * a poll or replay always returns the latest write of a score (a rewrite may
+ * change traceId or timestamp, which the delta row does not track). `FINAL`
+ * plus `LIMIT 1 BY` collapse unmerged versions and any duplicate delta rows.
+ */
 type ScoreDeltaRow = Record<string, any> & {
   cursorId?: string;
   traceId: string | null;
@@ -367,10 +373,8 @@ async function queryScoresAfterCursor(
         s.scoreId AS scoreId,
         toString(d.cursorId) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s FINAL
-        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
-       AND s.timestamp = d.timestamp
-       AND s.scoreId = d.scoreId
+      INNER JOIN ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+        ON s.scoreId = d.scoreId
       ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
       ORDER BY d.cursorId ASC
       LIMIT 1 BY s.scoreId
@@ -390,10 +394,8 @@ async function getDeltaCursor(
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_SCORE_EVENTS} s FINAL
-        ON ((s.traceId = d.traceId) OR (s.traceId IS NULL AND d.traceId IS NULL))
-       AND s.timestamp = d.timestamp
-       AND s.scoreId = d.scoreId
+      INNER JOIN ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
+        ON s.scoreId = d.scoreId
       ${whereClause}
     `,
     params,

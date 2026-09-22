@@ -788,7 +788,8 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_DELTA} (
   ingestedAt         ${DELTA_INGESTED_AT_TYPE},
   traceId            Nullable(String),
   timestamp          DateTime64(3, 'UTC'),
-  scoreId            String
+  scoreId            String,
+  INDEX idx_scoreId scoreId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = MergeTree
 PARTITION BY toDate(ingestedAt)
@@ -806,8 +807,11 @@ SETTINGS allow_nullable_key = 1
 // skipped when the scoreId is already in the delta table, and `LIMIT 1 BY`
 // collapses duplicates within a single insert block. This mirrors the DuckDB
 // store, which preserves cursorId on retry so the score is not re-emitted to
-// delta consumers. Concurrent inserts of one scoreId can still race past the
-// NOT IN check; the read side dedupes those with `LIMIT 1 BY scoreId`.
+// delta consumers. The inner `SELECT scoreId FROM mastra_score_events` refers
+// to the inserted block, so the delta lookup only touches the scoreIds being
+// written (served by idx_scoreId) instead of hashing the whole delta table.
+// Concurrent inserts of one scoreId can still race past the NOT IN check; the
+// read side dedupes those with `LIMIT 1 BY scoreId`.
 export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
   return `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
@@ -826,7 +830,10 @@ FROM (
     timestamp,
     scoreId
   FROM ${TABLE_SCORE_EVENTS}
-  WHERE scoreId NOT IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA})
+  WHERE scoreId NOT IN (
+    SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}
+    WHERE scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS})
+  )
   LIMIT 1 BY scoreId
 )
 `;
@@ -1230,6 +1237,7 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SCORE_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   addBloomIndex(TABLE_SCORE_EVENTS, 'idx_scoreId', 'scoreId', 1),
+  addBloomIndex(TABLE_SCORE_EVENTS_DELTA, 'idx_scoreId', 'scoreId', 1),
   // Feedback
   addColumn(TABLE_FEEDBACK_EVENTS, 'writeVersion', 'UInt64 DEFAULT 0'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
