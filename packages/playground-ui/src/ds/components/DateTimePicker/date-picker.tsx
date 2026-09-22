@@ -36,7 +36,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         day_range_start: 'day-range-start rounded-l-md',
         day_range_end: 'day-range-end rounded-r-md',
         day_selected: cn(
-          'bg-neutral6! text-sidebar! hover:bg-neutral6/90! focus:bg-neutral6/90! focus:text-sidebar!',
+          'bg-foreground! text-sidebar! hover:bg-foreground/90! focus:bg-foreground/90! focus:text-sidebar!',
           props.mode !== 'range' && 'rounded-md',
         ),
         day_today: 'bg-fill text-foreground',

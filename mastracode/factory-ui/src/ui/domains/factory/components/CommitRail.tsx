@@ -55,9 +55,11 @@ function CommitRow({ commit, first, last }: { commit: RepositoryCommit; first: b
       >
         <Txt as="span" variant="caption" className="flex min-w-0 flex-1 items-center gap-2 pr-4">
           <Avatar src={commit.avatarUrl ?? undefined} name={author} size="sm" />
-          <span className="text-icon6 min-w-0 truncate font-medium">{commit.message}</span>
+          <span className="text-foreground min-w-0 truncate font-medium">{commit.message}</span>
         </Txt>
-        <span className={`${TIMESTAMP} text-icon3 shrink-0 font-mono`}>{commit.sha.slice(0, SHORT_SHA)}</span>
+        <span className={`${TIMESTAMP} text-muted-foreground shrink-0 font-mono`}>
+          {commit.sha.slice(0, SHORT_SHA)}
+        </span>
         {commit.committedAt ? (
           <time dateTime={commit.committedAt} className={`${TIMESTAMP} w-14 shrink-0 pl-3 text-right`}>
             {relativeTime(commit.committedAt)}
@@ -71,7 +73,7 @@ function CommitRow({ commit, first, last }: { commit: RepositoryCommit; first: b
 function Note({ children }: { children: string }) {
   return (
     <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="caption" className="text-icon3 m-0 text-center">
+      <Txt as="p" variant="caption" className="text-muted-foreground m-0 text-center">
         {children}
       </Txt>
     </div>

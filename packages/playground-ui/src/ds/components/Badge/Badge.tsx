@@ -11,9 +11,9 @@ type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 
 const badgeToneStyles = {
   neutral: {
-    default: 'bg-neutral6/5 text-badge-neutral-fg',
-    muted: 'bg-neutral6/[0.025] text-badge-neutral-fg',
-    indicator: 'bg-neutral3',
+    default: 'bg-fill text-badge-neutral-fg',
+    muted: 'bg-fill-subtle text-badge-neutral-fg',
+    indicator: 'bg-muted-foreground',
   },
   green: {
     default: 'bg-badge-green/20 text-badge-green-fg',

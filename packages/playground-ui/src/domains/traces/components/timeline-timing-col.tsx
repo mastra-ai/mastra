@@ -41,7 +41,7 @@ export function TimelineTimingCol({
         <div className={cn('w-full rounded-md bg-muted p-1.5')}>
           <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
             <div
-              className={cn('absolute top-0 h-1.5 rounded-sm bg-neutral1')}
+              className={cn('absolute top-0 h-1.5 rounded-sm bg-placeholder')}
               style={{
                 width: widthPercent ? `${widthPercent}%` : '2px',
                 left: `${leftPercent}%`,

@@ -56,7 +56,7 @@ function RadioStateGrid({ idPrefix }: { idPrefix: string }) {
         id={`${idPrefix}-focus`}
         label={`${idPrefix} focus preview`}
         checked
-        className="border-neutral5/60 outline-neutral5/55 outline-1 outline-offset-2 outline-solid"
+        className="border-border-focus outline-border-focus outline-1 outline-offset-2 outline-solid"
       />
       <RadioPreview id={`${idPrefix}-disabled`} label={`${idPrefix} disabled`} disabled />
       <RadioPreview id={`${idPrefix}-disabled-selected`} label={`${idPrefix} disabled selected`} checked disabled />

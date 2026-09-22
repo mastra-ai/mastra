@@ -55,7 +55,7 @@ export function ChatEvent({ label, detail, icon, children, defaultOpen, ...props
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="max-w-full min-w-0" role="group" {...props}>
-      <CollapsibleTrigger className="group/event hover:bg-neutral6/5 w-full cursor-pointer rounded-md text-left motion-safe:transition-colors">
+      <CollapsibleTrigger className="group/event hover:bg-fill w-full cursor-pointer rounded-md text-left motion-safe:transition-colors">
         {header}
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">

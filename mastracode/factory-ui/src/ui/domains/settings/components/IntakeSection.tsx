@@ -61,7 +61,7 @@ function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps
 
         {config.github.enabled &&
           (slugs.length === 0 ? (
-            <Txt as="p" variant="caption" className="text-icon3 px-4 py-3">
+            <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
               No linked repositories yet — link a repository to a factory to add one.
             </Txt>
           ) : (
@@ -120,7 +120,7 @@ function GitLabIntakeSection({
         : "Open issues from the selected projects feed every member's board.";
   const accounts = status?.accounts ?? [];
   const action = configured ? (
-    <Txt as="span" variant="caption" className="text-icon3">
+    <Txt as="span" variant="caption" className="text-muted-foreground">
       {accounts.length === 1 ? `Connected to ${accounts[0]}` : `${accounts.length} GitLab accounts connected`}
     </Txt>
   ) : undefined;
@@ -197,7 +197,7 @@ function LinearIntakeSection({
     </Button>
   ) : (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="caption" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-muted-foreground">
         Connected to {status?.workspace?.name ?? 'a Linear workspace'}
       </Txt>
       <Button size="sm" variant="ghost" onClick={() => connectLinear(baseUrl)}>
@@ -299,7 +299,7 @@ function JiraIntakeSection({
   );
   const action = configured ? (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="caption" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-muted-foreground">
         {connectionLabel}
       </Txt>
       {actionButton}
@@ -383,7 +383,7 @@ function IncidentioIntakeSection({
       <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
     ) : (
       <span className="flex items-center gap-2">
-        <Txt as="span" variant="caption" className="text-icon3">
+        <Txt as="span" variant="caption" className="text-muted-foreground">
           {active.length === 1
             ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
             : `${active.length} ${meta.displayName} accounts connected`}
@@ -514,7 +514,7 @@ export function IntakeSection() {
   }
   if (configQuery.isError || !config) {
     return (
-      <Txt as="p" variant="caption" className="text-icon3">
+      <Txt as="p" variant="caption" className="text-muted-foreground">
         Intake configuration is unavailable. Connect GitHub, GitLab, Linear, Jira, or incident.io first.
       </Txt>
     );

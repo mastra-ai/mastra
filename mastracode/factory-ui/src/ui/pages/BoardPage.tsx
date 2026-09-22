@@ -95,7 +95,7 @@ function InstalledBoard({ factory, definition }: { factory: FactoryProject; defi
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
         <EmptyState
           as="h2"
-          iconSlot={<GitBranch className="text-icon3 size-10" />}
+          iconSlot={<GitBranch className="text-muted-foreground size-10" />}
           titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
           descriptionSlot={
             review
@@ -513,8 +513,8 @@ function IntakeSourceSwitch({
           className={cn(
             'rounded-full border px-2.5 py-0.5 text-meta transition',
             active === source.id
-              ? 'border-accent1 bg-fill text-icon6'
-              : 'border-border bg-transparent text-icon3 hover:text-icon5',
+              ? 'border-accent1 bg-fill text-foreground'
+              : 'border-border bg-transparent text-muted-foreground hover:text-foreground',
           )}
         >
           {source.label}

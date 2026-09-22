@@ -48,7 +48,7 @@ export function WorkItemTray({
         leadingLoaded={description === undefined || !description.isPending}
         leading={
           <div className="bg-fill mx-1 my-2 flex flex-col gap-2 rounded-lg p-3">
-            <h3 className="text-label text-icon6 m-0 font-[550] wrap-anywhere">{item.title}</h3>
+            <h3 className="text-label text-foreground m-0 font-[550] wrap-anywhere">{item.title}</h3>
             <CardSourceDescription
               item={item}
               projectRepositoryId={projectRepositoryId}

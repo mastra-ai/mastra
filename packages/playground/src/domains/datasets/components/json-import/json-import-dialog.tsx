@@ -180,7 +180,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
 function JSONImportStatus({ validation }: { validation: JSONImportValidation }) {
   const dotClassName = cn(
     'size-1.5 shrink-0 rounded-full',
-    validation.status === 'idle' && 'bg-neutral3',
+    validation.status === 'idle' && 'bg-muted-foreground',
     validation.status === 'ready' && 'bg-accent1',
     validation.status === 'error' && 'bg-accent2',
   );

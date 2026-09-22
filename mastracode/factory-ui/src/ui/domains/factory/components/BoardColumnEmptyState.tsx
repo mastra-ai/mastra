@@ -102,10 +102,10 @@ export function BoardColumnEmptyState({
       : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
   return (
     <div className="border-border rounded-card flex min-h-24 flex-col justify-center border border-dashed px-4 py-4">
-      <Txt as="p" variant="column" className="text-icon4 m-0">
+      <Txt as="p" variant="column" className="text-muted-foreground m-0">
         {copy.title}
       </Txt>
-      <Txt as="p" variant="meta" className="text-icon3 mt-1 mb-0 max-w-60 leading-5">
+      <Txt as="p" variant="meta" className="text-muted-foreground mt-1 mb-0 max-w-60 leading-5">
         {copy.description}
       </Txt>
     </div>

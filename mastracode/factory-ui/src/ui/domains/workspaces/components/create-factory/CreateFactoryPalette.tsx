@@ -74,7 +74,12 @@ export function CreateFactoryPalette({
       </div>
 
       <div className="flex shrink-0 items-center gap-3 px-1">
-        <Txt key={step} as="h1" variant="body" className={cn('text-icon6 min-w-0 flex-1 truncate', stepTransition)}>
+        <Txt
+          key={step}
+          as="h1"
+          variant="body"
+          className={cn('text-foreground min-w-0 flex-1 truncate', stepTransition)}
+        >
           {title}
         </Txt>
         <ol className="flex shrink-0 gap-1" aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
@@ -130,7 +135,7 @@ export function CreateFactoryPaletteAlert({ children }: { children: ReactNode })
 
 export function CreateFactoryPaletteMessage({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" variant="caption" className="text-icon3 m-0 px-3 py-2">
+    <Txt as="p" variant="caption" className="text-muted-foreground m-0 px-3 py-2">
       {children}
     </Txt>
   );

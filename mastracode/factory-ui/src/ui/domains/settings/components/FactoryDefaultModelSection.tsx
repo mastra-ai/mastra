@@ -39,7 +39,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
     >
       <div className="flex w-full max-w-72 items-center gap-2">
         {setDefaultModel.isPending && (
-          <Spinner size="sm" aria-label="Saving default model" className="text-icon3 shrink-0" />
+          <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
         )}
         <label className="min-w-0 flex-1">
           <span className="sr-only">Factory default model</span>

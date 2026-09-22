@@ -119,7 +119,7 @@ export const SkillBuilderStarter = () => {
 
         <form onSubmit={handleSubmit}>
           <div
-            className="starter-prompt border-border bg-background duration-normal ease-out-custom focus-within:border-neutral3 rounded-2xl border transition-colors"
+            className="starter-prompt border-border bg-background duration-normal ease-out-custom focus-within:border-muted-foreground rounded-2xl border transition-colors"
             style={{ viewTransitionName: 'skill-chat-composer' }}
           >
             <Textarea

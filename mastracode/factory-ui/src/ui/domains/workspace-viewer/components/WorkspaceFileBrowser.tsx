@@ -30,16 +30,16 @@ function getFileIcon(path: string): ReactNode {
       return <FileJson className="text-notice-warning/70" />;
     case 'md':
     case 'mdx':
-      return <FileText className="text-neutral4" />;
+      return <FileText className="text-muted-foreground" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
     case 'gif':
     case 'svg':
     case 'webp':
-      return <Image className="text-neutral4" />;
+      return <Image className="text-muted-foreground" />;
     default:
-      return <File className="text-neutral4" />;
+      return <File className="text-muted-foreground" />;
   }
 }
 
@@ -174,12 +174,12 @@ export function WorkspaceFileBrowser({
         <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
           <ArrowLeft />
         </Button>
-        <NotepadText className="text-icon3" size={14} />
-        <Txt as="h2" variant="column" className="text-icon6">
+        <NotepadText className="text-muted-foreground" size={14} />
+        <Txt as="h2" variant="column" className="text-foreground">
           Files
         </Txt>
         {!isLoading && !error ? (
-          <Txt variant="meta" className="text-icon3 ml-auto">
+          <Txt variant="meta" className="text-muted-foreground ml-auto">
             {persistedFiles.length} {persistedFiles.length === 1 ? 'file' : 'files'}
           </Txt>
         ) : null}
@@ -208,7 +208,7 @@ export function WorkspaceFileBrowser({
       ) : null}
       {!isLoading && !error && nodes.length === 0 ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt className="text-icon3" variant="caption">
+          <Txt className="text-muted-foreground" variant="caption">
             No files
           </Txt>
         </div>

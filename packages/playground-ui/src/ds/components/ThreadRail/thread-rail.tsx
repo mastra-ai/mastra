@@ -249,10 +249,10 @@ const getRailItemTone = ({
   active,
   inView,
 }: Pick<ThreadRailItemProps, 'distance' | 'active' | 'inView'>): string => {
-  if (distance === 0 || active) return 'bg-neutral6';
-  if (inView) return 'bg-neutral5';
-  if (distance === 1) return 'bg-neutral4';
-  return 'bg-neutral3/60';
+  if (distance === 0 || active) return 'bg-foreground';
+  if (inView) return 'bg-foreground/85';
+  if (distance === 1) return 'bg-foreground/70';
+  return 'bg-foreground/40';
 };
 
 function ThreadRailItem({

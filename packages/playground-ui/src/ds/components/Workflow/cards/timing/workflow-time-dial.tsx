@@ -24,7 +24,7 @@ function DialTick({ angle, major, className, ...props }: ComponentProps<'line'> 
       y1={inner.y}
       x2={outer.x}
       y2={outer.y}
-      className={cn(major ? 'stroke-neutral2' : 'stroke-border-strong', className)}
+      className={cn(major ? 'stroke-placeholder' : 'stroke-border-strong', className)}
       {...props}
     />
   );
@@ -38,7 +38,7 @@ function DialHand({ angle, length }: { angle: number; length: number }) {
       y1={DIAL_CENTER}
       x2={tip.x}
       y2={tip.y}
-      className="stroke-neutral4 stroke-[1.5]"
+      className="stroke-muted-foreground stroke-[1.5]"
       strokeLinecap="round"
     />
   );
@@ -78,10 +78,10 @@ export function DurationDial({ amount, unit }: { amount: number; unit: DurationU
         className="stroke-foreground stroke-2"
         strokeLinecap="round"
       />
-      <text x={DIAL_CENTER} y={94} textAnchor="middle" className="fill-neutral3 text-meta font-body">
+      <text x={DIAL_CENTER} y={94} textAnchor="middle" className="fill-muted-foreground text-meta font-body">
         {scale} {unit}
       </text>
-      <text x={DIAL_CENTER} y={106} textAnchor="middle" className="fill-neutral2 text-meta font-body">
+      <text x={DIAL_CENTER} y={106} textAnchor="middle" className="fill-placeholder text-meta font-body">
         scale
       </text>
     </DialFace>
