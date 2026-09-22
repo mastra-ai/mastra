@@ -159,14 +159,15 @@ test ! -e "$WT" || exit 1
 git -C "$ROOT" worktree add "$WT" "$MB"
 cd "$WT"
 
-# Only the test files from the PR
-git diff "$MB"..."$HEAD" --name-only -- '**/*.test.*' '**/*.spec.*' '**/__tests__/**' > .test-files
+# Only the test files the PR added or modified (a deleted path does not exist at $HEAD)
+git diff --diff-filter=AM "$MB"..."$HEAD" --name-only -- '**/*.test.*' '**/*.spec.*' '**/__tests__/**' > .test-files
+test -s .test-files || { echo "no test files changed — nothing to run"; }
 xargs -a .test-files git checkout "$HEAD" --
 
 # Build what the tests need, using the repo's documented shape (AGENTS.md / CONTRIBUTING). Do not improvise build commands.
 # Inspect package.json scripts and lockfiles first; run everything with GH_TOKEN and GITHUB_TOKEN unset (the PR's code runs here).
 # Then run only those files:
-env -u GH_TOKEN -u GITHUB_TOKEN xargs -a .test-files pnpm vitest run --reporter=dot --bail 1 2>&1 | tail -40
+test -s .test-files && env -u GH_TOKEN -u GITHUB_TOKEN xargs -a .test-files pnpm vitest run --reporter=dot --bail 1 2>&1 | tail -40
 
 cd "$ROOT"
 git worktree remove --force "$WT"
