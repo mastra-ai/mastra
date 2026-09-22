@@ -118,7 +118,11 @@ export const FactoryTranscript: Story = {
         icon={<PullRequestIcon status="merged" size={13} aria-hidden />}
         link={{ href: 'https://github.com/mastra-ai/mastra/pull/24263', label: 'Open on GitHub' }}
       />
-      <ChatNotification state="summary" label="Notification summary" message="3 updates: 2 pull requests and 1 issue." />
+      <ChatNotification
+        state="summary"
+        label="Notification summary"
+        message="3 updates: 2 pull requests and 1 issue."
+      />
       <TranscriptDivider label="24 minutes later" title="Sep 17, 2026, 2:24 PM" />
       <ChatSignal kind="state" label="State delta: factory-phase" message="Stage: building → review" />
     </div>
