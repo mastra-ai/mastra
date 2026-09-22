@@ -3922,6 +3922,23 @@ describe('error processors — shared stability defaults', () => {
       (await bareAgent({ errorProcessors: [customProcessor] }).getConfiguredProcessorIds()).errorProcessorIds,
     ).toEqual(['custom-error-processor']);
   });
+
+  it('runs only the caller list when `errorProcessorDefaults` is false', async () => {
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+    const agent = bareAgent({ errorProcessors: [customProcessor], errorProcessorDefaults: false });
+
+    // The one thing `errorProcessors: [mine]` cannot otherwise express: no defaults merged in.
+    expect(await agent.listErrorProcessors()).toEqual([customProcessor]);
+  });
+
+  it('resolves no error processors for a bare agent when `errorProcessorDefaults` is false', async () => {
+    const agent = bareAgent({ errorProcessorDefaults: false });
+
+    expect(await agent.listErrorProcessors()).toEqual([]);
+  });
 });
 
 describe('LLM request lane — error-phase processors', () => {
