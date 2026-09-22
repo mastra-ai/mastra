@@ -145,28 +145,26 @@ export default function LogsPage() {
     [url],
   );
 
-  const pageTopArea = (
-    <PageLayout.TopArea>
-      <PageLayout.Row>
-        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
-          <DateTimeRangePicker
-            preset={url.datePreset}
-            onPresetChange={url.handleDatePresetChange}
-            dateFrom={url.selectedDateFrom}
-            dateTo={url.selectedDateTo}
-            onDateChange={url.handleDateChange}
-            disabled={isLoadingLogs}
-            presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-          />
-          <PropertyFilterCreator
-            fields={filterFields}
-            tokens={url.filterTokens}
-            onTokensChange={url.handleFilterTokensChange}
-            disabled={isLoadingLogs}
-            onStartTextFilter={setAutoFocusFilterFieldId}
-          />
-        </PageLayout.Column>
-      </PageLayout.Row>
+  const actionRow = (
+    <>
+      <div className="grid flex-wrap content-start items-start justify-start gap-2">
+        <DateTimeRangePicker
+          preset={url.datePreset}
+          onPresetChange={url.handleDatePresetChange}
+          dateFrom={url.selectedDateFrom}
+          dateTo={url.selectedDateTo}
+          onDateChange={url.handleDateChange}
+          disabled={isLoadingLogs}
+          presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+        />
+        <PropertyFilterCreator
+          fields={filterFields}
+          tokens={url.filterTokens}
+          onTokensChange={url.handleFilterTokensChange}
+          disabled={isLoadingLogs}
+          onStartTextFilter={setAutoFocusFilterFieldId}
+        />
+      </div>
 
       <LogsToolbar
         isLoading={isLoadingLogs}
@@ -179,16 +177,15 @@ export default function LogsPage() {
         onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
         autoFocusFilterFieldId={autoFocusFilterFieldId}
       />
-    </PageLayout.TopArea>
+    </>
   );
 
   if (logsError) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+        <div className="flex h-full items-center justify-center">
           <LogsErrorContent error={logsError} resource="logs" errorTitle="Failed to load logs" />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
@@ -197,18 +194,16 @@ export default function LogsPage() {
 
   if (logs.length === 0 && !isLoadingLogs && !contentFiltersApplied) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+        <div className="flex h-full items-center justify-center">
           <NoLogsInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-      {pageTopArea}
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
       <LogsLayout
         logCollapsed={logDetailsCollapsed}
         listSlot={

@@ -1,6 +1,6 @@
 import { CreateButton } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
@@ -65,34 +65,42 @@ export default function Datasets() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="datasets" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <ErrorState title="Failed to load datasets" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load datasets" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 
   // With a target filter active, keep the toolbar so the user can reset it.
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actions={headerCreateAction}>
-        <NoDatasetsInfo onCreateClick={openCreatePage} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerCreateAction}>
+        <div className="flex h-full items-center justify-center">
+          <NoDatasetsInfo onCreateClick={openCreatePage} />
+        </div>
+      </PageLayout>
     );
   }
 
@@ -108,10 +116,8 @@ export default function Datasets() {
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actions={headerCreateAction}
-      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
-    >
-      <PageLayout.TopArea>
+      headerActions={headerCreateAction}
+      actionRow={
         <DatasetsToolbar
           search={search}
           onSearchChange={setSearch}
@@ -127,8 +133,8 @@ export default function Datasets() {
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
         />
-      </PageLayout.TopArea>
-
+      }
+    >
       <DatasetsList
         datasets={datasets}
         experiments={experiments}

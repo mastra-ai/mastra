@@ -1,7 +1,7 @@
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { NoDataPageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
@@ -213,25 +213,31 @@ function MetricsContent() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
-        <PermissionDenied resource="metrics" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="metrics" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
-        <ErrorState title="Failed to load metrics" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load metrics" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 

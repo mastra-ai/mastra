@@ -58,11 +58,9 @@ export function MetricsPageLayout({ children, filterFields, isLoading = false }:
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}
-      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
-    >
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
+      actionRow={
+        <>
+          <div className="grid flex-wrap content-start items-start justify-start gap-2">
             <DateRangeSelector />
             <PropertyFilterCreator
               fields={filterFields}
@@ -71,21 +69,22 @@ export function MetricsPageLayout({ children, filterFields, isLoading = false }:
               disabled={isLoading}
               onStartTextFilter={setAutoFocusFilterFieldId}
             />
-          </PageLayout.Column>
-        </PageLayout.Row>
+          </div>
 
-        <MetricsToolbar
-          isLoading={isLoading}
-          filterFields={filterFields}
-          filterTokens={filterTokens}
-          onFilterTokensChange={setFilterTokens}
-          onClear={handleClear}
-          onRemoveAll={() => setFilterTokens([])}
-          onSave={handleSave}
-          onRemoveSaved={hasSavedFilters ? handleRemoveSaved : undefined}
-          autoFocusFilterFieldId={autoFocusFilterFieldId}
-        />
-      </PageLayout.TopArea>
+          <MetricsToolbar
+            isLoading={isLoading}
+            filterFields={filterFields}
+            filterTokens={filterTokens}
+            onFilterTokensChange={setFilterTokens}
+            onClear={handleClear}
+            onRemoveAll={() => setFilterTokens([])}
+            onSave={handleSave}
+            onRemoveSaved={hasSavedFilters ? handleRemoveSaved : undefined}
+            autoFocusFilterFieldId={autoFocusFilterFieldId}
+          />
+        </>
+      }
+    >
       {children}
     </PageLayout>
   );

@@ -1,6 +1,6 @@
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -21,44 +21,53 @@ const MCPs = () => {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="MCP servers" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="MCP servers" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <ErrorState title="Failed to load MCP servers" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load MCP servers" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 
   if (mcpServers.length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <NoMCPServersInfo />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <NoMCPServersInfo />
+        </div>
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-      <PageLayout.TopArea>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter MCP servers" placeholder="Filter by name" />
         </div>
-      </PageLayout.TopArea>
-
+      }
+    >
       <McpServersList
         mcpServers={mcpServers}
         isLoading={isLoading}

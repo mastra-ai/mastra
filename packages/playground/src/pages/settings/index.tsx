@@ -20,7 +20,7 @@ export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <SettingsLayout>
         <div className="mx-auto flex max-w-4xl flex-col gap-8">
           <SettingsGroup>

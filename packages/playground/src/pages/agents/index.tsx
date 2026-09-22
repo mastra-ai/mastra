@@ -1,6 +1,6 @@
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -28,33 +28,41 @@ function Agents() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="agents" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="agents" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <ErrorState title="Failed to load agents" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load agents" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 
   if (Object.keys(agents).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <NoAgentsInfo />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <NoAgentsInfo />
+        </div>
+      </PageLayout>
     );
   }
 
@@ -81,10 +89,8 @@ function Agents() {
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actions={<AgentHeaderCreateAction />}
-      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
-    >
-      <PageLayout.TopArea>
+      headerActions={<AgentHeaderCreateAction />}
+      actionRow={
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="max-w-120 flex-1">
             <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
@@ -93,8 +99,8 @@ function Agents() {
             <AgentsViewToggle view={view} onViewChange={setView} />
           </div>
         </div>
-      </PageLayout.TopArea>
-
+      }
+    >
       {agentsView}
     </PageLayout>
   );

@@ -32,9 +32,9 @@ const RESULTS_SORT_KEYS = ['startedAt'] as const;
 
 function ExperimentPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div />
-      <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
+      <div className="flex h-full items-center justify-center">{children}</div>
     </PageLayout>
   );
 }
@@ -168,14 +168,14 @@ function ExperimentPage() {
       <div className="h-full">
         <PageLayout
           breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-          className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
+          actionRow={
+            <ExperimentTopArea experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)}>
+              <ExperimentResultsBulkActions selection={selection} />
+            </ExperimentTopArea>
+          }
         >
-          <ExperimentTopArea experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)}>
-            <ExperimentResultsBulkActions selection={selection} />
-          </ExperimentTopArea>
-
           {/* Results take the remaining width; the rail keeps the pipeline and run metadata beside them. */}
-          <PageLayout.MainArea className="grid grid-cols-[1fr_auto] gap-4 overflow-visible">
+          <div className="grid grid-cols-[1fr_auto] gap-4 overflow-visible">
             <ExperimentResultsSection
               experimentId={experimentId}
               experimentStatus={experiment.status}
@@ -190,7 +190,7 @@ function ExperimentPage() {
               onSortChange={onSortChange}
             />
             <ExperimentSideRail experiment={experiment} metrics={experimentMetrics} className="w-80 overflow-y-auto" />
-          </PageLayout.MainArea>
+          </div>
         </PageLayout>
 
         {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}

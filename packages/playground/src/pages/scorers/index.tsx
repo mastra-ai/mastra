@@ -1,5 +1,5 @@
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -22,33 +22,41 @@ export default function Scorers() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="scorers" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="scorers" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <ErrorState title="Failed to load scorers" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load scorers" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 
   if (Object.keys(scorers).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actions={<ScorersHeaderCreateAction />}>
-        <NoScorersInfo />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={<ScorersHeaderCreateAction />}>
+        <div className="flex h-full items-center justify-center">
+          <NoScorersInfo />
+        </div>
+      </PageLayout>
     );
   }
 
@@ -62,10 +70,8 @@ export default function Scorers() {
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actions={<ScorersHeaderCreateAction />}
-      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
-    >
-      <PageLayout.TopArea>
+      headerActions={<ScorersHeaderCreateAction />}
+      actionRow={
         <ScorersToolbar
           search={search}
           onSearchChange={setSearch}
@@ -74,8 +80,8 @@ export default function Scorers() {
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
         />
-      </PageLayout.TopArea>
-
+      }
+    >
       <ScorersList
         scorers={scorers}
         isLoading={isLoading}

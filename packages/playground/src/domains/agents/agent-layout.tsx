@@ -63,8 +63,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
       </RouteSidePanel>
       <PageLayout
         breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-        actions={<AgentDetailHeaderActions agentId={agentId!} />}
-        className="p-4"
+        headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
       >
         <AgentPageTabs
           agentId={agentId!}

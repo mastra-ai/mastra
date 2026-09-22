@@ -9,7 +9,7 @@ const Tool = () => {
   const crumbs = [navCrumb('/tools'), toolCrumb];
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[minmax(0,1fr)]">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div className="h-full w-full overflow-y-hidden">
         <ToolPanel toolId={toolId!} />
       </div>

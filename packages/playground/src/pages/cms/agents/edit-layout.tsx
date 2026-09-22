@@ -323,7 +323,7 @@ function EditLayoutWrapper() {
   );
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actions={actions} className="p-4">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       {isNotFound ? (
         <>
           <div className="text-muted-foreground flex h-full items-center justify-center">Agent not found</div>

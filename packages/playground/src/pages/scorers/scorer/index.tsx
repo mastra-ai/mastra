@@ -219,15 +219,13 @@ export default function Scorer() {
     return (
       <PageLayout
         breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-
-        className={hasError || !scorerActionsMenu ? 'grid-rows-[1fr]' : undefined}
-      >
-        {!hasError && scorerActionsMenu && (
-          <PageLayout.TopArea>
+        actionRow={
+          !hasError && scorerActionsMenu ? (
             <div className="ml-auto flex items-center gap-2">{scorerActionsMenu}</div>
-          </PageLayout.TopArea>
-        )}
-        <PageLayout.MainArea isCentered>
+          ) : undefined
+        }
+      >
+        <div className="flex h-full items-center justify-center">
           {isUnauthorized ? (
             <SessionExpired />
           ) : isForbidden ? (
@@ -237,15 +235,16 @@ export default function Scorer() {
           ) : (
             <NoScoresInfo onRunExperiment={() => setRunDialogOpen(true)} />
           )}
-        </PageLayout.MainArea>
+        </div>
         {runDialog}
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-      <PageLayout.TopArea>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
         <div className="flex items-center justify-between gap-3">
           <ScoresTools
             selectedEntity={selectedEntityOption}
@@ -268,8 +267,8 @@ export default function Scorer() {
             {scorerActionsMenu}
           </div>
         </div>
-      </PageLayout.TopArea>
-
+      }
+    >
       <ScoresList
         scores={scores}
         isLoading={isLoadingScores}

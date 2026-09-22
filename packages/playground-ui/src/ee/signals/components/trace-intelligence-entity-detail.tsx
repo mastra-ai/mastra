@@ -10,7 +10,6 @@ import { TraceIntelligenceProvider } from '../trace-intelligence-provider';
 import { useTraceIntelligence } from '../use-trace-intelligence';
 import { SignalsEmptyState } from './signals-empty-state';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { PageLayout } from '@/ds/components/PageLayout';
 
 export interface TraceIntelligenceEntityDetailProps {
   entityId: string;
@@ -58,13 +57,13 @@ export function TraceIntelligenceEntityDetail({
   }
   if (!entity) {
     return (
-      <PageLayout.MainArea isCentered className="p-4">
+      <div className="flex h-full items-center justify-center">
         <EmptyState
           iconSlot={<Radar aria-hidden="true" />}
           titleSlot="Trace Intelligence entity not found"
           descriptionSlot="The requested entity is unavailable in this project."
         />
-      </PageLayout.MainArea>
+      </div>
     );
   }
   if (signalNames.length < 2) {

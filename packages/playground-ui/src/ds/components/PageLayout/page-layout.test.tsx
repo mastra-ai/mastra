@@ -6,10 +6,10 @@ import { PageLayout } from './index';
 afterEach(cleanup);
 
 describe('PageLayout', () => {
-  describe('when breadcrumbs and actions are provided', () => {
+  describe('when breadcrumbs and header actions are provided', () => {
     it('renders them inside a header above the main content', () => {
       render(
-        <PageLayout breadcrumbs={<span>Crumbs</span>} actions={<button>Act</button>}>
+        <PageLayout breadcrumbs={<span>Crumbs</span>} headerActions={<button>Act</button>}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -21,7 +21,25 @@ describe('PageLayout', () => {
     });
   });
 
-  describe('when neither breadcrumbs nor actions are provided', () => {
+  describe('when an action row is provided', () => {
+    it('pins it between the header and the scrollable body', () => {
+      render(
+        <PageLayout breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      const row = screen.getByLabelText('Filter').closest('[data-slot="page-layout-action-row"]');
+      const main = screen.getByRole('main');
+      expect(row).not.toBeNull();
+      if (!row) return;
+      expect(main.contains(row)).toBe(false);
+      expect(screen.getByRole('banner').compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(row.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
+  describe('when neither breadcrumbs nor header actions are provided', () => {
     it('does not render a header', () => {
       render(
         <PageLayout>

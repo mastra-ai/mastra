@@ -111,43 +111,45 @@ export default function AgentBuilderSkillsPage() {
 
   return (
     <>
-      <PageLayout className="grid grid-rows-[auto_minmax(0,1fr)] p-4 px-4 md:px-10">
-        <PageLayout.TopArea>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
-            <PageHeader>
-              <PageHeader.Title>
-                <SparklesIcon /> My skills
-              </PageHeader.Title>
-              <PageHeader.Description>Skills you've created.</PageHeader.Description>
-            </PageHeader>
-            {skills.length > 0 && canWriteSkills && (
-              <div className="flex w-full shrink-0 flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
-                {enabledRegistry && (
+      <PageLayout
+        actionRow={
+          <>
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+              <PageHeader>
+                <PageHeader.Title>
+                  <SparklesIcon /> My skills
+                </PageHeader.Title>
+                <PageHeader.Description>Skills you've created.</PageHeader.Description>
+              </PageHeader>
+              {skills.length > 0 && canWriteSkills && (
+                <div className="flex w-full shrink-0 flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
+                  {enabledRegistry && (
+                    <Button
+                      variant="default"
+                      className="w-full justify-center md:w-auto"
+                      onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
+                      icon={<DownloadIcon />}
+                    >
+                      Browse registry
+                    </Button>
+                  )}
                   <Button
-                    variant="default"
+                    variant="primary"
                     className="w-full justify-center md:w-auto"
-                    onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
-                    icon={<DownloadIcon />}
+                    onClick={goToCreate}
+                    icon={<PlusIcon />}
                   >
-                    Browse registry
+                    New skill
                   </Button>
-                )}
-                <Button
-                  variant="primary"
-                  className="w-full justify-center md:w-auto"
-                  onClick={goToCreate}
-                  icon={<PlusIcon />}
-                >
-                  New skill
-                </Button>
-              </div>
-            )}
-          </div>
-          <div className="max-w-120">
-            <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
-          </div>
-        </PageLayout.TopArea>
-
+                </div>
+              )}
+            </div>
+            <div className="max-w-120">
+              <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
+            </div>
+          </>
+        }
+      >
         {body}
       </PageLayout>
 

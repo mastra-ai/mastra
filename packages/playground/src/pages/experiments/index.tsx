@@ -1,5 +1,5 @@
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
@@ -119,33 +119,41 @@ export default function Experiments() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="experiments" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="experiments" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="datasets" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <ErrorState title="Failed to load experiments" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load experiments" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 
@@ -160,10 +168,12 @@ export default function Experiments() {
   // With a dataset or target filter active, keep the toolbar so the user can reset it.
   if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
-        {runDialog}
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
+          {runDialog}
+        </div>
+      </PageLayout>
     );
   }
 
@@ -186,8 +196,9 @@ export default function Experiments() {
   };
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-      <PageLayout.TopArea>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
         <ExperimentsToolbar
           search={search}
           onSearchChange={setSearch}
@@ -215,8 +226,8 @@ export default function Experiments() {
               : undefined
           }
         />
-      </PageLayout.TopArea>
-
+      }
+    >
       <ExperimentsList
         experiments={experiments}
         datasets={datasets}

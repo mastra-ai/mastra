@@ -98,34 +98,36 @@ export default function AgentBuilderAgentsPage() {
   })();
 
   return (
-    <PageLayout className="grid grid-rows-[auto_minmax(0,1fr)] p-4 px-4 md:px-10">
-      <PageLayout.TopArea>
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
-          <PageHeader>
-            <PageHeader.Title>
-              <AgentIcon /> My agents
-            </PageHeader.Title>
-            <PageHeader.Description>Agents you've created.</PageHeader.Description>
-          </PageHeader>
-          {agents.length > 0 && canWrite && (
-            <div className="w-full shrink-0 md:w-auto">
-              <Button
-                render={<FrameworkLink href="/agent-builder/agents/create" />}
+    <PageLayout
+      actionRow={
+        <>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+            <PageHeader>
+              <PageHeader.Title>
+                <AgentIcon /> My agents
+              </PageHeader.Title>
+              <PageHeader.Description>Agents you've created.</PageHeader.Description>
+            </PageHeader>
+            {agents.length > 0 && canWrite && (
+              <div className="w-full shrink-0 md:w-auto">
+                <Button
+                  render={<FrameworkLink href="/agent-builder/agents/create" />}
 
-                variant="primary"
-                className="w-full justify-center md:w-auto"
-                icon={<PlusIcon />}
-              >
-                New agent
-              </Button>
-            </div>
-          )}
-        </div>
-        <div className="max-w-120">
-          <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
-        </div>
-      </PageLayout.TopArea>
-
+                  variant="primary"
+                  className="w-full justify-center md:w-auto"
+                  icon={<PlusIcon />}
+                >
+                  New agent
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="max-w-120">
+            <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
+          </div>
+        </>
+      }
+    >
       {body}
     </PageLayout>
   );

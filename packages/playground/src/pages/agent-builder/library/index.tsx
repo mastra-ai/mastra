@@ -120,49 +120,51 @@ export default function AgentBuilderLibraryPage() {
 
   return (
     <>
-      <PageLayout className="grid grid-rows-[auto_minmax(0,1fr)] p-4 px-4 md:px-10">
-        <PageLayout.TopArea>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
-            <PageHeader>
-              <PageHeader.Title>
-                <LibraryIcon /> Library
-              </PageHeader.Title>
-              <PageHeader.Description>
-                {tab === 'agents' ? 'Agents shared with the team library.' : 'Skills shared with the team library.'}
-              </PageHeader.Description>
-            </PageHeader>
-          </div>
-          <div className="flex items-center gap-4">
-            {features.skills && (
-              <div className="border-border flex overflow-hidden rounded-lg border">
-                <button
-                  onClick={() => setTab('agents')}
-                  className={cn(
-                    'text-column px-3 py-1.5',
-                    controlStateColorTransition,
-                    tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
-                  )}
-                >
-                  Agents
-                </button>
-                <button
-                  onClick={() => setTab('skills')}
-                  className={cn(
-                    'text-column px-3 py-1.5',
-                    controlStateColorTransition,
-                    tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
-                  )}
-                >
-                  Skills
-                </button>
-              </div>
-            )}
-            <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter library" placeholder="Filter by name or description" />
+      <PageLayout
+        actionRow={
+          <>
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+              <PageHeader>
+                <PageHeader.Title>
+                  <LibraryIcon /> Library
+                </PageHeader.Title>
+                <PageHeader.Description>
+                  {tab === 'agents' ? 'Agents shared with the team library.' : 'Skills shared with the team library.'}
+                </PageHeader.Description>
+              </PageHeader>
             </div>
-          </div>
-        </PageLayout.TopArea>
-
+            <div className="flex items-center gap-4">
+              {features.skills && (
+                <div className="border-border flex overflow-hidden rounded-lg border">
+                  <button
+                    onClick={() => setTab('agents')}
+                    className={cn(
+                      'text-column px-3 py-1.5',
+                      controlStateColorTransition,
+                      tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                    )}
+                  >
+                    Agents
+                  </button>
+                  <button
+                    onClick={() => setTab('skills')}
+                    className={cn(
+                      'text-column px-3 py-1.5',
+                      controlStateColorTransition,
+                      tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                    )}
+                  >
+                    Skills
+                  </button>
+                </div>
+              )}
+              <div className="max-w-120 flex-1">
+                <ListSearch onSearch={setSearch} label="Filter library" placeholder="Filter by name or description" />
+              </div>
+            </div>
+          </>
+        }
+      >
         {body}
       </PageLayout>
     </>

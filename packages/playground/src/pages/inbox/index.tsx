@@ -123,8 +123,8 @@ export default function InboxPage() {
 
   return (
     <div className="relative h-full overflow-hidden">
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[minmax(0,1fr)] p-4">
-        <PageLayout.MainArea className="min-h-0 overflow-hidden">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="min-h-0 overflow-hidden">
           {isInboxEmpty ? (
             <InboxEmptyState />
           ) : (
@@ -191,7 +191,7 @@ export default function InboxPage() {
               </TabContent>
             </Tabs>
           )}
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
 
       <InboxTracePanel

@@ -115,7 +115,7 @@ function DatasetItemVersionsComparePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -125,7 +125,7 @@ function DatasetItemVersionsComparePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="datasets" />
         </div>
@@ -135,7 +135,7 @@ function DatasetItemVersionsComparePage() {
 
   if (!datasetId || !itemId) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Item not found.</p>
@@ -155,7 +155,7 @@ function DatasetItemVersionsComparePage() {
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actions={
+      headerActions={
         canDiff && (
           <Button variant="outline" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
             {isDiffView ? (
@@ -170,7 +170,6 @@ function DatasetItemVersionsComparePage() {
           </Button>
         )
       }
-      className="grid grid-rows-[minmax(0,1fr)] p-4"
     >
       <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
         <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">

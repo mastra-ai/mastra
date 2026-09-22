@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -51,25 +51,31 @@ export default function SchedulePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="schedules" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="schedules" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <ErrorState title="Failed to load schedule" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load schedule" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 
@@ -77,41 +83,40 @@ export default function SchedulePage() {
   const agentId = schedule?.agentId;
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
-      <PageLayout.TopArea>
-        <PageLayout.Row className="justify-end">
-          <PageLayout.Column className="flex justify-end gap-2">
-            <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
-              Back to schedules
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
+        <div className="flex justify-end gap-2">
+          <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
+            Back to schedules
+          </Button>
+          {workflowId ? (
+            <Button icon={<WorkflowIcon />} render={<Link to={paths.workflowLink(workflowId)} />} variant="ghost">
+              Open workflow
             </Button>
-            {workflowId ? (
-              <Button icon={<WorkflowIcon />} render={<Link to={paths.workflowLink(workflowId)} />} variant="ghost">
-                Open workflow
-              </Button>
-            ) : null}
-            {schedule ? (
-              <Button
-                onClick={() => toggle.mutate(schedule.status === 'active' ? 'pause' : 'resume')}
-                disabled={toggle.isPending}
-                data-testid="schedule-toggle-button"
-              >
-                {schedule.status === 'active' ? (
-                  <>
-                    <PauseIcon />
-                    Pause
-                  </>
-                ) : (
-                  <>
-                    <PlayIcon />
-                    Resume
-                  </>
-                )}
-              </Button>
-            ) : null}
-          </PageLayout.Column>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
-
+          ) : null}
+          {schedule ? (
+            <Button
+              onClick={() => toggle.mutate(schedule.status === 'active' ? 'pause' : 'resume')}
+              disabled={toggle.isPending}
+              data-testid="schedule-toggle-button"
+            >
+              {schedule.status === 'active' ? (
+                <>
+                  <PauseIcon />
+                  Pause
+                </>
+              ) : (
+                <>
+                  <PlayIcon />
+                  Resume
+                </>
+              )}
+            </Button>
+          ) : null}
+        </div>
+      }
+    >
       {schedule ? (
         <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-4 overflow-hidden">
           <div className="border-border flex h-fit flex-col gap-4 rounded-md border p-4">

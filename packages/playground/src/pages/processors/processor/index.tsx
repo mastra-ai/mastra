@@ -18,7 +18,7 @@ export function Processor() {
   // 401 check - session expired
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -29,7 +29,7 @@ export function Processor() {
   // 403 check - permission denied for processors
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="processors" />
         </div>
@@ -44,7 +44,7 @@ export function Processor() {
 
   if (isLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </PageLayout>
@@ -52,7 +52,7 @@ export function Processor() {
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[minmax(0,1fr)]">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div className="h-full w-full overflow-y-hidden">
         <ProcessorPanel processorId={processorId!} />
       </div>

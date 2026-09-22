@@ -354,14 +354,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     </>
   );
 
-  const pageTopArea = (
-    <PageLayout.TopArea>
-      <PageLayout.Row>
-        <PageLayout.Column className="flex w-full flex-wrap items-start justify-start gap-2">
-          {toolbarControls}
-        </PageLayout.Column>
-      </PageLayout.Row>
-    </PageLayout.TopArea>
+  const actionRow = (
+    <>
+      <div className="grid w-full flex-wrap content-start items-start justify-start gap-2">{toolbarControls}</div>
+    </>
   );
 
   // Hold the whole toolbar + list behind one skeleton until field discovery has settled, so the
@@ -369,21 +365,20 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
   if (isDiscoveryLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-        <PageLayout.MainArea>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
 
   if (tracesError) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+        <div className="flex h-full items-center justify-center">
           <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
@@ -392,19 +387,16 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+        <div className="flex h-full items-center justify-center">
           <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-      {pageTopArea}
-
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
       <TracesListView
         traces={traces}
         isLoading={isTracesLoading}

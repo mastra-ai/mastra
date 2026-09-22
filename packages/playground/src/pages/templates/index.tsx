@@ -66,7 +66,7 @@ export default function Templates() {
   const isFiltered = searchTerm || selectedTag !== 'all' || selectedProvider !== 'all';
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <Header>
         <HeaderTitle>
           <Icon>

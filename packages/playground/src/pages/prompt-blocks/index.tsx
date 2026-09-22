@@ -1,6 +1,6 @@
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
@@ -62,44 +62,50 @@ export default function PromptBlocks() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="prompt blocks" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="prompt blocks" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <ErrorState title="Failed to load prompt blocks" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load prompt blocks" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 
   if (promptBlocks.length === 0 && !isLoading && page === 0) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <NoPromptBlocksInfo />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <NoPromptBlocksInfo />
+        </div>
+      </PageLayout>
     );
   }
 
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actions={<PromptBlocksHeaderCreateAction />}
-      className="grid grid-rows-[auto_minmax(0,1fr)] p-4"
-    >
-      <PageLayout.TopArea>
-        <PageLayout.Row align="center" stack="responsive">
+      headerActions={<PromptBlocksHeaderCreateAction />}
+      actionRow={
+        <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
           <div className="max-w-120 flex-1">
             <ListSearch
               onSearch={handleSearchChange}
@@ -107,9 +113,9 @@ export default function PromptBlocks() {
               placeholder="Filter by name or description"
             />
           </div>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
-
+        </div>
+      }
+    >
       <PromptsList
         promptBlocks={promptBlocks}
         isLoading={isLoading}

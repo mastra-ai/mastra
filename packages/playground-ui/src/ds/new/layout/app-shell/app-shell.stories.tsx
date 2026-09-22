@@ -96,22 +96,24 @@ function Frame({ children }: { children: ReactNode }) {
 
 function MainContent({ withHeader = true }: { withHeader?: boolean }) {
   return (
-    <PageLayout breadcrumbs={withHeader ? crumbs : undefined} className="grid gap-4 p-4">
-      <PageHeader>
-        <PageHeader.Icon>
-          <Bot />
-        </PageHeader.Icon>
-        <PageHeader.Title>Research agent</PageHeader.Title>
-        <PageHeader.Description>Configuration and recent activity.</PageHeader.Description>
-      </PageHeader>
-      {Array.from({ length: 14 }, (_, index) => (
-        <article key={index} className={cn(raisedSurfaceStyle, 'rounded-studio-panel p-4')}>
-          <p className="text-column text-foreground">Activity {index + 1}</p>
-          <p className="text-meta text-muted-foreground mt-1">
-            A representative row that makes the content area scroll.
-          </p>
-        </article>
-      ))}
+    <PageLayout breadcrumbs={withHeader ? crumbs : undefined}>
+      <div className="grid gap-4">
+        <PageHeader>
+          <PageHeader.Icon>
+            <Bot />
+          </PageHeader.Icon>
+          <PageHeader.Title>Research agent</PageHeader.Title>
+          <PageHeader.Description>Configuration and recent activity.</PageHeader.Description>
+        </PageHeader>
+        {Array.from({ length: 14 }, (_, index) => (
+          <article key={index} className={cn(raisedSurfaceStyle, 'rounded-studio-panel p-4')}>
+            <p className="text-column text-foreground">Activity {index + 1}</p>
+            <p className="text-meta text-muted-foreground mt-1">
+              A representative row that makes the content area scroll.
+            </p>
+          </article>
+        ))}
+      </div>
     </PageLayout>
   );
 }

@@ -10,7 +10,7 @@ const crumbs = [navCrumb('/intelligence')];
 
 export function SignalsOverviewPage() {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[minmax(0,1fr)]">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
         <SignalsOverviewContent />
       </TraceIntelligenceProvider>

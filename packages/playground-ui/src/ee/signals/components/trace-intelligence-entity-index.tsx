@@ -16,7 +16,6 @@ import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { ListSearch } from '@/ds/components/ListSearch';
-import { PageLayout } from '@/ds/components/PageLayout';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { SessionExpired } from '@/ds/components/SessionExpired';
@@ -41,22 +40,22 @@ export interface TraceIntelligenceEntityIndexProps {
 function EntityIndexError({ error }: { error: Error }) {
   if (is401UnauthorizedError(error)) {
     return (
-      <PageLayout.MainArea isCentered className="p-4">
+      <div className="flex h-full items-center justify-center">
         <SessionExpired />
-      </PageLayout.MainArea>
+      </div>
     );
   }
   if (is403ForbiddenError(error)) {
     return (
-      <PageLayout.MainArea isCentered className="p-4">
+      <div className="flex h-full items-center justify-center">
         <PermissionDenied resource="Trace Intelligence" />
-      </PageLayout.MainArea>
+      </div>
     );
   }
   return (
-    <PageLayout.MainArea isCentered className="p-4">
+    <div className="flex h-full items-center justify-center">
       <ErrorState title="Failed to load Trace Intelligence" message={error.message} />
-    </PageLayout.MainArea>
+    </div>
   );
 }
 
@@ -179,8 +178,8 @@ export function TraceIntelligenceEntityIndex({
   }
 
   return (
-    <div className="mx-auto grid min-h-0 w-full max-w-7xl grid-rows-[auto_minmax(0,1fr)] p-4 pt-6">
-      <PageLayout.TopArea>
+    <div className="mx-auto grid size-full min-h-0 max-w-7xl grid-rows-[auto_minmax(0,1fr)]">
+      <div className="pb-3">
         <EntityIndexControls
           search={search}
           sort={sort}
@@ -200,7 +199,7 @@ export function TraceIntelligenceEntityIndex({
             ) : undefined
           }
         />
-      </PageLayout.TopArea>
+      </div>
       <div
         className={
           settingsOpen

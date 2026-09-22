@@ -55,8 +55,8 @@ const resources = [
 
 export default function Resources() {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="mx-auto max-w-screen-lg p-4 pt-6">
-      <PageLayout.MainArea>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <div>
         <div className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
           {resources.map(resource => (
             <a
@@ -78,7 +78,7 @@ export default function Resources() {
             </a>
           ))}
         </div>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 }

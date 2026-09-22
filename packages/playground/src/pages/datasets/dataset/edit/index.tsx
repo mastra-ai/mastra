@@ -17,9 +17,9 @@ const crumbs = [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-edit', label
 
 function EditDatasetPageShell({ children }: { children?: ReactNode }) {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div />
-      <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
+      <div className="flex h-full items-center justify-center">{children}</div>
     </PageLayout>
   );
 }
@@ -61,9 +61,9 @@ function EditDatasetPage() {
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div />
-      <PageLayout.MainArea isCentered>
+      <div className="flex h-full items-center justify-center">
         <div className="w-full max-w-2xl overflow-y-auto px-4 py-5">
           <MainHeader className="mb-6 p-0">
             <MainHeader.Column>
@@ -89,7 +89,7 @@ function EditDatasetPage() {
             />
           </Card>
         </div>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 }

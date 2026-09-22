@@ -332,7 +332,7 @@ export default function Template() {
   };
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div className={cn('w-full lg:px-12 h-full overflow-y-scroll')}>
         <div className="mx-auto grid w-full max-w-[80rem] gap-y-4 p-4">
           <TemplateInfo

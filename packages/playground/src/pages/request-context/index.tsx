@@ -7,12 +7,12 @@ const crumbs = [navCrumb('/request-context')];
 
 export default function RequestContextPage() {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="mx-auto max-w-screen-lg p-4 pt-6">
-      <PageLayout.MainArea>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <div>
         <RequestContextWrapper>
           <RequestContext />
         </RequestContextWrapper>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 }

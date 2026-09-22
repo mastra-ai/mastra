@@ -31,9 +31,9 @@ import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/do
 
 function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div />
-      <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
+      <div className="flex h-full items-center justify-center">{children}</div>
     </PageLayout>
   );
 }
@@ -132,8 +132,8 @@ function DatasetPage() {
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
       <div className="h-full">
-        <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[1fr]">
-          <PageLayout.MainArea>
+        <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+          <div>
             <DatasetItemsView
               datasetId={datasetId}
               onAddItemClick={() => setAddItemDialogOpen(true)}
@@ -197,7 +197,7 @@ function DatasetPage() {
                 </div>
               }
             />
-          </PageLayout.MainArea>
+          </div>
         </PageLayout>
 
         {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}

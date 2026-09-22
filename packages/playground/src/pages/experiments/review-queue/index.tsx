@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -65,57 +65,62 @@ function ReviewQueuePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="experiments" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="experiments" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <ErrorState title="Failed to load experiments" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load experiments" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-      <DatasetReview
-        datasetId={selected?.datasetId ?? undefined}
-        experimentId={selectedId ?? undefined}
-        targetType={targetType}
-        targetId={targetId}
-        featuredItemId={featuredResultId}
-        renderFilters={list => (
-          <ReviewQueueFilterBar
-            targetType={targetType}
-            targetId={targetId}
-            experimentId={selectedId ?? ''}
-            status={list.status}
-            tag={list.tag}
-            experiments={data?.experiments ?? []}
-            tagOptions={list.tagOptions}
-            onChange={next => handleFiltersChange(next, list)}
-          />
-        )}
-        toolbarEnd={
-          selectedId ? (
-            <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>
-              See experiment
-            </Button>
-          ) : undefined
-        }
-      />
-    </PageLayout>
+    <DatasetReview
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      datasetId={selected?.datasetId ?? undefined}
+      experimentId={selectedId ?? undefined}
+      targetType={targetType}
+      targetId={targetId}
+      featuredItemId={featuredResultId}
+      renderFilters={list => (
+        <ReviewQueueFilterBar
+          targetType={targetType}
+          targetId={targetId}
+          experimentId={selectedId ?? ''}
+          status={list.status}
+          tag={list.tag}
+          experiments={data?.experiments ?? []}
+          tagOptions={list.tagOptions}
+          onChange={next => handleFiltersChange(next, list)}
+        />
+      )}
+      toolbarEnd={
+        selectedId ? (
+          <Button render={<Link href={paths.experimentLink(selectedId)} />} icon={<ArrowUpRight />}>
+            See experiment
+          </Button>
+        ) : undefined
+      }
+    />
   );
 }
 

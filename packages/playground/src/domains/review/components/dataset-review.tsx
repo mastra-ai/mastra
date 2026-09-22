@@ -91,6 +91,7 @@ export interface DatasetReviewProps {
   renderFilters?: (filters: ReviewListFilters) => ReactNode;
   /** Rendered at the end of the toolbar, after the bulk actions. */
   toolbarEnd?: ReactNode;
+  breadcrumbs?: ReactNode;
   /** When set, shows a "Create Scorer" action fed with the visible review items (input/output). */
   onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }
@@ -107,6 +108,7 @@ export function DatasetReview({
   renderFilters,
   toolbarEnd,
   onCreateScorer,
+  breadcrumbs,
 }: DatasetReviewProps) {
   const client = useMastraClient();
   const { paths } = useLinkComponent();
@@ -532,12 +534,11 @@ export function DatasetReview({
 
   if (isLoadingReview) {
     return (
-      <>
-        <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
-        <PageLayout.MainArea isCentered>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+        <div className="flex h-full items-center justify-center">
           <Spinner className="h-6 w-6" />
-        </PageLayout.MainArea>
-      </>
+        </div>
+      </PageLayout>
     );
   }
 
@@ -572,9 +573,7 @@ export function DatasetReview({
   );
 
   return (
-    <>
-      <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
-
+    <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
       {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -697,7 +696,7 @@ export function DatasetReview({
       </Dialog>
 
       {/* Main layout: list; the detail opens as a drawer. */}
-      <PageLayout.MainArea className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
+      <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay ? (
             <div className="flex h-full items-center justify-center">
@@ -730,7 +729,7 @@ export function DatasetReview({
         </div>
 
         {detailPanel}
-      </PageLayout.MainArea>
-    </>
+      </div>
+    </PageLayout>
   );
 }

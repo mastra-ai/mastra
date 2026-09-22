@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { NoDataPageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { createMetricsPropertyFilterFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
@@ -34,9 +34,11 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
   }
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
-        <MetricsCapabilityError error={error} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <MetricsCapabilityError error={error} />
+        </div>
+      </PageLayout>
     );
   }
   if (supportsMetrics) return children;

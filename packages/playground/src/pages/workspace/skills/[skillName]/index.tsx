@@ -84,7 +84,7 @@ export default function WorkspaceSkillDetailPage() {
 
   if (isLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="grid h-full place-items-center">
           <div className="border-accent1 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
         </div>
@@ -95,7 +95,7 @@ export default function WorkspaceSkillDetailPage() {
   // 401 check - session expired
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -106,7 +106,7 @@ export default function WorkspaceSkillDetailPage() {
   // 403 check - permission denied for workspaces
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="workspaces" />
         </div>
@@ -116,7 +116,7 @@ export default function WorkspaceSkillDetailPage() {
 
   if (error || !skill) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="grid h-full place-items-center">
           <div className="text-center">
             <p className="mb-2 text-red-400">Failed to load skill</p>
@@ -130,7 +130,7 @@ export default function WorkspaceSkillDetailPage() {
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="p-4">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div className="grid h-full overflow-x-hidden overflow-y-auto">
         <div className="mx-auto h-full w-full max-w-[100rem] overflow-x-hidden px-[3rem] py-5">
           <SkillDetail skill={skill} rawSkillMd={rawSkillMdData?.content} onReferenceClick={setViewingReference} />

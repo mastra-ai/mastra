@@ -17,7 +17,7 @@ export function SignalsEntityDetailPage() {
   if (!entityType || !entityId) return null;
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[minmax(0,1fr)]">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
         <TraceIntelligenceEntityDetail
           entityId={entityId}

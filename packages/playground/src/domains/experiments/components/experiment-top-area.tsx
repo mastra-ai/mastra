@@ -1,7 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ClipboardCheck, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { RenameExperimentDialog } from '@/domains/experiments/components/rename-experiment-dialog';
@@ -31,8 +30,8 @@ export function ExperimentTopArea({ experiment, onDeleteClick, children }: Exper
   const hasMenu = canRename || Boolean(onDeleteClick);
 
   return (
-    <PageLayout.TopArea>
-      <PageLayout.Row className="items-center justify-start gap-2">
+    <>
+      <div className="flex items-center justify-start gap-2">
         <div className="flex items-center gap-2 whitespace-nowrap">
           <RerunExperimentButton experiment={experiment} />
           <Button render={<LinkComponent href={experimentReviewQueueLink(experiment.id)} />} icon={<ClipboardCheck />}>
@@ -61,10 +60,10 @@ export function ExperimentTopArea({ experiment, onDeleteClick, children }: Exper
           )}
         </div>
         {children}
-      </PageLayout.Row>
+      </div>
 
       {/* Mounted on demand so the form state is seeded from the experiment each time it opens. */}
       {renameOpen && <RenameExperimentDialog experiment={experiment} open onOpenChange={setRenameOpen} />}
-    </PageLayout.TopArea>
+    </>
   );
 }

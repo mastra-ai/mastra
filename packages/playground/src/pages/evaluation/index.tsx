@@ -2,7 +2,7 @@ import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRa
 import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -50,45 +50,51 @@ export default function Evaluation() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <PermissionDenied resource="evaluation" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="evaluation" />
+        </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <ErrorState title="Failed to load evaluation data" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <div className="flex h-full items-center justify-center">
+          <ErrorState title="Failed to load evaluation data" message={error.message} />
+        </div>
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <DateTimeRangePicker
-              preset={datePreset}
-              onPresetChange={setDatePreset}
-              dateFrom={dateRange.start}
-              dateTo={dateRange.end}
-              onDateChange={(value, type) =>
-                setDateRange(current => (type === 'from' ? { ...current, start: value } : { ...current, end: value }))
-              }
-            />
-          </PageLayout.Column>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
+        <div className="grid content-start">
+          <DateTimeRangePicker
+            preset={datePreset}
+            onPresetChange={setDatePreset}
+            dateFrom={dateRange.start}
+            dateTo={dateRange.end}
+            onDateChange={(value, type) =>
+              setDateRange(current => (type === 'from' ? { ...current, start: value } : { ...current, end: value }))
+            }
+          />
+        </div>
+      }
+    >
       <div className="flex flex-col gap-4">
         <MetricsFlexGrid>
           <EvaluationKpiCards

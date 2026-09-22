@@ -40,7 +40,7 @@ function CreateLayoutWrapper() {
   );
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actions={actions} className="p-4">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       <AgentCmsFormShell
         form={form}
         mode="create"
