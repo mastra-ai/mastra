@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { transform } from './transform';
 
@@ -70,5 +71,15 @@ describe('transform', () => {
     await transform('v1/runtime-context', '.', {}, { logStatus: false });
 
     expect(stdoutWriteSpy).not.toHaveBeenCalled();
+  });
+
+  it('anchors the hidden-directory ignore pattern to the target', async () => {
+    const source = '/tmp/.worktrees/project';
+
+    await transform('v1/runtime-context', source, {}, { logStatus: false });
+
+    const childArgs = execFileMock.mock.calls[0]![1];
+    expect(childArgs).toContain(`--ignore-pattern=${path.join(path.resolve(source), '**/.*/**')}`);
+    expect(childArgs).not.toContain('--ignore-pattern=**/.*/**');
   });
 });

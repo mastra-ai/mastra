@@ -15,10 +15,12 @@ import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hook
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardStatus';
-import { githubNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
+import { changeRequestNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';
+import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem } from '../../factory/services/workItems';
+import { isPullRequestSource } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/user-sessions';
@@ -92,9 +94,9 @@ export function WorkspacesSection() {
   );
   const relatedItemsFor = relatedWorkItemIndex(allWorkItems);
   const latestPullRequestFor = (item: WorkItem) => {
-    if (item.source === 'github-pr') return item;
+    if (isPullRequestSource(item.source)) return item;
     return relatedItemsFor(item)
-      .filter(related => related.source === 'github-pr')
+      .filter(related => isPullRequestSource(related.source))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
   };
 
@@ -102,7 +104,9 @@ export function WorkspacesSection() {
     const workItemSession = workItemByPath.get(workspace.sessionId);
     const item = workItemSession?.item;
     const pullRequest = item && latestPullRequestFor(item);
-    const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
+    const pullRequestNumber = pullRequest ? changeRequestNumberForItem(pullRequest) : undefined;
+    // The card names its provider; GitLab merge requests poll their own subscriptions route.
+    const provider = pullRequest?.source === 'gitlab-pr' ? ('gitlab' as const) : ('github' as const);
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
     const initializing = !workspace.materializedAt;
@@ -127,6 +131,7 @@ export function WorkspacesSection() {
         updatedAt: item?.updatedAt ?? workspace.updatedAt,
         threadId: workItemSession?.threadId,
         pullRequestNumber,
+        provider,
         knownMerged: pullRequest?.metadata.merged === true,
         pinned: pinnedSessions.has(workspace.sessionId),
       },
@@ -151,6 +156,7 @@ export function WorkspacesSection() {
             threadId: row.threadId,
             projectPath: row.workspace.sessionId,
             pullRequestNumber: row.pullRequestNumber,
+            provider: row.provider,
             knownMerged: row.knownMerged,
           },
         ]
@@ -265,6 +271,7 @@ interface FactoryWorkspaceRow {
   updatedAt: string;
   threadId?: string;
   pullRequestNumber?: number;
+  provider: ChangeRequestProvider;
   knownMerged: boolean;
   pinned: boolean;
 }
@@ -315,6 +322,7 @@ function WorkspaceGroup({
             active={row.active}
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
+            changeRequestProvider={row.provider}
             status={sessionRowStatus(row)}
             pinned={row.pinned}
             preview={{

@@ -14,7 +14,7 @@ import { formatDate } from 'date-fns';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
-import { getRunTimestamp } from '../utils';
+import { getRunResourceId, getRunTimestamp } from '../utils';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
@@ -50,6 +50,25 @@ function formatRunInput(snapshot: unknown): string | null {
   }
 }
 
+function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resourceId?: string }) {
+  if (timestamp === undefined && !resourceId) return null;
+
+  return (
+    <span className="text-muted-foreground text-ui-xs flex w-full min-w-0 items-center gap-1.5">
+      {timestamp !== undefined && (
+        <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
+          {formatDate(timestamp, 'MMM d, yyyy · h:mm a')}
+        </time>
+      )}
+      {resourceId && (
+        <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
+          {timestamp === undefined ? resourceId : `· ${resourceId}`}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
@@ -83,11 +102,11 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="flex min-h-0 flex-col">
-        <CollapsibleTrigger className="text-ui-sm text-neutral4 flex shrink-0 items-center gap-2 px-4 py-3 text-left">
-          <ChevronRight aria-hidden className="text-neutral3 size-4 shrink-0 motion-reduce:transition-none" />
+        <CollapsibleTrigger className="text-ui-sm text-muted-foreground flex shrink-0 items-center gap-2 px-4 py-3 text-left">
+          <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0 motion-reduce:transition-none" />
           <span>Recent runs</span>
           {!isLoading && !error && (
-            <span className="text-ui-xs text-neutral3">
+            <span className="text-ui-xs text-muted-foreground">
               {runList.length}
               {hasNextPage ? '+' : ''}
             </span>
@@ -111,11 +130,8 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                   <ThreadListItems>
                     {runList.map(run => {
                       const isActiveRun = run.runId === runId;
-                      const runInput = isActiveRun ? formatRunInput(run.snapshot) : null;
-                      const runTimestamp =
-                        run?.snapshot && typeof run.snapshot === 'object'
-                          ? getRunTimestamp(run.snapshot.timestamp)
-                          : undefined;
+                      const snapshot = run.snapshot && typeof run.snapshot === 'object' ? run.snapshot : undefined;
+                      const runInput = isActiveRun ? formatRunInput(snapshot) : null;
 
                       return (
                         <ThreadListItem
@@ -128,27 +144,23 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                           className="h-auto min-h-0 items-stretch py-1"
                         >
                           <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
-                            {run?.snapshot && typeof run.snapshot === 'object' && (
+                            {snapshot && (
                               <span className="shrink-0">
-                                <WorkflowRunStatusIcon status={run.snapshot.status} />
+                                <WorkflowRunStatusIcon status={snapshot.status} />
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
                               <span className="text-ui-sm flex w-full min-w-0 items-center gap-2">
-                                <span className="text-neutral5 min-w-0 flex-1 truncate font-medium" title={run.runId}>
+                                <span className="text-foreground min-w-0 flex-1 truncate font-medium" title={run.runId}>
                                   {run.runId}
                                 </span>
                               </span>
-                              {runTimestamp !== undefined && (
-                                <time
-                                  className="text-neutral3 text-ui-xs"
-                                  dateTime={new Date(runTimestamp).toISOString()}
-                                >
-                                  {formatDate(runTimestamp, 'MMM d, yyyy · h:mm a')}
-                                </time>
-                              )}
+                              <WorkflowRunMeta
+                                timestamp={getRunTimestamp(snapshot?.timestamp)}
+                                resourceId={getRunResourceId(run)}
+                              />
                               {runInput && (
-                                <span className="text-neutral3 text-ui-sm block w-full min-w-0 truncate">
+                                <span className="text-muted-foreground text-ui-sm block w-full min-w-0 truncate">
                                   {runInput}
                                 </span>
                               )}

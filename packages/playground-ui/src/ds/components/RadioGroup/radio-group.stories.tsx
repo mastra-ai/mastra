@@ -13,7 +13,7 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
     <div className={`border-border1 rounded-2xl border p-5 ${className}`}>
-      <p className="text-ui-xs text-neutral3 mb-4 tracking-wide uppercase">{label}</p>
+      <p className="text-ui-xs text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
   );
@@ -41,7 +41,7 @@ function RadioPreview({
 
 function RadioStateGrid({ idPrefix }: { idPrefix: string }) {
   return (
-    <div className="text-ui-sm text-neutral3 grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
+    <div className="text-ui-sm text-muted-foreground grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
       <span />
       <span>Default</span>
       <span>Selected</span>
@@ -49,7 +49,7 @@ function RadioStateGrid({ idPrefix }: { idPrefix: string }) {
       <span>Disabled</span>
       <span>Disabled on</span>
 
-      <span className="text-neutral5">State</span>
+      <span className="text-foreground">State</span>
       <RadioPreview id={`${idPrefix}-default`} label={`${idPrefix} default`} />
       <RadioPreview id={`${idPrefix}-selected`} label={`${idPrefix} selected`} checked />
       <RadioPreview
@@ -166,21 +166,21 @@ export const WithDescriptions: Story = {
         <RadioGroupItem value="startup" id="startup" className="mt-1" />
         <div className="grid gap-1">
           <Label htmlFor="startup">Startup</Label>
-          <p className="text-neutral3 text-ui-sm">Best for small teams just getting started</p>
+          <p className="text-muted-foreground text-ui-sm">Best for small teams just getting started</p>
         </div>
       </div>
       <div className="flex items-start space-x-2">
         <RadioGroupItem value="business" id="business" className="mt-1" />
         <div className="grid gap-1">
           <Label htmlFor="business">Business</Label>
-          <p className="text-neutral3 text-ui-sm">For growing companies with advanced needs</p>
+          <p className="text-muted-foreground text-ui-sm">For growing companies with advanced needs</p>
         </div>
       </div>
       <div className="flex items-start space-x-2">
         <RadioGroupItem value="enterprise" id="enterprise" className="mt-1" />
         <div className="grid gap-1">
           <Label htmlFor="enterprise">Enterprise</Label>
-          <p className="text-neutral3 text-ui-sm">For large organizations requiring customization</p>
+          <p className="text-muted-foreground text-ui-sm">For large organizations requiring customization</p>
         </div>
       </div>
     </RadioGroup>

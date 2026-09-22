@@ -43,7 +43,7 @@ function Stage({
           <TooltipTrigger
             render={
               <span
-                className="text-neutral3 flex size-5 shrink-0 items-center justify-center [&_svg]:size-3.5"
+                className="text-muted-foreground flex size-5 shrink-0 items-center justify-center [&_svg]:size-3.5"
                 role="img"
                 aria-label={typeLabel}
               />
@@ -56,14 +56,14 @@ function Stage({
         {!isLast && <span aria-hidden className="bg-border1 mt-1 w-px flex-1" />}
       </div>
       <div className="grid min-w-0 gap-0.5">
-        <div className="text-ui-sm text-neutral5 flex min-h-5 items-center">{subject}</div>
-        <p className="text-ui-xs text-neutral2">{description}</p>
+        <div className="text-ui-sm text-foreground flex min-h-5 items-center">{subject}</div>
+        <p className="text-ui-xs text-placeholder">{description}</p>
       </div>
     </li>
   );
 }
 
-const linkClass = 'text-neutral5 inline-flex min-w-0 items-center gap-1.5 hover:underline';
+const linkClass = 'text-foreground inline-flex min-w-0 items-center gap-1.5 hover:underline';
 
 /**
  * Reads the experiment as the pipeline it actually is: every dataset item is sent
@@ -111,11 +111,11 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
                 {isDatasetLoading ? <Skeleton className="h-4 w-28" /> : (dataset?.name ?? experiment.datasetId)}
               </span>
               {experiment.datasetVersion != null && (
-                <span className="text-neutral3 shrink-0">(v{experiment.datasetVersion})</span>
+                <span className="text-muted-foreground shrink-0">(v{experiment.datasetVersion})</span>
               )}
             </LinkComponent>
           ) : (
-            <span className="text-neutral3">No dataset</span>
+            <span className="text-muted-foreground">No dataset</span>
           )
         }
       />
@@ -130,7 +130,7 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
               <span className="truncate">{targetName}</span>
             </LinkComponent>
           ) : (
-            <span className="text-neutral3 truncate">{targetName}</span>
+            <span className="text-muted-foreground truncate">{targetName}</span>
           )
         }
       />
@@ -142,7 +142,7 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
         isLast
         subject={
           scorerIds.length === 0 ? (
-            <span className="text-neutral3">No scorer has produced a score yet</span>
+            <span className="text-muted-foreground">No scorer has produced a score yet</span>
           ) : (
             <ul className="grid min-w-0 gap-0.5">
               {scorerIds.map(id => {

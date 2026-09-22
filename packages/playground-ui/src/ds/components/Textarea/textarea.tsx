@@ -71,7 +71,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         className={cn(
           textareaVariants({ variant: resolveFieldVariant(variant), size }),
-          error && 'border-error focus-visible:border-error',
+          error && 'border-destructive focus-visible:border-destructive',
           className,
         )}
         data-testid={testId}

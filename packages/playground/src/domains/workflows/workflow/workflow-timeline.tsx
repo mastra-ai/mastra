@@ -45,14 +45,14 @@ export function WorkflowTimeline() {
       >
         <div className="flex items-center">
           <CollapsibleTrigger
-            className="hover:bg-surface4 text-ui-sm text-neutral5 flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3.5 py-2.5"
+            className="hover:bg-surface4 text-ui-sm text-foreground flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3.5 py-2.5"
             aria-label={isCollapsed ? 'Expand timeline' : 'Collapse timeline'}
           >
             <span>
-              <ChartNoAxesGantt aria-hidden className="text-neutral3 size-4" />
+              <ChartNoAxesGantt aria-hidden className="text-muted-foreground size-4" />
             </span>
             <span>Timeline</span>
-            <span className="text-neutral3 text-ui-xs">{rows.length} events</span>
+            <span className="text-muted-foreground text-ui-xs">{rows.length} events</span>
             <span className="ml-auto">
               <ChevronDown
                 aria-hidden

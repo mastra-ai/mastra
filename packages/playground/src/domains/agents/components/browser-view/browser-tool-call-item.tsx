@@ -93,26 +93,26 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
         className="hover:bg-surface3 flex w-full items-center gap-2 px-3 py-0.5 text-left transition-colors"
       >
         <ChevronRight
-          className={cn('h-3 w-3 text-neutral3 transition-transform shrink-0', isExpanded && 'rotate-90')}
+          className={cn('h-3 w-3 text-muted-foreground transition-transform shrink-0', isExpanded && 'rotate-90')}
         />
 
         <StatusDot status={entry.status} />
 
-        <span className="text-neutral6 text-ui-sm shrink-0 font-medium">{displayName}</span>
+        <span className="text-foreground text-ui-sm shrink-0 font-medium">{displayName}</span>
 
-        {keyArg && <span className="text-neutral3 text-ui-sm truncate">{keyArg}</span>}
+        {keyArg && <span className="text-muted-foreground text-ui-sm truncate">{keyArg}</span>}
       </button>
 
       {isExpanded && (
         <div className="space-y-2 px-3 pb-2">
           <div>
-            <p className="text-neutral4 text-ui-sm pb-1 font-medium">Arguments</p>
+            <p className="text-muted-foreground text-ui-sm pb-1 font-medium">Arguments</p>
             <CodeEditor data={displayArgs} data-testid="browser-tool-args" />
           </div>
 
           {entry.result !== undefined && entry.result !== null && (
             <div>
-              <p className="text-neutral4 text-ui-sm pb-1 font-medium">Result</p>
+              <p className="text-muted-foreground text-ui-sm pb-1 font-medium">Result</p>
               {typeof entry.result === 'string' ? (
                 <pre className="bg-surface4 text-ui-sm max-h-40 overflow-x-auto overflow-y-auto rounded-md p-2 whitespace-pre">
                   {entry.result}
@@ -134,7 +134,7 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
 function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
   switch (status) {
     case 'pending':
-      return <Loader2 className="text-neutral4 h-3 w-3 shrink-0 animate-spin" />;
+      return <Loader2 className="text-muted-foreground h-3 w-3 shrink-0 animate-spin" />;
     case 'complete':
       return <Check className="h-3 w-3 shrink-0 text-green-500" />;
     case 'error':

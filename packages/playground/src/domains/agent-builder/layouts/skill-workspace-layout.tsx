@@ -52,7 +52,7 @@ export const SkillWorkspaceLayout = ({
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="text-ui-md text-neutral6 min-w-0 truncate">{title}</div>
+          <div className="text-ui-md text-foreground min-w-0 truncate">{title}</div>
           {rightAside && <div className="shrink-0">{rightAside}</div>}
         </div>
         {primaryAction && <div className="shrink-0">{primaryAction}</div>}
@@ -85,7 +85,7 @@ export const SkillWorkspaceLayout = ({
               className={cn(
                 'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
                 'transition-colors duration-200',
-                activeTab === 'chat' ? 'text-neutral5' : 'text-neutral3 hover:text-neutral4',
+                activeTab === 'chat' ? 'text-foreground' : 'text-muted-foreground hover:text-muted-foreground',
               )}
             >
               Chat
@@ -99,7 +99,7 @@ export const SkillWorkspaceLayout = ({
               className={cn(
                 'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
                 'transition-colors duration-200',
-                activeTab === 'configure' ? 'text-neutral5' : 'text-neutral3 hover:text-neutral4',
+                activeTab === 'configure' ? 'text-foreground' : 'text-muted-foreground hover:text-muted-foreground',
               )}
             >
               Configuration

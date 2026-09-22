@@ -114,7 +114,13 @@ function labelDotClass(label: string): string {
   return 'bg-icon3';
 }
 
-export function CardLabels({ labels }: { labels: readonly string[] }) {
+export function CardLabels({
+  labels,
+  colors = {},
+}: {
+  labels: readonly string[];
+  colors?: Readonly<Record<string, string>>;
+}) {
   const displayLabels = labels.filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
   if (displayLabels.length === 0) return null;
   return (
@@ -126,7 +132,11 @@ export function CardLabels({ labels }: { labels: readonly string[] }) {
             className="border-border1 text-ui-xs text-icon4 inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
             title={label}
           >
-            <span className={cn('size-1 shrink-0 rounded-full', labelDotClass(label))} aria-hidden />
+            <span
+              className={cn('size-1 shrink-0 rounded-full', labelDotClass(label))}
+              style={colors[label] ? { backgroundColor: colors[label] } : undefined}
+              aria-hidden
+            />
             <span className="truncate">{label}</span>
           </span>
         ))}
@@ -134,8 +144,6 @@ export function CardLabels({ labels }: { labels: readonly string[] }) {
     </ScrollArea>
   );
 }
-
-/** Pinned to the card's bottom: the likeliest click first, lit only while the card waits on a person, the rest stacked under it, `trailing` at the right. */
 export function CardActions({
   actions,
   beforeStart,

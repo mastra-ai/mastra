@@ -14,6 +14,7 @@ import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
 import type { InstalledBoardInfo } from '../../../../../api/types';
 import type { GithubIssue } from '../../services/factory';
+import type { GitLabIssue } from '../../services/gitlab';
 import type { IntakeLabelRoute, IntakeSourceBinding } from '../../services/intake';
 import type { JiraIssue } from '../../services/jira';
 import type { LinearIssue } from '../../services/linear';
@@ -21,6 +22,7 @@ import { useBoardIntake } from '../useBoardIntake';
 
 const repository = { projectRepositoryId: 'repo-1', slug: 'acme/app' } as LinkedRepositoryPayload;
 const workBoard = builtinBoardCatalog.boards.find(board => board.id === 'work')!;
+const reviewBoard = builtinBoardCatalog.boards.find(board => board.id === 'review')!;
 
 const linearIssue = (identifier: string, sourceId: string): LinearIssue => ({
   id: identifier,
@@ -215,6 +217,161 @@ describe('useBoardIntake board-bound sources', () => {
 
     await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(result.current.available).toEqual([]);
+  });
+});
+
+describe('useBoardIntake GitLab routing', () => {
+  it('never queries GitHub issues or label routes for a GitLab-linked Work board', async () => {
+    const sourceId = 'gitlab-project:encoded-source';
+    let githubIssueRequests = 0;
+    let githubLabelRouteRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: false, sourceIds: [] },
+            gitlab: { enabled: true, sourceIds: [sourceId] },
+            linear: { enabled: false, sourceIds: [] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [{ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1', board: 'work' }],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () => {
+        githubIssueRequests++;
+        return HttpResponse.json({ issues: [], nextPage: null });
+      }),
+      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => {
+        githubLabelRouteRequests++;
+        return HttpResponse.json({ routes: [] });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repository: { ...repository, provider: 'gitlab' },
+        definition: workBoard,
+        knownSourceKeys: new Set(),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.active).toBe('gitlab'));
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(githubIssueRequests).toBe(0);
+    expect(githubLabelRouteRequests).toBe(0);
+  });
+
+  it('uses the GitLab MR feed for a GitLab-linked Review board and never requests GitHub PRs', async () => {
+    let githubRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects/repo-1/prs`, ({ request }) => {
+        const url = new URL(request.url);
+        expect(url.searchParams.get('factoryProjectId')).toBe('factory-1');
+        expect(url.searchParams.get('page')).toBe('1');
+        return HttpResponse.json({
+          pullRequests: [
+            {
+              number: 5,
+              externalId: 'gitlab-pr:encoded-5',
+              title: 'Validate GitLab',
+              url: 'https://gitlab.com/acme/app/-/merge_requests/5',
+              author: 'rhys',
+              assignees: [],
+              requestedReviewers: [],
+              baseBranch: 'main',
+              headBranch: 'test-branch',
+              createdAt: '2026-09-18T00:00:00Z',
+              updatedAt: '2026-09-18T00:00:00Z',
+            },
+          ],
+          nextPage: null,
+        });
+      }),
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () => {
+        githubRequests++;
+        return HttpResponse.json({ pullRequests: [], nextPage: null });
+      }),
+    );
+    const { result } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repository: { ...repository, provider: 'gitlab' },
+        definition: reviewBoard,
+        knownSourceKeys: new Set(),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
+    expect(result.current.active).toBe('gitlab-prs');
+    expect(result.current.candidates[0]).toMatchObject({ source: 'gitlab-pr', sourceKey: 'gitlab-pr:encoded-5' });
+    expect(githubRequests).toBe(0);
+  });
+
+  it('shows a routed GitLab issue on its destination board', async () => {
+    const sourceId = 'gitlab-project:encoded-source';
+    const issue: GitLabIssue = {
+      id: '42',
+      externalId: 'gitlab-issue:encoded-42',
+      identifier: 'acme/app#42',
+      title: 'Fix GitLab intake',
+      url: 'https://gitlab.com/acme/app/-/issues/42',
+      state: 'opened',
+      stateType: 'unstarted',
+      priority: null,
+      assignee: 'ada',
+      author: 'grace',
+      source: 'acme/app',
+      sourceId,
+      labels: ['bug'],
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    };
+    server.use(
+      http.get(TEST_BASE_URL + '/web/intake/config', () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: false, sourceIds: null },
+            gitlab: { enabled: true, sourceIds: [sourceId] },
+            linear: { enabled: false, sourceIds: null },
+          },
+        }),
+      ),
+      http.get(TEST_BASE_URL + '/web/intake/bindings', () =>
+        HttpResponse.json({
+          bindings: [{ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1', board: 'release' }],
+        }),
+      ),
+      http.get(TEST_BASE_URL + '/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
+      http.get(TEST_BASE_URL + '/web/gitlab/status', () =>
+        HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
+      ),
+      http.get(TEST_BASE_URL + '/web/gitlab/issues', ({ request }) => {
+        const url = new URL(request.url);
+        expect(url.searchParams.get('factoryProjectId')).toBe('factory-1');
+        expect(url.searchParams.get('board')).toBe('release');
+        return HttpResponse.json({ issues: [issue], nextCursor: null });
+      }),
+      http.get(TEST_BASE_URL + '/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false })),
+    );
+
+    const { result } = renderIntake('factory-1', releaseBoard);
+
+    await waitFor(() => expect(result.current.active).toBe('gitlab'));
+    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
+    expect(result.current.candidates[0]).toMatchObject({
+      source: 'gitlab-issue',
+      sourceKey: issue.externalId,
+      column: 'queued',
+    });
   });
 });
 

@@ -39,20 +39,20 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const { icon, title } = getIconAndTitle();
 
   return (
-    <Container className="text-neutral3 mb-5 content-center space-y-4">
+    <Container className="text-muted-foreground mb-5 content-center space-y-4">
       {/* Main Error Display */}
       <div className={cn('grid items-center justify-items-center gap-4 content-center', '[&>svg]:w-8 [&>svg]:h-8')}>
         {icon}
         <div className="space-y-2 text-center">
-          <p className="text-ui-md text-neutral5 font-medium">{title}</p>
-          <p className="text-ui-md text-neutral3">{getUserFriendlyMessage()}</p>
+          <p className="text-ui-md text-foreground font-medium">{title}</p>
+          <p className="text-ui-md text-muted-foreground">{getUserFriendlyMessage()}</p>
         </div>
       </div>
 
       {/* Validation Errors */}
       {validationErrors && validationErrors.length > 0 && (
         <details className="text-ui-sm">
-          <summary className="text-neutral3 hover:text-neutral4 cursor-pointer text-center select-none">
+          <summary className="text-muted-foreground hover:text-muted-foreground cursor-pointer text-center select-none">
             Show Validation Issues ({validationErrors.length})
           </summary>
           <div className="text-ui-sm mt-4 max-h-60 space-y-2 overflow-auto rounded bg-gray-100 p-3 text-left dark:bg-gray-800">
@@ -73,7 +73,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
       {/* General Error Details */}
       {errorString && !isValidationError && (
         <details className="text-ui-sm">
-          <summary className="text-neutral3 hover:text-neutral4 cursor-pointer text-center select-none">
+          <summary className="text-muted-foreground hover:text-muted-foreground cursor-pointer text-center select-none">
             Show Details
           </summary>
           <div className="text-ui-sm mt-4 max-h-60 overflow-auto rounded bg-gray-100 p-3 text-left font-mono dark:bg-gray-800">

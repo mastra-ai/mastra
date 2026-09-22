@@ -101,7 +101,7 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
     setSelectedPreset(getMatchingPresetKey(presets, requestContextStr));
   };
 
-  const buttonClass = 'text-neutral3 hover:text-neutral6';
+  const buttonClass = 'text-muted-foreground hover:text-foreground';
 
   const formatRequestContext = async () => {
     if (!isValidJson(requestContextValue)) {

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { getErrorFromUnknown } from '../error';
 import { withAck } from '../events/acking-callback';
 import { EventEmitterPubSub } from '../events/event-emitter';
@@ -447,7 +445,7 @@ export class AgentThreadStreamRuntime {
   }
 
   #getSourceId(): string {
-    this.#id ??= randomUUID();
+    this.#id ??= globalThis.crypto.randomUUID();
     return this.#id;
   }
 
@@ -678,7 +676,7 @@ export class AgentThreadStreamRuntime {
   #nextStreamIdentity(state: AgentThreadRuntimeState, runId: string) {
     const streamSeq = (state.streamSeqByRunId.get(runId) ?? 0) + 1;
     state.streamSeqByRunId.set(runId, streamSeq);
-    return { streamId: randomUUID(), streamSeq };
+    return { streamId: globalThis.crypto.randomUUID(), streamSeq };
   }
 
   #markRunSuspending(
@@ -736,7 +734,7 @@ export class AgentThreadStreamRuntime {
         entityId: agent.id,
         threadId: target.threadId,
         resourceId: target.resourceId,
-      }) ?? randomUUID()
+      }) ?? globalThis.crypto.randomUUID()
     );
   }
 
@@ -1018,10 +1016,11 @@ export class AgentThreadStreamRuntime {
   async discoverThreadPeers(
     options: DiscoverAgentThreadPeersOptions = {},
     pubsub?: PubSub,
+    callerAgent?: Agent<any, any, any, any>,
   ): Promise<AgentThreadPeerAdvertisement[]> {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const state = this.#getState(resolvedPubSub);
-    const requestId = randomUUID();
+    const requestId = globalThis.crypto.randomUUID();
     const replyTopic = `${AGENT_THREAD_PEER_DISCOVERY_TOPIC}.${requestId}`;
     const peers = new Map<string, AgentThreadPeerAdvertisement>();
     const discoveredAt = new Date();
@@ -1057,6 +1056,18 @@ export class AgentThreadStreamRuntime {
         )
         .catch(() => finish());
     });
+
+    // The mark is applied after every pass that can produce an entry: a reply can
+    // describe a thread this caller already owns — a second live instance with the
+    // same thread loaded answers discovery too, and its reply replaces the local
+    // entry. The runtime is shared by every agent in the process, so the mark is
+    // scoped to the claiming agent: a sibling agent's claim stays a real peer.
+    if (callerAgent !== undefined) {
+      for (const [id, peer] of peers) {
+        const owner = state.claimedThreadOwners.get(this.#threadKey(peer.resourceId, peer.threadId));
+        if (owner?.agent === callerAgent) peers.set(id, { ...peer, selfAdvertised: true });
+      }
+    }
 
     return [...peers.values()].sort((a, b) => a.id.localeCompare(b.id));
   }
@@ -1191,7 +1202,7 @@ export class AgentThreadStreamRuntime {
     signal: CreatedAgentSignal,
     targetSourceId: string,
   ): Promise<string> {
-    const requestId = randomUUID();
+    const requestId = globalThis.crypto.randomUUID();
     const replyTopic = `${this.#threadTopic(key)}.idle-acceptance.${requestId}`;
 
     return new Promise<string>((resolve, reject) => {
@@ -1269,7 +1280,7 @@ export class AgentThreadStreamRuntime {
       return this.#getSourceId();
     }
 
-    const requestId = randomUUID();
+    const requestId = globalThis.crypto.randomUUID();
     const replyTopic = `${AGENT_THREAD_OWNER_DISCOVERY_TOPIC}.${requestId}`;
 
     return new Promise<string | undefined>(resolve => {
@@ -1730,6 +1741,10 @@ export class AgentThreadStreamRuntime {
     if (state.remoteThreadKeysByRunId.get(runId) !== key) return false;
     const streamId = state.activeThreadStreamIds.get(key);
     if (!streamId) return false;
+    // A remote owner's run is only stopped when the abort is meant for it. Thread
+    // lifecycle transitions abort locally on the way out and must not reach across
+    // processes: a follower running `/new` would otherwise kill the owner's run.
+    if (options.localOnly) return false;
     this.#publish(resolvedPubSub, key, { type: 'run-abort-requested', runId, streamId });
     return true;
   }
@@ -2401,7 +2416,7 @@ export class AgentThreadStreamRuntime {
         // old owner already lost the lease (e.g. a pubsub blip let the TTL lapse
         // and another process took over), forward the signal to the new winner
         // instead of starting a competing run here.
-        nextRunId = randomUUID();
+        nextRunId = globalThis.crypto.randomUUID();
         state.activeThreadRunIds.set(key, nextRunId);
         state.threadKeysByRunId.set(nextRunId, key);
         const owns = await this.#acquireOrTransferThreadLease(pubsub, key, nextRunId, previousRun.runId);
@@ -2608,7 +2623,7 @@ export class AgentThreadStreamRuntime {
   ): { accepted: true; runId: string } {
     const state = this.#getState(pubsub);
     const key = this.#threadKey(target.resourceId, target.threadId);
-    const runId = target.runId ?? randomUUID();
+    const runId = target.runId ?? globalThis.crypto.randomUUID();
     const pending: PendingContinuation<OUTPUT> = {
       agent,
       messages,
@@ -3477,7 +3492,8 @@ export class AgentThreadStreamRuntime {
         const record = activeReaderStreamId ? state.threadRunsByStreamId.get(activeReaderStreamId) : undefined;
         return record ? record.streamOptions.requestContext : currentRunRequestContext;
       },
-      abort: () => this.abortThread(options, resolvedPubSub),
+      abort: (abortOptions?: { localOnly?: boolean }) =>
+        this.abortThread(abortOptions?.localOnly ? { ...options, localOnly: true } : options, resolvedPubSub),
       unsubscribe,
       stream: (async function* () {
         try {
@@ -3670,7 +3686,7 @@ export class AgentThreadStreamRuntime {
       id: this.#generateSignalMessageId(agent, { resourceId, threadId }),
       acceptedAt,
     });
-    const queuedRunId = randomUUID();
+    const queuedRunId = globalThis.crypto.randomUUID();
     // Preserve explicit cancellation, but don't inherit the active run's signal.
     const queuedStreamOptions = target.ifIdle?.streamOptions ?? {
       ...activeRecord?.streamOptions,
@@ -3917,7 +3933,7 @@ export class AgentThreadStreamRuntime {
           const accepted = this.#deliverAfterClaimedOwnerDiscovery<OUTPUT>(
             this.#getPubSub(pubsub),
             key,
-            randomUUID(),
+            globalThis.crypto.randomUUID(),
             signal,
             claimedOwnerDiscovery,
           );
@@ -3943,7 +3959,7 @@ export class AgentThreadStreamRuntime {
       }
     }
 
-    runId = randomUUID();
+    runId = globalThis.crypto.randomUUID();
     key ??= this.#threadKey(resourceId, threadId);
     if (idleBehavior === 'persist') {
       // Transient signals are never written to storage, so an idle `persist` behavior drops

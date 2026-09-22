@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
@@ -765,7 +763,7 @@ export class AgentController<TState = {}> {
       this.#sessionsBeingDeleted.add(session);
       // tolerantPromise is set synchronously below before this microtask runs.
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
-      session.abort();
+      session.abort({ localOnly: true });
       session.thread.cleanupSubscription();
       try {
         await session.thread.clearAndReleaseLock();
@@ -1929,6 +1927,7 @@ export class AgentController<TState = {}> {
     tracingOptions,
     untilIdle,
     abortSignal,
+    threadId,
   }: {
     session: Session<TState>;
     requestContext?: RequestContext;
@@ -1936,8 +1935,11 @@ export class AgentController<TState = {}> {
     tracingOptions?: TracingOptions;
     untilIdle?: boolean | { maxIdleMs?: number };
     abortSignal?: AbortSignal;
+    threadId?: string;
   }): Promise<Record<string, unknown>> {
-    const runThreadId = session.thread.getId();
+    // A caller may name the thread the run belongs to (a claimed thread woken by
+    // a peer); otherwise the run belongs to whichever thread the session holds.
+    const runThreadId = threadId ?? session.thread.getId();
     if (!runThreadId) {
       throw new Error('Cannot build stream options without a current thread');
     }
@@ -1995,10 +1997,21 @@ export class AgentController<TState = {}> {
         const data = chunk.data as { toolCallId?: string; progress?: unknown } | undefined;
         if (!data?.toolCallId || data.progress === undefined) return;
 
-        session.emit({ type: 'tool_update', toolCallId: data.toolCallId, partialResult: data.progress });
+        session.emit({
+          type: 'tool_update',
+          threadId: runThreadId,
+          toolCallId: data.toolCallId,
+          partialResult: data.progress,
+        });
         const output = this.formatToolProgressOutput(data.progress);
         if (output) {
-          session.emit({ type: 'shell_output', toolCallId: data.toolCallId, output, stream: 'stdout' });
+          session.emit({
+            type: 'shell_output',
+            threadId: runThreadId,
+            toolCallId: data.toolCallId,
+            output,
+            stream: 'stdout',
+          });
         }
       },
       ...(tracingContext && { tracingContext }),
@@ -2083,7 +2096,7 @@ export class AgentController<TState = {}> {
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const dbMessage = {
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role,
       threadId,
       resourceId,
@@ -2477,6 +2490,6 @@ export class AgentController<TState = {}> {
     if (this.config.idGenerator) {
       return this.config.idGenerator();
     }
-    return randomUUID();
+    return globalThis.crypto.randomUUID();
   }
 }

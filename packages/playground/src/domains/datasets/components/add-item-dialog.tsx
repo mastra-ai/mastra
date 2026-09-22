@@ -3,13 +3,14 @@
 import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DatasetItemScorerSelector } from './dataset-detail/dataset-item-scorer-selector';
+import { DatasetFieldErrors } from './dataset-field-errors';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
@@ -34,25 +35,6 @@ function parseValidationError(error: unknown): SchemaValidationError | null {
     // Not valid JSON
   }
   return null;
-}
-
-/** Displays field-level validation errors */
-function ValidationErrors({ field, errors }: { field: string; errors: Array<{ path: string; message: string }> }) {
-  if (!errors.length) return null;
-
-  return (
-    <div className="mt-2 space-y-1">
-      {errors.map((err, idx) => (
-        <p key={idx} className="text-destructive text-ui-sm">
-          <code className="bg-destructive/10 rounded px-1">
-            {field}
-            {err.path !== '/' ? err.path : ''}
-          </code>
-          : {err.message}
-        </p>
-      ))}
-    </div>
-  );
 }
 
 export interface AddItemDialogProps {
@@ -221,27 +203,45 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
 
         <form onSubmit={handleSubmit} className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="item-input">Input (JSON) *</Label>
-            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[240px]" />
-            {validationErrors?.field === 'input' && <ValidationErrors field="input" errors={validationErrors.errors} />}
+            <FieldBlock.Label name="item-input" required>
+              Input (JSON)
+            </FieldBlock.Label>
+            <CodeEditor
+              id="input-item-input"
+              aria-invalid={validationErrors?.field === 'input' ? true : undefined}
+              aria-describedby={validationErrors?.field === 'input' ? fieldErrorId('item-input') : undefined}
+              value={input}
+              onChange={handleInputChange}
+              showCopyButton={false}
+              className="min-h-[240px]"
+            />
+            {validationErrors?.field === 'input' && (
+              <DatasetFieldErrors name="item-input" field="input" errors={validationErrors.errors} />
+            )}
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
+            <FieldBlock.Label name="item-ground-truth">Ground Truth (JSON, optional)</FieldBlock.Label>
             <CodeEditor
+              id="input-item-ground-truth"
+              aria-invalid={validationErrors?.field === 'groundTruth' ? true : undefined}
+              aria-describedby={
+                validationErrors?.field === 'groundTruth' ? fieldErrorId('item-ground-truth') : undefined
+              }
               value={groundTruth}
               onChange={handleGroundTruthChange}
               showCopyButton={false}
               className="min-h-[200px]"
             />
             {validationErrors?.field === 'groundTruth' && (
-              <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
+              <DatasetFieldErrors name="item-ground-truth" field="groundTruth" errors={validationErrors.errors} />
             )}
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
+            <FieldBlock.Label name="item-trajectory">Expected Trajectory (JSON, optional)</FieldBlock.Label>
             <CodeEditor
+              id="input-item-trajectory"
               value={expectedTrajectory}
               onChange={setExpectedTrajectory}
               showCopyButton={false}
@@ -250,15 +250,18 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="item-tool-mocks">Tool Mocks (JSON array, optional)</Label>
+            <FieldBlock.Label name="item-tool-mocks">Tool Mocks (JSON array, optional)</FieldBlock.Label>
             <CodeEditor
+              id="input-item-tool-mocks"
+              aria-invalid={validationErrors?.field === 'toolMocks' ? true : undefined}
+              aria-describedby={validationErrors?.field === 'toolMocks' ? fieldErrorId('item-tool-mocks') : undefined}
               value={toolMocks}
               onChange={handleToolMocksChange}
               showCopyButton={false}
               className="min-h-[200px]"
             />
             {validationErrors?.field === 'toolMocks' && (
-              <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
+              <DatasetFieldErrors name="item-tool-mocks" field="toolMocks" errors={validationErrors.errors} />
             )}
           </div>
 
@@ -271,8 +274,9 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           />
 
           <div className="grid gap-2">
-            <Label htmlFor="item-request-context">Request Context (JSON, optional)</Label>
+            <FieldBlock.Label name="item-request-context">Request Context (JSON, optional)</FieldBlock.Label>
             <CodeEditor
+              id="input-item-request-context"
               value={requestContext}
               onChange={setRequestContext}
               showCopyButton={false}

@@ -56,7 +56,7 @@ export const WithInput: Story = {
   render: args => (
     <div className="flex items-center gap-4">
       <input
-        className="border-border1 bg-surface3 text-neutral6 rounded-md border px-2 py-1"
+        className="border-border1 bg-surface3 text-foreground rounded-md border px-2 py-1"
         placeholder="Type c here"
       />
       <CreateButton {...args} />

@@ -510,6 +510,7 @@ describe('DuckDB advanced trace query', () => {
     expect(response).toEqual({
       traces: [],
       pagination: { total, page, perPage: 2, hasMore: false },
+      deltaCursor: expect.any(String),
     });
   });
 

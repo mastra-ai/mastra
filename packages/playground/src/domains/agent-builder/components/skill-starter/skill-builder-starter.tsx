@@ -110,7 +110,7 @@ export const SkillBuilderStarter = () => {
   return (
     <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <h1 className="starter-heading text-neutral6 text-header-lg md:text-header-xl text-center font-serif tracking-tight">
+        <h1 className="starter-heading text-foreground text-header-lg md:text-header-xl text-center font-serif tracking-tight">
           What skill do you want to build?
         </h1>
 
@@ -129,7 +129,7 @@ export const SkillBuilderStarter = () => {
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isCreating}
-              className="text-ui-md placeholder:text-neutral3 min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
+              className="text-ui-md placeholder:text-muted-foreground min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
               rows={3}
             />
             <div className="flex items-center justify-end px-3 pb-2.5">
@@ -164,9 +164,9 @@ export const SkillBuilderStarter = () => {
                 onClick={() => handleExampleClick(example.prompt)}
                 data-testid={`skill-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + i * 40}ms` }}
-                className="starter-chip group border-border1 text-ui-sm text-neutral4 duration-normal ease-out-custom hover:border-border2 hover:bg-surface2 hover:text-neutral6 inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2 transition-colors"
+                className="starter-chip group border-border1 text-ui-sm text-muted-foreground duration-normal ease-out-custom hover:border-border2 hover:bg-surface2 hover:text-foreground inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2 transition-colors"
               >
-                <Icon className="text-neutral3 group-hover:text-neutral5 h-3.5 w-3.5 transition-colors" />
+                <Icon className="text-muted-foreground group-hover:text-foreground h-3.5 w-3.5 transition-colors" />
                 {example.title}
               </button>
             );

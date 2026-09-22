@@ -145,9 +145,9 @@ const commentItemAuthorSize: Record<CommentVariant, TxtProps['variant']> = {
 };
 
 const commentItemAuthorTone: Record<CommentVariant, string> = {
-  default: 'font-medium text-neutral6',
-  embed: 'font-medium text-neutral6',
-  thread: 'truncate font-medium text-neutral6',
+  default: 'font-medium text-foreground',
+  embed: 'font-medium text-foreground',
+  thread: 'truncate font-medium text-foreground',
 };
 
 export type CommentItemAuthorProps = ComponentPropsWithoutRef<'span'>;
@@ -169,9 +169,9 @@ export const CommentItemAuthor = forwardRef<HTMLElement, CommentItemAuthorProps>
 CommentItemAuthor.displayName = 'CommentItemAuthor';
 
 const commentItemTimestampTone: Record<CommentVariant, string> = {
-  default: 'text-ui-sm leading-ui-sm text-neutral3',
-  embed: 'text-ui-sm leading-ui-sm text-neutral3',
-  thread: 'text-ui-xs leading-ui-xs text-neutral2 shrink-0',
+  default: 'text-ui-sm leading-ui-sm text-muted-foreground',
+  embed: 'text-ui-sm leading-ui-sm text-muted-foreground',
+  thread: 'text-ui-xs leading-ui-xs text-placeholder shrink-0',
 };
 
 export type CommentItemTimestampProps = ComponentPropsWithoutRef<'time'>;
@@ -199,8 +199,8 @@ const commentItemBodySize: Record<CommentVariant, TxtProps['variant']> = {
 };
 
 const commentItemBodyTone: Record<CommentVariant, string> = {
-  default: 'whitespace-pre-wrap text-neutral6 border-l border-border1 pl-3',
-  embed: 'whitespace-pre-wrap text-neutral6',
+  default: 'whitespace-pre-wrap text-foreground border-l border-border1 pl-3',
+  embed: 'whitespace-pre-wrap text-foreground',
   thread: '',
 };
 

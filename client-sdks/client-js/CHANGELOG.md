@@ -1,5 +1,23 @@
 # @mastra/client-js
 
+## 1.47.0-alpha.10
+
+### Patch Changes
+
+- # Add pagination support to listThreadMessages ([#23669](https://github.com/mastra-ai/mastra/pull/23669))
+
+  The `listThreadMessages` client API now accepts pagination parameters to allow fetching previous chunks of conversation history.
+
+  ```ts
+  const messages = await client.listThreadMessages('thread-123', {
+    page: 1,
+    perPage: 40,
+  });
+  ```
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0)]:
+  - @mastra/core@1.68.0-alpha.10
+
 ## 1.47.0-alpha.9
 
 ### Patch Changes

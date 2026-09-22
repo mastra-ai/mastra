@@ -36,7 +36,7 @@ function SearchPreview(props: ListSearchProps) {
           props.onSearch(nextValue);
         }}
       />
-      <p className="text-ui-sm text-neutral3">Debounced value: {debouncedValue || 'None'}</p>
+      <p className="text-ui-sm text-muted-foreground">Debounced value: {debouncedValue || 'None'}</p>
     </div>
   );
 }
@@ -50,7 +50,6 @@ export const PresetValue: Story = {
     value: 'research',
     debounceMs: 0,
     size: 'sm',
-    variant: 'unstyled',
   },
   render: args => <SearchPreview {...args} />,
 };

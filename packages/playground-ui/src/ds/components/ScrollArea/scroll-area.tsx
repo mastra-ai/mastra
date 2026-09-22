@@ -123,7 +123,7 @@ const ScrollButton = ({ direction, label, onStartScrolling, onStopScrolling, onK
       type="button"
       aria-label={label}
       className={cn(
-        'absolute inset-y-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-neutral3 transition-colors duration-normal ease-out-custom hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
+        'absolute inset-y-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground transition-colors duration-normal ease-out-custom hover:bg-neutral6/5 hover:text-foreground active:bg-neutral6/10',
         'outline-hidden focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
         direction === 'left'
           ? 'left-1 group-data-[overflow-x-start]/scroll-area:flex'

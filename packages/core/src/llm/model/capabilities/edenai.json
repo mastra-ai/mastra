@@ -442,6 +442,7 @@
     "cerebras/gpt-oss-120b",
     "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731",
     "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813",
+    "cloudflare/@cf/qwen/qwen2.5-coder-32b-instruct",
     "cloudflare/@cf/zai-org/glm-4.7-flash",
     "cohere/command-a-03-2025",
     "cohere/command-r-08-2024",

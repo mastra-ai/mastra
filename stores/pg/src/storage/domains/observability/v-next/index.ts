@@ -165,6 +165,7 @@ export type VNextPostgresObservabilityConfig = PgDomainConfig & {
 function wrapError(op: string, error: unknown, details?: Record<string, unknown>): never {
   if (
     error instanceof MastraError ||
+    error instanceof coreStorage.TraceQueryCursorError ||
     error instanceof coreStorage.TraceQueryExecutionError ||
     error instanceof coreStorage.TraceQueryResourceLimitError
   )

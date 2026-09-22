@@ -67,11 +67,11 @@ export function HorizontalBars({
           {segments.map(seg => (
             <div key={seg.label} className="flex items-center gap-2">
               <div className="size-2 rounded-full" style={{ backgroundColor: seg.color }} />
-              <span className="text-ui-sm text-neutral3">{seg.label}</span>
+              <span className="text-ui-sm text-muted-foreground">{seg.label}</span>
             </div>
           ))}
         </div>
-        <span className="text-ui-sm text-neutral2 shrink-0 pr-2">Total</span>
+        <span className="text-ui-sm text-placeholder shrink-0 pr-2">Total</span>
       </div>
       <div className="grid gap-3.5">
         {sorted.map(d => {
@@ -148,7 +148,7 @@ export function HorizontalBars({
                     darkLabelOnFill && 'dark:[clip-path:inset(0_0_0_var(--bar-width))]',
                   )}
                 >
-                  <span className="text-ui-sm text-neutral4 absolute inset-y-0 left-2.5 flex items-center truncate">
+                  <span className="text-ui-sm text-muted-foreground absolute inset-y-0 left-2.5 flex items-center truncate">
                     {d.name}
                   </span>
                 </div>
@@ -157,13 +157,13 @@ export function HorizontalBars({
                     aria-hidden
                     className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-(--bar-width) overflow-hidden dark:block"
                   >
-                    <span className="text-ui-sm text-neutral1 absolute inset-y-0 left-2.5 flex items-center whitespace-nowrap">
+                    <span className="text-ui-sm text-placeholder absolute inset-y-0 left-2.5 flex items-center whitespace-nowrap">
                       {d.name}
                     </span>
                   </div>
                 )}
               </div>
-              <span className="text-ui-md text-neutral4 shrink-0 pr-3 tabular-nums">{fmt(total)}</span>
+              <span className="text-ui-md text-muted-foreground shrink-0 pr-3 tabular-nums">{fmt(total)}</span>
             </>
           );
 

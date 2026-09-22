@@ -1,18 +1,40 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { FilterBarField, FilterBarItem, FilterBarOperator, FilterBarSegment } from './types';
+import type {
+  DraftStage,
+  FilterBarCommit,
+  FilterBarDraft,
+  FilterBarField,
+  FilterBarItem,
+  FilterBarOperator,
+  FilterBarSegment,
+  FilterBarValue,
+} from './types';
 
 type SegmentKey = `${string}:${FilterBarSegment}`;
 
 const SEGMENTS_LEFT_TO_RIGHT: FilterBarSegment[] = ['field', 'operator', 'value', 'remove'];
 const SEGMENTS_RIGHT_TO_LEFT: FilterBarSegment[] = [...SEGMENTS_LEFT_TO_RIGHT].reverse();
 
+const stageOf = (draft: FilterBarDraft | null): DraftStage => {
+  if (!draft) return 'none';
+  return draft.operatorId ? 'operator' : 'field';
+};
+
 export type FilterBarContextValue = {
   fields: FilterBarField[];
   operators: FilterBarOperator[];
   items: FilterBarItem[];
-  addItem: (item: Omit<FilterBarItem, 'id'>) => void;
+  /** Filter under construction in the input, once a field is picked; `null` otherwise. */
+  draft: FilterBarDraft | null;
+  /** Progress or reset the draft. Its id is assigned on first field pick and kept afterwards. */
+  setDraft: (next: Omit<FilterBarDraft, 'id' | 'from'> | null) => void;
+  /** Append an item for the draft, reusing its id so the draft chip becomes the item's chip. */
+  commitDraft: (next: Required<Omit<FilterBarDraft, 'id' | 'from'>>, value: FilterBarValue) => void;
+  /** The draft that just became an item, until its chip has glinted or the bar moves on. */
+  lastCommit: FilterBarCommit | null;
+  settleCommit: () => void;
   updateItem: (id: string, patch: Partial<Omit<FilterBarItem, 'id'>>) => void;
   removeItem: (id: string) => void;
   /** Removes every removable item (chips rendered with `removable={false}` stay). */
@@ -65,6 +87,7 @@ export type FilterBarProviderProps = {
   operators: FilterBarOperator[];
   value: FilterBarItem[];
   onValueChange: (items: FilterBarItem[]) => void;
+  createItemId?: (fieldId: string) => string;
   ariaLabel: string;
   children: ReactNode;
 };
@@ -74,6 +97,7 @@ export function FilterBarProvider({
   operators,
   value,
   onValueChange,
+  createItemId,
   ariaLabel,
   children,
 }: FilterBarProviderProps) {
@@ -97,12 +121,48 @@ export function FilterBarProvider({
 
   const announce = useCallback((message: string) => setAnnouncement(message), []);
 
-  const addItem = useCallback(
-    (item: Omit<FilterBarItem, 'id'>) => {
-      onValueChange([...itemsRef.current, { ...item, id: createFilterId() }]);
+  const [draft, setDraftState] = useState<FilterBarDraft | null>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const [lastCommit, setLastCommit] = useState<FilterBarCommit | null>(null);
+  const settleCommit = useCallback(() => setLastCommit(prev => (prev ? { ...prev, glint: false } : null)), []);
+  // Until the consumer reflects the commit in `value`, the committed item is ours to show.
+  const items = useMemo(
+    () => (lastCommit && !value.some(item => item.id === lastCommit.item.id) ? [...value, lastCommit.item] : value),
+    [value, lastCommit],
+  );
+
+  // The draft chip is keyed by the id the committed item will carry, so React keeps the same
+  // element through the commit. Consumers who derive ids themselves supply `createItemId` so
+  // the id we hand back in `onValueChange` is the one they'll hand back in `value`.
+  const newItemId = useCallback(
+    (fieldId: string) => (createItemId ? createItemId(fieldId) : createFilterId()),
+    [createItemId],
+  );
+
+  const setDraft = useCallback(
+    (next: Omit<FilterBarDraft, 'id' | 'from'> | null) => {
+      setLastCommit(null);
+      setDraftState(prev =>
+        next
+          ? { ...next, id: prev?.fieldId === next.fieldId ? prev.id : newItemId(next.fieldId), from: stageOf(prev) }
+          : null,
+      );
+    },
+    [newItemId],
+  );
+
+  const commitDraft = useCallback(
+    ({ fieldId, operatorId }: Required<Omit<FilterBarDraft, 'id' | 'from'>>, value: FilterBarValue) => {
+      // Operators without a value commit straight from the operator step, before a draft exists.
+      const id = draftRef.current?.id ?? newItemId(fieldId);
+      const item = { id, fieldId, operatorId, value };
+      onValueChange([...itemsRef.current, item]);
+      setLastCommit({ item, from: stageOf(draftRef.current), glint: true });
+      setDraftState(null);
       announce('Filter added');
     },
-    [onValueChange, announce],
+    [onValueChange, announce, newItemId],
   );
 
   const updateItem = useCallback(
@@ -115,6 +175,7 @@ export function FilterBarProvider({
   const removeItem = useCallback(
     (id: string) => {
       onValueChange(itemsRef.current.filter(item => item.id !== id));
+      setLastCommit(null);
       announce('Filter removed');
     },
     [onValueChange, announce],
@@ -192,8 +253,12 @@ export function FilterBarProvider({
     () => ({
       fields,
       operators,
-      items: value,
-      addItem,
+      items,
+      draft,
+      setDraft,
+      commitDraft,
+      lastCommit,
+      settleCommit,
       updateItem,
       removeItem,
       clear,
@@ -214,8 +279,12 @@ export function FilterBarProvider({
     [
       fields,
       operators,
-      value,
-      addItem,
+      items,
+      draft,
+      setDraft,
+      commitDraft,
+      lastCommit,
+      settleCommit,
       updateItem,
       removeItem,
       clear,

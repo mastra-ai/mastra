@@ -73,7 +73,7 @@ export function TimelineNameCol({
       <button
         type="button"
         className={cn(
-          'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-ui-sm text-neutral6',
+          'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-ui-sm text-foreground',
           'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
         )}
       >
@@ -98,7 +98,7 @@ export function TimelineNameCol({
           >
             {span.name}
           </span>
-          {meta && <span className="text-ui-xs text-neutral3 shrink-0 lg:tabular-nums">{meta}</span>}
+          {meta && <span className="text-ui-xs text-muted-foreground shrink-0 lg:tabular-nums">{meta}</span>}
         </span>
       </button>
 

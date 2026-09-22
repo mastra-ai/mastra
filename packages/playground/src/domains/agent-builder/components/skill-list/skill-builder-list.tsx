@@ -29,7 +29,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
     return (
       <div className="flex items-center-safe justify-center-safe">
         <EmptyState
-          iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+          iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
           titleSlot="No skills match your search"
           descriptionSlot="Try a different name or description."
         />
@@ -44,12 +44,12 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
           <>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="text-ui-md text-neutral6 truncate">{skill.name}</div>
+                <div className="text-ui-md text-foreground truncate">{skill.name}</div>
                 {skill.visibility === 'private' && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span
-                        className="text-neutral3 shrink-0"
+                        className="text-muted-foreground shrink-0"
                         aria-label="Private skill"
                         data-testid="skill-builder-private-visibility-icon"
                       >
@@ -69,7 +69,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span
-                          className="bg-surface5 text-neutral4 text-ui-xs inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-medium"
+                          className="bg-surface5 text-muted-foreground text-ui-xs inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-medium"
                           aria-label={isCopy ? 'Copied skill' : 'Imported skill'}
                           data-testid="skill-builder-origin-badge"
                         >
@@ -89,7 +89,9 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                 })()}
               </div>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="text-ui-sm text-neutral3 line-clamp-1">{skill.description || 'No description'}</span>
+                <span className="text-ui-sm text-muted-foreground line-clamp-1">
+                  {skill.description || 'No description'}
+                </span>
               </div>
               {showFavorites && (
                 <div className="mt-2 md:hidden">

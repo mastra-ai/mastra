@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardStatus';
 import type { CardAction } from '../cardPrimaryAction';
-import { metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
+import { metadataLabelColors, metadataLabels, pullRequestStatusForItem, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
@@ -48,6 +48,7 @@ export function WorkItemCardRows({
   open: boolean;
 }) {
   const labels = metadataLabels(item.metadata);
+  const labelColors = metadataLabelColors(item.metadata);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const external = knownExternalAuthor(item);
 
@@ -79,7 +80,7 @@ export function WorkItemCardRows({
           </span>
         </div>
       </div>
-      <CardLabels labels={labels} />
+      <CardLabels labels={labels} colors={labelColors} />
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (

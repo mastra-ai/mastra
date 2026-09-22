@@ -46,7 +46,7 @@ export function EntityAccordionItem({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon size="sm">{icon}</Icon>
-            <span className="text-neutral6 text-ui-sm font-medium">{name}</span>
+            <span className="text-foreground text-ui-sm font-medium">{name}</span>
           </div>
           {onRemove && (
             <Button tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -71,7 +71,7 @@ export function EntityAccordionItem({
           <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2">
             <Icon>
               <ChevronRight
-                className={cn('text-neutral3 transition-transform', {
+                className={cn('text-muted-foreground transition-transform', {
                   'rotate-90': isRulesOpen,
                 })}
               />
@@ -79,9 +79,9 @@ export function EntityAccordionItem({
             <Icon>
               <Ruler className="text-accent6" />
             </Icon>
-            <span className="text-neutral5 text-ui-sm">Display Conditions</span>
+            <span className="text-foreground text-ui-sm">Display Conditions</span>
             {ruleCount > 0 && (
-              <span className="text-neutral3 text-ui-sm">
+              <span className="text-muted-foreground text-ui-sm">
                 ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
               </span>
             )}

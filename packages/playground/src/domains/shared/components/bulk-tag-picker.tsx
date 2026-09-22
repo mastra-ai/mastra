@@ -55,13 +55,13 @@ export function BulkTagPicker({
         <div className="max-h-40 space-y-0.5 overflow-y-auto">
           {filtered.map(tag => (
             <div key={tag} className="hover:bg-surface3 text-ui-sm flex items-center justify-between rounded px-2 py-1">
-              <button type="button" onClick={() => onApplyTag(tag)} className="text-neutral4 flex-1 text-left">
+              <button type="button" onClick={() => onApplyTag(tag)} className="text-muted-foreground flex-1 text-left">
                 {tag}
               </button>
               <button
                 type="button"
                 onClick={() => onRemoveTag(tag)}
-                className="text-neutral2 hover:text-negative1 ml-2"
+                className="text-placeholder hover:text-negative1 ml-2"
               >
                 <X className="h-3 w-3" />
               </button>

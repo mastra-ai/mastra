@@ -54,7 +54,7 @@ function RepositoryVisibilitySwitch() {
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
     <div className={`border-border1/70 rounded-2xl border p-5 ${className}`}>
-      <p className="text-ui-xs text-neutral3 mb-4 tracking-wide uppercase">{label}</p>
+      <p className="text-ui-xs text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
   );
@@ -62,14 +62,14 @@ function SurfaceFrame({ className, label, children }: { className: string; label
 
 function SwitchStateGrid({ idPrefix, icons }: { idPrefix: string; icons?: SwitchIconProps }) {
   return (
-    <div className="text-ui-sm text-neutral3 grid grid-cols-[5rem_repeat(4,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
+    <div className="text-ui-sm text-muted-foreground grid grid-cols-[5rem_repeat(4,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
       <span />
       <span>Default</span>
       <span>On</span>
       <span>Disabled</span>
       <span>Disabled on</span>
 
-      <span className="text-neutral5">State</span>
+      <span className="text-foreground">State</span>
       <Switch aria-label={`${idPrefix} default`} {...icons} />
       <Switch aria-label={`${idPrefix} on`} checked onCheckedChange={() => {}} {...icons} />
       <Switch aria-label={`${idPrefix} disabled`} disabled {...icons} />
@@ -185,13 +185,13 @@ export const AllStates: Story = {
   },
   render: () => (
     <div className="bg-surface2 grid min-w-108 gap-4 rounded-lg p-4">
-      <div className="text-ui-sm text-neutral3 grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
+      <div className="text-ui-sm text-muted-foreground grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
         <span />
         <span>Default</span>
         <span>On</span>
         <span>Focus</span>
 
-        <span className="text-neutral5">Enabled</span>
+        <span className="text-foreground">Enabled</span>
         <Switch aria-label="enabled off" />
         <Switch aria-label="enabled on" checked onCheckedChange={() => {}} />
         <Switch
@@ -201,7 +201,7 @@ export const AllStates: Story = {
           className="outline-neutral5/55 outline-1 outline-offset-2 outline-solid"
         />
 
-        <span className="text-neutral5">Disabled</span>
+        <span className="text-foreground">Disabled</span>
         <Switch aria-label="disabled off" disabled />
         <Switch aria-label="disabled on" checked disabled onCheckedChange={() => {}} />
         <Switch
@@ -264,7 +264,7 @@ export const WithDescription: Story = {
     <div className="flex w-[350px] items-start justify-between gap-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="dark-mode">Dark mode</Label>
-        <span className="text-neutral3 text-ui-sm">Switch to a darker color scheme</span>
+        <span className="text-muted-foreground text-ui-sm">Switch to a darker color scheme</span>
       </div>
       <Switch id="dark-mode" />
     </div>

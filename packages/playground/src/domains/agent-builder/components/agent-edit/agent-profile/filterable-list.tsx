@@ -75,11 +75,11 @@ export const FilterableList = ({
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-select-all`}
-          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Select all
         </button>
-        <span className="text-neutral2" aria-hidden>
+        <span className="text-placeholder" aria-hidden>
           ·
         </span>
         <button
@@ -87,7 +87,7 @@ export const FilterableList = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-clear-all`}
-          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Clear all
         </button>
@@ -95,7 +95,7 @@ export const FilterableList = ({
 
       <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
         {filteredItems.length === 0 ? (
-          <Txt variant="ui-xs" className="text-neutral3 px-1 py-2">
+          <Txt variant="ui-xs" className="text-muted-foreground px-1 py-2">
             No matches
           </Txt>
         ) : (
@@ -116,7 +116,7 @@ export const FilterableList = ({
                     data-testid={`${testIdPrefix}-filter-item-${item.id}`}
                     data-checked={checked ? 'true' : 'false'}
                     className={cn(
-                      'flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors hover:bg-surface4',
+                      'flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-foreground transition-colors hover:bg-surface4',
                       disabled && 'cursor-not-allowed opacity-60',
                     )}
                   >

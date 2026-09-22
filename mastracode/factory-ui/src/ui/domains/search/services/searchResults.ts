@@ -1,9 +1,7 @@
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
-import { issueCandidate, pullRequestCandidate } from '../../factory/boardCandidates';
 import type { BoardCandidate } from '../../factory/boardCandidates';
 import { persistedSourceKeys, SOURCE_LABELS } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
-import type { GithubIssue, GithubPullRequest } from '../../factory/services/factory';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
 import { stageLabel } from '../../factory/stages';
@@ -194,14 +192,10 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
 export function createWorkItemSearchResults(input: {
   factoryId: string;
   workItems: WorkItem[];
-  issues: GithubIssue[];
-  pullRequests: GithubPullRequest[];
+  candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
 }): WorkItemSearchResult[] {
   const filed = persistedSourceKeys(input.workItems);
-  const candidates = [
-    ...input.issues.map(issue => ({ candidate: issueCandidate(issue), updatedAt: issue.updatedAt })),
-    ...input.pullRequests.map(pr => ({ candidate: pullRequestCandidate(pr), updatedAt: pr.updatedAt })),
-  ].filter(({ candidate }) => !filed.has(candidate.sourceKey));
+  const candidates = input.candidates.filter(({ candidate }) => !filed.has(candidate.sourceKey));
 
   return [
     ...input.workItems

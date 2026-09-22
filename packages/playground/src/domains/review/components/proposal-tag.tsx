@@ -47,7 +47,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="text-neutral4 text-ui-sm w-20 bg-transparent py-0.5 outline-hidden"
+          className="text-muted-foreground text-ui-sm w-20 bg-transparent py-0.5 outline-hidden"
         />
         <button
           type="button"
@@ -64,7 +64,7 @@ export function ProposalTag({
   }
 
   return (
-    <span className="bg-surface3 border-border1 text-neutral4 group text-ui-sm inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5">
+    <span className="bg-surface3 border-border1 text-muted-foreground group text-ui-sm inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5">
       {tag}
       <button
         type="button"
@@ -72,7 +72,7 @@ export function ProposalTag({
           setEditValue(tag);
           setIsEditing(true);
         }}
-        className="text-neutral2 hover:text-neutral4 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+        className="text-placeholder hover:text-muted-foreground p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
         title="Edit tag"
       >
         <Pencil className="h-3 w-3" />
@@ -80,7 +80,7 @@ export function ProposalTag({
       <button
         type="button"
         onClick={onRemove}
-        className="text-neutral2 hover:text-negative1 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+        className="text-placeholder hover:text-negative1 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
         title="Remove tag"
       >
         <X className="h-3 w-3" />

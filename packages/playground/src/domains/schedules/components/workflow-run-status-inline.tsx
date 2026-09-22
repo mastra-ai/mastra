@@ -30,15 +30,15 @@ function getStatusVisual(status: WorkflowRunStatus): { icon: React.ReactNode; co
     case 'failed':
       return { icon: <X size={14} />, color: 'text-accent2' };
     case 'running':
-      return { icon: <Spinner />, color: 'text-neutral3' };
+      return { icon: <Spinner />, color: 'text-muted-foreground' };
     case 'suspended':
       return { icon: <CirclePause size={14} />, color: 'text-accent3' };
     case 'canceled':
-      return { icon: <CircleSlash size={14} />, color: 'text-neutral3' };
+      return { icon: <CircleSlash size={14} />, color: 'text-muted-foreground' };
     case 'pending':
     case 'waiting':
-      return { icon: <Clock size={14} />, color: 'text-neutral3' };
+      return { icon: <Clock size={14} />, color: 'text-muted-foreground' };
     default:
-      return { icon: null, color: 'text-neutral3' };
+      return { icon: null, color: 'text-muted-foreground' };
   }
 }

@@ -518,6 +518,11 @@ export const getThreadByIdResponseSchema = threadSchema;
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
   uiMessages: z.array(z.unknown()).nullable(), // Converted messages in UI format
+  // Absent on the gateway path, which has no page metadata to report.
+  total: z.number().optional(),
+  page: z.number().optional(),
+  perPage: z.union([z.number(), z.literal(false)]).optional(),
+  hasMore: z.boolean().optional(),
 });
 
 /**

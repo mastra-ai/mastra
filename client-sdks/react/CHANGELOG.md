@@ -1,5 +1,27 @@
 # @mastra/react
 
+## 1.6.0-alpha.11
+
+### Minor Changes
+
+- Added an optional `resourceId` to `useCreateWorkflowRun` and `useStreamWorkflow`, so a manually started workflow run can be attributed to a resource. ([#24519](https://github.com/mastra-ai/mastra/pull/24519))
+
+  ```tsx
+  const createWorkflowRun = useCreateWorkflowRun();
+  const { streamWorkflow } = useStreamWorkflow();
+
+  const { runId } = await createWorkflowRun.mutateAsync({ workflowId, resourceId: 'tenant-42' });
+  await streamWorkflow.mutateAsync({ workflowId, runId, inputData, requestContext: {}, resourceId: 'tenant-42' });
+  ```
+
+### Patch Changes
+
+- Fix `useSpeechRecognition` (browser path) dropping earlier finalized phrases during continuous dictation. Each `onresult` event now appends its finalized results to the session transcript instead of replacing it, and the transcript resets when a new dictation session starts. Fixes #24330. ([#24579](https://github.com/mastra-ai/mastra/pull/24579))
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0), [`d77beee`](https://github.com/mastra-ai/mastra/commit/d77beeec3f4c17f1c47376730a90faccc06247cb)]:
+  - @mastra/core@1.68.0-alpha.10
+  - @mastra/client-js@1.47.0-alpha.10
+
 ## 1.6.0-alpha.10
 
 ### Patch Changes
