@@ -204,9 +204,7 @@ export interface ClassifierEvaluationAttributes extends AIBaseAttributes {
   attemptCount?: number;
   retryCount?: number;
   durationMs?: number;
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
+  usage?: UsageStats;
   errorType?: string;
 }
 

@@ -11,10 +11,44 @@ import {
   type SharedV4Warning,
 } from '@ai-sdk/provider-v7';
 
+import { MastraBase } from '../base';
 import { SpanType } from '../observability/types';
 import { resolveCurrentSpan } from '../observability/utils';
 
 export type ClassifierState = EvaluationModelV4Input;
+export type EvaluationModelResult = Awaited<ReturnType<EvaluationModelV4['doEvaluate']>>;
+
+export interface MastraEvaluationModelInterface {
+  readonly specificationVersion: 'v4';
+  readonly provider: string;
+  readonly modelId: string;
+  readonly supportedQuestionTypes: EvaluationModelV4['supportedQuestionTypes'];
+  doEvaluate(options: Parameters<EvaluationModelV4['doEvaluate']>[0]): Promise<EvaluationModelResult>;
+}
+
+export class MastraEvaluationModel extends MastraBase implements MastraEvaluationModelInterface {
+  readonly specificationVersion = 'v4' as const;
+  readonly provider: string;
+  readonly modelId: string;
+  readonly supportedQuestionTypes: EvaluationModelV4['supportedQuestionTypes'];
+  readonly #model: EvaluationModelV4;
+
+  constructor(model: EvaluationModelV4) {
+    super({ name: 'evaluation-model' });
+    this.#model = model;
+    this.provider = model.provider;
+    this.modelId = model.modelId;
+    this.supportedQuestionTypes = model.supportedQuestionTypes;
+  }
+
+  async doEvaluate(options: Parameters<EvaluationModelV4['doEvaluate']>[0]): Promise<EvaluationModelResult> {
+    return this.transformResult(await this.#model.doEvaluate(options));
+  }
+
+  protected transformResult(result: EvaluationModelResult): EvaluationModelResult {
+    return result;
+  }
+}
 
 export type ChoiceQuestion<
   CRITERIA extends Readonly<Record<string, EvaluationModelV4Input | null>> = Readonly<
@@ -119,19 +153,34 @@ export type PerCallClassifierEvaluateOptions<QUESTIONS extends ClassifierQuestio
 
 export type ConfiguredClassifierOptions<QUESTIONS extends ClassifierQuestions> = {
   id: string;
-  model: EvaluationModelV4;
+  model: EvaluationModelV4 | MastraEvaluationModel;
   questions: QUESTIONS;
 };
 
 export type PerCallClassifierOptions = {
   id: string;
-  model: EvaluationModelV4;
+  model: EvaluationModelV4 | MastraEvaluationModel;
   questions?: never;
 };
 
-export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undefined = undefined> {
+export interface ClassifierInterface<CONFIGURED_QUESTIONS extends ClassifierQuestions | undefined = undefined> {
   readonly id: string;
-  readonly model: EvaluationModelV4;
+  readonly model: MastraEvaluationModelInterface;
+  readonly questions: CONFIGURED_QUESTIONS;
+  evaluate(
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierEvaluateOptions : never,
+  ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
+  evaluate<const QUESTIONS extends ClassifierQuestions>(
+    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierEvaluateOptions<QUESTIONS> : never,
+  ): Promise<ClassifierResult<QUESTIONS>>;
+}
+
+export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undefined = undefined>
+  extends MastraBase
+  implements ClassifierInterface<CONFIGURED_QUESTIONS>
+{
+  readonly id: string;
+  readonly model: MastraEvaluationModel;
   readonly questions: CONFIGURED_QUESTIONS;
 
   constructor(
@@ -139,12 +188,15 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
       ? ConfiguredClassifierOptions<CONFIGURED_QUESTIONS>
       : PerCallClassifierOptions,
   ) {
+    super({ name: options.id });
+
     if (typeof options.id !== 'string' || options.id.trim().length === 0) {
       throw new TypeError('Classifier id must be a non-empty string.');
     }
 
     this.id = options.id;
-    this.model = options.model;
+    this.model =
+      options.model instanceof MastraEvaluationModel ? options.model : new MastraEvaluationModel(options.model);
     this.questions = options.questions as CONFIGURED_QUESTIONS;
 
     if (this.questions !== undefined) {
@@ -215,6 +267,10 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           }
         });
       } catch (error) {
+        if (options.abortSignal?.aborted) {
+          throw options.abortSignal.reason;
+        }
+
         // When retries are exhausted the helper reports a generic retry error,
         // which drops `APICallError.isInstance` and `isRetryable`. Core reads
         // both for control flow, so the provider's own error is rethrown.
@@ -250,9 +306,10 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           attemptCount,
           retryCount: attemptCount - 1,
           durationMs: Date.now() - startedAt,
-          inputTokens: result.usage.inputTokens,
-          outputTokens: result.usage.outputTokens,
-          totalTokens: result.usage.totalTokens,
+          usage: {
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+          },
         },
       });
       span?.end();

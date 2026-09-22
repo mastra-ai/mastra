@@ -1,8 +1,9 @@
 import { APICallError, type Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { MastraBase } from '../base';
 import * as observabilityUtils from '../observability/utils';
-import { Classifier } from './index';
+import { Classifier, MastraEvaluationModel } from './index';
 
 type ProviderResult = Awaited<ReturnType<EvaluationModelV4['doEvaluate']>>;
 
@@ -49,6 +50,26 @@ afterEach(() => {
 });
 
 describe('Classifier', () => {
+  it('uses Mastra primitives and supports custom evaluation response transforms', async () => {
+    class TransformedEvaluationModel extends MastraEvaluationModel {
+      protected override transformResult(result: ProviderResult): ProviderResult {
+        return {
+          ...result,
+          answers: { unsafe: { type: 'boolean', probability: 0.1 } },
+        };
+      }
+    }
+
+    const model = new TransformedEvaluationModel(createModel());
+    const classifier = new Classifier({ id: 'transformed', model, questions: booleanQuestions });
+
+    expect(classifier).toBeInstanceOf(MastraBase);
+    expect(classifier.model).toBe(model);
+    await expect(classifier.evaluate({ state: 'content' })).resolves.toMatchObject({
+      answers: { unsafe: { probability: 0.1 } },
+    });
+  });
+
   it('evaluates constructor-configured questions and normalizes evidence', async () => {
     const timestamp = new Date('2026-09-19T00:00:00.000Z');
     const doEvaluate = vi.fn(async () => ({
@@ -237,6 +258,29 @@ describe('Classifier', () => {
     await vi.runAllTimersAsync();
     await rejection;
     expect(exhausted).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates an abort that occurs during a retry delay', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const abortReason = new Error('cancel retry');
+    const doEvaluate = vi.fn<EvaluationModelV4['doEvaluate']>().mockRejectedValue(retryableError());
+    const classifier = new Classifier({
+      id: 'abort-retry',
+      model: createModel({ doEvaluate }),
+      questions: booleanQuestions,
+    });
+
+    const resultPromise = classifier.evaluate({ state: 'content', abortSignal: controller.signal, maxRetries: 2 });
+    const rejection = expect(resultPromise).rejects.toBe(abortReason);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(doEvaluate).toHaveBeenCalledOnce();
+
+    controller.abort(abortReason);
+    await vi.runAllTimersAsync();
+    await rejection;
+    expect(doEvaluate).toHaveBeenCalledOnce();
   });
 
   it('propagates aborts before, during, and after provider execution', async () => {

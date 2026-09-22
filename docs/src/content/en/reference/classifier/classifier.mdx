@@ -10,7 +10,7 @@ packages:
 
 The `Classifier` evaluates named choice, score, and boolean questions against shared state. It returns typed answers and provider evidence without applying thresholds, blocking content, routing requests, or making other application decisions.
 
-Import it from `@mastra/core/classifier` and provide an AI SDK `EvaluationModelV4` implementation.
+Import it from `@mastra/core/classifier` and provide an AI SDK `EvaluationModelV4` implementation or a customized `MastraEvaluationModel` wrapper.
 
 ## Configure questions in the constructor
 
@@ -82,9 +82,9 @@ Constructor-configured questions and per-call questions are mutually exclusive.
   },
   {
     name: 'model',
-    type: 'EvaluationModelV4',
+    type: 'EvaluationModelV4 | MastraEvaluationModel',
     description:
-      "An AI SDK evaluation model. The classifier checks each question against the model's supported question types before provider I/O.",
+      "An AI SDK evaluation model or Mastra wrapper. The classifier checks each question against the model's supported question types before provider I/O.",
     isOptional: false,
   },
   {
@@ -229,6 +229,25 @@ Evaluates all named questions against the same state. The classifier validates i
   },
 ]}
 />
+
+## Customize evaluation model responses
+
+`Classifier` wraps an AI SDK model with `MastraEvaluationModel`. Extend that wrapper and override `transformResult()` when a provider response needs normalization before classifier validation.
+
+```typescript
+import { Classifier, MastraEvaluationModel } from '@mastra/core/classifier'
+
+class CustomEvaluationModel extends MastraEvaluationModel {
+  protected override transformResult(result) {
+    return normalizeProviderResult(result)
+  }
+}
+
+const classifier = new Classifier({
+  id: 'custom-classifier',
+  model: new CustomEvaluationModel(model),
+})
+```
 
 ## Validation and retries
 

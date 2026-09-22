@@ -1,6 +1,6 @@
 import { expectTypeOf } from 'vitest';
 
-import { Classifier, type BooleanAnswer, type ChoiceAnswer, type ScoreAnswer } from './index';
+import { Classifier, type BooleanAnswer, type ChoiceAnswer, type ClassifierInterface, type ScoreAnswer } from './index';
 
 declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
 
@@ -23,7 +23,8 @@ const configured = new Classifier({
   },
 });
 
-const configuredResult = await configured.evaluate({ state: 'content' });
+const configuredInterface: ClassifierInterface<(typeof configured)['questions']> = configured;
+const configuredResult = await configuredInterface.evaluate({ state: 'content' });
 expectTypeOf(configuredResult.answers.route).toEqualTypeOf<ChoiceAnswer<'support' | 'sales'>>();
 expectTypeOf(configuredResult.answers.quality).toEqualTypeOf<ScoreAnswer>();
 expectTypeOf(configuredResult.answers.unsafe).toEqualTypeOf<BooleanAnswer>();
