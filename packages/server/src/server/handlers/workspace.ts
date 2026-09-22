@@ -1052,10 +1052,6 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
     try {
       requireWorkspaceV1Support();
 
-      if (!skillName || !referencePath) {
-        throw new HTTPException(400, { message: 'Skill name and reference path are required' });
-      }
-
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = skillPath ?? skillName;
 
