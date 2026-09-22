@@ -2586,6 +2586,49 @@ describe('MongoDBVector autoEmbed', () => {
       await expect(v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } })).resolves.toBeUndefined();
     });
 
+    it('reports that it embeds server-side only when configured with autoEmbed defaults', () => {
+      const configured = new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+        autoEmbed: { model: 'voyage-4' },
+      });
+      const plain = makeVector();
+
+      expect(configured.embedsServerSide).toBe(true);
+      expect(plain.embedsServerSide).toBe(false);
+    });
+
+    it('applies the store autoEmbed defaults to a createIndex that names neither config nor dimension', async () => {
+      const v = new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+        autoEmbed: { model: 'voyage-4', path: 'fullplot' },
+      });
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies' });
+
+      const fields = createSearchIndex.mock.calls[0][0].definition.fields;
+      expect(fields[0]).toMatchObject({ type: 'autoEmbed', modality: 'text', path: 'fullplot', model: 'voyage-4' });
+    });
+
+    it('lets an explicit dimension opt a single index out of the store defaults', async () => {
+      const v = new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+        autoEmbed: { model: 'voyage-4' },
+      });
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', dimension: 1536 });
+
+      const fields = createSearchIndex.mock.calls[0][0].definition.fields;
+      expect(fields[0]).toMatchObject({ type: 'vector', numDimensions: 1536 });
+    });
+
     it('rejects a createIndex whose registry claim is lost to a concurrent call', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
