@@ -4,6 +4,8 @@ import {
   handleGitLabWebhook,
   normalizeGitLabWebhookMetadata,
   parseGitLabWebhook,
+  parseGitLabWebhookBody,
+  processGitLabWebhook,
   verifyGitLabToken,
 } from './webhook.js';
 
@@ -149,6 +151,79 @@ describe('normalizeGitLabWebhookMetadata', () => {
       noteableType: 'MergeRequest',
       sender: 'bob',
     });
+  });
+});
+
+describe('parseGitLabWebhookBody', () => {
+  it.each([
+    ['issue', 'Issue Hook'],
+    ['note', 'Note Hook'],
+    ['merge_request', 'Merge Request Hook'],
+    ['push', 'Push Hook'],
+  ])('maps object_kind %s to the %s event and keeps the caller-supplied delivery id', (objectKind, event) => {
+    const body = { object_kind: objectKind, project: { id: 101 }, object_attributes: { iid: 3 } };
+
+    expect(parseGitLabWebhookBody(body, 'platform:conn-1:1000-0')).toEqual({
+      event,
+      deliveryId: 'platform:conn-1:1000-0',
+      payload: body,
+    });
+  });
+
+  it('returns null for unsupported kinds, non-object bodies, and blank delivery ids', () => {
+    expect(parseGitLabWebhookBody({ object_kind: 'pipeline' }, 'platform:conn-1:1')).toBeNull();
+    expect(parseGitLabWebhookBody({ object_kind: 'Issue Hook' }, 'platform:conn-1:1')).toBeNull();
+    expect(parseGitLabWebhookBody({}, 'platform:conn-1:1')).toBeNull();
+    expect(parseGitLabWebhookBody([{ object_kind: 'issue' }], 'platform:conn-1:1')).toBeNull();
+    expect(parseGitLabWebhookBody('{"object_kind":"issue"}', 'platform:conn-1:1')).toBeNull();
+    expect(parseGitLabWebhookBody(null, 'platform:conn-1:1')).toBeNull();
+    expect(parseGitLabWebhookBody({ object_kind: 'issue' }, '  ')).toBeNull();
+  });
+
+  it('produces a parsed webhook the metadata normalizer reads like a direct delivery', () => {
+    const parsed = parseGitLabWebhookBody(
+      {
+        object_kind: 'note',
+        user: { username: 'ada' },
+        project: { id: 101, path_with_namespace: 'acme/app' },
+        object_attributes: { noteable_type: 'Issue' },
+        issue: { iid: 12 },
+      },
+      'platform:conn-1:1000-0',
+    );
+
+    expect(parsed && normalizeGitLabWebhookMetadata(parsed)).toEqual({
+      event: 'Note Hook',
+      projectId: 101,
+      projectPath: 'acme/app',
+      issueIid: 12,
+      mergeRequestIid: undefined,
+      noteableType: 'Issue',
+      sender: 'ada',
+    });
+  });
+});
+
+describe('processGitLabWebhook', () => {
+  it('acknowledges and ignores unsupported events without ingesting them', async () => {
+    const ingestFactoryEvent = vi.fn();
+
+    await expect(
+      processGitLabWebhook({ event: 'Pipeline Hook', deliveryId: 'd-1', payload: {} }, { ingestFactoryEvent }),
+    ).resolves.toEqual({ status: 202, body: { ok: true, ignored: true } });
+    expect(ingestFactoryEvent).not.toHaveBeenCalled();
+  });
+
+  it('ingests supported events and surfaces ingestion failures to the caller', async () => {
+    const parsed = { event: 'Issue Hook', deliveryId: 'd-2', payload: { object_attributes: { iid: 4 } } };
+    const ingestFactoryEvent = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('failed'));
+
+    await expect(processGitLabWebhook(parsed, { ingestFactoryEvent })).resolves.toEqual({
+      status: 202,
+      body: { ok: true },
+    });
+    await expect(processGitLabWebhook(parsed, { ingestFactoryEvent })).rejects.toThrow('failed');
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsed);
   });
 });
 
