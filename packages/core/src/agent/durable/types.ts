@@ -174,10 +174,11 @@ export interface SerializableModelSettings {
   maxRetries?: number;
   /**
    * Execution time budgets (#21724). Persisted so a cold resume / recovery can
-   * re-arm the run-level budget the run was started with; `stepMs` is consumed
-   * by the shared per-call execute wrapper.
+   * re-arm the run-level budget the run was started with; `stepMs` and
+   * `firstChunkMs` are consumed by the shared per-call execute wrapper, which
+   * receives these serialized settings on the durable path.
    */
-  timeout?: { stepMs?: number; totalMs?: number };
+  timeout?: { stepMs?: number; totalMs?: number; firstChunkMs?: number };
 }
 
 /**
@@ -190,7 +191,7 @@ export interface SerializableDurableOptions {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Tool names enabled for this execution */
   activeTools?: string[];
-  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed). Headers are excluded — see RunRegistryEntry. */
+  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed, maxRetries, timeout). Headers are excluded — see RunRegistryEntry. */
   modelSettings?: SerializableModelSettings;
   /**
    * Agent-level maxRetries (folded, defaults to 0). Single-model agents have

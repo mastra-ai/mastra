@@ -1218,8 +1218,7 @@ export class DurableAgent<
       // composed in.
       // Restore the run-level execution budget from the persisted snapshot so
       // a recovered session is bounded like the original one (#21724).
-      timeoutTotalMs: (workflowInput.options?.modelSettings as { timeout?: { totalMs?: number } } | undefined)?.timeout
-        ?.totalMs,
+      timeoutTotalMs: workflowInput.options?.modelSettings?.timeout?.totalMs,
       backgroundTaskManager,
       backgroundTasksConfig,
       inputProcessors,

@@ -201,6 +201,25 @@ export function serializeModelSettings(
     out.stopSequences = source.stopSequences;
   }
 
+  // Execution time budgets (#21724). `totalMs` re-arms the run-level budget on
+  // cold resume/recovery (see DurableAgent.recover()); `stepMs`/`firstChunkMs`
+  // bound each model call inside the shared execute wrapper, which receives
+  // these serialized settings on the durable path. Only positive finite
+  // numbers survive, mirroring validateModelTimeoutSettings.
+  if (source.timeout && typeof source.timeout === 'object') {
+    const timeoutSource = source.timeout as Record<string, unknown>;
+    const timeout: NonNullable<SerializableModelSettings['timeout']> = {};
+    for (const key of ['totalMs', 'stepMs', 'firstChunkMs'] as const) {
+      const value = timeoutSource[key];
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        timeout[key] = value;
+      }
+    }
+    if (Object.keys(timeout).length > 0) {
+      out.timeout = timeout;
+    }
+  }
+
   // Headers are never serialized into the workflow input. They are stored
   // exclusively on the in-process RunRegistryEntry so they never reach
   // durable storage. The durable llm-execution step merges them back from

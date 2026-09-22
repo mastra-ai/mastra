@@ -26,7 +26,9 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { globalRunRegistry } from '../run-registry';
 
 function hangingModel() {
   return new MockLanguageModelV2({
@@ -235,4 +237,67 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     expect(finish?.payload?.stepResult?.reason).toBe('abort');
     result.cleanup();
   });
+
+  it('re-arms the persisted run-level budget after a cold restart (recover)', async () => {
+    const storage = new InMemoryStore();
+    const build = () => {
+      const baseAgent = new Agent({
+        id: 'timeout-restart-agent',
+        name: 'Timeout Restart Agent',
+        instructions: 'You are a helpful agent.',
+        model: hangingModel() as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      // `running` checkpoints — the rows recover() reads — are only persisted
+      // under the auto-recovery policy (#23915).
+      new Mastra({
+        agents: { 'timeout-restart-agent': durableAgent as any },
+        logger: false,
+        storage,
+        pubsub,
+        recovery: { durableAgents: 'auto' },
+      });
+      return durableAgent;
+    };
+
+    // ---- Process 1: start a budgeted run against a hanging model. ----
+    const firstDurable = build();
+    const started = await firstDurable.stream('hello', {
+      modelSettings: { timeout: { totalMs: 2000 } },
+    });
+    const runId = (started as unknown as { runId: string }).runId;
+
+    // Write side of the regression: the run-level budget must survive
+    // serializeModelSettings into the persisted workflow input — this is the
+    // field cold recovery reads back.
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const persisted = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+      expect(snapshot?.context?.input?.options?.modelSettings?.timeout?.totalMs).toBe(2000);
+    });
+
+    // ---- The restart: nothing of process 1 survives but its storage.
+    // clear() runs each entry's cleanup, which also disarms process 1's
+    // in-memory budget timer — exactly what a real crash does.
+    globalRunRegistry.clear();
+    await pubsub.close();
+    pubsub = new EventEmitterPubSub();
+
+    // ---- Process 2: recover the run; the model hangs again. ----
+    const secondDurable = build();
+    const recovered = await secondDurable.recover(runId);
+
+    // Read side: the rebuilt registry entry restored the budget from the
+    // persisted snapshot.
+    expect(globalRunRegistry.get(runId)?.timeoutTotalMs).toBe(2000);
+
+    // Behavioral proof: the recovered session is bounded — the restored
+    // budget fails the hanging run instead of letting it run unbounded.
+    const chunks = await drain(recovered.fullStream);
+    const errorChunk = findTimeoutErrorChunk(chunks);
+    expect(errorChunk).toBeDefined();
+    expect(errorChunk.payload.error.message).toContain('totalMs');
+    recovered.cleanup();
+  }, 30000);
 });
