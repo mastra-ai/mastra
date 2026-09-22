@@ -291,20 +291,16 @@ export class GoalManager {
   }
 
   /**
-   * Remove the objective from the thread. This is the only method that deletes,
-   * and the caller — not the state of the in-memory mirror — expresses that
-   * intent, so it works just as well when the mirror is already empty.
+   * Remove the objective from the thread. This is the only method that deletes.
+   * The caller expresses that intent, not the in-memory mirror, so it works the
+   * same when the mirror is already empty.
    *
-   * An explicit clear reaches for every place a goal can live. The legacy
-   * thread-metadata key is reachable without an agent, so it is wiped whether or
-   * not a durable delete was attempted, while the durable record itself needs an
-   * agent and a thread. (Persistence is non-critical here as it is in
-   * {@link saveToThread}: if the durable delete fails the legacy wipe is
-   * skipped with it, which is the pre-existing behaviour, not a guarantee.) That
-   * asymmetry with {@link saveToThread} (which now writes nothing at all when
-   * its mirror is empty) is deliberate — it mirrors where this wipe sat before
-   * deletion was split out, and stops a pre-migration goal resurfacing as a
-   * shadow. Do not tidy it into symmetry.
+   * The durable record needs an agent and a thread; the legacy thread-metadata
+   * key does not, so it is wiped either way — unlike {@link saveToThread}, which
+   * writes nothing with an empty mirror. That asymmetry is deliberate: a
+   * pre-migration goal must not resurface from the legacy key after a clear.
+   * Like the save, this is best-effort: a failed durable delete also skips the
+   * legacy wipe.
    */
   async deleteFromThread(state: GoalManagerState): Promise<void> {
     const threadId = state.session.thread.getId();

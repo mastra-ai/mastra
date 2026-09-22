@@ -6,41 +6,28 @@ import type { McE2eScenario } from './types.js';
 const OBJECTIVE = 'Keep the mid-goal thread switch e2e objective alive.';
 
 /**
- * End-to-end coverage for a live goal surviving a thread created in the middle
- * of it: the goal is set on the starting thread, `/new` creates a second thread
- * while the goal is still live, and the original thread's durable goal record
- * must still be there when the app shuts down.
+ * A live goal survives a thread created in the middle of it: the goal is set on
+ * the starting thread, `/new` creates a second thread while the goal is still
+ * live, and the original thread's durable goal record must still be there —
+ * on the same thread — when the app shuts down.
  *
- * This is NOT a discriminating regression test for the empty-mirror deletion
- * defect, and it cannot be made into one from this harness. That is measured,
- * not assumed: this scenario was run against the pre-fix production files and
- * passed (recorded in the issue's proof transcript). Two reasons:
- *
- *  1. `GoalManager.saveToThread` resolves its thread id from the live session
- *     (`state.session.thread.getId()`), and the session assigns the new thread
- *     id before `thread_created` is dispatched. So on pre-fix code the
- *     `clearObjective` lands on the *new* thread, which has no goal row, and
- *     the original thread's row survives regardless of the fix.
- *  2. The two mechanisms that can actually destroy a live row — a swallowed
- *     `getObjective` failure on the same thread, and the window inside
- *     `setGoal` before `setObjective` resolves — need an injected storage
- *     fault, and the e2e harness exposes no seam for one (scenarios receive an
- *     app-data dir and a db path, nothing that reaches storage behaviour).
- *
- * The deterministic pin for the defect therefore lives in the unit tests
- * (`src/tui/__tests__/goal-manager.test.ts`), which assert that a save with an
- * empty mirror calls neither `clearObjective` nor the legacy-metadata wipe.
- * What this scenario buys is the real end-to-end path: a real goal, a real
- * mid-goal thread creation, and the goal record actually still in SQLite on the
- * thread that owns it. This mirrors the honesty convention already used by
+ * This is a positive end-to-end demo, not a discriminating regression test for
+ * the empty-mirror deletion defect (#22447): it passes on pre-fix code as well.
+ * `saveToThread` resolves its thread id from the live session, and the session
+ * has already switched to the new thread by the time `thread_created` is
+ * dispatched, so the pre-fix delete landed on the new (goal-less) thread. The
+ * paths that could destroy a live row — a swallowed `getObjective` failure, or
+ * a save inside the `setGoal` window — need an injected storage fault, which
+ * this harness has no seam for. The deterministic pin lives in
+ * `src/tui/__tests__/goal-manager.test.ts`, as with
  * `goal-fresh-thread-persistence.ts`.
  */
-export const goalSaveDoesNotDeleteScenario: McE2eScenario = {
-  name: 'goal-save-does-not-delete',
+export const goalSurvivesNewThreadScenario: McE2eScenario = {
+  name: 'goal-survives-new-thread',
   description: 'Set a goal, create a new thread mid-goal, and verify the original thread keeps its goal record.',
   testName: 'keeps the durable goal when a new thread is created mid-goal',
   useOpenAIModel: true,
-  aimockFixture: 'goal-save-does-not-delete.json',
+  aimockFixture: 'goal-survives-new-thread.json',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
@@ -84,8 +71,7 @@ export const goalSaveDoesNotDeleteScenario: McE2eScenario = {
     // `thread_created` path that empties the in-memory goal mirror.
     // A thread row is only persisted once the thread carries a turn, so `/new`
     // alone leaves the count unchanged and the switch unproven. Send a message
-    // on the new thread to materialize it — the count assertion below is what
-    // caught this.
+    // on the new thread to materialize it.
     terminal.submit('/new');
     await runtime.sleep(1000);
     terminal.submit('hello on the new thread');

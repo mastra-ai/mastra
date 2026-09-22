@@ -71,7 +71,7 @@ import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolati
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { goalMaxRunsEndsGoalScenario } from './goal-max-runs-ends-goal.js';
 import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
-import { goalSaveDoesNotDeleteScenario } from './goal-save-does-not-delete.js';
+import { goalSurvivesNewThreadScenario } from './goal-survives-new-thread.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
 import { integrationCommandsScenario } from './integration-commands.js';
@@ -272,11 +272,11 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-api-error-stops-loop': goalApiErrorStopsLoopScenario,
   'goal-duration-tool-approval': goalDurationToolApprovalScenario,
   'goal-fresh-thread-persistence': goalFreshThreadPersistenceScenario,
-  'goal-save-does-not-delete': goalSaveDoesNotDeleteScenario,
   'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'goal-max-runs-ends-goal': goalMaxRunsEndsGoalScenario,
   'goal-resume-single-render': goalResumeSingleRenderScenario,
+  'goal-survives-new-thread': goalSurvivesNewThreadScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
