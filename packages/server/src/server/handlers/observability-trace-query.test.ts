@@ -5,6 +5,7 @@ import {
   TRACE_QUERY_FIXTURE_DATA,
 } from '@internal/storage-test-utils';
 import type { Mastra } from '@mastra/core';
+import { coreFeatures } from '@mastra/core/features';
 import {
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
@@ -28,7 +29,7 @@ import { createTestServerContext } from './test-utils';
 
 const TIME_RANGE = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
 
-function createHarness(features: string[] = ['trace-query']) {
+function createHarness(features: string[] = ['trace-query', 'trace-query-tenant-scope']) {
   const observabilityStore = {
     getFeatures: vi.fn(() => features),
     queryTraces: vi.fn().mockResolvedValue({ traces: [], page: { next: null } }),
@@ -62,6 +63,12 @@ async function captureHttpException(call: Promise<unknown>) {
 function getDeclaredErrorSchema(status: 400 | 409 | 413 | 422 | 501 | 504): z.ZodTypeAny {
   const schema = QUERY_TRACES.openapi?.responses[status]?.content?.['application/json']?.schema;
   if (!schema) throw new Error(`Missing OpenAPI error schema for ${status}`);
+  return schema as z.ZodTypeAny;
+}
+
+function getDeclaredDiscoveryErrorSchema(status: 501): z.ZodTypeAny {
+  const schema = GET_TRACE_QUERY_FIELDS.openapi?.responses[status]?.content?.['application/json']?.schema;
+  if (!schema) throw new Error(`Missing OpenAPI discovery error schema for ${status}`);
   return schema as z.ZodTypeAny;
 }
 
@@ -472,7 +479,11 @@ describe('QUERY_TRACES', () => {
   });
 
   it('applies the trusted tenant scope from the request context and binds it into cursors', async () => {
-    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-discovery']);
+    const { mastra, observabilityStore } = createHarness([
+      'trace-query',
+      'trace-query-discovery',
+      'trace-query-tenant-scope',
+    ]);
     const scoped = (organizationId: string | undefined, request: unknown) => {
       const context = createTestServerContext({ mastra });
       if (organizationId) context.requestContext.set('organizationId', organizationId);
@@ -534,6 +545,70 @@ describe('QUERY_TRACES', () => {
       code: 'TRACE_QUERY_CURSOR_CONFLICT',
     });
     expect(conflictHarness.getStore).not.toHaveBeenCalled();
+  });
+
+  it('rejects scoped requests that the store or core cannot enforce, and leaves unscoped ones alone', async () => {
+    const legacyStore = createHarness(['trace-query']);
+    const scoped = createTestServerContext({ mastra: legacyStore.mastra });
+    scoped.requestContext.set('organizationId', 'org-a');
+    const storeError = await captureHttpException(
+      QUERY_TRACES.handler({ ...scoped, ...traceQueryRequestSchema.parse({ timeRange: TIME_RANGE }) }),
+    );
+    expect(storeError.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await storeError.getResponse().json())).toMatchObject({
+      code: 'TRACE_QUERY_UNSUPPORTED',
+    });
+    expect(legacyStore.observabilityStore.queryTraces).not.toHaveBeenCalled();
+
+    await QUERY_TRACES.handler(params(legacyStore.mastra, { timeRange: TIME_RANGE }));
+    expect(legacyStore.observabilityStore.queryTraces).toHaveBeenCalledTimes(1);
+
+    coreFeatures.delete('observability-trace-query-tenant-scope');
+    try {
+      const legacyCore = createHarness(['trace-query', 'trace-query-discovery', 'trace-query-tenant-scope']);
+      const context = createTestServerContext({ mastra: legacyCore.mastra });
+      context.requestContext.set('organizationId', 'org-a');
+
+      const coreError = await captureHttpException(
+        QUERY_TRACES.handler({ ...context, ...traceQueryRequestSchema.parse({ timeRange: TIME_RANGE }) }),
+      );
+      expect(coreError.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await coreError.getResponse().json())).toMatchObject({
+        code: 'TRACE_QUERY_UNSUPPORTED',
+      });
+
+      // Each discovery route must answer with its own declared code so Studio's
+      // discovery fallback recognizes it instead of surfacing an unexpected error.
+      const fieldsError = await captureHttpException(
+        GET_TRACE_QUERY_FIELDS.handler({
+          ...context,
+          ...getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+        }),
+      );
+      expect(fieldsError.status).toBe(501);
+      expect(getDeclaredDiscoveryErrorSchema(501).parse(await fieldsError.getResponse().json())).toMatchObject({
+        code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+      });
+
+      const valuesError = await captureHttpException(
+        GET_TRACE_QUERY_VALUES.handler({
+          ...context,
+          ...getTraceQueryValuesArgsSchema.parse({
+            timeRange: TIME_RANGE,
+            predicateScope: 'trace',
+            path: 'environment',
+          }),
+        }),
+      );
+      expect(valuesError.status).toBe(501);
+      expect(getDeclaredDiscoveryErrorSchema(501).parse(await valuesError.getResponse().json())).toMatchObject({
+        code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+      });
+
+      expect(legacyCore.getStore).not.toHaveBeenCalled();
+    } finally {
+      coreFeatures.add('observability-trace-query-tenant-scope');
+    }
   });
 
   it('returns a structured 504 without exposing database errors', async () => {

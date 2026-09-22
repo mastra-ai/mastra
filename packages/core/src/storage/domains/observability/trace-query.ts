@@ -1054,12 +1054,14 @@ export function planTraceQuery(
     where,
     result: 'trace-delta',
     authorization: options.authorizationBinding,
+    scope,
   });
   if (request.mode === 'delta') {
     return {
       result,
       timeRange,
       where,
+      scope,
       orderBy,
       paginationMode: 'delta',
       limit: request.limit ?? defaultDeltaLimit,

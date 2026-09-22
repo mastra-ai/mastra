@@ -972,6 +972,19 @@ describe('planTraceQuery', () => {
         expect.objectContaining({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
       );
     }
+
+    const numbered = planTraceQuery(parsed({ ...baseRequest, pagination: {} }), { scope });
+    if (numbered.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const deltaAfter = encodeTraceQueryDeltaCursor(numbered, 'pg', '42:3');
+    expect(planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: deltaAfter }), { scope })).toMatchObject({
+      paginationMode: 'delta',
+      scope: { organizationId: 'org-a' },
+    });
+    for (const other of [undefined, { organizationId: 'org-b' }]) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: deltaAfter }), { scope: other }),
+      ).toThrow(TraceQueryCursorError);
+    }
   });
 
   it('rejects tenant scope fields as predicates in every predicate context', () => {

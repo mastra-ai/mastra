@@ -12,9 +12,9 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQueryValues,
-  type TraceQueryTenantScope,
 } from '@mastra/core/storage';
 import type {
+  TraceQueryTenantScope,
   CreateFeedbackRecord,
   CreateScoreRecord,
   CreateSpanRecord,
@@ -442,7 +442,9 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
                 mode: 'delta' as const,
                 limit: 2,
               };
-              const bootstrap = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+              const bootstrap = await storage.queryTraces(
+                planTraceQuery(parseTraceQueryRequest(request), { scope: testCase.scope }),
+              );
               if (!('delta' in bootstrap)) throw new Error('Expected delta');
               return { testCase, request, after: bootstrap.deltaCursor };
             }),
@@ -456,7 +458,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
                 const ids: string[] = [];
                 for (let page = 0; page < 20; page++) {
                   const batch = await storage.queryTraces(
-                    planTraceQuery(parseTraceQueryRequest({ ...request, after: cursor })),
+                    planTraceQuery(parseTraceQueryRequest({ ...request, after: cursor }), { scope: testCase.scope }),
                   );
                   if (!('delta' in batch)) throw new Error('Expected delta');
                   ids.push(...batch.traces.map(trace => trace.traceId));

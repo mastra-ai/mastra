@@ -108,7 +108,8 @@ export type ObservabilityStorageFeature =
   | 'logs'
   | 'trace-query'
   | 'trace-query-discovery'
-  | 'thread-query';
+  | 'thread-query'
+  | 'trace-query-tenant-scope';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
