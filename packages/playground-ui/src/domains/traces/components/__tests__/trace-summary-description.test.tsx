@@ -75,7 +75,7 @@ describe('TraceSummaryDescription', () => {
       />,
     );
 
-    expect(screen.getByText('1.2K')).not.toBeNull();
+    expect(screen.getByText('1.2k')).not.toBeNull();
     expect(screen.getByText('345')).not.toBeNull();
     expect(screen.getByText('$0.0010')).not.toBeNull();
 

@@ -51,9 +51,9 @@ type DataListRootStyle = CSSProperties & {
 
 function getDataListMask(mask: ScrollAreaMask | undefined): ScrollAreaMask {
   if (mask === undefined) return { top: false };
-  if (typeof mask === 'object') return { top: false, ...mask };
+  if (mask === true || mask === false) return mask;
 
-  return mask;
+  return { top: false, ...mask };
 }
 
 /**
