@@ -1,4 +1,5 @@
 import type * as authStudioModule from '@mastra/auth-studio';
+import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
@@ -13,6 +14,7 @@ import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
+import type * as platformGithubModule from './integrations/platform/github/integration.js';
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
@@ -138,6 +140,23 @@ vi.mock('@mastra/auth-studio', async importOriginal => {
   return { ...mod, MastraAuthStudio: TrackedMastraAuthStudio };
 });
 
+// `MastraFactory.prepare()` constructs `PlatformGithubIntegration` itself when
+// Platform credentials are present, so capture every instance's constructor
+// options to assert the `github` config key is forwarded to it.
+const platformGithubOptions = vi.hoisted(
+  () => [] as Array<ConstructorParameters<typeof platformGithubModule.PlatformGithubIntegration>[0]>,
+);
+vi.mock('./integrations/platform/github/integration', async importOriginal => {
+  const actual = await importOriginal<typeof platformGithubModule>();
+  class TrackedPlatformGithubIntegration extends actual.PlatformGithubIntegration {
+    constructor(options: ConstructorParameters<typeof actual.PlatformGithubIntegration>[0]) {
+      super(options);
+      platformGithubOptions.push(options);
+    }
+  }
+  return { ...actual, PlatformGithubIntegration: TrackedPlatformGithubIntegration };
+});
+
 /** The default `MastraAuthStudio` provider minted by the last `prepare()`. */
 function lastStudioProvider():
   | (IMastraAuthProvider & {
@@ -196,6 +215,20 @@ async function prepareFactory(config: ConstructorParameters<typeof MastraFactory
 }
 
 /**
+ * Prepare with a stubbed Platform access token, then clear the stub. This is
+ * the path on which the factory installs its Platform-backed integrations —
+ * where the `github` config key is forwarded.
+ */
+async function prepareWithPlatformToken(config: ConstructorParameters<typeof MastraFactory>[0]) {
+  vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+  try {
+    return await prepareFactory(config);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+}
+
+/**
  * Prepare the factory with a probe integration and return the
  * {@link IntegrationContext} the factory hands to `routes()` — the fleet has
  * no global getter anymore, so tests observe it through the context.
@@ -218,6 +251,7 @@ beforeEach(() => {
   dispatcherOptions.length = 0;
   terminalCleanups.length = 0;
   transitionServiceOptions.length = 0;
+  platformGithubOptions.length = 0;
 });
 
 describe('MastraFactory constructor', () => {
@@ -681,6 +715,80 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
+  it('forwards platform.github.rules to the Platform GitHub integration it installs', async () => {
+    const issueOpened = () => undefined;
+
+    await prepareWithPlatformToken({ storage: fakeStorage(), platform: { github: { rules: { issueOpened } } } });
+
+    expect(platformGithubOptions).toHaveLength(1);
+    expect(platformGithubOptions[0]?.rules).toEqual({ issueOpened });
+  });
+
+  it('falls back to platform.githubAppSlug for the installed GitHub integration slug', async () => {
+    await prepareWithPlatformToken({ storage: fakeStorage(), platform: { githubAppSlug: 'platform-app' } });
+
+    expect(platformGithubOptions[0]?.slug).toBe('platform-app');
+  });
+
+  it('passes platform.github.slug through when platform.githubAppSlug is unset', async () => {
+    await prepareWithPlatformToken({ storage: fakeStorage(), platform: { github: { slug: 'configured-app' } } });
+
+    expect(platformGithubOptions[0]?.slug).toBe('configured-app');
+  });
+
+  it('prefers platform.github.slug over platform.githubAppSlug', async () => {
+    await prepareWithPlatformToken({
+      storage: fakeStorage(),
+      platform: { githubAppSlug: 'platform-app', github: { slug: 'configured-app' } },
+    });
+
+    expect(platformGithubOptions[0]?.slug).toBe('configured-app');
+  });
+
+  it('ignores platform.github config and warns when an explicit github integration is passed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await prepareWithPlatformToken({
+        storage: fakeStorage(),
+        platform: { github: { rules: { issueClosed: null } } },
+        integrations: [fakeIntegration({ id: 'github' })],
+      });
+
+      expect(platformGithubOptions).toHaveLength(0);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("'platform.github' config was provided"));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('warns when platform.github config is set but no Platform credentials or explicit github integration exist', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await prepareFactory({ storage: fakeStorage(), platform: { github: { rules: { issueClosed: null } } } });
+
+      expect(platformGithubOptions).toHaveLength(0);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("'platform.github' config was provided"));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('rejects invalid platform.github rules at boot through the integration constructor', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      await expect(
+        prepareFactory({
+          storage: fakeStorage(),
+          // A JavaScript caller can pass an unknown event name; the integration
+          // constructor must reject it rather than dropping the override silently.
+          platform: { github: { rules: { notARealEvent: () => undefined } as never } },
+        }),
+      ).rejects.toThrow('Unknown GitHub rule event: notARealEvent.');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
@@ -983,6 +1091,43 @@ describe('MastraFactory.prepare integrations', () => {
     expect(initialize.mock.calls[0]![0].storage.integrationId).toBe('custom-version-control');
   });
 
+  it('requires source-control storage before GitLab integration routes are ready', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'source-control');
+    const ensureDomainReady = vi.spyOn(storage, 'ensureDomainReady').mockResolvedValue(undefined);
+    const routes = vi.fn((_ctx: IntegrationContext) => [
+      {
+        path: '/web/gitlab/webhook',
+        method: 'POST' as const,
+        handler: () => new Response(null, { status: 202 }),
+      },
+    ]);
+    const versionControl = {
+      initialize: vi.fn(),
+      registerInstallation: vi.fn(),
+      registerRepositories: vi.fn(),
+      getRepositoryAccess: vi.fn(),
+    } as unknown as VersionControl;
+    const config = await prepareFactory({
+      storage,
+      integrations: [fakeIntegration({ id: 'gitlab', routes, versionControl })],
+    });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{
+      path: string;
+      handler?: (context: unknown) => Promise<Response>;
+    }>;
+    const apiRoutes = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} });
+    const route = apiRoutes.find(candidate => candidate.path === '/web/gitlab/webhook');
+
+    expect(apiRoutes.map(candidate => candidate.path)).toEqual(
+      expect.arrayContaining(['/web/source-control/projects/:id/sessions', '/web/user-sessions/:sessionId']),
+    );
+
+    await route?.handler?.({});
+
+    expect(ensureDomainReady).toHaveBeenCalledWith('source-control');
+  });
+
   it("folds a ready integration's routes into buildApiRoutes", async () => {
     const routes = vi.fn((_ctx: IntegrationContext) => [
       { path: '/web/custom/status', method: 'GET' as const, handler: () => new Response() },
@@ -1006,6 +1151,28 @@ describe('MastraFactory.prepare integrations', () => {
     const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/github/status');
     expect(paths).toContain('/web/linear/status');
+  });
+
+  it('prefers an explicit GitLab integration over the platform fallback', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_platform_test');
+    const routes = vi.fn(() => [
+      { path: '/web/gitlab/direct-test', method: 'GET' as const, handler: () => new Response() },
+    ]);
+
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        stateSecret: 'deployment-stable-secret',
+        integrations: [fakeIntegration({ id: 'gitlab', routes })],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(route => route.path);
+
+      expect(routes).toHaveBeenCalledOnce();
+      expect(paths).toContain('/web/gitlab/direct-test');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('merges agentTools and sessionTools from ready integrations into extraTools', async () => {

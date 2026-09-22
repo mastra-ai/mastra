@@ -9,11 +9,10 @@ type SpanTimingHoverCardProps = {
   startShiftMs: number;
 };
 
-/** "Span Timing" hover card body. Must be rendered inside a `HoverCard`. */
 export function SpanTimingHoverCard({ span, startShiftMs }: SpanTimingHoverCardProps) {
   return (
-    <HoverCardContent className="bg-surface4 pr-6">
-      <div className={cn('mt-1 mb-2 flex items-center gap-2 text-ui-sm')}>Span Timing</div>
+    <HoverCardContent className="pr-6">
+      <div className={cn('mt-1 mb-2 flex items-center gap-2 text-caption')}>Span Timing</div>
       <DataKeysAndValues>
         <DataKeysAndValues.Key>Latency</DataKeysAndValues.Key>
         <DataKeysAndValues.Value>{span.latency} ms</DataKeysAndValues.Value>

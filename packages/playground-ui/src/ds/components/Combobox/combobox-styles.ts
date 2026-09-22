@@ -56,20 +56,17 @@ export function comboboxTriggerClass({
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`). Icon sizes are a fixed square
     // showing only the chevron, so they keep Button's centering.
-    !isIconButtonSize(size) && 'w-full justify-between',
+    !isIconButtonSize(size) && 'justify-between text-body-sm',
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant === 'default' ? 'field' : visualVariant],
     'data-[placeholder]:text-muted-foreground',
-    error && 'border-error hover:border-error focus-visible:border-error',
+    error && 'border-destructive hover:border-destructive focus-visible:border-destructive',
     className,
   );
 }
 
-/**
- * Options are shared menu items. Options may carry a description (two lines),
- * so the fixed Button height becomes a minimum and the item grows with `py-1`.
- */
-export const comboboxItemClass = cva(cn(menuItemClass, 'h-auto min-h-form-md py-1'), {
+/** Options are shared menu items, which already grow to fit a second line. */
+export const comboboxItemClass = cva(menuItemClass, {
   variants: {
     multiple: {
       false: '',
@@ -117,7 +114,7 @@ export const comboboxStyles = {
   list: 'p-1 empty:p-0',
 
   /** Scroll container around the List; hosts the fluid highlight so it scrolls with the rows. */
-  listScroller: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden',
+  listScroller: 'max-h-dropdown overflow-y-auto overflow-x-hidden',
 
   /** Option item base — rounded-lg sits concentrically inside rounded-xl + p-1. */
   item: comboboxItemClass({ multiple: false }),
@@ -141,11 +138,11 @@ export const comboboxStyles = {
   optionLabel: 'truncate',
 
   /** Option description */
-  optionDescription: 'text-ui-sm text-muted-foreground truncate',
+  optionDescription: 'text-caption text-muted-foreground truncate',
 
   /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
   optionEnd: 'ml-auto flex items-center shrink-0',
 
   /** Error message */
-  error: 'text-ui-sm text-accent2',
+  error: 'text-caption text-accent2',
 } as const;

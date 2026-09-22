@@ -1,6 +1,7 @@
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import type { KeyValueListItemData } from '@mastra/playground-ui/components/KeyValueList';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
 
@@ -23,7 +24,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
       <div className={cn('grid mt-5 items-center')}>
         <div
           className={cn(
-            'text-header-lg flex items-center gap-3',
+            'text-title flex items-center gap-3',
             '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-50',
             {
               '[&>svg]:opacity-20': isLoading,
@@ -33,7 +34,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
           <PackageIcon />
           <h2
             className={cn({
-              'bg-surface4 flex rounded-lg min-w-[50%]': isLoading,
+              'bg-muted flex rounded-lg min-w-[50%]': isLoading,
             })}
           >
             {isLoading ? <>&nbsp;</> : title}
@@ -43,8 +44,8 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
       <div className="grid gap-x-24 lg:grid-cols-[1fr_1fr]">
         <div className="grid">
           <p
-            className={cn('mb-4 text-ui-md text-neutral4 mt-2', {
-              'bg-surface4 rounded-lg ': isLoading,
+            className={cn('mb-4 text-body text-muted-foreground mt-2', {
+              'bg-muted rounded-lg ': isLoading,
             })}
           >
             {isLoading ? <>&nbsp;</> : description}
@@ -52,19 +53,19 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
 
           {/* Git Branch Notice */}
           {!isLoading && templateSlug && (
-            <div className={cn('bg-surface2 border border-surface4 rounded-lg p-4 mb-4', 'flex items-start gap-3')}>
+            <div className={cn('bg-background border border-border rounded-lg p-4 mb-4', 'flex items-start gap-3')}>
               <div className="mt-0.5 shrink-0">
                 <InfoIcon className="h-[1.1em] w-[1.1em] text-blue-500" />
               </div>
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
-                  <GitBranchIcon className="text-neutral4 h-[1em] w-[1em]" />
-                  <span className="text-ui-md text-neutral5 font-medium">A new Git branch will be created</span>
+                  <GitBranchIcon className="text-muted-foreground h-[1em] w-[1em]" />
+                  <span className="text-subheading text-foreground">A new Git branch will be created</span>
                 </div>
-                <div className="text-ui-sm text-neutral4 space-y-1">
+                <div className="text-caption text-muted-foreground space-y-1">
                   <div>
                     <span className="font-medium">Branch name:</span>{' '}
-                    <code className="bg-surface3 text-ui-sm rounded px-1.5 py-0.5 font-mono">{branchName}</code>
+                    <code className="bg-card text-caption rounded px-1.5 py-0.5 font-mono">{branchName}</code>
                   </div>
                   <div>
                     This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.
@@ -79,7 +80,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-neutral3 text-ui-md hover:text-neutral5 mt-auto flex items-center gap-2"
+              className={cn(quietTextHover, 'text-body mt-auto flex items-center gap-2')}
             >
               <GithubIcon />
               {githubUrl?.split('/')?.pop()}

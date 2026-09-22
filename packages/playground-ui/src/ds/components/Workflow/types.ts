@@ -56,6 +56,7 @@ export interface WorkflowStepCardViewProps {
   stepGraph?: SerializedStepFlowEntry[];
   startedAt?: number;
   endedAt?: number;
+  spansSuspension?: boolean;
   actionBar?: ReactNode;
 }
 

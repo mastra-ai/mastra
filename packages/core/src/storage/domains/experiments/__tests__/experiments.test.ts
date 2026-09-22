@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryDB } from '../../inmemory-db';
 import { ExperimentsInMemory } from '../inmemory';
 
@@ -769,6 +769,94 @@ describe('ExperimentsInMemory', () => {
         pagination: { page: 0, perPage: 10 },
       });
       expect(result.results).toHaveLength(0);
+    });
+  });
+
+  describe('ordering', () => {
+    const makeExperiment = (targetId: string) =>
+      storage.createExperiment({ datasetId: 'ds-1', datasetVersion: 1, targetType: 'agent', targetId, totalItems: 1 });
+
+    it('lists experiments newest first by default', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      await makeExperiment('old');
+      vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
+      await makeExperiment('new');
+      vi.useRealTimers();
+
+      const result = await storage.listExperiments({ pagination: { page: 0, perPage: 10 } });
+      expect(result.experiments.map(e => e.targetId)).toEqual(['new', 'old']);
+    });
+
+    it('lists experiments oldest first when requested', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      await makeExperiment('old');
+      vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
+      await makeExperiment('new');
+      vi.useRealTimers();
+
+      const result = await storage.listExperiments({
+        pagination: { page: 0, perPage: 10 },
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(result.experiments.map(e => e.targetId)).toEqual(['old', 'new']);
+    });
+
+    it('rejects unknown orderBy fields for experiments and results', async () => {
+      const exp = await makeExperiment('exp');
+      await expect(
+        storage.listExperiments({
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'nope' as any, direction: 'ASC' },
+        }),
+      ).rejects.toThrow(/Invalid orderBy field/);
+      await expect(
+        storage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'status' as any, direction: 'ASC' },
+        }),
+      ).rejects.toThrow(/Invalid orderBy field/);
+    });
+
+    it('lists experiment results newest started first when requested', async () => {
+      const experiment = await makeExperiment('a1');
+      const base = {
+        experimentId: experiment.id,
+        itemDatasetVersion: 1,
+        output: null,
+        groundTruth: null,
+        error: null,
+        retryCount: 0,
+      };
+      await storage.addExperimentResult({
+        ...base,
+        itemId: 'item-1',
+        input: 'first',
+        startedAt: new Date('2026-01-01T00:00:00Z'),
+        completedAt: new Date('2026-01-01T00:00:01Z'),
+      });
+      await storage.addExperimentResult({
+        ...base,
+        itemId: 'item-2',
+        input: 'second',
+        startedAt: new Date('2026-01-02T00:00:00Z'),
+        completedAt: new Date('2026-01-02T00:00:01Z'),
+      });
+
+      const asc = await storage.listExperimentResults({
+        experimentId: experiment.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(asc.results.map(r => r.input)).toEqual(['first', 'second']);
+
+      const desc = await storage.listExperimentResults({
+        experimentId: experiment.id,
+        pagination: { page: 0, perPage: 10 },
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      });
+      expect(desc.results.map(r => r.input)).toEqual(['second', 'first']);
     });
   });
 });

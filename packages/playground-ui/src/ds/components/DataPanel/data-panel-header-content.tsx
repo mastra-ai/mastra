@@ -16,7 +16,7 @@ export function DataPanelHeaderContent({ children }: DataPanelHeaderContentProps
       {heading}
       {metadata.length > 0 && (
         <>
-          <div role="separator" aria-orientation="vertical" className="bg-border2 mx-1 h-4 w-px shrink-0" />
+          <div role="separator" aria-orientation="vertical" className="bg-border-strong mx-1 h-4 w-px shrink-0" />
           {metadata}
         </>
       )}

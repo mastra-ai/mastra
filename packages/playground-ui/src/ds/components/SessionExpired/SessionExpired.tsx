@@ -46,7 +46,7 @@ export function SessionExpired({ title, description, className }: SessionExpired
     <EmptyState
       className={className}
       iconSlot={
-        <Icon size="lg" className="text-neutral3">
+        <Icon size="lg" className="text-muted-foreground">
           <LogIn />
         </Icon>
       }

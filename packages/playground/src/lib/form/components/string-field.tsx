@@ -11,7 +11,7 @@ export const StringField: React.FC<AutoFormFieldProps> = ({ inputProps, error, f
       id={id}
       {...props}
       rows={1}
-      className={cn('field-sizing-content min-h-form-md max-h-48 resize-none overflow-y-auto', className)}
+      className={cn('field-sizing-content min-h-control-md max-h-48 resize-none overflow-y-auto', className)}
       error={Boolean(error)}
       defaultValue={field.default}
     />

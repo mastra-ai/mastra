@@ -18,7 +18,7 @@ type Story = StoryObj<typeof Tree>;
 
 export const Default: Story = {
   render: () => (
-    <div className="w-dropdown-max-height">
+    <div className="w-75">
       <Tree>
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
@@ -71,7 +71,7 @@ export const Default: Story = {
           <Tree.Label>README.md</Tree.Label>
         </Tree.File>
         <Tree.File id="LICENSE">
-          <Tree.Icon className="text-neutral3">
+          <Tree.Icon className="text-muted-foreground">
             <File />
           </Tree.Icon>
           <Tree.Label>LICENSE</Tree.Label>
@@ -85,7 +85,7 @@ function WithSelectionExample() {
   const [selected, setSelected] = useState('src/index.ts');
 
   return (
-    <div className="w-dropdown-max-height">
+    <div className="w-75">
       <Tree selectedId={selected} onSelect={setSelected}>
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
@@ -127,7 +127,7 @@ export const WithSelection: Story = {
 export const WithActions: Story = {
   render: () => (
     <TooltipProvider>
-      <div className="w-dropdown-max-height">
+      <div className="w-75">
         <Tree>
           <Tree.Folder defaultOpen>
             <Tree.FolderTrigger
@@ -190,7 +190,7 @@ export const WithActions: Story = {
 
 export const CustomContent: Story = {
   render: () => (
-    <div className="w-dropdown-max-height">
+    <div className="w-75">
       <Tree>
         <Tree.Folder defaultOpen>
           <Tree.FolderTrigger>
@@ -198,22 +198,22 @@ export const CustomContent: Story = {
               <FolderGit2 className="text-accent6" />
             </Tree.Icon>
             <Tree.Label>packages</Tree.Label>
-            <span className="text-neutral3 text-ui-xs ml-auto">12 items</span>
+            <span className="text-muted-foreground text-meta ml-auto">12 items</span>
           </Tree.FolderTrigger>
           <Tree.FolderContent>
             <Tree.File>
               <Tree.Icon>
-                <FileCode className="text-neutral3" />
+                <FileCode className="text-muted-foreground" />
               </Tree.Icon>
               <Tree.Label>core</Tree.Label>
-              <span className="text-neutral3 text-ui-xs ml-auto">v2.1.0</span>
+              <span className="text-muted-foreground text-meta ml-auto">v2.1.0</span>
             </Tree.File>
             <Tree.File>
               <Tree.Icon>
-                <FileCode className="text-neutral3" />
+                <FileCode className="text-muted-foreground" />
               </Tree.Icon>
               <Tree.Label>cli</Tree.Label>
-              <span className="text-neutral3 text-ui-xs ml-auto">v1.0.3</span>
+              <span className="text-muted-foreground text-meta ml-auto">v1.0.3</span>
             </Tree.File>
           </Tree.FolderContent>
         </Tree.Folder>
@@ -250,7 +250,7 @@ function WithInlineCreationExample() {
 
   return (
     <TooltipProvider>
-      <div className="w-dropdown-max-height">
+      <div className="w-75">
         <Tree>
           <Tree.Folder defaultOpen>
             <Tree.FolderTrigger

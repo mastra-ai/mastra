@@ -143,10 +143,11 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           visualVariant === 'default' && fieldTriggerSurfaceStyle,
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
-          'w-full justify-between',
+          'justify-between text-body-sm',
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant === 'default' ? 'field' : visualVariant],
           'data-[placeholder]:text-muted-foreground',
+          'aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive',
           '[&>span]:truncate',
           className,
         )}
@@ -154,12 +155,12 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
       >
         {children}
         {/* `SelectPrimitive.Icon` renders the provided element in place of its
-            default `<span>`, so the chevron would land as a *direct* `<svg>`
-            child of the trigger — where Button's `TEXT_MODE_ADORNMENTS`
-            `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
-            would distort and mis-position it. Wrapping it in a `<span>` keeps
-            the svg one level deep so those rules can't reach it, leaving the
-            chevron pinned at the right edge at its intended size and color. */}
+ default `<span>`, so the chevron would land as a *direct* `<svg>`
+ child of the trigger — where Button's `TEXT_MODE_ADORNMENTS`
+ `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
+ would distort and mis-position it. Wrapping it in a `<span>` keeps
+ the svg one level deep so those rules can't reach it, leaving the
+ chevron pinned at the right edge at its intended size and color. */}
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">

@@ -27,7 +27,8 @@ export interface DataPanelProps {
    * Drawer width. `md` (default) is a narrow detail panel whose width shrinks
    * with `depth`. `half`/`wide`/`full` are for multi-column content (e.g. the
    * trace panel); each `depth` level trims them by a small fixed amount so a
-   * same-size parent still peeks out beneath.
+   * same-size parent still peeks out beneath. Changing `size` while open
+   * animates the width.
    */
   size?: 'md' | 'half' | 'wide' | 'full';
   children: React.ReactNode;
@@ -64,8 +65,8 @@ export function DataPanelRoot({
       swipeDirection="right"
     >
       <DrawerPrimitive.Portal>
-        {/* Lighter than the shared `--overlay`: a side panel should keep the page beneath readable. */}
-        <DrawerPrimitive.Backdrop className="drawer-backdrop bg-overlay/30 fixed inset-0 z-50" />
+        {/* Lighter than the shared `--scrim`: a side panel should keep the page beneath readable. */}
+        <DrawerPrimitive.Backdrop className="drawer-backdrop bg-scrim/30 fixed inset-0 z-50" />
         <DrawerPrimitive.Viewport className="fixed inset-0 z-50">
           <DrawerPrimitive.Popup
             data-slot="data-panel-popup"
@@ -96,7 +97,7 @@ export function DataPanelRoot({
               <DrawerPrimitive.Content
                 render={<section />}
                 className={cn(
-                  'flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-border1 bg-surface2',
+                  'flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-background',
                   className,
                 )}
               >

@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 
 import { Button } from '../../../ds/components/Button';
+import { overlaySurfaceStyle } from '../../../ds/primitives/raised-surface';
 import type { ExtractedOmMarker } from '../lib/extract-markers';
 import { tToTimestampMs } from '../lib/replay-selection';
 import type { TDomain } from '../lib/timeline';
@@ -63,10 +64,10 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
+      <p className="text-muted-foreground border-border/50 text-meta flex items-center self-stretch border-r pl-3">
         Time
       </p>
-      <div className="text-icon3 text-ui-xs flex justify-between px-1 py-1.5 font-mono">
+      <div className="text-muted-foreground text-meta flex justify-between px-1 py-1.5 font-mono">
         {ticks.map(t => (
           <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
         ))}
@@ -93,17 +94,17 @@ export function FlameTooltip({
 
   if (showValue) {
     return (
-      <div className="border-border1 bg-surface3 text-ui-xs flex flex-col gap-0.5 rounded border px-2 py-1.5 font-mono shadow">
+      <div className={`${overlaySurfaceStyle} text-meta flex flex-col gap-0.5 rounded px-2 py-1.5 font-mono`}>
         {time && (
           <div className="flex items-center justify-between gap-3">
-            <span className="text-icon3">time</span>
-            <span className="text-neutral6">{time}</span>
+            <span className="text-muted-foreground">time</span>
+            <span className="text-foreground">{time}</span>
           </div>
         )}
         {visibleEntries.map(entry => (
           <div key={entry.name} className="flex items-center justify-between gap-3">
-            <span className="text-icon3">{entry.name}</span>
-            <span className="text-neutral6">
+            <span className="text-muted-foreground">{entry.name}</span>
+            <span className="text-foreground">
               {typeof entry.value === 'number' ? Math.round(entry.value).toLocaleString() : String(entry.value)}
             </span>
           </div>
@@ -113,8 +114,8 @@ export function FlameTooltip({
   }
 
   return (
-    <div className="border-border1 bg-surface3 text-ui-xs rounded border px-2 py-1 font-mono shadow">
-      {time && <span className="text-neutral6">{time}</span>}
+    <div className={`${overlaySurfaceStyle} text-meta rounded px-2 py-1 font-mono`}>
+      {time && <span className="text-foreground">{time}</span>}
     </div>
   );
 }
@@ -134,8 +135,8 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
   const yMax = getAreaRowYMax(data, dataKey, threshold);
 
   return (
-    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
+    <div className="border-border/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
+      <p className="text-muted-foreground border-border/50 text-meta flex items-center self-stretch border-r pl-3">
         {label}
       </p>
       <div>
@@ -183,8 +184,8 @@ interface EventRowProps {
 
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
-    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
+    <div className="border-border/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
+      <p className="text-muted-foreground border-border/50 text-meta flex items-center self-stretch border-r pl-3">
         {label}
       </p>
       <div>
@@ -244,8 +245,8 @@ function CombinedRow({
   const combinedData = toCombinedRowData(areaData, areaDataKey, eventData);
 
   return (
-    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
+    <div className="border-border/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
+      <p className="text-muted-foreground border-border/50 text-meta flex items-center self-stretch border-r pl-3">
         {label}
       </p>
       <div>
@@ -352,9 +353,9 @@ function ZoomTrack({
   }, [toTimestamp, zoomLeft, zoomRight, onZoomLeftChange, onZoomRightChange]);
 
   return (
-    <div className="border-border1/50 grid grid-cols-[6rem_1fr] items-center border-b">
-      <div className="border-border1/50 flex items-center gap-1 self-stretch border-r pl-3">
-        <p className="text-icon3 text-ui-xs font-medium">Zoom</p>
+    <div className="border-border/50 grid grid-cols-[6rem_1fr] items-center border-b">
+      <div className="border-border/50 flex items-center gap-1 self-stretch border-r pl-3">
+        <p className="text-muted-foreground text-meta">Zoom</p>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
         </Button>
@@ -380,22 +381,22 @@ function ZoomTrack({
       >
         <div
           data-zoom-part="before"
-          className="bg-surface2/60 absolute inset-y-0 left-0"
+          className="bg-background/60 absolute inset-y-0 left-0"
           style={{ width: `${leftPercent}%` }}
         />
         <div
           data-zoom-part="band"
-          className="border-border1/30 bg-neutral6/5 absolute inset-y-0 border-y"
+          className="border-border/30 bg-fill-subtle absolute inset-y-0 border-y"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
         <div
           data-zoom-part="after"
-          className="bg-surface2/60 absolute inset-y-0 right-0"
+          className="bg-background/60 absolute inset-y-0 right-0"
           style={{ width: `${100 - rightPercent}%` }}
         />
         <div
           data-zoom-handle="left"
-          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
+          className="bg-foreground/50 hover:bg-foreground absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();
@@ -405,7 +406,7 @@ function ZoomTrack({
         />
         <div
           data-zoom-handle="right"
-          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
+          className="bg-foreground/50 hover:bg-foreground absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${rightPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();

@@ -1,9 +1,9 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Route, Routes } from 'react-router';
+import { Route, Routes, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptBlocksPage from '..';
-import { fewPromptBlocks, pagedPromptBlocks, systemPackages } from './fixtures/prompt-blocks';
+import { fewPromptBlocks, noPromptBlocks, pagedPromptBlocks, systemPackages } from './fixtures/prompt-blocks';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
 import { RouteHeaderActionsProvider } from '@/lib/route-header';
@@ -13,11 +13,13 @@ import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const onListRequest = vi.fn<(page: number, perPage: number) => void>();
+let listRequests: URL[] = [];
 
 const usePagedPromptBlocks = () => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/stored/prompt-blocks`, ({ request }) => {
       const url = new URL(request.url);
+      listRequests.push(url);
       const page = Number(url.searchParams.get('page') ?? 0);
       const perPage = Number(url.searchParams.get('perPage') ?? 100);
       onListRequest(page, perPage);
@@ -27,14 +29,26 @@ const usePagedPromptBlocks = () => {
   );
 };
 
-const renderPage = () =>
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
+}
+
+const renderPage = (initialEntry = '/prompt-blocks') =>
   renderWithProviders(
     <TestLinkProvider>
-      <PromptBlocksPage />
+      <Routes>
+        <Route path="/prompt-blocks" element={<PromptBlocksPage />} />
+      </Routes>
+      <LocationProbe />
     </TestLinkProvider>,
+    { router: { initialEntries: [initialEntry] } },
   );
 
-beforeEach(() => onListRequest.mockClear());
+beforeEach(() => {
+  onListRequest.mockClear();
+  listRequests = [];
+});
 
 describe('Prompt Blocks page', () => {
   describe('when there are more blocks than one page', () => {
@@ -179,6 +193,77 @@ describe('Prompt Blocks page', () => {
       fireEvent.keyDown(window, { key: 'c' });
 
       expect(await screen.findByText('Create prompt page')).not.toBeNull();
+    });
+  });
+
+  describe('when blocks are sorted from the Updated column', () => {
+    it('does not ask the server for a sort by default', async () => {
+      usePagedPromptBlocks();
+      renderPage();
+
+      await screen.findByText('Prompt Block 1');
+
+      expect(listRequests[0].searchParams.get('orderBy[field]')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Updated, not sorted, sort ascending' })).not.toBeNull();
+    });
+
+    it('asks the server for oldest-updated first and writes it to the URL', async () => {
+      usePagedPromptBlocks();
+      renderPage();
+
+      await screen.findByText('Prompt Block 1');
+      fireEvent.click(screen.getByRole('button', { name: 'Updated, not sorted, sort ascending' }));
+
+      await waitFor(() => expect(listRequests.at(-1)?.searchParams.get('orderBy[field]')).toBe('updatedAt'));
+      expect(listRequests.at(-1)?.searchParams.get('orderBy[direction]')).toBe('ASC');
+      expect(screen.getByTestId('location').textContent).toBe('/prompt-blocks?sort=updatedAt&dir=asc');
+    });
+
+    it('goes back to the first page when the sort changes', async () => {
+      usePagedPromptBlocks();
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+      await screen.findByText('Prompt Block 51');
+      fireEvent.click(screen.getByRole('button', { name: 'Updated, not sorted, sort ascending' }));
+
+      await waitFor(() => expect(listRequests.at(-1)?.searchParams.get('orderBy[direction]')).toBe('ASC'));
+      expect(listRequests.at(-1)?.searchParams.get('page')).toBe('0');
+    });
+
+    it('restores the sort from the URL', async () => {
+      usePagedPromptBlocks();
+      renderPage('/prompt-blocks?sort=updatedAt&dir=desc');
+
+      await screen.findByText('Prompt Block 1');
+
+      expect(listRequests[0].searchParams.get('orderBy[field]')).toBe('updatedAt');
+      expect(listRequests[0].searchParams.get('orderBy[direction]')).toBe('DESC');
+      expect(screen.getByRole('button', { name: 'Updated, sorted descending, sort ascending' })).not.toBeNull();
+    });
+  });
+
+  describe('when there are no blocks and the CMS is available', () => {
+    it('shows the empty state without a New prompt header action', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/stored/prompt-blocks`, () => HttpResponse.json(noPromptBlocks)),
+        http.get(`${TEST_BASE_URL}/api/system/packages`, () =>
+          HttpResponse.json({ ...systemPackages, cmsEnabled: true }),
+        ),
+      );
+      renderWithProviders(
+        <TestLinkProvider>
+          <RouteHeaderActionsProvider>
+            <RouteHeaderActionsSlot />
+            <PromptBlocksPage />
+          </RouteHeaderActionsProvider>
+        </TestLinkProvider>,
+        { router: { initialEntries: ['/prompt-blocks'] } },
+      );
+
+      await screen.findByText('No Prompts yet');
+
+      expect(screen.queryByRole('link', { name: 'New prompt' })).toBeNull();
     });
   });
 

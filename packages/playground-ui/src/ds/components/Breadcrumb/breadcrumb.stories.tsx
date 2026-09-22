@@ -125,7 +125,7 @@ export const TruncatedLabel: Story = {
 
 const Usage = ({ title, children }: { title: string; children: ReactNode }) => (
   <div className="flex flex-col gap-1">
-    <Txt variant="ui-xs" className="text-neutral3">
+    <Txt variant="meta" tone="muted">
       {title}
     </Txt>
     <Header className="h-10 min-h-10 w-220 gap-2 overflow-hidden px-2">
@@ -245,7 +245,7 @@ export const AllAppUsages: Story = {
  */
 export const ControlAlignment: Story = {
   render: () => (
-    <div className="bg-surface2 flex items-center gap-1 rounded-lg p-2">
+    <div className="bg-background flex items-center gap-1 rounded-lg p-2">
       <Breadcrumb label="Breadcrumb">
         <Crumb as="span" isCurrent>
           Span

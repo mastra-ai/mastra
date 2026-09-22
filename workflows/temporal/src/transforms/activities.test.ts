@@ -102,9 +102,24 @@ describe('activity transform', () => {
       export const fetchWeather = createStep({ id: 'fetch-weather', execute: async () => ({ ok: true }) });
     `);
 
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.params,[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
     expect(output).not.toMatch(/await import\(/);
     expect(output).toContain('const fetchWeather = createStep({');
+  });
+
+  it('avoids collisions with source bindings named RequestContext', async () => {
+    const output = await transform(`
+      import { createStep } from '@mastra/core/workflows';
+
+      const RequestContext = 'source binding';
+      export const fetchWeather = createStep({
+        id: 'fetch-weather',
+        execute: async ({ requestContext }) => ({ value: RequestContext, tenantId: requestContext.get('tenantId') }),
+      });
+    `);
+
+    expect(output).toContain("const RequestContext = 'source binding'");
+    expect(output).toMatch(/import\s*\{\s*RequestContext as [A-Za-z_$][\w$]*\s*\}\s*from\s*["']@mastra\/core\/di["']/);
   });
 
   it('keeps supporting declarations needed by extracted activities while stripping workflow setup', async () => {
@@ -158,6 +173,10 @@ describe('activity transform', () => {
     expect(output).toContain('const double =');
     expect(output).toMatch(/const mappingMappedWorkflow0[\s\S]*export \{ mappingMappedWorkflow0 \}/);
     expect(output).toContain('getInitData: () => initData');
+    expect(output).toContain('requestContext');
+    expect(output).toContain('runId');
+    expect(output).toContain('resourceId');
+    expect(output).toContain('workflowId');
     expect(output).not.toContain('const mappedWorkflow =');
     expect(activityBindings).toContainEqual({
       exportName: 'mappingMappedWorkflow0',
@@ -239,6 +258,6 @@ describe('activity transform', () => {
 
     expect(output).toContain('const mastra =');
     expect(output).not.toMatch(/export\s+(const|\{)\s*mastra/);
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.params,[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
   });
 });

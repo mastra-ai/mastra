@@ -57,7 +57,7 @@ export function ThreadViewByTrace({ threadId, onSelectedSpanChange }: ThreadView
   if (traceIds.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <Txt variant="ui-md" className="text-neutral3">
+        <Txt variant="body" tone="muted">
           No traces found for this thread.
         </Txt>
       </div>
@@ -132,19 +132,19 @@ function ThreadTraceRowContent() {
         <ThreadTrace.MessagesHeader>
           <ThreadTrace.TabList>
             <ThreadTrace.Tab value="messages">
-              <Icon size="sm">
+              <Icon size="xs">
                 <MessageSquareTextIcon />
               </Icon>
               Messages
             </ThreadTrace.Tab>
             <ThreadTrace.Tab value="feedback">
-              <Icon size="sm">
+              <Icon size="xs">
                 <MessageSquareReplyIcon />
               </Icon>
               Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
             </ThreadTrace.Tab>
             <ThreadTrace.Tab value="scores">
-              <Icon size="sm">
+              <Icon size="xs">
                 <ScorersIcon />
               </Icon>
               Scores{scoresTotal != null && <> ({scoresTotal})</>}

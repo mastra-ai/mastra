@@ -28,7 +28,7 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
       <ChatShell className="h-dvh" scroller={{ autoScroll: true, defaultScrollPosition: 'end' }}>
         <ChatShell.Bar>
           <ChatShell.Column className="flex-row items-center justify-between gap-3 py-3">
-            <Txt as="h1" variant="header-xs">
+            <Txt as="h1" variant="body">
               Composer review
             </Txt>
             <Button size="sm" variant="ghost" onClick={onReset}>
@@ -64,7 +64,7 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
                       className="ml-auto flex max-w-[85%] min-w-0 flex-col items-end gap-2"
                     >
                       <div className="flex items-center gap-2">
-                        <Txt variant="ui-sm">You</Txt>
+                        <Txt variant="caption">You</Txt>
                         <Avatar name="You" size="sm" />
                       </div>
                       {turn.prompt && <UserTextPartRenderer part={{ type: 'text', text: turn.prompt }} />}
@@ -77,7 +77,7 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
                     <MessageScrollerItem messageId={`${turn.id}-reply`} className="flex min-w-0 flex-col gap-3">
                       <div className="flex items-center gap-2">
                         <Avatar name="Assistant" size="sm" />
-                        <Txt variant="ui-sm">Assistant</Txt>
+                        <Txt variant="caption">Assistant</Txt>
                       </div>
                       <ConversationResponse turn={turn} transitionTurn={transitionTurn} />
                     </MessageScrollerItem>

@@ -62,7 +62,7 @@ export function ScheduleTriggersList({
 
   if (triggers.length === 0) {
     return (
-      <Txt variant="ui-md" className="text-neutral4 p-4">
+      <Txt variant="body" tone="muted" className="p-4">
         No trigger history yet.
       </Txt>
     );
@@ -94,8 +94,8 @@ export function ScheduleTriggersList({
           <span
             className={
               isLinked
-                ? 'text-accent1 text-ui-sm font-mono whitespace-nowrap'
-                : 'text-neutral3 text-ui-sm font-mono whitespace-nowrap'
+                ? 'text-accent1 text-caption font-mono whitespace-nowrap'
+                : 'text-muted-foreground text-caption font-mono whitespace-nowrap'
             }
           >
             {t.runId}
@@ -109,14 +109,14 @@ export function ScheduleTriggersList({
             <DataList.Cell>
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="text-ui-sm text-accent2 inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="text-caption text-accent2 inline-flex items-center gap-1.5 whitespace-nowrap">
                     <AlertTriangleIcon size={14} />
                     publish failed
                   </span>
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="text-ui-sm text-neutral3 inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="text-caption text-muted-foreground inline-flex items-center gap-1.5 whitespace-nowrap">
                     pending
                   </span>
                 )}
@@ -150,7 +150,11 @@ export function ScheduleTriggersList({
             </DataList.Cell>
 
             <DataList.Cell>
-              {t.run ? <span>{formatDuration(t.run.durationMs)}</span> : <span className="text-neutral4">—</span>}
+              {t.run ? (
+                <span>{formatDuration(t.run.durationMs)}</span>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
             </DataList.Cell>
             <DataList.Cell> </DataList.Cell>
           </>

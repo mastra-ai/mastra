@@ -1,9 +1,10 @@
-import { Card } from '@mastra/playground-ui/components/Card';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
 import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
@@ -35,13 +36,13 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
   const { isCollapsed } = useRouteSidePanel();
 
   return (
-    <Card
+    <div
       data-testid="agent-overview-panel"
-      className="rounded-studio-frame grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden"
+      className={cn('rounded-studio-frame grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden', frameSurfaceStyle)}
     >
       {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
-      <div className="border-border1 flex h-10 min-h-10 items-center border-b px-4">
-        <Txt as="h2" variant="ui-md" className="text-neutral6 font-medium">
+      <div className="border-border flex h-10 min-h-10 items-center border-b px-4">
+        <Txt as="h2" variant="subheading" tone="ink">
           Config
         </Txt>
       </div>
@@ -50,7 +51,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
         {/* Skip the sections (and their data fetching) while the panel is collapsed. */}
         {!isCollapsed && <AgentOverviewSections agentId={agentId} />}
       </ScrollArea>
-    </Card>
+    </div>
   );
 }
 
@@ -74,7 +75,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
   if (!agent) {
     return (
-      <Txt variant="ui-md" className="text-neutral3 p-4">
+      <Txt variant="body" tone="muted" className="p-4">
         Agent not found
       </Txt>
     );

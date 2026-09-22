@@ -1,6 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Brain, ExternalLink, Info } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
@@ -96,39 +100,39 @@ const ProgressBar = ({
 
   const showAdaptiveLabel = isAdaptive && percentage >= 100 && !isProcessing && baseThreshold && value < baseThreshold;
 
-  const containerBg = isProcessing ? 'bg-transparent' : 'bg-surface4';
+  const containerBg = isProcessing ? 'bg-transparent' : 'bg-muted';
   const fillColor = isProcessing ? 'bg-blue-500/10' : barColor;
-  const textColor = isProcessing ? 'text-blue-600' : 'text-neutral4';
+  const textColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
   const textColorFilled = isProcessing ? 'text-blue-600' : 'text-white';
-  const tokenBg = isProcessing ? 'bg-blue-500/10' : 'bg-surface5';
-  const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-neutral3';
+  const tokenBg = isProcessing ? 'bg-blue-500/10' : 'bg-fill';
+  const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
 
   return (
     <div className="min-w-0 flex-1">
       <div className="mb-1 flex h-4 items-center gap-1">
-        <span className="text-neutral4 text-ui-xs font-normal tracking-wider uppercase">{label}</span>
+        <span className="text-muted-foreground text-meta tracking-wider uppercase">{label}</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" className="inline-flex items-center justify-center">
-              <Info className="text-neutral4 hover:text-neutral3 h-2.5 w-2.5 cursor-help" />
+              <Info className={cn('h-2.5 w-2.5 cursor-help', quietTextHover, controlStateColorTransition)} />
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
-            <div className="text-ui-sm space-y-1.5">
-              <div className="text-neutral5 font-medium">
+            <div className="text-caption space-y-1.5">
+              <div className="text-foreground font-medium">
                 {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
               </div>
               <div className="space-y-0.5">
                 <div>
-                  <span className="text-neutral4">Model:</span>{' '}
-                  <span className="text-neutral5">{model || 'not configured'}</span>
+                  <span className="text-muted-foreground">Model:</span>{' '}
+                  <span className="text-foreground">{model || 'not configured'}</span>
                 </div>
                 {modelRouting?.length ? (
                   <div>
-                    <span className="text-neutral4">Routing:</span>
+                    <span className="text-muted-foreground">Routing:</span>
                     <div className="mt-0.5 space-y-0.5 pl-2">
                       {modelRouting.map(route => (
-                        <div key={`${route.upTo}-${route.model}`} className="text-neutral5">
+                        <div key={`${route.upTo}-${route.model}`} className="text-foreground">
                           ≤{formatTokens(route.upTo)} → {route.model}
                         </div>
                       ))}
@@ -136,14 +140,15 @@ const ProgressBar = ({
                   </div>
                 ) : (
                   <div>
-                    <span className="text-neutral4">Threshold:</span>{' '}
-                    <span className="text-neutral5">{formatTokens(baseThreshold ?? max)} tokens</span>
+                    <span className="text-muted-foreground">Threshold:</span>{' '}
+                    <span className="text-foreground">{formatTokens(baseThreshold ?? max)} tokens</span>
                   </div>
                 )}
                 {isAdaptive && totalBudget && (
                   <div>
-                    <span className="text-neutral4">Mode:</span> <span className="text-amber-400">Adaptive</span>{' '}
-                    <span className="text-neutral4">({formatTokens(totalBudget)} shared budget)</span>
+                    <span className="text-muted-foreground">Mode:</span>{' '}
+                    <span className="text-amber-400">Adaptive</span>{' '}
+                    <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
                   </div>
                 )}
               </div>
@@ -156,7 +161,7 @@ const ProgressBar = ({
         <div className={`relative h-5 flex-1 ${containerBg} overflow-hidden rounded-l`}>
           <div className={`h-full ${fillColor} transition-all`} style={{ width: `${percentage}%` }} />
           <span
-            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-ui-xs font-medium ${textColor} pointer-events-none`}
+            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColor} pointer-events-none`}
           >
             {isProcessing
               ? `${activeText} ${elapsed.toFixed(1)}s`
@@ -165,7 +170,7 @@ const ProgressBar = ({
                 : `${Math.round(percentage)}%`}
           </span>
           <span
-            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-ui-xs font-medium ${textColorFilled} pointer-events-none`}
+            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColorFilled} pointer-events-none`}
             style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
           >
             {isProcessing
@@ -177,20 +182,20 @@ const ProgressBar = ({
         </div>
 
         <span
-          className={`text-ui-xs ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
+          className={`text-meta ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
           {formatTokens(value)}
-          <span className={isProcessing ? 'text-blue-500' : 'text-neutral4'}>/{formatTokens(max)}</span>
+          <span className={isProcessing ? 'text-blue-500' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="cursor-help text-amber-400">({formatTokens(baseThreshold)})</span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
-                <div className="text-ui-sm">
+                <div className="text-caption">
                   <span className="text-amber-400">{formatTokens(baseThreshold)}</span>
-                  <span className="text-neutral4"> is the configured threshold. </span>
-                  <span className="text-neutral5">
+                  <span className="text-muted-foreground"> is the configured threshold. </span>
+                  <span className="text-foreground">
                     Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
                   </span>
                 </div>
@@ -206,18 +211,18 @@ const ProgressBar = ({
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
     <Brain className="h-4 w-4 text-purple-400" />
-    <h3 className="text-neutral5 text-ui-md font-medium">Observational Memory</h3>
+    <h3 className="text-foreground text-subheading">Observational Memory</h3>
   </div>
 );
 
 const ObservationalMemoryDisabled = () => (
   <div className="p-4">
     <div className="mb-3 flex items-center gap-2">
-      <Brain className="text-neutral3 h-4 w-4" />
-      <h3 className="text-neutral5 text-ui-md font-medium">Observational Memory</h3>
+      <Brain className="text-muted-foreground h-4 w-4" />
+      <h3 className="text-foreground text-subheading">Observational Memory</h3>
     </div>
-    <div className="bg-surface3 border-border1 rounded-lg border p-4">
-      <p className="text-neutral3 text-ui-md mb-3">
+    <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
+      <p className="text-muted-foreground text-body mb-3">
         Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
         from conversations.
       </p>
@@ -225,7 +230,10 @@ const ObservationalMemoryDisabled = () => (
         href="https://mastra.ai/en/docs/memory/observational-memory"
         target="_blank"
         rel="noopener noreferrer"
-        className="text-ui-md inline-flex items-center gap-2 text-blue-400 transition-colors hover:text-blue-300"
+        className={cn(
+          'text-body inline-flex items-center gap-2 text-blue-400 hover:text-blue-300',
+          controlStateColorTransition,
+        )}
       >
         Learn about Observational Memory
         <ExternalLink className="h-3 w-3" />

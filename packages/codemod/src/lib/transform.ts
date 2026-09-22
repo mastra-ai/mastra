@@ -30,8 +30,9 @@ function getJscodeshiftBin(): string {
 }
 
 function buildArgs(codemodPath: string, targetPath: string, options: TransformOptions): string[] {
-  // Ignoring everything under `.*/` covers `.mastra/` along with any other
-  // framework build related or otherwise intended-to-be-hidden directories.
+  // Ignore hidden directories inside the target without matching hidden
+  // directories that contain the target itself.
+  const hiddenDirectoryPattern = path.join(targetPath, '**/.*/**');
   const args = [
     '-t',
     codemodPath,
@@ -39,7 +40,7 @@ function buildArgs(codemodPath: string, targetPath: string, options: TransformOp
     '--parser',
     'tsx',
     '--ignore-pattern=**/node_modules/**',
-    '--ignore-pattern=**/.*/**',
+    `--ignore-pattern=${hiddenDirectoryPattern}`,
     '--ignore-pattern=**/dist/**',
     '--ignore-pattern=**/build/**',
     '--ignore-pattern=**/*.min.js',
@@ -124,6 +125,11 @@ export async function transform(
   const { stdout } = await execFile(process.execPath, [getJscodeshiftBin(), ...args], { encoding: 'utf8' });
   const errors = parseErrors(codemod, stdout);
   const notImplementedErrors = parseNotImplementedErrors(codemod, stdout);
+  // Keep routine v1 bundle runs quiet while its spinner is active, but always
+  // show explicitly requested previews and individual codemod results.
+  if (stdout && (options.logStatus || transformOptions.dry || transformOptions.print || transformOptions.verbose)) {
+    process.stdout.write(stdout);
+  }
   if (options.logStatus) {
     if (errors.length > 0) {
       errors.forEach(({ transform, filename, summary }) => {

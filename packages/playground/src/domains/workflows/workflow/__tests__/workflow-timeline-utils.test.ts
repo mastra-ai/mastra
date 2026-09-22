@@ -58,15 +58,43 @@ describe('buildTimeline', () => {
 });
 
 describe('Workflow timeline timing', () => {
-  it('does not keep suspended or completed steps running when their end timestamp is absent', () => {
+  it('does not keep a step with no end timestamp running', () => {
     const rows = buildTimeline(
       {
-        approval: { status: 'suspended', startedAt: 100 },
+        review: { status: 'paused', startedAt: 100 },
         saved: { status: 'success', startedAt: 120 },
       },
       1000,
     );
     expect(rows.every(row => !row.isRunning && row.timing === undefined)).toBe(true);
+  });
+
+  it('measures a suspended step up to its suspension instead of leaving it unmeasured', () => {
+    const rows = buildTimeline(
+      {
+        work: { status: 'success', startedAt: 100, endedAt: 110 },
+        approval: { status: 'suspended', startedAt: 110, suspendedAt: 122 },
+      },
+      600_000,
+    );
+    expect(rowById(rows, 'approval')?.timing?.durationMs).toBe(12);
+    expect(rowById(rows, 'approval')?.isRunning).toBe(false);
+  });
+
+  it('stops the nested workflow row ticking while its child waits, even though it reports running', () => {
+    const rows = buildTimeline({ 'nested.approval': { status: 'running', startedAt: 100, suspendedAt: 122 } }, 600_000);
+    expect(rowById(rows, 'nested.approval')?.timing?.durationMs).toBe(22);
+    expect(rowById(rows, 'nested.approval')?.isRunning).toBe(false);
+    expect(rowById(rows, 'nested.approval')?.status).toBe('suspended');
+  });
+
+  it('flags a resumed step, whose wall clock necessarily contains the wait', () => {
+    const rows = buildTimeline(
+      { approval: { status: 'success', startedAt: 100, resumedAt: 300_100, endedAt: 300_105 } },
+      600_000,
+    );
+    expect(rowById(rows, 'approval')?.timing?.durationMs).toBe(300_005);
+    expect(rowById(rows, 'approval')?.spansSuspension).toBe(true);
   });
 
   it('keeps entries without valid timestamps without corrupting measured durations', () => {

@@ -82,9 +82,9 @@ export function TokenBudget({
           />
         )}
       </svg>
-      <span className="text-icon4">
+      <span className="text-muted-foreground">
         {formatCompactTokens(tokens)}
-        <span className="text-icon2">/{formatCompactTokens(threshold)}k</span>
+        <span className="text-placeholder">/{formatCompactTokens(threshold)}k</span>
       </span>
     </span>
   );
