@@ -294,7 +294,13 @@ describe('PlatformGitLabEventWorker', () => {
       normalizeGitLabWebhookMetadata(parsed as unknown as ParsedGitLabWebhook),
     );
     expect(metadata).toEqual([
-      expect.objectContaining({ event: 'Issue Hook', projectId: 101, projectPath: 'acme/app', issueIid: 12, sender: 'ada' }),
+      expect.objectContaining({
+        event: 'Issue Hook',
+        projectId: 101,
+        projectPath: 'acme/app',
+        issueIid: 12,
+        sender: 'ada',
+      }),
       expect.objectContaining({
         event: 'Note Hook',
         projectId: 101,
@@ -362,7 +368,10 @@ describe('PlatformGitLabEventWorker', () => {
 
     it('wakes a subscribed session for a merge request note from a trusted project member', async () => {
       const settings = createSettingsStorage();
-      const { gitlab, getProjectMemberAccessLevel } = createGitLab({ subscriptions: [subscription()], accessLevel: 40 });
+      const { gitlab, getProjectMemberAccessLevel } = createGitLab({
+        subscriptions: [subscription()],
+        accessLevel: 40,
+      });
       const { controller, send } = createController();
       const log = createEventLog({ 'conn-1': [{ events: [mergeRequestNote()], nextCursor: '1000-0' }] });
       const ingestFactoryEvent = vi.fn(async () => undefined);
@@ -390,6 +399,28 @@ describe('PlatformGitLabEventWorker', () => {
       await worker.stop();
     });
 
+    it('does not wake a subscription that another connection created, even for the same merge request', async () => {
+      const settings = createSettingsStorage();
+      const foreign = subscription();
+      foreign.data.installationExternalId = 'conn-2';
+      const { gitlab, getProjectMemberAccessLevel } = createGitLab({ subscriptions: [foreign], accessLevel: 40 });
+      const { controller, send } = createController();
+      const log = createEventLog({ 'conn-1': [{ events: [mergeRequestNote()], nextCursor: '1000-0' }] });
+      const worker = createWorker({ fetchImpl: log.fetchImpl, storage: settings.storage, gitlab, controller });
+      const deps = createDeps();
+
+      await runOnce(worker, deps);
+
+      expect(send).not.toHaveBeenCalled();
+      expect(getProjectMemberAccessLevel).not.toHaveBeenCalled();
+      expect(deps.logger.debug).toHaveBeenCalledWith(
+        'Platform GitLab event skipped: subscription belongs to another connection',
+        expect.objectContaining({ deliveryId: 'platform:conn-1:1000-0', subscriptionConnectionId: 'conn-2' }),
+      );
+      expect(settings.read()).toEqual({ version: 1, connections: { 'conn-1': { afterEventId: '1000-0' } } });
+      await worker.stop();
+    });
+
     it('drops a note from a sender below the trusted access level without waking the session', async () => {
       const settings = createSettingsStorage();
       const { gitlab } = createGitLab({ subscriptions: [subscription()], accessLevel: 10 });
@@ -409,6 +440,65 @@ describe('PlatformGitLabEventWorker', () => {
       expect(settings.read()).toEqual({ version: 1, connections: { 'conn-1': { afterEventId: '1000-0' } } });
       await worker.stop();
     });
+  });
+
+  it('hands over to the next connection after ten pages and resumes from the saved cursor', async () => {
+    const settings = createSettingsStorage();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const busyPages = Array.from({ length: 12 }, (_, index) => ({
+      events: [
+        event(`${2000 + index}-0`, {
+          object_kind: 'issue',
+          project,
+          object_attributes: { iid: index, action: 'open' },
+        }),
+      ],
+      nextCursor: `${2000 + index}-0`,
+    }));
+    const log = createEventLog({
+      'conn-busy': busyPages,
+      'conn-quiet': [
+        {
+          events: [event('3000-0', { object_kind: 'issue', project, object_attributes: { iid: 99, action: 'open' } })],
+          nextCursor: '3000-0',
+        },
+      ],
+    });
+    const worker = createWorker({
+      fetchImpl: log.fetchImpl,
+      storage: settings.storage,
+      ingestFactoryEvent,
+      connections: [
+        { id: 'conn-busy', status: 'active' },
+        { id: 'conn-quiet', status: 'active' },
+      ],
+    });
+    const deps = createDeps();
+
+    await runOnce(worker, deps);
+
+    const firstCycle = log.requests.map(request => request.connectionId);
+    expect(firstCycle.filter(id => id === 'conn-busy')).toHaveLength(10);
+    expect(firstCycle).toContain('conn-quiet');
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(11);
+    expect(settings.read()).toEqual({
+      version: 1,
+      connections: { 'conn-busy': { afterEventId: '2009-0' }, 'conn-quiet': { afterEventId: '3000-0' } },
+    });
+    expect(deps.logger.debug).toHaveBeenCalledWith(
+      'Platform GitLab connection page budget reached; resuming next cycle',
+      expect.objectContaining({ connectionId: 'conn-busy', pages: 10 }),
+    );
+
+    // The next cycle picks the busy connection up where it stopped.
+    await vi.advanceTimersByTimeAsync(1_000);
+    const resumed = log.requests.slice(firstCycle.length).find(request => request.connectionId === 'conn-busy');
+    expect(resumed?.afterEventId).toBe('2009-0');
+    expect(settings.read()).toEqual({
+      version: 1,
+      connections: { 'conn-busy': { afterEventId: '2011-0' }, 'conn-quiet': { afterEventId: '3000-0' } },
+    });
+    await worker.stop();
   });
 
   it('keeps polling other connections when one answers 401, and skips connections needing reauth', async () => {

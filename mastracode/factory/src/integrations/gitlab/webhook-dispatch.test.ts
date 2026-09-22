@@ -390,6 +390,36 @@ describe('dispatchGitLabWebhook', () => {
     expect(String(onTargetError.mock.calls[0]![1])).toMatch(/has no Factory session session-b/);
   });
 
+  it('delivers only to subscriptions created under the source connection when one is named', async () => {
+    const onConnectionMismatch = vi.fn();
+    resolveActiveConnectionForHost.mockImplementation(async (connectionId: string) => connectionId);
+    const own = session('thread-own');
+    const other = session('thread-other');
+    const ownRow = subscription('own', '/worktrees/own', 'thread-own');
+    const otherRow = subscription('other', '/worktrees/other', 'thread-other');
+    otherRow.data.installationExternalId = 'conn-2';
+    ownRow.data.installationExternalId = 'conn-1';
+    const result = await dispatchGitLabWebhook(mergeRequest('approved'), {
+      controller: controllerStub({
+        getSessionByResource: async (_resourceId: string, scope?: string) =>
+          scope === '/worktrees/own' ? own.session : other.session,
+      }),
+      gitlab: gitlabStub(null),
+      listSubscriptions: async () => [ownRow, otherRow],
+      retireSubscription: async () => undefined,
+      sourceConnectionId: 'conn-1',
+      onConnectionMismatch,
+    });
+
+    expect(result).toEqual({ delivered: 1, failed: 0, skipped: 1, ignored: false });
+    expect(own.send).toHaveBeenCalledOnce();
+    expect(other.send).not.toHaveBeenCalled();
+    expect(onConnectionMismatch.mock.calls[0]![0].id).toBe('other');
+    // The membership check runs only for the subscription that is delivered.
+    expect(getProjectMemberAccessLevel).toHaveBeenCalledTimes(1);
+    expect(getProjectMemberAccessLevel).toHaveBeenCalledWith('conn-1', '101', expect.any(String));
+  });
+
   it('recreates a missing session as the Factory session owner and binds the subscribed thread', async () => {
     const a = session('thread-a');
     a.session.thread.getId = vi.fn().mockReturnValueOnce('other-thread').mockReturnValue('thread-a');

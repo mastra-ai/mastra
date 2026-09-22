@@ -15,6 +15,12 @@ import { PlatformApiError } from '../api-client.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const EVENT_PAGE_SIZE = 500;
+/**
+ * Pages drained per connection per cycle. A connection that never runs dry
+ * (a busy group webhook, or a backlog after downtime) hands over to the next
+ * connection after this many pages and resumes from its saved cursor next tick.
+ */
+const MAX_PAGES_PER_CONNECTION_PER_CYCLE = 10;
 const MIN_LEASE_TTL_MS = 30_000;
 const CURSOR_ORG_ID = '__platform_gitlab_event_worker__';
 const CURSOR_USER_ID = 'worker';
@@ -259,7 +265,14 @@ export class PlatformGitLabEventWorker extends MastraWorker {
       await this.#saveSettings();
     }
 
-    while (this.#running && this.#hasLease) {
+    for (let pageIndex = 0; this.#running && this.#hasLease; pageIndex += 1) {
+      if (pageIndex >= MAX_PAGES_PER_CONNECTION_PER_CYCLE) {
+        this.deps?.logger.debug('Platform GitLab connection page budget reached; resuming next cycle', {
+          connectionId,
+          pages: pageIndex,
+        });
+        return;
+      }
       const cursor: { afterEventId: string } = this.#settings.connections[connectionId]!;
       const query = new URLSearchParams({ afterEventId: cursor.afterEventId, limit: String(EVENT_PAGE_SIZE) });
       const pollStartedAt = performance.now();
@@ -280,6 +293,10 @@ export class PlatformGitLabEventWorker extends MastraWorker {
       }
 
       if (page.nextCursor === cursor.afterEventId) return;
+      // A replica that lost its lease while processing this page must not
+      // write a cursor over one the new holder has already advanced. The
+      // page is replayed there; delivery is deduplicated by delivery id.
+      if (!this.#hasLease) return;
       this.#settings.connections[connectionId] = { afterEventId: page.nextCursor };
       await this.#saveSettings();
     }
@@ -309,6 +326,16 @@ export class PlatformGitLabEventWorker extends MastraWorker {
       // The integration supplies subscription storage and the project-member
       // trust check, so the dispatcher's default author gate applies unchanged.
       gitlab: this.#gitlab,
+      sourceConnectionId: connectionId,
+      onConnectionMismatch: subscription => {
+        // Expected whenever two connections reach the same project: the
+        // event is delivered by the connection that created the subscription.
+        this.deps?.logger.debug('Platform GitLab event skipped: subscription belongs to another connection', {
+          deliveryId,
+          subscriptionId: subscription.id,
+          subscriptionConnectionId: subscription.data.installationExternalId,
+        });
+      },
       onTargetSkipped: subscription => {
         // Routine when a subscription's thread belongs to another deployment,
         // so this stays at debug rather than warning on a loop.
