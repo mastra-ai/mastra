@@ -194,6 +194,9 @@ export const CompactSpanDetails: StoryObj<FixtureArgs> = {
 
 const PROCESSOR_FIXTURES = [
   'processorInputSpan',
+  'processorSystemMutationSpan',
+  'processorClearedMessagesSpan',
+  'malformedProcessorSpan',
   'processorTripwireSpan',
   'processorToolResultSpan',
   'processorOutputStreamSpan',

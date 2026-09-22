@@ -102,7 +102,6 @@ interface SpanInputMap {
   MODEL_GENERATION: ModelGenerationInput
   MODEL_STEP: ModelStepInput
   MODEL_INFERENCE: ModelStepInput
-  PROCESSOR_RUN: ProcessorRunInput
 }
 
 interface SpanOutputMap {
@@ -110,7 +109,6 @@ interface SpanOutputMap {
   MODEL_GENERATION: ModelGenerationOutput
   MODEL_STEP: ModelStepOutput
   MODEL_INFERENCE: ModelStepResult
-  PROCESSOR_RUN: ProcessorRunOutput
 }
 
 /** The mapped shape when the map lists the type, otherwise `any` */
@@ -174,7 +172,9 @@ if (input?.type === 'processor') {
   input.value.phase // 'input' | 'inputStep' | 'llmRequest' | 'llmResponse'
   // | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'requestError'
   input.value.phaseLabel // 'Tool result'
-  input.value.data // typed for that phase
+  if (input.value.phase === 'outputStream') {
+    input.value.data.totalChunks // number
+  }
 }
 ```
 
@@ -193,8 +193,15 @@ pipeline?.tripwireAbort?.reason // why the processor blocked the run
 pipeline?.rest // attributes this description does not explain
 ```
 
-Both return `undefined` for a span recorded before the phase was tracked, so older
-traces keep their previous untyped shape.
+`PROCESSOR_RUN` payloads stay untyped in `SpanInputMap` and `SpanOutputMap` because
+existing executors can record different shapes. The description helpers narrow only
+payloads with a recognized recorded phase and supported fields. Unknown fields stay
+on the original payload.
+
+`describeProcessorPipeline` returns `undefined` when the phase or known attributes
+are unsupported. `describeSpanInput` and `describeSpanOutput` use their JSON fallback
+for unsupported processor payloads, including older spans without a recorded phase.
+The stored payload and the JSON view remain unchanged.
 
 ### Span
 

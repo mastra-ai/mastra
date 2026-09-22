@@ -8,6 +8,7 @@ import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
 import { createWorkflow } from './create';
+import { createStep as createEventedStep } from './evented/workflow';
 import { createStep, isProcessor } from './workflow';
 
 // Helper to create a mock MessageList
@@ -53,6 +54,88 @@ function createMockTracingContext() {
   };
   return { mockSpan, tracingContext: { currentSpan } };
 }
+
+describe.each([
+  ['workflow', createStep],
+  ['evented workflow', createEventedStep],
+] as const)('%s processor mutation tracing', (_executor, makeStep) => {
+  it('records actual system-message changes separately for repeated executions', async () => {
+    let invocation = 0;
+    const processor: Processor = {
+      id: 'system-message-trace',
+      processInput: async ({ messageList }) => {
+        messageList.addSystem(`Instruction ${++invocation}`, 'processor-context');
+        return messageList;
+      },
+    };
+    const step = makeStep(processor);
+    const messageList = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    const { mockSpan, tracingContext } = createMockTracingContext();
+
+    for (let run = 1; run <= 2; run++) {
+      await step.execute({
+        inputData: { phase: 'input', messages: [], messageList },
+        tracingContext,
+      } as any);
+
+      expect(mockSpan.end).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          attributes: {
+            messageListMutations: [
+              {
+                type: 'addSystem',
+                message: { role: 'system', content: `Instruction ${run}` },
+                tag: 'processor-context',
+              },
+            ],
+          },
+        }),
+      );
+      expect(messageList.getSystemMessages('processor-context').map(message => message.content)).toContain(
+        `Instruction ${run}`,
+      );
+    }
+    expect(mockSpan.end).toHaveBeenCalledTimes(2);
+    expect(tracingContext.currentSpan.createChildSpan).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        attributes: expect.objectContaining({ processorPhase: 'input', processorExecutor: 'workflow' }),
+      }),
+    );
+  });
+
+  it('preserves mutations when a processor aborts and stops recording afterward', async () => {
+    const processor: Processor = {
+      id: 'abort-trace',
+      processInput: async ({ messageList, abort }) => {
+        messageList.addSystem('Answer briefly.', 'processor-context');
+        abort('Blocked', { retry: true });
+      },
+    };
+    const step = makeStep(processor);
+    const messageList = new MessageList();
+    const { mockSpan, tracingContext } = createMockTracingContext();
+
+    await expect(
+      step.execute({
+        inputData: { phase: 'input', messages: [], messageList },
+        tracingContext,
+      } as any),
+    ).rejects.toThrow(TripWire);
+
+    expect(mockSpan.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: {
+          messageListMutations: [
+            { type: 'addSystem', message: { role: 'system', content: 'Answer briefly.' }, tag: 'processor-context' },
+          ],
+          tripwireAbort: { reason: 'Blocked', retry: true, metadata: undefined },
+        },
+      }),
+    );
+    messageList.addSystem('Outside the processor');
+    expect(messageList.stopRecording()).toEqual([]);
+  });
+});
 
 describe('isProcessor', () => {
   it('should return true for object with processInput method', () => {

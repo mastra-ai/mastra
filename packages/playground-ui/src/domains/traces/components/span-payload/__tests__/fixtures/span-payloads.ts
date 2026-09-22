@@ -275,6 +275,36 @@ export const legacyProcessorSpan = makeSpan({
   input: { messages: [{ role: 'user', content: 'hi' }] },
 });
 
+/** Workflow runners can record in-place system additions only in the mutation log. */
+export const processorSystemMutationSpan = makeSpan({
+  ...processorInputSpan,
+  spanId: 'span-processor-system-mutation',
+  output: {},
+  attributes: {
+    processorPhase: 'input',
+    processorExecutor: 'workflow',
+    processorIndex: 0,
+    messageListMutations: [
+      { type: 'addSystem', tag: 'context-note', message: { role: 'system', content: 'Answer briefly.' } },
+    ],
+  },
+});
+
+export const processorClearedMessagesSpan = makeSpan({
+  ...processorInputSpan,
+  spanId: 'span-processor-cleared',
+  output: { messages: [], systemMessages: [] },
+  attributes: { processorPhase: 'input', messageListMutations: [{ type: 'clear', count: 2 }] },
+});
+
+export const malformedProcessorSpan = makeSpan({
+  ...processorInputSpan,
+  spanId: 'span-processor-malformed',
+  input: { messages: 'redacted-message-content' },
+  attributes: { processorPhase: 'input', messageListMutations: 'redacted-mutation-log' },
+  metadata: { customMetadata: 'keep-this-value' },
+});
+
 export const ALL_SPAN_FIXTURES = {
   agentRunMessagesSpan,
   agentRunResumeSpan,
@@ -291,6 +321,9 @@ export const ALL_SPAN_FIXTURES = {
   longTextSpan,
   unknownPartSpan,
   processorInputSpan,
+  processorSystemMutationSpan,
+  processorClearedMessagesSpan,
+  malformedProcessorSpan,
   processorTripwireSpan,
   processorToolResultSpan,
   processorOutputStreamSpan,

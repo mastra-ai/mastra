@@ -12,7 +12,9 @@ import type {
   ModelStepOutput,
   ModelStepResult,
   ProcessorRunInput,
+  ProcessorRunInputByPhase,
   ProcessorRunOutput,
+  ProcessorRunOutputByPhase,
   ProcessorSpanPayloadPhase,
   SpanErrorInfo,
   UsageStats,
@@ -92,25 +94,39 @@ describe('processor span payload types', () => {
       expectTypeOf(input.value.phase).toEqualTypeOf<ProcessorSpanPayloadPhase>();
       expectTypeOf(input.value.phaseLabel).toEqualTypeOf<string>();
       expectTypeOf(input.value.data).toEqualTypeOf<ProcessorRunInput>();
+      if (input.value.phase === 'outputStream') {
+        expectTypeOf(input.value.data.totalChunks).toEqualTypeOf<number>();
+        expectTypeOf(input.value.data).toEqualTypeOf<ProcessorRunInputByPhase['outputStream']>();
+      }
+      if (input.value.phase === 'requestError') {
+        expectTypeOf(input.value.data.error).toEqualTypeOf<string>();
+      }
+      if (input.value.phase === 'input') {
+        expectTypeOf(input.value.data.messages).toEqualTypeOf<unknown[]>();
+      }
     }
 
     if (output?.type === 'processor') {
       expectTypeOf(output.value.data).toEqualTypeOf<ProcessorRunOutput>();
+      if (output.value.phase === 'outputStream') {
+        expectTypeOf(output.value.data.accumulatedText).toEqualTypeOf<string>();
+        expectTypeOf(output.value.data).toEqualTypeOf<ProcessorRunOutputByPhase['outputStream']>();
+      }
     }
   });
 
-  it('types a processor span record through the payload maps', () => {
+  it('keeps processor producers compatible until the recorded phase is checked', () => {
     const span = {} as SpanRecord;
 
     if (isSpanRecordOfType(span, SpanType.PROCESSOR_RUN)) {
-      expectTypeOf(span.input).toEqualTypeOf<ProcessorRunInput | null | undefined>();
-      expectTypeOf(span.output).toEqualTypeOf<ProcessorRunOutput | null | undefined>();
+      expectTypeOf(span.input).toBeAny();
+      expectTypeOf(span.output).toBeAny();
       expectTypeOf(span.attributes?.processorPhase).toEqualTypeOf<ProcessorSpanPayloadPhase | undefined>();
     }
   });
 
   it('keeps the two output hooks apart in the phase union', () => {
-    expectTypeOf<ProcessorSpanPayloadPhase>().toExtend<'outputStream' | 'outputResult' | ProcessorSpanPayloadPhase>();
+    expectTypeOf<'outputStream' | 'outputResult'>().toExtend<ProcessorSpanPayloadPhase>();
     // The declaration phase collapses them; the recorded phase must not.
     expectTypeOf<'output'>().not.toExtend<ProcessorSpanPayloadPhase>();
   });

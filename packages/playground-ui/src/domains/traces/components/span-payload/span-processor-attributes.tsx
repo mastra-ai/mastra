@@ -3,6 +3,7 @@ import type { ProcessorPipelineDescription } from '@mastra/core/observability';
 import { Fragment } from 'react';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadJson } from './span-payload-json';
+import { SpanPayloadMessages } from './span-payload-messages';
 import { SpanPayloadCollapsible, SpanPayloadField } from './span-payload-primitives';
 import { asCoreSpan } from './span-payload-registry';
 import { Badge } from '@/ds/components/Badge';
@@ -32,9 +33,18 @@ function Mutations({ mutations }: { mutations: NonNullable<ProcessorPipelineDesc
           .join(' · ');
 
         return (
-          <li key={index} className="text-body text-foreground flex flex-wrap items-center gap-2">
-            <span>{MUTATION_LABELS[mutation.type] ?? mutation.type}</span>
-            {detail && <span className="text-meta text-placeholder">{detail}</span>}
+          <li key={index} className="flex flex-col gap-2">
+            <div className="text-body text-foreground flex flex-wrap items-center gap-2">
+              <span>{MUTATION_LABELS[mutation.type] ?? mutation.type}</span>
+              {detail && <span className="text-meta text-placeholder">{detail}</span>}
+            </div>
+            {mutation.message !== undefined && <SpanPayloadMessages value={[mutation.message]} />}
+            {mutation.text !== undefined && <SpanPayloadMessages value={[mutation.text]} />}
+            {mutation.ids && mutation.ids.length > 0 && (
+              <SpanPayloadCollapsible label="Removed message IDs">
+                <SpanPayloadJson value={mutation.ids} />
+              </SpanPayloadCollapsible>
+            )}
           </li>
         );
       })}

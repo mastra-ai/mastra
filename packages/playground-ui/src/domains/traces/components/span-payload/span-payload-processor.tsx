@@ -1,8 +1,7 @@
 import type {
-  ProcessorRunInput,
-  ProcessorRunOutput,
+  ProcessorRunInputByPhase,
+  ProcessorRunOutputByPhase,
   ProcessorSpanPayload,
-  SpanInputMessage,
 } from '@mastra/core/observability';
 import { Fragment } from 'react';
 import type { ReactNode } from 'react';
@@ -80,7 +79,7 @@ function ScalarRows({ payload }: { payload: Record<string, unknown> }) {
 }
 
 export interface SpanPayloadProcessorProps {
-  value: ProcessorSpanPayload<ProcessorRunInput | ProcessorRunOutput>;
+  value: ProcessorSpanPayload<ProcessorRunInputByPhase> | ProcessorSpanPayload<ProcessorRunOutputByPhase>;
 }
 
 /**
@@ -91,16 +90,22 @@ export interface SpanPayloadProcessorProps {
  * through the JSON block at the end rather than being dropped.
  */
 export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
-  const payload = value.data as Record<string, unknown>;
+  const payload: Record<string, unknown> = { ...value.data };
   const extras = Object.fromEntries(Object.entries(payload).filter(([key]) => !RENDERED_KEYS.has(key)));
   const sections: ReactNode[] = [];
 
   for (const field of MESSAGE_FIELDS) {
     const messages = payload[field.key];
-    if (!Array.isArray(messages) || messages.length === 0) continue;
+    if (!Array.isArray(messages)) continue;
     sections.push(
       <SpanPayloadField key={field.key} label={field.label}>
-        <SpanPayloadMessages value={messages as SpanInputMessage[]} />
+        {messages.length > 0 ? (
+          <SpanPayloadMessages value={messages} />
+        ) : (
+          <span className="text-body text-placeholder">
+            {field.key === 'messages' ? 'No messages' : 'No system messages'}
+          </span>
+        )}
       </SpanPayloadField>,
     );
   }
@@ -123,8 +128,9 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
     );
   }
 
-  const scalars = <ScalarRows payload={payload} />;
-  if (scalars) sections.push(<div key="scalars">{scalars}</div>);
+  if (SCALAR_FIELDS.some(field => payload[field.key] !== undefined)) {
+    sections.push(<ScalarRows key="scalars" payload={payload} />);
+  }
 
   // Secondary context: the prompt a request processor saw, the result an output
   // processor read, and the model-call configuration an input step could change.

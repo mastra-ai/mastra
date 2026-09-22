@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { SpanDataPanelView } from '../../span-data-panel-view';
@@ -9,6 +9,9 @@ import { SpanOutputRenderer } from '../span-output-renderers';
 import { SpanProcessorAttributes } from '../span-processor-attributes';
 import {
   legacyProcessorSpan,
+  malformedProcessorSpan,
+  processorClearedMessagesSpan,
+  processorSystemMutationSpan,
   processorInputSpan,
   processorOutputStreamSpan,
   processorToolResultSpan,
@@ -104,5 +107,34 @@ describe('processor spans in both span layouts', () => {
 
     expect(container.querySelector('[data-slot="span-processor-attributes"]')).toBeTruthy();
     expect(container.querySelector('[data-slot="span-payload-processor"]')).toBeTruthy();
+  });
+  it.each([
+    ['data panel', (span: typeof processorInputSpan) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
+    ['details', (span: typeof processorInputSpan) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
+  ])('preserves recorded changes, raw data and fallback in the %s layout', (_name, renderView) => {
+    const { rerender, container } = render(renderView(processorSystemMutationSpan));
+    expect(screen.getByText('Answer briefly.')).toBeTruthy();
+    expect(screen.getByText('Added system message')).toBeTruthy();
+
+    const attributes = Array.from(container.querySelectorAll('[data-slot="span-payload-section"]')).find(section =>
+      within(section).queryByText('Attributes'),
+    );
+    if (!attributes) throw new Error('Missing attributes section');
+    fireEvent.click(within(attributes).getByRole('button', { name: 'JSON', exact: true }));
+    expect(attributes.textContent).toContain('messageListMutations');
+    expect(attributes.textContent).toContain('Answer briefly.');
+    fireEvent.click(within(attributes).getByRole('button', { name: 'Preview', exact: true }));
+    expect(within(attributes).queryByText('messageListMutations')).toBeNull();
+
+    rerender(renderView(processorClearedMessagesSpan));
+    expect(screen.getByText('No messages')).toBeTruthy();
+    expect(screen.getByText('No system messages')).toBeTruthy();
+    expect(screen.getByText('Cleared messages')).toBeTruthy();
+
+    rerender(renderView(malformedProcessorSpan));
+    expect(container.textContent).toContain('redacted-message-content');
+    expect(container.textContent).toContain('redacted-mutation-log');
+    expect(container.textContent).toContain('keep-this-value');
+    expect(container.querySelector('[data-slot="span-processor-attributes"]')).toBeNull();
   });
 });
