@@ -189,5 +189,8 @@
     "@mastra/s3": "0.6.3",
     "@mastra/vercel": "1.6.0"
   },
-  "changesets": []
+  "changesets": [
+    "smart-points-leave",
+    "spicy-toys-repair"
+  ]
 }

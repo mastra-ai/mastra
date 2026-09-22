@@ -1,5 +1,11 @@
 # @mastra/factory
 
+## 0.16.1-alpha.0
+
+### Patch Changes
+
+- Fixed diff-comment tool calls failing on OpenAI models. Creating or replying to a line-anchored review comment with `source_control_create_diff_comment` no longer produces an invalid function schema that the model API rejects; both modes are validated from one object input. ([#24661](https://github.com/mastra-ai/mastra/pull/24661))
+
 ## 0.16.0
 
 ### Minor Changes
