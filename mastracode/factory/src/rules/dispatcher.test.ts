@@ -44,6 +44,8 @@ function createSession(
     endRunAfterDroppedSignal?: boolean;
     /** Once the session is free, a redelivered signal wakes it and lands. */
     acceptRedeliveredSignal?: boolean;
+    /** Number of consecutive sends swallowed by ending runs before a redelivery wakes the session. */
+    droppedSignalCount?: number;
     initialDeliveredSignalIds?: string[];
     /**
      * Per-call notification outcomes. `deliver` models a kickoff queued onto a
@@ -171,10 +173,10 @@ function createSession(
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
       signalSends += 1;
-      // The first send is the one queued onto the busy run; anything after it is
-      // a redelivery into a session the dispatcher waited for.
-      const redelivered = signalSends > 1 && options?.acceptRedeliveredSignal === true;
-      if (!options?.dropDeliveredSignal || redelivered) deliveredSignals.add(input.id);
+      const droppedSignalCount = options?.droppedSignalCount ?? (options?.dropDeliveredSignal ? 1 : 0);
+      const dropped = signalSends <= droppedSignalCount;
+      const redelivered = !dropped && signalSends > 1 && options?.acceptRedeliveredSignal === true;
+      if (!dropped) deliveredSignals.add(input.id);
       if (options?.suspendsOnPlan || options?.suspendsOnTool) {
         queueMicrotask(() => void emitScriptedSuspension());
       } else if (options?.emitAgentEndDuringSignal || redelivered) {
@@ -2542,7 +2544,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
-  it('fails terminally when a kickoff remains queued after an ending run', async () => {
+  it('redelivers across consecutive ending runs until the kickoff wakes the session', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -2571,14 +2573,14 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffKey: 'kickoff-null',
       kickoffMessage: null,
     });
-    // The session is mid-turn, so the signal is delivered onto the in-flight
-    // run; that run then ends without ever persisting or answering the prompt,
-    // and the redelivery is swallowed the same way. Nothing here can be waited
-    // out, so the decision has to go back on the queue.
-    const { controller, getAgentEndListenerCount } = createSession(undefined, {
+    // Two consecutive runs end after accepting but before draining the kickoff.
+    // The dispatcher must keep following the run boundary until the session is
+    // actually idle and the third send can wake a new run.
+    const { controller, session, getAgentEndListenerCount } = createSession(undefined, {
       signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
-      dropDeliveredSignal: true,
+      droppedSignalCount: 2,
       endRunAfterDroppedSignal: true,
+      acceptRedeliveredSignal: true,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -2591,12 +2593,9 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision).toMatchObject({
-      status: 'failed',
-      deliveryGeneration: 0,
-      failureCode: 'skill_delivery_ambiguous',
-      lastError: expect.stringContaining('never reached the agent'),
-    });
+    expect(decision?.status).toBe('succeeded');
+    expect(decision?.attempts).toBe(1);
+    expect(session.sendSignal).toHaveBeenCalledTimes(3);
     expect(getAgentEndListenerCount()).toBe(0);
   });
 

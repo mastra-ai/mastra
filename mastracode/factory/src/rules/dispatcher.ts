@@ -1000,7 +1000,7 @@ export class FactoryDecisionDispatcher {
 
           try {
             let settled = await sendKickoff();
-            if (settled.action === 'deliver') {
+            while (settled.action === 'deliver') {
               // `deliver` means the signal was queued onto a run that was already
               // in flight. If that run ends before draining its queue the prompt
               // is dropped silently: no turn starts, no error surfaces, and the
@@ -1009,28 +1009,20 @@ export class FactoryDecisionDispatcher {
               // (the same identity the replay guard above reads), so confirm the
               // message actually landed in the thread rather than trusting the ack.
               const landed = await session.thread.listActiveMessages();
-              if (!landed.some(message => message.id === deliveryId)) {
-                // The condition that resolves this is the in-flight run ending, so
-                // wait for exactly that and redeliver into the idle session. A
-                // backoff cannot work here: retries are sized in seconds and a turn
-                // takes minutes, so every attempt lands on the same busy run and
-                // the card burns its whole budget without the session ever having
-                // had a chance to be free.
-                if (!(await run.wait())) {
-                  throw new FactoryDispatchError(
-                    'run_terminal_event_missing',
-                    'Factory skill invocation is waiting on a run whose terminal event was not observed.',
-                  );
-                }
-                run.arm();
-                settled = await sendKickoff();
-                if (settled.action !== 'wake') {
-                  throw new FactoryDispatchError(
-                    'skill_delivery_ambiguous',
-                    'Factory skill invocation was queued onto an ending run and never reached the agent.',
-                  );
-                }
+              if (landed.some(message => message.id === deliveryId)) break;
+
+              // Another run can start while the previous run is finishing, so one
+              // redelivery is not enough to prove the session is idle. Follow each
+              // run boundary until the kickoff either lands on an active run or
+              // wakes a new one.
+              if (!(await run.wait())) {
+                throw new FactoryDispatchError(
+                  'run_terminal_event_missing',
+                  'Factory skill invocation is waiting on a run whose terminal event was not observed.',
+                );
               }
+              run.arm();
+              settled = await sendKickoff();
             }
             await this.#recordRunStart(
               session,
