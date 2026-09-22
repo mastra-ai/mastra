@@ -2,6 +2,7 @@ import { ShieldX } from 'lucide-react';
 import * as React from 'react';
 import { Icon } from '../../icons/Icon';
 import { EmptyState } from '../EmptyState';
+import type { EmptyStateProps } from '../EmptyState';
 
 export interface PermissionDeniedProps {
   /** Resource type (e.g., "agents", "workflows") */
@@ -14,9 +15,17 @@ export interface PermissionDeniedProps {
   actionSlot?: React.ReactNode;
   /** Additional CSS classes */
   className?: string;
+  variant?: EmptyStateProps['variant'];
 }
 
-export function PermissionDenied({ resource, title, description, actionSlot, className }: PermissionDeniedProps) {
+export function PermissionDenied({
+  resource,
+  title,
+  description,
+  actionSlot,
+  className,
+  variant,
+}: PermissionDeniedProps) {
   const defaultTitle = 'Permission Denied';
   const defaultDescription = resource
     ? `You don't have permission to access ${resource}. Contact your administrator for access.`
@@ -25,11 +34,7 @@ export function PermissionDenied({ resource, title, description, actionSlot, cla
   return (
     <EmptyState
       className={className}
-      iconSlot={
-        <Icon size="lg" className="text-muted-foreground">
-          <ShieldX />
-        </Icon>
-      }
+      variant={variant}
       titleSlot={title ?? defaultTitle}
       descriptionSlot={description ?? defaultDescription}
       actionSlot={actionSlot}

@@ -154,7 +154,7 @@ export const ToolCallDisclosure = ({ className, children, ...props }: ComponentP
       <span
         aria-hidden
         className={cn(
-          'text-muted-foreground flex shrink-0 items-center opacity-0 transition duration-150 motion-reduce:transition-none',
+          'flex shrink-0 items-center text-muted-foreground opacity-0 transition duration-150 motion-reduce:transition-none',
           'group-hover/row:opacity-100 group-focus-visible/row:opacity-100',
           open && 'rotate-90 opacity-100',
         )}

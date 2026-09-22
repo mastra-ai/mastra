@@ -40,7 +40,6 @@ export function MemoryPage() {
         {!isEnabled && (
           <div className="py-8">
             <EmptyState
-              iconSlot={<MemoryIcon height={40} width={40} />}
               titleSlot="Memory is not enabled"
               descriptionSlot="Enable memory to store conversation history, add semantic recall for relevant retrieval, or observational memory for long-term learning."
               actionSlot={

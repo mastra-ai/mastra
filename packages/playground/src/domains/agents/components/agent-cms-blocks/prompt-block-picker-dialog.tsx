@@ -91,7 +91,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
 
             {isLoading ? (
               <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-5">
-                <Spinner className="h-6 w-6" />
+                <Spinner />
                 <Txt variant="caption">Loading prompt blocks...</Txt>
               </div>
             ) : filtered.length === 0 ? (
