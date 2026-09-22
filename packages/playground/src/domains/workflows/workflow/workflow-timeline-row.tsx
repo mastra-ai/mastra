@@ -18,21 +18,21 @@ import type { Step } from '../context/use-current-run';
 import type { TimelineRow } from './workflow-timeline-utils';
 
 const statusPresentation = {
-  success: { label: 'Completed', icon: Check, color: 'text-positive1', bar: 'bg-neutral3/60' },
+  success: { label: 'Completed', icon: Check, color: 'text-positive1', bar: 'bg-muted-foreground/60' },
   failed: { label: 'Failed', icon: CircleX, color: 'text-negative1', bar: 'bg-negative1/60' },
   suspended: { label: 'Needs input', icon: Pause, color: 'text-accent3', bar: 'bg-accent3/60' },
-  waiting: { label: 'Waiting', icon: Timer, color: 'text-muted-foreground', bar: 'bg-neutral3/40' },
-  paused: { label: 'Paused', icon: Pause, color: 'text-muted-foreground', bar: 'bg-neutral3/40' },
-  skipped: { label: 'Skipped', icon: SkipForward, color: 'text-muted-foreground', bar: 'bg-neutral3/25' },
+  waiting: { label: 'Waiting', icon: Timer, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
+  paused: { label: 'Paused', icon: Pause, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
+  skipped: { label: 'Skipped', icon: SkipForward, color: 'text-muted-foreground', bar: 'bg-muted-foreground/25' },
   running: { label: 'Running', icon: Loader2, color: 'text-accent6', bar: 'bg-accent6/60' },
-  canceled: { label: 'Canceled', icon: CircleSlash, color: 'text-muted-foreground', bar: 'bg-neutral3/40' },
+  canceled: { label: 'Canceled', icon: CircleSlash, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
 } satisfies Record<Step['status'], { label: string; icon: typeof Check; color: string; bar: string }>;
 
 const unknownStatus = {
   label: 'Status unavailable',
   icon: CircleHelp,
   color: 'text-muted-foreground',
-  bar: 'bg-neutral3/25',
+  bar: 'bg-muted-foreground/25',
 };
 
 export interface WorkflowTimelineRowProps {
@@ -73,7 +73,7 @@ export function WorkflowTimelineRow({
     >
       <button
         type="button"
-        className="text-meta text-foreground focus-visible:outline-neutral3 flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-default"
+        className="text-meta text-foreground focus-visible:outline-border-focus flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-default"
         aria-disabled={row.isNestedEntry}
         aria-pressed={isSelected}
         onClick={() => {

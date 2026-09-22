@@ -57,10 +57,10 @@ function AuthNotConfiguredScreen() {
   return (
     <div className="bg-sidebar grid h-dvh w-full place-items-center px-6 text-center">
       <div className="max-w-md space-y-3">
-        <h1 className="text-heading text-icon6 font-semibold">
+        <h1 className="text-heading text-foreground font-semibold">
           This MastraCode server has no authentication provider configured
         </h1>
-        <p className="text-icon3 text-sm leading-6">
+        <p className="text-muted-foreground text-sm leading-6">
           MastraCode web requires authenticated remote Factories. Configure a supported auth provider on the server,
           then reload this page.
         </p>

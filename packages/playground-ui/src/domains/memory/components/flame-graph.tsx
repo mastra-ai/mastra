@@ -396,7 +396,7 @@ function ZoomTrack({
         />
         <div
           data-zoom-handle="left"
-          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
+          className="bg-foreground/50 hover:bg-foreground absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();
@@ -406,7 +406,7 @@ function ZoomTrack({
         />
         <div
           data-zoom-handle="right"
-          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
+          className="bg-foreground/50 hover:bg-foreground absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${rightPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();

@@ -21,7 +21,7 @@ const tint = (color: string, pct: number) => `color-mix(in oklch, ${color} ${pct
 const diffOverrides = EditorView.theme({
   '&.cm-editor .cm-line': { lineHeight: '1.5' },
   '&.cm-editor .cm-gutters': { border: 'none', backgroundColor: 'transparent' },
-  '&.cm-editor .cm-lineNumbers .cm-gutterElement': { color: 'var(--neutral2)', minWidth: '2.5rem' },
+  '&.cm-editor .cm-lineNumbers .cm-gutterElement': { color: 'var(--placeholder)', minWidth: '2.5rem' },
   '&.cm-editor .cm-changeGutter': { width: '3px', paddingLeft: '0' },
 
   '&.cm-merge-a .cm-changedLine': {
@@ -48,7 +48,7 @@ const diffOverrides = EditorView.theme({
   '&.cm-editor .cm-collapsedLines': {
     backgroundColor: 'var(--muted)',
     backgroundImage: 'none',
-    color: 'var(--neutral3)',
+    color: 'var(--muted-foreground)',
     fontSize: 'var(--text-caption)',
     padding: '4px 12px',
     cursor: 'pointer',
@@ -89,7 +89,7 @@ function buildDiffLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
       borderRight: 'none',
     },
     '.cm-content': {
@@ -104,7 +104,7 @@ function buildDiffLightTheme(): Extension {
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
+    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
     { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
     { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },

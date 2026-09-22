@@ -42,7 +42,7 @@ function buildSideDialogLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
       borderRight: 'none',
     },
     '.cm-content': {
@@ -61,7 +61,7 @@ function buildSideDialogLightTheme(): Extension {
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
+    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
     { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
     { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },

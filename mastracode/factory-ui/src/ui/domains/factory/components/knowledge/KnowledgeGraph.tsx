@@ -74,7 +74,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       >
         {labeled ? (
           <span
-            className="text-icon6 pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words"
+            className="text-foreground pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words"
             style={{ fontSize: nameSize }}
             title={node.name}
           >
@@ -241,7 +241,7 @@ function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
   return (
     <div
       data-testid="knowledge-truncation-banner"
-      className="border-border bg-card/90 text-icon4 pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
+      className="border-border bg-card/90 text-muted-foreground pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
     >
       Partial view — {parts.join(' · ')}
     </div>
@@ -272,7 +272,7 @@ function FilterChip({
           ? accent
             ? 'border-amber-400/70 bg-amber-400/15 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.15)]'
             : 'border-purple-400/70 bg-purple-500/20 text-purple-200 shadow-[0_0_12px_rgba(139,92,246,0.2)]'
-          : 'border-border bg-card/60 text-icon3 hover:text-icon5',
+          : 'border-border bg-card/60 text-muted-foreground hover:text-foreground',
       ].join(' ')}
     >
       {icon}
@@ -616,17 +616,17 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         style={style}
       >
         <div className="mb-1 flex items-center gap-1.5">
-          <span className="text-icon6 font-semibold">{node.name}</span>
+          <span className="text-foreground font-semibold">{node.name}</span>
         </div>
         {node.description?.trim() ? (
           <p
             data-testid="knowledge-hover-description"
-            className="text-icon5 mb-2 line-clamp-3 max-w-72 leading-relaxed break-words"
+            className="text-foreground mb-2 line-clamp-3 max-w-72 leading-relaxed break-words"
           >
             {node.description}
           </p>
         ) : null}
-        <dl className="text-icon4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+        <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
           <dt>Kind</dt>
           <dd>{node.kind}</dd>
           <dt>Scope</dt>
@@ -651,11 +651,11 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3 text-xs`}
         style={style}
       >
-        <div className="text-icon6 mb-1 flex items-center gap-1.5">
+        <div className="text-foreground mb-1 flex items-center gap-1.5">
           Record
           {record.pinned ? <Pin size={11} className="text-amber-400" aria-label="Pinned" /> : null}
         </div>
-        <div className="text-icon4 leading-relaxed">{record.text}</div>
+        <div className="text-muted-foreground leading-relaxed">{record.text}</div>
       </div>
     );
   }
@@ -669,8 +669,8 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3 text-xs`}
         style={style}
       >
-        <div className="text-icon6">{source && target ? `${source} → ${target}` : 'Record'}</div>
-        <div className="text-icon4 mt-0.5 leading-relaxed">
+        <div className="text-foreground">{source && target ? `${source} → ${target}` : 'Record'}</div>
+        <div className="text-muted-foreground mt-0.5 leading-relaxed">
           {hover.edge.data?.text ?? 'Mentioned in a knowledge record'}
         </div>
       </div>

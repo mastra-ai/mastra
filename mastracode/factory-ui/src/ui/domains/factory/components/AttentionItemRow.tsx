@@ -30,7 +30,7 @@ import { RAIL_ROW_BODY } from './Timeline';
 /** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
   mention: { glyph: MessageSquare, label: 'mention', tone: 'text-accent1', badge: 'green' },
-  activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-icon3', badge: 'neutral' },
+  activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-muted-foreground', badge: 'neutral' },
   'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
   'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning1', badge: 'orange' },
   'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
@@ -126,7 +126,7 @@ export function AttentionItemRow({
       />
       <span className="flex w-full items-center gap-2">
         <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>
-        <span className="text-column text-icon6 min-w-0 flex-1 truncate">{item.title}</span>
+        <span className="text-column text-foreground min-w-0 flex-1 truncate">{item.title}</span>
         <Badge
           variant={KIND[item.kind].badge}
           emphasis={item.read ? 'muted' : 'default'}
@@ -205,8 +205,8 @@ export function AttentionItemRow({
           </span>
         </span>
       </span>
-      <span className="text-meta text-icon3 truncate">
-        {author ? <span className="text-icon4 font-medium">{author} </span> : null}
+      <span className="text-meta text-muted-foreground truncate">
+        {author ? <span className="text-muted-foreground font-medium">{author} </span> : null}
         {item.detail}
       </span>
     </div>

@@ -148,7 +148,7 @@ export function ComposerModeStates() {
     <div className="mx-auto grid max-w-3xl gap-6">
       {modes.map(mode => (
         <section key={mode.id} aria-label={mode.label} className="grid gap-3">
-          <h2 className="text-ui-md text-neutral4">{mode.label}</h2>
+          <h2 className="text-ui-md text-muted-foreground">{mode.label}</h2>
           <ComposerPreview mode={mode.id} />
           <ComposerPreview mode={mode.id} busy />
         </section>

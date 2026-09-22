@@ -112,7 +112,8 @@ export function SidebarAttention() {
                 const unread = kinds ? attentionCountsIn(kinds, tab).unread : 0;
                 return (
                   <Tab key={tab} value={tab} className="text-meta">
-                    {TAB[tab].label} {unread > 0 ? <span className="text-icon3 tabular-nums">{unread}</span> : null}
+                    {TAB[tab].label}{' '}
+                    {unread > 0 ? <span className="text-muted-foreground tabular-nums">{unread}</span> : null}
                   </Tab>
                 );
               })}
@@ -135,7 +136,7 @@ export function SidebarAttention() {
               </div>
             ) : preview.isError ? (
               <div className="flex flex-col items-start gap-2.5 px-3.5 py-4">
-                <span className="text-caption text-icon4">Unable to load attention items.</span>
+                <span className="text-caption text-muted-foreground">Unable to load attention items.</span>
                 <Button type="button" variant="ghost" size="sm" onClick={() => void preview.refetch()}>
                   <RefreshCw aria-hidden />
                   Try again
@@ -156,7 +157,7 @@ export function SidebarAttention() {
                 </ul>
               </ScrollArea>
             ) : (
-              <div className="text-caption text-icon2 flex min-h-24 items-center justify-center px-3.5 text-center">
+              <div className="text-caption text-placeholder flex min-h-24 items-center justify-center px-3.5 text-center">
                 {groupOpenCount > 0 ? 'Open the inbox to continue through older items.' : TAB[group].empty}
               </div>
             )}

@@ -23,7 +23,7 @@ export function AuditCategoryFilter({
       >
         <FilterChip
           label="All"
-          dotClass="bg-neutral3"
+          dotClass="bg-muted-foreground"
           pressed={selectedCategories.size === 0}
           onClick={onClearCategories}
         />
@@ -38,7 +38,7 @@ export function AuditCategoryFilter({
         ))}
       </div>
       {countLabel ? (
-        <span className="text-meta text-neutral2 justify-self-center tabular-nums sm:justify-self-end">
+        <span className="text-meta text-placeholder justify-self-center tabular-nums sm:justify-self-end">
           {countLabel}
         </span>
       ) : null}

@@ -258,10 +258,10 @@ export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterO
   { id: 'notIn', label: 'is none of', arity: 'many' },
   { id: 'exists', label: 'exists', arity: 'none' },
   { id: 'notExists', label: 'does not exist', arity: 'none' },
-  { id: 'gt', label: '>' },
-  { id: 'gte', label: '≥' },
-  { id: 'lt', label: '<' },
-  { id: 'lte', label: '≤' },
+  { id: 'gt', label: 'greater than' },
+  { id: 'gte', label: 'at least' },
+  { id: 'lt', label: 'less than' },
+  { id: 'lte', label: 'at most' },
 ];
 
 const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];

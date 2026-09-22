@@ -206,7 +206,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : oauthProviders.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-icon3 px-4 py-3">
+                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
                     No providers support sign in.
                   </Txt>
                 ) : (
@@ -255,7 +255,10 @@ export function ProviderAccessSection({ description }: { description?: string })
 
           <TabContent value="api-key" className="flex flex-col gap-3">
             <div className="relative">
-              <Search size={14} className="text-icon3 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" />
+              <Search
+                size={14}
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+              />
               <Input
                 type="text"
                 placeholder="Search providers to add an API key…"
@@ -273,7 +276,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : results.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-icon3 px-4 py-3">
+                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
                     {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
                   </Txt>
                 ) : (
