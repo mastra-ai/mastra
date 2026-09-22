@@ -1,12 +1,12 @@
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
+import type { IntegrationContext } from '../../base.js';
 import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.js';
 import type { GitLabRuleOverrides } from '../../gitlab/default-rules.js';
 import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.js';
 import type { GitLabStatusConnection } from '../../gitlab/integration.js';
 import { attachGitLabRules } from '../../gitlab/rules.js';
-import type { IntegrationContext } from '../../base.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
 import type { PlatformApiClientConfig } from '../api-client.js';
 import { PlatformGitLabEventWorker } from './event-worker.js';
@@ -29,8 +29,7 @@ interface PlatformGitLabContext {
 }
 
 type PlatformGitLabCredential =
-  | { type: 'oauth2'; accessToken: string; expiresAt: string | null }
-  | { type: 'api_key'; apiKey: string };
+  { type: 'oauth2'; accessToken: string; expiresAt: string | null } | { type: 'api_key'; apiKey: string };
 
 const GITLAB_INTEGRATION_IDS = new Set(['gitlab', 'gitlab-group', 'gitlab-group-token']);
 

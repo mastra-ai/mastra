@@ -473,11 +473,19 @@ describe('PlatformGitLabIntegration', () => {
       storage: { generic: { integrationId: 'gitlab', settings: { get: async () => null, save: async () => {} } } },
     } as never;
 
-    expect(platform().workers(context).map(worker => worker.name)).toEqual(['platform-gitlab-events']);
+    expect(
+      platform()
+        .workers(context)
+        .map(worker => worker.name),
+    ).toEqual(['platform-gitlab-events']);
 
     vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '45000');
     const tuned = platform();
-    expect(tuned.diagnostics()).toMatchObject({ pollingEnabled: true, pollingIntervalMs: 45_000, webhookConfigured: false });
+    expect(tuned.diagnostics()).toMatchObject({
+      pollingEnabled: true,
+      pollingIntervalMs: 45_000,
+      webhookConfigured: false,
+    });
     expect(tuned.workers(context)).toHaveLength(1);
     expect(() => tuned.workers({ storage: context.storage } as never)).toThrow(
       'Platform GitLab event polling requires the mounted Mastra Code controller.',
