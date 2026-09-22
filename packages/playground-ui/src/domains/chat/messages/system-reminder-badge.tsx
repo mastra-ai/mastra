@@ -19,7 +19,7 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
       collapsible
       kind="reminder"
       label="System reminder"
-      detail={reminder.path ?? reminder.type}
+      detail={reminder.path || reminder.type}
       message={reminder.body}
     />
   );

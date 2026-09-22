@@ -50,4 +50,10 @@ describe('SystemReminderBadge', () => {
 
     expect(screen.getByText('Remember nested instructions')).toBeTruthy();
   });
+
+  it('names the reminder by its type when its path is empty', () => {
+    render(<SystemReminderBadge text='<system-reminder type="dynamic-agents-md" path="">Remember</system-reminder>' />);
+
+    expect(screen.getByText('dynamic-agents-md')).toBeTruthy();
+  });
 });
