@@ -203,6 +203,15 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     ],
     [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFields, valueSuggestions],
   );
+  // Metadata columns read top-level keys only, so nested paths collapse to their first segment.
+  const availableMetadataKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const field of metadataFields) {
+      const key = field.path.replace(/^metadata\./, '').split('.')[0];
+      if (key) keys.add(key);
+    }
+    return [...keys].sort();
+  }, [metadataFields]);
   const allFilterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
   const filterBarItems = useMemo(
     () => allFilterBarItems.filter(item => !scopedFieldIds.has(item.fieldId)),
@@ -220,6 +229,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       url.handleFilterTokensChange(filterBarItemsToTraceTokens([...scoped, ...rest]));
     },
     [allFilterBarItems, scopedFieldIds, url],
+  );
+  const handleFilterByField = useCallback(
+    (fieldId: string, value: string) => {
+      const withoutField = filterBarItems.filter(item => item.fieldId !== fieldId);
+      handleFilterBarChange([...withoutField, { id: `${fieldId}:${value}`, fieldId, operatorId: 'is', value }]);
+    },
+    [filterBarItems, handleFilterBarChange],
   );
 
   const {
@@ -331,8 +347,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       <div className="min-h-control-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
         <TraceColumnsMenu
           preferences={traceColumns.preferences}
+          availableMetadataKeys={availableMetadataKeys}
           usageDisabledReason={usageDisabledReason}
           onToggleColumn={traceColumns.toggleColumn}
+          onAddCustomColumn={traceColumns.addCustomColumn}
+          onRemoveCustomColumn={traceColumns.removeCustomColumn}
           onAddMetadataColumn={traceColumns.addMetadataColumn}
           onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
           onReset={traceColumns.resetColumns}
@@ -414,6 +433,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         usageByTraceId={traceUsage.data}
         createdSort={sortDirection}
         onSortChange={onSortChange}
+        onFilterByField={handleFilterByField}
         onTraceClick={trace => {
           const isBranches = url.listMode === 'branches';
           const isSameRow = isBranches
