@@ -29,6 +29,7 @@ test-outputs/
 openapi-ts-error*
 
 .mastra
+.factory/
 .sandbox-profiles/
 *.db*
 *.duckdb

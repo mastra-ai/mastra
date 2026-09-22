@@ -1,11 +1,12 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Check, Download, GitPullRequest, Save, Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
 import { getCodeAgentOverrideSections } from '@/domains/agents/components/agent-cms-sidebar/agent-cms-sections';
 import { AgentVersionPanel } from '@/domains/agents/components/agent-version-panel';
@@ -16,10 +17,13 @@ import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
+import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
+import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
-import { RouteHeaderActions } from '@/lib/route-header';
+
+const crumbs = [navCrumb('/agents'), agentCrumb];
 
 function EditFormContent({
   agentId,
@@ -248,84 +252,91 @@ function EditLayoutWrapper() {
     ? 'Open a pull request with this agent override JSON'
     : 'Open PR is available on Mastra-hosted projects with GitHub App support';
 
-  return (
-    <MainContentLayout>
-      {isReady && (
-        <RouteHeaderActions owner="cms-agent-edit">
-          <div className="flex items-center gap-2">
-            {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
-            {showCodeModeActions ? (
-              isCodeAgentEditable ? (
-                <>
-                  <Button
-                    onClick={() => void handleDownloadJson()}
-                    disabled={isSavingDraft || isSubmitting}
-                    icon={<Download />}
-                  >
-                    Download JSON
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={!canOpenPr || isSavingDraft || isSubmitting}
-                    title={openPrTitle}
-                    onClick={() => {
-                      if (!mastraPlatformApiEndpoint || !mastraPlatformProjectId) return;
-                      void handleOpenPr({
-                        platformApiEndpoint: mastraPlatformApiEndpoint,
-                        projectId: mastraPlatformProjectId,
-                      });
-                    }}
-                  >
-                    <GitPullRequest />
-                    Open PR
-                  </Button>
-                </>
-              ) : null
-            ) : !isCodeAgentEditable ? null : (
+  const actions = isReady && (
+    <CmsEditHeaderActions hasDraft={hasDraft}>
+      {showCodeModeActions ? (
+        isCodeAgentEditable ? (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleDownloadJson()}
+              disabled={isSavingDraft || isSubmitting}
+              icon={<Download />}
+            >
+              Download JSON
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!canOpenPr || isSavingDraft || isSubmitting}
+              title={openPrTitle}
+              onClick={() => {
+                if (!mastraPlatformApiEndpoint || !mastraPlatformProjectId) return;
+                void handleOpenPr({
+                  platformApiEndpoint: mastraPlatformApiEndpoint,
+                  projectId: mastraPlatformProjectId,
+                });
+              }}
+            >
+              <GitPullRequest />
+              Open PR
+            </Button>
+          </>
+        ) : null
+      ) : !isCodeAgentEditable ? null : (
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void handleSaveDraft()}
+            disabled={!isDirty || isSavingDraft || isSubmitting}
+          >
+            {isSavingDraft ? (
               <>
-                <Button onClick={() => void handleSaveDraft()} disabled={!isDirty || isSavingDraft || isSubmitting}>
-                  {isSavingDraft ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save />
-                      Save
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => void handlePublishVersion()}
-                  disabled={
-                    isViewingPreviousVersion
-                      ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
-                      : !hasDraft || isSubmitting || isSavingDraft
-                  }
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Publishing...
-                    </>
-                  ) : (
-                    <>
-                      <Check />
-                      {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
-                    </>
-                  )}
-                </Button>
+                <Spinner className="h-4 w-4" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save />
+                Save
               </>
             )}
-          </div>
-        </RouteHeaderActions>
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => void handlePublishVersion()}
+            disabled={
+              isViewingPreviousVersion
+                ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
+                : !hasDraft || isSubmitting || isSavingDraft
+            }
+          >
+            {isSubmitting ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Publishing...
+              </>
+            ) : (
+              <>
+                <Check />
+                {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
+              </>
+            )}
+          </Button>
+        </>
       )}
+    </CmsEditHeaderActions>
+  );
 
+  return (
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+      <h1 className="sr-only">{agentId}</h1>
       {isNotFound ? (
         <>
-          <div className="text-muted-foreground flex h-full items-center justify-center">Agent not found</div>
+          <EmptyState variant="fill" titleSlot="Agent not found" />
           <div className="hidden">
             <EditFormContent
               agentId={agentId ?? ''}
@@ -364,7 +375,7 @@ function EditLayoutWrapper() {
           editorConfig={codeAgent?.editor}
         />
       )}
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

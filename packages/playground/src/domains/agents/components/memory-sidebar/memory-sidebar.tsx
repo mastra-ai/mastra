@@ -235,7 +235,6 @@ export function MemorySidebarBody({
               />
             ) : (
               <EmptyState
-                iconSlot={null}
                 titleSlot="Memory not enabled"
                 descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
                 actionSlot={

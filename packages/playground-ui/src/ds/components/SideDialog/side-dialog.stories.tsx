@@ -399,7 +399,8 @@ const SideDialogWithCodeDemo = () => {
             codeStr={`{
   "name": "customer-support",
   "model": "gpt-4",
-  "temperature": 0.7
+  "temperature": 0.7,
+  "instructions": "You are a support agent.\\nKeep answers short."
 }`}
           />
         </SideDialog.Content>

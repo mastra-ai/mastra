@@ -24,3 +24,12 @@ export const WithRecoveryAction: Story = {
     action: <Button onClick={fn()}>Try again</Button>,
   },
 };
+
+export const Fill: Story = {
+  args: { variant: 'fill' },
+  render: args => (
+    <div className="border-border h-120 border border-dashed">
+      <ErrorState {...args} />
+    </div>
+  ),
+};

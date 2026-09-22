@@ -81,7 +81,7 @@ export function DatasetItemsToolbar({
   const showItemActions = hasItems || Boolean(searchQuery);
 
   const searchField = showItemActions && (
-    <div className="max-w-120 min-w-64 flex-1">
+    <div className="max-w-120 flex-1">
       <ListSearch
         label="Search items"
         placeholder="Search items..."

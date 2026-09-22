@@ -84,7 +84,7 @@ const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
 const StudioFrame = ({ children }: { children: React.ReactNode }) => (
   <div className="bg-sidebar flex h-180 w-270 overflow-hidden">
     {children}
-    <main className="flex min-w-0 flex-1 flex-col">
+    <main className="flex min-w-0 flex-1 flex-col pr-1.5 pb-1.5 lg:pr-2 lg:pb-2">
       <header className="mx-2 mt-1.5 flex h-12 shrink-0 items-center justify-between px-3">
         <div className="min-w-0">
           <p className="text-heading text-foreground truncate">Traces</p>
@@ -92,7 +92,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
         </div>
         <span className="border-border bg-card text-meta text-foreground rounded-md border px-2.5 py-1">Live</span>
       </header>
-      <section className="rounded-studio-frame bg-card shadow-raised mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
+      <section className="rounded-studio-frame bg-card shadow-raised min-h-0 flex-1 overflow-y-auto [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem]">
         <div className="grid min-h-full grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
           <div className="grid grid-cols-3 gap-3">
             {[
@@ -102,7 +102,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
             ].map(([label, value]) => (
               <div key={label} className={`${raisedSurfaceStyle} rounded-studio-panel p-4`}>
                 <p className="text-meta text-muted-foreground uppercase">{label}</p>
-                <p className="text-foreground text-title mt-2">{value}</p>
+                <p className="text-title text-foreground mt-2">{value}</p>
               </div>
             ))}
           </div>
@@ -155,7 +155,7 @@ const MobileFrame = ({ children }: { children: React.ReactNode }) => (
   <div className="bg-sidebar flex h-screen w-screen flex-col overflow-hidden">
     <header className="border-border flex h-12 shrink-0 items-center gap-3 border-b px-3">
       <MainSidebar.MobileTrigger />
-      <span className="text-foreground text-subheading">Mastra Studio</span>
+      <span className="text-subheading text-foreground">Mastra Studio</span>
     </header>
     {children}
     <div className="min-w-0 flex-1 p-4">
@@ -268,7 +268,7 @@ const StudioSidebarBody = () => {
               {state !== 'collapsed' && (
                 <kbd
                   aria-hidden="true"
-                  className="border-border bg-muted text-muted-foreground text-meta ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                  className="border-border bg-muted text-meta text-muted-foreground ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                 >
                   ⌘K
                 </kbd>
@@ -302,7 +302,7 @@ const StudioSidebarBody = () => {
         {state !== 'collapsed' && (
           <>
             <hr className="bg-border mx-6 my-2 h-px border-0" />
-            <span className="bg-fill text-meta text-muted-foreground font-body ml-3 inline-flex h-5 items-center rounded-full px-2.5 leading-none">
+            <span className="bg-fill font-body text-meta text-muted-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 leading-none">
               v0.0.0
             </span>
           </>

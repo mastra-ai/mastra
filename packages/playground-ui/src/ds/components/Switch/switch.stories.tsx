@@ -86,7 +86,7 @@ function RepositoryVisibilitySwitch() {
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="repository-visibility-icons">Repository visibility</Label>
         <span className="inline-flex items-center gap-2">
-          <span className="text-foreground text-column">{isPrivate ? 'Private' : 'Public'}</span>
+          <span className="text-column text-foreground">{isPrivate ? 'Private' : 'Public'}</span>
           <Switch
             id="repository-visibility-icons"
             checked={isPrivate}
@@ -264,7 +264,7 @@ export const WithDescription: Story = {
     <div className="flex w-[350px] items-start justify-between gap-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="dark-mode">Dark mode</Label>
-        <span className="text-muted-foreground text-caption">Switch to a darker color scheme</span>
+        <span className="text-caption text-muted-foreground">Switch to a darker color scheme</span>
       </div>
       <Switch id="dark-mode" />
     </div>

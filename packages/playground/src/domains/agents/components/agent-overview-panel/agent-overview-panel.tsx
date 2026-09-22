@@ -38,7 +38,10 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
   return (
     <div
       data-testid="agent-overview-panel"
-      className={cn('rounded-studio-frame grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden', frameSurfaceStyle)}
+      className={cn(
+        'rounded-studio-frame grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden ml-2',
+        frameSurfaceStyle,
+      )}
     >
       {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
       <div className="border-border flex h-10 min-h-10 items-center border-b px-4">

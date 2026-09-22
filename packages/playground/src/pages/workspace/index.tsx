@@ -1,8 +1,9 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -12,6 +13,8 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
 import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
@@ -32,6 +35,8 @@ import {
 } from '@/domains/workspace/hooks/use-workspace';
 import { useWorkspaceSkills, useSearchWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
 import type { WorkspaceItem } from '@/domains/workspace/types';
+
+const crumbs = [navCrumb('/workspaces')];
 
 type TabType = 'files' | 'skills';
 
@@ -304,36 +309,40 @@ export default function Workspace() {
   // Show loading while fetching workspace list
   if (isLoadingWorkspaces) {
     return (
-      <NoDataPageLayout>
-        <Spinner />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <Spinner fill />
+      </PageLayout>
     );
   }
 
   // If session expired (401 error)
   if (isSessionExpired) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   // If permission denied (403 error)
   if (isPermissionDenied) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="workspaces" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <PermissionDenied variant="fill" resource="workspaces" />
+      </PageLayout>
     );
   }
 
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotSupported />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
@@ -341,18 +350,20 @@ export default function Workspace() {
   const genericError = workspacesError || workspaceInfoError;
   if (genericError) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
+        <ErrorState variant="fill" title="Failed to load workspace" message={(genericError as Error).message} />
+      </PageLayout>
     );
   }
 
   // If the workspace feature is configured but no workspaces exist yet, show empty state
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <NoWorkspacesInfo />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
@@ -360,27 +371,36 @@ export default function Workspace() {
   // Also wait for workspaces list to load to avoid showing this before 403 is detected
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotConfigured />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
   const showSkillsEmptyState = activeTab === 'skills' && hasSkills && !isSkillsConfigured && !isLoadingSkills;
 
   return (
-    <PageLayout className={showSkillsEmptyState ? 'flex min-h-full flex-col' : undefined}>
-      {hasSearchCapability && (
-        <PageLayout.TopArea>
-          <PageLayout.Row className="justify-end">
-            <Button onClick={() => setShowSearch(!showSearch)} tooltip="Search workspace" aria-label="Search workspace">
-              <Search />
-            </Button>
-          </PageLayout.Row>
-        </PageLayout.TopArea>
-      )}
-
-      <PageLayout.MainArea className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-4' : 'grid content-start gap-4'}>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
+        hasSearchCapability ? (
+          <ActionRow>
+            <ActionRow.End>
+              <Button
+                onClick={() => setShowSearch(!showSearch)}
+                tooltip="Search workspace"
+                aria-label="Search workspace"
+              >
+                <Search />
+              </Button>
+            </ActionRow.End>
+          </ActionRow>
+        ) : undefined
+      }
+    >
+      <h1 className="sr-only">Workspaces</h1>
+      <div className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-4' : 'grid content-start gap-4'}>
         {/* Workspace Selector - shown when multiple workspaces exist */}
         {workspaces.length > 1 && (
           <DropdownMenu>
@@ -560,7 +580,7 @@ export default function Workspace() {
             <p>No workspace capabilities are configured.</p>
           </div>
         )}
-      </PageLayout.MainArea>
+      </div>
 
       {/* Add Skill Dialog */}
       {effectiveWorkspaceId && canManageSkills && (

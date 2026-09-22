@@ -145,7 +145,7 @@ export function DataDetailsPanelCodeSection({
       <div
         className={cn(
           raisedSurfaceStyle,
-          'text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+          'max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
         )}
       >
         {usePlainTextView ? (
