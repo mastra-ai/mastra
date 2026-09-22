@@ -245,7 +245,7 @@ export function WorkItemCard({
           wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
           busyLabel !== undefined && 'opacity-70',
-          highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
+          highlighted && 'border-warning/40 bg-warning/5 ring-1 ring-warning/30',
         )}
       >
         {wickStatus && <ActivityWick status={wickStatus} />}

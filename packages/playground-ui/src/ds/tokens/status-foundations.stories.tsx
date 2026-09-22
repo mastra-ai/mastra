@@ -61,9 +61,9 @@ const badgeHues: BadgeVariant[] = ['green', 'red', 'blue', 'yellow', 'purple', '
 const greenSteps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
 
 const statusAliases: { token: ColorToken; aliasOf?: ColorToken; note: string }[] = [
-  { token: 'warning1', aliasOf: 'accent6', note: 'Alias of --accent6 — amber' },
-  { token: 'positive1', aliasOf: 'accent1', note: 'Alias of --accent1 — green' },
-  { token: 'negative1', aliasOf: 'accent2', note: 'Alias of --accent2 — red' },
+  { token: 'warning', aliasOf: 'accent6', note: 'Alias of --accent6 — amber' },
+  { token: 'positive', aliasOf: 'accent1', note: 'Alias of --accent1 — green' },
+  { token: 'negative', aliasOf: 'accent2', note: 'Alias of --accent2 — red' },
   { token: 'error', note: 'Its own red, off the ramp — form and request failures' },
 ];
 
@@ -82,7 +82,7 @@ export const StatusFoundations: Story = {
         </Txt>
       }
       note="Light is not the dark value dimmed: the base keeps its saturation while the foreground flips to a deep tint, because ink has to darken when the surface turns white."
-      noteAside="Utilities: bg-notice-*, text-notice-*-fg, bg-badge-*, text-badge-*-fg."
+      noteAside="Utilities: bg-notice-*, text-notice-*-fg, bg-badge-*, text-badge-*-fg, text-warning, text-positive."
     >
       <FoundationSection
         label="Notice"
@@ -160,8 +160,8 @@ export const StatusFoundations: Story = {
       </FoundationSection>
 
       <FoundationSection
-        label="Semantic aliases"
-        description="Older surfaces name a status instead of an accent. These are pointers onto the accent ramp, not a fourth palette — each swatch is split, alias on the left and source on the right, so a seam would mean one of them moved."
+        label="Status ink"
+        description="Status with no wash under it: a bare warning line, a live dot, a progress fill. Reach for these, not a notice pair — a notice -fg is built for its own 20% wash and reads near-white on a plain background. Light is the constraint: --warning and --positive clear 8.7:1 on the dark shell and land at 3.06:1 and 3.08:1 on white, which is the 3:1 icon bar and not the 4.5:1 text one. New work puts the hue on the icon and leaves the words on --foreground; surfaces written before this rule still colour the text, and --negative at 4.56:1 is the one alias that carries it. --error clears the text bar in both themes, which is why form errors wear it."
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {statusAliases.map(alias => (

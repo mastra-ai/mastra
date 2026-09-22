@@ -78,7 +78,7 @@ export function ConnectedAccountsSection() {
         <Txt
           as="span"
           variant="caption"
-          className={slackAccounts.length > 0 ? 'text-positive1' : 'text-muted-foreground'}
+          className={slackAccounts.length > 0 ? 'text-positive' : 'text-muted-foreground'}
         >
           {slackAccounts.length > 1
             ? `${slackAccounts.length} connected`

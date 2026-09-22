@@ -188,7 +188,7 @@ export function DuplicateDatasetDialog({
               <div className="space-y-2">
                 <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
                   <div
-                    className="bg-primary h-full transition-all duration-200"
+                    className="bg-accent1 h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
