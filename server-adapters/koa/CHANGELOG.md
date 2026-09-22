@@ -1,5 +1,17 @@
 # @mastra/koa
 
+## 1.7.13-alpha.1
+
+### Patch Changes
+
+- Fixed compatibility by requiring @mastra/core 1.58.0 or newer. These packages all build on @mastra/server, which needs core 1.58.0, but they still advertised support for core versions as old as 1.50.0. Installing one of those older pairings produced a broken setup instead of a clear version conflict. ([#24715](https://github.com/mastra-ai/mastra/pull/24715))
+
+  If your package manager reports a peer conflict after this release, upgrade @mastra/core to 1.58.0 or newer.
+
+- Updated dependencies [[`6f4831a`](https://github.com/mastra-ai/mastra/commit/6f4831a9e0fc127ffcd04a0fd70ea5b1bfffc29a)]:
+  - @mastra/server@1.69.0-alpha.1
+  - @mastra/core@1.69.0-alpha.1
+
 ## 1.7.13-alpha.0
 
 ### Patch Changes
