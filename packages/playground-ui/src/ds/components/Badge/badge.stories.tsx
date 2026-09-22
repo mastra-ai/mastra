@@ -116,6 +116,25 @@ export const Matrix: Story = {
   ),
 };
 
+export const Indicators: Story = {
+  render: () => (
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge variant="success" indicator="dot">
+        Connected
+      </Badge>
+      <Badge variant="info" indicator="pulse">
+        Live
+      </Badge>
+      <Badge variant="warning" indicator="dot">
+        Waiting
+      </Badge>
+      <Badge variant="destructive" indicator="dot">
+        Failed
+      </Badge>
+    </div>
+  ),
+};
+
 export const Emphasis: Story = {
   render: () => (
     <div className="grid gap-3">

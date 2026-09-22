@@ -5,8 +5,6 @@ import { DataList } from './data-list';
 import type { DataListSort } from './data-list';
 import { DataListSkeleton } from './data-list-skeleton';
 import { Button } from '@/ds/components/Button';
-import { Status } from '@/ds/components/StatusIndicators';
-import { Txt } from '@/ds/components/Txt';
 import { useTableKeydown } from '@/lib/keyboard';
 
 const meta: Meta<typeof DataList> = {
@@ -63,26 +61,11 @@ function RunsHeader() {
 }
 
 function RunCells({ run }: { run: SampleRun }) {
-  const failed = run.status === 'failed';
-  const statusLabel = failed ? 'Failed' : 'Success';
-
   return (
     <>
       <DataList.IdCell id={run.id} />
       <DataList.TextCell>{run.input}</DataList.TextCell>
-      <DataList.Cell>
-        <Status
-          presentation={
-            failed
-              ? { label: statusLabel, tone: 'error', description: 'The run failed.' }
-              : { label: statusLabel, tone: 'success', description: 'The run completed successfully.' }
-          }
-        >
-          <Txt as="span" variant="body-sm">
-            {statusLabel}
-          </Txt>
-        </Status>
-      </DataList.Cell>
+      <DataList.Cell>{run.status}</DataList.Cell>
       <DataList.DateCell timestamp={run.createdAt} />
       <DataList.TimeCell timestamp={run.createdAt} />
     </>
