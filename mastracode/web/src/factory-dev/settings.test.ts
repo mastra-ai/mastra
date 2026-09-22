@@ -34,7 +34,7 @@ describe('Factory development settings', () => {
     const root = await createTempDir();
     const settings: FactoryDevSettings = {
       version: 1,
-      auth: { source: 'mastra-cli-session', tokenId: 'token-1' },
+      auth: { source: 'mastra-cli-session', tokenId: 'token-1', tokenOrganizationId: 'org-1' },
       organization: { id: 'org-1', name: 'Mastra' },
       project: { id: 'project-1', name: 'Factory' },
       environment: { id: 'env-1', name: 'Production' },
@@ -58,7 +58,7 @@ describe('Factory development settings', () => {
     const file = path.join(root, '.env');
     await fs.writeFile(
       file,
-      'OPENAI_API_KEY=existing\nDATABASE_URL=stale\nAPP_DATABASE_URL=deprecated\nFACTORY_SANDBOX_PROVIDER=local\n',
+      'OPENAI_API_KEY=existing\nexport DATABASE_URL = stale\nAPP_DATABASE_URL=deprecated\nFACTORY_SANDBOX_PROVIDER=local\n',
     );
 
     await saveEnvironment(file, {

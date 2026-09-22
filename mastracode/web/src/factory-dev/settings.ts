@@ -9,7 +9,12 @@ export type DatabaseSettings =
 
 export interface FactoryDevSettings {
   version: 1;
-  auth: { source: 'mastra-cli-session'; tokenId?: string };
+  auth: {
+    source: 'mastra-cli-session';
+    tokenId?: string;
+    tokenOrganizationId?: string;
+    pendingRevocations?: { tokenId: string; organizationId: string }[];
+  };
   organization: { id: string; name: string };
   project: { id: string; name: string };
   environment: { id: string; name: string };
@@ -52,9 +57,10 @@ export async function loadEnvironmentValue(file: string, key: string): Promise<s
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
     throw error;
   });
-  const line = contents.split('\n').find(candidate => candidate.startsWith(`${key}=`));
-  if (!line) return undefined;
-  const value = line.slice(key.length + 1).trim();
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = contents.match(new RegExp(`^\\s*(?:export\\s+)?${escapedKey}\\s*=\\s*(.*)$`, 'm'));
+  if (!match) return undefined;
+  const value = match[1]!.trim();
   if (!value) return undefined;
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -71,7 +77,7 @@ export async function saveEnvironment(file: string, values: Record<string, strin
   });
   const managedKeys = new Set(Object.keys(values));
   const lines = existing.split('\n').filter(line => {
-    const match = line.match(/^([A-Z][A-Z0-9_]*)=/);
+    const match = line.match(/^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=/);
     return !match || !managedKeys.has(match[1]!);
   });
   while (lines.at(-1) === '') lines.pop();

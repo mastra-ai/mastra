@@ -21,6 +21,7 @@ import {
   saveEnvironment,
   saveSettings,
 } from './settings.js';
+import { queueTokenRotation, reconcileTokenOwnership, retryPendingTokenRevocations } from './token-lifecycle.js';
 
 interface Project {
   id: string;
@@ -59,7 +60,7 @@ async function deleteOrgApiKey(token: string, orgId: string, tokenId: string): P
     method: 'DELETE',
     headers: authHeaders(token, orgId),
   });
-  if (!response.ok) {
+  if (!response.ok && response.status !== 404) {
     const body = await response.json().catch(() => ({}));
     throw new Error(extractApiErrorDetail(body) || `Failed to delete platform API key (${response.status})`);
   }
@@ -189,17 +190,6 @@ async function configure(): Promise<FactoryDevSettings> {
     { value: 'platform', label: 'Platform', hint: 'Uses the selected project environment' },
   ] as const);
 
-  if (database.provider === 'postgres-local') {
-    const spinner = p.spinner();
-    spinner.start('Starting PostgreSQL and Redis with Docker');
-    const result = await x('pnpm', ['db:up'], { nodeOptions: { cwd: webDir, stdio: 'pipe' } });
-    if (result.exitCode !== 0) {
-      spinner.stop('Docker services failed to start');
-      throw new Error(result.stderr || 'Docker is unavailable. Start Docker Desktop and run pnpm factory:dev again.');
-    }
-    spinner.stop('PostgreSQL and Redis are ready');
-  }
-
   const settings: FactoryDevSettings = {
     version: 1,
     auth: { source: 'mastra-cli-session' },
@@ -255,7 +245,16 @@ async function run() {
   let platformSecretKey = existingSettings
     ? await loadEnvironmentValue(envFile, 'MASTRA_PLATFORM_SECRET_KEY')
     : undefined;
-  const previousTokenId = settings.auth.tokenId;
+  const persistedTokenId = await loadEnvironmentValue(envFile, 'FACTORY_PLATFORM_TOKEN_ID');
+  const persistedTokenOrganizationId = await loadEnvironmentValue(envFile, 'FACTORY_PLATFORM_TOKEN_ORGANIZATION_ID');
+  const persistedOwnership =
+    persistedTokenId && persistedTokenOrganizationId
+      ? { tokenId: persistedTokenId, organizationId: persistedTokenOrganizationId }
+      : undefined;
+  if (platformSecretKey && persistedOwnership && reconcileTokenOwnership(settings, persistedOwnership)) {
+    await saveSettings(root, settings);
+  }
+  const originalAuth = structuredClone(settings.auth);
   let createdToken: { id: string; secret: string } | undefined;
   let setupToken: string | undefined;
   if (!platformSecretKey) {
@@ -265,17 +264,27 @@ async function run() {
       setupToken = await getToken();
       createdToken = await mintOrgApiKey(setupToken, settings.organization.id, settings.project.name);
       platformSecretKey = createdToken.secret;
-      settings.auth.tokenId = createdToken.id;
+      queueTokenRotation(settings, createdToken.id, settings.organization.id, persistedOwnership);
       await saveSettings(root, settings);
       spinner.stop('Platform API key created');
     } catch (error) {
       if (createdToken && setupToken) {
-        await deleteOrgApiKey(setupToken, settings.organization.id, createdToken.id).catch(cleanupError => {
+        try {
+          await deleteOrgApiKey(setupToken, settings.organization.id, createdToken.id);
+        } catch (cleanupError) {
+          settings.auth = {
+            ...originalAuth,
+            pendingRevocations: [
+              ...(originalAuth.pendingRevocations ?? []),
+              { tokenId: createdToken.id, organizationId: settings.organization.id },
+            ],
+          };
+          await saveSettings(root, settings).catch(() => undefined);
           throw new AggregateError(
             [error, cleanupError],
             'Failed to save Factory settings and revoke its platform API key.',
           );
-        });
+        }
       }
       spinner.stop('Platform API key creation failed');
       throw error;
@@ -287,6 +296,8 @@ async function run() {
     await saveEnvironment(envFile, {
       MASTRA_PLATFORM_ACCESS_TOKEN: undefined,
       MASTRA_PLATFORM_SECRET_KEY: env.MASTRA_PLATFORM_SECRET_KEY,
+      FACTORY_PLATFORM_TOKEN_ID: settings.auth.tokenId,
+      FACTORY_PLATFORM_TOKEN_ORGANIZATION_ID: settings.auth.tokenOrganizationId,
       MASTRA_ORGANIZATION_ID: env.MASTRA_ORGANIZATION_ID,
       MASTRA_PROJECT_ID: env.MASTRA_PROJECT_ID,
       MASTRA_ENVIRONMENT_ID: env.MASTRA_ENVIRONMENT_ID,
@@ -297,21 +308,42 @@ async function run() {
     });
   } catch (error) {
     if (createdToken && setupToken) {
-      await deleteOrgApiKey(setupToken, settings.organization.id, createdToken.id).catch(cleanupError => {
+      try {
+        await deleteOrgApiKey(setupToken, settings.organization.id, createdToken.id);
+        settings.auth = originalAuth;
+      } catch (cleanupError) {
+        settings.auth = {
+          ...originalAuth,
+          pendingRevocations: [
+            ...(originalAuth.pendingRevocations ?? []),
+            { tokenId: createdToken.id, organizationId: settings.organization.id },
+          ],
+        };
+        await saveSettings(root, settings);
         throw new AggregateError(
           [error, cleanupError],
           'Failed to save Factory environment and revoke its platform API key.',
         );
-      });
-      settings.auth.tokenId = previousTokenId;
+      }
       await saveSettings(root, settings);
     }
     throw error;
   }
-  if (createdToken && setupToken && previousTokenId && previousTokenId !== createdToken.id) {
-    await deleteOrgApiKey(setupToken, settings.organization.id, previousTokenId).catch(error => {
-      p.log.warn(`Could not revoke the previous Factory platform API key: ${String(error)}`);
-    });
+
+  if (settings.auth.pendingRevocations?.length) {
+    try {
+      setupToken ??= await getToken();
+      const failures = await retryPendingTokenRevocations(
+        settings,
+        ownership => deleteOrgApiKey(setupToken!, ownership.organizationId, ownership.tokenId),
+        () => saveSettings(root, settings),
+      );
+      for (const failure of failures) {
+        p.log.warn(`Could not revoke a previous Factory platform API key: ${failure.message}`);
+      }
+    } catch (error) {
+      p.log.warn(`Could not retry previous Factory platform API key revocations: ${String(error)}`);
+    }
   }
   const dev = await x(
     'pnpm',
