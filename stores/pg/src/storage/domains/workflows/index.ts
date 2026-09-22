@@ -193,6 +193,9 @@ const WORKFLOW_PARENT_REVISION_MIGRATION = 'workflow-parent-revision-v1';
 const WORKFLOW_PARENT_REVISION_MIGRATION_EPOCH = 1;
 const TERMINAL_WORKFLOW_RUN_STATUSES = ['success', 'failed', 'canceled', 'tripwire', 'bailed', 'skipped'] as const;
 const WORKFLOW_TERMINALIZATION_STATUSES = ['success', 'failed', 'canceled'] as const;
+// Bounds the prune exclusion list: a run of candidates that keep failing their
+// revision/handoff recheck cannot grow the NOT IN unnest past this many pairs.
+const MAX_WORKFLOW_PRUNE_SKIPPED_CANDIDATES = 4096;
 type TerminalWorkflowRunStatus = (typeof TERMINAL_WORKFLOW_RUN_STATUSES)[number];
 type WorkflowSnapshotColumnType = 'jsonb' | 'json' | 'text';
 const WORKFLOW_PARENT_REVISION_BASE_CHECKS = ['generation >= 0', 'updated_at >= 0'] as const;
@@ -4708,15 +4711,23 @@ export class WorkflowsPG extends WorkflowsStorage {
    * in place rather than deleting around that fence through the generic table
    * pruner.
    */
-  private async pruneWorkflowSnapshotsBatch(cutoff: Date | number, limit: number): Promise<number> {
+  private async pruneWorkflowSnapshotsBatch(
+    cutoff: Date | number,
+    limit: number,
+    options?: PruneOptions,
+  ): Promise<number> {
     let deleted = 0;
     // Candidates skipped under the revision/handoff locks (e.g. a handoff that
     // committed mid-batch, or a row with missing revision evidence) are
     // excluded from re-selection: the loop can never spin on the same rows,
-    // and remaining eligible rows are still drained within this call.
+    // and remaining eligible rows are still drained within this call. The
+    // exclusion list is capped so a pathological run of stuck candidates
+    // cannot grow the NOT IN unnest without bound — hitting the cap ends this
+    // call, and skipped rows are safe to leave for the next prune run.
     const skippedNames: string[] = [];
     const skippedRuns: string[] = [];
     while (deleted < limit) {
+      if (options?.signal?.aborted) break;
       const candidates = await this.#db.client.manyOrNone<{ workflow_name: string; run_id: string }>(
         `SELECT snapshot.workflow_name, snapshot.run_id
          FROM ${this.workflowSnapshotTableName()} AS snapshot
@@ -4736,6 +4747,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       );
       if (candidates.length === 0) break;
       for (const candidate of candidates) {
+        if (options?.signal?.aborted) return deleted;
         const removed = await this.#db.client.tx(async t => {
           const revision = await this.lockExistingWorkflowParentRevision(t, candidate.workflow_name, candidate.run_id);
           if (!revision) return false;
@@ -4754,6 +4766,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         } else {
           skippedNames.push(candidate.workflow_name);
           skippedRuns.push(candidate.run_id);
+          if (skippedNames.length >= MAX_WORKFLOW_PRUNE_SKIPPED_CANDIDATES) return deleted;
         }
         if (deleted >= limit) break;
       }
@@ -4774,7 +4787,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       domain: 'workflows',
       targets,
       options,
-      deleteBatch: (_target, cutoff, limit) => this.pruneWorkflowSnapshotsBatch(cutoff, limit),
+      deleteBatch: (_target, cutoff, limit) => this.pruneWorkflowSnapshotsBatch(cutoff, limit, options),
     });
   }
 

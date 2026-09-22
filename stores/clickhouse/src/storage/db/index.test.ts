@@ -1,5 +1,11 @@
 import type { ClickHouseClient } from '@clickhouse/client';
-import { TABLE_MESSAGES, TABLE_SCHEMAS, TABLE_SPANS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  TABLE_MESSAGES,
+  TABLE_SCHEMAS,
+  TABLE_SPANS,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
+} from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -114,6 +120,23 @@ describe('ClickhouseDB createTable', () => {
     const query = client.command.mock.calls[0]?.[0]?.query;
     expect(query).toContain('PRIMARY KEY ("traceId", "spanId")');
     expect(query).toContain('ORDER BY ("traceId", "spanId")');
+  });
+
+  it('creates the handoff table with a supported ReplacingMergeTree version and identity key', async () => {
+    const { client, db } = createDb();
+
+    await db.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT_HANDOFF],
+    });
+
+    const query = client.command.mock.calls[0]?.[0]?.query;
+    // ReplacingMergeTree version columns must be UInt*/Date/DateTime — the
+    // shared bigint mapping would emit Int64, which ClickHouse rejects.
+    expect(query).toContain('ENGINE = ReplacingMergeTree(updated_at)');
+    expect(query).toContain('"updated_at" UInt64');
+    expect(query).toContain('PRIMARY KEY ("workflow_name", "run_id")');
+    expect(query).toContain('ORDER BY ("workflow_name", "run_id")');
   });
 });
 

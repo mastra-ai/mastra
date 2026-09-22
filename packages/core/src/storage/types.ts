@@ -76,6 +76,8 @@ export interface WorkflowResumeCapabilities {
   fencedStepUpdateVersion?: 1;
 }
 
+export type WorkflowSnapshotHandoffStatus = 'pending' | 'completed';
+
 /**
  * A framework-owned handoff record for an application/product snapshot.
  *
@@ -84,8 +86,6 @@ export interface WorkflowResumeCapabilities {
  * terminal status or its parent-revision latch. `mutationFence` is opaque to
  * storage and must only be compared for exact equality.
  */
-export type WorkflowSnapshotHandoffStatus = 'pending' | 'completed';
-
 export interface WorkflowSnapshotHandoffRecord {
   version: 1;
   workflowName: string;

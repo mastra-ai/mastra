@@ -7,7 +7,7 @@ import {
 } from '@mastra/core/storage';
 import type { WorkflowRunState, WorkflowTerminalRecoveryAncestryV1 } from '@mastra/core/workflows';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { PostgresStore } from '../../index';
+import { PostgresStore, WorkflowsPG } from '../../index';
 
 const NESTED_PARENT_GRAPH: WorkflowRunState['serializedStepGraph'] = [
   { type: 'step', step: { id: 'nested', component: 'WORKFLOW' } },
@@ -53,12 +53,12 @@ const snapshot = (runId: string, status: WorkflowRunState['status'], value: unkn
 
 describe('workflow snapshot handoff in PostgreSQL', () => {
   let store: PostgresStore;
-  let workflows: any;
+  let workflows: WorkflowsPG;
 
   beforeAll(async () => {
     store = new PostgresStore({ id: `workflow-handoff-${randomUUID()}`, connectionString });
     await store.init();
-    workflows = await store.getStore('workflows');
+    workflows = (await store.getStore('workflows'))!;
   }, 60000);
 
   afterAll(async () => {

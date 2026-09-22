@@ -1502,6 +1502,10 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
     columns: KNOWLEDGE_CURSORS_SCHEMA,
     compositePrimaryKey: ['sourceThreadId', 'agent'],
   },
+  [TABLE_WORKFLOW_SNAPSHOT_HANDOFF]: {
+    columns: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT_HANDOFF],
+    compositePrimaryKey: ['workflow_name', 'run_id'],
+  },
 };
 
 /**
