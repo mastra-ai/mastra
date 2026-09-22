@@ -291,6 +291,87 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(issueOpened?.({ ...context([]), item: card(['intake']) })).not.toHaveProperty('skipRules');
   });
 
+  it('sends the item a pull request was authored from to review when it opens', { timeout: 60_000 }, async () => {
+    vi.stubEnv('GITHUB_APP_ID', '123');
+    vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+    vi.stubEnv('GITHUB_APP_CLIENT_ID', 'client-id');
+    vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+    vi.stubEnv('GITHUB_APP_SLUG', 'factory-app');
+    vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'test-webhook-secret');
+    const { factoryConfigVersion } = await import('./index.js');
+    const { GithubIntegration } = await import('@mastra/factory/integrations/github/integration');
+    const github = factoryConfigs[0]?.integrations?.find(
+      (integration): integration is InstanceType<typeof GithubIntegration> => integration instanceof GithubIntegration,
+    );
+    if (!github) throw new Error('Expected the configured GitHub integration');
+
+    const context = {
+      tenant: { orgId: 'org-1', projectId: 'project-1' },
+      actor: { type: 'github' as const, login: 'maintainer', trusted: true, factoryAuthored: false },
+      ingress: { type: 'github' as const, id: '9:pr-opened' },
+      cause: 'github.pullRequestOpened',
+      causalChain: [],
+      configVersion: factoryConfigVersion,
+      factory: { createdAt: '2030-01-01T00:00:00.000Z' },
+      repository: { id: 10, fullName: 'acme/repo' },
+      event: 'pullRequestOpened' as const,
+      deliveryId: 'pr-opened',
+      pullRequest: {
+        number: 17,
+        title: 'PR 17',
+        url: 'https://github.com/acme/repo/pull/17',
+        createdAt: '2030-01-01T00:00:00Z',
+        state: 'open' as const,
+        draft: false,
+        merged: false,
+        headBranch: 'factory/issue-42',
+        baseBranch: 'main',
+        factoryAuthored: false,
+      },
+    };
+    const card = {
+      id: 'card-42',
+      source: 'github-issue' as const,
+      sourceKey: 'github-issue:42',
+      parentWorkItemId: null,
+      title: 'Issue 42',
+      url: 'https://github.com/acme/repo/issues/42',
+      stages: ['execute'],
+      acceptedAt: null,
+      metadata: {},
+    };
+    const { pullRequestOpened } = github.rules;
+
+    // The arrival — the evaluation that files the pull request's own Review
+    // card — keeps the built-in behaviour, whether or not a card is bound to it.
+    expect(pullRequestOpened?.({ ...context, pullRequestIntake: true })).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      source: 'github-pr',
+      board: 'review',
+      stage: 'intake',
+    });
+    expect(pullRequestOpened?.({ ...context, pullRequestIntake: true, item: card, board: 'work' })).toMatchObject({
+      source: 'github-pr',
+    });
+
+    // The item the pull request was authored from waits for review. That is a
+    // placement, not a governed transition: no phase rule runs for it and the
+    // card's own facts are left alone.
+    expect(pullRequestOpened?.({ ...context, item: card, board: 'work' })).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      idempotencyKey: '9:pr-opened:work-item-review',
+      source: 'github-issue',
+      sourceKey: 'github-issue:42',
+      board: 'work',
+      stage: 'review',
+      skipRules: true,
+    });
+    // Already waiting for review, or living on a board whose phases are its
+    // own: nothing to place.
+    expect(pullRequestOpened?.({ ...context, item: { ...card, stages: ['review'] }, board: 'work' })).toBeUndefined();
+    expect(pullRequestOpened?.({ ...context, item: card, board: 'release' })).toBeUndefined();
+  });
+
   it('carries the GitHub event-rule overrides on whichever integration is installed', { timeout: 60_000 }, async () => {
     const { githubRules } = await import('./github-rules.js');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

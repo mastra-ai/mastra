@@ -521,6 +521,8 @@ export class GithubRules {
     const evaluate = async (
       item: WorkItemRow | undefined,
       ingressIdentity: string,
+      /** Set on the evaluation that files the pull request's own Review card. */
+      pullRequestIntake = false,
     ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> => {
       const context: FactoryGithubRuleContext = {
         tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
@@ -547,6 +549,7 @@ export class GithubRules {
             }
           : {}),
         ...(intake ? { intake } : {}),
+        ...(pullRequestIntake ? { pullRequestIntake: true } : {}),
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
@@ -672,13 +675,19 @@ export class GithubRules {
     };
 
     const deliveryIdentity = `${installationId}:${parsed.deliveryId}`;
-    const primary = await evaluate(relatedItem, deliveryIdentity);
-    // A merged pull request is the one event both linked cards need: the
-    // Review card has to close, and the Work item that wrote the code has to
-    // assess whether it is finished. Resolution binds the delivery to whichever
-    // card it matched first, so evaluate the other one too — under an identity
-    // suffixed with its id, because ingress identities are the replay key and
-    // reusing the delivery's own would drop this evaluation as a duplicate.
+    // A pull request opening concerns two cards: its own Review card, which the
+    // arrival rule files — committed against the Work item that authored the
+    // pull request when one exists, because that binding is what links the two
+    // — and that authoring item, which is now out for review. The arrival is
+    // the delivery's own evaluation; the item's is a second one, under an
+    // identity suffixed with its id, because ingress identities are the replay
+    // key and reusing the delivery's own would drop it as a duplicate.
+    const pullRequestOpened = event === 'pullRequestOpened';
+    const primary = await evaluate(relatedItem, deliveryIdentity, pullRequestOpened);
+    // A merged pull request is the one *other* event both linked cards need:
+    // the Review card has to close, and the Work item that wrote the code has
+    // to assess whether it is finished. Resolution binds the delivery to
+    // whichever card it matched first, so evaluate the other one too.
     const linked =
       event === 'pullRequestMerged' && relatedItem && pullRequestNumber
         ? await this.#linkedClosureItem(
@@ -690,8 +699,16 @@ export class GithubRules {
             relatedItem,
           )
         : undefined;
-    if (!linked) return primary;
-    const secondary = await evaluate(linked, `${deliveryIdentity}:${linked.id}`);
+    const authoringItem =
+      linked === undefined &&
+      pullRequestOpened &&
+      relatedItem !== undefined &&
+      relatedItem.externalSource?.type !== 'pull-request'
+        ? relatedItem
+        : undefined;
+    if (linked === undefined && authoringItem === undefined) return primary;
+    const companion = linked ?? authoringItem;
+    const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
     for (const status of ['committed', 'replayed'] as const) {
       if (primary.status === status || secondary.status === status) return { status };
     }

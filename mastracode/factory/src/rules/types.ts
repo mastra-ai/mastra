@@ -282,6 +282,16 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
    * is installed. Absent for pull requests and for issues whose labels select nothing.
    */
   intake?: FactoryRuleIntakeTarget;
+  /**
+   * Set on the one evaluation per pull request delivery that files the pull
+   * request's own Review card. Opening a pull request concerns two cards — that
+   * Review card and the Work item that authored the pull request — so the rule
+   * answers for the two separately: the arrival carries this flag and is
+   * committed against the authoring item when resolution found one, which is
+   * what links the new card to it, while the authoring item's own evaluation
+   * leaves the flag unset.
+   */
+  pullRequestIntake?: boolean;
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };

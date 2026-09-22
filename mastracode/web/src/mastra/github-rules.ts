@@ -42,6 +42,17 @@ function has(labels: readonly string[], label: string): boolean {
  *
  * Issues placed by one of a project's own label routes keep the built-in
  * landing as well: the route owns the board and its initial phase.
+ *
+ * A pull request opening is answered for both cards it concerns. The arrival —
+ * the evaluation the built-in handler files from, flagged `pullRequestIntake` —
+ * is the pull request's own Review card; the item that authored the pull request
+ * is answered separately, and is placed on Work › Review: the code is open for
+ * review, so the item waits there instead of in the working phase that produced
+ * it, where a reviewer's feedback can reach it. That placement is explicit, not
+ * a governed transition — the item is not arriving on a board and nothing should
+ * be started for it — so it runs no phase rules and leaves the card's metadata
+ * alone, exactly like a label route change. Items on another board, terminal
+ * items, and items a run owns stay where they are.
  */
 export const githubRules: GithubRuleOverrides = {
   issueOpened: context => {
@@ -59,5 +70,25 @@ export const githubRules: GithubRuleOverrides = {
     if (has(labels, NEEDS_TRIAGE_LABEL)) return moved ? { ...decision, skipRules: true } : decision;
     if (has(labels, AUTO_TRIAGED_LABEL)) return { ...decision, stage: 'planning', skipRules: true };
     return moved ? { ...decision, stage: 'triage', skipRules: true } : { ...decision, stage: 'triage' };
+  },
+  pullRequestOpened: context => {
+    // The arrival files the pull request's own Review card; the item that
+    // authored the pull request is evaluated separately, and is answered here.
+    if (context.pullRequestIntake === true || !context.item) return defaultGithubRules.pullRequestOpened(context);
+    // The item lives on another board, so its phases are that board's business.
+    if (context.board !== 'work' || context.item.sourceKey === null) return;
+    // Already waiting for review: re-placing it would be a no-op with history.
+    if (context.item.stages.includes('review')) return;
+    return {
+      type: 'upsertLinkedWorkItem',
+      idempotencyKey: `${context.ingress.id}:work-item-review`,
+      source: context.item.source,
+      sourceKey: context.item.sourceKey,
+      title: context.item.title,
+      url: context.item.url,
+      board: 'work',
+      stage: 'review',
+      skipRules: true,
+    };
   },
 };

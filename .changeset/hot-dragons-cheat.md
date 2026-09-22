@@ -16,3 +16,5 @@ issueOpened: context => {
 ```
 
 The same decision on an existing card relocates it — used by the GitHub issue reconciliation sweep, which now replays an open issue through the rules ingress when its labels changed, so label-derived placement is re-applied even when the `labeled` webhook never arrived. `moveCardToBoard` now takes an optional `targetStage`, so a placement can name a phase on the card's own board (Work › Intake to Work › Planning), not just a board's landing phase. Relocation guards still apply: terminal cards, cards with a session on their current phase's role, and cards that changed under the dispatcher stay put.
+
+A pull request opening is now evaluated once per card it concerns, like a merge: its own Review card is filed by the arrival (the evaluation flagged `pullRequestIntake`) and the Work item that authored the pull request is answered in a second evaluation, so a rule can place the item that is now out for review. The built-in `pullRequestOpened` files the card only on the arrival.

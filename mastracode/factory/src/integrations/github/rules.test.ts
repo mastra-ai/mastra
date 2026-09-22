@@ -7,7 +7,7 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
-import { resolveGithubRules } from './default-rules.js';
+import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 import type { GithubRuleOverrides } from './default-rules.js';
 import { createGithubPullRequestReconciler, GithubRules, reconciledClosedEvent } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
@@ -2199,6 +2199,185 @@ describe('GithubRules', () => {
         }),
       }),
     ]);
+  });
+
+  it('answers a pull request opening for the pull request card and the item it was authored from', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read', {
+      pullRequestOpened: context => {
+        // The arrival files the pull request's own card; the item the pull
+        // request was authored from is placed in review instead.
+        if (context.pullRequestIntake === true || !context.item || context.item.sourceKey === null)
+          return defaultGithubRules.pullRequestOpened(context);
+        return {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: `${context.ingress.id}:work-item-review`,
+          source: context.item.source,
+          sourceKey: context.item.sourceKey,
+          title: context.item.title,
+          url: context.item.url,
+          board: 'work',
+          stage: 'review',
+          skipRules: true,
+        };
+      },
+    });
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: { work: { sessionId: 'session-issue-42', branch: 'feature', threadId: 'session-issue-42' } },
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-two-cards'));
+
+    // Both decisions are committed against the authoring item — that binding is
+    // what links the Review card to it — but they come from separate
+    // evaluations: the arrival under the delivery's own identity, and the item
+    // under one suffixed with its id.
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(2);
+    expect(decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({
+            type: 'upsertLinkedWorkItem',
+            source: 'github-pr',
+            board: 'review',
+            idempotencyKey: '7:delivery-two-cards:pull-request-intake',
+          }),
+        }),
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({
+            type: 'upsertLinkedWorkItem',
+            source: 'github-issue',
+            sourceKey: 'github-issue:42',
+            board: 'work',
+            stage: 'review',
+            skipRules: true,
+            idempotencyKey: `7:delivery-two-cards:${work.item.id}:work-item-review`,
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("moves the item that authored a pull request into review when it opens, and still files the pull request's card", async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read', {
+      pullRequestOpened: context => {
+        if (context.pullRequestIntake === true || !context.item || context.item.sourceKey === null)
+          return defaultGithubRules.pullRequestOpened(context);
+        return {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: `${context.ingress.id}:work-item-review`,
+          source: context.item.source,
+          sourceKey: context.item.sourceKey,
+          title: context.item.title,
+          url: context.item.url,
+          board: 'work',
+          stage: 'review',
+          skipRules: true,
+        };
+      },
+    });
+    const configVersion = 'factory-config-v1';
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
+      storage: workItems,
+      boards: createBoardRegistry(),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        board: 'work',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: { labels: ['bug'] },
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-work-review'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const cards = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    // The item the pull request was authored from is waiting for review, moved
+    // there by placement: its own facts are untouched and no phase rule ran.
+    expect(cards.find(card => card.id === work.item.id)).toMatchObject({
+      board: 'work',
+      stages: ['review'],
+      metadata: { labels: ['bug'] },
+    });
+    expect(cards.find(card => card.id === work.item.id)?.stageHistory).toMatchObject([
+      { stage: 'execute', exitedBy: 'factory-rule-dispatcher' },
+      { stage: 'review', by: 'factory-rule-dispatcher' },
+    ]);
+    // The pull request still gets its own card, linked to that item.
+    expect(cards.find(card => card.externalSource?.type === 'pull-request')).toMatchObject({
+      board: 'review',
+      stages: ['intake'],
+      parentWorkItemId: work.item.id,
+    });
   });
 
   it('moves the merged Review card to Done when the PR has no Factory provenance', async () => {
