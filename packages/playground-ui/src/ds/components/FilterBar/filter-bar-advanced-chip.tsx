@@ -116,7 +116,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
       </div>
       <PopoverContent
         align="start"
-        className="w-auto max-w-[min(90vw,40rem)] min-w-96 p-0"
+        className="w-[min(92vw,44rem)] p-0"
         {...{ [FILTER_BAR_SCOPE_ATTR]: 'advanced' }}
         finalFocus={triggerRef}
       >
