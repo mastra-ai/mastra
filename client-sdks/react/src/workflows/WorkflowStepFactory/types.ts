@@ -50,6 +50,11 @@ export type ResolvedWorkflowToolStep = ResolvedWorkflowStepBase<
   Extract<SerializedStepFlowEntry, { type: 'tool' }>
 >;
 
+export type ResolvedWorkflowClassifierStep = ResolvedWorkflowStepBase<
+  'classifier-step',
+  Extract<SerializedStepFlowEntry, { type: 'classifier' }>
+>;
+
 export type ResolvedWorkflowForEachStep = ResolvedWorkflowStepBase<
   'foreach-step',
   Extract<SerializedStepFlowEntry, { type: 'foreach' }>
@@ -92,6 +97,7 @@ export type ResolvedWorkflowStep =
   | ResolvedWorkflowMapStep
   | ResolvedWorkflowAgentStep
   | ResolvedWorkflowToolStep
+  | ResolvedWorkflowClassifierStep
   | ResolvedWorkflowForEachStep
   | ResolvedWorkflowParallelStep
   | ResolvedWorkflowConditionalStep

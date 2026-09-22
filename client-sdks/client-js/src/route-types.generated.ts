@@ -3081,6 +3081,7 @@ type Shared_Type_46 = {
     | 'step'
     | 'agent'
     | 'tool'
+    | 'classifier'
     | 'mapping'
     | 'sleep'
     | 'sleepUntil'

@@ -16,6 +16,7 @@ describe('resolveWorkflowGraphStep', () => {
     [{ type: 'step', step: { ...step('map'), mapConfig: 'return input' } }, 'map-step'],
     [{ type: 'agent', id: 'writer', agentId: 'writer-agent' }, 'agent-step'],
     [{ type: 'tool', id: 'double', toolId: 'double-tool' }, 'tool-step'],
+    [{ type: 'classifier', id: 'router', classifierId: 'ticket-router' }, 'classifier-step'],
     [{ type: 'mapping', id: 'map-1', mapConfig: 'return input' }, 'map-step'],
     [{ type: 'foreach', step: stepEntry('each'), opts: { concurrency: 2 } }, 'foreach-step'],
     [{ type: 'parallel', steps: [stepEntry('a')] }, 'parallel-step'],
