@@ -4644,11 +4644,12 @@ export class WorkflowsPG extends WorkflowsStorage {
 
     // Expression index backing the status filter in listWorkflowRuns(). Only valid on jsonb
     // columns — legacy json/text snapshot columns still go through the sanitizing regexp,
-    // which cannot use an index anyway.
+    // which cannot use an index anyway. A warm init that already has the index must not
+    // re-read the column type from information_schema.
+    const indexName = workflowSnapshotStatusIndexName(this.#schema);
+    if (this.#db.getSchemaSnapshotIndex(indexName) === true) return;
     const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
     if (snapshotType !== 'jsonb') return;
-
-    const indexName = workflowSnapshotStatusIndexName(this.#schema);
     try {
       await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema));
     } catch (error) {
