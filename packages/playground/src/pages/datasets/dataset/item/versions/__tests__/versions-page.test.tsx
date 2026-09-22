@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import DatasetItemVersionsComparePage from '../index';
 import { dataset, history } from './fixtures/versions-page';
-import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
@@ -45,11 +44,10 @@ const renderPage = (initialEntry: string) => {
               <Route
                 path="/datasets/:datasetId/items/:itemId/versions"
                 element={
-                  <RouteHeaderActionsProvider>
-                    <RouteHeaderActionsSlot />
+                  <>
                     <DatasetItemVersionsComparePage />
                     <LocationProbe />
-                  </RouteHeaderActionsProvider>
+                  </>
                 }
               />
             </Routes>
@@ -61,6 +59,13 @@ const renderPage = (initialEntry: string) => {
 };
 
 describe('DatasetItemVersionsComparePage', () => {
+  it('renders a single main landmark around the compare columns', async () => {
+    renderPage('/datasets/ds-1/items/item-a/versions');
+
+    expect(await screen.findByRole('combobox', { name: 'Version' })).toBeDefined();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+  });
+
   it('shows an empty compare column when no ?compare is provided', async () => {
     renderPage('/datasets/ds-1/items/item-a/versions');
 

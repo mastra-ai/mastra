@@ -73,7 +73,7 @@ export const CodeModeBadge = ({
             <SectionLabel>Error</SectionLabel>
             <pre
               data-testid="code-mode-error"
-              className="bg-muted text-error text-caption rounded-md px-3 py-2 font-mono break-words whitespace-pre-wrap"
+              className="rounded-md bg-muted px-3 py-2 font-mono text-caption break-words whitespace-pre-wrap text-error"
             >
               {error.name ? `${error.name}: ` : ''}
               {error.message}
@@ -87,7 +87,7 @@ export const CodeModeBadge = ({
             <SectionLabel>Result</SectionLabel>
             {typeof resultValue === 'string' ? (
               <pre
-                className="bg-muted text-caption max-h-60 overflow-auto rounded-md px-3 py-2 font-mono break-words whitespace-pre-wrap"
+                className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-caption break-words whitespace-pre-wrap"
                 data-testid="code-mode-result"
               >
                 {resultValue}
@@ -103,7 +103,7 @@ export const CodeModeBadge = ({
             <SectionLabel>Logs</SectionLabel>
             <pre
               data-testid="code-mode-logs"
-              className="text-caption max-h-60 overflow-auto rounded-md bg-black px-3 py-2 font-mono break-words whitespace-pre-wrap text-neutral-300"
+              className="max-h-60 overflow-auto rounded-md bg-black px-3 py-2 font-mono text-caption break-words whitespace-pre-wrap text-neutral-300"
             >
               {logs.join('\n')}
             </pre>

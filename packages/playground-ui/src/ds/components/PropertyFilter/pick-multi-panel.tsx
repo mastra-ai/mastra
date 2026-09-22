@@ -102,7 +102,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
 
       {field.isLoading ? (
         <div className={cn(menuEmptyClass, 'm-1')}>
-          <Spinner size="sm" className="text-muted-foreground size-3" />
+          <Spinner size="sm" className="size-3 text-muted-foreground" />
           Loading options…
         </div>
       ) : filteredOptions.length === 0 ? (

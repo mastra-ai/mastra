@@ -69,10 +69,10 @@ function LockedTokenPill({ field, value, tooltipContent }: LockedTokenPillProps)
             tabIndex={0}
             aria-label={lockA11yLabel}
           >
-            <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-            <ButtonsGroupText size="md">is</ButtonsGroupText>
-            <ButtonsGroupText size="md">{display}</ButtonsGroupText>
-            <ButtonsGroupText size="md">
+            <ButtonsGroupText>{field.label}</ButtonsGroupText>
+            <ButtonsGroupText>is</ButtonsGroupText>
+            <ButtonsGroupText>{display}</ButtonsGroupText>
+            <ButtonsGroupText>
               <LockIcon />
             </ButtonsGroupText>
           </ButtonsGroup>
@@ -110,11 +110,10 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
 
   return (
     <ButtonsGroup>
-      <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-      <ButtonsGroupText size="md">is</ButtonsGroupText>
+      <ButtonsGroupText>{field.label}</ButtonsGroupText>
+      <ButtonsGroupText>is</ButtonsGroupText>
       <Input
         ref={inputRef}
-        size="md"
         disabled={disabled}
         value={draft}
         placeholder={field.placeholder ?? `Enter ${field.label}`}
@@ -141,7 +140,6 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
         type="button"
         disabled={disabled}
         aria-label={`Remove ${field.label} filter`}
-        size="md"
         onMouseDown={e => e.preventDefault()}
         onClick={onRemove}
       >
@@ -165,11 +163,11 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
 
   return (
     <ButtonsGroup>
-      <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-      <ButtonsGroupText size="md">is</ButtonsGroupText>
+      <ButtonsGroupText>{field.label}</ButtonsGroupText>
+      <ButtonsGroupText>is</ButtonsGroupText>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" disabled={disabled} size="md">
+          <Button type="button" disabled={disabled}>
             {stringifyTokenValue(token.value)}
           </Button>
         </PopoverTrigger>
@@ -177,13 +175,7 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
           <PickMultiPanel field={field} tokens={tokens} onChange={onChange} />
         </PopoverContent>
       </Popover>
-      <Button
-        type="button"
-        disabled={disabled}
-        aria-label={`Remove ${field.label} filter`}
-        size="md"
-        onClick={onRemove}
-      >
+      <Button type="button" disabled={disabled} aria-label={`Remove ${field.label} filter`} onClick={onRemove}>
         <XIcon />
       </Button>
     </ButtonsGroup>
@@ -271,13 +263,12 @@ export function PropertyFilterApplied({
 
         return (
           <ButtonsGroup key={`${token.fieldId}-${index}`}>
-            <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
-            <ButtonsGroupText size="md">is</ButtonsGroupText>
-            <ButtonsGroupText size="md">{stringifyTokenValue(token.value)}</ButtonsGroupText>
+            <ButtonsGroupText>{field.label}</ButtonsGroupText>
+            <ButtonsGroupText>is</ButtonsGroupText>
+            <ButtonsGroupText>{stringifyTokenValue(token.value)}</ButtonsGroupText>
             <Button
               type="button"
               disabled={disabled}
-              size="md"
               aria-label={`Remove ${field.label} filter`}
               onClick={() => removeTokenAt(index)}
             >

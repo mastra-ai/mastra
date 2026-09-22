@@ -18,13 +18,13 @@ export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
 
   return (
     <Collapsible defaultOpen className="my-1.5 min-w-0">
-      <CollapsibleTrigger className="text-caption text-muted-foreground flex cursor-pointer items-center gap-1.5 pointer-coarse:min-h-11">
+      <CollapsibleTrigger className="flex cursor-pointer items-center gap-1.5 text-caption text-muted-foreground pointer-coarse:min-h-11">
         <ChevronRightIcon className="size-3.5 shrink-0" />
         Reasoning
       </CollapsibleTrigger>
 
-      <CollapsibleContent className="border-border mt-1.5 min-w-0 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <MarkdownRenderer className="text-muted-foreground text-caption" streaming={streaming && !redacted}>
+      <CollapsibleContent className="mt-1.5 min-w-0 border-l-2 border-border pl-2.5 italic [&_p]:my-0.5">
+        <MarkdownRenderer className="text-caption text-muted-foreground" streaming={streaming && !redacted}>
           {body}
         </MarkdownRenderer>
       </CollapsibleContent>
