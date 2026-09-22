@@ -1,5 +1,334 @@
 # @mastra/playground-ui
 
+## 56.0.0-alpha.13
+
+### Minor Changes
+
+- Removed the `Kbd` `theme` prop and pointed the radius tokens at the theme. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  `Kbd` rendered the same surface for both `theme` values, so the prop is gone and the component always uses the card surface. Callers passing it can drop the prop:
+
+  ```tsx
+  /* Before */
+  <Kbd theme="dark">⌘ K</Kbd>
+
+  /* After */
+  <Kbd>⌘ K</Kbd>
+  ```
+
+  `BorderRadius` exported stale pixel values (2px, 4px, 6px, 12px) that no longer matched the theme, so `cn()` could not resolve a conflict between two radius classes. Each key now resolves to its `--radius-*` token and follows the theme.
+
+  **Removed.** The unused `--brand-green-badge-bg` and `--brand-green-badge-fg` tokens, their `--color-green-badge-*` aliases, and a `shimmer` keyframe no animation referenced.
+
+- `ButtonsGroup` is now always a joined segmented control, and `TabList` defaults to the pill treatment, so a row of related controls reads as one object instead of a set of neighbours. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  **Why**
+
+  `ButtonsGroup` had a `spacing` prop: `close` joined the segments, `default` just put a gap between them. A row that does not join is not a group, so half the call sites were using a segmented-control component to get `flex gap-2`. The joined path also had a seam bug — two translucent 1px borders overlapped onto the same pixel, so the line between two segments read brighter than the ring around the whole group, and a `ghost` segment next to a selected one painted only half a capsule.
+
+  **What changed**
+
+  ```tsx
+  // before — a group that does not group
+  <ButtonsGroup spacing="default">
+    <Button>Compare</Button>
+    <Button>Run</Button>
+  </ButtonsGroup>
+
+  // after — a plain row for independent actions
+  <div className="flex items-center gap-2">
+    <Button>Compare</Button>
+    <Button>Run</Button>
+  </div>
+
+  // after — a group for segments of one control
+  <ButtonsGroup aria-label="View">
+    <Button variant={view === 'list' ? 'default' : 'ghost'}>List</Button>
+    <Button variant={view === 'board' ? 'default' : 'ghost'}>Board</Button>
+  </ButtonsGroup>
+  ```
+
+  The seam now follows shadcn's rule: the left segment owns it with its right border and the next segment drops its left edge, so exactly one border paints each seam and nothing overlaps. Every segment paints the ring, transparent variants included.
+
+  `TabList` used to fall back to a deprecated `line` variant when `variant` was omitted, which is what 43 of the app's tab lists were silently getting. `pill` is the default now and `line` is gone.
+
+  **Removed**
+
+  The `spacing` prop and the `ButtonsGroupSpacing` type; the `buttonsGroupVariants` export (the recipe is a stylesheet now); the `line` tab variant and `DeprecatedLineTabListVariant`; `new-theme.css` and the `new-theme` class, whose every declaration duplicated what `theme.css` already declares at the document root — importing `style.css` is all a consumer needs.
+
+- Unified every control surface on one fill ladder, so an input, a button, a select or dropdown trigger, a chip and a list panel read as the same material on any background. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  **Why**
+
+  Controls painted their own alpha (`bg-foreground/10`), while containers picked an opaque step from the `surface1..6` ramp. The two ladders drifted: on the Workflows and Traces list pages the search input sat visibly lighter than the list panel right next to it, and the same control changed apparent weight depending on whether it sat on the sidebar, the canvas or a card.
+
+  **What changed**
+
+  New role tokens, all alphas of `--foreground` off the existing gray ramp, so a rung means "one step up from whatever is behind me":
+
+  - `fill` — rest of a filled control (input, button, select/dropdown trigger, chip) and of a raised container
+  - `fill-hover` — hover on that rest fill; rest of a selection control (checkbox, switch, radio)
+  - `fill-active` — press, open, selected
+  - `fill-subtle` — state layer on a transparent base: ghost hover, list-row hover, disabled fill
+  - `fill-strong` — selection-control press
+
+  `--surface-panel` is the opaque twin of `fill` for cases that cannot be translucent — the level a selected list row rests on, and the sticky cells that scroll over other cells. `DataList` rows step down to `--background` as wells inside the panel and up to `--surface-panel` when featured or selected.
+
+  Values are unchanged, so existing controls look the same; the list panel is what moves to meet them.
+
+  **Removed**
+
+  Dead tokens `--button-default-bg`, `--button-default-hover`, `--button-default-active`, `--button-default-border`, `--surface-header`, `--surface-header-hover` and `--surface-row-featured`, plus the `--color-surface-row-featured` utility. Use `bg-fill`, `bg-surface-panel` and `bg-card` instead.
+
+- Renamed the `Txt` neutral tone from `default` to `ink`, so the three tones read as one ladder — ink, muted, faint. `default` invited you to write the tone you already get: the page body carries the ink colour, so leaving `tone` off inherits it. Write a tone only when the text departs from it, including lifting a line back to ink inside a muted block. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  If you passed `tone="default"`, drop it or use `tone="ink"` where the text sits in a muted block:
+
+  **Before**
+
+  ```tsx
+  <Txt variant="body" tone="default">Title</Txt>
+  <Txt variant="caption" className="text-muted-foreground">Supporting copy</Txt>
+  ```
+
+  **After**
+
+  ```tsx
+  <Txt variant="body">Title</Txt>
+  <Txt variant="caption" tone="muted">Supporting copy</Txt>
+  ```
+
+  Setting the colour through `className` still works, but `tone` is the supported way to reach the three neutral inks.
+
+- Every control reads one height scale — `sm` 28px, `md` 30px, `lg` 32px — and the tokens are named for what they size. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  **Why**
+
+  The rungs were named `form-*`, but by the end they were sizing buttons, dropdown triggers, filter chips, input groups and sidebar nav rows. Only a third of those live in a form, and a nav row reading `h-form-sm` is a name arguing with its call site. The word every design system uses here is _control_: Primer names the pattern explicitly ("the pattern `control` can be used for multiple types of controls like buttons, inputs, or interactive items"), Spectrum treats `control-size` as a shared unit, and the rung is the one thing a button, a field and a row have to agree on.
+
+  The scale also had a fourth rung at 20px that nothing could use honestly: a control's label is 13px at every height, and 13px does not fit in 20px with any padding left over. Call sites reached for it anyway — 155 of them — so the densest surfaces were a rung below the rest of the app, and the two neighbouring rungs were 4px apart while `sm`→`md` was 8px.
+
+  **What changed**
+
+  `--spacing-control-sm|md|lg` replaces `--spacing-form-*`, and the 20px rung is gone: `size="xs"` becomes `sm` and `size="icon-xs"` becomes `icon-sm` at every call site. The three rungs now sit 2px apart, which is the point of a scale whose members share a type role — the box grows for touch and density, the label does not move. `md` is the default everywhere.
+
+  Sidebar nav rows read `controlHeight` like any other control instead of declaring their own heights, which is what lets a consumer delete its per-row size overrides: a nav row is a control, and it was only ever off the scale by accident.
+
+  `FilterBar` picks the `sm` rung, once, for both its chips and its typeahead pill. It is a dense row sitting above a list, carrying a dozen chips at a time, and it should not compete with the page's own controls; the two parts used to each name `md` and stay level only because a comment told the next reader to keep them in sync.
+
+  The icon scale is renamed for the same reason. `sm | smd | default | lg` becomes `xs | sm | md | lg` (12 / 14 / 16 / 20), so there is no rung called `default` competing with the actual default and no `smd` between `sm` and what should have been `md`. With honest names, the two maps inside `Button` that translated a control size into a glyph size collapse into one, because the glyph rung and the control rung are now the same word.
+
+  **Consumers**
+
+  `h-form-*`, `w-form-*` and `min-h-form-*` become `h-control-*`, `w-control-*`, `min-h-control-*`. `<Icon size="sm">` is now 14px rather than 12px — the 12px rung is `xs` — and `size="default"` is `md`. `Badge`, `Kbd`, `Avatar`, `Spinner` and `ThemeToggle` keep their own scales, `xs` included; they are not controls and never read the control rung.
+
+- Replaced the numbered chart palette with hue-named tokens that hold in light mode. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  `--chart-1` through `--chart-5` are removed. Charts now paint from eight tokens named after the hue they carry, each with its own light value, so a series keeps its meaning on a white canvas instead of washing out:
+
+  ```css
+  /* Before */
+  stroke: var(--chart-1);
+
+  /* After */
+  stroke: var(--chart-blue);
+  ```
+
+  The full set is `--chart-blue`, `--chart-blue-deep`, `--chart-yellow`, `--chart-green`, `--chart-purple`, `--chart-orange`, `--chart-pink` and `--chart-red`. Dark values are unchanged from the colours charts shipped before, so only light mode moves. The ordered `--chart-soft-1` to `--chart-soft-5` ramp is unchanged.
+
+  **Added.** `--span-type-*` for the eleven trace span kinds (agent, workflow, model, mcp, tool, provider, memory, workspace, skill, scorer, other), and `CHART_LABEL_COLOR` exported from `@mastra/playground-ui` for chart axis labels.
+
+  **Removed.** `CHART_COLORS.blueLight`, `CHART_COLORS.greenDark` and `CHART_COLORS.redDark`, which had no callers. Every other key keeps its name and now resolves to a token.
+
+- Removed the TypeScript mirrors of CSS values from `@mastra/playground-ui/tokens`, so a token now has exactly one definition. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  **Why**
+
+  `FontSizes`, `LineHeights` and `FontWeights` restated every `--text-*` role in TypeScript, and nothing read those numbers except the Storybook foundations page. A role edited in CSS left the copies untouched and no test noticed. The list of role _names_, meanwhile, is load-bearing: `cn()` uses it to know that `text-label` replaces `text-body` instead of stacking on it.
+
+  **What changed**
+
+  The three objects collapse into one list of role names, and the foundations story reads the rendered size, line height and weight off the element, so it reports what the browser actually applies.
+
+  ```ts
+  // Before
+  import { FontSizes, FontWeights, LineHeights } from '@mastra/playground-ui/tokens';
+  FontSizes.body; // '0.875rem'
+
+  // After
+  import { TextRoles, type TextRole } from '@mastra/playground-ui/tokens';
+  TextRoles; // ['display', 'title', ..., 'meta']
+  ```
+
+  `Txt`'s `variant` prop is now typed as `TextRole`, so a role added to the list has to be given a class.
+
+  **Removed**
+
+  - `FontSizes`, `LineHeights`, `FontWeights` — replaced by `TextRoles`
+  - `Easings` — held a curve nothing read; use `var(--ease-out-custom)`
+  - `Durations` is now a list of rung names rather than a name-to-duration map
+
+  A new test keeps `TextRoles` and the `--text-*` declarations in step, so a role can no longer exist in CSS while `cn()` is unaware of it.
+
+- Made every surface and interaction state read at the same strength in light and in dark, and put every raised container on the one elevation recipe. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  **Why**
+
+  Dark mode carried its own hand-written alphas, at roughly twice the light ones, on the premise that "a lightness step has to be large to register on a near-black surface". That premise is wrong: alpha compositing is linear in sRGB, so one alpha is one step in either direction — white over near-black spans 242 levels, near-black over near-white 233. The two ladders therefore drifted apart in ways that were visible everywhere:
+
+  - the `DataList` panel sat 0.105 in OKLab lightness above its canvas in dark but only 0.015 in light, so the same list read as a glowing slab on one theme and a quiet recess on the other
+  - a row's press state was 2.4× its hover step in dark against 1.8× in light, so `active` swamped `hover`
+  - the sidebar sat at absolute black (`oklch(0 0 0)`), 16 lightness points below the canvas where light keeps 2, leaving no room beneath the hover fill — the hover was effectively invisible
+  - the raised rim was black at 40% in dark, which paints a hard outline around a surface that is _lighter_ than its canvas, while its light-side rim sat at 3% — under the ~5% where an inner edge stops being visible at all. A divider drawn inside a card was louder than the card's own boundary.
+
+  **What changed**
+
+  The fill and boundary ladders are now declared once and resolve from a single `--fill-tint`, the only part that flips per theme. Each rung is one alpha — `fill-subtle` 4%, `fill` 6%, `fill-hover` 9%, `fill-active` 12%, `fill-strong` 18%, `border` 9% — and measures within one 8-bit level of its counterpart in the other theme. Focus is the one rung that stays per-theme, because it answers to a 3:1 contrast floor rather than to symmetry: shade at dark's 40% measures 2.87:1 in light, so light holds 50%, and a test now composites the ring's alpha over each surface to enforce it. The dark canvas also moves off absolute black, mirroring the light canvas/sidebar relationship, so the alpha rungs have room beneath them.
+
+  `DataList`, the settings container and the metrics cards now take the shared raised surface (`bg-card` plus `--shadow-raised`) instead of each pairing a fill with its own border, which is what made them read as unrelated materials. The rim in that recipe is `--border` itself, so a surface boundary and a divider inside it are the same edge by construction in both themes. An interactive surface layers its state rung instead of swapping its background colour — swapping made a card composite over the canvas and therefore _darken_ on hover in dark — which also retires the last opaque hovers (`hover:bg-muted`, `hover:bg-card`) that sat off the ladder. A menu item sizes to its content above the control height, so an item carrying a name over a description no longer overflows into its neighbour.
+
+  Elevation splits in two, because the only thing a shadow has to say here is how far a surface sits from the canvas, and there are two distances. A _raised_ surface is in the flow — card, panel, table head, the app frame — and lifts a couple of pixels; that restraint is also what keeps it honest, since a tile in a scrolling grid gets its shadow sliced into a hard line by the scroller when the falloff exceeds its own clearance. An _overlay_ is detached — popover, dropdown, dialog, drawer, tooltip — is never clipped, and carries the long falloff. `shadow-raised` and `shadow-overlay` assemble those from `--elevation-lip`, `--elevation-raised` and `--elevation-overlay`, which also lets the rim resolve on the element instead of on `:root`.
+
+  The rim became its own token rather than a reuse of `--border`. A divider sits inside one surface and needs 9% to register; a rim sits between two surfaces that already differ by a lightness step, so it needs less, and reusing the divider value made every card look outlined. `--surface-rim` (5% dark / 8% light) now holds it, with `--surface-rim-focus` above it.
+
+  A field is the same material as a card: `bg-card` plus `shadow-raised`, no border of its own. That is what makes a filter input and the panel beside it read as one system — in light the field is white on the off-white canvas, in dark the same step above it. `Input`, `Textarea`, `Select`, `Combobox`, `InputGroup` and a filter chip all take it from one primitive. Hover washes the fill and focus repaints the rim: both go through the elevation utility, whose `--surface-tint` layer is an inset shadow, so a field gets the same state layer a `Card` gets from `state-layer` without needing the pseudo-element an `<input>` cannot have. Hover used to brighten the rim instead, and the rim is the loudest part of a surface with no border — a form full of fields announced the pointer on every one of them. It is reserved for focus, at 14% dark / 18% light, where being unmissable is the point.
+
+  A filled `Select`/`Combobox` trigger was the one field that still swapped its whole fill on hover, because the pin meant to stop it (`hover:bg-card`) sat in a different tailwind-merge group from the Button variant it lands on (`not-disabled:hover:bg-fill-hover`): both survived the merge and the two-variant selector won on specificity. The pins now carry the same prefix, and the open state washes through `--surface-tint` too rather than replacing the card fill.
+
+  The command palette was the last surface drawing its own material by hand. `CommandDialog` has always carried the shared overlay recipe, but the palette cancels it because its three inner surfaces are the real panels — and each of those pinned a `shadow-[0_Npx…]` literal beside a `border`, with the search field swapping one literal for another on `focus-within`. The rail and the results panel were also still filled from `--background` while every other detached panel had moved to the card. All three now take the shared materials — the field takes the field material, the panels take `shadow-overlay` — and the footer fade reads the panel's own fill and radius rather than restating both as literals.
+
+  That cancellation did not actually work, which is what made the dialog draw a 1px rectangle and a drop shadow around the whole palette: `overlay` was a key in both the colour and the shadow token sets, so `shadow-overlay` was classified as a shadow _colour_, `shadow-none` could not override it, and Tailwind emitted a second `.shadow-overlay` rule setting `--tw-shadow-color`. The modal scrim colour is now `--scrim` (`bg-scrim`), which is both the accurate name — it is the wash over the page, not an elevation — and what makes `shadow-overlay` a single unambiguous class that a call site can replace.
+
+  Interaction on an opaque surface now layers instead of replacing. `hover:bg-fill-subtle` on top of `bg-muted` does not add a rung, it _substitutes_ one — measured, that meant −3 levels in dark and +5 in light, so the same hover darkened one theme and lightened the other. The `state-layer` utility puts the rung on a pseudo-element beneath the content, which measures +9/−9 from any resting rung in both themes; the sidebar search control and the nav recipe were the loudest cases and are now on it.
+
+  Panels docked beside the app frame share the frame's material (`bg-background` plus the raised elevation) rather than the card's. The agent Config panel was a `Card`, one fill step lighter than the chat frame it sits next to, which made two peers read as different materials.
+
+  **Removed**
+
+  `DashboardCard` (use `Card`) and the numeric `Spacings` mirror — spacing comes off one multiplier that tailwind-merge already understands, so enumerating 37 rungs bought nothing, and the named rungs it does need are the `Sizes` scale. Registering that scale as `theme.spacing` also replaces seven per-utility class groups that duplicated it. Gone too: the dead `badge-default` size token, and the per-utility duplication of every named rung — each one was declared across the `--height-`, `--max-height-`, `--width-` and `--container-` namespaces, which is how `icon-smd` came to exist in three of them and in none of the fourth. A rung is now one `--spacing-*` declaration, which every size utility reads, and a test holds the `Sizes` mirror to `theme.css` so the next drift fails instead of going unnoticed.
+
+  The legacy `--surface1` … `--surface6` ramp and the `border1`/`border2` pair are gone. Six numbered surfaces described a palette, not a system: three canvas steps (`--background-1/2/3`, surfaced as `--sidebar`, `--background`, `--card`) plus the translucent fill rungs cover every real case, and the numbered names told a call site nothing about when to reach for one. `border1`/`border2` collapse into `border` and `border-strong` — one divider weight and one emphasis weight — which also retires the global `* { border-color }` default that quietly gave every bordered element a colour it never asked for.
+
+  `--surface-rim-hover` is gone with the rim-based hover it existed for, and `--overlay` / `bg-overlay` are now `--scrim` / `bg-scrim`.
+
+  **Consumers**
+
+  MastraCode's Factory SPA imports `theme.css` directly, so it consumed the deleted tokens and had to move with them. Its canvases map by role — `surface1` → `sidebar`, `surface2` → `background`, `surface3` → `card` — and `surface4/5/6` become fill rungs, which is what they were describing: they sat _above_ the card in dark and _below_ the page in light, an inversion an alpha rung expresses by construction and a fixed lightness step cannot. Its text moves off the retired `--text-ui-*` / `--text-header-*` scale onto the roles, picking the rung by the weight already at the call site so a 12px label that was `font-medium` becomes `column` and a plain one becomes `caption`.
+
+  The sign-in and onboarding screens dropped a private palette that re-declared `--surface*`, `--neutral*`, `--border*` and `color-scheme: dark` locally, which pinned those two pages to dark while the rest of the app followed the theme. The decorative halftone canvas reads its stage hues from `--chart-1/2/4/3` instead of four hardcoded hex values, and re-reads them when the theme class changes, since a canvas cannot inherit a token the way a border can.
+
+- Removed the `--neutral1` … `--neutral6` colour ramp and the `--text1` alias. Greys now come from the semantic roles the design system already exposes, so a colour says what it is for instead of how dark it is: `foreground` for body ink, `muted-foreground` for secondary, `placeholder` for the faintest, the `fill` ladder for tinted surfaces, and `border-focus` / `border-hover` for edges. ([#24645](https://github.com/mastra-ai/mastra/pull/24645))
+
+  **Why** The ramp was a second grey scale sitting beside the ten-step `gray` one, and the two only lined up at the ink end — every other rung landed between gray steps, differently in light and dark. Picking `neutral4` meant picking a lightness, which is a decision the theme should make, not the call site.
+
+  **Before**
+
+  ```tsx
+  <span className="text-neutral6">Title</span>
+  <span className="text-neutral3">Secondary</span>
+  <span className="text-neutral1">Hint</span>
+  <div className="bg-neutral6/5 border-neutral3/40" />
+  <Spinner color={Colors.neutral3} />
+  ```
+
+  **After**
+
+  ```tsx
+  <span className="text-foreground">Title</span>
+  <span className="text-muted-foreground">Secondary</span>
+  <span className="text-placeholder">Hint</span>
+  <div className="bg-fill border-muted-foreground/40" />
+  <Spinner color={Colors['muted-foreground']} />
+  ```
+
+  `Colors.neutral1` … `Colors.neutral6` and `Colors.text1` are gone from the exported token map. `text-text1` becomes `text-foreground` — it was already an alias of it, so nothing moves on screen.
+
+- Fixed three surface defects in the design system's controls, and collapsed form fields to a single look. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  **Filter chips no longer show square corners.** Opening a chip's picker made its fill paint straight through the pill's rounded edge, leaving visible square corners on the traces Time filter. The chip now clips its own content, so its shape holds no matter which segment is open.
+
+  **Grouped pickers respond to hover again.** Inside a `ButtonsGroup`, a picker's hover and open states were cancelled out, so only its border moved — and it jumped from a 9% to a 31% white, which read as a flash. Both states now tint the surface like every other control, and the border stays put.
+
+  **Hover borders are calmer.** `--border-hover` went from 31% to 25% white, so a hover is a nudge rather than a flash. This now reaches outline buttons, selection controls and an open outline trigger — form fields no longer move their border on hover at all, they tint their surface like every other control.
+
+  **Removed the `outline` variant from form fields.** `Input`, `Textarea` and `InputGroup` had two competing looks for the same control: a filled one and a transparent one. Four call sites had already wrapped the transparent one in a hand-made background to get the filled look back. There is now one field surface. Buttons keep their `outline` variant.
+
+  ```tsx
+  // Before
+  <Input variant="outline" placeholder="Search" />
+  <div className="bg-card rounded-full">
+    <InputGroup variant="outline">
+      <InputGroupInput placeholder="Search" />
+    </InputGroup>
+  </div>
+
+  // After
+  <Input placeholder="Search" />
+  <InputGroup>
+    <InputGroupInput placeholder="Search" />
+  </InputGroup>
+  ```
+
+- Replaced the size-only text scale with ten typography roles, so a piece of text picks what it is rather than assembling how it looks. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  **Why**
+
+  Size, line height and weight were three separate decisions at every call site: `text-ui-md font-semibold leading-ui-lg` next to `text-ui-md font-medium` next to `text-header-sm font-bold`. The same nominal size rendered at four different weights across the app, and emphasis was expressed by reaching for a heavier font — up to 700 — which is why headings, buttons and table headers all looked like they came from different products.
+
+  **What changed**
+
+  A role is a complete text style: size, line height, weight and tracking in one token. Pick the role, get the look.
+
+  - `text-display` 22/500, `text-title` 18/500, `text-heading` 16/500, `text-subheading` 14/500
+  - `text-body` 14/400, `text-label` 13/500, `text-body-sm` 13/400
+  - `text-column` 12/500, `text-caption` 12/400, `text-meta` 10/500
+
+  500 is the ceiling; hierarchy comes from size and tone, not from weight. Emphasis inside prose is a role swap at the same size (`text-body` → `text-subheading`), never a `font-*` class. Control text is `text-label` at every control height, so a button reads the same whether it is 24px or 36px tall.
+
+  **Removed**
+
+  The `header-*` scale, the `leading-ui-*` line heights, and the Tailwind `text-xs`/`text-sm`/`text-base`/`text-lg`/`text-xl`/`text-2xl` rungs — nothing in the app used them, and keeping them open was an invitation to bypass the roles. `Txt` now takes `variant` as a role name plus `tone`; `headingStyle` and `supportingTextStyle` are gone in favour of the role plus a tone class.
+
+  **Also**
+
+  Supporting text moved one rung further from the ink (`--gray-9` to `--gray-8`), because at one step from the ink it read as a second ink instead of stepping back.
+
+  Settings picked its roles one rung too high: a group title (`SettingsTitle`) rendered at `text-heading`, the same role as the page title above it, so "GitHub issues" shouted as loud as "Work Intake" and darker, and a row label sat at `text-subheading`, the role for the title above it. The page now descends: page title 16, group title 14, row label 13, descriptions 12.
+
+### Patch Changes
+
+- Simplified the reasoning toggle in the chat view. It now reads "Reasoning" in muted text next to a chevron, instead of a badge whose label flipped between "Show reasoning" and "Hide reasoning". The chevron and `aria-expanded` carry the open state, so the label stays still while you open and close it. ([#24646](https://github.com/mastra-ai/mastra/pull/24646))
+
+  The panel is now the shared Collapsible used by tool calls and chat events, so opening and closing it animates its height instead of snapping.
+
+- Documented every design token in Storybook and moved the shell off raw colours. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  **Added.** Two foundation pages: Status (notices, badges, the brand green ramp and the semantic aliases, each rendered by the real component) and Utilities (the interaction layer, frame radius, resize, the five one-shot animations and word wrapping). Typography gains the three type families, Surface gains the overlay washes, rim and tint, and Shape gains the breakpoints. Sixty-seven tokens that shipped without an entry now have one.
+
+  **Fixed.** The mode label on the colour, status and surface pages read the background global instead of the theme, so it always said "Dark". Frame radius specimens were invisible on a light canvas.
+
+  **Changed.** The sidebar, settings layout header, workflow timing dial, signals list and the chat observation markers use semantic roles instead of Tailwind palette classes and hex literals, so they follow the theme. The react-flow control buttons style through reactflow's own custom properties rather than overriding every rule with `!important`.
+
+- Improved the FilterBar so removed chips now collapse right-to-left (remove button → value → operator → field) and fade out, mirroring the entrance animation. This applies to the × button, Delete/Backspace on a chip, Backspace in the empty input, and the Clear button. Leaving chips are inert and hidden from assistive technology while they animate, and disappear immediately under prefers-reduced-motion. ([#24609](https://github.com/mastra-ai/mastra/pull/24609))
+
+- Fixed secondary text rendering at full strength across the studio. Tool call headers, chat events, token budgets, chart tooltips, the theme toggle and the skill dialog all spelled their dimmer text tiers with class names the stylesheet never defined, so those elements silently inherited body ink and every tier looked the same. They now use the semantic inks, and the hierarchy reads again. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+- Split the raw token stylesheet into one file per subject. `@mastra/playground-ui/theme.css` stays the only import and now holds the semantic aliases (`--background`, `--foreground`, `--destructive`), importing `theme/colors.css`, `theme/status.css`, `theme/data-viz.css`, `theme/surfaces.css`, `theme/typography.css`, `theme/scale.css` and `theme/motion.css`. Each layer carries both themes side by side, so a token and its `html.light` counterpart are a few lines apart instead of 250. No token changed value. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  Two tokens that no foundations story rendered are now documented in Storybook: `--scrim`, and the legacy `--neutral1`–`--neutral6` ramp, labelled legacy because the product still reads it while new work takes a semantic role.
+
+- Removed the serif default from the typography tokens. `--font-display` now defaults to the same system sans stack as `--font-body`, and the `font-serif` utility no longer exists — the design system has no serif family, and display is a role (headlines and brand), not a typeface. `--font-sans` still resolves to `--font-body`, which is also what Tailwind's preflight reads for the document's default font, so page text keeps following the product font. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  Apps that never overrode the tokens rendered Georgia wherever they used `font-display` or `font-serif`; they now get the system sans stack. The `text-*` roles are unaffected — they carry size, line height and weight, never a family. Override the role tokens to apply product fonts:
+
+  ```css
+  :root {
+    --font-display: 'Mona Sans', system-ui, sans-serif;
+    --font-body: 'Mona Sans', system-ui, sans-serif;
+    --font-mono: 'Commit Mono', ui-monospace, monospace;
+  }
+  ```
+
 ## 56.0.0-alpha.12
 
 ### Minor Changes
