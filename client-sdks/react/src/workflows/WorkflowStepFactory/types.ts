@@ -114,6 +114,7 @@ export type WorkflowStepRenderers<TStep extends ResolvedWorkflowStep = ResolvedW
   MapStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'map-step' }>>;
   AgentStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'agent-step' }>>;
   ToolStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'tool-step' }>>;
+  ClassifierStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'classifier-step' }>>;
   ForEachStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'foreach-step' }>>;
   ParallelStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'parallel-step' }>>;
   Conditional?: WorkflowStepRenderer<Extract<TStep, { kind: 'conditional' }>>;
