@@ -2,6 +2,10 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon, BuildingIcon } from 'lucide-react';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/resources')];
 
 const resources = [
   {
@@ -51,8 +55,9 @@ const resources = [
 
 export default function Resources() {
   return (
-    <PageLayout width="narrow">
-      <PageLayout.MainArea>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Resources</h1>
+      <div>
         <div className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
           {resources.map(resource => (
             <a
@@ -74,7 +79,7 @@ export default function Resources() {
             </a>
           ))}
         </div>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 }

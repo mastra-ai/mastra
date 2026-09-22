@@ -82,7 +82,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
     <div
       className={cn(
         'relative isolate w-[274px]',
-        isBodyExpanded && 'w-[688px]',
+        isBodyExpanded && 'w-172',
         isStacked &&
           'pb-3 before:absolute before:inset-x-1.5 before:top-2 before:bottom-1.5 before:-z-10 before:rounded-xl before:border before:border-border before:bg-card after:absolute after:inset-x-3 after:top-3.5 after:bottom-0 after:-z-20 after:rounded-xl after:border after:border-border after:bg-card',
       )}
@@ -181,7 +181,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
               <CollapsibleTrigger
                 className={cn(
                   surfaceStateLayerStyle,
-                  'nodrag nopan border-border bg-card text-caption flex min-h-11 w-full items-center justify-between border-t px-3.5 py-2.5 focus-visible:shadow-none focus-visible:ring-0',
+                  'nodrag nopan flex min-h-11 w-full items-center justify-between border-t border-border bg-card px-3.5 py-2.5 text-caption focus-visible:shadow-none focus-visible:ring-0',
                 )}
               >
                 <span>
@@ -189,7 +189,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                 </span>
                 <ChevronRight aria-hidden size={14} />
               </CollapsibleTrigger>
-              <CollapsibleContent className="border-border h-[620px] overflow-hidden border-t border-dashed">
+              <CollapsibleContent className="border-border h-155 overflow-hidden border-t border-dashed">
                 {body}
               </CollapsibleContent>
             </>

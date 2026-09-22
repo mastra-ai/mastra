@@ -72,19 +72,11 @@ export const Workflow = () => {
   const { data: workflow, isLoading, error } = useWorkflow(workflowId!);
 
   if (error && is401UnauthorizedError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
+    return <SessionExpired variant="fill" />;
   }
 
   if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="workflows" />
-      </div>
-    );
+    return <PermissionDenied variant="fill" resource="workflows" />;
   }
 
   return <WorkflowContent workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />;

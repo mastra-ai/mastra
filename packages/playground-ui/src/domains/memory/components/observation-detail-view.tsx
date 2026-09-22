@@ -1,4 +1,3 @@
-import { CircleSlashIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Checkbox } from '../../../ds/components/Checkbox';
 import { CodeDiff } from '../../../ds/components/CodeDiff';
@@ -215,7 +214,7 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
 function ObservationContent({ observations }: { observations: string }) {
   const sections = useMemo(() => parseObservations(observations), [observations]);
   if (sections.length === 0) {
-    return <p className="text-muted-foreground text-caption italic">Initialized</p>;
+    return <p className="text-caption text-muted-foreground italic">Initialized</p>;
   }
   return (
     <div className="space-y-5">
@@ -224,7 +223,7 @@ function ObservationContent({ observations }: { observations: string }) {
           <div className="border-border flex items-baseline justify-between gap-3 border-b pb-2">
             <div className="min-w-0">
               <h3 className="text-column text-foreground">{section.title}</h3>
-              {section.relativeTime && <p className="text-muted-foreground text-meta">{section.relativeTime}</p>}
+              {section.relativeTime && <p className="text-meta text-muted-foreground">{section.relativeTime}</p>}
             </div>
           </div>
           <ObservationItems items={section.items} />
@@ -258,7 +257,7 @@ function ObservationHistoryPanel({
               key={record.id}
               type="button"
               className={cn(
-                'text-muted-foreground w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption hover:bg-fill-subtle',
+                'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption text-muted-foreground hover:bg-fill-subtle',
                 isSelected && 'border-l-accent1 bg-fill-hover',
               )}
               onClick={() => onSelectRecord(record.id)}
@@ -319,13 +318,11 @@ export function ObservationDetailView({
 
   if (!selected) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<CircleSlashIcon className="size-4" />}
-          titleSlot="No observations"
-          descriptionSlot="No observational memory snapshots available for this thread."
-        />
-      </div>
+      <EmptyState
+        titleSlot="No observations"
+        descriptionSlot="No observational memory snapshots available for this thread."
+        variant="fill"
+      />
     );
   }
 
@@ -340,7 +337,7 @@ export function ObservationDetailView({
             <div className="flex items-start justify-end gap-3">
               <label className="text-caption flex cursor-pointer items-center gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
-                <span className="text-muted-foreground text-caption">Show diff</span>
+                <span className="text-caption text-muted-foreground">Show diff</span>
               </label>
             </div>
           </div>
@@ -355,7 +352,7 @@ export function ObservationDetailView({
           ) : activeObservations ? (
             <ObservationContent observations={activeObservations} />
           ) : (
-            <p className="text-muted-foreground text-caption italic">
+            <p className="text-caption text-muted-foreground italic">
               {selected.isObserving || selected.isReflecting ? 'Processing…' : 'Initialized'}
             </p>
           )}
