@@ -448,7 +448,8 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
     if (value === null || value === undefined) return true;
     if (typeof value === 'function') return false;
     if (typeof value === 'symbol') return false;
-    if (typeof value !== 'object') return true;
+    // BigInts can define toJSON, so validate them with the guarded probe below.
+    if (typeof value !== 'object' && typeof value !== 'bigint') return true;
 
     // The outermost probe owns the budget; nested probes (a nested
     // `RequestContext.toJSON()` invoked while this JSON.stringify runs) draw

@@ -40,6 +40,44 @@ describe('RequestContext', () => {
   });
 
   describe('toJSON', () => {
+    it.each([
+      { name: 'zero', value: 0n },
+      { name: 'positive', value: 42n },
+      { name: 'negative', value: -42n },
+      { name: 'large', value: 9007199254740993n },
+      { name: 'nested object', value: { id: 42n } },
+      { name: 'array', value: [42n] },
+      { name: 'boxed', value: Object(42n) },
+    ])('skips non-serializable BigInt values: $name', ({ value }) => {
+      const ctx = new RequestContext();
+      ctx.set('locale', 'zh-CN');
+      ctx.set('databaseId', value);
+
+      expect(ctx.toJSON()).toEqual({ locale: 'zh-CN' });
+      expect(JSON.stringify(ctx)).toBe('{"locale":"zh-CN"}');
+      expect(ctx.get('databaseId')).toBe(value);
+    });
+
+    it('preserves BigInts with a working custom toJSON serializer', () => {
+      const prototype = BigInt.prototype;
+      const original = Object.getOwnPropertyDescriptor(prototype, 'toJSON');
+      try {
+        Object.defineProperty(prototype, 'toJSON', {
+          configurable: true,
+          value(this: bigint) {
+            return this.toString();
+          },
+        });
+        const ctx = new RequestContext();
+        ctx.set('databaseId', 42n);
+        expect(ctx.toJSON()).toEqual({ databaseId: 42n });
+        expect(JSON.stringify(ctx)).toBe('{"databaseId":"42"}');
+      } finally {
+        if (original) Object.defineProperty(prototype, 'toJSON', original);
+        else Reflect.deleteProperty(prototype, 'toJSON');
+      }
+    });
+
     it('should correctly serialize serializable values', () => {
       const ctx = new RequestContext();
       ctx.set('string', 'hello');
