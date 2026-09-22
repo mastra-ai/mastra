@@ -19,9 +19,13 @@
  *      continues with an error placeholder — the raw result never reaches the
  *      stream or the step output (the regular loop rethrows here, so no
  *      engine emits or persists the raw value).
- *   4. A throwing chunk-pipeline processor (processOutputStream) suppresses
- *      the chunk instead of emitting the unprocessed original (fail-closed
- *      counterpart in the emission path).
+ *   4. A throwing chunk-pipeline processor (processOutputStream) does not
+ *      disturb the gated value: the shared ProcessorRunner logs and continues
+ *      with the part as it stood after the processToolResult gate
+ *      (pre-existing policy, identical in both engines) — the emitted chunk
+ *      carries the gated value, never the raw one when a gate is configured.
+ *      Value redaction belongs to processToolResult; processOutputStream is
+ *      stream-view shaping only.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChunkFrom } from '../../../../stream/types';
@@ -60,6 +64,12 @@ const REDACTED_RESULT = { secret: '[redacted]' };
 function mockPubsub() {
   return { publish: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn(), flush: vi.fn() };
 }
+
+// Production always supplies a logger. An undefined logger makes the runner's
+// swallow-catch itself crash (`this.logger.error` TypeErrors), which escapes
+// processPart and lands in onProcessorError — a path processor throws never
+// take in production. The spies also let tests prove a swallow actually fired.
+const noopLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
 
 function makeInitData() {
   return {
@@ -106,7 +116,7 @@ function runToolCallStep() {
   const step = createDurableToolCallStep();
   return (step as any).execute({
     inputData: { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS },
-    mastra: { getLogger: () => undefined },
+    mastra: { getLogger: () => noopLogger },
     suspend: vi.fn(),
     resumeData: undefined,
     requestContext: new Map(),
@@ -207,7 +217,7 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
         messageId: 'msg-1',
         state: { threadId: THREAD_ID, resourceId: RESOURCE_ID, threadExists: true },
       },
-      mastra: { getLogger: () => undefined },
+      mastra: { getLogger: () => noopLogger },
       requestContext: new Map(),
     });
 
@@ -247,12 +257,20 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     expect(JSON.stringify(toolResultChunks)).not.toContain('raw-value');
   });
 
-  it('suppresses the chunk when a chunk-pipeline processor throws (no raw emission)', async () => {
+  it('emits the gated value when a chunk-pipeline processor throws (stream falls back to the processToolResult baseline)', async () => {
     const messageList = seedMessageList();
     setupRegistry(
       {
-        id: 'stream-crasher',
-        name: 'stream-crasher',
+        id: 'gated-stream-crasher',
+        name: 'gated-stream-crasher',
+        // The authoritative value gate: runs before emission, redacts the raw result.
+        processToolResult: async ({ messageList: ml, toolCallId, toolName, args }: any) => {
+          ml.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId, toolName, args, result: REDACTED_RESULT },
+          });
+        },
+        // Stream-view shaping: crashes on the tool-result part.
         processOutputStream: async ({ part }: any) => {
           if (part.type === 'tool-result') {
             throw new Error('stream processor exploded');
@@ -265,13 +283,23 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
 
     const output = await runToolCallStep();
 
-    // The run continues and the result still travels to llm-mapping via the
-    // step output (processToolResult was not involved), but the stream never
-    // sees the unprocessed chunk: it is dropped, not emitted raw.
+    // The value gate ran before emission: the step output (persistence channel)
+    // carries the redacted value.
     expect(output.error).toBeUndefined();
     expect(output.resultBlocked).toBeUndefined();
-    expect(output.result).toEqual(RAW_RESULT);
-    expect(emittedChunksOfType('tool-result')).toHaveLength(0);
+    expect(output.result).toEqual(REDACTED_RESULT);
+
+    // The stream hook threw, but the shared runner logs and continues with the
+    // part as it stood after the processToolResult gate: the chunk is emitted
+    // with the gated value — not raw, not dropped.
+    const toolResultChunks = emittedChunksOfType('tool-result');
+    expect(toolResultChunks).toHaveLength(1);
+    expect(toolResultChunks[0].payload.result).toEqual(REDACTED_RESULT);
+    expect(JSON.stringify(vi.mocked(emitChunkEvent).mock.calls)).not.toContain('raw-value');
     expect(emittedChunksOfType('tripwire')).toHaveLength(0);
+
+    // The throw actually fired and was swallowed by the runner's catch —
+    // guards against this test silently not exercising the crash path.
+    expect(noopLogger.error).toHaveBeenCalled();
   });
 });
