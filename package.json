@@ -61,6 +61,7 @@
     "build:workspaces": "pnpm turbo build --filter \"./workspaces/*\"",
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
     "dev:playground:full": "pnpm install && pnpm setup && pnpm --dir examples/agent install && pnpm --dir examples/agent dev:ui",
+    "factory:dev": "tsx mastracode/web/src/factory-dev/cli.ts",
     "generate:integration": "tsx ./integration-generator/index.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
