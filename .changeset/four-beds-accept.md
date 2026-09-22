@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Chat events now have one shell. `ChatEvent` is exported and owns both presentations through `density`: `row` for a dense transcript line, `card` for a block in a conversation. `ChatSignal`, `ChatNotification` and `ChatSkill` are presets over it, so a system reminder and a state signal are the same component with a different icon and body — not two implementations.
