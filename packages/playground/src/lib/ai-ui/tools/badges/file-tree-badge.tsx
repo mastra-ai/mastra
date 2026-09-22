@@ -137,7 +137,7 @@ export const FileTreeBadge = ({
           <Icon>
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
-          <Badge icon={<FolderTree className="text-(--span-workspace)" size={16} />}>
+          <Badge icon={<FolderTree className="text-span-workspace" size={16} />}>
             List Files <span className="text-foreground ml-1">{path}</span>
             {argsDisplay.length > 0 && <span className="text-muted-foreground ml-1">({argsDisplay.join(', ')})</span>}
           </Badge>

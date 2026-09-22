@@ -15,7 +15,7 @@ export function ChatSkill({ name, arguments: args, instructions, defaultOpen }: 
     <ChatEvent
       label="Skill"
       detail={args ? `${name} ${args}` : name}
-      icon={<BookOpen size={14} strokeWidth={1.75} aria-hidden className="text-(--span-skill)" />}
+      icon={<BookOpen size={14} strokeWidth={1.75} aria-hidden className="text-span-skill" />}
       data-skill-name={name}
       aria-label={`Skill: ${name}`}
       defaultOpen={defaultOpen}

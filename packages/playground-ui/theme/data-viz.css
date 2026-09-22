@@ -51,3 +51,30 @@ html.light {
   --span-skill: var(--green-300);
   --span-scorer: var(--purple-300);
 }
+
+@theme inline {
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+  --color-chart-sequential-1: var(--chart-sequential-1);
+  --color-chart-sequential-2: var(--chart-sequential-2);
+  --color-chart-sequential-3: var(--chart-sequential-3);
+  --color-chart-sequential-4: var(--chart-sequential-4);
+  --color-chart-sequential-5: var(--chart-sequential-5);
+  --color-span-agent: var(--span-agent);
+  --color-span-workflow: var(--span-workflow);
+  --color-span-model: var(--span-model);
+  --color-span-mcp: var(--span-mcp);
+  --color-span-tool: var(--span-tool);
+  --color-span-provider: var(--span-provider);
+  --color-span-memory: var(--span-memory);
+  --color-span-workspace: var(--span-workspace);
+  --color-span-skill: var(--span-skill);
+  --color-span-scorer: var(--span-scorer);
+  --color-span-other: var(--span-other);
+}

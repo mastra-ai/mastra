@@ -22,7 +22,7 @@ const AUDIT_CATEGORY_STYLES: Record<AuditNamespace, AuditCategoryStyle> = {
     strokeClass: 'stroke-info-indicator',
   },
   run: { tone: 'success', label: 'Runs', dotClass: 'bg-success-indicator', strokeClass: 'stroke-success-indicator' },
-  git: { tone: 'orange', label: 'Git', dotClass: 'bg-(--chart-6)', strokeClass: 'stroke-(--chart-6)' },
+  git: { tone: 'orange', label: 'Git', dotClass: 'bg-chart-6', strokeClass: 'stroke-chart-6' },
   agent: { tone: 'info', label: 'Agent', dotClass: 'bg-warning-indicator', strokeClass: 'stroke-warning-indicator' },
   intake: { tone: 'cyan', label: 'Intake', dotClass: 'bg-placeholder', strokeClass: 'stroke-placeholder' },
 };

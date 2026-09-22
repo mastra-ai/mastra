@@ -137,7 +137,7 @@ const ExtractedValuesPanel = ({
     <div className="border-border mt-2 border-t pt-2">
       <button
         onClick={onToggle}
-        className="text-foreground text-meta flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
+        className="text-meta text-foreground flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
       >
         {isExpanded ? <ChevronDown className="size-2.5" /> : <ChevronRight className="size-2.5" />}
         Extractions ({entries.length}){failures.length > 0 ? ` · ${failures.length} failed` : ''}
@@ -146,14 +146,14 @@ const ExtractedValuesPanel = ({
         <div className="mt-1 space-y-2">
           {entries.map(([slug, value]) => (
             <div key={slug} className="border-border bg-fill-subtle rounded border p-2">
-              <div className="text-foreground/70 text-meta tracking-wide uppercase">{slug}</div>
+              <div className="text-meta text-foreground/70 tracking-wide uppercase">{slug}</div>
               {isStructuredExtractedValue(value) ? (
-                <pre className="text-foreground/80 text-caption mt-1 max-h-40 overflow-auto break-words whitespace-pre-wrap">
+                <pre className="text-caption text-foreground/80 mt-1 max-h-40 overflow-auto break-words whitespace-pre-wrap">
                   {formatExtractedValue(value)}
                 </pre>
               ) : (
-                <div className="[&_code]:text-meta [&_code]:bg-fill mt-1 [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5">
-                  <MarkdownRenderer className="text-foreground/80 text-caption">
+                <div className="[&_code]:bg-fill [&_code]:text-meta mt-1 [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5">
+                  <MarkdownRenderer className="text-caption text-foreground/80">
                     {formatExtractedValue(value)}
                   </MarkdownRenderer>
                 </div>
@@ -325,7 +325,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     <>
                       <button
                         onClick={() => setIsObservationsExpanded(!isObservationsExpanded)}
-                        className="text-foreground text-meta flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
+                        className="text-meta text-foreground flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
                       >
                         {isObservationsExpanded ? (
                           <ChevronDown className="size-2.5" />
@@ -347,14 +347,14 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                 <div className="border-border mt-2 border-t pt-2">
                   <button
                     onClick={() => setIsTaskExpanded(!isTaskExpanded)}
-                    className="text-foreground text-meta flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
+                    className="text-meta text-foreground flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
                   >
                     {isTaskExpanded ? <ChevronDown className="size-2.5" /> : <ChevronRight className="size-2.5" />}
                     Current Task
                   </button>
                   {isTaskExpanded && (
-                    <div className="[&_code]:text-meta [&_code]:bg-fill mt-1 [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5">
-                      <MarkdownRenderer className="text-foreground text-caption">{currentTask}</MarkdownRenderer>
+                    <div className="[&_code]:bg-fill [&_code]:text-meta mt-1 [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5">
+                      <MarkdownRenderer className="text-caption text-foreground">{currentTask}</MarkdownRenderer>
                     </div>
                   )}
                 </div>
@@ -363,14 +363,14 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                 <div className="border-border mt-2 border-t pt-2">
                   <button
                     onClick={() => setIsResponseExpanded(!isResponseExpanded)}
-                    className="text-foreground text-meta flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
+                    className="text-meta text-foreground flex items-center gap-1 tracking-wide uppercase transition-opacity hover:opacity-80"
                   >
                     {isResponseExpanded ? <ChevronDown className="size-2.5" /> : <ChevronRight className="size-2.5" />}
                     Suggested Response
                   </button>
                   {isResponseExpanded && (
-                    <div className="[&_code]:text-meta [&_code]:bg-fill mt-1 italic [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5">
-                      <MarkdownRenderer className="text-foreground/80 text-caption">
+                    <div className="[&_code]:bg-fill [&_code]:text-meta mt-1 italic [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5">
+                      <MarkdownRenderer className="text-caption text-foreground/80">
                         {suggestedResponse}
                       </MarkdownRenderer>
                     </div>
@@ -452,7 +452,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
-        <MarkerPill icon={<Loader2 className="text-(--span-memory) animate-spin" />}>
+        <MarkerPill icon={<Loader2 className="text-span-memory animate-spin" />}>
           {bufferingLabel}
           {tokensToBuffer ? ` ~${formatTokens(tokensToBuffer)} tokens` : '...'}
         </MarkerPill>
@@ -488,7 +488,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           <MarkerPill
             expanded={isExpanded}
             onClick={handleToggle}
-            icon={<ObservationIcon className="text-(--span-memory)" />}
+            icon={<ObservationIcon className="text-span-memory" />}
           >
             {bufferedLabel} {tokensBuffered ? formatTokens(tokensBuffered) : '?'}→
             {bufferedTokens ? formatTokens(bufferedTokens) : '?'} tokens
@@ -615,7 +615,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
       data-om-state={state}
       data-om-type={isReflection ? 'reflection' : 'observation'}
     >
-      <div className="text-column bg-fill text-muted-foreground my-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1">
+      <div className="bg-fill text-column text-muted-foreground my-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1">
         <Brain className="size-3" />
         <span>{toolName}</span>
       </div>

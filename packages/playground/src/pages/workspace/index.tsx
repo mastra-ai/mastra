@@ -389,7 +389,7 @@ export default function Workspace() {
                 <Button
                   size="md"
                   className="w-full max-w-md justify-start"
-                  icon={selectedWorkspace?.source === 'agent' ? <Bot className="text-(--span-agent)" /> : <Server />}
+                  icon={selectedWorkspace?.source === 'agent' ? <Bot className="text-span-agent" /> : <Server />}
                 >
                   <span className="flex-1 truncate text-left">
                     {selectedWorkspace?.name ?? 'Select workspace'}
@@ -406,7 +406,7 @@ export default function Workspace() {
                 {workspaces.map(workspace => (
                   <DropdownMenu.RadioItem key={workspace.id} value={workspace.id} className="gap-3">
                     {workspace.source === 'agent' ? (
-                      <Bot className="text-(--span-agent) shrink-0" />
+                      <Bot className="text-span-agent shrink-0" />
                     ) : (
                       <Server className="shrink-0" />
                     )}
@@ -436,7 +436,7 @@ export default function Workspace() {
         {workspaces.length === 1 && selectedWorkspace && (
           <div className="text-muted-foreground text-body flex items-center gap-2">
             {selectedWorkspace.source === 'agent' ? (
-              <Bot className="text-(--span-agent) h-4 w-4" />
+              <Bot className="text-span-agent h-4 w-4" />
             ) : (
               <Server className="h-4 w-4" />
             )}

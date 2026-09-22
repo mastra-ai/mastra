@@ -226,6 +226,21 @@ describe('theme.css export', () => {
     }
   });
 
+  it('generates named chromatic utilities from the shared palette', async () => {
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
+    const css = compiler.build(['text-span-agent', 'bg-chart-1', 'stroke-chart-6', 'fill-span-tool', 'bg-purple-300']);
+    for (const [utility, property, token] of [
+      ['text-span-agent', 'color', 'span-agent'],
+      ['bg-chart-1', 'background-color', 'chart-1'],
+      ['stroke-chart-6', 'stroke', 'chart-6'],
+      ['fill-span-tool', 'fill', 'span-tool'],
+      ['bg-purple-300', 'background-color', 'purple-300'],
+    ]) {
+      expect(css).toContain(`.${utility}`);
+      expect(css).toContain(`${property}: var(--${token})`);
+    }
+  });
+
   it('overrides the green palette the native v4 way (initial + remap)', () => {
     expect(themeCss).toContain('--color-green-*: initial;');
     expect(themeCss).toContain('--color-green-500: var(--green-500);');
