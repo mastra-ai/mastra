@@ -52,10 +52,7 @@ export async function loadEnvironmentValue(file: string, key: string): Promise<s
   }
 }
 
-export async function saveEnvironment(
-  file: string,
-  values: Record<string, string | undefined>,
-): Promise<void> {
+export async function saveEnvironment(file: string, values: Record<string, string | undefined>): Promise<void> {
   const existing = await fs.readFile(file, 'utf8').catch(error => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
     throw error;

@@ -102,7 +102,8 @@ async function configure(): Promise<FactoryDevSettings> {
   const projects = await apiJson<{ projects: Project[] }>(`${MASTRA_PLATFORM_API_URL}/v1/projects`, token, orgId).then(
     result => result.projects,
   );
-  if (projects.length === 0) throw new Error('The selected organization has no projects. Create one in Mastra Cloud first.');
+  if (projects.length === 0)
+    throw new Error('The selected organization has no projects. Create one in Mastra Cloud first.');
   const projectId =
     projects.length === 1
       ? projects[0]!.id
@@ -263,7 +264,17 @@ async function run() {
   });
   const dev = await x(
     'pnpm',
-    ['turbo', 'run', 'dev', 'dev:api', '--filter', './mastracode/factory-ui', '--filter', './packages/playground-ui', '--env-mode=loose'],
+    [
+      'turbo',
+      'run',
+      'dev',
+      'dev:api',
+      '--filter',
+      './mastracode/factory-ui',
+      '--filter',
+      './packages/playground-ui',
+      '--env-mode=loose',
+    ],
     { nodeOptions: { cwd: root, stdio: 'inherit', env } },
   );
   process.exit(dev.exitCode ?? 1);
