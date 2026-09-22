@@ -6,13 +6,13 @@ import { createGlobalPatchScope } from './global-patches.js';
 import type { McE2eScenario } from './types.js';
 
 /**
- * Gemini is reachable from an API key before the wizard starts, so it heads the
- * OM list; the Anthropic login must still win the preselection.
+ * Gemini is reachable from an API key before the wizard starts, but the main
+ * Anthropic model selected during login must drive both automatic OM roles.
  */
 export const onboardingOmFollowsLoginScenario = {
   name: 'onboarding-om-follows-login',
-  description: 'Preselects the OM pack of the provider signed in during onboarding, not the first reachable one.',
-  testName: 'preselects the OM pack matching the provider signed in during setup',
+  description: 'Leaves OM roles on auto so they follow the main provider selected during onboarding.',
+  testName: 'keeps OM roles automatic after selecting the main provider during setup',
   prepare({ appDataDir, projectDir }) {
     rmSync(join(appDataDir, 'settings.json'), { force: true });
     rmSync(join(appDataDir, 'auth.json'), { force: true });
@@ -62,11 +62,6 @@ export const onboardingOmFollowsLoginScenario = {
     await runtime.waitForScreenText(/Anthropic\s+All Anthropic models via Max subscription/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Observational Memory/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Gemini Flash\s+Via Google API key/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Claude Haiku\s+Via Max subscription/i, terminal, 8_000);
-    terminal.write('\r');
-
     await runtime.waitForScreenText(/Tool Approval/i, terminal, 8_000);
     terminal.write('\r');
 
@@ -74,15 +69,15 @@ export const onboardingOmFollowsLoginScenario = {
 
     terminal.submit('/memory');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Observer model\s+claude-haiku-4-5/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Reflector model\s+claude-haiku-4-5/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observer model\s+Auto \(claude-haiku-4-5\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Reflector model\s+Auto \(claude-haiku-4-5\)/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); console.log("ONBOARDING_OM_PACK="+s.onboarding.omPackId+":"+s.models.activeOmPackId);'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); console.log("ONBOARDING_OM_AUTO="+(s.onboarding.omPackId||"none")+":"+(s.models.activeOmPackId||"none")+":"+(s.models.observerModelSelection||"auto")+":"+(s.models.reflectorModelSelection||"auto"));'`,
     );
-    await runtime.waitForScreenText(/ONBOARDING_OM_PACK=anthropic:anthropic/i, terminal, 8_000);
+    await runtime.waitForScreenText(/ONBOARDING_OM_AUTO=none:none:auto:auto/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

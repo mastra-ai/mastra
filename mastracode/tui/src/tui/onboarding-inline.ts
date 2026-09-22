@@ -5,8 +5,7 @@
  *  1. Welcome
  *  2. Auth / Login prompt
  *  3. Mode pack selection (build / plan / fast model preset)
- *  4. OM pack selection (observational memory model)
- *  5. YOLO mode toggle
+ *  4. YOLO mode toggle
  *
  * The component renders as a settings overlay. On completion it fires
  * `onComplete` with the collected choices.
@@ -14,7 +13,7 @@
 
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
-import type { ModePack, OMPack } from '@mastra/code-sdk/onboarding/packs';
+import type { ModePack } from '@mastra/code-sdk/onboarding/packs';
 import chalk from 'chalk';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { BOX_INDENT, theme, getSelectListTheme, mastra } from './theme.js';
@@ -25,7 +24,6 @@ import { BOX_INDENT, theme, getSelectListTheme, mastra } from './theme.js';
 
 export interface OnboardingResult {
   modePack: ModePack;
-  omPack: OMPack;
   yolo: boolean;
   /** True if the user chose to log in (auth flow handled externally). */
   loginRequested: boolean;
@@ -35,7 +33,6 @@ export interface OnboardingResult {
 /** Previously saved selections to pre-populate when re-running /setup. */
 export interface PreviousSetupChoices {
   modePackId: string | null;
-  omPackId: string | null;
   yolo: boolean | null;
 }
 
@@ -45,10 +42,6 @@ export interface OnboardingOptions {
   authProviders: Array<{ label: string; value: string; loggedIn: boolean }>;
   /** Available mode packs (pre-filtered by provider access). */
   modePacks: ModePack[];
-  /** Available OM packs (pre-filtered by provider access). */
-  omPacks: OMPack[];
-  /** Preferred OM pack for first-run setup, usually derived from the connected provider. */
-  preferredOmPackId?: string;
   /** Whether the user has any provider access (API key or OAuth) — even for providers without a built-in pack. */
   hasProviderAccess: boolean;
   /** Previously saved choices — used to highlight current selections when re-running. */
@@ -67,7 +60,7 @@ export interface OnboardingOptions {
 // Steps
 // ---------------------------------------------------------------------------
 
-type StepId = 'welcome' | 'auth' | 'modePack' | 'omPack' | 'yolo' | 'done';
+type StepId = 'welcome' | 'auth' | 'modePack' | 'yolo' | 'done';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -88,7 +81,6 @@ export class OnboardingInlineComponent extends Box implements Focusable {
   private loginRequested = false;
   private loginProvider?: string;
   private selectedModePack!: ModePack;
-  private selectedOmPack!: OMPack;
   private selectedYolo = true;
 
   // Focusable
@@ -110,16 +102,6 @@ export class OnboardingInlineComponent extends Box implements Focusable {
       ? options.modePacks.find(p => p.id === options.previous!.modePackId)
       : undefined;
     this.selectedModePack = prevModePack ?? options.modePacks[0]!;
-
-    const prevOmPack = options.previous?.omPackId
-      ? options.omPacks.find(p => p.id === options.previous!.omPackId)
-      : undefined;
-    const preferredOmPack = options.preferredOmPackId
-      ? options.omPacks.find(p => p.id === options.preferredOmPackId)
-      : undefined;
-    this.selectedOmPack = prevOmPack ??
-      preferredOmPack ??
-      options.omPacks[0] ?? { id: 'none', name: 'None available', description: '', modelId: '' };
 
     if (options.previous?.yolo != null) {
       this.selectedYolo = options.previous.yolo;
@@ -145,22 +127,6 @@ export class OnboardingInlineComponent extends Box implements Focusable {
     this.options.modePacks = packs;
     if (!this.selectedModePack || !packs.find(p => p.id === this.selectedModePack.id)) {
       this.selectedModePack = packs[0]!;
-    }
-  }
-
-  /** Refresh the available OM packs (e.g. after a login grants new provider access). */
-  updateOmPacks(packs: OMPack[], preferredOmPackId?: string): void {
-    this.options.omPacks = packs;
-    if (!this.options.previous?.omPackId && preferredOmPackId) {
-      const preferred = packs.find(p => p.id === preferredOmPackId);
-      if (preferred) {
-        this.selectedOmPack = preferred;
-        this.options.preferredOmPackId = preferred.id;
-        return;
-      }
-    }
-    if (!this.selectedOmPack || !packs.find(p => p.id === this.selectedOmPack.id)) {
-      this.selectedOmPack = packs[0]!;
     }
   }
 
@@ -190,8 +156,6 @@ export class OnboardingInlineComponent extends Box implements Focusable {
         return this.renderAuth();
       case 'modePack':
         return this.renderModePack();
-      case 'omPack':
-        return this.renderOmPack();
       case 'yolo':
         return this.renderYolo();
       case 'done':
@@ -351,14 +315,13 @@ export class OnboardingInlineComponent extends Box implements Focusable {
         this.runCustomPackFlow();
       } else {
         this.selectedModePack = pack;
-        this.preferMatchingOmPack(pack.id);
         this.collapseStep(`Model pack → ${theme.bold(this.selectedModePack.name)}`);
-        this.renderStep('omPack');
+        this.renderStep('yolo');
       }
     };
     this.selectList.onCancel = () => {
       this.collapseStep(`Model pack → ${theme.bold(this.selectedModePack.name)} (default)`);
-      this.renderStep('omPack');
+      this.renderStep('yolo');
     };
     this.selectList.onSelectionChange = (item: SelectItem) => {
       this.updateModePackDetail(packs, item.value);
@@ -435,7 +398,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
       const fallback = this.options.modePacks.find(p => p.id !== 'custom') ?? this.options.modePacks[0]!;
       this.selectedModePack = fallback;
       this.collapseStep(`Model pack → ${theme.bold(this.selectedModePack.name)} (cancelled custom)`);
-      this.renderStep('omPack');
+      this.renderStep('yolo');
       this.tui.requestRender();
       return;
     }
@@ -459,7 +422,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
         const fallback = this.options.modePacks.find(p => p.id !== 'custom') ?? this.options.modePacks[0]!;
         this.selectedModePack = fallback;
         this.collapseStep(`Model pack → ${theme.bold(this.selectedModePack.name)} (cancelled custom)`);
-        this.renderStep('omPack');
+        this.renderStep('yolo');
         this.tui.requestRender();
         return;
       }
@@ -480,88 +443,6 @@ export class OnboardingInlineComponent extends Box implements Focusable {
         `${chalk.hex(mastra.purple)('build')} ${models.build}  ` +
         `${chalk.hex(mastra.green)('fast')} ${models.fast}`,
     );
-    this.renderStep('omPack');
-    this.tui.requestRender();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Step: OM pack
-  // ---------------------------------------------------------------------------
-
-  private preferMatchingOmPack(providerId: string): void {
-    if (this.options.previous?.omPackId) return;
-    const matchingPack = this.options.omPacks.find(pack => pack.id === providerId);
-    if (matchingPack) this.selectedOmPack = matchingPack;
-  }
-
-  private renderOmPack(): void {
-    const omPacks = this.options.omPacks;
-
-    // If no OM packs at all (unlikely — would mean zero supported providers),
-    // skip to next step
-    if (omPacks.length === 0) {
-      this.renderStep('yolo');
-      return;
-    }
-
-    const box = this.makeBox();
-    box.addChild(new Text(theme.bold(theme.fg('accent', '🧠 Observational Memory')), 0, 0));
-    box.addChild(new Spacer(1));
-    box.addChild(new Text(theme.fg('text', 'Choose the model for observational memory:'), 0, 0));
-    box.addChild(new Text(theme.fg('dim', 'https://mastra.ai/docs/memory/observational-memory'), 0, 0));
-    box.addChild(new Spacer(1));
-
-    const prevOmId = this.options.previous?.omPackId ?? null;
-    const items: SelectItem[] = omPacks.map(p => ({
-      value: p.id,
-      label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === prevOmId ? theme.fg('dim', ' (current)') : ''}`,
-    }));
-
-    this.selectList = new SelectList(items, items.length, getSelectListTheme());
-
-    // Pre-select the previous choice, or the pack matching the connected provider
-    const selectedOmId = prevOmId ?? this.selectedOmPack?.id ?? null;
-    const selectedOmIdx = selectedOmId ? omPacks.findIndex(p => p.id === selectedOmId) : -1;
-    if (selectedOmIdx > 0) this.selectList.setSelectedIndex(selectedOmIdx);
-
-    this.selectList.onSelect = (item: SelectItem) => {
-      const pack = omPacks.find(p => p.id === item.value) ?? omPacks[0]!;
-      if (pack.id === 'custom') {
-        this.runCustomOmFlow();
-      } else {
-        this.selectedOmPack = pack;
-        this.collapseStep(`Observational memory → ${theme.bold(this.selectedOmPack.name)}`);
-        this.renderStep('yolo');
-      }
-    };
-    this.selectList.onCancel = () => {
-      this.collapseStep(`Observational memory → ${theme.bold(this.selectedOmPack.name)} (default)`);
-      this.renderStep('yolo');
-    };
-
-    box.addChild(this.selectList);
-    box.addChild(new Spacer(1));
-    box.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc use default'), 0, 0));
-  }
-
-  private async runCustomOmFlow(): Promise<void> {
-    this.selectList = undefined;
-    this.collapseStep(`Observational memory → ${theme.bold('Custom')}`);
-
-    const modelId = await this.options.onSelectModel('Select model for observational memory');
-    if (modelId) {
-      this.selectedOmPack = { id: 'custom', name: 'Custom', description: 'User-selected model', modelId };
-      this.collapseStep(`Observational memory → ${theme.bold('Custom')}  ${modelId}`);
-    } else {
-      // Cancelled — fall back to first non-custom pack
-      const fallback = this.options.omPacks.find(p => p.id !== 'custom');
-      if (fallback) {
-        this.selectedOmPack = fallback;
-        this.collapseStep(`Observational memory → ${theme.bold(fallback.name)} (cancelled custom)`);
-      } else {
-        this.collapseStep(`Observational memory → ${theme.bold('Custom')} (cancelled)`);
-      }
-    }
     this.renderStep('yolo');
     this.tui.requestRender();
   }
@@ -627,7 +508,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
       `  ${chalk.hex(mastra.blue)('plan')}  → ${this.selectedModePack.models.plan}`,
       `  ${chalk.hex(mastra.purple)('build')} → ${this.selectedModePack.models.build}`,
       `  ${chalk.hex(mastra.green)('fast')}  → ${this.selectedModePack.models.fast}`,
-      `Observational memory: ${theme.bold(this.selectedOmPack.name)}`,
+      `Observational memory: ${theme.bold('Auto')}`,
       `YOLO mode: ${theme.bold(this.selectedYolo ? 'enabled' : 'disabled')}`,
     ];
     for (const line of lines) {
@@ -638,7 +519,6 @@ export class OnboardingInlineComponent extends Box implements Focusable {
 
     this.options.onComplete({
       modePack: this.selectedModePack,
-      omPack: this.selectedOmPack,
       yolo: this.selectedYolo,
       loginRequested: this.loginRequested,
       loginProvider: this.loginProvider,
