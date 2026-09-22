@@ -210,23 +210,33 @@ function isArrayInputField(inputSchemaText: string, field: string): boolean {
 function execReadsConnectionCredentials(execInitializer: Node): boolean {
   const isGetConnectionCall = (node: Node): boolean =>
     /^\(*\s*(?:await\s+)?nango\s*\.\s*getConnection\s*\(\s*\)\s*\)*$/.test(node.getText());
-  const connectionBindings = new Set<string>();
+  const connectionSymbols = new Set<unknown>();
   for (const declaration of execInitializer.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
     const initializer = declaration.getInitializer();
     if (!initializer || !isGetConnectionCall(initializer)) continue;
     const nameNode = declaration.getNameNode();
     if (Node.isIdentifier(nameNode)) {
-      connectionBindings.add(nameNode.getText());
-    } else if (/\bcredentials\b/.test(nameNode.getText())) {
-      // `const { credentials } = await nango.getConnection();`
-      return true;
+      const symbol = nameNode.getSymbol();
+      if (symbol) connectionSymbols.add(symbol);
+    } else if (Node.isObjectBindingPattern(nameNode)) {
+      // `const { credentials } = await nango.getConnection();` (or a rename
+      // such as `{ credentials: creds }` — the property name is what counts).
+      for (const element of nameNode.getElements()) {
+        const propertyName = element.getPropertyNameNode()?.getText() ?? element.getName();
+        if (propertyName === 'credentials') return true;
+      }
     }
   }
   for (const access of execInitializer.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
     if (access.getName() !== 'credentials') continue;
     const target = access.getExpression();
     if (isGetConnectionCall(target)) return true;
-    if (Node.isIdentifier(target) && connectionBindings.has(target.getText())) return true;
+    // Resolve the identifier to its declaration so a shadowing binding with
+    // the same name (e.g. a callback parameter) never counts as a read.
+    if (Node.isIdentifier(target)) {
+      const symbol = target.getSymbol();
+      if (symbol && connectionSymbols.has(symbol)) return true;
+    }
   }
   return false;
 }
@@ -253,20 +263,67 @@ function simplifyScalarQuerySerialization(execBody: string, inputSchemaText: str
  * the clone, so the permissiveness survives schema reuse.
  */
 function widenResponseEnums(statements: string[], inputSchemaName: string): string[] {
-  const declared = statements.map(statement => statement.match(/^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)/)?.[1]);
-  const references = (statement: string, name: string) => new RegExp(`\\b${escapeRegExp(name)}\\b`).test(statement);
   const widenLiterals = (statement: string) =>
     statement.replace(/z\.enum\((\[[^\]]*\])\)(?!\.or\()/g, 'z.enum($1).or(z.string())');
+
+  // Re-parse the vendored statements so declarations and their references
+  // resolve as TypeScript symbols; text matching would confuse identifiers
+  // that merely share a name (or appear inside string literals).
+  const scratch = new Project({ useInMemoryFileSystem: true }).createSourceFile('scratch.ts', statements.join('\n'));
+  const topLevel = scratch.getStatements();
+  const declared: (string | undefined)[] = topLevel.map(statement => {
+    if (!Node.isVariableStatement(statement)) return undefined;
+    const nameNode = statement.getDeclarations()[0]?.getNameNode();
+    return nameNode !== undefined && Node.isIdentifier(nameNode) ? nameNode.getText() : undefined;
+  });
+  const statementIndexOf = (node: Node): number =>
+    topLevel.findIndex(statement => statement.getStart() <= node.getStart() && node.getEnd() <= statement.getEnd());
+
+  // For each declared schema, resolve every identifier that references it and
+  // record which top-level statement the reference sits in, plus its exact
+  // span so a rename never touches lookalike text.
+  interface SchemaReference {
+    name: string;
+    start: number;
+    end: number;
+  }
+  const referencesByStatement: SchemaReference[][] = topLevel.map(() => []);
+  const referencedNamesByStatement: Set<string>[] = topLevel.map(() => new Set());
+  topLevel.forEach((statement, index) => {
+    const name = declared[index];
+    if (!name || !Node.isVariableStatement(statement)) return;
+    const nameNode = statement.getDeclarations()[0]!.getNameNode();
+    if (!Node.isIdentifier(nameNode)) return;
+    for (const reference of nameNode.findReferencesAsNodes()) {
+      if (reference === nameNode) continue;
+      const referenceIndex = statementIndexOf(reference);
+      if (referenceIndex < 0) continue;
+      const statementStart = topLevel[referenceIndex]!.getStart();
+      referencesByStatement[referenceIndex]!.push({
+        name,
+        start: reference.getStart() - statementStart,
+        end: reference.getEnd() - statementStart,
+      });
+      referencedNamesByStatement[referenceIndex]!.add(name);
+    }
+  });
+  const declarationNameSpan = (index: number): SchemaReference | undefined => {
+    const statement = topLevel[index]!;
+    const name = declared[index];
+    if (!name || !Node.isVariableStatement(statement)) return undefined;
+    const nameNode = statement.getDeclarations()[0]!.getNameNode();
+    return { name, start: nameNode.getStart() - statement.getStart(), end: nameNode.getEnd() - statement.getStart() };
+  };
 
   const inputSide = new Set<string>([inputSchemaName]);
   let changed = true;
   while (changed) {
     changed = false;
-    statements.forEach((statement, index) => {
+    topLevel.forEach((_, index) => {
       const name = declared[index];
       if (!name || !inputSide.has(name)) return;
-      for (const other of declared) {
-        if (other && !inputSide.has(other) && references(statement, other)) {
+      for (const other of referencedNamesByStatement[index]!) {
+        if (!inputSide.has(other)) {
           inputSide.add(other);
           changed = true;
         }
@@ -280,11 +337,12 @@ function widenResponseEnums(statements: string[], inputSchemaName: string): stri
   changed = true;
   while (changed) {
     changed = false;
-    statements.forEach((statement, index) => {
+    topLevel.forEach((statement, index) => {
       const name = declared[index];
       if (!name || !inputSide.has(name) || enumBearing.has(name)) return;
+      const text = statement.getText();
       const carriesEnum =
-        widenLiterals(statement) !== statement || [...enumBearing].some(other => references(statement, other));
+        widenLiterals(text) !== text || [...enumBearing].some(other => referencedNamesByStatement[index]!.has(other));
       if (carriesEnum) {
         enumBearing.add(name);
         changed = true;
@@ -298,34 +356,41 @@ function widenResponseEnums(statements: string[], inputSchemaName: string): stri
   const visit = (name: string) => {
     if (needsClone.has(name)) return;
     needsClone.add(name);
-    const statement = statements[declared.indexOf(name)];
-    if (statement === undefined) return;
+    const index = declared.indexOf(name);
+    if (index < 0) return;
     for (const other of enumBearing) {
-      if (other !== name && references(statement, other)) visit(other);
+      if (other !== name && referencedNamesByStatement[index]!.has(other)) visit(other);
     }
   };
-  statements.forEach((statement, index) => {
+  topLevel.forEach((_, index) => {
     const name = declared[index];
     if (name && inputSide.has(name)) return;
     for (const candidate of enumBearing) {
-      if (references(statement, candidate)) visit(candidate);
+      if (referencedNamesByStatement[index]!.has(candidate)) visit(candidate);
     }
   });
 
-  const redirectToClones = (statement: string) => {
-    let result = statement;
-    for (const name of needsClone) {
-      result = result.replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, 'g'), `${name}Widened`);
+  // Rewrite recorded identifier spans back-to-front so earlier offsets stay
+  // valid; only resolved references are touched, never coincidental text.
+  const redirectToClones = (index: number, extraSpans: SchemaReference[] = []) => {
+    const spans = [...referencesByStatement[index]!, ...extraSpans]
+      .filter(span => needsClone.has(span.name))
+      .sort((a, b) => b.start - a.start);
+    let result = topLevel[index]!.getText();
+    for (const span of spans) {
+      result = `${result.slice(0, span.start)}${span.name}Widened${result.slice(span.end)}`;
     }
     return result;
   };
 
-  return statements.flatMap((statement, index) => {
+  return topLevel.flatMap((statement, index) => {
     const name = declared[index];
     if (name && inputSide.has(name)) {
-      return needsClone.has(name) ? [statement, widenLiterals(redirectToClones(statement))] : [statement];
+      if (!needsClone.has(name)) return [statement.getText()];
+      const nameSpan = declarationNameSpan(index);
+      return [statement.getText(), widenLiterals(redirectToClones(index, nameSpan ? [nameSpan] : []))];
     }
-    return [widenLiterals(redirectToClones(statement))];
+    return [widenLiterals(redirectToClones(index))];
   });
 }
 
@@ -486,7 +551,10 @@ function extractAction(
     inputSchemaText,
   );
   if (readsCredentials) {
-    execBody = execBody.replace(/\bplatformProxy\.getConnection\(\)/g, 'platformProxy.getConnectionWithCredentials()');
+    execBody = execBody.replace(
+      /\bplatformProxy\s*\.\s*getConnection\s*\(\s*\)/g,
+      'platformProxy.getConnectionWithCredentials()',
+    );
   }
 
   const moduleStatements = widenResponseEnums(

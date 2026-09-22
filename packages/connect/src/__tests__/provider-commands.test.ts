@@ -203,6 +203,32 @@ const action = createAction({
 export default action;
 `;
 
+const shadowedCredentialsTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ accounts: z.array(z.object({ credentials: z.string() })) });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Read credentials off a shadowing callback parameter, not the connection.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const connection = await nango.getConnection();
+    const tokens = input.accounts.map(connection => connection.credentials);
+    const response = await nango.post({
+      endpoint: '/echo',
+      data: { tokens, region: connection.connection_config.region },
+    });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
 const noProxyCallTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -244,6 +270,7 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'inline-context-helper.ts'), inlineContextHelperTemplate);
         writeFileSync(resolve(actionDir, 'connection-credentials.ts'), connectionCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'input-credentials.ts'), inputCredentialsTemplate);
+        writeFileSync(resolve(actionDir, 'shadowed-credentials.ts'), shadowedCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-response-type.ts'), unsupportedResponseTypeTemplate);
       }
@@ -425,7 +452,9 @@ export default action;
     );
     expect(originalDecl).toMatch(/z\.enum\(\[["']open["'], ["']closed["']\]\)/);
     expect(originalDecl).not.toContain('.or(z.string())');
-    const cloneDecl = generatedTool.slice(generatedTool.indexOf('const StatusSchemaWidened'));
+    const cloneStart = generatedTool.indexOf('const StatusSchemaWidened');
+    const cloneEnd = generatedTool.indexOf('const InputSchema', cloneStart);
+    const cloneDecl = generatedTool.slice(cloneStart, cloneEnd);
     expect(cloneDecl).toContain('.or(z.string())');
     expect(generatedTool).toContain('item: StatusSchema ');
     expect(generatedTool).toContain('StatusSchemaWidened.extend(');
@@ -448,7 +477,7 @@ export default action;
     expect(listProviders({ installedOnly: false, search: 'custom' })).toEqual([
       'first-provider (1 action templates) [installed as custom]',
     ]);
-    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (8 action templates)']);
+    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (9 action templates)']);
   });
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
@@ -495,6 +524,14 @@ export default action;
     );
     expect(inputCredentialsTool).toContain('await platformProxy.getConnection()');
     expect(inputCredentialsTool).not.toContain('getConnectionWithCredentials');
+    // A shadowing callback parameter named like the connection binding must
+    // not count as a credentials read.
+    const shadowedCredentialsTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/shadowed-credentials.ts'),
+      'utf8',
+    );
+    expect(shadowedCredentialsTool).toContain('await platformProxy.getConnection()');
+    expect(shadowedCredentialsTool).not.toContain('getConnectionWithCredentials');
     expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-no-proxy.ts'))).toBe(false);
     expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-response-type.ts'))).toBe(
       false,
@@ -503,7 +540,7 @@ export default action;
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(6);
+    expect(manifest.toolCount).toBe(7);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
@@ -566,7 +603,7 @@ export default action;
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (6 tools, 2 skipped)',
+      'other <- second-provider (7 tools, 2 skipped)',
     ]);
   });
 
