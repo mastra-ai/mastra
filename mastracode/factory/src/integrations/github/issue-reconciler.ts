@@ -4,6 +4,7 @@ import {
   githubRulesOptions,
   reconcilableIssueNumber,
   reconciledIssueClosedEvent,
+  reconciledIssueRelabeledEvent,
   RECONCILE_ERROR_SAMPLE_LIMIT,
   sameStrings,
   sweepTrustLookup,
@@ -20,6 +21,8 @@ export interface GithubIssueReconcileSummary {
   updated: number;
   /** Closed issues replayed through the rules ingress. */
   closed: number;
+  /** Open issues whose changed labels were replayed through the rules ingress. */
+  relabeled: number;
   /** Errors encountered during the sweep. */
   failed: number;
   /** Error samples with context. */
@@ -39,6 +42,7 @@ export function createGithubIssueReconciler(
       checked: 0,
       updated: 0,
       closed: 0,
+      relabeled: 0,
       failed: 0,
       errors: [],
     };
@@ -121,6 +125,16 @@ export function createGithubIssueReconciler(
               } catch (error) {
                 recordFailure(repository, error, issueNumber);
               }
+            }
+
+            // Label drift decides where the card belongs, and the rule that owns
+            // that decision has to run again — mirrored from the `labeled` /
+            // `unlabeled` webhook, replayed here so a label Factory never saw a
+            // delivery for still re-places the card. Replayed before the
+            // metadata patch, so the ingress sees the drift it acts on.
+            if (state.labels !== undefined && items.some(item => !sameStrings(item.metadata?.labels, state.labels))) {
+              await rules.ingest(reconciledIssueRelabeledEvent(repository, issueNumber, state));
+              summary.relabeled += 1;
             }
 
             for (const item of items) {

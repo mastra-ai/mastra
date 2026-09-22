@@ -12,6 +12,7 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { moveCardToBoard } from '../boards/relocate.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -1127,6 +1128,10 @@ export class FactoryDecisionDispatcher {
       source: externalSourceForDecision(decision),
     });
     if (existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey) {
+      // Filing the card *was* the placement, so a retry of the same decision has
+      // nothing left to apply — and must not drag a card that has since moved
+      // back down to the stage this decision filed it at.
+      if (decision.skipRules === true) return;
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
           record.orgId,
@@ -1140,6 +1145,12 @@ export class FactoryDecisionDispatcher {
     const definition = this.#boards.get(decision.board);
     if (!definition) throw new Error('Factory decision target board is not installed.');
     const initialPhase = definition.initialPhase;
+    // `skipRules` files the card at the stage the decision names, as its first
+    // entry, and runs none of the board's phase rules. Without it the card
+    // enters through the board's initial phase and transitions from there, so
+    // arrival and destination-entry rules both run.
+    const skipRules = decision.skipRules === true;
+    const entryStage = skipRules ? decision.stage : initialPhase;
     const parentWorkItemId =
       record.workItemId ??
       (await this.#resolveLinkedWorkItemParentId?.({
@@ -1160,7 +1171,7 @@ export class FactoryDecisionDispatcher {
           parentWorkItemId,
           title: decision.title,
           board: decision.board,
-          stages: [initialPhase],
+          stages: [entryStage],
           sessions: {},
           metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
         },
@@ -1198,7 +1209,10 @@ export class FactoryDecisionDispatcher {
       });
       if (item) result = { ...result, item };
     }
-    if (!result.created) {
+    // A `skipRules` decision is a placement and nothing else: the backfill would
+    // otherwise walk the arrival decision's facts back onto an existing card,
+    // restamping trust the sweep deliberately left unanswered.
+    if (!result.created && !skipRules) {
       // Backfill source facts (e.g. sourceCreatedAt) that older cards were filed
       // without. Fill-only: never overwrite, and never adopt the card as
       // materialized by this decision.
@@ -1216,6 +1230,23 @@ export class FactoryDecisionDispatcher {
         });
         if (filled) result = { ...result, item: filled.item };
       }
+    }
+    if (skipRules) {
+      // Creation already filed the card at `stage`. An existing card — a
+      // reconcile pass reacting to a label change, say — is placed there the
+      // same way, through the relocation the label routes use, so no phase rule
+      // runs for it and no transition is recorded.
+      if (!result.created) {
+        await moveCardToBoard({
+          workItems: this.#storage,
+          boardRegistry: this.#boards,
+          userId: 'factory-rule-dispatcher',
+          item: result.item,
+          targetBoard: decision.board,
+          targetStage: decision.stage,
+        });
+      }
+      return;
     }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))

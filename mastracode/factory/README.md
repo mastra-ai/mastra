@@ -406,6 +406,37 @@ Board definitions own lifecycle, transition-policy, phase-semantics, and tool-re
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
+**Placement, not transition.** An `upsertLinkedWorkItem` decision normally names a destination: the card is materialized on the board's initial phase, the arrival rule runs, and a governed transition moves it to `stage` where that phase's entry rule runs. Set `skipRules: true` to file it on `stage` directly instead, as its first entry, with none of the board's phase rules run for it — no arrival, no destination entry, no transition row. The card is filed and left parked for a person:
+
+```typescript
+new PlatformGithubIntegration({
+  rules: {
+    // An issue whose triage is already recorded skips the triage phase
+    // entirely and waits on Planning.
+    issueOpened: context => {
+      const decision = defaultGithubRules.issueOpened(context);
+      if (!decision || !context.issue) return decision;
+      const labels = context.issue.labels ?? [];
+      if (labels.some(label => label.toLowerCase() === 'status: auto-triaged')) {
+        return { ...decision, stage: 'planning', skipRules: true };
+      }
+      // A reconcile replay carries the existing card: a card that has already
+      // left the landing phase is re-placed, not landed again.
+      const moved = context.item !== undefined && !context.item.stages.includes(decision.stage);
+      return moved ? { ...decision, stage: 'triage', skipRules: true } : decision;
+    },
+  },
+});
+```
+
+Label-driven placement is a relocation, not a transition: `stage` must be a phase of `board`, and the card is written there in one step. An existing card the same decision reaches — a reconcile pass reacting to a label change, or a retry after a lost acknowledgement — is placed the same way, so the decision means the same thing whether the card is being created or already exists. The relocation guards apply: a terminal card, a card with a session attached to its current phase's role, and a card that changed under the dispatcher (revision conflict) all stay put. A retry whose materialization key already matches its card is a no-op, so a card that has since moved on is not dragged back to the stage this decision filed it at.
+
+A decision _without_ the flag that reaches a card which already exists keeps the governed path, so once a card has left the board's initial phase the decision cannot move it: a destination transition starts at the initial phase, and the initial phase is deliberately never re-entered. A handler that answers for an existing card — the reconcile replay below — therefore sets `skipRules` itself when the labels, not an arrival, are what decides where the card belongs.
+
+`AUTO_TRIAGED_LABEL` is exported from `@mastra/factory/rules/types` for the label the triage skill applies.
+
+Reconciliation re-applies label-derived placement. The issue sweep replays an open issue through the rules ingress whenever the issue's live labels differ from the card's stored ones — the `labeled`/`unlabeled` webhook may never have arrived (Factory was down, or the label was applied by something else). The deployment rule decides placement, exactly as at arrival, and the context carries the existing card on `item`, so one handler answers for both: a card still resting on the board's initial phase is landed the normal way, and a card that has already left it is re-placed with `skipRules` and no phase rule run. Cards parked by hand are untouched while an issue's labels are unchanged.
+
 ### GitLab intake and source control
 
 Direct deployments can use either a GitLab Personal Access Token or Group Access Token. Both authenticate the GitLab API and Git-over-HTTPS in the same way; the difference is reach: a personal token follows the user's accessible projects, while a group token is limited to its group and subgroups. Configure the token with `api` and `write_repository` scopes so Factory can manage issues and merge requests, clone repositories, and push session branches.

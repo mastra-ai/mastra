@@ -510,6 +510,18 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   title: string;
   url: string | null;
   stage: FactoryRuleStage;
+  /**
+   * File the card at `stage` as its first entry and run none of the board's
+   * phase rules for it — no arrival, no destination entry. The card is filed
+   * (or, if it already exists, moved) and left parked for a person; nothing is
+   * started for it. For external records that arrive already past the board's
+   * first step: a GitHub issue whose triage is already recorded, for instance.
+   *
+   * Placement is the whole decision. An existing card it reaches is moved to
+   * that stage through the same relocation the label routes use, and its
+   * metadata is left alone.
+   */
+  skipRules?: boolean;
   metadata?: Record<string, FactoryRuleJsonValue>;
 }
 

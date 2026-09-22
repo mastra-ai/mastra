@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
@@ -961,6 +963,48 @@ export function reconciledIssueClosedEvent(
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
         assignees: (state.assignees ?? []).map(login => ({ login })),
+      },
+    },
+  };
+}
+
+/**
+ * The label-drift replay: an open issue whose labels changed without a
+ * `labeled`/`unlabeled` webhook ever arriving (Factory was down, the delivery
+ * was lost, or the label was applied by something other than a delivery the
+ * webhook saw). Synthesized as an `opened` delivery so the deployment's
+ * `issueOpened` rule decides placement, exactly as it does at arrival — one
+ * source of placement policy for both.
+ */
+export function reconciledIssueRelabeledEvent(
+  repository: ReconcileRepository,
+  issueNumber: number,
+  state: ReconcileIssueState,
+): ParsedGithubWebhook {
+  const labels = state.labels ?? [];
+  // The delivery id carries a digest of the new label set: the same drift
+  // dedupes on a retry, while a later, different drift is a new delivery the
+  // ingress commits rather than discards as a replay.
+  const digest = createHash('sha256').update([...labels].sort().join('\n')).digest('hex').slice(0, 16);
+  return {
+    event: 'issues',
+    deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:relabeled:${digest}`,
+    payload: {
+      // `opened` is the event that carries an issue's labels through the rules;
+      // an already-filed card is re-placed by the decision, not re-materialized.
+      action: 'opened',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.author ?? 'github' },
+      issue: {
+        number: issueNumber,
+        title: state.title,
+        html_url: state.url,
+        state: 'open',
+        ...(state.createdAt ? { created_at: state.createdAt } : {}),
+        ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
+        assignees: (state.assignees ?? []).map(login => ({ login })),
+        labels: labels.map(name => ({ name })),
       },
     },
   };
