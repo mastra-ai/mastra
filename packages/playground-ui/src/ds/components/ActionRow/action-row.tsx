@@ -29,10 +29,6 @@ export function ActionRowStart({ className, ...props }: DivProps) {
 /** Actions positioned on the right. Never shrinks; wraps under the start group when needed. */
 export function ActionRowEnd({ className, ...props }: DivProps) {
   return (
-    <div
-      data-slot="action-row-end"
-      className={cn('ml-auto flex shrink-0 items-center gap-2', className)}
-      {...props}
-    />
+    <div data-slot="action-row-end" className={cn('ml-auto flex shrink-0 items-center gap-2', className)} {...props} />
   );
 }

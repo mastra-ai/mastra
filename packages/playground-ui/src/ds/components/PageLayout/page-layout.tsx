@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
 import { Header } from '../Header';
+import { cn } from '@/lib/utils';
 
 export interface PageLayoutProps {
   children: ReactNode;
@@ -14,7 +14,13 @@ export interface PageLayoutProps {
   variant?: 'container' | 'fit';
 }
 
-export function PageLayout({ children, breadcrumbs, headerActions, actionRow, variant = 'container' }: PageLayoutProps) {
+export function PageLayout({
+  children,
+  breadcrumbs,
+  headerActions,
+  actionRow,
+  variant = 'container',
+}: PageLayoutProps) {
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions) && (

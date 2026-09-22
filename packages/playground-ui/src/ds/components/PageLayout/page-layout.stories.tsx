@@ -29,7 +29,7 @@ const crumbs = (
 
 export const FullPage: Story = {
   render: () => (
-    <div className="h-152 bg-sidebar">
+    <div className="bg-sidebar h-152">
       <PageLayout
         breadcrumbs={crumbs}
         headerActions={
@@ -51,7 +51,7 @@ export const FullPage: Story = {
       >
         <ul className="grid gap-2">
           {resources.map(resource => (
-            <li key={resource} className="rounded border border-border px-3 py-2">
+            <li key={resource} className="border-border rounded border px-3 py-2">
               {resource}
             </li>
           ))}
@@ -63,7 +63,7 @@ export const FullPage: Story = {
 
 export const Empty: Story = {
   render: () => (
-    <div className="h-152 bg-sidebar">
+    <div className="bg-sidebar h-152">
       <PageLayout breadcrumbs={crumbs}>
         <div className="flex h-full items-center justify-center">
           <EmptyState titleSlot="No resources yet" descriptionSlot="Create a resource to get started." />

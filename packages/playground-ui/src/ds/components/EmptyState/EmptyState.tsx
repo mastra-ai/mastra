@@ -36,7 +36,7 @@ export function EmptyState({
     >
       {iconSlot && <div className="mb-3">{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
-      {descriptionSlot && <p className="mt-1.5 max-w-md text-caption text-muted-foreground">{descriptionSlot}</p>}
+      {descriptionSlot && <p className="text-caption text-muted-foreground mt-1.5 max-w-md">{descriptionSlot}</p>}
       {actionSlot && <div className="mt-4">{actionSlot}</div>}
     </div>
   );
