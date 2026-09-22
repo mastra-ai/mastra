@@ -107,17 +107,11 @@ function createDependencies(): FilesystemCaptureDependencies {
 }
 
 describe('parseFilesystemCaptureFiles', () => {
-  it('keeps current on-disk paths and omits deleted paths', () => {
-    expect(
-      parseFilesystemCaptureFiles(
-        ' M src/app.ts\0?? notes/todo.md\0R  src/renamed.ts\0src/old.ts\0C  copy.ts\0source.ts\0 D removed.ts\0DD gone.ts\0UU conflict.ts\0',
-      ),
-    ).toEqual([
-      { path: 'conflict.ts' },
-      { path: 'copy.ts' },
+  it('treats command output as plain paths and normalizes a leading dot segment', () => {
+    expect(parseFilesystemCaptureFiles('src/app.ts\0./notes/todo.md\0ab file.ts\0src/app.ts\0')).toEqual([
+      { path: 'ab file.ts' },
       { path: 'notes/todo.md' },
       { path: 'src/app.ts' },
-      { path: 'src/renamed.ts' },
     ]);
   });
 });
@@ -159,7 +153,7 @@ describe('captureSessionFilesystem', () => {
 
   it('captures Git changes and ignored workspace artifacts', async () => {
     const { session, executeCommand } = createSession([
-      commandResult({ stdout: ' M src/app.ts\0?? new.txt\0' }),
+      commandResult({ stdout: 'src/app.ts\0new.txt\0' }),
       commandResult({ stdout: './.artifacts/hello-world.md\0' }),
     ]);
     const dependencies = createDependencies();
@@ -168,8 +162,14 @@ describe('captureSessionFilesystem', () => {
 
     expect(executeCommand).toHaveBeenNthCalledWith(
       1,
-      'git',
-      ['-C', '/sessions/s1/worktree', 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      'sh',
+      [
+        '-c',
+        expect.stringContaining('diff --name-only -z --find-renames'),
+        'mastracode-changed-files',
+        '/sessions/s1/worktree',
+        'main',
+      ],
       { timeout: 30_000 },
     );
     expect(executeCommand).toHaveBeenNthCalledWith(
@@ -215,7 +215,7 @@ describe('captureSessionFilesystem', () => {
 
     expect(failedDependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith(
-      '[Factory filesystem capture] Unable to inspect Git status.',
+      '[Factory filesystem capture] Unable to inspect Git changes.',
       'not a repository',
     );
     error.mockRestore();
