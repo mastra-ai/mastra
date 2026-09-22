@@ -96,7 +96,13 @@ Slash commands and skills work too:
 mastracode --initial-prompt "/skill/review-pr https://github.com/org/repo/pull/1"
 ```
 
-Launchers that can only pass environment variables through, such as an editor pane or a terminal multiplexer, can set `MASTRACODE_INITIAL_PROMPT` instead. Mastra Code removes the variable at startup, so shells and nested sessions it starts don't send the prompt again. The flag takes precedence when both are set. To run a task without the interactive UI and exit, use [headless mode](/headless).
+`--initial-prompt` only starts a new conversation. If Mastra Code resumes an existing conversation for the directory, it shows that conversation and doesn't send the prompt, so relaunching in the same place doesn't repeat the task. Use `--send-prompt` to send the prompt either way, including into a resumed conversation:
+
+```sh
+mastracode --send-prompt "Pick up where we left off and run the tests"
+```
+
+Launchers that can only pass environment variables through, such as an editor pane or a terminal multiplexer, can set `MASTRACODE_INITIAL_PROMPT` instead. It works like `--initial-prompt`, and Mastra Code removes the variable at startup so shells and nested sessions it starts don't send the prompt again. A flag takes precedence over the variable. To run a task without the interactive UI and exit, use [headless mode](/headless).
 
 ## Slash commands
 

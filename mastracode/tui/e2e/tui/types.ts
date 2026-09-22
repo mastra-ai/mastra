@@ -78,6 +78,8 @@ export type ScenarioName =
   | 'headless-mcp-tool-availability'
   | 'initial-prompt'
   | 'initial-prompt-skill'
+  | 'initial-prompt-resume'
+  | 'send-prompt-resume'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
@@ -250,7 +252,15 @@ export type McE2eStartMastraCodeAppOptions = {
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
   tui?: Partial<
-    Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'>
+    Pick<
+      MastraTUIOptions,
+      | 'appName'
+      | 'initialMessage'
+      | 'skipInitialMessageOnResume'
+      | 'inlineQuestions'
+      | 'processMemoryDiagnostics'
+      | 'verbose'
+    >
   >;
 };
 

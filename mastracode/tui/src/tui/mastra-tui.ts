@@ -407,10 +407,17 @@ export class MastraTUI {
       hookMgr.runSessionStart().catch(() => {});
     }
 
-    // Initial message (--initial-prompt and/or piped stdin) is submitted exactly
-    // like typed input, so slash commands and skills work too.
+    // Initial message (--initial-prompt / --send-prompt and/or piped stdin) is
+    // submitted exactly like typed input, so slash commands and skills work too.
     if (this.state.options.initialMessage) {
-      await this.submitUserInput(this.state.options.initialMessage);
+      if (this.state.options.skipInitialMessageOnResume && (await this.resumedConversation())) {
+        showInfo(
+          this.state,
+          'Resumed the existing conversation for this directory, so the initial prompt was not sent. Use --send-prompt to send it anyway.',
+        );
+      } else {
+        await this.submitUserInput(this.state.options.initialMessage);
+      }
     }
 
     // Main interactive loop — never blocks on streaming,
@@ -421,6 +428,15 @@ export class MastraTUI {
       if (!userInput.trim() && userInput !== ' ') continue;
       await this.submitUserInput(userInput);
     }
+  }
+
+  /** Whether startup loaded a thread that already has messages. */
+  private async resumedConversation(): Promise<boolean> {
+    if (this.state.pendingNewThread) return false;
+    const threadId = this.state.session.thread.getId();
+    if (!threadId) return false;
+    const messages = await this.state.session.thread.listMessages({ threadId, limit: 1 });
+    return messages.length > 0;
   }
 
   /**

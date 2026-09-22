@@ -135,6 +135,12 @@ export interface MastraTUIOptions {
   /** Initial message to send on startup */
   initialMessage?: string;
 
+  /**
+   * Don't send `initialMessage` when startup resumes a thread that already has
+   * messages (`--initial-prompt`); by default it is always sent.
+   */
+  skipInitialMessageOnResume?: boolean;
+
   /** Whether to show verbose startup info */
   verbose?: boolean;
 
