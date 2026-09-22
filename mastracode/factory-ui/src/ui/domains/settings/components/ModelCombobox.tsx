@@ -1,5 +1,6 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
@@ -11,6 +12,8 @@ import type { AvailableModelOption } from '../../../../hooks/useAvailableModels'
  *
  * A persisted value that is no longer in the catalog (key removed, model
  * retired) is kept selectable so the control always displays the stored state.
+ *
+ * Combobox triggers are content-sized; every call site is a field row, so fill by default.
  */
 export function ModelCombobox({
   models,
@@ -44,7 +47,7 @@ export function ModelCombobox({
       emptyText="No matching model."
       allowCustomValue
       disabled={disabled}
-      className={className}
+      className={cn('w-full', className)}
     />
   );
 }
