@@ -1349,16 +1349,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             const awaitAuthoritativeBackgroundResult = async () => {
               const completedTask = await bgTask.waitForCompletion({ abortSignal: options?.abortSignal });
+              // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+              if (completedTask.status !== 'cancelled') {
+                const reconciliation = await reconciliationComplete;
+                if (reconciliation.error) {
+                  throw reconciliation.error;
+                }
+              }
+
               if (completedTask.status !== 'completed') {
                 throw new Error(
                   completedTask.error?.message ??
                     `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
                 );
-              }
-
-              const reconciliation = await reconciliationComplete;
-              if (reconciliation.error) {
-                throw reconciliation.error;
               }
 
               return ensureSerializable(completedTask.result);

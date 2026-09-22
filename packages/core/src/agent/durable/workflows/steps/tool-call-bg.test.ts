@@ -221,21 +221,50 @@ describe('durable tool-call background task dispatch', () => {
       maxRetries: 0,
     } as any);
 
+    let capturedOnResult: any;
     const waitForCompletion = vi.fn().mockResolvedValue({
       id: 'task-failed',
       status: 'failed',
       error: { message: 'background failure' },
     });
-    vi.mocked(createBackgroundTask).mockReturnValue({
-      dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-failed' }, fallbackToSync: false }),
-      checkIfRunning: vi.fn().mockResolvedValue(false),
-      restart: vi.fn(),
-      task: { id: 'task-failed' },
-      cancel: vi.fn(),
-      waitForCompletion,
-    } as any);
+    vi.mocked(createBackgroundTask).mockImplementation((_manager: any, options: any) => {
+      capturedOnResult = options.context.onResult;
+      return {
+        dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-failed' }, fallbackToSync: false }),
+        checkIfRunning: vi.fn().mockResolvedValue(false),
+        restart: vi.fn(),
+        task: { id: 'task-failed' },
+        cancel: vi.fn(),
+        waitForCompletion,
+      } as any;
+    });
 
-    await expect(executeStep(pubsub, initData)).rejects.toThrow('background failure');
+    let settled = false;
+    const execution = executeStep(pubsub, initData);
+    void execution.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await vi.waitFor(() => expect(waitForCompletion).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+
+    await capturedOnResult({
+      runId: RUN_ID,
+      taskId: 'task-failed',
+      toolCallId: TOOL_CALL_ID,
+      toolName: TOOL_NAME,
+      agentId: AGENT_ID,
+      error: { message: 'background failure' },
+      status: 'failed',
+      startedAt: new Date(),
+      completedAt: new Date(),
+    });
+
+    await expect(execution).rejects.toThrow('background failure');
     expect(execute).not.toHaveBeenCalled();
   });
 
@@ -534,6 +563,38 @@ describe('durable tool-call background task dispatch', () => {
         }),
       }),
     );
+  });
+
+  it('does not execute synchronously when status chunk emission fails after dispatch', async () => {
+    const pubsub = mockPubsub();
+    const execute = vi.fn().mockResolvedValue({ summary: 'sync fallback' });
+    setupRegistry({
+      tools: {
+        [TOOL_NAME]: {
+          execute,
+          backgroundConfig: { enabled: true },
+        },
+      },
+    });
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+    vi.mocked(emitChunkEvent).mockRejectedValueOnce(new Error('status chunk failed'));
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-x' }, fallbackToSync: false }),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
+      task: { id: 'task-x' },
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn(),
+    } as any);
+
+    await expect(executeStep(pubsub, initData)).rejects.toThrow('status chunk failed');
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('onResult hook injects real result into MessageList and flushes to memory', async () => {

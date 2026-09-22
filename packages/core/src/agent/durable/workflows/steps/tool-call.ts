@@ -1323,14 +1323,17 @@ export function createDurableToolCallStep() {
             const awaitAuthoritativeBackgroundResult = async () => {
               awaitingBackgroundTask = true;
               const completedTask = await bgTask.waitForCompletion({ abortSignal: toolOptions.abortSignal });
+              // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+              if (completedTask.status !== 'cancelled') {
+                const reconciliation = await reconciliationComplete;
+                if (reconciliation.error) throw reconciliation.error;
+              }
               if (completedTask.status !== 'completed') {
                 throw new Error(
                   completedTask.error?.message ??
                     `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
                 );
               }
-              const reconciliation = await reconciliationComplete;
-              if (reconciliation.error) throw reconciliation.error;
               return completedTask.result;
             };
 
@@ -1393,6 +1396,7 @@ export function createDurableToolCallStep() {
             const { task, fallbackToSync } = await bgTask.dispatch();
 
             if (!fallbackToSync) {
+              awaitingBackgroundTask = true;
               // Emit background-task-started chunk via PubSub
               if (pubsub) {
                 await emitChunkEvent(pubsub, runId, {
