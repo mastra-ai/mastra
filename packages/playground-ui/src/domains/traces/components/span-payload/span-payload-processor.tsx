@@ -46,19 +46,15 @@ const SCALAR_FIELDS = [
   { key: 'providerExecuted', label: 'Provider executed' },
 ] as const;
 
-/** Keys rendered above; anything else in the payload falls to the trailing JSON block. */
-const RENDERED_KEYS: ReadonlySet<string> = new Set([
-  ...MESSAGE_FIELDS.map(field => field.key),
-  ...TEXT_FIELDS.map(field => field.key),
-  ...SCALAR_FIELDS.map(field => field.key),
-  'toolCalls',
-  'prompt',
-  'result',
-  'model',
-  'tools',
-  'toolChoice',
-  'activeTools',
-]);
+/** Large secondary context, collapsed because it is rarely why someone opened the span. */
+const CONTEXT_FIELDS = [
+  { key: 'prompt', label: 'Prompt' },
+  { key: 'result', label: 'Result' },
+  { key: 'model', label: 'Model' },
+  { key: 'tools', label: 'Tools' },
+  { key: 'toolChoice', label: 'Tool choice' },
+  { key: 'activeTools', label: 'Active tools' },
+] as const;
 
 /** A scalar this view can print as one line; anything else belongs in the JSON block. */
 const SCALAR_RENDERABLE = (value: unknown): boolean =>
@@ -147,14 +143,13 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
     sections.push(<ScalarRows key="scalars" fields={scalars} payload={payload} />);
   }
 
-  // Secondary context: the prompt a request processor saw, the result an output
-  // processor read, and the model-call configuration an input step could change.
-  // Collapsed because they are large and rarely the reason someone opened the span.
-  for (const key of ['prompt', 'result', 'model', 'tools', 'toolChoice', 'activeTools'] as const) {
+  // The prompt a request processor saw, the result an output processor read, and
+  // the model-call configuration an input step could change.
+  for (const { key, label } of CONTEXT_FIELDS) {
     if (payload[key] === undefined) continue;
     laidOut.add(key);
     sections.push(
-      <SpanPayloadCollapsible key={key} label={key === 'activeTools' ? 'Active tools' : key}>
+      <SpanPayloadCollapsible key={key} label={label}>
         <SpanPayloadJson value={payload[key]} />
       </SpanPayloadCollapsible>,
     );
@@ -169,12 +164,17 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
     );
   }
 
+  // The phase itself is shown once, in the Attributes preview. Most phases record
+  // only what the processor changed, so an empty payload means it changed nothing.
   return (
     <div data-slot="span-payload-processor" data-phase={value.phase} className="flex flex-col gap-6">
-      <SpanPayloadField label="Phase">
-        <span className="text-body text-foreground">{value.phaseLabel}</span>
-      </SpanPayloadField>
-      {sections.length > 0 ? sections : <SpanPayloadJson value={payload} />}
+      {sections.length > 0 ? (
+        sections
+      ) : Object.keys(payload).length === 0 ? (
+        <span className="text-body text-placeholder">No changes</span>
+      ) : (
+        <SpanPayloadJson value={payload} />
+      )}
     </div>
   );
 }

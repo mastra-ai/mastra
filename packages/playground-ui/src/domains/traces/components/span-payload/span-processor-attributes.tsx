@@ -8,6 +8,7 @@ import { SpanPayloadCollapsible, SpanPayloadField } from './span-payload-primiti
 import { asCoreSpan } from './span-payload-registry';
 import { Badge } from '@/ds/components/Badge';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { formatDuration } from '@/utils/duration';
 
 /** Mutation kinds as actions a reader recognises. */
 const MUTATION_LABELS: Record<string, string> = {
@@ -16,8 +17,6 @@ const MUTATION_LABELS: Record<string, string> = {
   removeByIds: 'Removed messages',
   clear: 'Cleared messages',
 };
-
-const formatDuration = (ms: number): string => (ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms)}ms`);
 
 function Mutations({ mutations }: { mutations: NonNullable<ProcessorPipelineDescription['messageListMutations']> }) {
   return (
@@ -68,10 +67,18 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
   if (!pipeline) return null;
 
   const { phaseLabel, executor, processorIndex, hookDurationMs, messageListMutations, tripwireAbort, rest } = pipeline;
+  const processorName = span.entityName ?? span.entityId;
+  const hookDuration = hookDurationMs === undefined ? undefined : formatDuration(hookDurationMs);
 
   return (
     <div data-slot="span-processor-attributes" className="flex flex-col gap-6">
       <DataKeysAndValues>
+        {processorName && (
+          <Fragment>
+            <DataKeysAndValues.Key>Processor</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value>{processorName}</DataKeysAndValues.Value>
+          </Fragment>
+        )}
         <Fragment>
           <DataKeysAndValues.Key>Phase</DataKeysAndValues.Key>
           <DataKeysAndValues.Value>{phaseLabel}</DataKeysAndValues.Value>
@@ -88,10 +95,10 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
             <DataKeysAndValues.Value>{processorIndex + 1}</DataKeysAndValues.Value>
           </Fragment>
         )}
-        {hookDurationMs !== undefined && (
+        {hookDuration && (
           <Fragment>
             <DataKeysAndValues.Key>Hook duration</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{formatDuration(hookDurationMs)}</DataKeysAndValues.Value>
+            <DataKeysAndValues.Value>{hookDuration}</DataKeysAndValues.Value>
           </Fragment>
         )}
       </DataKeysAndValues>

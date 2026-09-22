@@ -14,6 +14,7 @@ import {
   processorSystemMutationSpan,
   processorInputSpan,
   processorOutputStreamSpan,
+  processorRequestErrorSpan,
   processorToolResultSpan,
   processorTripwireSpan,
 } from './fixtures/span-payloads';
@@ -30,7 +31,6 @@ describe('processor span payloads', () => {
     expect(container.querySelector('[data-slot="span-payload-processor"]')?.getAttribute('data-phase')).toBe(
       'toolResult',
     );
-    expect(screen.getByText('Tool result')).toBeTruthy();
     expect(screen.getByText('search')).toBeTruthy();
     expect(screen.getByText('call_17')).toBeTruthy();
   });
@@ -46,6 +46,20 @@ describe('processor span payloads', () => {
     render(<SpanOutputRenderer span={processorInputSpan} />);
 
     expect(screen.getByText('Answer in exactly three words.')).toBeTruthy();
+  });
+
+  it('says a processor changed nothing instead of showing an empty object', () => {
+    const { container } = render(<SpanOutputRenderer span={processorSystemMutationSpan} />);
+
+    expect(screen.getByText('No changes')).toBeTruthy();
+    expect(container.textContent).not.toContain('{}');
+  });
+
+  it('shows the error a request-error processor saw', () => {
+    render(<SpanInputRenderer span={processorRequestErrorSpan} />);
+
+    expect(screen.getByText('Provider returned 429')).toBeTruthy();
+    expect(screen.getByText('What colour is the sky?')).toBeTruthy();
   });
 
   it('keeps the two output hooks apart', () => {
@@ -68,6 +82,8 @@ describe('processor span attributes', () => {
   it('presents the pipeline facts as labelled values', () => {
     render(<SpanProcessorAttributes span={processorInputSpan} />);
 
+    expect(screen.getByText('Processor')).toBeTruthy();
+    expect(screen.getByText('context-note')).toBeTruthy();
     expect(screen.getByText('Phase')).toBeTruthy();
     expect(screen.getByText('Input')).toBeTruthy();
     expect(screen.getByText('Workflow')).toBeTruthy();
@@ -80,7 +96,7 @@ describe('processor span attributes', () => {
     render(<SpanProcessorAttributes span={processorInputSpan} />);
 
     expect(screen.getByText('Added system message')).toBeTruthy();
-    expect(screen.getByText(/context-note/)).toBeTruthy();
+    expect(screen.getByText('context-note · 1 message')).toBeTruthy();
   });
 
   it('surfaces a tripwire as a blocked run with its reason', () => {
@@ -99,6 +115,18 @@ describe('processor span attributes', () => {
 });
 
 describe('processor spans in both span layouts', () => {
+  it.each([
+    ['data panel', (span: typeof processorInputSpan) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
+    ['details', (span: typeof processorInputSpan) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
+  ])('shows a failed processor span with its error in the %s layout', (_name, renderView) => {
+    const { container } = render(renderView(processorRequestErrorSpan));
+
+    expect(screen.getByText('Request error')).toBeTruthy();
+    expect(screen.getByText('rate-limit-retry')).toBeTruthy();
+    expect(screen.getByText('Provider returned 429')).toBeTruthy();
+    expect(container.textContent).toContain('Retry budget exhausted');
+  });
+
   it.each([
     ['data panel', (span: typeof processorInputSpan) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
     ['details', (span: typeof processorInputSpan) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
