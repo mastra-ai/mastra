@@ -390,12 +390,12 @@ With no constructor options, the integration reads `GITLAB_ACCESS_TOKEN`, `GITLA
 
 `GITLAB_BASE_URL` must use HTTPS. Plain HTTP is accepted only for loopback development instances (`localhost`, `127.0.0.0/8`, or `::1`), where the access token is sent without transport encryption.
 
-For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. It proxies provider requests through `/v2/connections/{connectionId}/proxy` and polls every active GitLab connection in the organization. `MastraFactory` installs it automatically when Platform credentials are present; an explicit integration with id `gitlab` takes precedence. `MASTRA_GITLAB_CONNECTION_ID` (or the `connectionId` option) is an optional filter that restricts the integration to one connection.
+For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. `MastraFactory` installs it automatically whenever Platform credentials are configured and no integration with id `gitlab` was supplied. It discovers every active GitLab connection of the organization, whichever Platform credential flow created it (OAuth, group token, or personal access token), proxies provider requests through `/v2/connections/{connectionId}/proxy`, and polls the Platform event log for GitLab events. `MASTRA_GITLAB_CONNECTION_ID` (or the `connectionId` constructor option) is optional and only narrows discovery to one connection. An explicit integration with id `gitlab` takes precedence.
 
 ```typescript
 import { PlatformGitLabIntegration } from '@mastra/factory/integrations/platform/gitlab/integration';
 
-const gitlab = new PlatformGitLabIntegration();
+const gitlab = new PlatformGitLabIntegration(); // Optionally { connectionId: 'connection-id' } to pin one connection.
 ```
 
 In Platform mode, issue, note, merge request and push events reach Factory by polling the Platform's event log for each connection, the same way Platform GitHub deployments do. Point the GitLab project webhook at the Platform's Nango forwarding URL, not at Factory; Platform mode needs neither `MASTRA_GITLAB_CONNECTION_ID` nor `MASTRA_GITLAB_WEBHOOK_SECRET`. The direct `/web/gitlab/webhook` route stays available when `MASTRA_GITLAB_WEBHOOK_SECRET` is set; do not point a project webhook at both Factory and the Platform, or each event is processed twice.
