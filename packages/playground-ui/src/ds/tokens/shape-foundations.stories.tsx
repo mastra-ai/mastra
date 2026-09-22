@@ -50,14 +50,14 @@ const elementKeys = sizeKeys.filter(
 );
 
 const SizeRow = ({ token }: { token: SizeToken }) => (
-  <div className="border-border grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)] items-center gap-4 border-b py-2 last:border-b-0">
+  <div className="grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)] items-center gap-4 border-b border-border py-2 last:border-b-0">
     <Txt variant="meta" font="mono" tone="muted" className="truncate">
       --spacing-{token}
     </Txt>
     <div
       role="img"
       aria-label={`${token} height`}
-      className="border-border bg-fill w-40 rounded-md border"
+      className="w-40 rounded-md border border-border bg-fill"
       style={{ height: `var(--spacing-${token})` }}
     />
   </div>
@@ -83,7 +83,7 @@ export const ShapeFoundations: Story = {
               <div
                 role="img"
                 aria-label={`radius ${token}`}
-                className="border-border-strong bg-fill h-20 border"
+                className="h-20 border border-border-strong bg-fill"
                 style={{ borderRadius: `var(--radius-${token})` }}
               />
             </Specimen>
@@ -104,7 +104,7 @@ export const ShapeFoundations: Story = {
               <div
                 role="img"
                 aria-label={`spacing ${rung}`}
-                className="bg-fill-strong h-3 rounded-sm"
+                className="h-3 rounded-sm bg-fill-strong"
                 style={{ width: `calc(var(--spacing) * ${rung})` }}
               />
             </div>
@@ -124,7 +124,7 @@ export const ShapeFoundations: Story = {
                   <div
                     role="img"
                     aria-label={`${token} icon box`}
-                    className="bg-fill-strong rounded-sm"
+                    className="rounded-sm bg-fill-strong"
                     style={{ height: `var(--spacing-${token})`, width: `var(--spacing-${token})` }}
                   />
                 </Specimen>
@@ -158,7 +158,7 @@ export const ShapeFoundations: Story = {
           {breakpoints.map(breakpoint => (
             <div
               key={breakpoint.token}
-              className="border-border grid grid-cols-[minmax(0,10rem)_5rem_minmax(0,1fr)] items-baseline gap-4 border-b py-2 last:border-b-0"
+              className="grid grid-cols-[minmax(0,10rem)_5rem_minmax(0,1fr)] items-baseline gap-4 border-b border-border py-2 last:border-b-0"
             >
               <Txt variant="meta" font="mono" tone="muted">
                 {breakpoint.token}

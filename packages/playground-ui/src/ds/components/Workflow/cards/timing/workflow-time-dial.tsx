@@ -46,7 +46,7 @@ function DialHand({ angle, length }: { angle: number; length: number }) {
 
 function DialFace({ tickAngles, children }: { tickAngles: number[]; children: ReactNode }) {
   return (
-    <span className="text-muted-foreground block size-28 shrink-0" aria-hidden>
+    <span className="block size-28 shrink-0 text-muted-foreground" aria-hidden>
       <svg viewBox="0 0 116 116" fill="none" className="block size-full overflow-visible">
         {tickAngles.map((angle, index) => (
           <DialTick key={angle} angle={angle} major={index % 5 === 0} />

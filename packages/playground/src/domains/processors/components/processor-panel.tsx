@@ -125,7 +125,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
   return (
     <div className="relative grid h-full min-w-min grid-cols-[auto_1fr] overflow-x-auto overflow-y-auto">
-      <div className="border-border w-[22rem] overflow-y-auto border-r">
+      <div className="w-[22rem] overflow-y-auto border-r border-border">
         <ProcessorInformation processor={processor} />
 
         <div className="space-y-5 p-5">
@@ -195,7 +195,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           )}
 
           {result && (
-            <div className="border-border space-y-2 border-t pt-4">
+            <div className="space-y-2 border-t border-border pt-4">
               <Txt variant="caption" tone="muted">
                 Status
               </Txt>
@@ -204,7 +204,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 {result.tripwire?.triggered && <Badge variant="blue">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
-                <div className="bg-accent6Dark border-accent6/20 mt-2 rounded-md border p-3">
+                <div className="mt-2 rounded-md border border-accent6/20 bg-accent6Dark p-3">
                   <Txt variant="column" className="text-accent6">
                     Tripwire Reason
                   </Txt>
@@ -235,7 +235,7 @@ interface ProcessorInformationProps {
 
 function ProcessorInformation({ processor }: ProcessorInformationProps) {
   return (
-    <div className="border-border border-b px-5 pt-5 pb-4">
+    <div className="border-b border-border px-5 pt-5 pb-4">
       <Txt variant="heading" tone="faint" className="mb-2">
         {processor.name || processor.id}
       </Txt>

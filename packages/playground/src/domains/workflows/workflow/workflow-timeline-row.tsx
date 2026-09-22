@@ -73,7 +73,7 @@ export function WorkflowTimelineRow({
     >
       <button
         type="button"
-        className="text-meta text-foreground focus-visible:outline-border-focus flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-default"
+        className="flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left text-meta text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus aria-disabled:cursor-default"
         aria-disabled={row.isNestedEntry}
         aria-pressed={isSelected}
         onClick={() => {
@@ -85,7 +85,7 @@ export function WorkflowTimelineRow({
         <span
           aria-label={status.label}
           className={cn(
-            'border-border bg-background grid size-6 flex-none place-items-center rounded-md border',
+            'grid size-6 flex-none place-items-center rounded-md border border-border bg-background',
             status.color,
           )}
         >
@@ -94,7 +94,7 @@ export function WorkflowTimelineRow({
         <span className="min-w-0">
           <span className="block truncate">{label}</span>
           {row.isNestedEntry && (
-            <span className="text-muted-foreground text-meta flex min-w-0 items-center gap-1">
+            <span className="flex min-w-0 items-center gap-1 text-meta text-muted-foreground">
               <CornerDownRight aria-hidden className="size-3 shrink-0" />
               <span className="truncate">{parentPath}</span>
             </span>
@@ -102,7 +102,7 @@ export function WorkflowTimelineRow({
         </span>
       </button>
       <div
-        className="bg-muted relative h-5 min-w-0 overflow-hidden rounded-sm @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-[34px]"
+        className="relative h-5 min-w-0 overflow-hidden rounded-sm bg-muted @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-[34px]"
         aria-hidden
       >
         {row.timing && (
@@ -116,7 +116,7 @@ export function WorkflowTimelineRow({
         )}
       </div>
       <span
-        className="text-muted-foreground text-meta text-right whitespace-nowrap tabular-nums"
+        className="text-right text-meta whitespace-nowrap text-muted-foreground tabular-nums"
         title={row.timing && row.spansSuspension ? 'Includes time spent suspended waiting for input' : undefined}
       >
         {row.timing ? formatDuration(row.timing.durationMs) : <span aria-label="Timing unavailable">—</span>}
