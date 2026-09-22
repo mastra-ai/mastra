@@ -133,7 +133,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
     <DataListCell
       sticky="start"
       className={cn(
-        'data-list-row-header -mr-3 -ml-3 w-auto max-w-none pr-3 pl-3 text-left text-label text-foreground',
+        'data-list-row-header -mx-3 w-auto max-w-none px-3 text-left text-label text-foreground',
         className,
       )}
       {...rest}
@@ -244,12 +244,13 @@ export interface DataListCreatedCellProps {
   timestamp: Date | string;
 }
 
-/** Combined date + time cell — `MMM dd h:mm:ss a` (e.g. `Aug 31 1:07:47 pm`), no milliseconds. */
+/** Compact date + time cell — 24h `HH:mm:ss` for today (e.g. `13:07:47`), otherwise `MMM d HH:mm:ss`
+ *  (e.g. `Aug 31 13:07:47`). No milliseconds. */
 export function DataListCreatedCell({ timestamp }: DataListCreatedCellProps) {
   const date = toDate(timestamp);
   return (
     <DataListCell className="text-muted-foreground tabular-nums">
-      {date ? format(date, 'MMM dd h:mm:ss aaa') : null}
+      {date ? format(date, isToday(date) ? 'HH:mm:ss' : 'MMM d HH:mm:ss') : null}
     </DataListCell>
   );
 }

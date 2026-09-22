@@ -71,7 +71,7 @@ describe('TracesListView columns', () => {
       expect(headers).toEqual(['Start', 'Type', 'Name', 'Input', 'Status', 'Duration', 'Est. cost']);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe('9rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 
@@ -99,7 +99,7 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      expect(grid.style.gridTemplateColumns).toBe('9rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
     });
   });
 });
@@ -451,7 +451,7 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       expect(screen.getByText('End time')).toBeTruthy();
-      expect(screen.getByText('Jun 10 1:07:47 pm')).toBeTruthy();
+      expect(screen.getByText('Jun 10 13:07:47')).toBeTruthy();
     });
   });
 });
@@ -523,7 +523,7 @@ describe('TracesListView — custom columns', () => {
         />,
       );
 
-      expect(screen.getAllByText('Jun 10 1:07:47 pm')).toHaveLength(2);
+      expect(screen.getAllByText('Jun 10 13:07:47')).toHaveLength(2);
     });
   });
 });

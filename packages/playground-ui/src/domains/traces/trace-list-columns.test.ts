@@ -60,7 +60,7 @@ describe('trace list columns', () => {
   describe('when the grid is built', () => {
     it('keeps the existing default layout', () => {
       expect(buildTraceListColumns(DEFAULT_TRACE_COLUMN_PREFERENCES)).toBe(
-        '11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem',
+        '9rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem',
       );
     });
 
@@ -71,7 +71,7 @@ describe('trace list columns', () => {
           customColumns: [],
           metadataKeys: ['tenant'],
         }),
-      ).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      ).toBe('9rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
     });
   });
 
@@ -210,34 +210,34 @@ describe('trace list columns', () => {
 
   describe('when a single optional column is toggled', () => {
     it.each([
-      ['input', '11rem 14rem minmax(8rem,1fr) 6rem'],
-      ['type', '11rem 7rem minmax(8rem,1fr) 6rem'],
-      ['duration', '11rem minmax(8rem,1fr) 6rem 7rem'],
-      ['endTime', '11rem minmax(8rem,1fr) 6rem 10rem'],
-      ['environment', '11rem minmax(8rem,1fr) 6rem 8rem'],
-      ['totalTokens', '11rem minmax(8rem,1fr) 6rem 8rem'],
-      ['inputTokens', '11rem minmax(8rem,1fr) 6rem 8rem'],
-      ['outputTokens', '11rem minmax(8rem,1fr) 6rem 8rem'],
-      ['estimatedCost', '11rem minmax(8rem,1fr) 6rem 8rem'],
+      ['input', '9rem 14rem minmax(8rem,1fr) 6rem'],
+      ['type', '9rem 7rem minmax(8rem,1fr) 6rem'],
+      ['duration', '9rem minmax(8rem,1fr) 6rem 7rem'],
+      ['endTime', '9rem minmax(8rem,1fr) 6rem 8rem'],
+      ['environment', '9rem minmax(8rem,1fr) 6rem 8rem'],
+      ['totalTokens', '9rem minmax(8rem,1fr) 6rem 8rem'],
+      ['inputTokens', '9rem minmax(8rem,1fr) 6rem 8rem'],
+      ['outputTokens', '9rem minmax(8rem,1fr) 6rem 8rem'],
+      ['estimatedCost', '9rem minmax(8rem,1fr) 6rem 8rem'],
     ] as const)('lays out %s on its own', (column, expected) => {
       expect(buildTraceListColumns({ visibleColumns: [column], customColumns: [], metadataKeys: [] })).toBe(expected);
     });
 
     it('widens the second track only when input is hidden', () => {
       expect(buildTraceListColumns({ visibleColumns: [], customColumns: [], metadataKeys: [] })).toBe(
-        '11rem minmax(8rem,1fr) 6rem',
+        '9rem minmax(8rem,1fr) 6rem',
       );
     });
 
     it('adds one bounded track per metadata key', () => {
       expect(buildTraceListColumns({ visibleColumns: [], customColumns: [], metadataKeys: ['a', 'b'] })).toBe(
-        '11rem minmax(8rem,1fr) 6rem minmax(8rem,14rem) minmax(8rem,14rem)',
+        '9rem minmax(8rem,1fr) 6rem minmax(8rem,14rem) minmax(8rem,14rem)',
       );
     });
 
     it('adds one bounded track per custom column before metadata columns', () => {
       expect(buildTraceListColumns({ visibleColumns: [], customColumns: ['threadId'], metadataKeys: ['a'] })).toBe(
-        '11rem minmax(8rem,1fr) 6rem minmax(8rem,14rem) minmax(8rem,14rem)',
+        '9rem minmax(8rem,1fr) 6rem minmax(8rem,14rem) minmax(8rem,14rem)',
       );
     });
   });
