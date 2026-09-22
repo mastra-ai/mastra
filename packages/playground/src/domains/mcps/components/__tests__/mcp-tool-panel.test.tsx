@@ -54,9 +54,7 @@ describe('MCPToolPanel execution results', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
 
     // Studio cannot answer the input request, so it explains that instead of presenting the payload as output.
-    await waitFor(() =>
-      expect(screen.getByText(/asked for more input, which Studio cannot provide/)).not.toBeNull(),
-    );
+    await waitFor(() => expect(screen.getByText(/asked for more input, which Studio cannot provide/)).not.toBeNull());
     // The suspend payload stays visible in the result panel.
     expect(container.textContent).toMatch(/"phase":\s*"confirm"/);
     await waitForMutationsIdle(queryClient);

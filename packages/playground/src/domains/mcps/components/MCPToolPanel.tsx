@@ -139,8 +139,8 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
       {isSuspendedResult(result) && (
         <div className="px-4 pt-4">
           <Notice variant="warning">
-            This tool asked for more input, which Studio cannot provide. The suspend payload below shows what it
-            needs. Call it from an MCP client with an <code>inputRequests</code> handler to finish the request.
+            This tool asked for more input, which Studio cannot provide. The suspend payload below shows what it needs.
+            Call it from an MCP client with an <code>inputRequests</code> handler to finish the request.
           </Notice>
         </div>
       )}
