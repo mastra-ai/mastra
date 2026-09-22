@@ -53,3 +53,7 @@ A group put the mismatch in plain sight: with every segment finally the same hei
 States follow the material rather than the fill: hover and press wash through `--surface-tint` (`fill-subtle`, then `fill`) instead of swapping the background, because a pinned card fill cannot be swapped without going translucent.
 
 Removed with it: `fieldTriggerSurfaceStyle`, which existed only to undo the Button's fill on a Select/Combobox trigger, and the `field` key of `controlTriggerOpenState` — `default` now *is* the field's open state. `raisedControlSurfaceStyle` (exported from `ds/primitives/form-element`) is the one definition.
+
+**Hover and focus inside a group**
+
+A segment's leading edge belongs to its neighbour, so hovering an `outline` segment lit only three of its sides, and keyboard focus showed no edge at all — the group's seam colour overrode the segment's focus border. The focused segment now takes the focus colour on every side, and the neighbour that owns the shared seam takes the hover or focus colour with it.

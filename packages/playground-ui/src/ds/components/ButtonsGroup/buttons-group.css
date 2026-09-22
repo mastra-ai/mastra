@@ -184,4 +184,33 @@
     ) {
     box-shadow: inset 0 -1px 0 0 var(--border);
   }
+
+  /* The ring colour above ties a segment's own `focus-visible:` border on specificity and
+     wins on source order, so the group repaints the focus edge itself. */
+  [data-slot='buttons-group'] > :is(:focus-visible, :has(:focus-visible)) {
+    border-color: var(--border-focus);
+  }
+
+  /* A segment's leading edge is its neighbour's border, so a state that recolours the
+     segment's own border (focus everywhere, hover on `outline`) lights three sides only.
+     The neighbour that owns the seam takes the state colour for it. */
+  [data-slot='buttons-group'][data-orientation='horizontal'] > :has(+ :is(:focus-visible, :has(:focus-visible))) {
+    border-right-color: var(--border-focus);
+  }
+
+  [data-slot='buttons-group'][data-orientation='vertical'] > :has(+ :is(:focus-visible, :has(:focus-visible))) {
+    border-bottom-color: var(--border-focus);
+  }
+
+  @media (hover: hover) {
+    [data-slot='buttons-group'][data-orientation='horizontal']
+      > :has(+ [data-variant='outline']:not(:disabled, :focus-visible):hover) {
+      border-right-color: var(--border-hover);
+    }
+
+    [data-slot='buttons-group'][data-orientation='vertical']
+      > :has(+ [data-variant='outline']:not(:disabled, :focus-visible):hover) {
+      border-bottom-color: var(--border-hover);
+    }
+  }
 }
