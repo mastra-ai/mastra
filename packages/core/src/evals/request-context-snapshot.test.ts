@@ -39,6 +39,15 @@ describe('snapshotRequestContextForScore', () => {
     expect(Object.getPrototypeOf(snapshot)).toBe(Object.prototype);
   });
 
+  it('excludes the auth token at any nesting level', () => {
+    const inner = new RequestContext();
+    inner.set(MASTRA_AUTH_TOKEN_KEY, 'nested-secret');
+    inner.set('ok', 1);
+    expect(snapshotRequestContextForScore({ child: inner, obj: { [MASTRA_AUTH_TOKEN_KEY]: 'x' } })).toEqual({
+      'child.ok': 1,
+    });
+  });
+
   it('skips non-finite numbers', () => {
     expect(snapshotRequestContextForScore({ n: 1, a: NaN, b: Infinity, c: -Infinity })).toEqual({ n: 1 });
   });

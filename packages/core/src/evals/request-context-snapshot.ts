@@ -22,7 +22,7 @@ export function snapshotRequestContextForScore(requestContext: unknown): Record<
       typeof (obj as any).entries === 'function' ? (obj as any).entries() : Object.entries(obj);
     for (const [key, value] of entries) {
       const flatKey = prefix ? `${prefix}.${key}` : key;
-      if (flatKey === MASTRA_AUTH_TOKEN_KEY) continue;
+      if (key === MASTRA_AUTH_TOKEN_KEY) continue;
       if (
         typeof value === 'string' ||
         typeof value === 'boolean' ||
