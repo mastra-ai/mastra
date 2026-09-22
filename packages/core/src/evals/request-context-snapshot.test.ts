@@ -25,6 +25,20 @@ describe('snapshotRequestContextForScore', () => {
     expect(snapshotRequestContextForScore(obj)).toEqual({ name: 'n' });
   });
 
+  it('skips Buffer and typed-array values', () => {
+    expect(snapshotRequestContextForScore({ secret: Buffer.from('abc'), bytes: new Uint8Array([1]), ok: 'y' })).toEqual(
+      {
+        ok: 'y',
+      },
+    );
+  });
+
+  it('keeps a primitive __proto__ key as an own property', () => {
+    const snapshot = snapshotRequestContextForScore(new RequestContext<any>([['__proto__', 'x']]));
+    expect(Object.prototype.hasOwnProperty.call(snapshot, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(snapshot)).toBe(Object.prototype);
+  });
+
   it('returns an empty object for missing input', () => {
     expect(snapshotRequestContextForScore(undefined)).toEqual({});
   });

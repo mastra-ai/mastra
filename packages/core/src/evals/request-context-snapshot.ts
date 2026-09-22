@@ -24,8 +24,8 @@ export function snapshotRequestContextForScore(requestContext: unknown): Record<
       const flatKey = prefix ? `${prefix}.${key}` : key;
       if (flatKey === MASTRA_AUTH_TOKEN_KEY) continue;
       if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        safeContext[flatKey] = value;
-      } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+        Object.defineProperty(safeContext, flatKey, { value, enumerable: true, configurable: true, writable: true });
+      } else if (value && typeof value === 'object' && !Array.isArray(value) && !ArrayBuffer.isView(value)) {
         flatten(value as Record<string, unknown>, flatKey, depth + 1);
       }
     }
