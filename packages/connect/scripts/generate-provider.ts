@@ -208,8 +208,23 @@ function isArrayInputField(inputSchemaText: string, field: string): boolean {
  * so the generated tool never fetches a secret the action doesn't use.
  */
 function execReadsConnectionCredentials(execInitializer: Node): boolean {
-  const isGetConnectionCall = (node: Node): boolean =>
-    /^\(*\s*(?:await\s+)?nango\s*\.\s*getConnection\s*\(\s*\)\s*\)*$/.test(node.getText());
+  // Unwrap `await` and parentheses so wrapped calls (e.g.
+  // `await (nango.getConnection())`) resolve to the underlying expression.
+  const unwrap = (node: Node): Node => {
+    let current = node;
+    while (Node.isParenthesizedExpression(current) || Node.isAwaitExpression(current)) {
+      current = current.getExpression();
+    }
+    return current;
+  };
+  const isGetConnectionCall = (node: Node): boolean => {
+    const call = unwrap(node);
+    if (!Node.isCallExpression(call) || call.getArguments().length > 0) return false;
+    const callee = call.getExpression();
+    if (!Node.isPropertyAccessExpression(callee) || callee.getName() !== 'getConnection') return false;
+    const receiver = unwrap(callee.getExpression());
+    return Node.isIdentifier(receiver) && receiver.getText() === 'nango';
+  };
   const connectionSymbols = new Set<unknown>();
   for (const declaration of execInitializer.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
     const initializer = declaration.getInitializer();
@@ -271,10 +286,16 @@ function widenResponseEnums(statements: string[], inputSchemaName: string): stri
   // that merely share a name (or appear inside string literals).
   const scratch = new Project({ useInMemoryFileSystem: true }).createSourceFile('scratch.ts', statements.join('\n'));
   const topLevel = scratch.getStatements();
-  const declared: (string | undefined)[] = topLevel.map(statement => {
-    if (!Node.isVariableStatement(statement)) return undefined;
-    const nameNode = statement.getDeclarations()[0]?.getNameNode();
-    return nameNode !== undefined && Node.isIdentifier(nameNode) ? nameNode.getText() : undefined;
+  // A statement can declare several variables (`const A = …, B = …;`); track
+  // every identifier-named declaration so the statement can be cloned as a
+  // unit without emitting an unrenamed duplicate of a sibling declaration.
+  const declared: string[][] = topLevel.map(statement => {
+    if (!Node.isVariableStatement(statement)) return [];
+    return statement
+      .getDeclarations()
+      .map(declaration => declaration.getNameNode())
+      .filter(Node.isIdentifier)
+      .map(nameNode => nameNode.getText());
   });
   const statementIndexOf = (node: Node): number =>
     topLevel.findIndex(statement => statement.getStart() <= node.getStart() && node.getEnd() <= statement.getEnd());
@@ -289,40 +310,51 @@ function widenResponseEnums(statements: string[], inputSchemaName: string): stri
   }
   const referencesByStatement: SchemaReference[][] = topLevel.map(() => []);
   const referencedNamesByStatement: Set<string>[] = topLevel.map(() => new Set());
-  topLevel.forEach((statement, index) => {
-    const name = declared[index];
-    if (!name || !Node.isVariableStatement(statement)) return;
-    const nameNode = statement.getDeclarations()[0]!.getNameNode();
-    if (!Node.isIdentifier(nameNode)) return;
-    for (const reference of nameNode.findReferencesAsNodes()) {
-      if (reference === nameNode) continue;
-      const referenceIndex = statementIndexOf(reference);
-      if (referenceIndex < 0) continue;
-      const statementStart = topLevel[referenceIndex]!.getStart();
-      referencesByStatement[referenceIndex]!.push({
-        name,
-        start: reference.getStart() - statementStart,
-        end: reference.getEnd() - statementStart,
-      });
-      referencedNamesByStatement[referenceIndex]!.add(name);
+  topLevel.forEach(statement => {
+    if (!Node.isVariableStatement(statement)) return;
+    for (const declaration of statement.getDeclarations()) {
+      const nameNode = declaration.getNameNode();
+      if (!Node.isIdentifier(nameNode)) continue;
+      const name = nameNode.getText();
+      for (const reference of nameNode.findReferencesAsNodes()) {
+        if (reference === nameNode) continue;
+        const referenceIndex = statementIndexOf(reference);
+        if (referenceIndex < 0) continue;
+        const statementStart = topLevel[referenceIndex]!.getStart();
+        referencesByStatement[referenceIndex]!.push({
+          name,
+          start: reference.getStart() - statementStart,
+          end: reference.getEnd() - statementStart,
+        });
+        referencedNamesByStatement[referenceIndex]!.add(name);
+      }
     }
   });
-  const declarationNameSpan = (index: number): SchemaReference | undefined => {
+  const declarationNameSpans = (index: number): SchemaReference[] => {
     const statement = topLevel[index]!;
-    const name = declared[index];
-    if (!name || !Node.isVariableStatement(statement)) return undefined;
-    const nameNode = statement.getDeclarations()[0]!.getNameNode();
-    return { name, start: nameNode.getStart() - statement.getStart(), end: nameNode.getEnd() - statement.getStart() };
+    if (!Node.isVariableStatement(statement)) return [];
+    return statement
+      .getDeclarations()
+      .map(declaration => declaration.getNameNode())
+      .filter(Node.isIdentifier)
+      .map(nameNode => ({
+        name: nameNode.getText(),
+        start: nameNode.getStart() - statement.getStart(),
+        end: nameNode.getEnd() - statement.getStart(),
+      }));
   };
 
+  // Statements are classified as a unit: when any of a statement's
+  // declarations is input-side, its siblings and everything it references are
+  // input-side too.
   const inputSide = new Set<string>([inputSchemaName]);
   let changed = true;
   while (changed) {
     changed = false;
     topLevel.forEach((_, index) => {
-      const name = declared[index];
-      if (!name || !inputSide.has(name)) return;
-      for (const other of referencedNamesByStatement[index]!) {
+      const names = declared[index]!;
+      if (!names.some(name => inputSide.has(name))) return;
+      for (const other of [...names, ...referencedNamesByStatement[index]!]) {
         if (!inputSide.has(other)) {
           inputSide.add(other);
           changed = true;
@@ -338,33 +370,36 @@ function widenResponseEnums(statements: string[], inputSchemaName: string): stri
   while (changed) {
     changed = false;
     topLevel.forEach((statement, index) => {
-      const name = declared[index];
-      if (!name || !inputSide.has(name) || enumBearing.has(name)) return;
+      const names = declared[index]!.filter(name => inputSide.has(name) && !enumBearing.has(name));
+      if (names.length === 0) return;
       const text = statement.getText();
       const carriesEnum =
         widenLiterals(text) !== text || [...enumBearing].some(other => referencedNamesByStatement[index]!.has(other));
       if (carriesEnum) {
-        enumBearing.add(name);
+        for (const name of names) enumBearing.add(name);
         changed = true;
       }
     });
   }
 
   // Enum-bearing input-side declarations the response side reaches, including
-  // the ones their clones will need transitively.
+  // the ones their clones will need transitively. Cloning a statement clones
+  // every declaration in it, so siblings enter the set together.
   const needsClone = new Set<string>();
   const visit = (name: string) => {
     if (needsClone.has(name)) return;
-    needsClone.add(name);
-    const index = declared.indexOf(name);
-    if (index < 0) return;
+    const index = declared.findIndex(names => names.includes(name));
+    if (index < 0) {
+      needsClone.add(name);
+      return;
+    }
+    for (const sibling of declared[index]!) needsClone.add(sibling);
     for (const other of enumBearing) {
-      if (other !== name && referencedNamesByStatement[index]!.has(other)) visit(other);
+      if (!needsClone.has(other) && referencedNamesByStatement[index]!.has(other)) visit(other);
     }
   };
   topLevel.forEach((_, index) => {
-    const name = declared[index];
-    if (name && inputSide.has(name)) return;
+    if (declared[index]!.some(name => inputSide.has(name))) return;
     for (const candidate of enumBearing) {
       if (referencedNamesByStatement[index]!.has(candidate)) visit(candidate);
     }
@@ -384,11 +419,9 @@ function widenResponseEnums(statements: string[], inputSchemaName: string): stri
   };
 
   return topLevel.flatMap((statement, index) => {
-    const name = declared[index];
-    if (name && inputSide.has(name)) {
-      if (!needsClone.has(name)) return [statement.getText()];
-      const nameSpan = declarationNameSpan(index);
-      return [statement.getText(), widenLiterals(redirectToClones(index, nameSpan ? [nameSpan] : []))];
+    if (declared[index]!.some(name => inputSide.has(name))) {
+      if (!declared[index]!.some(name => needsClone.has(name))) return [statement.getText()];
+      return [statement.getText(), widenLiterals(redirectToClones(index, declarationNameSpans(index)))];
     }
     return [widenLiterals(redirectToClones(index))];
   });
