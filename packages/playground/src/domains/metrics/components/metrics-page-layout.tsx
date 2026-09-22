@@ -88,6 +88,7 @@ export function MetricsPageLayout({ children, filterFields, isLoading = false }:
         </>
       }
     >
+      <h1 className="sr-only">Metrics</h1>
       {children}
     </PageLayout>
   );

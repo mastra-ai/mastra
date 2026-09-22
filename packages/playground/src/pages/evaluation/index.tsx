@@ -52,6 +52,7 @@ export default function Evaluation() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Overview</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -60,6 +61,7 @@ export default function Evaluation() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Overview</h1>
         <PermissionDenied variant="fill" resource="evaluation" />
       </PageLayout>
     );
@@ -68,6 +70,7 @@ export default function Evaluation() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Overview</h1>
         <ErrorState variant="fill" title="Failed to load evaluation data" message={error.message} />
       </PageLayout>
     );
@@ -92,6 +95,7 @@ export default function Evaluation() {
         </ActionRow>
       }
     >
+      <h1 className="sr-only">Overview</h1>
       <div className="flex flex-col gap-4">
         <MetricsFlexGrid>
           <EvaluationKpiCards

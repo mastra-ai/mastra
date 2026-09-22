@@ -67,6 +67,7 @@ export default function Templates() {
 
   return (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Templates</h1>
       <Header>
         <HeaderTitle>
           <Icon>

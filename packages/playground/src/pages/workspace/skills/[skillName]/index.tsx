@@ -87,6 +87,7 @@ export default function WorkspaceSkillDetailPage() {
   if (isLoading) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{skillName}</h1>
         <Spinner fill size="lg" />
       </PageLayout>
     );
@@ -96,6 +97,7 @@ export default function WorkspaceSkillDetailPage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{skillName}</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -105,6 +107,7 @@ export default function WorkspaceSkillDetailPage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{skillName}</h1>
         <PermissionDenied variant="fill" resource="workspaces" />
       </PageLayout>
     );
@@ -113,6 +116,7 @@ export default function WorkspaceSkillDetailPage() {
   if (error || !skill) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{skillName}</h1>
         <ErrorState
           variant="fill"
           title="Failed to load skill"
@@ -124,6 +128,7 @@ export default function WorkspaceSkillDetailPage() {
 
   return (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">{skillName}</h1>
       <div className="grid h-full overflow-x-hidden overflow-y-auto">
         <div className="mx-auto h-full w-full max-w-[100rem] overflow-x-hidden px-[3rem] py-5">
           <SkillDetail skill={skill} rawSkillMd={rawSkillMdData?.content} onReferenceClick={setViewingReference} />

@@ -333,6 +333,7 @@ function EditLayoutWrapper() {
 
   return (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+      <h1 className="sr-only">{agentId}</h1>
       {isNotFound ? (
         <>
           <EmptyState variant="fill" titleSlot="Agent not found" />

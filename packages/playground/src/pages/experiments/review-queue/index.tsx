@@ -66,6 +66,7 @@ function ReviewQueuePage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Review Queue</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -74,6 +75,7 @@ function ReviewQueuePage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Review Queue</h1>
         <PermissionDenied variant="fill" resource="experiments" />
       </PageLayout>
     );
@@ -82,6 +84,7 @@ function ReviewQueuePage() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Review Queue</h1>
         <ErrorState variant="fill" title="Failed to load experiments" message={error.message} />
       </PageLayout>
     );

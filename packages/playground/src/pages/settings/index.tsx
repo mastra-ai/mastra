@@ -21,6 +21,7 @@ export const StudioSettingsPage = () => {
 
   return (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Settings</h1>
       <SettingsLayout>
         <div className="mx-auto flex max-w-4xl flex-col gap-8">
           <SettingsGroup>

@@ -23,6 +23,7 @@ const MCPs = () => {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">MCP Servers</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -31,6 +32,7 @@ const MCPs = () => {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">MCP Servers</h1>
         <PermissionDenied variant="fill" resource="MCP servers" />
       </PageLayout>
     );
@@ -39,6 +41,7 @@ const MCPs = () => {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">MCP Servers</h1>
         <ErrorState variant="fill" title="Failed to load MCP servers" message={error.message} />
       </PageLayout>
     );
@@ -47,6 +50,7 @@ const MCPs = () => {
   if (mcpServers.length === 0 && !isLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">MCP Servers</h1>
         <NoMCPServersInfo />
       </PageLayout>
     );
@@ -65,6 +69,7 @@ const MCPs = () => {
         </ActionRow>
       }
     >
+      <h1 className="sr-only">MCP Servers</h1>
       <McpServersList
         mcpServers={mcpServers}
         isLoading={isLoading}

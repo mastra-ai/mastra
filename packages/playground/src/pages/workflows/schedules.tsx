@@ -19,6 +19,7 @@ export default function SchedulesPage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Schedules</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -27,6 +28,7 @@ export default function SchedulesPage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Schedules</h1>
         <PermissionDenied variant="fill" resource="schedules" />
       </PageLayout>
     );
@@ -34,6 +36,7 @@ export default function SchedulesPage() {
 
   return (
     <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Schedules</h1>
       <div className="h-full">
         <SchedulesPageContent workflowId={workflowId} />
       </div>

@@ -46,6 +46,7 @@ function CompareExperimentsPage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -54,6 +55,7 @@ function CompareExperimentsPage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
         <PermissionDenied variant="fill" resource="experiments" />
       </PageLayout>
     );
@@ -62,6 +64,7 @@ function CompareExperimentsPage() {
   if (!datasetId || !experimentIdA || !experimentIdB) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Select two experiments to compare.</p>
@@ -80,6 +83,7 @@ function CompareExperimentsPage() {
   if (error && !is404NotFoundError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
         <ErrorState variant="fill" title="Failed to load experiments" message={error.message} />
       </PageLayout>
     );
@@ -89,6 +93,7 @@ function CompareExperimentsPage() {
   if (error || !experimentA.data || !experimentB.data) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>

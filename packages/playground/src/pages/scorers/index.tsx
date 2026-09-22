@@ -23,6 +23,7 @@ export default function Scorers() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Scorers</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -31,6 +32,7 @@ export default function Scorers() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Scorers</h1>
         <PermissionDenied variant="fill" resource="scorers" />
       </PageLayout>
     );
@@ -39,6 +41,7 @@ export default function Scorers() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Scorers</h1>
         <ErrorState variant="fill" title="Failed to load scorers" message={error.message} />
       </PageLayout>
     );
@@ -47,6 +50,7 @@ export default function Scorers() {
   if (Object.keys(scorers).length === 0 && !isLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={<ScorersHeaderCreateAction />}>
+        <h1 className="sr-only">Scorers</h1>
         <NoScorersInfo />
       </PageLayout>
     );
@@ -74,6 +78,7 @@ export default function Scorers() {
         />
       }
     >
+      <h1 className="sr-only">Scorers</h1>
       <ScorersList
         scorers={scorers}
         isLoading={isLoading}

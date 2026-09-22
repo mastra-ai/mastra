@@ -33,6 +33,7 @@ const RESULTS_SORT_KEYS = ['startedAt'] as const;
 function ExperimentPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
     <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Experiment</h1>
       <div />
       <div className="flex h-full items-center justify-center">{children}</div>
     </PageLayout>
@@ -173,6 +174,7 @@ function ExperimentPage() {
             </ExperimentTopArea>
           }
         >
+          <h1 className="sr-only">{experimentId}</h1>
           {/* Results take the remaining width; the rail keeps the pipeline and run metadata beside them. */}
           <div className="grid grid-cols-[1fr_auto] gap-4 overflow-visible">
             <ExperimentResultsSection

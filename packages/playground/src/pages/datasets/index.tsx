@@ -66,6 +66,7 @@ export default function Datasets() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Datasets</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -74,6 +75,7 @@ export default function Datasets() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Datasets</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
     );
@@ -82,6 +84,7 @@ export default function Datasets() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Datasets</h1>
         <ErrorState variant="fill" title="Failed to load datasets" message={error.message} />
       </PageLayout>
     );
@@ -91,6 +94,7 @@ export default function Datasets() {
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerCreateAction}>
+        <h1 className="sr-only">Datasets</h1>
         <NoDatasetsInfo onCreateClick={openCreatePage} />
       </PageLayout>
     );
@@ -127,6 +131,7 @@ export default function Datasets() {
         />
       }
     >
+      <h1 className="sr-only">Datasets</h1>
       <DatasetsList
         datasets={datasets}
         experiments={experiments}

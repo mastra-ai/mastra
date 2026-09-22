@@ -120,6 +120,7 @@ export default function Experiments() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -128,6 +129,7 @@ export default function Experiments() {
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
         <PermissionDenied variant="fill" resource="experiments" />
       </PageLayout>
     );
@@ -136,6 +138,7 @@ export default function Experiments() {
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
     );
@@ -144,6 +147,7 @@ export default function Experiments() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
         <ErrorState variant="fill" title="Failed to load experiments" message={error.message} />
       </PageLayout>
     );
@@ -161,6 +165,7 @@ export default function Experiments() {
   if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Experiments</h1>
         <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
         {runDialog}
       </PageLayout>
@@ -218,6 +223,7 @@ export default function Experiments() {
         />
       }
     >
+      <h1 className="sr-only">Experiments</h1>
       <ExperimentsList
         experiments={experiments}
         datasets={datasets}

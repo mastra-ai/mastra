@@ -35,6 +35,7 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <h1 className="sr-only">Metrics</h1>
         <div className="flex h-full items-center justify-center">
           <MetricsCapabilityError error={error} />
         </div>

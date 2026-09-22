@@ -116,6 +116,7 @@ function DatasetItemVersionsComparePage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Item Version History</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -124,6 +125,7 @@ function DatasetItemVersionsComparePage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Item Version History</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
     );
@@ -132,6 +134,7 @@ function DatasetItemVersionsComparePage() {
   if (!datasetId || !itemId) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Item Version History</h1>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Item not found.</p>
@@ -168,6 +171,7 @@ function DatasetItemVersionsComparePage() {
         )
       }
     >
+      <h1 className="sr-only">Item Version History</h1>
       <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
         <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
           <CardHeader>

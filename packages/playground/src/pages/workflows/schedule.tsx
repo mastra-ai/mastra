@@ -53,6 +53,7 @@ export default function SchedulePage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scheduleId}</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -61,6 +62,7 @@ export default function SchedulePage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scheduleId}</h1>
         <PermissionDenied variant="fill" resource="schedules" />
       </PageLayout>
     );
@@ -69,6 +71,7 @@ export default function SchedulePage() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scheduleId}</h1>
         <ErrorState variant="fill" title="Failed to load schedule" message={error.message} />
       </PageLayout>
     );
@@ -114,6 +117,7 @@ export default function SchedulePage() {
         </ActionRow>
       }
     >
+      <h1 className="sr-only">{scheduleId}</h1>
       {schedule ? (
         <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-4 overflow-hidden">
           <div className="border-border flex h-fit flex-col gap-4 rounded-md border p-4">

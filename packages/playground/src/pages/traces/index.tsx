@@ -384,6 +384,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   if (isDiscoveryLoading) {
     return (
       <PageLayout breadcrumbs={breadcrumbs}>
+        <h1 className="sr-only">Traces</h1>
         <div>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
         </div>
@@ -394,6 +395,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   if (tracesError) {
     return (
       <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
         <div className="flex h-full items-center justify-center">
           <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
         </div>
@@ -406,6 +408,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
       <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
         <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
       </PageLayout>
     );
@@ -413,6 +416,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   return (
     <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+      <h1 className="sr-only">Traces</h1>
       <TracesListView
         traces={traces}
         isLoading={isTracesLoading}

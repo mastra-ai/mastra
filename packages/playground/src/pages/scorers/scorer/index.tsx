@@ -228,6 +228,7 @@ export default function Scorer() {
           ) : undefined
         }
       >
+        <h1 className="sr-only">{scorerId}</h1>
         <div className="flex h-full items-center justify-center">
           {isUnauthorized ? (
             <SessionExpired />
@@ -274,6 +275,7 @@ export default function Scorer() {
         </ActionRow>
       }
     >
+      <h1 className="sr-only">{scorerId}</h1>
       <ScoresList
         scores={scores}
         isLoading={isLoadingScores}

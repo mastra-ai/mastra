@@ -310,6 +310,7 @@ export default function Workspace() {
   if (isLoadingWorkspaces) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <Spinner fill />
       </PageLayout>
     );
@@ -319,6 +320,7 @@ export default function Workspace() {
   if (isSessionExpired) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -328,6 +330,7 @@ export default function Workspace() {
   if (isPermissionDenied) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <PermissionDenied variant="fill" resource="workspaces" />
       </PageLayout>
     );
@@ -337,6 +340,7 @@ export default function Workspace() {
   if (isWorkspaceNotSupported) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotSupported />
       </PageLayout>
     );
@@ -347,6 +351,7 @@ export default function Workspace() {
   if (genericError) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <ErrorState variant="fill" title="Failed to load workspace" message={(genericError as Error).message} />
       </PageLayout>
     );
@@ -356,6 +361,7 @@ export default function Workspace() {
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <NoWorkspacesInfo />
       </PageLayout>
     );
@@ -366,6 +372,7 @@ export default function Workspace() {
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Workspaces</h1>
         <WorkspaceNotConfigured />
       </PageLayout>
     );
@@ -392,6 +399,7 @@ export default function Workspace() {
         ) : undefined
       }
     >
+      <h1 className="sr-only">Workspaces</h1>
       <div className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-4' : 'grid content-start gap-4'}>
         {/* Workspace Selector - shown when multiple workspaces exist */}
         {workspaces.length > 1 && (

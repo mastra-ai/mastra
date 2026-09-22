@@ -11,6 +11,7 @@ function CmsPromptBlocksCreatePage() {
 
   return (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Create prompt block</h1>
       <PromptBlockCreateContent onSuccess={block => navigate(paths.cmsPromptBlockEditLink(block.id))} />
     </PageLayout>
   );

@@ -8,6 +8,7 @@ const crumbs = [navCrumb('/request-context')];
 export default function RequestContextPage() {
   return (
     <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Request Context</h1>
       <div>
         <RequestContextWrapper>
           <RequestContext />

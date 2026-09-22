@@ -14,6 +14,7 @@ export const McpServerPage = () => {
 
   return (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">{serverId}</h1>
       <div className="h-full w-full overflow-hidden">
         <MCPDetail isLoading={isLoading} server={server} />
       </div>

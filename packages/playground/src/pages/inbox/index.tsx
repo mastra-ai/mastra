@@ -124,6 +124,7 @@ export default function InboxPage() {
   return (
     <div className="relative h-full overflow-hidden">
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Inbox</h1>
         <div className="h-full min-h-0 overflow-hidden">
           {isInboxEmpty ? (
             <InboxEmptyState />

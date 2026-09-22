@@ -42,6 +42,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   if (!workflowId) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{workflowId}</h1>
         <div className="flex h-full flex-col items-center justify-center">
           <Txt variant="body" tone="ink" className="text-center">
             No workflow ID provided
@@ -54,6 +55,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   if (isWorkflowLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{workflowId}</h1>
         <Skeleton className="h-full" />
       </PageLayout>
     );
@@ -70,6 +72,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
                 breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
                 headerActions={<WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />}
               >
+                <h1 className="sr-only">{workflowId}</h1>
                 <WorkflowLayoutUI leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}>
                   {children}
                 </WorkflowLayoutUI>

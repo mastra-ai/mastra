@@ -23,6 +23,7 @@ export function Processors() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Processors</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
     );
@@ -31,6 +32,7 @@ export function Processors() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Processors</h1>
         <PermissionDenied variant="fill" resource="processors" />
       </PageLayout>
     );
@@ -39,6 +41,7 @@ export function Processors() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Processors</h1>
         <ErrorState variant="fill" title="Failed to load processors" message={error.message} />
       </PageLayout>
     );
@@ -47,6 +50,7 @@ export function Processors() {
   if (Object.keys(processors).length === 0 && !isLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Processors</h1>
         <NoProcessorsInfo />
       </PageLayout>
     );
@@ -65,6 +69,7 @@ export function Processors() {
         </ActionRow>
       }
     >
+      <h1 className="sr-only">Processors</h1>
       <ProcessorsList
         processors={processors}
         isLoading={isLoading}

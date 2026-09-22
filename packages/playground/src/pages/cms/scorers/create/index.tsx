@@ -11,6 +11,7 @@ function CmsScorersCreatePage() {
 
   return (
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Create scorer</h1>
       <ScorerCreateContent onSuccess={scorer => navigate(paths.scorerLink(scorer.id))} />
     </PageLayout>
   );

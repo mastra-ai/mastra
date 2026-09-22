@@ -538,6 +538,7 @@ export function DatasetReview({
   if (isLoadingReview) {
     return (
       <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+        <h1 className="sr-only">Review Queue</h1>
         <Spinner fill />
       </PageLayout>
     );
@@ -575,6 +576,7 @@ export function DatasetReview({
 
   return (
     <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+      <h1 className="sr-only">Review Queue</h1>
       {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
