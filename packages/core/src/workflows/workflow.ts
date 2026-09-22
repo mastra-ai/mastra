@@ -3803,14 +3803,19 @@ export class Run<
           waitingPaths: {},
           timestamp: Date.now(),
         };
-        await workflowsStore?.persistWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-          resourceId: this.resourceId,
-          snapshot: this.executionEngine.options.pruneSnapshot
-            ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
-            : initialRunSnapshot,
-        });
+        try {
+          await workflowsStore?.persistWorkflowSnapshot({
+            workflowName: this.workflowId,
+            runId: this.runId,
+            resourceId: this.resourceId,
+            snapshot: this.executionEngine.options.pruneSnapshot
+              ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
+              : initialRunSnapshot,
+          });
+        } catch (error) {
+          workflowSpan?.error({ error: error as Error });
+          throw error;
+        }
       }
       this.workflowRunStatus = 'running';
       onDispatched();
@@ -3878,7 +3883,8 @@ export class Run<
    * The workflow continues executing in the background.
    * Use this when you don't need to wait for the result or want to avoid polling failures.
    * @param args The input data and configuration for the workflow
-   * @returns A promise that resolves immediately with the runId
+   * @returns A promise that resolves with the runId after startup validation, lifecycle hooks, and durable dispatch,
+   * or rejects if any of those operations fail
    */
   async startAsync(
     args: (TInput extends unknown
