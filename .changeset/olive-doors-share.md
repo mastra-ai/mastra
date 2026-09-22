@@ -32,6 +32,12 @@ The rung is declared once, on the group, and a child's own `size` can no longer 
 
 `size` defaults to `md`. A group whose segments were all `sm` needs `size="sm"` on the group — without it those segments now render at `md`. `size="icon-sm" | "icon-md" | "icon-lg"` stays on a `Button`: on `Button` the `icon-*` sizes also select the square shape, and only their rung is overridden.
 
+**`InputGroup` inside a group**
+
+A field keys its type scale off its own `data-size` (`text-caption` / `text-body-sm` / `text-body`), which the group's stylesheet cannot reach — forcing only the box left a `sm` group reading at `md`. `ButtonsGroup` now publishes its rung on the new `ControlSizeContext` (exported from `ds/primitives/control-size`) and `InputGroup` takes it **over** its own `size`, the same rule as every other segment: inside a group, an explicit `size` on the field is inert. Outside one, `size` behaves exactly as before.
+
+A field's addon glyph is still a flat `size-4` at every rung. That is `InputGroup`'s own behaviour, in or out of a group, and changing it moves every field in the app — left as a follow-up.
+
 **Removed**
 
 `ButtonsGroupText` no longer takes a `size` prop. A text segment only exists inside a group, and the group sets its height.
