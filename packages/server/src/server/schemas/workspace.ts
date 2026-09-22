@@ -33,7 +33,7 @@ const coercedBooleanSchema = z.preprocess(value => {
 // =============================================================================
 
 export const fsPathParams = z.object({
-  path: z.string().describe('File or directory path (URL encoded)'),
+  path: z.string().describe('File or directory path'),
 });
 
 export const workspaceIdPathParams = z.object({
@@ -281,7 +281,7 @@ export const skillNamePathParams = workspaceIdPathParams.extend({
 });
 
 export const skillReferencePathParams = skillNamePathParams.extend({
-  referencePath: z.string().describe('Reference file path (URL encoded)'),
+  referencePath: z.string().describe('Reference file path'),
 });
 
 // Optional query param for disambiguating same-named skills
