@@ -1325,7 +1325,8 @@ describe('CachingPubSub', () => {
       await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
       expect(sourceBus.acked).toHaveLength(1);
 
-      // 2. Already-indexed delivery (dedup-suppressed — never republished): still acked.
+      // 2. Foreign-indexed delivery on a non-aliased source (re-cached under a
+      //    fresh index and republished): still acked.
       await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 2 }, index: 5 });
       expect(sourceBus.acked).toHaveLength(2);
 
@@ -1354,6 +1355,50 @@ describe('CachingPubSub', () => {
       await flush();
 
       expect(replayed).toEqual(['first', 'second', 'third']);
+    });
+
+    it('bridges foreign-indexed events when the source is another caching tier', async () => {
+      // Supported topology: an agent with its own pubsub wraps it in its own
+      // CachingPubSub and follows `mastra.pubsub` — which is itself a
+      // user-supplied CachingPubSub over a *different* cache and transport
+      // (`new Mastra({ pubsub: new CachingPubSub(...) })`). Events published
+      // through the mastra tier arrive at the follower already carrying that
+      // tier's index. They must NOT be treated as a local echo: the foreign
+      // tier's cache is not the one this tier replays from, so dropping them
+      // loses the event for local subscribers entirely (#20646's failure
+      // mode). Expected: cached here under a fresh index and republished
+      // into inner exactly once.
+      const foreignTier = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache());
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: foreignTier });
+
+      // Bump the foreign tier's counter before anyone follows, so the foreign
+      // index (1) is distinguishable from this tier's fresh index (0).
+      await foreignTier.publish(topic, { type: 'warmup', runId: 'run-1', data: {} });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await foreignTier.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
+      await flush();
+
+      // Exactly one live delivery, carrying this tier's index — not the
+      // foreign tier's.
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ type: 'chunk', data: { n: 1 }, index: 0 });
+
+      // Cached in this tier, so late subscribers can replay it.
+      const history = await caching.getHistory(topic);
+      expect(history).toHaveLength(1);
+      expect(history[0]).toMatchObject({ type: 'chunk', index: 0 });
+
+      const replayed: string[] = [];
+      await caching.subscribeWithReplay(topic, event => {
+        replayed.push(event.type);
+      });
+      await flush();
+      expect(replayed).toEqual(['chunk']);
     });
 
     it('does not double-deliver when source and inner share the transport', async () => {

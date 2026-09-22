@@ -202,9 +202,18 @@ export class CachingPubSub extends PubSub {
    * and torn down on {@link clearTopic}.
    *
    * The follower's contract:
-   * - Events that already carry an `index` have been through a caching layer
-   *   (our own publish echo on an aliased bus, or our own republish) — ack and
-   *   ignore them. This is both the dedup and the republish loop guard.
+   * - On an aliased source, events that carry an `index` are this cache's own
+   *   publish echo (or its own republish) — ack and ignore them. This is both
+   *   the dedup and the republish loop guard.
+   * - On a non-aliased source, an `index` means the event passed through a
+   *   *foreign* caching tier (e.g. a user-supplied `CachingPubSub` handed to
+   *   `new Mastra({ pubsub })` while this agent runs its own cache tier).
+   *   That tier's cache is not the one this instance replays from, so the
+   *   event is treated like an un-indexed one: cached here under a fresh
+   *   index (replacing the foreign index) and republished into `inner`.
+   *   Dropping it instead would lose the event for local subscribers entirely
+   *   — the exact stream-loss failure `source` following exists to prevent
+   *   (#20646).
    * - Un-indexed events were published directly on the source bus (e.g. by
    *   the evented workflow engine, possibly from another process). Assign an
    *   index, cache them (subject to `shouldCache`), and — only when source and
@@ -228,10 +237,10 @@ export class CachingPubSub extends PubSub {
 
     const followerCb: EventCallback = async (event, ack) => {
       try {
-        if (event.index !== undefined) {
+        const aliased = this.isSourceAliased(source);
+        if (event.index !== undefined && aliased) {
           return await ack?.();
         }
-        const aliased = this.isSourceAliased(source);
         let outbound: Event = event;
         if (this.shouldCache?.(topic) !== false) {
           // Same single-round-trip op as publish() (#22477): the follower sits
