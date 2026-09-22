@@ -12,7 +12,9 @@ import type { PgDB } from '../../db';
 const STORE_NAME = 'PG';
 // Legacy timestamps contain UTC wall time. Interpret them explicitly so reads
 // and filtering agree even when the server or node process uses another zone.
-const SCORE_TIMESTAMP = `COALESCE(s."createdAtZ", s."createdAt" AT TIME ZONE 'UTC', s."updatedAt" AT TIME ZONE 'UTC', s."updatedAtZ")`;
+// Z columns added to older tables are backfilled with migration time, not the
+// score's recorded time. Always use the original legacy creation timestamp.
+const SCORE_TIMESTAMP = `s."createdAt" AT TIME ZONE 'UTC'`;
 
 type ScoreRow = Record<string, unknown>;
 type ParsedScoreFilters = ReturnType<typeof listScoresArgsSchema.parse>['filters'];
@@ -151,11 +153,10 @@ function transformScoreRow(row: ScoreRow): ScoreRecord {
   const entity = parseObjectValue(row.entity);
   const requestContext = parseObjectValue(row.requestContext);
   const source = optionalString(row.source);
-  const timestampValue = row.bridgeTimestamp ?? row.createdAtZ ?? row.createdAt ?? row.updatedAt ?? row.updatedAtZ;
 
   return {
     scoreId: optionalString(row.id),
-    timestamp: toDate(timestampValue, 'score timestamp'),
+    timestamp: toDate(row.bridgeTimestamp, 'score timestamp'),
     traceId: firstString(row.traceId, metadata?.traceId, requestContext?.traceId),
     spanId: firstString(row.spanId, metadata?.spanId, requestContext?.spanId),
     scorerId: firstString(row.scorerId, scorer?.id, scorer?.scorerId) ?? 'unknown-scorer',

@@ -206,6 +206,37 @@ describe('PostgresStore observability scores bridge', () => {
     });
   });
 
+  it('keeps historical timestamps after init backfills missing Z columns', async () => {
+    const historical = new Date('2026-01-15T12:34:56.000Z');
+    const newer = new Date('2026-02-15T12:34:56.000Z');
+    await saveLegacyScore({ id: 'historical-a', scorerId: 'historical-scorer' }, historical);
+    await saveLegacyScore({ id: 'historical-z', scorerId: 'historical-scorer' }, newer);
+    await store.db.none(
+      `ALTER TABLE ${getSchemaName(schemaName)}."mastra_scorers" DROP COLUMN "createdAtZ", DROP COLUMN "updatedAtZ"`,
+    );
+    const reopened = new PostgresStore({ ...TEST_CONFIG, id: 'pg-scores-migration', schemaName });
+    try {
+      await reopened.init();
+      const migrated = (await reopened.getStore('observability'))!;
+      const row = await reopened.db.one<{ createdAtZ: Date }>(
+        `SELECT "createdAtZ" FROM ${getSchemaName(schemaName)}."mastra_scorers" WHERE id = 'historical-a'`,
+      );
+      expect(row.createdAtZ.getTime()).toBeGreaterThan(newer.getTime());
+      const result = await migrated.listScores({
+        filters: { scorerId: 'historical-scorer', timestamp: { start: historical, end: historical } },
+      });
+      expect(result.scores).toMatchObject([{ scoreId: 'historical-a', timestamp: historical }]);
+      expect(result.pagination!.total).toBe(1);
+      await expect(migrated.getScoreById('historical-a')).resolves.toMatchObject({ timestamp: historical });
+      const ordered = await migrated.listScores({ orderBy: { field: 'timestamp', direction: 'ASC' } });
+      expect(ordered.scores.map(score => score.scoreId)).toEqual(['historical-a', 'historical-z']);
+      const migrationWindow = await migrated.listScores({ filters: { timestamp: { start: row.createdAtZ } } });
+      expect(migrationWindow.scores).toEqual([]);
+    } finally {
+      await reopened.close();
+    }
+  });
+
   it('filters legacy JSON objects with the same fallback precedence as returned records', async () => {
     const { score: saved } = await scores.saveScore(
       legacyScore({
