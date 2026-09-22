@@ -572,6 +572,7 @@ export class SessionThread {
   cleanupSubscription(): void {
     this.#owner.cleanupFollowUpBinding();
     this.#owner.stream.cleanup();
+    this.#owner.run.supersedeBinding();
     this.#owner.run.reset();
   }
 
@@ -1451,6 +1452,8 @@ export class SessionRun {
   #traceId: string | null = null;
   /** Monotonic counter bumped at the start of each operation. */
   #operationId = 0;
+  /** Bumped when the thread binding is torn down; see {@link bindingGeneration}. */
+  #bindingGeneration = 0;
   /** Controller whose signal cancels the active run; null when no run is armed. */
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
@@ -1536,6 +1539,20 @@ export class SessionRun {
     this.#abortController = null;
     this.#abortRequested = false;
     this.#notifyTeardown();
+  }
+
+  /**
+   * Generation of the session's thread binding. Bumped whenever the binding is
+   * torn down (detach, switch, `/new`, ...), so async work started for one run
+   * can tell that the session has since moved on to another.
+   */
+  bindingGeneration(): number {
+    return this.#bindingGeneration;
+  }
+
+  /** Mark the current binding as superseded; see {@link bindingGeneration}. */
+  supersedeBinding(): void {
+    this.#bindingGeneration += 1;
   }
 
   /** Bump and return the operation counter at the start of a new operation. */
@@ -3356,10 +3373,14 @@ export class Session<TState = unknown> {
 
     if (suspendedToolCalls.length > 0) {
       this.run.requestAbort({ deferSignal: true });
+      // Settlement is async; a thread switch / `/new` can tear down the binding
+      // and start a successor run before it lands. Bind the teardown to this
+      // binding and abort mode so it cannot abort that successor.
+      const origin = { bindingGeneration: this.run.bindingGeneration(), localOnly: this.#localOnlyAbort };
       void this.runEngine
         .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
         .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
-        .finally(() => this.completeDeferredAbort());
+        .finally(() => this.completeDeferredAbort(origin));
       return;
     }
 
@@ -3372,9 +3393,14 @@ export class Session<TState = unknown> {
    * a tool-approval gate: abort the live subscription and the run's controller.
    * Called by the run engine once the gated call's decline has been driven
    * through the agent, so the denial is persisted before the run is torn down.
+   * When `origin` is given, the teardown is skipped if the session's binding was
+   * torn down since, because a successor run may now own the stream and run
+   * state. (The abort-requested flag is not a usable guard: the denial's own
+   * resumed run resets it before settlement resolves.)
    */
-  completeDeferredAbort(): void {
-    this.stream.abort({ localOnly: this.#localOnlyAbort });
+  completeDeferredAbort(origin?: { bindingGeneration: number; localOnly: boolean }): void {
+    if (origin && this.run.bindingGeneration() !== origin.bindingGeneration) return;
+    this.stream.abort({ localOnly: origin?.localOnly ?? this.#localOnlyAbort });
     this.run.requestAbort();
   }
 
