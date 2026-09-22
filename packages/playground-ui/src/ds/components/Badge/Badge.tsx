@@ -10,7 +10,7 @@ export type BadgeIndicator = 'dot' | 'pulse';
 
 type BadgeToneStyles = Record<BadgeEmphasis, string> & { indicator: string };
 
-const badgeToneStyles = {
+const semanticBadgeToneStyles = {
   studio: {
     default: productColors['studio'],
     muted: productColors['studio'],
@@ -87,6 +87,14 @@ const badgeToneStyles = {
     indicator: 'bg-badge-pink',
   },
 } satisfies Record<string, BadgeToneStyles>;
+
+const badgeToneStyles = {
+  ...semanticBadgeToneStyles,
+  green: semanticBadgeToneStyles.success,
+  red: semanticBadgeToneStyles.destructive,
+  yellow: semanticBadgeToneStyles.warning,
+  blue: semanticBadgeToneStyles.info,
+};
 
 export type BadgeVariant = keyof typeof badgeToneStyles;
 

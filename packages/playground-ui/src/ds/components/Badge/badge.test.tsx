@@ -26,6 +26,14 @@ afterEach(() => {
 });
 
 describe('Badge', () => {
+  it.each(['green', 'red', 'yellow', 'blue'] as const)('keeps the legacy %s variant usable', variant => {
+    render(
+      <Badge variant={variant} indicator="dot">
+        Legacy status
+      </Badge>,
+    );
+    expect(screen.getByText('Legacy status')).not.toBeNull();
+  });
   describe('when rendered inside text', () => {
     it('uses phrasing content and forwards span attributes', () => {
       render(

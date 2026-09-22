@@ -20,6 +20,7 @@
  * still waiting on a ramp of their own.
  */
 
+@import './legacy-theme.css';
 @import './theme/colors.css';
 @import './theme/status.css';
 @import './theme/data-viz.css';

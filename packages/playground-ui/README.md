@@ -63,9 +63,9 @@ import { ProductBadge } from '@mastra/playground-ui/components/ProductBadge';
 
 Charts use `--chart-1` through `--chart-8` for categories and `--chart-sequential-1` through `--chart-sequential-5` for ordered values. Span colors use `--span-agent`, `--span-workflow`, and the other span names. Pastel chart colors are fills, not text colors; keep labels on `--foreground` or `--muted-foreground`.
 
-Numbered `accent*` tokens and `positive1`, `negative1`, and `warning1` are removed. Status consumers use the existing `success`, `destructive`, `warning`, or `info` roles. Focus styling uses `border-focus`; categorical charts and span icons use their own roles. CodeMirror uses five local `--syntax-*` properties scoped to `.cm-editor`, not a global palette.
+Numbered `accent*` tokens and `positive1`, `negative1`, and `warning1` remain in `legacy-theme.css`, imported by `theme.css` for existing consumers. Status consumers use the existing `success`, `destructive`, `warning`, or `info` roles. Focus styling uses `border-focus`; categorical charts and span icons use their own roles. CodeMirror uses five local `--syntax-*` properties scoped to `.cm-editor`, not a global palette.
 
-The duplicated `notice-success/destructive/warning/info` and `badge-green/red/yellow/blue` color aliases are removed. Use the status role with `-bg`, `-border`, `-fg`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are now `success`, `destructive`, `warning`, and `info`, replacing `green`, `red`, `yellow`, and `blue`; categorical variants are unchanged. `--brand-green-*` is now `--green-*`, the shared chromatic ramp, not Mastra brand green.
+The duplicated `notice-success/destructive/warning/info` and `badge-green/red/yellow/blue` color aliases are also retained in the compatibility theme. Use the status role with `-bg`, `-border`, `-fg`, or `-indicator` for its intended job. Notice variants are unchanged. Badge status variants are now `success`, `destructive`, `warning`, and `info`, with `green`, `red`, `yellow`, and `blue` retained as compatibility aliases; categorical variants are unchanged. New consumers use `--green-*` for the shared chromatic ramp, not Mastra brand green. `--brand-green-*` remains in the compatibility theme.
 
 To migrate chart consumers:
 

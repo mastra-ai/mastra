@@ -196,17 +196,34 @@ describe('theme.css export', () => {
     expect(lightTheme).not.toMatch(/--color-ds-/);
   });
 
-  it('removes legacy accent and duplicated status aliases from the theme', () => {
-    const declarations = [...themeCss.matchAll(/(--[\w-]+)\s*:/g)].map(([, name]) => name);
-    expect(
-      declarations.filter(
-        name =>
-          name &&
-          /(?:accent[1-6]|brand-green-|positive1|negative1|warning1|notice-(?:success|warning|info|destructive)|badge-(?:green|red|blue|yellow))/.test(
-            name,
-          ),
-      ),
-    ).toEqual([]);
+  it('loads legacy colors through the public theme entry in both modes', () => {
+    const legacyCss = readFileSync(resolve(pkgRoot, 'legacy-theme.css'), 'utf8');
+    const names = [...parseVariables(blocksOf(legacyCss, ':root')).keys()];
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
+    expect(readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8')).toContain("@import './legacy-theme.css';");
+    expect(names).toContain('accent1');
+    expect(names).toContain('chart-blue');
+    expect(names).toContain('span-type-agent');
+    for (const variables of [darkVariables, lightVariables]) {
+      for (const name of names) expect(resolveToken(name, variables)).not.toContain('var(');
+    }
+    expect(resolveToken('accent1', darkVariables)).toBe('oklch(0.723 0.219 149.579)');
+    expect(resolveToken('accent1', lightVariables)).toBe('oklch(0.627 0.194 149.214)');
+    expect(Colors.accent1).toBe('var(--accent1)');
+  });
+
+  it('generates legacy utilities alongside semantic utilities', async () => {
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
+    const css = compiler.build([
+      'bg-accent1',
+      'text-positive1',
+      'bg-notice-success',
+      'text-badge-green-fg',
+      'bg-success-bg',
+    ]);
+    for (const name of ['bg-accent1', 'text-positive1', 'bg-notice-success', 'text-badge-green-fg', 'bg-success-bg']) {
+      expect(css).toContain(`.${name}`);
+    }
   });
 
   it('overrides the green palette the native v4 way (initial + remap)', () => {
@@ -550,7 +567,8 @@ describe('theme.css export', () => {
 
   it('resolves chromatic roles to opaque ramp values in both themes', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
-    const roles = /^(?:destructive|warning|success|info)-(?:bg|border|indicator|fg)$|^(?:product-|chart-|span-)/;
+    const roles =
+      /^(?:destructive|warning|success|info)-(?:bg|border|indicator|fg)$|^product-|^chart-(?:[1-8]|sequential-[1-5])$|^span-(?!type-)/;
 
     for (const variables of [darkVariables, lightVariables]) {
       const tokens = [...variables.keys()].filter(name => roles.test(name));
