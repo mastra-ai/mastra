@@ -37,7 +37,7 @@ export function StatusLine() {
   return (
     <div
       aria-label="Session status line"
-      className="text-ui-sm text-icon3 flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
+      className="text-caption text-muted-foreground flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <ModesSelection />
       <ModelPicker />

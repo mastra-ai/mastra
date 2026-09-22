@@ -1,4 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
@@ -28,6 +29,10 @@ import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-tr
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/logs')];
 
 const LOGS_SORT_KEYS = ['timestamp'] as const;
 const DEFAULT_LOGS_SORT = { key: 'timestamp', direction: 'desc' } as const;
@@ -141,10 +146,10 @@ export default function LogsPage() {
     [url],
   );
 
-  const pageTopArea = (
-    <PageLayout.TopArea>
-      <PageLayout.Row>
-        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
+  const actionRow = (
+    <>
+      <ActionRow>
+        <ActionRow.Start>
           <DateTimeRangePicker
             preset={url.datePreset}
             onPresetChange={url.handleDatePresetChange}
@@ -161,8 +166,8 @@ export default function LogsPage() {
             disabled={isLoadingLogs}
             onStartTextFilter={setAutoFocusFilterFieldId}
           />
-        </PageLayout.Column>
-      </PageLayout.Row>
+        </ActionRow.Start>
+      </ActionRow>
 
       <LogsToolbar
         isLoading={isLoadingLogs}
@@ -175,16 +180,16 @@ export default function LogsPage() {
         onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
         autoFocusFilterFieldId={autoFocusFilterFieldId}
       />
-    </PageLayout.TopArea>
+    </>
   );
 
   if (logsError) {
     return (
-      <PageLayout width="wide" height="full">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+        <h1 className="sr-only">Logs</h1>
+        <div className="flex h-full items-center justify-center">
           <LogsErrorContent error={logsError} resource="logs" errorTitle="Failed to load logs" />
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
     );
   }
@@ -193,18 +198,16 @@ export default function LogsPage() {
 
   if (logs.length === 0 && !isLoadingLogs && !contentFiltersApplied) {
     return (
-      <PageLayout width="wide" height="full">
-        {pageTopArea}
-        <PageLayout.MainArea isCentered>
-          <NoLogsInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
-        </PageLayout.MainArea>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+        <h1 className="sr-only">Logs</h1>
+        <NoLogsInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout width="wide" height="full">
-      {pageTopArea}
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+      <h1 className="sr-only">Logs</h1>
       <LogsLayout
         logCollapsed={logDetailsCollapsed}
         listSlot={

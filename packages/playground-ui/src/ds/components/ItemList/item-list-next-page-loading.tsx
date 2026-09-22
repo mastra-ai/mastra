@@ -18,7 +18,7 @@ export function ItemListNextPageLoading({
   }
 
   return (
-    <div ref={setEndOfListElement} className="text-ui-md text-muted-foreground mt-4 flex justify-center opacity-50">
+    <div ref={setEndOfListElement} className="text-body text-muted-foreground mt-4 flex justify-center opacity-50">
       {isLoading && loadingText}
       {!hasMore && !isLoading && noMoreDataText}
     </div>

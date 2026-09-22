@@ -142,14 +142,9 @@ export function MCPClientList() {
         </Section.Header>
 
         {mcpClients.length === 0 && (
-          <div className="border-border2 rounded-xl border border-dashed py-5 text-center">
+          <div className="border-border-strong rounded-xl border border-dashed py-5 text-center">
             <EmptyState
               className="py-4!"
-              iconSlot={
-                <div className="text-muted-foreground bg-surface3 flex size-6 items-center justify-center rounded-full p-2">
-                  <LaptopMinimal className="size-6" />
-                </div>
-              }
               titleSlot="No MCP clients configured yet."
               descriptionSlot="Add one to get started."
               actionSlot={
@@ -171,7 +166,7 @@ export function MCPClientList() {
               return (
                 <Entity
                   key={mcpClient.id ?? `pending-${index}`}
-                  className="bg-surface2 items-center"
+                  className="bg-background items-center"
                   onClick={() => setViewIndex(index)}
                 >
                   <div

@@ -5,7 +5,7 @@
  * @internal This module is not exported from the main package.
  */
 
-import { randomBytes, createHash } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 /**
  * Generate a code verifier for PKCE.
@@ -15,7 +15,7 @@ import { randomBytes, createHash } from 'node:crypto';
  */
 export function generateCodeVerifier(): string {
   // 32 bytes -> 43 chars base64url
-  return randomBytes(32).toString('base64url');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
 }
 
 /**
@@ -34,5 +34,5 @@ export function computeCodeChallenge(verifier: string): string {
  */
 export function generateState(): string {
   // 16 bytes -> 22 chars base64url
-  return randomBytes(16).toString('base64url');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString('base64url');
 }

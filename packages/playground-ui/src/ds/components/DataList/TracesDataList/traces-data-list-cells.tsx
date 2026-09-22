@@ -36,7 +36,7 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
     </span>
   );
   return (
-    <DataListCell className="text-ui-smd text-muted-foreground flex min-w-0 items-center gap-2">
+    <DataListCell className="text-body-sm text-muted-foreground flex min-w-0 items-center gap-2">
       {showLevelTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{icon}</TooltipTrigger>
@@ -99,7 +99,7 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
       {display ? (
         <>
           <display.Icon className="text-placeholder size-3.5 shrink-0" aria-hidden />
-          <span className="text-ui-smd min-w-0 truncate">{display.label}</span>
+          <span className="text-body-sm min-w-0 truncate">{display.label}</span>
         </>
       ) : (
         '-'

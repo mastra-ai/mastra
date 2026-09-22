@@ -11,6 +11,6 @@ export interface PendingIndicatorProps {
  */
 export const PendingIndicator = ({ className, testId = 'pending-indicator' }: PendingIndicatorProps) => (
   <div className={cn('flex items-center text-muted-foreground', className)} data-testid={testId}>
-    <span className="bg-neutral3 size-2 animate-pulse rounded-full" />
+    <span className="bg-muted-foreground size-2 animate-pulse rounded-full" />
   </div>
 );

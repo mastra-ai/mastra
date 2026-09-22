@@ -2,6 +2,8 @@ import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { SearchIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -52,30 +54,28 @@ export const FilterableList = ({
 
   return (
     <div
-      className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-4 py-4"
+      className="border-border flex h-full min-h-0 flex-col gap-3 border-r px-4 py-4"
       data-testid={`${testIdPrefix}-filter`}
     >
-      <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${testIdPrefix}-filter-search`}>
-        <InputGroup variant="outline" size="md">
-          <InputGroupAddon align="inline-start">
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label={`Filter ${title.toLowerCase()}`}
-            placeholder={`Filter ${title.toLowerCase()}...`}
-            onChange={event => setSearch(event.target.value)}
-          />
-        </InputGroup>
-      </div>
+      <InputGroup size="md" className="flex-none" data-testid={`${testIdPrefix}-filter-search`}>
+        <InputGroupAddon align="inline-start">
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="search"
+          aria-label={`Filter ${title.toLowerCase()}`}
+          placeholder={`Filter ${title.toLowerCase()}...`}
+          onChange={event => setSearch(event.target.value)}
+        />
+      </InputGroup>
 
-      <div className="text-ui-xs flex shrink-0 items-center gap-2">
+      <div className="text-meta flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-select-all`}
-          className="text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           Select all
         </button>
@@ -87,7 +87,7 @@ export const FilterableList = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-clear-all`}
-          className="text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           Clear all
         </button>
@@ -95,7 +95,7 @@ export const FilterableList = ({
 
       <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
         {filteredItems.length === 0 ? (
-          <Txt variant="ui-xs" className="text-muted-foreground px-1 py-2">
+          <Txt variant="meta" tone="muted" className="px-1 py-2">
             No matches
           </Txt>
         ) : (
@@ -116,7 +116,7 @@ export const FilterableList = ({
                     data-testid={`${testIdPrefix}-filter-item-${item.id}`}
                     data-checked={checked ? 'true' : 'false'}
                     className={cn(
-                      'flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-foreground transition-colors hover:bg-surface4',
+                      'flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground hover:bg-fill-subtle',
                       disabled && 'cursor-not-allowed opacity-60',
                     )}
                   >

@@ -7,14 +7,14 @@ export function WorkflowDebugModeSwitch() {
   const descriptionId = useId();
 
   return (
-    <label className="text-ui-sm flex min-w-0 cursor-pointer items-center gap-2">
+    <label className="text-caption flex min-w-0 cursor-pointer items-center gap-2">
       <Switch
         checked={debugMode}
         onCheckedChange={setDebugMode}
         aria-label="Step by step"
         aria-describedby={descriptionId}
       />
-      <span className="text-ui-xs flex min-w-0 flex-col gap-0.5">
+      <span className="text-meta flex min-w-0 flex-col gap-0.5">
         <span className="text-foreground">Step by step</span>
         <span id={descriptionId} className="text-muted-foreground">
           Pause to inspect outputs

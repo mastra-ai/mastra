@@ -10,7 +10,7 @@ export function ExperimentTraceSpanTypeIcon({ icon, color }: ExperimentTraceSpan
     <span
       className={cn(
         'flex w-[1.1rem] h-[1.1rem] shrink-0 rounded-md items-center justify-center',
-        '[&>svg]:w-[.9rem] [&>svg]:h-[.9rem] [&>svg]:text-surface2',
+        '[&>svg]:w-[.9rem] [&>svg]:h-[.9rem] [&>svg]:text-background',
       )}
       style={{ backgroundColor: color }}
     >

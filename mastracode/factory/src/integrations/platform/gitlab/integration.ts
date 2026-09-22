@@ -31,7 +31,7 @@ interface PlatformGitLabContext {
 type PlatformGitLabCredential =
   { type: 'oauth2'; accessToken: string; expiresAt: string | null } | { type: 'api_key'; apiKey: string };
 
-const GITLAB_INTEGRATION_IDS = new Set(['gitlab', 'gitlab-group', 'gitlab-group-token']);
+const GITLAB_INTEGRATION_IDS = new Set(['gitlab', 'gitlab-group', 'gitlab-group-token', 'gitlab-pat']);
 
 export interface PlatformGitLabIntegrationConfig {
   rules?: GitLabRuleOverrides;

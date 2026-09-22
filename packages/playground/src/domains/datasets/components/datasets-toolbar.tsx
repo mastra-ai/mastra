@@ -1,5 +1,5 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { XIcon } from 'lucide-react';
@@ -44,16 +44,16 @@ export function DatasetsToolbar({
   hasActiveFilters,
 }: DatasetsToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="max-w-120 min-w-64 flex-1">
-        <ListSearch
-          label="Search datasets"
-          placeholder="Filter by dataset name"
-          value={search}
-          onSearch={onSearchChange}
-        />
-      </div>
-      <ButtonsGroup>
+    <ActionRow>
+      <ActionRow.Start>
+        <div className="max-w-120 flex-1">
+          <ListSearch
+            label="Search datasets"
+            placeholder="Filter by dataset name"
+            value={search}
+            onSearch={onSearchChange}
+          />
+        </div>
         <TargetFilter
           targetType={targetType}
           targetId={targetId}
@@ -85,7 +85,7 @@ export function DatasetsToolbar({
             Reset
           </Button>
         )}
-      </ButtonsGroup>
-    </div>
+      </ActionRow.Start>
+    </ActionRow>
   );
 }
