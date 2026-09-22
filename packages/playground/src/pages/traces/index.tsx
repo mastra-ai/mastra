@@ -1,8 +1,8 @@
 import type { EntityType } from '@mastra/core/observability';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
-import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
+import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
+import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
@@ -30,8 +30,10 @@ import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
 import {
   createTraceFilterBarFields,
+  filterBarExpressionToTraceFilters,
   filterBarItemsToTraceTokens,
   TRACE_FILTER_BAR_OPERATORS,
+  traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
@@ -226,23 +228,32 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   );
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens (its state lives in the date params).
-  const filterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
+  // Expression mode so root-level AND/OR groups render as "Advanced filter" chips.
+  const filterBarValue = useMemo<FilterBarExpression>(() => {
+    const expression = traceFiltersToFilterBarExpression([], url.filterGroups);
+    return { ...expression, nodes: [TRACE_TIME_RANGE_ITEM, ...filterBarItems, ...expression.nodes] };
+  }, [filterBarItems, url.filterGroups]);
   // Re-inject the hidden scope items so the FilterBar clear button (which drops every removable item) and any other
   // edit can never drop the scope from the URL.
   const handleFilterBarChange = useCallback(
-    (items: FilterBarItem[]) => {
+    (expression: FilterBarExpression) => {
       const scoped = allFilterBarItems.filter(item => scopedFieldIds.has(item.fieldId));
-      const rest = items.filter(item => item.fieldId !== TRACE_TIME_RANGE_FIELD_ID);
-      url.handleFilterTokensChange(filterBarItemsToTraceTokens([...scoped, ...rest]));
+      const { tokens, groups } = filterBarExpressionToTraceFilters({
+        ...expression,
+        nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
+      });
+      url.handleFilterTokensChange([...filterBarItemsToTraceTokens(scoped), ...tokens], groups);
     },
     [allFilterBarItems, scopedFieldIds, url],
   );
   const handleFilterByField = useCallback(
     (fieldId: string, value: string) => {
       const withoutField = filterBarItems.filter(item => item.fieldId !== fieldId);
-      handleFilterBarChange([...withoutField, { id: `${fieldId}:${value}`, fieldId, operatorId: 'is', value }]);
+      const item: FilterBarItem = { id: `${fieldId}:${value}`, fieldId, operatorId: 'is', value };
+      const groups = filterBarValue.nodes.filter(isFilterBarGroup);
+      handleFilterBarChange({ ...filterBarValue, nodes: [...withoutField, item, ...groups] });
     },
-    [filterBarItems, handleFilterBarChange],
+    [filterBarItems, filterBarValue, handleFilterBarChange],
   );
 
   const {
@@ -263,6 +274,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         dateFrom: url.selectedDateFrom,
         dateTo: url.selectedDateTo,
         tokens: url.filterTokens,
+        groups: url.filterGroups,
         now,
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
@@ -315,6 +327,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     !!url.selectedEntityOption ||
     !!url.selectedStatus ||
     url.filterTokens.length > 0 ||
+    url.filterGroups.length > 0 ||
     url.datePreset !== 'last-7d' ||
     !!url.selectedDateTo;
 
@@ -329,6 +342,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
           // draft that id so the chip survives the round trip without remounting.
           createItemId={fieldId => fieldId}
+          maxDepth={3}
           aria-label="Trace filters"
           className="min-w-64 flex-1"
         >
@@ -403,7 +417,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     );
   }
 
-  const contentFiltersApplied = !!url.selectedEntityOption || !!url.selectedStatus || url.filterTokens.length > 0;
+  const contentFiltersApplied =
+    !!url.selectedEntityOption || !!url.selectedStatus || url.filterTokens.length > 0 || url.filterGroups.length > 0;
 
   if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (

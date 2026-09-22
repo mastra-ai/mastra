@@ -32,6 +32,7 @@ import {
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
+import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -135,12 +136,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
       await sendMutation.mutateAsync({ text, files: outgoing });
+      clearPendingHandoff(resourceId);
       seedThreadMessageCache(threadId, text, files);
       void navigate(`/factories/${factoryId}/threads/${threadId}`, { replace: true });
       return;
     }
     localUser(text, false, outgoing);
     await sendMutation.mutateAsync({ text, files: outgoing });
+    clearPendingHandoff(resourceId);
   };
 
   const steer = async (text: string) => {
@@ -149,6 +152,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     scroller?.scrollToEnd({ behavior: 'smooth' });
     try {
       await sendMutation.mutateAsync({ text });
+      clearPendingHandoff(resourceId);
     } catch (error) {
       failLocalUser(localId);
       throw error;
