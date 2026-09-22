@@ -119,7 +119,15 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         {...{ [FILTER_BAR_SCOPE_ATTR]: 'advanced' }}
         finalFocus={triggerRef}
       >
-        <FilterBarGroupEditor group={group} depth={1} />
+        <FilterBarGroupEditor
+          group={group}
+          depth={1}
+          removeLabel="Remove advanced filter"
+          onRemove={() => {
+            ctx.setOpenGroup(null);
+            remove();
+          }}
+        />
       </PopoverContent>
     </Popover>
   );

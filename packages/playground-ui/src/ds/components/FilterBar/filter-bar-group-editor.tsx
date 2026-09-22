@@ -1,4 +1,4 @@
-import { PlusIcon, XIcon } from 'lucide-react';
+import { PlusIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { FilterBarChip } from './filter-bar-chip';
@@ -43,6 +43,9 @@ export type FilterBarGroupEditorProps = {
   group: FilterBarGroup;
   /** Nesting level of `group` (root-level group = 1). */
   depth: number;
+  /** Drops this group; rendered as a trailing action in the footer. */
+  onRemove?: () => void;
+  removeLabel?: string;
   className?: string;
 };
 
@@ -52,7 +55,13 @@ export type FilterBarGroupEditorProps = {
  * `+ Filter` / `+ Group` actions. The shared typeahead input renders inline at the end of
  * the group it is pointed at.
  */
-export function FilterBarGroupEditor({ group, depth, className }: FilterBarGroupEditorProps) {
+export function FilterBarGroupEditor({
+  group,
+  depth,
+  onRemove,
+  removeLabel = 'Remove group',
+  className,
+}: FilterBarGroupEditorProps) {
   const ctx = useFilterBarContext();
   const addFilterRef = useRef<HTMLButtonElement>(null);
   const focusAddFilter = useRef(false);
@@ -98,7 +107,7 @@ export function FilterBarGroupEditor({ group, depth, className }: FilterBarGroup
       data-depth={depth}
       role="group"
       aria-label={`Conditions joined with ${group.logic}`}
-      className={cn('flex min-w-0 flex-col items-start gap-1', className)}
+      className={cn('flex min-w-0 flex-col items-start gap-1.5', className)}
     >
       {rows}
       {targeted && (
@@ -112,7 +121,7 @@ export function FilterBarGroupEditor({ group, depth, className }: FilterBarGroup
         />
       )}
       {!targeted && (
-        <div className="flex items-center gap-1">
+        <div className={cn('flex w-full items-center gap-1', rows.length > 0 && 'mt-1')}>
           <Button
             ref={addFilterRef}
             variant="ghost"
@@ -132,6 +141,18 @@ export function FilterBarGroupEditor({ group, depth, className }: FilterBarGroup
           >
             Group
           </Button>
+          {onRemove && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Trash2Icon />}
+              className="text-muted-foreground ml-auto"
+              aria-label={removeLabel}
+              onClick={onRemove}
+            >
+              Clear
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -151,22 +172,15 @@ function NestedGroupRow({ group, depth }: { group: FilterBarGroup; depth: number
       data-leaving={leaving || undefined}
       aria-hidden={leaving || undefined}
       className={cn(
-        'filter-bar-editor-nested flex w-full items-start gap-1 border-l-2 border-border pl-3',
+        'filter-bar-editor-nested my-1 w-full rounded-lg border border-border bg-fill-subtle/40 p-2',
         leaving && 'pointer-events-none',
       )}
     >
-      <FilterBarGroupEditor group={group} depth={depth} className="min-w-0 flex-1" />
-      {!leaving && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Remove group"
-          tooltip="Remove group"
-          onClick={() => ctx.removeGroup(group.id)}
-        >
-          <XIcon />
-        </Button>
-      )}
+      <FilterBarGroupEditor
+        group={group}
+        depth={depth}
+        onRemove={leaving ? undefined : () => ctx.removeGroup(group.id)}
+      />
     </div>
   );
 }

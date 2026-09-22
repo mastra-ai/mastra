@@ -1155,6 +1155,16 @@ describe('FilterBar', () => {
         expect(argAt(onChange, 0, 0).nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'd']);
       });
 
+      it('removes the whole group from the editor footer Clear and closes the popover', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Remove advanced filter' }));
+        expect(onChange.mock.lastCall?.[0].nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'd']);
+        await waitFor(() => expect(getEditors()).toHaveLength(0));
+        await waitFor(() => expect(getAdvancedChips()).toHaveLength(0));
+      });
+
       it('walks ←/→ across the advanced chip in the bar', () => {
         render(<ExpressionHarness initial={EXPRESSION} />);
         getInput().focus();
