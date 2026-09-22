@@ -1,11 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleIcon, GlobeIcon, HashIcon, PlayIcon, TagIcon, TimerIcon, TriangleAlertIcon } from 'lucide-react';
+import {
+  CircleIcon,
+  GlobeIcon,
+  HashIcon,
+  PlayIcon,
+  SearchIcon,
+  TagIcon,
+  TimerIcon,
+  TriangleAlertIcon,
+  UserIcon,
+} from 'lucide-react';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import type { FilterBarField, FilterBarItem } from './types';
 import { Txt } from '@/ds/components/Txt';
+import { Avatar } from '@/ds/components/Avatar/Avatar';
 import { themedHueColor } from '@/lib/colors';
 
 const FIELDS: FilterBarField[] = [
@@ -122,6 +133,36 @@ export const WithPrefilledFilters: Story = {
       ]}
     />
   ),
+};
+
+const TEAMMATES = [
+  { id: 'github:ada', name: 'Ada' },
+  { id: 'github:grace', name: 'Grace' },
+  { id: 'github:linus', name: 'Linus' },
+];
+
+export const FreeText: Story = {
+  name: 'Free text (search field) and option avatars',
+  render: function FreeTextStory() {
+    const fields: FilterBarField[] = [
+      { id: 'text', label: 'Text', icon: SearchIcon, search: true, operators: ['contains'] },
+      {
+        id: 'teammate',
+        label: 'Teammate',
+        icon: UserIcon,
+        color: themedHueColor(200),
+        operators: ['is'],
+        strict: true,
+        suggestions: TEAMMATES.map(teammate => ({
+          value: teammate.id,
+          label: teammate.name,
+          start: <Avatar name={teammate.name} />,
+        })),
+      },
+      ...FIELDS,
+    ];
+    return <Demo fields={fields} />;
+  },
 };
 
 const SLOW_MODELS = ['gpt-4o', 'gpt-4o-mini', 'claude-sonnet-4', 'claude-opus-4', 'gemini-2.5-pro', 'llama-3.3-70b'];
