@@ -50,6 +50,22 @@ If you're unable to use a local MCP server and need to connect to a remote serve
 
 The [`create-mastra`](/reference/cli/create-mastra) command doesn't configure the MCP docs server. Add the server manually when you need MCP-specific tools such as the migration tool.
 
+`@mastra/mcp-docs-server` 2.x speaks the MCP `2026-07-28` revision. If your tool hasn't adopted that revision yet, it fails to connect with a version-negotiation error. Pin the previous major instead, which speaks the earlier `initialize` handshake:
+
+```json title="mcp.json"
+{
+  "mcpServers": {
+    "mastra": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server@^1"]
+    }
+  }
+}
+```
+
+Replace `@latest` with `@^1` in any of the commands below to do the same for that tool.
+
 If there are no specific instructions for your tool below, you may be able to add the MCP server with this common JSON configuration.
 
 ```json title="mcp.json"

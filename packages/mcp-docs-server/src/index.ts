@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import { MCPServer } from '@mastra/mcp';
-import { logger, createLogger } from './logger';
+import { logger } from './logger';
 import { migrationPromptMessages } from './prompts/migration';
 import {
   startMastraCourse,
@@ -32,9 +32,6 @@ server = new MCPServer({
   },
   prompts: migrationPromptMessages,
 });
-
-// Update logger with server instance
-Object.assign(logger, createLogger(server));
 
 async function runServer() {
   try {
