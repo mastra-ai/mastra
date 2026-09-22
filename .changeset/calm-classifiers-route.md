@@ -1,6 +1,7 @@
 ---
 '@mastra/core': minor
 '@mastra/client-js': patch
+'@mastra/playground-ui': patch
 '@mastra/react': patch
 ---
 
