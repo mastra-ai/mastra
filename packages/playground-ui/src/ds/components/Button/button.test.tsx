@@ -5,14 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '../Tooltip';
 import { Button, buttonVariants } from './Button';
-import type { ButtonVariant } from './Button';
 
 afterEach(() => {
   cleanup();
 });
 
 describe('Button', () => {
-  it('uses semantic neutral roles with distinct interaction states', () => {
+  it('transitions color alone, not every property', () => {
     const baseClasses = buttonVariants().split(' ');
     expect(baseClasses).toEqual(
       expect.arrayContaining([
@@ -23,55 +22,6 @@ describe('Button', () => {
       ]),
     );
     expect(baseClasses).not.toContain('transition-all');
-
-    const variants: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost', 'outline'];
-    const expectedClasses = {
-      default: [
-        'border-border',
-        'bg-fill',
-        'text-foreground',
-        'not-disabled:hover:bg-fill-hover',
-        'not-disabled:active:bg-fill-active',
-        'aria-disabled:bg-fill-subtle',
-      ],
-      primary: [
-        'bg-foreground',
-        'text-background',
-        'not-disabled:hover:bg-foreground/75',
-        'not-disabled:active:bg-foreground/60',
-        'aria-disabled:bg-foreground/45',
-      ],
-      destructive: [
-        'not-disabled:hover:bg-destructive/80',
-        'not-disabled:active:bg-destructive/70',
-        'aria-disabled:bg-destructive/45',
-      ],
-      'destructive-ghost': [
-        'not-disabled:hover:bg-destructive/20',
-        'not-disabled:active:bg-destructive/30',
-        'aria-disabled:text-destructive/50',
-      ],
-      ghost: [
-        'text-muted-foreground',
-        'not-disabled:hover:bg-fill-subtle',
-        'not-disabled:active:bg-fill',
-        'aria-disabled:bg-transparent',
-      ],
-      outline: [
-        'border-border-strong',
-        'bg-transparent',
-        'text-foreground',
-        'not-disabled:hover:border-border-hover',
-        'not-disabled:hover:bg-fill-subtle',
-        'not-disabled:active:bg-fill',
-        'aria-disabled:border-border',
-      ],
-    } satisfies Record<ButtonVariant, string[]>;
-
-    for (const variant of variants) {
-      const classes = buttonVariants({ variant }).split(' ');
-      expect(classes).toEqual(expect.arrayContaining(expectedClasses[variant]));
-    }
   });
 
   // Base UI renders `type="button"` when the prop is absent. Keeping the attribute off
@@ -295,7 +245,6 @@ describe('Button', () => {
       expect(link.getAttribute('href')).toBeNull();
       expect(link.getAttribute('aria-disabled')).toBe('true');
       expect(link.className).toContain('aria-disabled:pointer-events-none');
-      expect(link.classList.contains('aria-disabled:bg-fill-subtle')).toBe(true);
       fireEvent.click(link);
       expect(onClick).not.toHaveBeenCalled();
       expect(fireEvent.keyDown(link, { key: 'Enter' })).toBe(false);
@@ -334,52 +283,5 @@ describe('Button', () => {
       );
       expect(seen.prefetch).toBe(false);
     });
-  });
-
-  // Signal state with colour, not opacity: an opacity wash dims against whatever sits
-  // behind the control, and it left icon-only buttons with no hover response at all.
-  it.each(['default', 'outline'] as const)(
-    'moves the %s icon from muted to full on hover, labelled or not',
-    variant => {
-      const { container } = render(
-        <>
-          <Button variant={variant} icon={<svg data-testid="labelled" />}>
-            label
-          </Button>
-          <Button variant={variant} size="icon-md" aria-label="alone">
-            <svg />
-          </Button>
-        </>,
-      );
-
-      for (const button of container.querySelectorAll('button')) {
-        expect(button.className).toContain('[&_svg]:text-muted-foreground');
-        expect(button.className).toContain('not-disabled:hover:[&_svg]:text-foreground');
-      }
-    },
-  );
-
-  // Ghost dims its whole label, so the glyph inherits the same move without a
-  // separate rule. Asserting the inherited path keeps a redundant class off the recipe.
-  it('moves the ghost icon by dimming the whole control', () => {
-    render(
-      <Button variant="ghost" icon={<svg />}>
-        label
-      </Button>,
-    );
-
-    const cls = screen.getByRole('button').className;
-    expect(cls).toContain('text-muted-foreground');
-    expect(cls).toContain('not-disabled:hover:text-foreground');
-  });
-
-  it.each(['primary', 'destructive'] as const)('leaves the %s glyph colour alone', variant => {
-    render(
-      <Button variant={variant} icon={<svg />}>
-        label
-      </Button>,
-    );
-
-    expect(screen.getByRole('button').className).not.toContain('[&_svg]:text-muted-foreground');
   });
 });

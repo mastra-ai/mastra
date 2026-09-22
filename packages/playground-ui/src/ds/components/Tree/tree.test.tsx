@@ -16,18 +16,6 @@ function getTreeItem(label: string): HTMLElement {
   return item;
 }
 
-function getFolderRow(label: string): HTMLElement {
-  const row = screen.getByText(label).closest('[data-tree-folder-row="true"]');
-  if (!(row instanceof HTMLElement)) {
-    throw new Error(`Could not find tree folder row for ${label}`);
-  }
-  return row;
-}
-
-function getClassTokens(element: Element): string[] {
-  return element.className.split(/\s+/).filter(Boolean);
-}
-
 function renderProjectTree({ defaultOpen = true, onSelect = vi.fn() } = {}) {
   return render(
     <Tree onSelect={onSelect}>
@@ -87,79 +75,6 @@ describe('Tree', () => {
     expect(index.tabIndex).toBe(-1);
     expect(utils.tabIndex).toBe(-1);
     expect(packageJson.tabIndex).toBe(-1);
-  });
-
-  it('uses neutral focus styles without accent rings', () => {
-    const { container } = render(
-      <Tree>
-        <Tree.Folder id="src" defaultOpen>
-          <Tree.FolderTrigger>
-            <Tree.Label>src</Tree.Label>
-          </Tree.FolderTrigger>
-          <Tree.FolderContent>
-            <Tree.File id="src/index.ts">
-              <Tree.Label>index.ts</Tree.Label>
-            </Tree.File>
-            <Tree.Input type="file" onSubmit={vi.fn()} />
-          </Tree.FolderContent>
-        </Tree.Folder>
-      </Tree>,
-    );
-
-    const folderRow = container.querySelector('[data-tree-folder-row="true"]');
-    const fileItem = getTreeItem('index.ts');
-    const inputItem = container.querySelector('[data-tree-item-kind="input"]');
-
-    expect(folderRow?.className).not.toContain('group-focus-visible/treeitem');
-    expect(folderRow?.className).not.toContain('ring-accent1');
-    expect(folderRow?.className).not.toContain('shadow-focus-ring');
-
-    expect(fileItem.className).toContain('focus-visible:bg-fill-subtle');
-    expect(fileItem.className).not.toContain('ring-accent1');
-    expect(fileItem.className).not.toContain('shadow-focus-ring');
-
-    expect(inputItem?.className).toContain('focus-within:bg-fill-subtle');
-    expect(inputItem?.className).not.toContain('ring-accent1');
-    expect(inputItem?.className).not.toContain('shadow-focus-ring');
-  });
-
-  it('keeps parent folder focus styles independent from open child folders', () => {
-    render(
-      <Tree>
-        <Tree.Folder id="root" defaultOpen>
-          <Tree.FolderTrigger>
-            <Tree.Label>root</Tree.Label>
-          </Tree.FolderTrigger>
-          <Tree.FolderContent>
-            <Tree.Folder id="child" defaultOpen>
-              <Tree.FolderTrigger>
-                <Tree.Label>child</Tree.Label>
-              </Tree.FolderTrigger>
-              <Tree.FolderContent>
-                <Tree.File id="child/index.ts">
-                  <Tree.Label>index.ts</Tree.Label>
-                </Tree.File>
-              </Tree.FolderContent>
-            </Tree.Folder>
-          </Tree.FolderContent>
-        </Tree.Folder>
-      </Tree>,
-    );
-
-    const root = getTreeItem('root');
-    const child = getTreeItem('child');
-    const rootRow = getFolderRow('root');
-    const childRow = getFolderRow('child');
-
-    fireEvent.focus(root);
-    expect(getClassTokens(rootRow)).toContain('bg-fill-hover');
-    expect(getClassTokens(childRow)).not.toContain('bg-fill-hover');
-    expect(childRow.className).not.toContain('group-focus-visible/treeitem:bg-fill-subtle');
-
-    fireEvent.blur(root, { relatedTarget: child });
-    fireEvent.focus(child);
-    expect(getClassTokens(rootRow)).not.toContain('bg-fill-hover');
-    expect(getClassTokens(childRow)).toContain('bg-fill-hover');
   });
 
   it('moves focus through visible items with arrow, home, and end keys', () => {

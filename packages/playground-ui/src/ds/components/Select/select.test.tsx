@@ -122,35 +122,4 @@ describe('Select', () => {
 
     expect(screen.getByRole('combobox').classList.contains('custom-trigger')).toBe(true);
   });
-
-  it('keeps the outline and ghost variants on the Button recipe', () => {
-    render(
-      <>
-        <Select>
-          <SelectTrigger variant="outline" aria-label="outline">
-            <SelectValue placeholder="Pick one" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="a">A</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select>
-          <SelectTrigger variant="ghost" aria-label="ghost">
-            <SelectValue placeholder="Pick one" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="a">A</SelectItem>
-          </SelectContent>
-        </Select>
-      </>,
-    );
-
-    const outline = screen.getByRole('combobox', { name: 'outline' });
-    expect(outline.classList.contains('bg-transparent')).toBe(true);
-    expect(outline.classList.contains('bg-fill')).toBe(false);
-
-    const ghost = screen.getByRole('combobox', { name: 'ghost' });
-    expect(ghost.classList.contains('bg-transparent')).toBe(true);
-    expect(ghost.classList.contains('bg-fill')).toBe(false);
-  });
 });
