@@ -96,14 +96,14 @@ function WorkItemBreadcrumb({ item, factoryId }: { item: WorkItem; factoryId?: s
     <nav className="text-caption flex min-w-0 items-center gap-2" aria-label="Factory session breadcrumb">
       <Link
         to={isReview ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`}
-        className="text-icon4 hover:text-icon6 shrink-0 font-medium hover:underline"
+        className="text-muted-foreground hover:text-foreground shrink-0 font-medium hover:underline"
       >
         {isReview ? 'Review' : 'Work'}
       </Link>
-      <span className="text-icon3" aria-hidden>
+      <span className="text-muted-foreground" aria-hidden>
         /
       </span>
-      <span className="text-icon6 truncate">{sessionTitle(item)}</span>
+      <span className="text-foreground truncate">{sessionTitle(item)}</span>
     </nav>
   );
 }
@@ -156,7 +156,7 @@ function WorkItemActions({
             <Link
               key={related.id}
               to={relationshipPath(related, factoryId)}
-              className="text-caption text-icon4 hover:bg-fill hover:text-icon6 flex items-center gap-1.5 rounded-md px-2 py-1"
+              className="text-caption text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
               aria-label={`Open ${label}: ${related.title}`}
             >
               <Link2 size={13} aria-hidden />

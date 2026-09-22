@@ -82,6 +82,6 @@ function outcomeClass(outcome: ReportRow['outcome']): string {
     case 'live':
       return 'bg-orange-500/10 text-orange-400';
     case 'unconsumed':
-      return 'bg-neutral3/10 text-muted-foreground';
+      return 'bg-muted-foreground/10 text-muted-foreground';
   }
 }

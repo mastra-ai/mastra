@@ -118,7 +118,7 @@ describe('SpanOutputRenderer', () => {
     render(<SpanOutputRenderer span={modelGenerationSpan} />);
     expect(slot('span-model-generation-result')).not.toBeNull();
     expect(slot('span-payload-tool-calls')).not.toBeNull();
-    expect(screen.getByRole('button', { name: /hide reasoning/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reasoning' })).toBeTruthy();
   });
 
   it('falls back to JSON for TOOL_CALL', () => {

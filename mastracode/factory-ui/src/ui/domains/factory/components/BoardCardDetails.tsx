@@ -106,12 +106,12 @@ export function CardSourceDescription({
     );
   }
   if (query.isError) {
-    return <p className="text-meta text-icon3 m-0">The description could not be loaded.</p>;
+    return <p className="text-meta text-muted-foreground m-0">The description could not be loaded.</p>;
   }
   const description = query.data?.description ?? null;
   if (description === null || description.trim() === '') return null;
   return (
-    <MarkdownRenderer className="text-caption text-icon5 max-w-none [&>*:first-child]:mt-0">
+    <MarkdownRenderer className="text-caption text-foreground max-w-none [&>*:first-child]:mt-0">
       {description}
     </MarkdownRenderer>
   );

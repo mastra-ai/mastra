@@ -36,7 +36,7 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
         <span
           className={cn(
             'h-2 w-2 rounded-full',
-            voiceCall.status === 'connecting' && 'bg-neutral3',
+            voiceCall.status === 'connecting' && 'bg-muted-foreground',
             voiceCall.status === 'active' && voiceCall.agentState === 'speaking' && 'bg-accent1 animate-pulse',
             voiceCall.status === 'active' && voiceCall.agentState !== 'speaking' && 'bg-green-500',
           )}

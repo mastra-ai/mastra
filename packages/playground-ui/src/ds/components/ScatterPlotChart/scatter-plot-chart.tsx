@@ -72,7 +72,12 @@ export function ScatterPlotChart({
       <div className={cn(fillsContainer && 'min-h-0 flex-1')} style={{ height: fillsContainer ? undefined : height }}>
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart data={data} margin={CHART_MARGIN}>
-            <CartesianGrid stroke={Colors.neutral3} strokeDasharray="4 4" strokeOpacity={0.18} vertical={false} />
+            <CartesianGrid
+              stroke={Colors['muted-foreground']}
+              strokeDasharray="4 4"
+              strokeOpacity={0.18}
+              vertical={false}
+            />
             <XAxis
               dataKey={xKey}
               name={xLabel}
@@ -96,7 +101,7 @@ export function ScatterPlotChart({
             />
             <ZAxis range={[DEFAULT_POINT_SIZE, DEFAULT_POINT_SIZE]} />
             <Tooltip
-              cursor={{ stroke: Colors.neutral3, strokeOpacity: 0.16 }}
+              cursor={{ stroke: Colors['muted-foreground'], strokeOpacity: 0.16 }}
               content={
                 <ScatterPlotChartTooltip
                   xKey={xKey}

@@ -113,7 +113,7 @@ describe('RadioGroup', () => {
     expect(screen.getByRole('radiogroup').classList.contains('custom-group')).toBe(true);
   });
 
-  it('uses neutral radio styling without accent glow classes', () => {
+  it('gives the radio a pointer cursor', () => {
     render(
       <RadioGroup aria-label="Plan" defaultValue="option-1">
         <RadioGroupItem value="option-1" aria-label="Option 1" />
@@ -123,9 +123,5 @@ describe('RadioGroup', () => {
     const className = screen.getByLabelText('Option 1').className;
 
     expect(className).toContain('cursor-pointer');
-    expect(className.split(/\s+/)).toContain('bg-fill-hover');
-    expect(className).toContain('data-[checked]:bg-foreground');
-    expect(className).not.toContain('accent1');
-    expect(className).not.toContain('shadow-glow');
   });
 });

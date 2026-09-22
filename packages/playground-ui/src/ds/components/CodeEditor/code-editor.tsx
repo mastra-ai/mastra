@@ -30,7 +30,7 @@ function buildDarkTheme(): Extension {
       fontSize: 'var(--text-body-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: 'var(--neutral2)',
+      gutterForeground: 'var(--placeholder)',
       background: 'transparent',
       foreground: 'var(--foreground)',
       caret: 'var(--foreground)',
@@ -49,7 +49,7 @@ function buildDarkTheme(): Extension {
       { tag: t.url, color: 'var(--accent3)' },
       { tag: t.monospace, color: 'var(--foreground)' },
       { tag: t.strikethrough, textDecoration: 'line-through' },
-      { tag: t.quote, fontStyle: 'italic', color: 'var(--neutral2)' },
+      { tag: t.quote, fontStyle: 'italic', color: 'var(--placeholder)' },
     ],
   });
 
@@ -62,10 +62,10 @@ function buildDarkTheme(): Extension {
       caretColor: 'var(--foreground)',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
     },
     '.cm-activeLineGutter': {
-      color: 'var(--neutral3)',
+      color: 'var(--muted-foreground)',
     },
     '.cm-cursor': {
       borderLeftColor: 'var(--foreground)',
@@ -86,7 +86,7 @@ function buildDarkTheme(): Extension {
       color: 'var(--foreground)',
     },
     '.cm-completionDetail': {
-      color: 'var(--neutral3)',
+      color: 'var(--muted-foreground)',
       fontSize: 'var(--text-caption)',
       marginLeft: 'auto',
       paddingLeft: '12px',
@@ -94,7 +94,7 @@ function buildDarkTheme(): Extension {
     '.cm-completionInfo': {
       backgroundColor: 'var(--background)',
       border: '1px solid var(--border)',
-      color: 'var(--neutral3)',
+      color: 'var(--muted-foreground)',
       padding: '8px 12px',
     },
     '.cm-completionIcon': {
@@ -125,7 +125,7 @@ function buildLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
       borderRight: 'none',
     },
     '.cm-content': {
@@ -136,11 +136,11 @@ function buildLightTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
     },
     '.cm-activeLineGutter': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral3)',
+      color: 'var(--muted-foreground)',
     },
     '.cm-cursor, .cm-dropCursor': {
       borderLeftColor: 'var(--foreground)',
@@ -162,7 +162,7 @@ function buildLightTheme(): Extension {
       color: 'var(--foreground)',
     },
     '.cm-completionDetail': {
-      color: 'var(--neutral3)',
+      color: 'var(--muted-foreground)',
       fontSize: 'var(--text-caption)',
       marginLeft: 'auto',
       paddingLeft: '12px',
@@ -170,7 +170,7 @@ function buildLightTheme(): Extension {
     '.cm-completionInfo': {
       backgroundColor: 'var(--background)',
       border: '1px solid var(--border)',
-      color: 'var(--neutral3)',
+      color: 'var(--muted-foreground)',
       padding: '8px 12px',
     },
     '.cm-completionIcon': {
@@ -187,7 +187,7 @@ function buildLightTheme(): Extension {
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
+    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
     { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
     { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
@@ -232,7 +232,7 @@ const codeEditorVariants = cva(
   {
     variants: {
       variant: {
-        default: 'rounded-md border border-border bg-card p-1 focus-within:border-neutral6/20',
+        default: 'rounded-md border border-border bg-card p-1 focus-within:border-border-focus',
         embedded: 'rounded-none border-none bg-transparent p-0',
       },
     },

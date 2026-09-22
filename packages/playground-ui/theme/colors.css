@@ -51,13 +51,6 @@
   --accent5Darker: oklch(0.17 0.015 240);
   --accent6Darker: oklch(0.175 0.019 72);
 
-  --neutral1: oklch(0.372 0 0);
-  --neutral2: oklch(0.553 0 0);
-  --neutral3: oklch(0.705 0 0);
-  --neutral4: oklch(0.871 0 0);
-  --neutral5: oklch(0.92 0 0);
-  --neutral6: oklch(0.985 0 0);
-
   /* Brand green (dark). Remaps Tailwind green-* via @theme below. */
   --brand-green-50: oklch(99% 0.024 138);
   --brand-green-100: oklch(97.5% 0.055 138);
@@ -115,13 +108,6 @@ html.light {
   --accent5Darker: oklch(0.882 0.059 254.128);
   --accent6Darker: oklch(0.924 0.12 95.746);
 
-  --neutral1: oklch(0.554 0 0);
-  --neutral2: oklch(0.446 0 0);
-  --neutral3: oklch(0.372 0 0);
-  --neutral4: oklch(0.279 0 0);
-  --neutral5: oklch(0.208 0 0);
-  --neutral6: oklch(0.13 0 0);
-
   /* Brand green (light). badge + chart inherit :root. */
   --brand-green-50: oklch(97.8% 0.025 140);
   --brand-green-100: oklch(95.5% 0.055 140);
@@ -152,12 +138,6 @@ html.light {
   --color-accent3Darker: var(--accent3Darker);
   --color-accent5Darker: var(--accent5Darker);
   --color-accent6Darker: var(--accent6Darker);
-  --color-neutral1: var(--neutral1);
-  --color-neutral2: var(--neutral2);
-  --color-neutral3: var(--neutral3);
-  --color-neutral4: var(--neutral4);
-  --color-neutral5: var(--neutral5);
-  --color-neutral6: var(--neutral6);
 
   /* Replace Tailwind green with brand green. initial clears defaults (native v4), then remap. */
   --color-green-*: initial;

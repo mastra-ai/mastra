@@ -198,7 +198,7 @@ export const AllStates: Story = {
           aria-label="focused on"
           checked
           onCheckedChange={() => {}}
-          className="outline-neutral5/55 outline-1 outline-offset-2 outline-solid"
+          className="outline-border-focus outline-1 outline-offset-2 outline-solid"
         />
 
         <span className="text-foreground">Disabled</span>
@@ -209,7 +209,7 @@ export const AllStates: Story = {
           checked
           disabled
           onCheckedChange={() => {}}
-          className="outline-neutral5/35 outline-1 outline-offset-2 outline-solid"
+          className="outline-border-focus outline-1 outline-offset-2 outline-solid"
         />
       </div>
     </div>

@@ -36,9 +36,13 @@ export function GoalPanel() {
         <Target size={15} />
       </span>
       <span className="text-column flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{goal.objective}</span>
-      <span className="bg-fill text-caption text-icon3 rounded-full px-2 py-px tabular-nums">{progress}</span>
+      <span className="bg-fill text-caption text-muted-foreground rounded-full px-2 py-px tabular-nums">
+        {progress}
+      </span>
       {goal.reason && (
-        <span className="text-icon3 max-w-52 overflow-hidden text-ellipsis whitespace-nowrap">{goal.reason}</span>
+        <span className="text-muted-foreground max-w-52 overflow-hidden text-ellipsis whitespace-nowrap">
+          {goal.reason}
+        </span>
       )}
       {goal.status === 'active' && (
         <Button size="sm" onClick={() => void pauseGoalMutation.mutateAsync()}>

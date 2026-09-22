@@ -112,7 +112,7 @@ const SidebarLink = ({
           </div>
         ) : (
           <Txt
-            className="border-neutral2 flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
+            className="border-placeholder flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
             variant="caption"
             tone="faint"
           >

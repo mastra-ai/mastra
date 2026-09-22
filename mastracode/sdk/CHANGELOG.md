@@ -1,5 +1,27 @@
 # @mastra/code-sdk
 
+## 1.8.0-alpha.12
+
+### Patch Changes
+
+- Fixed Mastra Code exporting its own traces into whichever Mastra project's `.env` it was launched from, and crashing on startup when that project's `MASTRA_PROJECT_ID` was not a valid id. Mastra Code cloud observability now only reads its own environment variables (or the `/observability connect` settings) and ignores `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` from the environment. ([#24627](https://github.com/mastra-ai/mastra/pull/24627))
+
+  If you configured Mastra Code cloud observability through environment variables, rename them:
+
+  ```sh
+  # before
+  export MASTRA_CLOUD_ACCESS_TOKEN=...
+  export MASTRA_PROJECT_ID=...
+
+  # after
+  export MASTRACODE_CLOUD_ACCESS_TOKEN=...
+  export MASTRACODE_PROJECT_ID=...
+  ```
+
+- Updated dependencies [[`f9e386f`](https://github.com/mastra-ai/mastra/commit/f9e386f308c448761ab9ed0281ae4ab54c99cbd6)]:
+  - @mastra/observability@1.17.9-alpha.2
+  - @mastra/mcp@2.0.0-alpha.5
+
 ## 1.8.0-alpha.11
 
 ### Patch Changes

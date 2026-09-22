@@ -54,7 +54,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
         role="img"
         tabIndex={0}
         aria-label={tooltip}
-        className="focus-visible:outline-neutral5/55 rounded focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-solid"
+        className="focus-visible:outline-border-focus rounded focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-solid"
       >
         <BanIcon
           className={cn('text-muted-foreground/40 w-5 h-5 ', {

@@ -4,6 +4,8 @@ import { relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const sourceExtensions = new Set(['.cjs', '.css', '.html', '.js', '.jsx', '.mdx', '.mjs', '.scss', '.ts', '.tsx']);
+// `neutral[1-6]` no longer exists: the ramp was deleted in favour of the semantic
+// inks, so a hit is a class that resolves to nothing rather than a token to migrate.
 const legacyTokenPattern = '(?:neutral[1-6]|text1)';
 const semanticTokenPattern =
   '(?:sidebar-accent-foreground|popover-foreground|secondary-foreground|tertiary-foreground|disabled-foreground|contrast-foreground|sidebar-foreground|sidebar-accent|sidebar-border|sidebar-divider|sidebar-ring|card-foreground|muted-foreground|accent-foreground|background|secondary|foreground|selected|popover|sidebar|accent|border|input|muted|card|ring)';

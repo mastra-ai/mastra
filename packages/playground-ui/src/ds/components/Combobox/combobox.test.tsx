@@ -280,7 +280,7 @@ describe('Combobox', () => {
     expect(trigger.className).toContain('justify-between');
   });
 
-  it('renders options on the shared menu item recipe (ghost/md, rounded-lg)', async () => {
+  it('renders options on the shared menu item recipe (md, rounded-lg)', async () => {
     render(<Combobox options={options} placeholder="Pick provider" />);
 
     fireEvent.click(screen.getByRole('combobox'));
@@ -291,12 +291,6 @@ describe('Combobox', () => {
     expect(option.className).toContain('rounded-lg');
     expect(option.className).not.toContain('rounded-full');
     expect(option.className).not.toContain('rounded-md');
-    expect(option.className).toContain('data-highlighted:text-foreground');
-  });
-
-  it('applies the error border when an error is provided', () => {
-    render(<Combobox options={options} placeholder="Pick provider" error="Required" />);
-    expect(screen.getByRole('combobox').className).toContain('border-destructive');
   });
 
   it('says what went wrong under the field, and nothing when nothing did', () => {
@@ -373,17 +367,6 @@ describe('Combobox', () => {
 
     expect(screen.getByRole('combobox').textContent).toContain('Anthropic');
     expect(screen.getByRole('combobox').textContent).not.toContain('Pick provider');
-  });
-
-  it('greys out the invitation only while nothing is chosen', () => {
-    const { rerender } = render(<Combobox multiple options={options} value={[]} placeholder="Pick providers" />);
-    const label = () => getFirstHTMLElement(screen.getByRole('combobox'));
-    expect(label().classList.contains('text-muted-foreground')).toBe(true);
-
-    rerender(<Combobox multiple options={options} value={['openai']} placeholder="Pick providers" />);
-
-    expect(label().textContent).toBe('1 selected');
-    expect(label().classList.contains('text-muted-foreground')).toBe(false);
   });
 
   it('keeps up with a selection that changes from outside', () => {

@@ -3,7 +3,7 @@
 }
 
 .composer-tone-label {
-  --composer-tone-color: var(--neutral4);
+  --composer-tone-color: var(--muted-foreground);
 
   color: var(--composer-tone-color);
 }
