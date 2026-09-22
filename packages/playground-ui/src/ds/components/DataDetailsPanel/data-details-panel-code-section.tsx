@@ -128,11 +128,10 @@ export function DataDetailsPanelCodeSection({
         </div>
         <div className="flex items-center gap-2">
           {actions}
-          <ButtonsGroup>
-            <CopyButton content={codeStr || 'No content'} size="sm" />
+          <ButtonsGroup size="sm">
+            <CopyButton content={codeStr || 'No content'} />
             {hasMultilineText && (
               <Button
-                size="sm"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
               >
@@ -145,11 +144,11 @@ export function DataDetailsPanelCodeSection({
       <div
         className={cn(
           raisedSurfaceStyle,
-          'text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+          'max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
         )}
       >
         {usePlainTextView ? (
-          <div className="text-muted-foreground font-mono break-all">
+          <div className="font-mono break-all text-muted-foreground">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (

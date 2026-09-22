@@ -9,7 +9,7 @@ const detachedHandle: RefObject<CollapsiblePanelHandle | null> = { current: null
 
 export function useRouteSidePanel() {
   const ctx = use(SidePanelContext);
-  // Mirrors RouteHeaderActions: outside the provider (e.g. isolated page tests) the panel is a no-op.
+  // Outside the provider (e.g. isolated page tests) the panel is a no-op.
   if (!ctx) {
     return { hasPanel: false, isCollapsed: true, onPanelResize: noop, panelHandle: detachedHandle, toggle: noop };
   }

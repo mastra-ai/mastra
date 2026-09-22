@@ -108,14 +108,13 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             </SelectContent>
           </Select>
         </div>
-        <ButtonsGroup className="hidden lg:flex" role="group" aria-label="Rule decision filter">
+        <ButtonsGroup size="sm" className="hidden lg:flex" role="group" aria-label="Rule decision filter">
           {DECISION_GROUPS.map(entry => {
             const Icon = entry.icon;
             return (
               <Button
                 key={entry.key}
                 variant={decisionGroup === entry.key ? 'primary' : 'outline'}
-                size="sm"
                 aria-pressed={decisionGroup === entry.key}
                 onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >

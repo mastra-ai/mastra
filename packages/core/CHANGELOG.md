@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.69.0-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf))
+
+- Fixed chat channel messages (Slack, Discord, etc.) silently disappearing when the agent failed during setup. If workspace, instructions, tools, or model resolution throws before the run starts, the error is now posted back to the chat thread instead of being dropped with no reply. ([#24300](https://github.com/mastra-ai/mastra/pull/24300))
+
 ## 1.68.0
 
 ### Minor Changes

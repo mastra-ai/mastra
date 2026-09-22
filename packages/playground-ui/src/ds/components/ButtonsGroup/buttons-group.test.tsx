@@ -88,4 +88,26 @@ describe('ButtonsGroup', () => {
     expect(realSegments).toEqual([group.firstElementChild, trigger]);
     expect(realSegments[realSegments.length - 1]).toBe(trigger);
   });
+
+  it('publishes its rung, and the markers the stylesheet sizes a segment by', () => {
+    render(
+      <ButtonsGroup size="sm">
+        <Button>Copy</Button>
+        <Button size="icon-lg" aria-label="More options">
+          ▾
+        </Button>
+      </ButtonsGroup>,
+    );
+    const group = getGroup();
+    const [label, icon] = Array.from(group.querySelectorAll<HTMLElement>(':scope > button'));
+    assert(label && icon, 'Expected two segments');
+
+    // The rung the CSS reads, and the square-shape marker it moves the width with. Without
+    // either one an `icon-lg` segment keeps its own 32px box inside a 28px group.
+    expect(group.dataset.size).toBe('sm');
+    expect(icon.dataset.shape).toBe('icon');
+    expect(label.dataset.shape).toBeUndefined();
+    // The glyph wrapper the rung is applied through.
+    expect(icon.querySelector(':scope > [data-slot="icon"]')).not.toBeNull();
+  });
 });
