@@ -9723,6 +9723,24 @@ NODE
   head_sha="$(
     cd "$fixture_repo"
     git reset -q --hard "$base_sha"
+    printf '%s\n' 'export const clickhouseWorkflowInitHead = true;' \
+      >> stores/clickhouse/src/storage/domains/workflows/index.ts
+    git add .
+    git commit -q -m 'clickhouse workflow init conformance change'
+    git rev-parse HEAD
+  )"
+  : > "$command_log"
+  output="$test_root/clickhouse-workflow-init-success.log"
+  run_fixture "$head_sha" "$output"
+  assert_contains 'Forcing PF-2044 owned suites to run for source-only changes:' "$output"
+  assert_contains 'stores/clickhouse/src/storage/db/index.test.ts' "$output"
+  assert_contains '--filter ./stores/clickhouse --fail-if-no-match exec tsc --noEmit' "$command_log"
+  assert_contains '--dir stores/clickhouse exec vitest run' "$command_log"
+  assert_contains 'src/storage/db/index.test.ts' "$command_log"
+
+  head_sha="$(
+    cd "$fixture_repo"
+    git reset -q --hard "$base_sha"
     printf '%s\n' 'export type CloudflareRecordTypes = { head: true };' \
       > stores/cloudflare/src/kv/storage/types.ts
     git add .
@@ -13270,10 +13288,11 @@ while IFS= read -r file; do
       queue_owned_workspace_test "$file" pubsub/redis-streams/src/pubsub.test.ts
       ;;
     stores/clickhouse/src/storage/db/utils.ts | \
-      stores/clickhouse/src/storage/db/index.ts)
-      # TABLE_ENGINES and the DDL builder are one CREATE TABLE path. The fully
-      # mocked client suite exercises that emission in-process and needs no
-      # ClickHouse service.
+      stores/clickhouse/src/storage/db/index.ts | \
+      stores/clickhouse/src/storage/domains/workflows/index.ts)
+      # TABLE_ENGINES, the DDL builder, and workflow init are one CREATE TABLE
+      # path. The fully mocked client suite exercises that emission in-process
+      # and needs no ClickHouse service.
       queue_owned_workspace_test "$file" stores/clickhouse/src/storage/db/index.test.ts
       ;;
     stores/cloudflare/src/kv/storage/types.ts)
