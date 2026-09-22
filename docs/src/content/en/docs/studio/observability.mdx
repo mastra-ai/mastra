@@ -88,9 +88,7 @@ Metrics require a separate OLAP store for observability. Relational databases li
 
 When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood.
 
-Above the trace list, open **Columns** to show or hide type, input, status, duration, environment, end time, input token, output token, total token, estimated cost, and custom metadata columns. To display custom metadata, pick a top-level key from `tracingOptions.metadata`. The picker suggests keys observed on traces in the selected time range, and you can type a key that has not been seen yet. You can also add a custom column for any trace property, such as thread ID or resource ID. Each custom column header opens a menu that lists the values currently loaded, and choosing one adds an **is** filter for that property. Studio saves the selection in browser storage for the current Mastra server and API prefix.
-
-Filter operators use plain language, such as **is any of**, **greater than**, and **at most**. For properties the API can enumerate, such as environment or entity name, the **is** operator offers a dropdown of known values; ID fields accept free text.
+Above the trace list, open **Columns** to show or hide input, entity, duration, input token, output token, estimated cost, and custom metadata columns. To display custom metadata, add the top-level key used in `tracingOptions.metadata`. Studio saves the selection in browser storage for the current Mastra server and API prefix.
 
 Token and estimated cost columns require an observability store that supports metrics. These columns stay hidden in the **Branches** view because several branch rows can belong to the same trace.
 
