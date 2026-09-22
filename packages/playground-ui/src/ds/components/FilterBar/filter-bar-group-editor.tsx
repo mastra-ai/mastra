@@ -68,7 +68,7 @@ export function FilterBarGroupEditor({
   const targeted = ctx.inputTarget === group.id;
   const canNest = depth < ctx.maxDepth;
 
-  // `+ Filter` only mounts once the input has left; focus it on that render.
+  // `+ Filter` is disabled while the input is open; focus it once it re-enables.
   useEffect(() => {
     if (targeted || !focusAddFilter.current) return;
     focusAddFilter.current = false;
@@ -120,41 +120,40 @@ export function FilterBarGroupEditor({
           className={rows.length > 0 ? 'mt-1' : undefined}
         />
       )}
-      {!targeted && (
-        <div className={cn('flex w-full items-center gap-1', rows.length > 0 && 'mt-1')}>
+      <div className={cn('flex w-full items-center gap-1', (rows.length > 0 || targeted) && 'mt-1')}>
+        <Button
+          ref={addFilterRef}
+          variant="ghost"
+          size="sm"
+          icon={<PlusIcon />}
+          disabled={targeted}
+          onClick={() => ctx.openGroupInput(group.id)}
+        >
+          Filter
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<PlusIcon />}
+          disabled={!canNest}
+          tooltip={canNest ? undefined : `Groups can nest ${ctx.maxDepth} levels deep`}
+          onClick={() => ctx.addGroup(group.id, group.logic === 'and' ? 'or' : 'and')}
+        >
+          Group
+        </Button>
+        {onRemove && (
           <Button
-            ref={addFilterRef}
             variant="ghost"
             size="sm"
-            icon={<PlusIcon />}
-            onClick={() => ctx.openGroupInput(group.id)}
+            icon={<Trash2Icon />}
+            className="text-muted-foreground ml-auto"
+            aria-label={removeLabel}
+            onClick={onRemove}
           >
-            Filter
+            Clear
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<PlusIcon />}
-            disabled={!canNest}
-            tooltip={canNest ? undefined : `Groups can nest ${ctx.maxDepth} levels deep`}
-            onClick={() => ctx.addGroup(group.id, group.logic === 'and' ? 'or' : 'and')}
-          >
-            Group
-          </Button>
-          {onRemove && (
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<Trash2Icon />}
-              className="text-muted-foreground ml-auto"
-              aria-label={removeLabel}
-              onClick={onRemove}
-            >
-              Clear
-            </Button>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
