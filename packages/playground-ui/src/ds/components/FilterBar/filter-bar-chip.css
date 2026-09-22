@@ -118,9 +118,41 @@
   animation: filter-bar-chip-shine 420ms cubic-bezier(0.4, 0, 0.2, 1) 60ms both;
 }
 
+/* The advanced-filter chip is a `.filter-bar-chip` (same entrance and fold-shut exit).
+ * Inside its popover, a nested group block fades and collapses when removed; the
+ * connector toggles arrive like a segment. */
+@keyframes filter-bar-nested-out {
+  from {
+    height: auto;
+    opacity: 1;
+  }
+
+  to {
+    height: 0;
+    opacity: 0;
+    margin-block: 0;
+  }
+}
+
+@supports (interpolate-size: allow-keywords) {
+  .filter-bar-editor-nested[data-leaving] {
+    interpolate-size: allow-keywords;
+    overflow: hidden;
+    animation: filter-bar-nested-out 200ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+
+  .filter-bar-logic {
+    --filter-bar-segment-padding: 0.25rem;
+    interpolate-size: allow-keywords;
+    animation: filter-bar-segment-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .filter-bar-segment,
-  .filter-bar-chip[data-leaving] {
+  .filter-bar-chip[data-leaving],
+  .filter-bar-editor-nested[data-leaving],
+  .filter-bar-logic {
     animation: none;
   }
 
