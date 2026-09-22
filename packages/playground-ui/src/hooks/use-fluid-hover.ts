@@ -178,7 +178,7 @@ export const ACTIVE_INDEX_ATTR = 'data-fluid-hover-active-index';
 
 /** False for an event bubbled through React from a portal outside the container, and for a detached target. */
 function isFromInside(e: React.SyntheticEvent) {
-  return e.currentTarget.contains(e.target as Node);
+  return e.target instanceof Node && e.currentTarget.contains(e.target);
 }
 
 const ACTIVATOR_SELECTOR =
@@ -276,11 +276,11 @@ export function useFluidHover<T extends HTMLElement>(
       // loop never runs and this is exactly the plain offsetTop/offsetLeft.
       let top = element.offsetTop;
       let left = element.offsetLeft;
-      let ancestor = element.offsetParent as HTMLElement | null;
-      while (ancestor && ancestor !== container && container.contains(ancestor)) {
+      let ancestor = element.offsetParent;
+      while (ancestor instanceof HTMLElement && ancestor !== container && container.contains(ancestor)) {
         top += ancestor.offsetTop + ancestor.clientTop;
         left += ancestor.offsetLeft + ancestor.clientLeft;
-        ancestor = ancestor.offsetParent as HTMLElement | null;
+        ancestor = ancestor.offsetParent;
       }
       rects[index] = {
         top,
@@ -444,15 +444,15 @@ export function useFluidHover<T extends HTMLElement>(
       // Outside the container in the DOM: a portaled child's click, or a row
       // that unmounted while its own click was still bubbling (a pick whose
       // primitive re-renders the list synchronously). Neither is a gap.
-      if (!isFromInside(e)) return;
-      const target = e.target as Node;
+      const { target } = e;
+      if (!(target instanceof Element) || !isFromInside(e)) return;
       // Inside an item: the item owns the click.
       for (const element of itemsRef.current.values()) {
         if (element.contains(target)) return;
       }
       // A control that sits between the rows (a search field at the top of
       // a menu, a footer button) keeps its own click too.
-      const control = (target as Element).closest?.(
+      const control = target.closest(
         "input, textarea, select, button, a, summary, [contenteditable], [role='textbox'], [role='searchbox'], [role='button']",
       );
       if (control) return;

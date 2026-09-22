@@ -23,7 +23,7 @@ function PickMultiItem({
 }) {
   return (
     <button
-      ref={useFluidMenuItemRef<HTMLButtonElement>(null)}
+      ref={useFluidMenuItemRef<HTMLButtonElement>()}
       type="button"
       role={role}
       aria-checked={checked}
