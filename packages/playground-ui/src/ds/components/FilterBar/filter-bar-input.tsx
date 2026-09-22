@@ -1,11 +1,12 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { ListFilterIcon, Search } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
+import { findGroup } from './filter-bar-tree';
 import { matchesQueryFilter } from './match-query';
 import type { FilterBarDraft, FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
 import { parseFieldValue } from './types';
@@ -29,21 +30,44 @@ type Item = FilterBarField | FilterBarOperator | FilterBarOption;
 const getItemLabel = (item: Item) => ('label' in item && item.label ? item.label : 'value' in item ? item.value : '');
 
 const EMPTY_ITEMS: readonly Item[] = [];
+/** Pinned last entry of the field list that spawns an advanced filter (an `or` group) instead of a filter. */
+const ADVANCED_FIELD_ID = '__filter-bar-advanced__';
+const ADVANCED_FIELD: FilterBarField = {
+  id: ADVANCED_FIELD_ID,
+  label: 'Advanced filter…',
+  icon: BracesIcon,
+  operators: [],
+};
 
 export type FilterBarInputProps = {
   placeholder?: string;
   className?: string;
   'aria-label'?: string;
+  /**
+   * Group this instance commits into; omit for the bar's own input. Only the instance whose
+   * `groupId` matches the provider's `inputTarget` renders, so a single input is ever mounted.
+   */
+  groupId?: string;
+  /** Called when Escape is pressed on an empty query inside a group, after the input hands back to the bar. */
+  onLeave?: () => void;
 };
 
 /**
  * Typeahead entry point: type to pick a field, then an operator, then a value.
  * Focus never leaves the input; the popup is driven with the arrow keys.
  */
-export function FilterBarInput({
+export function FilterBarInput(props: FilterBarInputProps) {
+  const ctx = useFilterBarContext();
+  if (ctx.inputTarget !== props.groupId) return null;
+  return <FilterBarInputImpl {...props} />;
+}
+
+function FilterBarInputImpl({
   placeholder = 'Filter…',
   className,
   'aria-label': ariaLabel = 'Add filter',
+  groupId,
+  onLeave,
 }: FilterBarInputProps) {
   const ctx = useFilterBarContext();
   const container = usePortalContainer();
@@ -60,7 +84,18 @@ export function FilterBarInput({
   const field = draft ? ctx.getField(draft.fieldId) : undefined;
   const operator = draft?.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
-  const visibleFields = useMemo(() => ctx.fields.filter(f => !f.hidden), [ctx.fields]);
+  // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
+  const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
+  const visibleFields = useMemo(() => {
+    const fields = ctx.fields.filter(f => !f.hidden);
+    return offerAdvanced ? [...fields, ADVANCED_FIELD] : fields;
+  }, [ctx.fields, offerAdvanced]);
+  const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
+
+  // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
+  useEffect(() => {
+    if (groupId) inputRef.current?.focus();
+  }, [groupId]);
 
   // Base UI owns the highlight index and keeps it when the list content changes, so a row
   // reached with ArrowDown would carry over into the step that follows. An empty list committed
@@ -109,6 +144,15 @@ export function FilterBarInput({
 
   const selectField = useCallback(
     (next: FilterBarField) => {
+      if (next.id === ADVANCED_FIELD_ID) {
+        // `or` is the useful default: an `and` group is indistinguishable from the root.
+        const id = ctx.addGroup(undefined, 'or');
+        ctx.setOpenGroup(id);
+        ctx.openGroupInput(id);
+        setQuery('');
+        setOpen(false);
+        return;
+      }
       const [only, ...rest] = ctx.getFieldOperators(next);
       // Free-text entry with text already typed: that text is the value, so neither the
       // operator nor the value step has anything left to ask.
@@ -137,15 +181,24 @@ export function FilterBarInput({
     },
   });
 
+  // Leaving a group's input hands the target back to the bar; empty groups are pruned when the
+  // popover closes, never here.
+  const leaveGroup = useCallback(() => {
+    if (!groupId) return false;
+    ctx.openGroupInput(undefined);
+    onLeave?.();
+    return true;
+  }, [ctx, groupId, onLeave]);
+
   const stepBack = useCallback(() => {
     if (step === 'value' && draft) {
       // Back to the field step when the operator was implied (single operator).
       const skipOperator = field ? fieldOperators.length === 1 : false;
       setDraft(skipOperator ? null : { fieldId: draft.fieldId });
     } else if (step === 'operator') setDraft(null);
-    else setOpen(false);
+    else if (!leaveGroup()) setOpen(false);
     setQuery('');
-  }, [step, draft, field, fieldOperators, setDraft]);
+  }, [step, draft, field, fieldOperators, setDraft, leaveGroup]);
 
   // Selection is routed per step and never kept by Base UI (`value` stays null).
   const handleSelect = (item: Item) => {
@@ -158,6 +211,8 @@ export function FilterBarInput({
   const handleKeyDown = (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
+      // Consumed here: an enclosing popover (advanced filter) must not close on it.
+      event.stopPropagation();
       event.preventBaseUIHandler();
       stepBack();
       return;
@@ -173,7 +228,12 @@ export function FilterBarInput({
         event.preventDefault();
         event.preventBaseUIHandler();
         if (step !== 'field') stepBack();
-        else {
+        else if (targetGroup) {
+          // Inside a group: eat its last chip, or drop the group once it is empty.
+          const last = targetGroup.nodes.findLast(node => !ctx.leaving.has(node.id));
+          if (last) ctx.removeItem(last.id);
+          else leaveGroup();
+        } else {
           // Chips still animating out are already gone from the value: skip them.
           const last = ctx.items.findLast(item => !ctx.leaving.has(item.id));
           if (last) ctx.removeItem(last.id);
@@ -295,6 +355,7 @@ export function FilterBarInput({
             spellCheck={false}
             data-slot="filter-bar-input"
             data-step={step}
+            data-target={targetGroup?.id}
             inputMode={step === 'value' && field?.type === 'number' ? 'decimal' : undefined}
             placeholder={inputPlaceholder}
             className={cn(

@@ -1,5 +1,11 @@
 # mastra
 
+## 1.31.1-alpha.0
+
+### Patch Changes
+
+- Fixed production startup so active workflow runs are recovered after restarting a server. Fixes #24592. ([#24663](https://github.com/mastra-ai/mastra/pull/24663))
+
 ## 1.31.0
 
 ### Minor Changes

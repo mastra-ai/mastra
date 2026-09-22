@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
-import type { FilterBarField, FilterBarItem } from './types';
+import type { FilterBarExpression, FilterBarField, FilterBarItem } from './types';
 import { Avatar } from '@/ds/components/Avatar/Avatar';
 import { Txt } from '@/ds/components/Txt';
 import { themedHueColor } from '@/lib/colors';
@@ -87,6 +87,8 @@ const meta: Meta = {
           '**Keyboard**: `↑/↓` move the highlight, `Enter`/`Tab` pick, `Esc`/`Backspace` step back. Empty input: `←` focuses the last chip, `Backspace` removes it. On a chip: `←/→` move across segments and chips, `Enter` edits, `Delete` removes. Multi-value (`in`): `Enter` toggles, `Ctrl/⌘+Enter` or **Done** commits.',
           '',
           'Values are plain strings; the component has no business typing. `suggestions` can be a static list or a lazy resolver invoked only once the value step opens.',
+          '',
+          '**Groups**: pass a `FilterBarExpression` (`{ logic, nodes }`) instead of a flat array to get Linear-style filter groups — chips holding sub-chips joined with `and` / `or` — and connectors between top-level nodes. See *With groups*.',
         ].join('\n'),
       },
     },
@@ -294,5 +296,98 @@ export const KeyboardOnly: Story = {
     await user.keyboard('{Enter}');
     await user.keyboard('{Escape}');
     await user.keyboard('{Backspace}');
+  },
+};
+
+function ExpressionDemo({ initial }: { initial: FilterBarExpression }) {
+  const [expression, setExpression] = useState<FilterBarExpression>(initial);
+  return (
+    <div className="grid w-full max-w-3xl gap-3">
+      <FilterBar fields={FIELDS} operators={DEFAULT_FILTER_OPERATORS} value={expression} onValueChange={setExpression}>
+        <FilterBar.Chips />
+        <FilterBar.Input placeholder="Filter traces…" />
+      </FilterBar>
+      <pre className="bg-card text-meta text-muted-foreground rounded-lg p-3">
+        {JSON.stringify(expression, null, 2)}
+      </pre>
+    </div>
+  );
+}
+
+export const WithAdvancedFilter: Story = {
+  name: 'With an advanced filter (popover)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Pass a `FilterBarExpression` as `value` to enable Linear-style advanced filters. Root chips are implicitly joined with `and`; every root-level group renders as one **Advanced filter** chip whose popover holds a recursive rule builder (rows, `and` / `or` connector, `+ Filter`, `+ Group`). Empty groups are pruned when the popover closes.',
+      },
+    },
+  },
+  render: () => (
+    <ExpressionDemo
+      initial={{
+        logic: 'and',
+        nodes: [
+          { id: '1', fieldId: 'status', operatorId: 'is', value: 'error' },
+          {
+            id: 'g1',
+            kind: 'group',
+            logic: 'or',
+            nodes: [
+              { id: '2', fieldId: 'environment', operatorId: 'is', value: 'prod' },
+              {
+                id: 'g2',
+                kind: 'group',
+                logic: 'and',
+                nodes: [
+                  { id: '3', fieldId: 'environment', operatorId: 'is', value: 'staging' },
+                  { id: '4', fieldId: 'duration', operatorId: 'gt', value: '1500' },
+                ],
+              },
+            ],
+          },
+        ],
+      }}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const user = userEvent.setup({ delay: 80 });
+    await user.click(within(canvasElement).getByRole('button', { name: /Advanced filter/ }));
+  },
+};
+
+export const BuildAdvancedFilterFromKeyboard: Story = {
+  name: 'Build an advanced filter from the keyboard (play)',
+  render: () => <ExpressionDemo initial={{ logic: 'and', nodes: [] }} />,
+  play: async ({ canvasElement }) => {
+    const user = userEvent.setup({ delay: 80 });
+    const body = within(document.body);
+    const input = within(canvasElement).getByRole('combobox', { name: 'Add filter' });
+    await user.click(input);
+    // Status › is › Error
+    await user.type(input, 'stat');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+    // Open an advanced filter; the popover input is now the active one.
+    await user.type(input, 'advanced');
+    await user.keyboard('{Enter}');
+    const popoverInput = await body.findByRole('combobox', { name: 'Add filter' });
+    // Environment is prod, Environment is staging
+    await user.type(popoverInput, 'env');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{Enter}');
+    await user.type(popoverInput, 'env');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{Enter}');
+    await user.keyboard('{ArrowDown}{Enter}');
+    // Flip the connector, then nest a group and close the popover.
+    await user.click(body.getByRole('button', { name: 'Joined with or, switch to and' }));
+    await user.keyboard('{Escape}');
+    await user.click(body.getByRole('button', { name: 'Group' }));
+    await user.keyboard('{Escape}');
+    await user.keyboard('{Escape}');
   },
 };
