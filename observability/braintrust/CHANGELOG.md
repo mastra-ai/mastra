@@ -1,5 +1,12 @@
 # @mastra/braintrust
 
+## 1.3.14-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`f9e386f`](https://github.com/mastra-ai/mastra/commit/f9e386f308c448761ab9ed0281ae4ab54c99cbd6)]:
+  - @mastra/observability@1.17.9-alpha.2
+
 ## 1.3.14-alpha.1
 
 ### Patch Changes
