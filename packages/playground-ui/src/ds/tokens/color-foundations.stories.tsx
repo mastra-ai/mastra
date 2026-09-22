@@ -102,7 +102,7 @@ const Swatch = ({ value, height = 'h-16' }: { value: string; height?: string }) 
   <div
     role="img"
     aria-label={`${value} swatch`}
-    className={`${height} border border-border`}
+    className={`${height} border-border border`}
     style={{ background: value }}
   />
 );
@@ -120,7 +120,7 @@ const RampRow = ({ tokens }: { tokens: string[] }) => (
       <Txt variant="meta" font="mono" tone="muted" className="uppercase">
         Subtle
       </Txt>
-      <div className="h-px flex-1 bg-border" />
+      <div className="bg-border h-px flex-1" />
       <Txt variant="meta" font="mono" tone="muted" className="uppercase">
         Strong
       </Txt>
@@ -129,11 +129,11 @@ const RampRow = ({ tokens }: { tokens: string[] }) => (
 );
 
 const SeriesSwatch = ({ value }: { value: string }) => (
-  <div role="img" aria-label={`${value} swatch`} className="flex flex-col border border-border">
+  <div role="img" aria-label={`${value} swatch`} className="border-border flex flex-col border">
     <div className="bg-background p-1.5">
       <span className="block h-8 rounded-sm" style={{ background: value }} />
     </div>
-    <div className="flex h-8 items-center gap-1.5 bg-sidebar px-1.5">
+    <div className="bg-sidebar flex h-8 items-center gap-1.5 px-1.5">
       <span className="size-2 shrink-0 rounded-full" style={{ background: value }} />
       <span className="h-0.5 flex-1 rounded-full" style={{ background: value }} />
     </div>
@@ -201,7 +201,6 @@ export const ColorFoundations: Story = {
 };
 
 export const SemanticColors: Story = {
-  name: 'Semantic Colors',
   parameters: {
     docs: { description: { story: 'Surface, text, and status roles. Values adapt to the active theme.' } },
   },
@@ -283,7 +282,6 @@ export const SemanticColors: Story = {
 };
 
 export const ProductColors: Story = {
-  name: 'Product Colors',
   parameters: {
     docs: {
       description: {
@@ -382,7 +380,6 @@ const brandColors = [
 ];
 
 export const BrandColors: Story = {
-  name: 'Brand Colors',
   render: () => (
     <FoundationPage
       eyebrow="Color / 7 brand colors"
