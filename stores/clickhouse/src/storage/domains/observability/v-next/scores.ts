@@ -346,8 +346,13 @@ export async function listScores(
 /**
  * Delta reads join the delta stream to the current-state table by scoreId, so
  * a poll or replay always returns the latest write of a score (a rewrite may
- * change traceId or timestamp, which the delta row does not track). `FINAL`
- * plus `LIMIT 1 BY` collapse unmerged versions and any duplicate delta rows.
+ * change traceId or timestamp, which the delta row does not track).
+ *
+ * A score's first delta row is its only cursor: rows after `afterCursor` are
+ * dropped when the same scoreId already has a row at or before it, and
+ * `LIMIT 1 BY` keeps the lowest cursor within the page. Duplicate delta rows
+ * (a concurrent-insert race past the MV check) therefore never surface, in
+ * this poll or a later one.
  */
 type ScoreDeltaRow = Record<string, any> & {
   cursorId?: string;
@@ -375,7 +380,12 @@ async function queryScoresAfterCursor(
       FROM ${TABLE_SCORE_EVENTS_DELTA} d
       INNER JOIN ${TABLE_SCORE_EVENTS_CURRENT} s FINAL
         ON s.scoreId = d.scoreId
-      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ${whereClause ? `${whereClause} AND` : 'WHERE'} d.cursorId > {afterCursor:UInt64}
+        AND d.scoreId NOT IN (
+          SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}
+          WHERE cursorId <= {afterCursor:UInt64}
+            AND scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})
+        )
       ORDER BY d.cursorId ASC
       LIMIT 1 BY s.scoreId
       LIMIT {fetchLimit:UInt32}

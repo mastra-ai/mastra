@@ -811,13 +811,10 @@ SETTINGS allow_nullable_key = 1
 // to the inserted block, so the delta lookup only touches the scoreIds being
 // written (served by idx_scoreId) instead of hashing the whole delta table.
 // Concurrent inserts of one scoreId can still race past the NOT IN check; the
-// read side dedupes those with `LIMIT 1 BY scoreId`.
-export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
-  return `
-CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
-TO ${TABLE_SCORE_EVENTS_DELTA}
-AS
-SELECT
+// read side treats a score's first delta row as its only cursor, so such
+// duplicates never reach consumers.
+export function buildScoreEventsDeltaMvQuery(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `SELECT
   ${buildDeltaCursorExpr(strategy, 'mastra_score_events_delta_cursor', 'scoreId')} AS cursorId,
   ingestedAt,
   traceId,
@@ -835,7 +832,15 @@ FROM (
     WHERE scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS})
   )
   LIMIT 1 BY scoreId
-)
+)`;
+}
+
+export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
+TO ${TABLE_SCORE_EVENTS_DELTA}
+AS
+${buildScoreEventsDeltaMvQuery(strategy)}
 `;
 }
 

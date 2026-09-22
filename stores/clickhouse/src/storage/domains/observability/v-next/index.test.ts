@@ -911,7 +911,7 @@ LIMIT 1`,
       ]);
     });
 
-    it('collapses duplicate delta rows for one score within a poll', async () => {
+    it('collapses duplicate delta rows for one score within and across polls', async () => {
       const filters = { scorerId: 'delta-dup-scorer' } as any;
       const score = {
         scoreId: 'delta-score-dup-rows',
@@ -956,6 +956,10 @@ LIMIT 1`,
         const poll = await storage.listScores({ mode: 'delta', after: bootstrap.deltaCursor!, filters });
         expect(poll.scores.map(s => s.scoreId)).toEqual(['delta-score-dup-rows']);
         expect(poll.delta?.hasMore).toBe(false);
+
+        // The two higher-cursor duplicates must not resurface on the next poll either.
+        const next = await storage.listScores({ mode: 'delta', after: poll.deltaCursor!, filters });
+        expect(next.scores).toEqual([]);
       } finally {
         // Remove the hand-written rows so their cursorIds don't outrun the stream head for later tests.
         await client.command({
@@ -5514,7 +5518,7 @@ LIMIT 1`,
       ).toBeDefined();
     });
 
-    it('recreates a score delta view that predates per-scoreId deduplication', async () => {
+    it('upgrades a score delta view that predates per-scoreId deduplication in place', async () => {
       const client = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
         username: process.env.CLICKHOUSE_USERNAME || 'default',
@@ -5550,8 +5554,23 @@ LIMIT 1`,
         await client.command({ query: legacyMvDdl });
         expect(await readMvDdl()).not.toContain('NOT IN');
 
+        // init() must alter the view in place: a drop-and-recreate would leave
+        // a window in which score writes get no delta row.
+        const countDropViews = async () => {
+          await client.command({ query: 'SYSTEM FLUSH LOGS' });
+          const result = await client.query({
+            query: `SELECT count() AS count FROM system.query_log
+                    WHERE type = 'QueryFinish' AND query ILIKE {pattern:String}`,
+            query_params: { pattern: `DROP VIEW%${MV_SCORE_EVENTS_DELTA}%` },
+            format: 'JSONEachRow',
+          });
+          return Number((await result.json<{ count: string | number }>())[0]?.count ?? 0);
+        };
+        const dropsBefore = await countDropViews();
+
         await new ObservabilityStorageClickhouseVNext({ client }).init();
         expect(await readMvDdl()).toContain('NOT IN');
+        expect(await countDropViews()).toBe(dropsBefore);
 
         const storage = new ObservabilityStorageClickhouseVNext({ client });
         await storage.init();

@@ -123,6 +123,7 @@ import {
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
   MV_SCORE_EVENTS_DELTA,
+  buildScoreEventsDeltaMvQuery,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
   RETENTION_MANAGED_TABLES,
@@ -521,17 +522,23 @@ async function queryNamesByTable(
 }
 
 /**
- * Drops a score delta MV created before per-scoreId deduplication so init()'s
- * `CREATE MATERIALIZED VIEW IF NOT EXISTS` recreates it with the current
- * definition. Only the view is dropped; the delta table and its rows stay.
+ * Upgrades a score delta MV created before per-scoreId deduplication with
+ * `ALTER TABLE ... MODIFY QUERY`. The view is changed in place, so there is no
+ * window without a view in which score writes would miss their delta row (a
+ * drop-and-recreate would leave such writes out of delta polling for good).
  *
  * With a cluster configured the definition is read from every replica via
  * `clusterAllReplicas`, since each host stores its own copy of the view; a
- * single legacy copy is enough to drop `ON CLUSTER` and recreate everywhere.
+ * single legacy copy is enough to alter `ON CLUSTER`.
+ *
+ * Introspection failures are logged and skipped, like the other schema checks
+ * in init(): the existing view keeps working and the next boot retries.
  */
-export async function dropStaleScoreDeltaMv(
+export async function reconcileScoreDeltaMv(
   client: ClickHouseClient,
   replication: ClickhouseReplicationConfig | undefined,
+  strategy: ClickHouseDeltaCursorStrategy,
+  logger?: IMastraLogger,
 ): Promise<void> {
   const cluster = replication?.cluster?.trim();
   let createQueries: string[];
@@ -546,12 +553,22 @@ export async function dropStaleScoreDeltaMv(
     createQueries = ((await result.json()) as Array<{ create_table_query?: string | null }>).map(
       row => row.create_table_query ?? '',
     );
-  } catch {
+  } catch (error) {
+    logger?.warn?.(
+      `Could not verify the ${MV_SCORE_EVENTS_DELTA} definition; leaving the existing view in place: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
     return;
   }
 
   if (createQueries.some(createQuery => createQuery.length > 0 && !/NOT IN/i.test(createQuery))) {
-    await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${MV_SCORE_EVENTS_DELTA}`, replication) });
+    await client.command({
+      query: addOnClusterToDDL(
+        `ALTER TABLE ${MV_SCORE_EVENTS_DELTA} MODIFY QUERY ${buildScoreEventsDeltaMvQuery(strategy)}`,
+        replication,
+      ),
+    });
   }
 }
 
@@ -751,10 +768,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
 
-      // Skip when delta polling is disabled (mixed cursor schemas): BASE_MV_DDL
-      // would not recreate the view and the stream would silently stop.
+      // Skipped when delta polling is disabled (mixed cursor schemas): there is
+      // no single strategy to build the view query from.
       if (this.#deltaCursorStrategy !== null) {
-        await dropStaleScoreDeltaMv(this.#client, this.#replication);
+        await reconcileScoreDeltaMv(this.#client, this.#replication, this.#deltaCursorStrategy, this.logger);
       }
 
       const coreMvDdl = this.#deltaCursorStrategy === null ? BASE_MV_DDL : buildAllMvDDL(this.#deltaCursorStrategy);
