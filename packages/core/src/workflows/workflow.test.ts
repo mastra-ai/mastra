@@ -762,7 +762,53 @@ describe('Workflow (Default Engine Specifics)', () => {
     });
   });
 
-  describe('tool step cancellation', () => {
+  describe('workflow cancellation', () => {
+    it('leaves an executor-aborted run recoverable without invoking onFinish', async () => {
+      let notifyStepStarted!: () => void;
+      const stepStarted = new Promise<void>(resolve => {
+        notifyStepStarted = resolve;
+      });
+      const onFinish = vi.fn();
+
+      const blockingStep = createStep({
+        id: 'blocking-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ abortSignal }) => {
+          notifyStepStarted();
+          await new Promise<void>(resolve => abortSignal?.addEventListener('abort', () => resolve(), { once: true }));
+          return {};
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'executor-abort-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [blockingStep],
+        options: { onFinish },
+      });
+      workflow.then(blockingStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'executor-abort-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const resultPromise = run.start({ inputData: {} });
+      await stepStarted;
+
+      run.abortController.abort();
+
+      const result = await resultPromise;
+      const snapshot = await workflow.getWorkflowRunById(run.runId);
+
+      expect(result.status).toBe('waiting');
+      expect(snapshot?.status).toBe('waiting');
+      expect(onFinish).not.toHaveBeenCalled();
+    });
+
     it('forwards abortSignal to tool-wrapped steps so run.cancel() can stop cooperative tools', async () => {
       let capturedAbortSignal: AbortSignal | undefined;
       let toolStoppedEarly = false;
