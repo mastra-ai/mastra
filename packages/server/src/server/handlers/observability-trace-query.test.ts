@@ -329,6 +329,56 @@ describe('QUERY_TRACES', () => {
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
   });
 
+  it('rejects malformed metadata paths at request validation before storage', () => {
+    const { observabilityStore, getStore } = createHarness();
+    const paths = [
+      ['attributes', 'customer.id'],
+      ['metadata', ''],
+      ['metadata', 'customer', 'id'],
+      `metadata.${'x'.repeat(129)}`,
+      'metadata.customer\0id',
+    ];
+
+    for (const path of paths) {
+      const parsed = traceQueryRequestSchema.safeParse({
+        timeRange: TIME_RANGE,
+        where: { op: 'exists', path },
+      });
+      expect(parsed.success).toBe(false);
+      if (parsed.success) throw new Error('Expected metadata path validation failure');
+      expect(QUERY_TRACES.onValidationError?.(parsed.error, 'body')).toMatchObject({
+        status: 422,
+        body: {
+          code: 'TRACE_QUERY_INVALID',
+          issues: expect.arrayContaining([expect.objectContaining({ code: 'invalid_request' })]),
+        },
+      });
+    }
+
+    expect(getStore).not.toHaveBeenCalled();
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid metadata scalar combinations before storage without exposing literals', async () => {
+    const { mastra, observabilityStore, getStore } = createHarness();
+    const predicates = [
+      { op: 'in', value: { path: 'metadata.count' }, set: [1, 'sensitive-value'] },
+      { op: 'lt', left: { path: 'metadata.count' }, right: { literal: 'sensitive-value' } },
+      { op: 'eq', left: { path: 'metadata.count' }, right: { literal: null } },
+    ];
+
+    for (const where of predicates) {
+      const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, where })));
+      expect(error.status).toBe(422);
+      const body = getDeclaredErrorSchema(422).parse(await error.getResponse().json());
+      expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID' });
+      expect(JSON.stringify(body)).not.toContain('sensitive-value');
+    }
+
+    expect(getStore).not.toHaveBeenCalled();
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid score operators and literals before touching storage', async () => {
     const { mastra, observabilityStore, getStore } = createHarness();
     const cases = [
@@ -411,25 +461,33 @@ describe('QUERY_TRACES', () => {
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
   });
 
-  it('passes metadata keys through regardless of their names', async () => {
+  it('normalizes metadata dot paths and preserves exact dotted segments before storage', async () => {
     const { mastra, observabilityStore } = createHarness();
-    await QUERY_TRACES.handler(
-      params(mastra, {
-        timeRange: TIME_RANGE,
-        where: { op: 'eq', left: { path: 'metadata.api-key' }, right: { literal: 'sensitive-value' } },
-      }),
-    );
 
-    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          type: 'comparison',
-          field: 'metadata.api-key',
-          operator: 'eq',
-          value: 'sensitive-value',
-        },
-      }),
-    );
+    for (const [path, field] of [
+      ['metadata.customer.id', ['metadata', 'customer', 'id']],
+      [
+        ['metadata', 'customer.id'],
+        ['metadata', 'customer.id'],
+      ],
+    ] as const) {
+      await QUERY_TRACES.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path }, right: { literal: 'sensitive-value' } },
+        }),
+      );
+      expect(observabilityStore.queryTraces).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: {
+            type: 'comparison',
+            field,
+            operator: 'eq',
+            value: 'sensitive-value',
+          },
+        }),
+      );
+    }
   });
 
   it('distinguishes malformed cursors from changed-query conflicts', async () => {
@@ -569,6 +627,20 @@ describe('trace-query discovery routes', () => {
           valueSuggestions: true,
           occurrences: 4,
         },
+        {
+          path: 'metadata.retry.count',
+          valueKind: 'number',
+          operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists', 'lt', 'lte', 'gt', 'gte'],
+          valueSuggestions: true,
+          occurrences: 3,
+        },
+        {
+          path: ['metadata', 'customer.id'],
+          valueKind: 'boolean',
+          operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'],
+          valueSuggestions: true,
+          occurrences: 2,
+        },
       ],
       observedFieldsTruncated: false,
     });
@@ -582,7 +654,11 @@ describe('trace-query discovery routes', () => {
     expect(response.canonicalFields).toContainEqual(
       expect.objectContaining({ path: 'status', valueKind: 'string', valueSuggestions: true }),
     );
-    expect(response.observedFields).toEqual([expect.objectContaining({ path: 'metadata.region', occurrences: 4 })]);
+    expect(response.observedFields).toEqual([
+      expect.objectContaining({ path: 'metadata.region', valueKind: 'string', occurrences: 4 }),
+      expect.objectContaining({ path: 'metadata.retry.count', valueKind: 'number', occurrences: 3 }),
+      expect.objectContaining({ path: ['metadata', 'customer.id'], valueKind: 'boolean', occurrences: 2 }),
+    ]);
     expect(response.observedFieldsTruncated).toBe(false);
     expect(observabilityStore.getTraceQueryObservedFields).toHaveBeenCalledWith({
       timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' },
@@ -628,6 +704,37 @@ describe('trace-query discovery routes', () => {
       search: '',
       limit: 25,
     });
+  });
+
+  it('preserves exact metadata paths and typed scalar values through discovery responses', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query-discovery']);
+    observabilityStore.getTraceQueryValues.mockResolvedValue({
+      values: [
+        { value: false, count: 3 },
+        { value: 0, count: 2 },
+        { value: '', count: 1 },
+      ],
+      valuesTruncated: false,
+    });
+    const request = getTraceQueryValuesArgsSchema.parse({
+      timeRange: TIME_RANGE,
+      predicateScope: 'trace',
+      path: ['metadata', 'customer.id'],
+    });
+
+    await expect(
+      GET_TRACE_QUERY_VALUES.handler({ ...createTestServerContext({ mastra }), ...request }),
+    ).resolves.toEqual({
+      values: [
+        { value: false, count: 3 },
+        { value: 0, count: 2 },
+        { value: '', count: 1 },
+      ],
+      valuesTruncated: false,
+    });
+    expect(observabilityStore.getTraceQueryValues).toHaveBeenCalledWith(
+      expect.objectContaining({ path: ['metadata', 'customer.id'] }),
+    );
   });
 
   it('publishes strict authenticated contracts with observability read permission', () => {

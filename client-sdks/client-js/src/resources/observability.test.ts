@@ -7,6 +7,12 @@ import type {
 } from '@mastra/core/storage';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
+import type {
+  PostObservabilityTracesQuery_Body,
+  PostObservabilityTracesQueryFields_Response,
+  PostObservabilityTracesQueryValues_Body,
+  PostObservabilityTracesQueryValues_Response,
+} from '../route-types.generated';
 import type { QueryTraceThreadsResult } from './observability';
 
 // Mock fetch globally
@@ -531,6 +537,28 @@ describe('Observability Methods', () => {
       );
     });
 
+    it('should preserve nested and exact metadata paths with typed scalar predicates', async () => {
+      mockSuccessfulResponse();
+      const exactPath: ['metadata', string, ...string[]] = ['metadata', 'customer.id', 'profile'];
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        where: {
+          op: 'and' as const,
+          args: [
+            { op: 'gte' as const, left: { path: 'metadata.retry.count' }, right: { literal: 3 } },
+            { op: 'eq' as const, left: { path: exactPath }, right: { literal: false } },
+          ],
+        },
+      } satisfies PostObservabilityTracesQuery_Body;
+
+      await client.queryTraces(request);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({ method: 'POST', body: JSON.stringify(request) }),
+      );
+    });
+
     it('should expose paginated trace responses for page-mode queries', async () => {
       mockSuccessfulResponse();
       const request = {
@@ -594,6 +622,36 @@ describe('Observability Methods', () => {
           signal: controller.signal,
         }),
       );
+    });
+
+    it('should expose exact metadata paths and typed discovery scalars in generated route types', async () => {
+      const path: PostObservabilityTracesQueryValues_Body['path'] = ['metadata', 'customer.id', 'profile'];
+      const fields = {
+        observedFields: [
+          {
+            path,
+            valueKind: 'scalar' as const,
+            operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'],
+            valueSuggestions: true,
+            occurrences: 3,
+          },
+        ],
+        observedFieldsTruncated: false,
+        canonicalFields: [],
+      } satisfies PostObservabilityTracesQueryFields_Response;
+      const values = {
+        values: [
+          { value: false, count: 3 },
+          { value: 0, count: 2 },
+          { value: '', count: 1 },
+        ],
+        valuesTruncated: false,
+      } satisfies PostObservabilityTracesQueryValues_Response;
+
+      expectTypeOf<PostObservabilityTracesQueryValues_Response['values'][number]['value']>().toEqualTypeOf<
+        string | number | boolean
+      >();
+      expect(fields.observedFields[0]?.path).toEqual(path);
     });
 
     it('should not retry discovery requests', async () => {

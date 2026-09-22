@@ -652,9 +652,6 @@ const sidebars = {
               type: 'doc',
               id: 'guides/context-engineering',
               label: 'Context engineering',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',

@@ -7,7 +7,6 @@ import type {
   TraceQueryObservedFieldsResult,
   TraceQueryFeedbackField,
   TraceQueryField,
-  TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -138,10 +137,6 @@ function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
-function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
-  return typeof field === 'string' && field.startsWith('metadata.');
-}
-
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
@@ -193,16 +188,7 @@ function compileScalarPredicate<TField extends string>(
           parameterType: kind === 'number' ? 'Float64' : kind === 'boolean' ? 'UInt64' : 'String',
         };
       })()
-    : isMetadataField(predicate.field)
-      ? (() => {
-          if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
-          const key = parameters.add(predicate.field.slice('metadata.'.length), 'String');
-          return {
-            sql: `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`,
-            parameterType: 'String' as const,
-          };
-        })()
-      : fieldDefinition(registry, predicate.field);
+    : fieldDefinition(registry, predicate.field);
   if (predicate.type === 'presence') {
     return `${predicate.operator === 'exists' ? 'isNotNull' : 'isNull'}(${field.sql})`;
   }
@@ -635,9 +621,9 @@ export function compileClickHouseTraceQueryObservedFields(
     : '';
   const limit = parameters.add(plan.limit + 1, 'UInt64');
   ctes.push(`metadata_tree AS (
-    SELECT ['metadata'] AS segments, ifNull(r.metadataRaw, '{}') AS leaf FROM root_scope r
+    SELECT ['metadata'] AS segments, ifNull(r.metadataRaw, '{}') AS leaf, false AS requires_exact FROM root_scope r
     UNION ALL
-    SELECT arrayPushBack(segments, entry.1), entry.2
+    SELECT arrayPushBack(segments, entry.1), entry.2, requires_exact OR position(entry.1, '.') > 0
     FROM metadata_tree
     ARRAY JOIN JSONExtractKeysAndValuesRaw(if(JSONType(leaf) = 'Object', leaf, '{}')) AS entry
     WHERE length(segments) < ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENTS}
@@ -646,19 +632,24 @@ export function compileClickHouseTraceQueryObservedFields(
       AND length(arrayStringConcat(arrayPushBack(segments, entry.1), '.')) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
   )`);
   ctes.push(`fields AS (
-    SELECT segments, if(length(segments) = 2 AND position(segments[2], '.') = 0
-      AND JSONType(leaf) = 'String' AND trim(JSONExtractString(leaf)) != '',
-      concat('metadata.', segments[2]), toJSONString(segments)) AS path
+    SELECT segments,
+      if(requires_exact, toJSONString(segments), arrayStringConcat(segments, '.')) AS path,
+      multiIf(JSONType(leaf) = 'String', 'string', JSONType(leaf) = 'Bool', 'boolean', 'number') AS value_kind
     FROM metadata_tree
     WHERE JSONType(leaf) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool')
       AND (JSONType(leaf) != 'String' OR length(JSONExtractString(leaf)) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES})
   )`);
+  ctes.push(`grouped_fields AS (
+    SELECT path, count() AS occurrences,
+      if(uniqExact(value_kind) = 1, min(value_kind), 'scalar') AS value_kind
+    FROM fields
+    WHERE 1 ${search}
+    GROUP BY path
+  )`);
   return {
     query: `WITH RECURSIVE ${ctes.join(',\n')}
-SELECT path, count() AS occurrences
-FROM fields
-WHERE 1 ${search}
-GROUP BY path
+SELECT path, occurrences, value_kind
+FROM grouped_fields
 ORDER BY occurrences DESC, path ASC
 LIMIT ${limit}`,
     query_params: parameters.params,
@@ -677,9 +668,6 @@ export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesP
       .map(segment => parameters.add(segment, 'String'))
       .join(', ');
     field = `if(JSONType(r.metadataRaw, ${keys}) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool'), JSONExtractRaw(r.metadataRaw, ${keys}), NULL)`;
-  } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
-    const key = parameters.add(plan.path.slice('metadata.'.length), 'String');
-    field = `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`;
   } else {
     field = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
   }
@@ -773,6 +761,7 @@ export async function getTraceQueryObservedFields(
         coreStorage.createTraceQueryObservedFieldDescriptor(
           String(row.path).startsWith('[') ? JSON.parse(String(row.path)) : String(row.path),
           Number(row.occurrences),
+          coreStorage.traceQueryObservedValueKindSchema.parse(row.value_kind),
         ),
       ),
     observedFieldsTruncated: rows.length > plan.limit,

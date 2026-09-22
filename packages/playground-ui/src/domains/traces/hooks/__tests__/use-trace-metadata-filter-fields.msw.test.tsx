@@ -6,6 +6,7 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { encodeTraceMetadataValue } from '../../trace-metadata-filter-codec';
 import { useTraceMetadataFilterFields } from '../use-trace-metadata-filter-fields';
 import { traceQueryFieldsFixture, traceQueryValuesFixture } from './fixtures/trace-query-discovery';
 import { server } from '@/test/msw-server';
@@ -47,13 +48,34 @@ describe('useTraceMetadataFilterFields', () => {
       const wrapper = makeWrapper(queryClient);
 
       const first = renderHook(() => useTraceMetadataFilterFields({ timeRange }), { wrapper });
-      await waitFor(() => expect(first.result.current.fields).toHaveLength(2));
-      expect(first.result.current.fields.map(field => field.path)).toEqual(['metadata.region', 'metadata.tenant']);
+      await waitFor(() => expect(first.result.current.fields).toHaveLength(6));
+      expect(first.result.current.fields.map(field => field.path)).toEqual([
+        'metadata.region',
+        'metadata.customer.id',
+        ['metadata', 'customer.id'],
+        'metadata.retry.count',
+        'metadata.flags.reviewed',
+        'metadata.mixed',
+      ]);
       expect(bodies).toEqual([{ timeRange, predicateScope: 'trace', limit: 100 }]);
+
+      const [, nested, exact, number, boolean, mixed] = first.result.current.fields;
+      expect(nested?.id).toBe('metadata.customer.id');
+      expect(exact?.id).not.toBe(nested?.id);
+      expect(exact?.label).toBe('["customer.id"]');
+      expect(number).toMatchObject({
+        type: 'number',
+        operators: ['is', 'isNot', 'in', 'notIn', 'lt', 'lte', 'gt', 'gte', 'exists', 'notExists'],
+      });
+      expect(boolean).toMatchObject({
+        type: 'boolean',
+        operators: ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'],
+      });
+      expect(mixed).toMatchObject({ type: undefined, strict: true });
 
       first.unmount();
       const second = renderHook(() => useTraceMetadataFilterFields({ timeRange }), { wrapper });
-      await waitFor(() => expect(second.result.current.fields).toHaveLength(2));
+      await waitFor(() => expect(second.result.current.fields).toHaveLength(6));
       expect(bodies).toHaveLength(1);
     });
 
@@ -70,7 +92,7 @@ describe('useTraceMetadataFilterFields', () => {
       const { result } = renderHook(() => useTraceMetadataFilterFields({ timeRange }), {
         wrapper: makeWrapper(newQueryClient()),
       });
-      await waitFor(() => expect(result.current.fields).toHaveLength(2));
+      await waitFor(() => expect(result.current.fields).toHaveLength(6));
 
       const [region] = result.current.fields;
       const options = await region?.suggestions({
@@ -79,9 +101,54 @@ describe('useTraceMetadataFilterFields', () => {
         signal: new AbortController().signal,
       });
 
-      expect(options).toEqual([{ value: 'eu-west' }, { value: 'us-east' }]);
+      expect(options).toEqual([
+        { value: 'eu-west', label: 'eu-west' },
+        { value: 'us-east', label: 'us-east' },
+      ]);
       expect(bodies).toEqual([
         { timeRange, predicateScope: 'trace', path: 'metadata.region', search: 'eu', limit: 100 },
+      ]);
+    });
+
+    it('preserves nested paths, exact paths, and typed scalar suggestions in value requests', async () => {
+      const bodies: GetTraceQueryValuesArgs[] = [];
+      server.use(
+        http.post(FIELDS_URL, () => HttpResponse.json(traceQueryFieldsFixture)),
+        http.post(VALUES_URL, async ({ request }) => {
+          const body = (await request.json()) as GetTraceQueryValuesArgs;
+          bodies.push(body);
+          const value = Array.isArray(body.path)
+            ? 'literal-dot'
+            : body.path === 'metadata.retry.count'
+              ? 0
+              : body.path === 'metadata.flags.reviewed'
+                ? false
+                : 'nested';
+          return HttpResponse.json({ values: [{ value, count: 1 }], valuesTruncated: false });
+        }),
+      );
+
+      const { result } = renderHook(() => useTraceMetadataFilterFields({ timeRange }), {
+        wrapper: makeWrapper(newQueryClient()),
+      });
+      await waitFor(() => expect(result.current.fields).toHaveLength(6));
+
+      const fields = result.current.fields.slice(1, 5);
+      const options = await Promise.all(
+        fields.map(field => field.suggestions({ query: '', operatorId: 'is', signal: new AbortController().signal })),
+      );
+
+      expect(options).toEqual([
+        [{ value: 'nested', label: 'nested' }],
+        [{ value: 'literal-dot', label: 'literal-dot' }],
+        [{ value: encodeTraceMetadataValue(0), label: '0' }],
+        [{ value: encodeTraceMetadataValue(false), label: 'false' }],
+      ]);
+      expect(bodies.map(body => body.path)).toEqual([
+        'metadata.customer.id',
+        ['metadata', 'customer.id'],
+        'metadata.retry.count',
+        'metadata.flags.reviewed',
       ]);
     });
 
@@ -94,7 +161,7 @@ describe('useTraceMetadataFilterFields', () => {
       const { result } = renderHook(() => useTraceMetadataFilterFields({ timeRange }), {
         wrapper: makeWrapper(newQueryClient()),
       });
-      await waitFor(() => expect(result.current.fields).toHaveLength(2));
+      await waitFor(() => expect(result.current.fields).toHaveLength(6));
 
       const controller = new AbortController();
       controller.abort();
@@ -112,12 +179,12 @@ describe('useTraceMetadataFilterFields', () => {
         wrapper: makeWrapper(newQueryClient()),
         initialProps: { range: timeRange },
       });
-      await waitFor(() => expect(result.current.fields).toHaveLength(2));
+      await waitFor(() => expect(result.current.fields).toHaveLength(6));
 
       rerender({ range: { from: '2026-09-17T00:00:00.000Z', to: timeRange.to } });
 
       expect(result.current.isLoading).toBe(false);
-      expect(result.current.fields).toHaveLength(2);
+      expect(result.current.fields).toHaveLength(6);
     });
   });
 

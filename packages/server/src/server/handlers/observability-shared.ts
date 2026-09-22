@@ -157,7 +157,7 @@ export const NEW_ROUTE_DEFS = {
     method: 'POST',
     path: '/observability/traces/query/fields',
     summary: 'Discover trace query fields',
-    description: 'Returns canonical query fields and observed top-level string metadata fields',
+    description: 'Returns canonical query fields and recursively observed scalar metadata fields',
     requiresPermission: 'observability:read',
   },
 
@@ -165,7 +165,7 @@ export const NEW_ROUTE_DEFS = {
     method: 'POST',
     path: '/observability/traces/query/values',
     summary: 'Discover trace query values',
-    description: 'Returns bounded string value suggestions and occurrence counts for one eligible query field',
+    description: 'Returns bounded scalar value suggestions and occurrence counts for one eligible query field',
     requiresPermission: 'observability:read',
   },
 

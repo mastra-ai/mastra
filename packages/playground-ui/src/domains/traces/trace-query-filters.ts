@@ -1,7 +1,9 @@
 import type { QueryTracesInput } from '@mastra/client-js';
-import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import type { TraceQueryPath, TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
 import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
-import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { decodeTraceMetadataValue, traceMetadataFieldIdToPath } from './trace-metadata-filter-codec';
+import type { TraceMetadataScalar } from './trace-metadata-filter-codec';
+import type { FilterBarValue } from '@/ds/components/FilterBar/types';
 
 export const TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS = new Set([
   'tags',
@@ -32,7 +34,9 @@ export const isTraceFilterOperatorId = (value: string): value is TraceFilterOper
   (TRACE_FILTER_OPERATOR_IDS as readonly string[]).includes(value);
 
 /** A trace filter chip: `operatorId` defaults to `is` (equality / set membership). */
-export type TraceFilterToken = PropertyFilterToken & {
+export type TraceFilterToken = {
+  fieldId: string;
+  value: FilterBarValue;
   operatorId?: TraceFilterOperatorId;
   /** Only set for tokens inside a group: a group may hold several tokens on the same field. */
   id?: string;
@@ -99,10 +103,25 @@ function resolveTraceQueryPath(fieldId: string): { scope?: TraceQueryRelatedScop
   return { path: fieldId };
 }
 
+const metadataTokenValues = (value: FilterBarValue): TraceMetadataScalar[] => {
+  const candidates = Array.isArray(value) ? value : [value];
+  const values: TraceMetadataScalar[] = [];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      if (candidate.length === 0 || candidate === 'Any') continue;
+      const decoded = decodeTraceMetadataValue(candidate);
+      if (decoded !== undefined) values.push(decoded);
+    } else if (typeof candidate === 'boolean' || (typeof candidate === 'number' && Number.isFinite(candidate))) {
+      values.push(candidate);
+    }
+  }
+  return values;
+};
+
 function scalarPredicate(
   op: TraceFilterOperatorId,
-  path: string,
-  values: (string | number)[],
+  path: TraceQueryPath,
+  values: TraceMetadataScalar[],
 ): TraceQueryScalarPredicate | undefined {
   const queryOp = TRACE_FILTER_OPERATOR_TO_QUERY_OP[op];
   switch (queryOp) {
@@ -134,30 +153,36 @@ function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | u
   if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return undefined;
   const operatorId = token.operatorId ?? 'is';
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
-
-  const rawValues = (Array.isArray(token.value) ? token.value : [token.value]).filter(
-    (value): value is string => typeof value === 'string' && Boolean(value.trim()) && value !== 'Any',
-  );
-  if (!rawValues.length && !isPresence) return undefined;
+  const metadataPath = traceMetadataFieldIdToPath(token.fieldId);
+  const isMetadata = metadataPath !== undefined;
 
   let fieldId = token.fieldId;
-  let values: (string | number)[] = rawValues;
-  // Discovered metadata fields: the field id is already the predicate path (`metadata.<key>`).
-  if (fieldId.startsWith('metadata.')) {
-    if (fieldId.length === 'metadata.'.length) return undefined;
-  } else if (fieldId === 'rootEntityType' || fieldId === 'entityType') {
-    fieldId = 'entityType';
-  } else if (fieldId === 'status') {
-    values = rawValues.filter(value => value !== 'running');
-    if (!values.length && !isPresence) return undefined;
-  } else if (TRACE_QUERY_NUMERIC_FIELD_IDS.has(fieldId)) {
-    values = rawValues.map(Number).filter(value => !Number.isNaN(value));
-    if (!values.length && !isPresence) return undefined;
+  let path: TraceQueryPath;
+  let scope: TraceQueryRelatedScope | undefined;
+  let values: TraceMetadataScalar[];
+
+  if (metadataPath) {
+    path = metadataPath;
+    values = metadataTokenValues(token.value);
+  } else {
+    const rawValues = (Array.isArray(token.value) ? token.value : [token.value]).filter(
+      (value): value is string => typeof value === 'string' && Boolean(value.trim()) && value !== 'Any',
+    );
+    values = rawValues;
+    if (fieldId === 'rootEntityType' || fieldId === 'entityType') {
+      fieldId = 'entityType';
+    } else if (fieldId === 'status') {
+      values = rawValues.filter(value => value !== 'running');
+    } else if (TRACE_QUERY_NUMERIC_FIELD_IDS.has(fieldId)) {
+      values = rawValues.map(Number).filter(Number.isFinite);
+    }
+    const resolved = resolveTraceQueryPath(fieldId);
+    path = resolved.path;
+    scope = resolved.scope;
+    if (!scope && !TRACE_QUERY_TRACE_FIELD_IDS.has(fieldId)) return undefined;
   }
 
-  const { scope, path } = resolveTraceQueryPath(fieldId);
-  const isMetadata = fieldId.startsWith('metadata.');
-  if (!scope && !isMetadata && !TRACE_QUERY_TRACE_FIELD_IDS.has(fieldId)) return undefined;
+  if (!values.length && !isPresence) return undefined;
 
   if (scope && isNegativeOperator(operatorId)) {
     // `some(model ne X)` matches any trace with one span that differs; the user

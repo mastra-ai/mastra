@@ -8,7 +8,6 @@ import {
   paginationArgsSchema,
   paginationInfoSchema,
 } from '../shared';
-import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
 export const TRACE_QUERY_MAX_NODES = 100;
@@ -40,25 +39,36 @@ const literalStringSchema = z
 const timestampLiteralSchema = z.string().datetime({ offset: true });
 export const TRACE_QUERY_MAX_PATH_SEGMENTS = 12;
 export const TRACE_QUERY_MAX_PATH_SEGMENT_BYTES = 128;
-const legacyPredicatePathSchema = z
+const metadataPathSegmentSchema = z
   .string()
   .min(1)
-  .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large');
-const structuredMetadataPathSchema = z
-  .array(
-    z
-      .string()
-      .min(1)
-      .refine(
-        segment => !segment.includes('\0') && hasMaxUtf8Bytes(segment, TRACE_QUERY_MAX_PATH_SEGMENT_BYTES),
-        'Invalid path segment',
-      ),
-  )
-  .min(2)
-  .max(TRACE_QUERY_MAX_PATH_SEGMENTS)
-  .refine(segments => segments[0] === 'metadata', 'Structured paths must start with metadata')
+  .refine(
+    segment => !segment.includes('\0') && hasMaxUtf8Bytes(segment, TRACE_QUERY_MAX_PATH_SEGMENT_BYTES),
+    'Invalid path segment',
+  );
+const metadataPathSegmentsSchema = z
+  .tuple([z.literal('metadata'), metadataPathSegmentSchema])
+  .rest(metadataPathSegmentSchema)
+  .refine(segments => segments.length <= TRACE_QUERY_MAX_PATH_SEGMENTS, 'Metadata path has too many segments')
   .refine(segments => hasMaxUtf8Bytes(segments.join('.'), TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large');
-const predicatePathSchema = z.union([legacyPredicatePathSchema, structuredMetadataPathSchema]);
+const exactMetadataPathSchema = metadataPathSegmentsSchema.refine(
+  segments => segments.slice(1).some(segment => segment.includes('.')),
+  'Segment-array metadata paths require a literal dotted segment',
+);
+const predicateStringPathSchema = z
+  .string()
+  .min(1)
+  .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large')
+  .superRefine((value, context) => {
+    const normalized = normalizeStringPath(value);
+    if (!normalized.startsWith('metadata.')) return;
+    const segments = normalized.split('.');
+    const result = metadataPathSegmentsSchema.safeParse(segments);
+    if (!result.success) {
+      context.addIssue({ code: 'custom', message: result.error.issues[0]?.message ?? 'Invalid metadata path' });
+    }
+  });
+const predicatePathSchema = z.union([predicateStringPathSchema, exactMetadataPathSchema]);
 const literalSchema = z.union([literalStringSchema, z.number(), z.boolean(), z.null()]);
 const pathRefSchema = z.object({ path: predicatePathSchema }).strict();
 const literalRefSchema = z.object({ literal: literalSchema }).strict();
@@ -162,11 +172,9 @@ export const traceQueryOperatorSchema = z.enum([
   'exists',
   'notExists',
 ]);
+export const traceQueryObservedValueKindSchema = z.enum(['string', 'number', 'boolean', 'scalar']);
 export const traceQueryValueKindSchema = z.enum([
-  'string',
-  'number',
-  'boolean',
-  'scalar',
+  ...traceQueryObservedValueKindSchema.options,
   'stringOrNumber',
   'timestamp',
   'presence',
@@ -228,10 +236,10 @@ export const traceQueryCanonicalFieldDescriptorSchema = z
 export const traceQueryObservedFieldDescriptorSchema = z
   .object({
     path: z.union([
-      legacyPredicatePathSchema.refine(path => isTraceQueryMetadataPath(path), 'Invalid metadata path'),
-      structuredMetadataPathSchema,
+      predicateStringPathSchema.refine(path => isTraceQueryMetadataPath(path), 'Invalid metadata path'),
+      exactMetadataPathSchema,
     ]),
-    valueKind: z.enum(['string', 'scalar']),
+    valueKind: traceQueryObservedValueKindSchema,
     operators: z.array(traceQueryOperatorSchema),
     valueSuggestions: z.literal(true),
     occurrences: z.number().int().nonnegative(),
@@ -434,7 +442,9 @@ export const queryThreadsResultSchema = z
   .strict();
 
 export type TraceQueryLiteral = string | number | boolean | null;
-export type TraceQueryPath = string | string[];
+export type TraceQueryMetadataDotPath = `metadata.${string}`;
+export type TraceQueryExactMetadataPath = readonly ['metadata', string, ...string[]];
+export type TraceQueryPath = string | TraceQueryExactMetadataPath;
 export type TraceQueryPathOrLiteral = { path: TraceQueryPath } | { literal: TraceQueryLiteral };
 export type TraceQueryScalarPredicate =
   | {
@@ -563,10 +573,9 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
 } as const satisfies Record<TraceQueryPredicateScope, Record<string, FieldRule>>;
 
 const METADATA_FIELD_RULE: FieldRule = {
-  valueKind: 'string',
-  operators: TRACE_QUERY_STRING_OPERATORS,
+  valueKind: 'scalar',
+  operators: TRACE_QUERY_ORDERED_OPERATORS,
   valueSuggestions: true,
-  nonEmpty: true,
 };
 
 export type TraceQueryField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['trace'];
@@ -578,9 +587,9 @@ export type TraceQueryCanonicalField =
   | TraceQuerySpanField
   | TraceQueryScoreField
   | TraceQueryFeedbackField;
-type TraceQueryMetadataKey = Extract<keyof NonNullable<SpanRecord['metadata']>, string>;
-export type TraceQueryMetadataField = `metadata.${TraceQueryMetadataKey}`;
-export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMetadataField | string[];
+export type TraceQueryMetadataField = TraceQueryMetadataDotPath;
+export type TraceQueryMetadataSegments = ['metadata', string, ...string[]];
+export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMetadataSegments;
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
@@ -702,7 +711,7 @@ export interface TrustedTraceQueryObservedFieldsPlan {
 }
 
 export interface TrustedTraceQueryValuesPlan extends TrustedTraceQueryObservedFieldsPlan {
-  path: TraceQueryPath;
+  path: TraceQueryCanonicalField | TraceQueryMetadataSegments;
 }
 
 export interface TraceQueryObservedFieldsResult {
@@ -861,25 +870,30 @@ function findPredicateComplexityIssue(
 }
 
 function getTraceQueryFieldRule(scope: TraceQueryPredicateScope, path: TraceQueryPath): FieldRule | undefined {
-  if (scope === 'trace' && isTraceQueryMetadataPath(path)) return METADATA_FIELD_RULE;
-  if (Array.isArray(path)) {
-    return scope === 'trace' && structuredMetadataPathSchema.safeParse(path).success
-      ? { valueKind: 'scalar', operators: TRACE_QUERY_ORDERED_OPERATORS, valueSuggestions: true }
+  const normalizedPath = normalizePath(path);
+  if (Array.isArray(normalizedPath)) {
+    return scope === 'trace' && metadataPathSegmentsSchema.safeParse(normalizedPath).success
+      ? METADATA_FIELD_RULE
       : undefined;
   }
   const registry: Record<string, FieldRule> = TRACE_QUERY_FIELD_REGISTRY[scope];
-  return Object.hasOwn(registry, path) ? registry[path] : undefined;
+  return Object.hasOwn(registry, normalizedPath) ? registry[normalizedPath] : undefined;
 }
 
-export function isTraceQueryMetadataPath(path: TraceQueryPath): path is TraceQueryMetadataField {
-  if (Array.isArray(path)) return false;
-  if (!path.startsWith('metadata.') || !hasMaxUtf8Bytes(path, TRACE_QUERY_MAX_PATH_BYTES)) return false;
-  const key = path.slice('metadata.'.length);
-  return key.length > 0 && !key.includes('.');
+export function isTraceQueryMetadataPath(path: TraceQueryPath): path is TraceQueryMetadataDotPath {
+  return (
+    typeof path === 'string' &&
+    path.startsWith('metadata.') &&
+    metadataPathSegmentsSchema.safeParse(path.split('.')).success
+  );
+}
+
+function isTraceQueryCanonicalField(path: string): path is TraceQueryCanonicalField {
+  return Object.values(TRACE_QUERY_FIELD_REGISTRY).some(registry => Object.hasOwn(registry, path));
 }
 
 export function isTraceQueryValueSuggestionsPath(scope: TraceQueryPredicateScope, path: TraceQueryPath): boolean {
-  return getTraceQueryFieldRule(scope, normalizePath(path))?.valueSuggestions === true;
+  return getTraceQueryFieldRule(scope, path)?.valueSuggestions === true;
 }
 
 export function getTraceQueryCanonicalFieldDescriptors(
@@ -900,11 +914,12 @@ export function getTraceQueryCanonicalFieldDescriptors(
 export function createTraceQueryObservedFieldDescriptor(
   path: TraceQueryPath,
   occurrences: number,
+  valueKind: TraceQueryObservedFieldDescriptor['valueKind'] = Array.isArray(path) ? 'scalar' : 'string',
 ): TraceQueryObservedFieldDescriptor {
   return traceQueryObservedFieldDescriptorSchema.parse({
     path,
-    valueKind: Array.isArray(path) ? 'scalar' : 'string',
-    operators: [...(Array.isArray(path) ? TRACE_QUERY_ORDERED_OPERATORS : TRACE_QUERY_STRING_OPERATORS)],
+    valueKind,
+    operators: [...(valueKind === 'number' ? TRACE_QUERY_ORDERED_OPERATORS : TRACE_QUERY_STRING_OPERATORS)],
     valueSuggestions: true,
     occurrences,
   });
@@ -937,7 +952,7 @@ export function planTraceQueryObservedFields(
 }
 
 export function planTraceQueryValues(args: NormalizedGetTraceQueryValuesArgs): TrustedTraceQueryValuesPlan {
-  return { ...planTraceQueryObservedFields(args), path: args.path };
+  return { ...planTraceQueryObservedFields(args), path: toTrustedPredicateField(args.path) };
 }
 
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
@@ -1321,7 +1336,7 @@ function planPredicate(
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
-    return { type: 'presence', field: field as TraceQueryPredicateField, operator: predicate.op };
+    return { type: 'presence', field: toTrustedPredicateField(field), operator: predicate.op };
   }
 
   if (predicate.op === 'in' || predicate.op === 'notIn') {
@@ -1356,7 +1371,7 @@ function planPredicate(
     }
     return {
       type: 'membership',
-      field: field as TraceQueryPredicateField,
+      field: toTrustedPredicateField(field),
       operator: predicate.op,
       values,
     };
@@ -1392,11 +1407,15 @@ function planPredicate(
     });
     return undefined;
   }
-  return { type: 'comparison', field: field as TraceQueryPredicateField, operator: comparison.op, value };
+  return { type: 'comparison', field: toTrustedPredicateField(field), operator: comparison.op, value };
 }
 
 function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
   return TRACE_QUERY_FIELD_REGISTRY[context];
+}
+
+function isMetadataPathArray(path: TraceQueryPath): path is TraceQueryExactMetadataPath {
+  return Array.isArray(path);
 }
 
 function getRule(
@@ -1406,24 +1425,10 @@ function getRule(
   path: Array<string | number>,
   state: PlannerState,
 ): FieldRule | undefined {
-  if (Array.isArray(field)) {
-    if (context === 'trace' && structuredMetadataPathSchema.safeParse(field).success) {
-      return { valueKind: 'scalar', operators: TRACE_QUERY_ORDERED_OPERATORS, valueSuggestions: true };
-    }
+  if (isMetadataPathArray(field)) {
+    if (context === 'trace' && metadataPathSegmentsSchema.safeParse(field).success) return METADATA_FIELD_RULE;
     state.issues.push({ code: 'field_not_allowed', path, message: 'The predicate field is not allowed here' });
     return undefined;
-  }
-  if (context === 'trace' && field.startsWith('metadata.')) {
-    const key = field.slice('metadata.'.length);
-    if (key.length === 0 || key.includes('.')) {
-      state.issues.push({
-        code: 'invalid_metadata_key',
-        path,
-        message: 'Metadata predicates require one non-empty top-level key',
-      });
-      return undefined;
-    }
-    return METADATA_FIELD_RULE;
   }
   if (!Object.hasOwn(rules, field)) {
     state.issues.push({ code: 'field_not_allowed', path, message: 'The predicate field is not allowed here' });
@@ -1445,8 +1450,7 @@ function addOperatorIssue(
   });
 }
 
-function normalizePath(path: TraceQueryPath): TraceQueryPath {
-  if (Array.isArray(path)) return [...path];
+function normalizeStringPath(path: string): string {
   const match = /^\$\{([^}]+)\}$/.exec(path.trim());
   const unwrapped = match?.[1] ?? path;
   const normalized = unwrapped.trim();
@@ -1455,6 +1459,24 @@ function normalizePath(path: TraceQueryPath): TraceQueryPath {
     return `metadata.${unwrapped.slice(prefixIndex + 'metadata.'.length)}`;
   }
   return normalized;
+}
+
+function metadataDotPathToSegments(path: string): TraceQueryMetadataSegments | undefined {
+  const normalized = normalizeStringPath(path);
+  if (!normalized.startsWith('metadata.')) return undefined;
+  const result = metadataPathSegmentsSchema.safeParse(normalized.split('.'));
+  return result.success ? result.data : undefined;
+}
+
+function normalizePath(path: TraceQueryPath): TraceQueryPredicateField | string {
+  if (isMetadataPathArray(path)) return [path[0], path[1], ...path.slice(2)];
+  return metadataDotPathToSegments(path) ?? normalizeStringPath(path);
+}
+
+function toTrustedPredicateField(path: TraceQueryPath): TraceQueryPredicateField {
+  const normalized = normalizePath(path);
+  if (Array.isArray(normalized) || isTraceQueryCanonicalField(normalized)) return normalized;
+  throw new Error(`Unsupported trusted trace-query field: ${normalized}`);
 }
 
 function normalizeLiteral(

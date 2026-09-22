@@ -8,15 +8,47 @@ import type {
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import {
+  encodeTraceMetadataValue,
+  formatTraceMetadataValue,
+  traceMetadataPathToField,
+} from '../trace-metadata-filter-codec';
+import type { TraceMetadataPath } from '../trace-metadata-filter-codec';
+import type { TraceFilterOperatorId } from '../trace-query-filters';
 import { DISCOVERY_STALE_TIME } from './discovery-cache';
-import type { FilterBarSuggestionsResolver } from '@/ds/components/FilterBar/types';
+import type { FilterBarFieldType, FilterBarSuggestionsResolver } from '@/ds/components/FilterBar/types';
 
 export type TraceQueryDiscoveryTimeRange = GetTraceQueryFieldsArgs['timeRange'];
 
+type ObservedMetadataField = GetTraceQueryFieldsResponse['observedFields'][number];
+type ObservedMetadataValueKind = ObservedMetadataField['valueKind'];
+
 export type TraceMetadataFilterField = {
-  /** `metadata.<key>` — doubles as the filter bar field id. */
-  path: string;
+  id: string;
+  label: string;
+  path: TraceMetadataPath;
+  type?: FilterBarFieldType;
+  operators: TraceFilterOperatorId[];
+  strict?: boolean;
   suggestions: FilterBarSuggestionsResolver;
+};
+
+const TRACE_QUERY_OPERATOR_TO_FILTER_OPERATOR = {
+  eq: 'is',
+  ne: 'isNot',
+  in: 'in',
+  notIn: 'notIn',
+  exists: 'exists',
+  notExists: 'notExists',
+  gt: 'gt',
+  gte: 'gte',
+  lt: 'lt',
+  lte: 'lte',
+} as const satisfies Record<ObservedMetadataField['operators'][number], TraceFilterOperatorId>;
+
+const fieldType = (valueKind: ObservedMetadataValueKind): FilterBarFieldType | undefined => {
+  if (valueKind === 'number' || valueKind === 'boolean') return valueKind;
+  return undefined;
 };
 
 // Server caps discovery limits at 100 (TRACE_QUERY_DISCOVERY_MAX_LIMIT).
@@ -45,14 +77,17 @@ export const createTraceQueryValuesResolver = (
   client: MastraClient,
   timeRange: TraceQueryDiscoveryTimeRange,
   predicateScope: GetTraceQueryValuesArgs['predicateScope'],
-  path: string,
+  path: TraceMetadataPath,
 ): FilterBarSuggestionsResolver => {
   return async ({ query: search, signal }) => {
     const { values } = await client.getTraceQueryValues(
       { timeRange, predicateScope, path, search: search.trim() || undefined, limit: DISCOVERY_LIMIT },
       { signal },
     );
-    return values.map(({ value }) => ({ value }));
+    return values.map(({ value }) => ({
+      value: encodeTraceMetadataValue(value),
+      label: formatTraceMetadataValue(value),
+    }));
   };
 };
 
@@ -98,10 +133,19 @@ export const useTraceMetadataFilterFields = ({
 
   const fields = useMemo<TraceMetadataFilterField[]>(
     () =>
-      (observedFields ?? []).map(field => ({
-        path: field.path,
-        suggestions: createTraceQueryValuesResolver(client, timeRange, 'trace', field.path),
-      })),
+      (observedFields ?? []).flatMap(field => {
+        const identity = traceMetadataPathToField(field.path);
+        if (!identity) return [];
+        return [
+          {
+            ...identity,
+            type: fieldType(field.valueKind),
+            operators: field.operators.map(operator => TRACE_QUERY_OPERATOR_TO_FILTER_OPERATOR[operator]),
+            ...(field.valueKind === 'scalar' ? { strict: true } : {}),
+            suggestions: createTraceQueryValuesResolver(client, timeRange, 'trace', identity.path),
+          },
+        ];
+      }),
     [observedFields, client, timeRange],
   );
 

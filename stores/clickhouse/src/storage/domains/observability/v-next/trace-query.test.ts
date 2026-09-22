@@ -260,8 +260,10 @@ describe('ClickHouse advanced trace query', () => {
 
     expect(compiled.query).toContain('WITH RECURSIVE');
     expect(compiled.query).toContain("JSONType(leaf) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool')");
-    expect(compiled.query).toContain("trim(JSONExtractString(leaf)) != ''");
+    expect(compiled.query).toContain("multiIf(JSONType(leaf) = 'String', 'string'");
+    expect(compiled.query).toContain("if(uniqExact(value_kind) = 1, min(value_kind), 'scalar')");
     expect(compiled.query).toContain('length(JSONExtractString(leaf)) <= 4096');
+    expect(compiled.query).not.toContain('trim(');
     expect(compiled.query).not.toContain('JSONExtractString(r.metadataRaw, entry.1)');
   });
 
@@ -370,8 +372,10 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).not.toContain(key);
     expect(compiled.query).not.toContain(value);
     expect(compiled.query).toContain(
-      "coalesce(if(mapContains(r.metadataSearch, {trace_query_3:String}), r.metadataSearch[{trace_query_3:String}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, {trace_query_3:String})), ''))",
+      "if(JSONType(r.metadataRaw, {trace_query_3:String}) IN ('String'), JSONExtractString(r.metadataRaw, {trace_query_3:String}), NULL)",
     );
+    expect(compiled.query).not.toContain('metadataSearch');
+    expect(compiled.query).not.toContain('trim(');
     expect(compiled.query).toContain('ifNull(');
     expect(compiled.query_params).toMatchObject({
       trace_query_3: key,
@@ -381,6 +385,24 @@ describe('ClickHouse advanced trace query', () => {
       trace_query_7: 'tool',
       trace_query_8: 'parentMessageId',
       trace_query_9: 101,
+    });
+  });
+
+  it('binds every exact dotted metadata segment separately', () => {
+    const path = ['metadata', "customer.id' OR 1", 'profile'] as const;
+    const value = "admin' OR 1";
+    const compiled = compileClickHouseTraceQuery(
+      plan({ where: { op: 'eq', left: { path }, right: { literal: value } } }),
+    );
+
+    expect(compiled.query).not.toContain(path[1]);
+    expect(compiled.query).not.toContain(path[2]);
+    expect(compiled.query).not.toContain(value);
+    expect(compiled.query).toContain('{trace_query_3:String}, {trace_query_4:String}');
+    expect(compiled.query_params).toMatchObject({
+      trace_query_3: path[1],
+      trace_query_4: path[2],
+      trace_query_5: value,
     });
   });
 

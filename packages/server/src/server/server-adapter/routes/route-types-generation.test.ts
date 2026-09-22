@@ -67,6 +67,20 @@ describe('renderRouteTypesFileContent', () => {
     expect(rendered).not.toContain('preprocessed?: unknown');
   });
 
+  it('preserves variadic tuple elements', () => {
+    const rendered = renderFixtureRoutes([
+      {
+        method: 'POST',
+        path: '/tuple',
+        responseType: 'json',
+        bodySchema: z.object({ path: z.tuple([z.literal('metadata'), z.string()]).rest(z.string()) }),
+        handler: async () => ({}),
+      },
+    ]);
+
+    expect(rendered).toMatch(/path:\s*\[\s*["']metadata["'],\s*string,\s*\.\.\.string\[\]\s*\];/);
+  });
+
   it('promotes repeated nested schemas during the rendering pass', () => {
     const nestedSchema = z.object({
       first: z.string(),

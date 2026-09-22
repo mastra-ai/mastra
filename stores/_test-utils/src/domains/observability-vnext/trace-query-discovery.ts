@@ -99,12 +99,19 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
         unicodeValue: '東京',
         whitespaceOnly: '   ',
         emptyValue: '',
-        arrayValue: ['unsupported'],
+        arrayValue: [{ nested: { plan: 'must-not-be-discovered' } }, 'unsupported'],
         'percent%key': 'percent',
         under_score: 'underscore',
         nested: { plan: 'pro' },
+        account: { id: 'nested-a' },
+        'account.id': 'literal-a',
+        exactNested: { 'literal.key': { value: 'exact-nested-a' } },
         active: true,
         retries: 2,
+        numericOnly: -2.5,
+        booleanOnly: true,
+        mixedKind: 'string-kind',
+        deep: { a: { b: { c: { d: { e: { f: { g: { h: { i: { j: 'deep-value' } } } } } } } } } },
         'dotted.key': 'unsupported',
         '': 'unsupported',
         ['k'.repeat(TRACE_QUERY_MAX_PATH_BYTES)]: 'oversized-key',
@@ -133,6 +140,10 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
         literalPattern: 'ordinary',
         escapedValue: 'quote" and slash\\ with 雪',
         unicodeValue: '大阪',
+        account: { id: 'nested-b' },
+        numericOnly: 0,
+        booleanOnly: false,
+        mixedKind: 2,
       },
       environment: 'staging',
     }),
@@ -144,7 +155,14 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     span(30, 'trace-c', 'root-c', {
       startedAt: '2026-08-12T10:00:00.000Z',
-      metadata: { region: 'eu-west-1', customer: 'acme' },
+      metadata: {
+        region: 'eu-west-1',
+        customer: 'acme',
+        account: { id: 'nested-c' },
+        numericOnly: Number.MAX_SAFE_INTEGER,
+        booleanOnly: false,
+        mixedKind: true,
+      },
       error: { message: 'failed' },
     }),
     span(31, 'trace-c', 'span-model-c', {
@@ -176,4 +194,14 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
     feedback(3, 'feedback-c', 'trace-c', { feedbackType: 'rating', feedbackSource: 'system' }),
     feedback(4, 'feedback-outside', 'trace-outside', { feedbackType: 'excluded' }),
   ],
+};
+
+export const TRACE_QUERY_DISCOVERY_WIDE_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [
+    span(60, 'trace-wide', 'root-wide', {
+      metadata: Object.fromEntries(Array.from({ length: 150 }, (_, index) => [`wideKey${index}`, `value-${index}`])),
+    }),
+  ],
+  scores: [],
+  feedback: [],
 };

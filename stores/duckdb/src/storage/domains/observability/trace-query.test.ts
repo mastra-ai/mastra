@@ -143,8 +143,9 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).not.toContain(key);
     expect(compiled.sql).not.toContain(value);
     expect(compiled.sql).toContain(
-      `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
+      `CASE WHEN json_type(r.metadata, ?) IN ('VARCHAR') THEN json_extract_string(r.metadata, ?) END`,
     );
+    expect(compiled.sql).not.toContain('trim(');
     expect(compiled.values).toEqual([
       TIME_RANGE.from,
       TIME_RANGE.to,
@@ -163,21 +164,27 @@ describe('DuckDB advanced trace query', () => {
     ]);
   });
 
-  it('keeps generic ordered metadata compiler bindings aligned without changing planner support', () => {
+  it('binds exact dotted metadata segments without interpolating them into SQL', () => {
+    const path = ['metadata', "customer.id' OR TRUE --", 'profile'] as const;
+    const value = "admin' OR TRUE --";
+    const compiled = compileDuckDBTraceQuery(plan({ where: { op: 'eq', left: { path }, right: { literal: value } } }));
+    const jsonPath = `$.${JSON.stringify(path[1])}.${JSON.stringify(path[2])}`;
+
+    expect(compiled.sql).not.toContain(path[1]);
+    expect(compiled.sql).not.toContain(path[2]);
+    expect(compiled.sql).not.toContain(value);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, jsonPath, jsonPath, value, 101]);
+  });
+
+  it('keeps numeric metadata compiler bindings aligned', () => {
     const key = ` latency'ms `;
     const path = `$.${JSON.stringify(key)}`;
-    const trusted = plan({
-      where: { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: '10' } },
-    });
-    const ordered = {
-      ...trusted,
-      where: { type: 'comparison', field: `metadata.${key}`, operator: 'gt', value: '10' },
-    } as TrustedTraceQueryPlan;
-
-    const compiled = compileDuckDBTraceQuery(ordered);
+    const compiled = compileDuckDBTraceQuery(
+      plan({ where: { op: 'gt', left: { path: `metadata.${key}` }, right: { literal: 10 } } }),
+    );
 
     expect(compiled.sql).not.toContain(key);
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, '10', 101]);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, 10, 101]);
     expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
   });
 

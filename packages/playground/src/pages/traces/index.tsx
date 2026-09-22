@@ -212,11 +212,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     ],
     [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds, metadataFields, valueSuggestions],
   );
-  // Metadata columns read top-level keys only, so nested paths collapse to their first segment.
+  // Metadata columns read top-level keys only, so nested paths collapse to their first metadata segment.
   const availableMetadataKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const field of metadataFields) {
-      const key = field.path.replace(/^metadata\./, '').split('.')[0];
+      const key = Array.isArray(field.path) ? field.path[1] : field.path.split('.')[1];
       if (key) keys.add(key);
     }
     return [...keys].sort();

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { encodeTraceMetadataValue, traceMetadataPathToField } from './trace-metadata-filter-codec';
 import {
   buildTraceQueryRequest,
   clampTraceDiscoveryTimeRange,
@@ -89,6 +90,72 @@ describe('buildTraceQueryRequest', () => {
     ).toEqual({
       op: 'and',
       args: [{ op: 'in', value: { path: 'metadata.region' }, set: ['eu-west', 'us-east'] }],
+    });
+  });
+
+  it('keeps ordinary nested paths distinct from exact literal-dot paths', () => {
+    const exact = traceMetadataPathToField(['metadata', 'customer.id']);
+    expect(exact).toBeDefined();
+    if (!exact) return;
+
+    expect(
+      buildTraceQueryRequest({
+        tokens: [
+          { fieldId: 'metadata.customer.id', value: 'nested' },
+          { fieldId: exact.id, value: 'literal' },
+        ],
+        now,
+      }).where,
+    ).toEqual({
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'metadata.customer.id' }, right: { literal: 'nested' } },
+        { op: 'eq', left: { path: ['metadata', 'customer.id'] }, right: { literal: 'literal' } },
+      ],
+    });
+  });
+
+  it.each([
+    ['empty string', encodeTraceMetadataValue(''), ''],
+    ['whitespace string', '   ', '   '],
+    ['boolean false', encodeTraceMetadataValue(false), false],
+    ['number zero', encodeTraceMetadataValue(0), 0],
+    ['string false', 'false', 'false'],
+    ['string zero', '0', '0'],
+  ])('preserves a %s metadata value without coercion', (_name, value, literal) => {
+    expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'metadata.value', value }], now }).where).toEqual({
+      op: 'and',
+      args: [{ op: 'eq', left: { path: 'metadata.value' }, right: { literal } }],
+    });
+  });
+
+  it('builds homogeneous typed membership predicates', () => {
+    expect(
+      buildTraceQueryRequest({
+        tokens: [
+          {
+            fieldId: 'metadata.retry.count',
+            value: [encodeTraceMetadataValue(0), encodeTraceMetadataValue(2.5)],
+            operatorId: 'in',
+          },
+        ],
+        now,
+      }).where,
+    ).toEqual({
+      op: 'and',
+      args: [{ op: 'in', value: { path: 'metadata.retry.count' }, set: [0, 2.5] }],
+    });
+  });
+
+  it('builds ordered numeric metadata predicates', () => {
+    expect(
+      buildTraceQueryRequest({
+        tokens: [{ fieldId: 'metadata.retry.count', value: encodeTraceMetadataValue(3), operatorId: 'gte' }],
+        now,
+      }).where,
+    ).toEqual({
+      op: 'and',
+      args: [{ op: 'gte', left: { path: 'metadata.retry.count' }, right: { literal: 3 } }],
     });
   });
 
@@ -399,6 +466,42 @@ describe('buildTraceQueryRequest with groups', () => {
         args: [
           { op: 'eq', left: { path: 'traceId' }, right: { literal: 't1' } },
           { op: 'or', args: [eqStatus, { op: 'eq', left: { path: 'environment' }, right: { literal: 'prod' } }] },
+        ],
+      });
+    });
+  });
+
+  describe('when a group holds typed nested and exact-path metadata filters', () => {
+    it('preserves each metadata path and scalar type', () => {
+      const exact = traceMetadataPathToField(['metadata', 'flags.reviewed']);
+      expect(exact).toBeDefined();
+      if (!exact) return;
+
+      const where = buildTraceQueryRequest({
+        tokens: [],
+        groups: [
+          {
+            id: 'g',
+            logic: 'and',
+            nodes: [
+              { id: 'count', fieldId: 'metadata.retry.count', operatorId: 'gte', value: 0 },
+              { id: 'reviewed', fieldId: exact.id, value: false },
+            ],
+          },
+        ],
+        now,
+      }).where;
+
+      expect(where).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'and',
+            args: [
+              { op: 'gte', left: { path: 'metadata.retry.count' }, right: { literal: 0 } },
+              { op: 'eq', left: { path: ['metadata', 'flags.reviewed'] }, right: { literal: false } },
+            ],
+          },
         ],
       });
     });

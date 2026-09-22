@@ -34,6 +34,14 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { TraceMetadataFilterField } from './hooks/use-trace-metadata-filter-fields';
 import {
+  decodeTraceMetadataValue,
+  encodeTraceMetadataValue,
+  isTraceMetadataFieldId,
+  isTraceMetadataParam,
+  traceMetadataFieldIdToParam,
+  traceMetadataParamToFieldId,
+} from './trace-metadata-filter-codec';
+import {
   isTraceFilterGroup,
   isTraceFilterOperatorId,
   TRACE_QUERY_NUMERIC_FIELD_IDS,
@@ -54,7 +62,9 @@ import type {
   FilterBarGroup,
   FilterBarItem,
   FilterBarOperator,
+  FilterBarScalar,
   FilterBarSuggestionsResolver,
+  FilterBarValue,
 } from '@/ds/components/FilterBar/types';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
@@ -100,22 +110,13 @@ export const TRACE_STATUS_OPTIONS = [
  *  popover so users can manage all filters from one place. */
 export const TRACE_SYNTHETIC_FILTER_FIELD_IDS = ['rootEntityType', 'status'] as const;
 
-/** Discovered `metadata.<key>` fields are dynamic, so they use a prefix-based URL
- *  scheme (`filterMetadata.<key>`) instead of the fixed `filter*` param map. */
+/** Ordinary discovered metadata paths retain the original field and URL prefixes. */
 export const TRACE_METADATA_FILTER_FIELD_PREFIX = 'metadata.';
 export const TRACE_METADATA_FILTER_PARAM_PREFIX = 'filterMetadata.';
 
-export const isTraceMetadataFieldId = (fieldId: string) =>
-  fieldId.startsWith(TRACE_METADATA_FILTER_FIELD_PREFIX) && fieldId.length > TRACE_METADATA_FILTER_FIELD_PREFIX.length;
-
-const isTraceMetadataParam = (param: string) =>
-  param.startsWith(TRACE_METADATA_FILTER_PARAM_PREFIX) && param.length > TRACE_METADATA_FILTER_PARAM_PREFIX.length;
-
-export const metadataFieldIdToParam = (fieldId: string) =>
-  TRACE_METADATA_FILTER_PARAM_PREFIX + fieldId.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length);
-
-export const metadataParamToFieldId = (param: string) =>
-  TRACE_METADATA_FILTER_FIELD_PREFIX + param.slice(TRACE_METADATA_FILTER_PARAM_PREFIX.length);
+export { isTraceMetadataFieldId };
+export const metadataFieldIdToParam = traceMetadataFieldIdToParam;
+export const metadataParamToFieldId = traceMetadataParamToFieldId;
 
 export const TRACE_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
 export const TRACE_STATUS_PARAM = 'status';
@@ -177,8 +178,7 @@ export const TRACE_PROPERTY_FILTER_FIELD_IDS = Object.keys(TRACE_PROPERTY_FILTER
 >;
 
 /** The operator of a filter lives in a sibling `<valueParam>.op` param; omitted
- *  means the default (`is`). Metadata keys cannot contain dots, so the suffix is
- *  unambiguous. */
+ *  means the default (`is`). */
 export const TRACE_FILTER_OPERATOR_PARAM_SUFFIX = '.op';
 export const traceFilterOperatorParam = (valueParam: string) => valueParam + TRACE_FILTER_OPERATOR_PARAM_SUFFIX;
 const isTraceFilterOperatorParam = (param: string) => param.endsWith(TRACE_FILTER_OPERATOR_PARAM_SUFFIX);
@@ -194,6 +194,20 @@ export const traceFilterTokenOperator = (token: TraceFilterToken): TraceFilterOp
 const readTraceFilterOperator = (searchParams: URLSearchParams, valueParam: string) => {
   const raw = searchParams.get(traceFilterOperatorParam(valueParam));
   return raw !== null && isTraceFilterOperatorId(raw) ? raw : undefined;
+};
+
+const readMetadataFilterValue = (raw: string): FilterBarScalar | undefined => {
+  const decoded = decodeTraceMetadataValue(raw);
+  if (decoded === undefined) return undefined;
+  return typeof decoded === 'string' && decoded !== raw ? raw : decoded;
+};
+
+const writeMetadataFilterValue = (value: FilterBarScalar): string => {
+  if (typeof value === 'string') {
+    const decoded = decodeTraceMetadataValue(value);
+    if (decoded !== undefined && decoded !== value) return value;
+  }
+  return encodeTraceMetadataValue(value);
 };
 
 export const TRACE_STATUS_VALUES = new Set<TraceStatusFilter>(['running', 'success', 'error']);
@@ -268,7 +282,7 @@ export function hasAnyTraceFilterParams(params: URLSearchParams): boolean {
     if (params.has(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId])) return true;
   }
   for (const param of params.keys()) {
-    if (isTraceMetadataParam(param)) return true;
+    if (isTraceMetadataParam(param) && traceMetadataParamToFieldId(param)) return true;
   }
   return false;
 }
@@ -496,13 +510,15 @@ export function createTraceFilterBarFields({
       .sort(byLabel),
   );
   const metadataBarFields: FilterBarField[] = metadataFields
-    .filter(({ path }) => isTraceMetadataFieldId(path))
-    .map(({ path, suggestions }) => ({
-      id: path,
-      label: path.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length),
+    .filter(({ id }) => isTraceMetadataFieldId(id))
+    .map(({ id, label, type, operators, strict, suggestions }) => ({
+      id,
+      label,
       icon: BracesIcon,
-      color: stringToThemedColor(path),
-      operators: TRACE_STRING_OPERATORS,
+      color: stringToThemedColor(id),
+      type,
+      operators,
+      strict,
       suggestions,
     }));
 
@@ -535,9 +551,11 @@ export function filterBarItemsToTraceTokens(items: FilterBarItem[]): TraceFilter
 }
 
 function filterBarItemToTraceToken(item: FilterBarItem): TraceFilterToken {
+  const metadataField = isTraceMetadataFieldId(item.fieldId);
+  const value = metadataField ? item.value : Array.isArray(item.value) ? item.value.map(String) : String(item.value);
   const token: TraceFilterToken = {
     fieldId: item.fieldId,
-    value: Array.isArray(item.value) ? item.value.map(String) : String(item.value),
+    value,
   };
   // Only carry a non-default operator so tokens stay minimal (and URLs stay short).
   if (isTraceFilterOperatorId(item.operatorId) && item.operatorId !== traceFilterTokenOperator(token)) {
@@ -614,24 +632,28 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
   const seen = new Set<string>();
   for (const [paramName] of searchParams.entries()) {
     if (isTraceFilterOperatorParam(paramName)) continue;
-    const fieldId = isTraceMetadataParam(paramName) ? metadataParamToFieldId(paramName) : paramToFieldId.get(paramName);
+    const metadataParam = isTraceMetadataParam(paramName);
+    const fieldId = metadataParam ? metadataParamToFieldId(paramName) : paramToFieldId.get(paramName);
     if (!fieldId || seen.has(fieldId)) continue;
     seen.add(fieldId);
 
     const operatorId = readTraceFilterOperator(searchParams, paramName);
     const raw = searchParams.getAll(paramName);
+    const values = metadataParam
+      ? raw.map(readMetadataFilterValue).filter((value): value is FilterBarScalar => value !== undefined)
+      : raw;
 
     if (fieldId === 'tags' || isManyOperator(operatorId)) {
       // An empty `filterTags=` sentinel keeps the pill alive after a Reset
       // (neutral state = no selections) so users can re-pick without losing
       // the pill's position. Non-empty entries are the actual selected values.
-      tokens.push({ fieldId, value: raw.filter(Boolean), ...(operatorId ? { operatorId } : {}) });
+      tokens.push({ fieldId, value: values.filter(value => value !== ''), ...(operatorId ? { operatorId } : {}) });
       continue;
     }
 
     // Text and synthetic single-value fields: include empty strings so
     // pending-but-not-yet-filled filters survive URL round-trips.
-    const value = raw[0];
+    const value = values[0];
     if (value !== undefined) tokens.push({ fieldId, value, ...(operatorId ? { operatorId } : {}) });
   }
 
@@ -671,7 +693,14 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
 
   const seenMetadata = new Set<string>();
   for (const param of searchParams.keys()) {
-    if (!isTraceMetadataParam(param) || isTraceFilterOperatorParam(param) || seenMetadata.has(param)) continue;
+    if (
+      !isTraceMetadataParam(param) ||
+      isTraceFilterOperatorParam(param) ||
+      !traceMetadataParamToFieldId(param) ||
+      seenMetadata.has(param)
+    ) {
+      continue;
+    }
     seenMetadata.add(param);
     preserve(param);
   }
@@ -716,7 +745,8 @@ export function applyTracePropertyFilterTokens(
       continue;
     }
 
-    const param = isTraceMetadataFieldId(token.fieldId)
+    const metadataField = isTraceMetadataFieldId(token.fieldId);
+    const param = metadataField
       ? metadataFieldIdToParam(token.fieldId)
       : TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[token.fieldId as keyof typeof TRACE_PROPERTY_FILTER_PARAM_BY_FIELD];
     if (!param) continue;
@@ -727,10 +757,12 @@ export function applyTracePropertyFilterTokens(
         params.append(param, '');
       } else {
         for (const value of token.value) {
-          params.append(param, value);
+          params.append(param, metadataField ? writeMetadataFilterValue(value) : String(value));
         }
       }
-    } else {
+    } else if (metadataField) {
+      params.set(param, writeMetadataFilterValue(token.value));
+    } else if (typeof token.value === 'string') {
       // Persist empty / 'Any' values too so neutralized-but-still-visible pills
       // survive URL round-trips. The query builder skips these so neutrals
       // never reach the backend.
@@ -777,6 +809,16 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every(entry => typeof entry === 'string');
 
+const isMetadataScalar = (value: unknown): value is FilterBarScalar =>
+  typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
+
+const isMetadataFilterValue = (value: unknown): value is FilterBarValue => {
+  const values = Array.isArray(value) ? value : [value];
+  if (!values.every(isMetadataScalar)) return false;
+  const decoded = values.map(item => (typeof item === 'string' ? decodeTraceMetadataValue(item) : item));
+  return decoded.every(item => item !== undefined) && new Set(decoded.map(item => typeof item)).size <= 1;
+};
+
 function parseTraceFilterGroup(input: unknown): TraceFilterGroup | undefined {
   if (!isRecord(input) || typeof input.id !== 'string') return undefined;
   if (input.logic !== 'and' && input.logic !== 'or') return undefined;
@@ -789,8 +831,15 @@ function parseTraceFilterNode(input: unknown): TraceFilterNode | undefined {
   if (!isRecord(input)) return undefined;
   if ('nodes' in input) return parseTraceFilterGroup(input);
   if (typeof input.id !== 'string' || typeof input.fieldId !== 'string') return undefined;
-  if (typeof input.value !== 'string' && !isStringArray(input.value)) return undefined;
-  const token: TraceFilterToken = { id: input.id, fieldId: input.fieldId, value: input.value };
+  const value = isTraceMetadataFieldId(input.fieldId)
+    ? isMetadataFilterValue(input.value)
+      ? input.value
+      : undefined
+    : typeof input.value === 'string' || isStringArray(input.value)
+      ? input.value
+      : undefined;
+  if (value === undefined) return undefined;
+  const token: TraceFilterToken = { id: input.id, fieldId: input.fieldId, value };
   if (typeof input.operatorId === 'string' && isTraceFilterOperatorId(input.operatorId)) {
     token.operatorId = input.operatorId;
   }

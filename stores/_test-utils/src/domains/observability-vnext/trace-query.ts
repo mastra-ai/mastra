@@ -670,17 +670,29 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
         paddedValue: '  padded value  ',
         emptyValue: '',
         numericValue: 42,
+        numericString: '3',
+        booleanString: 'false',
+        fractionalValue: -2.5,
+        zeroValue: 0,
+        maxSafeInteger: Number.MAX_SAFE_INTEGER,
         nestedValue: {
           child: 'value',
           count: 3,
           reviewed: false,
           empty: '',
+          whitespace: '   ',
           null: null,
           array: [{ id: 'hidden' }],
           object: { '0': 'key' },
         },
         'nestedValue.child': 'literal-dot',
+        weird: { 'inner.dot': { value: 'nested-literal-dot' } },
         'quoted"key': { 'slash\\key': 'escaped-key' },
+        'space key': 'space-key',
+        unicode雪: 'unicode-key',
+        $dollar: 'dollar-key',
+        '[bracket]': 'bracket-key',
+        "x') OR 1=1 --": 'sql-like-key',
       },
     }),
     span(11, 'trace-a', 'span-a-tool', {
@@ -1401,33 +1413,169 @@ export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
   },
 ];
 
+const metadataScalarFixtures = [
+  { name: 'string', path: 'metadata.nestedValue.child', value: 'value' },
+  { name: 'number', path: 'metadata.nestedValue.count', value: 3 },
+  { name: 'boolean', path: 'metadata.nestedValue.reviewed', value: false },
+] as const;
+const metadataMissingResults = [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-b' }];
+
 export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
+  ...metadataScalarFixtures.flatMap(({ name, path, value }): TraceQueryConformanceCase[] => [
+    {
+      name: `compares ${name} metadata equality`,
+      request: { timeRange: fullRange, where: { op: 'eq', left: { path }, right: { literal: value } } },
+      expected: [{ traceId: 'trace-a' }],
+    },
+    {
+      name: `uses total missing semantics for ${name} metadata inequality`,
+      request: { timeRange: fullRange, where: { op: 'ne', left: { path }, right: { literal: value } } },
+      expected: metadataMissingResults,
+    },
+    {
+      name: `matches ${name} metadata membership`,
+      request: { timeRange: fullRange, where: { op: 'in', value: { path }, set: [value] } },
+      expected: [{ traceId: 'trace-a' }],
+    },
+    {
+      name: `uses total missing semantics for ${name} metadata negative membership`,
+      request: { timeRange: fullRange, where: { op: 'notIn', value: { path }, set: [value] } },
+      expected: metadataMissingResults,
+    },
+    {
+      name: `detects present ${name} metadata`,
+      request: { timeRange: fullRange, where: { op: 'exists', path } },
+      expected: [{ traceId: 'trace-a' }],
+    },
+    {
+      name: `detects missing ${name} metadata`,
+      request: { timeRange: fullRange, where: { op: 'notExists', path } },
+      expected: metadataMissingResults,
+    },
+  ]),
   ...(
     [
-      ['nested string', ['metadata', 'nestedValue', 'child'], 'value'],
+      ['nested string', 'metadata.nestedValue.child', 'value'],
       ['literal dotted key', ['metadata', 'nestedValue.child'], 'literal-dot'],
-      ['escaped keys', ['metadata', 'quoted"key', 'slash\\key'], 'escaped-key'],
-      ['nested number', ['metadata', 'nestedValue', 'count'], 3],
-      ['nested false', ['metadata', 'nestedValue', 'reviewed'], false],
-      ['nested empty string', ['metadata', 'nestedValue', 'empty'], ''],
-      ['numeric object key', ['metadata', 'nestedValue', 'object', '0'], 'key'],
+      ['nested literal dotted key', ['metadata', 'weird', 'inner.dot', 'value'], 'nested-literal-dot'],
+      ['escaped keys', 'metadata.quoted"key.slash\\key', 'escaped-key'],
+      ['space key', 'metadata.space key', 'space-key'],
+      ['Unicode key', 'metadata.unicode雪', 'unicode-key'],
+      ['dollar key', 'metadata.$dollar', 'dollar-key'],
+      ['bracket key', 'metadata.[bracket]', 'bracket-key'],
+      ['SQL-like key', "metadata.x') OR 1=1 --", 'sql-like-key'],
+      ['nested number', 'metadata.nestedValue.count', 3],
+      ['nested false', 'metadata.nestedValue.reviewed', false],
+      ['nested empty string', 'metadata.nestedValue.empty', ''],
+      ['numeric object key', 'metadata.nestedValue.object.0', 'key'],
     ] as const
   ).map(
     ([name, path, literal]): TraceQueryConformanceCase => ({
       name: `compares structured metadata ${name}`,
-      request: { timeRange: fullRange, where: { op: 'eq', left: { path: [...path] }, right: { literal } } },
+      request: { timeRange: fullRange, where: { op: 'eq', left: { path }, right: { literal } } },
       expected: [{ traceId: 'trace-a' }],
     }),
   ),
-  ...(['null', 'array', 'missing', 'object'] as const).map(key => ({
-    name: `excludes non-scalar structured metadata ${key}`,
-    request: { timeRange: fullRange, where: { op: 'exists' as const, path: ['metadata', 'nestedValue', key] } },
-    expected: [],
-  })),
+  ...(['null', 'array', 'missing', 'object'] as const).flatMap((key): TraceQueryConformanceCase[] => [
+    {
+      name: `excludes non-scalar structured metadata ${key}`,
+      request: { timeRange: fullRange, where: { op: 'exists', path: `metadata.nestedValue.${key}` } },
+      expected: [],
+    },
+    {
+      name: `treats non-scalar structured metadata ${key} as not existing`,
+      request: { timeRange: fullRange, where: { op: 'notExists', path: `metadata.nestedValue.${key}` } },
+      expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+    },
+  ]),
   {
     name: 'does not traverse arrays through numeric string segments',
-    request: { timeRange: fullRange, where: { op: 'exists', path: ['metadata', 'nestedValue', 'array', '0', 'id'] } },
+    request: { timeRange: fullRange, where: { op: 'exists', path: 'metadata.nestedValue.array.0.id' } },
     expected: [],
+  },
+  {
+    name: 'orders fractional metadata with lt',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'lt', left: { path: 'metadata.fractionalValue' }, right: { literal: 0 } },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'orders fractional metadata with lte',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'lte', left: { path: 'metadata.fractionalValue' }, right: { literal: -2.5 } },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'orders zero metadata with gt',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'gt', left: { path: 'metadata.zeroValue' }, right: { literal: -1 } },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'orders safe-integer-boundary metadata with gte',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'gte',
+        left: { path: 'metadata.maxSafeInteger' },
+        right: { literal: Number.MAX_SAFE_INTEGER },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'does not coerce numeric metadata to strings',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'metadata.numericValue' }, right: { literal: '42' } },
+    },
+    expected: [],
+  },
+  {
+    name: 'does not coerce string metadata to numbers',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'metadata.numericString' }, right: { literal: 3 } },
+    },
+    expected: [],
+  },
+  {
+    name: 'does not coerce boolean metadata to strings',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'metadata.nestedValue.reviewed' }, right: { literal: 'false' } },
+    },
+    expected: [],
+  },
+  {
+    name: 'does not coerce string metadata to booleans',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'metadata.booleanString' }, right: { literal: false } },
+    },
+    expected: [],
+  },
+  {
+    name: 'does not inspect stored arrays for membership',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'in', value: { path: 'metadata.nestedValue.array' }, set: ['hidden'] },
+    },
+    expected: [],
+  },
+  {
+    name: 'treats stored arrays as missing for negative membership',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'notIn', value: { path: 'metadata.nestedValue.array' }, set: ['hidden'] },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
   {
     name: 'orders numeric metadata and compares boolean membership without coercion',
@@ -1436,10 +1584,10 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       where: {
         op: 'and',
         args: [
-          { op: 'gte', left: { path: ['metadata', 'nestedValue', 'count'] }, right: { literal: 3 } },
-          { op: 'in', value: { path: ['metadata', 'nestedValue', 'reviewed'] }, set: [false] },
-          { op: 'ne', left: { path: ['metadata', 'nestedValue', 'count'] }, right: { literal: '3' } },
-          { op: 'notIn', value: { path: ['metadata', 'nestedValue', 'missing'] }, set: [0] },
+          { op: 'gte', left: { path: 'metadata.nestedValue.count' }, right: { literal: 3 } },
+          { op: 'in', value: { path: 'metadata.nestedValue.reviewed' }, set: [false] },
+          { op: 'ne', left: { path: 'metadata.nestedValue.count' }, right: { literal: '3' } },
+          { op: 'notIn', value: { path: 'metadata.nestedValue.missing' }, set: [0] },
         ],
       },
     },
@@ -1482,19 +1630,27 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
           { op: 'eq', left: { path: 'metadata.protocolVersion' }, right: { literal: 'v2' } },
           { op: 'eq', left: { path: 'metadata.temporalRunId' }, right: { literal: 'temporal-a' } },
           { op: 'eq', left: { path: 'metadata.externalTraceId' }, right: { literal: 'external-a' } },
-          { op: 'notExists', path: 'metadata.emptyValue' },
+          { op: 'eq', left: { path: 'metadata.emptyValue' }, right: { literal: '' } },
         ],
       },
     },
     expected: [{ traceId: 'trace-a' }],
   },
   {
-    name: 'compares metadata predicates against trimmed string values',
+    name: 'compares metadata strings without trimming',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'metadata.paddedValue' }, right: { literal: '  padded value  ' } },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'does not match metadata strings through trimmed values',
     request: {
       timeRange: fullRange,
       where: { op: 'eq', left: { path: 'metadata.paddedValue' }, right: { literal: 'padded value' } },
     },
-    expected: [{ traceId: 'trace-a' }],
+    expected: [],
   },
   {
     name: 'preserves exact metadata keys containing whitespace',

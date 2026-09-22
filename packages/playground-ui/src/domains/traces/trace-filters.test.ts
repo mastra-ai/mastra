@@ -17,6 +17,11 @@ import {
   traceTokensToFilterBarItems,
 } from './trace-filters';
 import type { TraceFilterGroup } from './trace-filters';
+import {
+  encodeTraceMetadataValue,
+  traceMetadataFieldIdToParam,
+  traceMetadataPathToField,
+} from './trace-metadata-filter-codec';
 
 const KEY = 'test:traces:saved-filters';
 
@@ -216,13 +221,14 @@ describe('createTraceFilterBarFields', () => {
 
   describe('when discovered metadata fields are provided', () => {
     const suggestions = async () => [{ value: 'eu-west' }];
+    const operators = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'] as const;
     const withMetadata = createTraceFilterBarFields({
       availableRootEntityNames: [],
       availableEnvironments: [],
       metadataFields: [
-        { path: 'metadata.tenant', suggestions },
-        { path: 'metadata.region', suggestions },
-        { path: 'notMetadata', suggestions },
+        { id: 'metadata.tenant', label: 'tenant', path: 'metadata.tenant', type: 'string', operators, suggestions },
+        { id: 'metadata.region', label: 'region', path: 'metadata.region', type: 'string', operators, suggestions },
+        { id: 'notMetadata', label: 'notMetadata', path: 'notMetadata', type: 'string', operators, suggestions },
       ],
     });
 
@@ -259,12 +265,12 @@ describe('metadata filter URL params', () => {
     ]);
   });
 
-  it('writes metadata tokens as filterMetadata.<key> params and drops stale ones', () => {
+  it('writes metadata tokens exactly as filterMetadata.<path> params and drops stale ones', () => {
     const params = new URLSearchParams('filterMetadata.stale=x&status=error');
 
     applyTracePropertyFilterTokens(params, [{ fieldId: 'metadata.region', value: ' eu-west ' }]);
 
-    expect(params.get('filterMetadata.region')).toBe('eu-west');
+    expect(params.get('filterMetadata.region')).toBe(' eu-west ');
     expect(params.has('filterMetadata.stale')).toBe(false);
   });
 
@@ -281,6 +287,55 @@ describe('metadata filter URL params', () => {
   it('counts a filterMetadata.<key> param as an existing filter so hydration does not re-append it', () => {
     expect(hasAnyTraceFilterParams(new URLSearchParams('filterMetadata.region=eu-west'))).toBe(true);
     expect(hasAnyTraceFilterParams(new URLSearchParams('page=2'))).toBe(false);
+  });
+
+  it('round-trips exact paths without colliding with ordinary nested paths', () => {
+    const exact = traceMetadataPathToField(['metadata', 'customer.id', 'profile/雪"\\']);
+    expect(exact).toBeDefined();
+    if (!exact) return;
+    const exactParam = traceMetadataFieldIdToParam(exact.id);
+    expect(exactParam).toBeDefined();
+
+    const params = new URLSearchParams();
+    applyTracePropertyFilterTokens(params, [
+      { fieldId: 'metadata.customer.id', value: 'nested' },
+      { fieldId: exact.id, value: 'literal' },
+    ]);
+
+    expect(params.get('filterMetadata.customer.id')).toBe('nested');
+    expect(exactParam ? params.get(exactParam) : null).toBe('literal');
+    expect(getTracePropertyFilterTokens(params)).toEqual([
+      { fieldId: 'metadata.customer.id', value: 'nested' },
+      { fieldId: exact.id, value: 'literal' },
+    ]);
+  });
+
+  it('round-trips typed and exact string metadata values without coercion or trimming', () => {
+    const params = new URLSearchParams();
+    applyTracePropertyFilterTokens(params, [
+      {
+        fieldId: 'metadata.value',
+        operatorId: 'in',
+        value: [false, 0, encodeTraceMetadataValue(''), 'false', '0', '   '],
+      },
+    ]);
+
+    expect(getTracePropertyFilterTokens(params)).toEqual([
+      {
+        fieldId: 'metadata.value',
+        operatorId: 'in',
+        value: [false, 0, encodeTraceMetadataValue(''), 'false', '0', '   '],
+      },
+    ]);
+  });
+
+  it('ignores malformed metadata parameters safely', () => {
+    const emptySegment = encodeURIComponent(JSON.stringify(['metadata', 'customer.id', '']));
+    const params = new URLSearchParams(
+      `filterMetadataExact.v1.not-base64=value&filterMetadataExact.v1.${emptySegment}=value&filterMetadata.customer..id=value`,
+    );
+    expect(getTracePropertyFilterTokens(params)).toEqual([]);
+    expect(hasAnyTraceFilterParams(params)).toBe(false);
   });
 });
 
@@ -303,6 +358,25 @@ describe('filter group URL params', () => {
       expect(getTraceFilterGroups(params)).toEqual([group]);
       expect(params.getAll('filterGroup')).toHaveLength(1);
       expect([...params.keys()].indexOf('filterGroup')).toBeGreaterThan([...params.keys()].indexOf('filterTraceId'));
+    });
+
+    it('preserves typed metadata values and exact paths inside groups', () => {
+      const exact = traceMetadataPathToField(['metadata', 'flags.reviewed']);
+      expect(exact).toBeDefined();
+      if (!exact) return;
+      const metadataGroup: TraceFilterGroup = {
+        id: 'metadata-group',
+        logic: 'and',
+        nodes: [
+          { id: 'count', fieldId: 'metadata.retry.count', operatorId: 'gte', value: 0 },
+          { id: 'reviewed', fieldId: exact.id, value: false },
+        ],
+      };
+      const params = new URLSearchParams();
+
+      applyTracePropertyFilterTokens(params, [], [metadataGroup]);
+
+      expect(getTraceFilterGroups(params)).toEqual([metadataGroup]);
     });
   });
 

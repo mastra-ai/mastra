@@ -121,7 +121,7 @@ See [Delta polling](/reference/observability/tracing/trace-query#poll-after-load
 
 ### Discover trace-query fields and values
 
-`getTraceQueryFields()` returns canonical query fields and observed top-level string metadata fields for one predicate scope. The response includes each field's value kind, supported operators, and whether value suggestions are available.
+`getTraceQueryFields()` returns canonical query fields and observed metadata fields for one predicate scope. In the `trace` scope, metadata discovery recursively walks objects and returns string, number, and boolean leaves. The response includes each field's value kind, supported operators, and whether value suggestions are available.
 
 ```typescript
 const timeRange = {
@@ -159,7 +159,7 @@ const values = await mastraClient.getTraceQueryValues(
 controller.abort()
 ```
 
-Both methods use case-insensitive literal substring search and accept an empty search. Limits default to 25 and can't exceed 100. Results are ordered by occurrence count, then deterministically by path or value. `observedFieldsTruncated` and `valuesTruncated` indicate that the caller should refine `search`. Discovery has no cursor.
+Both methods use case-insensitive literal substring search and accept an empty search. Metadata value suggestions preserve their string, number, or boolean type without trimming or coercion. Limits default to 25 and can't exceed 100. Results are ordered by occurrence count, then deterministically by path or value. `observedFieldsTruncated` and `valuesTruncated` indicate that the caller should refine `search`. Discovery has no cursor.
 
 Suggestions are bounded and advisory. Manual values remain valid when suggestions are unavailable, empty, or truncated. Discovery doesn't accept a draft query predicate. The client doesn't retry either request, and a per-call `AbortSignal` takes precedence over the signal configured on `MastraClient`.
 

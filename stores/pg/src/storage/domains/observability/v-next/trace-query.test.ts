@@ -176,23 +176,38 @@ describe('Postgres advanced trace query', () => {
 
     expect(compiled.text).not.toContain(key);
     expect(compiled.text).not.toContain(value);
-    expect(compiled.text).toContain(`jsonb_typeof(r."metadataSearch" -> $3) = 'string'`);
-    expect(compiled.text).toContain(`r."metadataSearch" ->> $3`);
-    expect(compiled.text).toContain(`jsonb_typeof(r."metadataRaw" -> $3) = 'string'`);
-    expect(compiled.text).toContain(`NULLIF(btrim(r."metadataRaw" ->> $3), '')`);
+    expect(compiled.text).toContain(`jsonb_typeof((r."metadataRaw" #> $3::text[])) = 'string'`);
+    expect(compiled.text).toContain(`r."metadataRaw" #>> $3::text[]`);
+    expect(compiled.text).not.toContain('metadataSearch');
+    expect(compiled.text).not.toContain('btrim(');
     expect(compiled.text).toContain('IS NOT DISTINCT FROM $4');
     expect(compiled.text).toContain('IS NULL OR');
     expect(compiled.values).toEqual([
       TIME_RANGE.from,
       TIME_RANGE.to,
-      key,
+      [key],
       value,
-      'actorRole',
+      ['actorRole'],
       'assistant',
       'tool',
-      'parentMessageId',
+      ['parentMessageId'],
       101,
     ]);
+  });
+
+  it('binds exact dotted metadata segments as one text array', () => {
+    const path = ['metadata', "customer.id' OR TRUE --", 'profile'] as const;
+    const value = "admin' OR TRUE --";
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { op: 'eq', left: { path }, right: { literal: value } } }),
+    );
+
+    expect(compiled.text).not.toContain(path[1]);
+    expect(compiled.text).not.toContain(path[2]);
+    expect(compiled.text).not.toContain(value);
+    expect(compiled.text).toContain('r."metadataRaw" #> $3::text[]');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path.slice(1), value, 101]);
   });
 
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {
@@ -436,7 +451,7 @@ describe('Postgres advanced trace query', () => {
       TIME_RANGE.from,
       TIME_RANGE.to,
       'medication_lookup',
-      metadataKey,
+      [metadataKey],
       metadataValue,
       0.6,
       'clinical-review',

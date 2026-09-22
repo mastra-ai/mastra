@@ -6,7 +6,6 @@ import type {
   TraceQueryObservedFieldsResult,
   TraceQueryFeedbackField,
   TraceQueryField,
-  TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -115,10 +114,6 @@ function parameterSql(type: ParameterType): string {
   return type === 'timestamp' ? 'CAST(? AS TIMESTAMP)' : '?';
 }
 
-function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
-  return typeof field === 'string' && field.startsWith('metadata.');
-}
-
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
@@ -172,15 +167,6 @@ function compileScalarPredicate<TField extends string>(
           ? 'TRY_CAST(json_extract_string(r.metadata, ?) AS BOOLEAN)'
           : 'json_extract_string(r.metadata, ?)';
     field = { sql: `CASE WHEN json_type(r.metadata, ?) IN (${types}) THEN ${extract} END`, parameterType: 'scalar' };
-    fieldValues = [path, path];
-  } else if (isMetadataField(predicate.field)) {
-    if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
-    const key = predicate.field.slice('metadata.'.length);
-    const path = `$.${JSON.stringify(key)}`;
-    field = {
-      sql: `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
-      parameterType: 'scalar',
-    };
     fieldValues = [path, path];
   } else {
     field = fieldDefinition(registry, predicate.field);
@@ -623,26 +609,34 @@ export function compileDuckDBTraceQueryObservedFields(
   const search = plan.search ? `AND strpos(lower(array_to_string(segments, '.')), lower(?)) > 0` : '';
   return {
     sql: `WITH RECURSIVE ${compileDuckDBTraceScope(new Set()).join(',\n  ')}, metadata_tree AS (
-  SELECT ['metadata'] AS segments, r.metadata AS leaf FROM root_scope r
+  SELECT ['metadata'] AS segments, r.metadata AS leaf, false AS requires_exact FROM root_scope r
   UNION ALL
-  SELECT list_append(segments, entry.key), entry.value
+  SELECT list_append(segments, entry.key), entry.value, requires_exact OR strpos(entry.key, '.') > 0
   FROM metadata_tree, LATERAL json_each(CASE WHEN json_type(leaf) = 'OBJECT' THEN leaf ELSE '{}'::JSON END) entry
   WHERE len(segments) < ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENTS}
     AND entry.key <> '' AND strpos(entry.key, chr(0)) = 0
     AND octet_length(encode(entry.key)) <= ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENT_BYTES}
     AND octet_length(encode(array_to_string(list_append(segments, entry.key), '.'))) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
 ), fields AS (
-  SELECT segments, CASE WHEN len(segments) = 2 AND strpos(segments[2], '.') = 0
-    AND json_type(leaf) = 'VARCHAR' AND trim(json_extract_string(leaf, '$')) <> ''
-    THEN 'metadata.' || segments[2] ELSE CAST(to_json(segments) AS VARCHAR) END AS path
+  SELECT segments,
+    CASE WHEN requires_exact THEN CAST(to_json(segments) AS VARCHAR) ELSE array_to_string(segments, '.') END AS path,
+    CASE json_type(leaf)
+      WHEN 'VARCHAR' THEN 'string'
+      WHEN 'BOOLEAN' THEN 'boolean'
+      ELSE 'number'
+    END AS value_kind
   FROM metadata_tree
   WHERE json_type(leaf) IN ('VARCHAR', 'BIGINT', 'UBIGINT', 'DOUBLE', 'BOOLEAN')
     AND (json_type(leaf) <> 'VARCHAR' OR octet_length(encode(json_extract_string(leaf, '$'))) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES})
+), grouped_fields AS (
+  SELECT path, count(*) AS occurrences,
+    CASE WHEN count(DISTINCT value_kind) = 1 THEN min(value_kind) ELSE 'scalar' END AS value_kind
+  FROM fields
+  WHERE true ${search}
+  GROUP BY path
 )
-SELECT path, count(*) AS occurrences
-FROM fields
-WHERE true ${search}
-GROUP BY path
+SELECT path, occurrences, value_kind
+FROM grouped_fields
 ORDER BY occurrences DESC, path ASC
 LIMIT ?`,
     values,
@@ -663,10 +657,6 @@ export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan)
         .map(segment => `.${JSON.stringify(segment)}`)
         .join('');
     fieldSql = `CASE WHEN json_type(r.metadata, ?) IN ('VARCHAR', 'BIGINT', 'UBIGINT', 'DOUBLE', 'BOOLEAN') THEN json_extract(r.metadata, ?) END`;
-    values.push(jsonPath, jsonPath);
-  } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
-    const jsonPath = `$.${JSON.stringify(plan.path.slice('metadata.'.length))}`;
-    fieldSql = `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`;
     values.push(jsonPath, jsonPath);
   } else {
     fieldSql = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
@@ -721,6 +711,7 @@ export async function getTraceQueryObservedFields(
         coreStorage.createTraceQueryObservedFieldDescriptor(
           String(row.path).startsWith('[') ? JSON.parse(String(row.path)) : String(row.path),
           Number(row.occurrences),
+          coreStorage.traceQueryObservedValueKindSchema.parse(row.value_kind),
         ),
       ),
     observedFieldsTruncated: rows.length > plan.limit,
