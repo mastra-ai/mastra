@@ -60,15 +60,22 @@ const RENDERED_KEYS: ReadonlySet<string> = new Set([
   'activeTools',
 ]);
 
+/** A scalar this view can print as one line; anything else belongs in the JSON block. */
+const SCALAR_RENDERABLE = (value: unknown): boolean =>
+  typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
+
 const formatScalar = (value: unknown): string => (typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value));
 
-function ScalarRows({ payload }: { payload: Record<string, unknown> }) {
-  const rows = SCALAR_FIELDS.filter(field => payload[field.key] !== undefined);
-  if (rows.length === 0) return null;
-
+function ScalarRows({
+  fields,
+  payload,
+}: {
+  fields: readonly { key: string; label: string }[];
+  payload: Record<string, unknown>;
+}) {
   return (
     <DataKeysAndValues>
-      {rows.map(field => (
+      {fields.map(field => (
         <Fragment key={field.key}>
           <DataKeysAndValues.Key>{field.label}</DataKeysAndValues.Key>
           <DataKeysAndValues.Value>{formatScalar(payload[field.key])}</DataKeysAndValues.Value>
@@ -91,12 +98,16 @@ export interface SpanPayloadProcessorProps {
  */
 export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
   const payload: Record<string, unknown> = { ...value.data };
-  const extras = Object.fromEntries(Object.entries(payload).filter(([key]) => !RENDERED_KEYS.has(key)));
   const sections: ReactNode[] = [];
+  // Keys this render actually laid out. Whatever is left over goes to the JSON
+  // block below, so a known key holding an unexpected value is still shown
+  // rather than silently dropped.
+  const laidOut = new Set<string>();
 
   for (const field of MESSAGE_FIELDS) {
     const messages = payload[field.key];
     if (!Array.isArray(messages)) continue;
+    laidOut.add(field.key);
     sections.push(
       <SpanPayloadField key={field.key} label={field.label}>
         {messages.length > 0 ? (
@@ -111,6 +122,7 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
   }
 
   if (Array.isArray(payload.toolCalls) && payload.toolCalls.length > 0) {
+    laidOut.add('toolCalls');
     sections.push(
       <SpanPayloadField key="toolCalls" label="Tool calls">
         <SpanPayloadToolCalls toolCalls={payload.toolCalls} />
@@ -121,6 +133,7 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
   for (const field of TEXT_FIELDS) {
     const text = payload[field.key];
     if (typeof text !== 'string' || text.length === 0) continue;
+    laidOut.add(field.key);
     sections.push(
       <SpanPayloadField key={field.key} label={field.label}>
         <SpanPayloadMarkdown>{text}</SpanPayloadMarkdown>
@@ -128,8 +141,10 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
     );
   }
 
-  if (SCALAR_FIELDS.some(field => payload[field.key] !== undefined)) {
-    sections.push(<ScalarRows key="scalars" payload={payload} />);
+  const scalars = SCALAR_FIELDS.filter(field => SCALAR_RENDERABLE(payload[field.key]));
+  if (scalars.length > 0) {
+    for (const field of scalars) laidOut.add(field.key);
+    sections.push(<ScalarRows key="scalars" fields={scalars} payload={payload} />);
   }
 
   // Secondary context: the prompt a request processor saw, the result an output
@@ -137,6 +152,7 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
   // Collapsed because they are large and rarely the reason someone opened the span.
   for (const key of ['prompt', 'result', 'model', 'tools', 'toolChoice', 'activeTools'] as const) {
     if (payload[key] === undefined) continue;
+    laidOut.add(key);
     sections.push(
       <SpanPayloadCollapsible key={key} label={key === 'activeTools' ? 'Active tools' : key}>
         <SpanPayloadJson value={payload[key]} />
@@ -144,6 +160,7 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
     );
   }
 
+  const extras = Object.fromEntries(Object.entries(payload).filter(([key]) => !laidOut.has(key)));
   if (Object.keys(extras).length > 0) {
     sections.push(
       <SpanPayloadCollapsible key="extras" label="Other fields">

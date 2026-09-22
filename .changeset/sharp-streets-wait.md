@@ -13,6 +13,6 @@ if (input?.type === 'processor' && input.value.phase === 'outputStream') {
 }
 ```
 
-Added `describeProcessorPipeline` for executor, pipeline position, hook duration, mutations, and tripwire details. Unknown attributes remain separate from the known fields. Unsupported or malformed data falls back to JSON, and existing processor span producers remain compatible.
+Added `describeProcessorPipeline` for executor, pipeline position, hook duration, mutations, and tripwire details. Unknown attributes remain separate from the known fields, so no value is rendered twice. Spans recorded before the phase existed keep their untyped shape and fall back to JSON.
 
 Fixed missing message-list mutation logs in workflow processor executions.

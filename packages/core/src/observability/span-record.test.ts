@@ -355,52 +355,6 @@ describe('processor span descriptions', () => {
     expect(describeSpanOutput(record)?.type).toBe('json');
   });
 
-  it.each([
-    ['input', { messages: 'redacted' }],
-    ['inputStep', { messages: [], model: { modelId: 1 } }],
-    ['inputStep', { messages: [], tools: [{ id: 'tool' }] }],
-    ['inputStep', { messages: [], toolChoice: { type: 'tool', tool: null } }],
-    ['inputStep', { messages: [], activeTools: ['tool'] }],
-    ['outputResult', { messages: [], result: null }],
-    ['outputStep', { messages: [], toolCalls: 'redacted' }],
-    ['outputStream', { totalChunks: 'many' }],
-    ['toolResult', { providerExecuted: 'yes' }],
-    ['llmRequest', { stepNumber: Infinity }],
-    ['llmResponse', { chunkCount: null }],
-    ['requestError', { messages: [], error: { message: 'failed' } }],
-  ])('keeps unsupported %s input in JSON', (phase, input) => {
-    expect(describeSpanInput(processorSpan({ processorPhase: phase }, { input }))).toEqual({
-      type: 'json',
-      value: input,
-    });
-  });
-
-  it.each([
-    ['input', { messages: 'redacted' }],
-    ['outputStream', { totalChunks: 1 }],
-    ['outputStream', { totalChunks: 1, accumulatedText: null }],
-  ])('keeps unsupported %s output in JSON', (phase, output) => {
-    expect(describeSpanOutput(processorSpan({ processorPhase: phase }, { output }))).toEqual({
-      type: 'json',
-      value: output,
-    });
-  });
-
-  it.each([
-    { messageListMutations: 'redacted' },
-    { messageListMutations: [null] },
-    { messageListMutations: [{ type: 'future-mutation' }] },
-    { messageListMutations: [{ type: 'add', count: 'many' }] },
-    { messageListMutations: [{ type: 'removeByIds', ids: [1] }] },
-    { tripwireAbort: { reason: { message: 'blocked' } } },
-    { tripwireAbort: { retry: 'yes' } },
-    { processorIndex: -1 },
-    { hookDurationMs: NaN },
-    { processorExecutor: 'other' },
-  ])('leaves unsupported pipeline fields in the raw attributes: %j', fields => {
-    expect(describeProcessorPipeline(processorSpan({ processorPhase: 'input', ...fields }))).toBeUndefined();
-  });
-
   it('preserves custom fields and arbitrary mutation message contents', () => {
     const message = { customMessage: true };
     const input = { messages: [], customPayload: { important: true } };

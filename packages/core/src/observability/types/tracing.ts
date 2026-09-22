@@ -1240,15 +1240,18 @@ export type ProcessorRunOutput = ProcessorRunOutputByPhase[ProcessorSpanPayloadP
  * Span types whose `input` Mastra writes itself with a fixed shape. Every
  * other span type keeps `any`, as before: tool arguments, workflow data and
  * the like are caller-defined, `MODEL_CHUNK` multiplexes several chunk shapes
- * on one span type. Processor payloads vary by executor and are narrowed by
- * their recorded phase in `describeSpanInput` / `describeSpanOutput` instead.
- * `GENERIC` is the escape hatch for custom spans.
+ * on one span type, and `GENERIC` is the escape hatch for custom spans.
+ *
+ * `PROCESSOR_RUN` is the union of every phase's payload, because the phase that
+ * picks one arm lives in `attributes`, not in the type parameter. Narrow it to a
+ * single phase with `describeSpanInput` / `describeSpanOutput`.
  */
 export interface SpanInputMap {
   [SpanType.AGENT_RUN]: AgentRunInput;
   [SpanType.MODEL_GENERATION]: ModelGenerationInput;
   [SpanType.MODEL_STEP]: ModelStepInput;
   [SpanType.MODEL_INFERENCE]: ModelStepInput;
+  [SpanType.PROCESSOR_RUN]: ProcessorRunInput;
 }
 
 /** Span types whose `output` Mastra writes itself with a fixed shape. Same rules as `SpanInputMap`. */
@@ -1257,6 +1260,7 @@ export interface SpanOutputMap {
   [SpanType.MODEL_GENERATION]: ModelGenerationOutput;
   [SpanType.MODEL_STEP]: ModelStepOutput;
   [SpanType.MODEL_INFERENCE]: ModelStepResult;
+  [SpanType.PROCESSOR_RUN]: ProcessorRunOutput;
 }
 
 /** `input` payload of a span: the mapped shape when `SpanInputMap` lists the type, otherwise `any`. */

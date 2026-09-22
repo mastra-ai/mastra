@@ -115,12 +115,12 @@ describe('processor span payload types', () => {
     }
   });
 
-  it('keeps processor producers compatible until the recorded phase is checked', () => {
+  it('types a processor span record through the payload maps', () => {
     const span = {} as SpanRecord;
 
     if (isSpanRecordOfType(span, SpanType.PROCESSOR_RUN)) {
-      expectTypeOf(span.input).toBeAny();
-      expectTypeOf(span.output).toBeAny();
+      expectTypeOf(span.input).toEqualTypeOf<ProcessorRunInput | null | undefined>();
+      expectTypeOf(span.output).toEqualTypeOf<ProcessorRunOutput | null | undefined>();
       expectTypeOf(span.attributes?.processorPhase).toEqualTypeOf<ProcessorSpanPayloadPhase | undefined>();
     }
   });

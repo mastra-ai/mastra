@@ -131,10 +131,27 @@ describe('processor spans in both span layouts', () => {
     expect(screen.getByText('No system messages')).toBeTruthy();
     expect(screen.getByText('Cleared messages')).toBeTruthy();
 
+    // A phase this release knows still previews. Values the layout cannot place
+    // are not dropped: they stay reachable as JSON, so one odd field never hides
+    // the rest of the span.
     rerender(renderView(malformedProcessorSpan));
-    expect(container.textContent).toContain('redacted-message-content');
-    expect(container.textContent).toContain('redacted-mutation-log');
+    expect(container.querySelector('[data-slot="span-processor-attributes"]')).toBeTruthy();
     expect(container.textContent).toContain('keep-this-value');
-    expect(container.querySelector('[data-slot="span-processor-attributes"]')).toBeNull();
+
+    // `queryAllByText`: the phase value repeats a section's own name ("Input").
+    const sectionNamed = (title: string) =>
+      Array.from(container.querySelectorAll('[data-slot="span-payload-section"]')).find(
+        section => within(section).queryAllByText(title).length > 0,
+      );
+
+    const malformedAttributes = sectionNamed('Attributes');
+    if (!malformedAttributes) throw new Error('Missing attributes section');
+    fireEvent.click(within(malformedAttributes).getByRole('button', { name: 'JSON', exact: true }));
+    expect(malformedAttributes.textContent).toContain('redacted-mutation-log');
+
+    const malformedInput = sectionNamed('Input');
+    if (!malformedInput) throw new Error('Missing input section');
+    fireEvent.click(within(malformedInput).getByRole('button', { name: 'JSON', exact: true }));
+    expect(malformedInput.textContent).toContain('redacted-message-content');
   });
 });
