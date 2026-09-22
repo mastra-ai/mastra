@@ -1,5 +1,14 @@
 # @mastra/code-sdk
 
+## 1.8.1-alpha.2
+
+### Patch Changes
+
+- Missing provider credentials for signed-in Factory accounts now throw `ProviderAuthRequiredError` instead of a plain `Error`, so hosts can classify the failure as an authentication error without matching on the message text. ([#24737](https://github.com/mastra-ai/mastra/pull/24737))
+
+- Updated dependencies [[`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e)]:
+  - @mastra/core@1.69.0-alpha.2
+
 ## 1.8.1-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,23 @@
 # mastra
 
+## 1.31.1-alpha.3
+
+### Patch Changes
+
+- Fixed `mastra deploy` aborting on temporary server errors or dropped connections while checking deployment status. ([#24701](https://github.com/mastra-ai/mastra/pull/24701))
+
+  - Status checks retry with backoff until the polling deadline, including when reading a response fails.
+  - Stalled status requests are cancelled instead of blocking the deploy.
+  - Retry notices appear at most every 30 seconds and keep streamed deployment logs on screen.
+  - The CLI confirms when status checks resume.
+  - If status cannot be confirmed, the CLI says the deployment may still be running and links to the deployment dashboard.
+
+- Enabled dedicated worker deploys to opt projects into worker infrastructure automatically. ([#24602](https://github.com/mastra-ai/mastra/pull/24602))
+
+- Updated dependencies [[`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e)]:
+  - @mastra/core@1.69.0-alpha.2
+  - @mastra/deployer@1.69.0-alpha.2
+
 ## 1.31.1-alpha.2
 
 ### Patch Changes

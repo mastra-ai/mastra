@@ -1,5 +1,14 @@
 # @mastra/quickjs
 
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- Fix the CommonJS build of `@mastra/quickjs` so programs run. Previously every `run()` failed with `(0, ts_blank_space.default) is not a function` because the CJS bundle externalised the ESM-only `ts-blank-space`. The build now splits per format: ESM keeps `ts-blank-space` and `typescript` external, while CJS bundles them in. ([#24722](https://github.com/mastra-ai/mastra/pull/24722))
+
+- Updated dependencies [[`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e)]:
+  - @mastra/core@1.69.0-alpha.2
+
 ## 0.1.1
 
 ### Patch Changes
