@@ -1389,4 +1389,97 @@ describe('workflow snapshot handoff', () => {
       status: 'admitted',
     });
   });
+
+  it('resolves enumerable getters that read sibling getters like JSON.stringify', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'getter-sibling';
+    const runId = 'getter-sibling-run';
+    const source = snapshot(runId, 'success');
+    // JSON.stringify resolves each enumerable getter through a live Get on the
+    // source in enumeration order, so `a` observes the live sibling getter `b`.
+    // Resolving against the clone would see `b` as not yet installed and drop
+    // `a` as undefined, diverging from what PostgreSQL persists.
+    const value: Record<string, unknown> = {};
+    Object.defineProperty(value, 'a', {
+      enumerable: true,
+      configurable: true,
+      get() {
+        return (this as Record<string, unknown>).b;
+      },
+    });
+    Object.defineProperty(value, 'b', {
+      enumerable: true,
+      configurable: true,
+      get() {
+        return 42;
+      },
+    });
+    source.value = value;
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: source });
+    const stored = await workflows.loadWorkflowSnapshot({ workflowName, runId });
+    expect(JSON.stringify(stored?.value)).toBe(JSON.stringify(value));
+    expect(stored?.value).toMatchObject({ a: 42, b: 42 });
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName,
+        runId,
+        expectedCanonical: { kind: 'present', snapshot: source },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).resolves.toMatchObject({ status: 'created' });
+  });
+
+  it('pins the lifecycle step guard before payload getters fire', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'guard-order';
+    const runId = 'guard-order-run';
+    const stored = snapshot(runId, 'suspended');
+    stored.executionGeneration = 'gen-1';
+    stored.lifecycleResumeAttempt = 0;
+    stored.lifecycleStepStates = { wait: { stepCallId: 'call-1', stepAttempt: 1 } };
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+    // operationReplayContext is destructured after lifecycleStepStates, so its
+    // getter fires before an in-literal pin could run. The pinned guard must
+    // already hold the pre-mutation projection or the admit sees a mutated
+    // fence and reports fence_conflict.
+    const input = {
+      workflowName,
+      runId,
+      resumeOperationHash: `sha256:${'0'.repeat(64)}` as `sha256:${string}`,
+      executionGeneration: 'gen-1',
+      lifecycleResumeAttempt: 0,
+      lifecycleStepStates: { wait: { stepCallId: 'call-1', stepAttempt: 1 } },
+      nextLifecycleResumeAttempt: 1,
+      get operationReplayContext() {
+        input.lifecycleStepStates.wait.stepAttempt = 99;
+        return { version: 1 as const, steps: [] };
+      },
+    };
+    await expect(workflows.admitWorkflowResume(input)).resolves.toMatchObject({ status: 'admitted' });
+  });
+
+  it('pins expectedStatus before the state-options spread fires payload getters', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'status-guard-order';
+    const runId = 'status-guard-run';
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, 'running') });
+    const guard: WorkflowRunState['status'][] = ['suspended'];
+    const opts = {
+      expectedStatus: guard,
+      // The rest-spread enumerates `status`, firing this getter before an
+      // after-destructure pin could run — mutating the caller's guard array.
+      get status() {
+        guard.push('running');
+        return 'failed' as const;
+      },
+    };
+    await expect(workflows.updateWorkflowState({ workflowName, runId, opts })).resolves.toBeUndefined();
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({
+      status: 'running',
+    });
+  });
 });

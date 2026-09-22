@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Added ClickHouse table-engine coverage for the native workflow snapshot handoff table.
+Fixed ClickHouse table setup so it creates the new workflow snapshot handoff table that `@mastra/core` now defines.

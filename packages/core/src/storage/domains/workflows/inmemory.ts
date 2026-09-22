@@ -288,14 +288,20 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
     // `cause`) terminate.
     seen.set(value, out);
     const outRecord = out as unknown as Record<PropertyKey, unknown>;
-    // Copy every own property through its descriptor: data values are
-    // deep-cloned with source enumerability, accessors are preserved verbatim
-    // and never invoked on the source — a getter or toJSON mutating `this`
-    // during observation must only ever affect the clone, not the stored row.
-    // Enumerable getters resolve in a second pass so `this` already carries
-    // every property, matching the fully populated object JSON.stringify
-    // observes; resolving them mid-pass could read a not-yet-copied field.
-    const deferredGetters: { key: PropertyKey; get: () => unknown }[] = [];
+    // Copy every own property through a fresh per-key descriptor so a getter
+    // that reconfigures or deletes a later key is observed exactly as
+    // JSON.stringify's per-key GetOwnProperty observes it. Enumerable getters
+    // resolve inline via `get.call(source)`: JSON.stringify invokes them
+    // once through a live `Get` on the source in enumeration order, so
+    // resolving against the source reproduces sibling-getter reads, mutation
+    // order, and deletion semantics exactly — including accessors the source
+    // declared non-configurable. This is safe on the load path because every
+    // stored value passed through this clone and therefore carries no
+    // enumerable getters of its own. The resolved value installs as a data
+    // property: a live enumerable accessor left on the stored clone would
+    // re-resolve on every later observation while durable adapters persist
+    // the resolved value once. Non-enumerable accessors are copied verbatim
+    // as toJSON/method backing and never invoked.
     for (const key of Reflect.ownKeys(value)) {
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (!descriptor) continue;
@@ -312,13 +318,13 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
           continue;
         }
         if (descriptor.enumerable && typeof descriptor.get === 'function') {
-          // JSON.stringify resolves enumerable getters against the complete
-          // object — defer so `this` sees the fully populated clone, then
-          // install the resolved value. Never copy an enumerable accessor
-          // verbatim: a live getter left on the stored clone would re-resolve
-          // on every later observation while durable adapters persist the
-          // resolved value once.
-          deferredGetters.push({ key, get: descriptor.get });
+          const resolved = deepCloneForRun(descriptor.get.call(value), seen, skipErrorToJSONProbe);
+          Object.defineProperty(outRecord, key, {
+            configurable: true,
+            writable: true,
+            enumerable: true,
+            value: resolved,
+          });
           continue;
         }
         Object.defineProperty(outRecord, key, descriptor);
@@ -334,20 +340,6 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
         writable: true,
         enumerable: descriptor.enumerable,
         value: cloned,
-      });
-    }
-    // JSON.stringify resolves enumerable getters once, against the complete
-    // object — do the same on the clone, then install the resolved value so
-    // canonical observations stay stable. The deferred keys were never
-    // defined in pass one, so defineProperty also works for getters the
-    // source declared non-configurable.
-    for (const { key, get } of deferredGetters) {
-      const resolved = deepCloneForRun(get.call(outRecord), seen, skipErrorToJSONProbe);
-      Object.defineProperty(outRecord, key, {
-        configurable: true,
-        writable: true,
-        enumerable: true,
-        value: resolved,
       });
     }
     // For `stack`, defer to the Error's own `toJSON` if present — that's how
@@ -408,23 +400,31 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
   // Non-enumerable own props are copied too — preserving the source
   // enumerability — because a copied `toJSON` may read backing fields that sit
   // off the JSON surface, and durable adapters stringify the full source.
-  // Accessors are never invoked on the source — a getter mutating `this`
-  // during observation must only affect the clone. Enumerable getters are
-  // deferred to a second pass over the fully populated clone; non-enumerable
-  // accessors stay live as toJSON/method backing.
-  const deferredGetters: { key: PropertyKey; get: () => unknown }[] = [];
+  // Each key's descriptor is fetched live so a getter that reconfigures or
+  // deletes a later key is observed exactly as JSON.stringify's per-key
+  // GetOwnProperty observes it. Enumerable getters resolve inline via
+  // `get.call(source)`: JSON.stringify invokes them once through a live `Get`
+  // on the source in enumeration order, so resolving against the source
+  // reproduces sibling-getter reads, mutation order, and deletion semantics
+  // exactly — including accessors the source declared non-configurable. This
+  // is safe on the load path because every stored value passed through this
+  // clone and therefore carries no enumerable getters of its own. The
+  // resolved value installs as a data property: a live enumerable accessor
+  // left on the stored clone would re-resolve on every later observation
+  // while durable adapters persist the resolved value once. Non-enumerable
+  // accessors are copied verbatim as toJSON/method backing and never invoked.
   for (const key of Reflect.ownKeys(value as object)) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor) continue;
     if (!('value' in descriptor)) {
       if (descriptor.enumerable && typeof descriptor.get === 'function') {
-        // JSON.stringify resolves enumerable getters against the complete
-        // object — defer so `this` sees the fully populated clone, then
-        // install the resolved value. Never copy an enumerable accessor
-        // verbatim: a live getter left on the stored clone would re-resolve
-        // on every later observation while durable adapters persist the
-        // resolved value once.
-        deferredGetters.push({ key, get: descriptor.get });
+        const resolved = deepCloneForRun(descriptor.get.call(value), seen, skipErrorToJSONProbe);
+        Object.defineProperty(out, key, {
+          configurable: true,
+          writable: true,
+          enumerable: true,
+          value: resolved,
+        });
         continue;
       }
       Object.defineProperty(out, key, descriptor);
@@ -435,21 +435,6 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
       writable: true,
       enumerable: descriptor.enumerable,
       value: deepCloneForRun(descriptor.value, seen, skipErrorToJSONProbe),
-    });
-  }
-  // Resolve enumerable getters in a second pass so `this` sees the fully
-  // populated clone — the same surface JSON.stringify observes on the
-  // source — then install the resolved value for a stable canonical
-  // projection. The deferred keys were never defined in pass one, so
-  // defineProperty also works for getters the source declared
-  // non-configurable.
-  for (const { key, get } of deferredGetters) {
-    const resolved = deepCloneForRun(get.call(out), seen, skipErrorToJSONProbe);
-    Object.defineProperty(out, key, {
-      configurable: true,
-      writable: true,
-      enumerable: true,
-      value: resolved,
     });
   }
   return out;
@@ -583,6 +568,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
+    // Pin the object-valued CAS guard before destructuring anything else: a
+    // getter on a later payload field could otherwise mutate the guard's
+    // contents between the destructure and the pin.
+    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
     // Pin every field in one ordered capture: CAS/identity fields before the
     // payload fields so a payload getter cannot retarget an expectation — each
     // input property's getter fires exactly once and a spread would re-read
@@ -593,7 +582,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
       nextLifecycleResumeAttempt,
       resourceId,
       requestContext,
@@ -609,7 +597,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       // Object-valued guards are pinned to their JSON projection: the caller's
       // retained reference could otherwise mutate the fence contents while
       // caller serialization runs inside the mutation loop.
-      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
+      lifecycleStepStates,
       nextLifecycleResumeAttempt,
       resourceId,
       requestContext,
@@ -622,22 +610,18 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
-    const {
-      workflowName,
-      runId,
-      resumeOperationHash,
-      executionGeneration,
-      lifecycleResumeAttempt,
-      lifecycleStepStates,
-      resourceId,
-    } = input;
+    // Pin the object-valued CAS guard before destructuring anything else: a
+    // getter on a later payload field could otherwise mutate the guard's
+    // contents between the destructure and the pin.
+    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
+    const { workflowName, runId, resumeOperationHash, executionGeneration, lifecycleResumeAttempt, resourceId } = input;
     const frozenInput: RollbackWorkflowResumeInput = {
       workflowName,
       runId,
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
+      lifecycleStepStates,
       resourceId,
     };
     return this.applyWorkflowResumeMutation(workflowName, runId, resourceId, snapshot =>
@@ -646,13 +630,16 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
+    // Pin the object-valued CAS guard before destructuring anything else: a
+    // getter on a later payload field could otherwise mutate the guard's
+    // contents between the destructure and the pin.
+    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
     const {
       workflowName,
       runId,
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
       resourceId,
       shouldPersistSnapshot,
       receiptKey,
@@ -665,7 +652,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
+      lifecycleStepStates,
       resourceId,
       shouldPersistSnapshot,
       receiptKey,
@@ -2215,17 +2202,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const key = this.getWorkflowKey(workflowName, runId);
     // Pin the CAS fields and state options once: getters on `opts` would
     // otherwise re-run per retry and could hand each attempt different
-    // expectations.
-    const {
-      expectedStatus: rawExpectedStatus,
-      expectedExecutionGeneration,
-      expectedLifecycleResumeAttempt,
-      finalState,
-      ...stateOptions
-    } = opts;
-    // `expectedStatus` may be an array the caller retains — pin its contents so
-    // reentrant serialization inside the loop cannot retarget the CAS guard.
-    const expectedStatus = pinWorkflowCasGuardValue(rawExpectedStatus);
+    // expectations. `expectedStatus` may be an array the caller retains — pin
+    // its contents before the rest-spread enumerates payload getters, which
+    // could otherwise retarget the CAS guard mid-capture.
+    const expectedStatus = pinWorkflowCasGuardValue(opts.expectedStatus);
+    const { expectedExecutionGeneration, expectedLifecycleResumeAttempt, finalState, ...stateOptions } = opts;
+    // Guard fields are never merged into the persisted snapshot.
+    delete stateOptions.expectedStatus;
     for (let attempt = 1; ; attempt++) {
       const run = this.db.workflows.get(key);
       this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);

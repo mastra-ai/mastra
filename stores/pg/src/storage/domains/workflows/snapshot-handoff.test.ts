@@ -1031,6 +1031,56 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     await expect(admitPromise).resolves.toMatchObject({ status: 'admitted' });
   }, 30_000);
 
+  it('pins the lifecycle step guard before payload getters fire', async () => {
+    const workflowName = `guard-order-${randomUUID()}`;
+    const runId = randomUUID();
+    const stored = snapshot(runId, 'suspended');
+    stored.executionGeneration = 'gen-1';
+    stored.lifecycleResumeAttempt = 0;
+    stored.lifecycleStepStates = { wait: { stepCallId: 'call-1', stepAttempt: 1 } };
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    // operationReplayContext is destructured after lifecycleStepStates, so its
+    // getter fires before an in-literal pin could run. The pinned guard must
+    // already hold the pre-mutation projection or the admit sees a mutated
+    // fence and reports fence_conflict.
+    const resumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash: `sha256:${'0'.repeat(64)}` as `sha256:${string}`,
+      executionGeneration: 'gen-1',
+      lifecycleResumeAttempt: 0,
+      lifecycleStepStates: { wait: { stepCallId: 'call-1', stepAttempt: 1 } },
+      nextLifecycleResumeAttempt: 1,
+      get operationReplayContext() {
+        resumeInput.lifecycleStepStates.wait.stepAttempt = 99;
+        return { version: 1 as const, steps: [] };
+      },
+    };
+    await expect(workflows.admitWorkflowResume(resumeInput)).resolves.toMatchObject({ status: 'admitted' });
+  });
+
+  it('pins expectedStatus before the state-options spread fires payload getters', async () => {
+    const workflowName = `status-guard-${randomUUID()}`;
+    const runId = randomUUID();
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, 'running') });
+
+    const guard: WorkflowRunState['status'][] = ['suspended'];
+    const opts = {
+      expectedStatus: guard,
+      // The rest-spread enumerates `status`, firing this getter before an
+      // after-destructure pin could run — mutating the caller's guard array.
+      get status() {
+        guard.push('running');
+        return 'failed' as const;
+      },
+    };
+    await expect(workflows.updateWorkflowState({ workflowName, runId, opts })).resolves.toBeUndefined();
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({
+      status: 'running',
+    });
+  });
+
   it('keeps draining eligible rows when a candidate is skipped mid-batch', async () => {
     const prefix = `prune-race-${randomUUID()}`;
     const nameA = `${prefix}-a`;
@@ -1123,4 +1173,27 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     );
     expect(remaining.n).toBe(1);
   }, 30_000);
+
+  it('reports done:false when a sweep aborts mid-batch', async () => {
+    const prefix = `prune-abort-${randomUUID()}`;
+    for (let i = 0; i < 3; i++) {
+      const runId = randomUUID();
+      await workflows.persistWorkflowSnapshot({
+        workflowName: `${prefix}-${i}`,
+        runId,
+        snapshot: snapshot(runId, 'success'),
+      });
+    }
+    // Trip the signal partway through the candidate loop: the batch stops
+    // early with unattempted rows, so the sweep is resumable, not drained —
+    // reporting done would tell callers to stop re-entering the prune.
+    let checks = 0;
+    const signal = {
+      get aborted() {
+        return ++checks >= 5;
+      },
+    } as unknown as AbortSignal;
+    const results = await workflows.prune({ workflowSnapshot: { maxAge: '0ms', batchSize: 10 } }, { signal });
+    expect(results[0]?.done).toBe(false);
+  });
 });

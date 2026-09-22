@@ -439,6 +439,10 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
+    // Pin the object-valued CAS guard before destructuring anything else: a
+    // getter on a later payload field could otherwise mutate the guard's
+    // contents between the destructure and the pin.
+    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
     // Pin every field in one ordered capture: CAS/identity fields before the
     // payload fields so a payload getter cannot retarget an expectation — each
     // input property's getter fires exactly once and a spread would re-read
@@ -449,7 +453,6 @@ export class WorkflowsPG extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
       nextLifecycleResumeAttempt,
       resourceId,
       requestContext,
@@ -465,7 +468,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       // Object-valued guards are pinned to their JSON projection: the caller's
       // retained reference could otherwise mutate the fence contents while the
       // transaction awaits row locks.
-      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
+      lifecycleStepStates,
       nextLifecycleResumeAttempt,
       resourceId,
       requestContext,
@@ -483,22 +486,18 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
-    const {
-      workflowName,
-      runId,
-      resumeOperationHash,
-      executionGeneration,
-      lifecycleResumeAttempt,
-      lifecycleStepStates,
-      resourceId,
-    } = input;
+    // Pin the object-valued CAS guard before destructuring anything else: a
+    // getter on a later payload field could otherwise mutate the guard's
+    // contents between the destructure and the pin.
+    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
+    const { workflowName, runId, resumeOperationHash, executionGeneration, lifecycleResumeAttempt, resourceId } = input;
     const frozenInput: RollbackWorkflowResumeInput = {
       workflowName,
       runId,
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
+      lifecycleStepStates,
       resourceId,
     };
     return this.mutateWorkflowResume(
@@ -512,13 +511,16 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
+    // Pin the object-valued CAS guard before destructuring anything else: a
+    // getter on a later payload field could otherwise mutate the guard's
+    // contents between the destructure and the pin.
+    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
     const {
       workflowName,
       runId,
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates,
       resourceId,
       shouldPersistSnapshot,
       receiptKey,
@@ -531,7 +533,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
-      lifecycleStepStates: pinWorkflowCasGuardValue(lifecycleStepStates),
+      lifecycleStepStates,
       resourceId,
       shouldPersistSnapshot,
       receiptKey,
@@ -4715,19 +4717,20 @@ export class WorkflowsPG extends WorkflowsStorage {
     cutoff: Date | number,
     limit: number,
     options?: PruneOptions,
-  ): Promise<number> {
+  ): Promise<{ deleted: number; truncated: boolean }> {
     let deleted = 0;
     // Candidates skipped under the revision/handoff locks (e.g. a handoff that
     // committed mid-batch, or a row with missing revision evidence) are
     // excluded from re-selection: the loop can never spin on the same rows,
     // and remaining eligible rows are still drained within this call. The
-    // exclusion list is capped so a pathological run of stuck candidates
-    // cannot grow the NOT IN unnest without bound — hitting the cap ends this
-    // call, and skipped rows are safe to leave for the next prune run.
+    // exclusion list is capped so a run of stuck candidates cannot grow the
+    // NOT IN unnest without bound — hitting the cap or an abort ends the batch
+    // early, which is reported as truncated so the sweep does not claim the
+    // table drained while unattempted candidates remain.
     const skippedNames: string[] = [];
     const skippedRuns: string[] = [];
     while (deleted < limit) {
-      if (options?.signal?.aborted) break;
+      if (options?.signal?.aborted) return { deleted, truncated: true };
       const candidates = await this.#db.client.manyOrNone<{ workflow_name: string; run_id: string }>(
         `SELECT snapshot.workflow_name, snapshot.run_id
          FROM ${this.workflowSnapshotTableName()} AS snapshot
@@ -4747,7 +4750,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       );
       if (candidates.length === 0) break;
       for (const candidate of candidates) {
-        if (options?.signal?.aborted) return deleted;
+        if (options?.signal?.aborted) return { deleted, truncated: true };
         const removed = await this.#db.client.tx(async t => {
           const revision = await this.lockExistingWorkflowParentRevision(t, candidate.workflow_name, candidate.run_id);
           if (!revision) return false;
@@ -4766,12 +4769,12 @@ export class WorkflowsPG extends WorkflowsStorage {
         } else {
           skippedNames.push(candidate.workflow_name);
           skippedRuns.push(candidate.run_id);
-          if (skippedNames.length >= MAX_WORKFLOW_PRUNE_SKIPPED_CANDIDATES) return deleted;
+          if (skippedNames.length >= MAX_WORKFLOW_PRUNE_SKIPPED_CANDIDATES) return { deleted, truncated: true };
         }
         if (deleted >= limit) break;
       }
     }
-    return deleted;
+    return { deleted, truncated: false };
   }
 
   /** Delete workflow run snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
@@ -4782,13 +4785,25 @@ export class WorkflowsPG extends WorkflowsStorage {
       descriptor: WorkflowsPG.retentionTables,
       order: ['workflowSnapshot'],
     });
-    return runPrune({
+    // A batch cut short by cancellation or the skipped-candidate bound did not
+    // evaluate every eligible row: the sweep is resumable, not drained, so the
+    // result must not report done.
+    let truncated = false;
+    const results = await runPrune({
       db: this.#db,
       domain: 'workflows',
       targets,
       options,
-      deleteBatch: (_target, cutoff, limit) => this.pruneWorkflowSnapshotsBatch(cutoff, limit, options),
+      deleteBatch: async (_target, cutoff, limit) => {
+        const batch = await this.pruneWorkflowSnapshotsBatch(cutoff, limit, options);
+        truncated ||= batch.truncated;
+        return batch.deleted;
+      },
     });
+    if (truncated) {
+      for (const result of results) result.done = false;
+    }
+    return results;
   }
 
   /**
@@ -5525,16 +5540,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     // mutate expectations while the row locks are being acquired.
     // `expectedStatus` is a compare-and-set guard, not state; `finalState` is
     // likewise a directive rather than snapshot state.
-    const {
-      expectedStatus: rawExpectedStatus,
-      expectedExecutionGeneration,
-      expectedLifecycleResumeAttempt,
-      finalState,
-      ...stateOptions
-    } = opts;
-    // `expectedStatus` may be an array the caller retains — pin its contents so
-    // mid-transaction mutation cannot retarget the CAS guard.
-    const expectedStatus = pinWorkflowCasGuardValue(rawExpectedStatus);
+    // `expectedStatus` may be an array the caller retains — pin its contents
+    // before the rest-spread enumerates payload getters, which could otherwise
+    // retarget the CAS guard mid-capture.
+    const expectedStatus = pinWorkflowCasGuardValue(opts.expectedStatus);
+    const { expectedExecutionGeneration, expectedLifecycleResumeAttempt, finalState, ...stateOptions } = opts;
+    // Guard fields are never merged into the persisted snapshot.
+    delete stateOptions.expectedStatus;
     try {
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
