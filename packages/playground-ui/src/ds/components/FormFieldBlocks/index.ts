@@ -6,3 +6,4 @@ export { TextFieldBlock, type TextFieldBlockProps } from './fields/text-field-bl
 export { TextareaFieldBlock, type TextareaFieldBlockProps } from './fields/textarea-field-block';
 export { SearchFieldBlock, type SearchFieldBlockProps } from './fields/search-field-block';
 export { SelectFieldBlock, type SelectFieldBlockProps } from './fields/select-field-block';
+export { PhoneFieldBlock, type PhoneFieldBlockProps } from './fields/phone-field-block';
