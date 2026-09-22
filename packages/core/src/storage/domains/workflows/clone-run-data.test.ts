@@ -260,6 +260,34 @@ describe('cloneRunData', () => {
     expect(JSON.stringify(out)).toBe('{"message":"frozen-toJSON"}');
   });
 
+  it('never invokes a copied toJSON accessor on the clone it stores', () => {
+    const src = new Error('getter-toJSON') as Error & { mutations: number };
+    src.mutations = 0;
+    Object.defineProperty(src, 'toJSON', {
+      configurable: true,
+      get(this: Error & { mutations: number }) {
+        Object.defineProperty(this, 'probe', {
+          enumerable: true,
+          configurable: true,
+          get() {
+            return ++this.mutations;
+          },
+        });
+        return undefined;
+      },
+    });
+    const stored = cloneRunData(src) as Error & { mutations: number };
+    expect('probe' in stored).toBe(false);
+    expect(stored.mutations).toBe(0);
+    // Re-cloning the stored record (the load path) must not observe a live
+    // accessor that mutates stored state either.
+    const reloaded = cloneRunData(stored) as Error & { mutations: number };
+    cloneRunData(stored);
+    expect('probe' in stored).toBe(false);
+    expect(stored.mutations).toBe(0);
+    expect('probe' in reloaded).toBe(false);
+  });
+
   // ── ArrayBuffer / TypedArrays / DataView ────────────────────────────
 
   it('clones ArrayBuffer', () => {

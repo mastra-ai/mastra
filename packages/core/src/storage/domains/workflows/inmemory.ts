@@ -351,11 +351,14 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
     // the agent-loop snapshot tests don't expect. Invoke it on a throwaway
     // clone so a counting or self-mutating serializer neither corrupts the
     // stored row nor shifts the durable projection on later serializations.
-    if (
-      !skipErrorToJSONProbe &&
-      Object.getOwnPropertyDescriptor(out, 'stack') !== undefined &&
-      typeof outRecord.toJSON === 'function'
-    ) {
+    const toJSONDescriptor = Object.getOwnPropertyDescriptor(outRecord, 'toJSON');
+    // Detect toJSON by descriptor, never by property access: `out` may be the
+    // record destined for the store, and invoking a verbatim-copied accessor
+    // here would let it mutate the clone that becomes stored state.
+    const hasToJSONSerializer =
+      toJSONDescriptor !== undefined &&
+      (typeof toJSONDescriptor.value === 'function' || typeof toJSONDescriptor.get === 'function');
+    if (!skipErrorToJSONProbe && Object.getOwnPropertyDescriptor(out, 'stack') !== undefined && hasToJSONSerializer) {
       try {
         const probe = deepCloneForRun(out, new WeakMap(), true) as Record<PropertyKey, unknown>;
         const probeToJSON = probe.toJSON;
