@@ -35,7 +35,9 @@ createRoot(document.getElementById('root')!).render(
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider baseUrl="">
-            <RouterProvider router={router} />
+            <div className="bg-sidebar font-body h-screen">
+              <RouterProvider router={router} />
+            </div>
             <PwaInstallBanner />
             <Toaster position="bottom-right" />
           </ApiConfigProvider>

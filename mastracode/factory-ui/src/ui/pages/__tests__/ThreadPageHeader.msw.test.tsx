@@ -142,7 +142,7 @@ afterEach(() => {
 });
 
 describe('ThreadPage header', () => {
-  it('keeps the sidebar toggle and the session breadcrumb in a single header', async () => {
+  it('renders a single sidebar toggle in the app frame and the session breadcrumb in the page bar', async () => {
     window.localStorage.setItem(SIDEBAR_STATE_KEY, 'collapsed');
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
@@ -150,7 +150,10 @@ describe('ThreadPage header', () => {
     const breadcrumb = await screen.findByRole('navigation', { name: 'Factory session breadcrumb' });
     const header = breadcrumb.closest('header');
     expect(header).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Toggle sidebar' }).closest('header')).toBe(header);
+    expect(header!.closest('[data-slot="page-layout"]')).not.toBeNull();
+    const toggles = screen.getAllByRole('button', { name: 'Toggle sidebar' });
+    expect(toggles).toHaveLength(1);
+    expect(toggles[0]!.closest('[data-slot="page-layout"]')).toBeNull();
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
     expect(within(header!).getByText('Issue #42: Fix the flaky login test')).toBeInTheDocument();
     expect(within(header!).getByRole('link', { name: 'Work' })).toBeInTheDocument();

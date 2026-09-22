@@ -4,7 +4,6 @@ import { Link, useLocation, useParams } from 'react-router';
 import { Brain } from 'lucide-react';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
@@ -56,7 +55,6 @@ export function SettingsPanel() {
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
   const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
   const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
@@ -85,7 +83,7 @@ export function SettingsPanel() {
   return (
     <section aria-label="Settings" className="flex flex-1 flex-col lg:px-5 lg:pb-5">
       <div className="mx-auto grid w-full max-w-4xl grid-cols-[minmax(0,1fr)] py-3">
-        {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
+        <SettingsHeader autoFocus placement="desktop" />
         {section === 'account' && <AccountSettingsSection />}
         {section === 'preferences' && <GeneralSettings />}
         {section === 'factory' && <FactoryManagementSection />}

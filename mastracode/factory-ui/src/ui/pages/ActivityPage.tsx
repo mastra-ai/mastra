@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -10,9 +11,10 @@ import { collapseRuns, factoryActivity, factoryDeeds } from '../domains/factory/
 import type { ActivityEntry } from '../domains/factory/activity';
 import { itemBoard } from '../domains/factory/boardStages';
 import { ActivityRail } from '../domains/factory/components/ActivityRail';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { FactoryPage } from '../domains/factory/components/FactoryPage';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import type { FactoryMentionMember } from '../domains/factory/services/members';
+import { FactoryBreadcrumbs } from '../ui/FactoryBreadcrumbs';
 import { SkeletonRows } from '../ui/SkeletonRows';
 
 /** The board snapshot arrives whole, so paging it only paces the DOM; the audit half is a real cursor pulled in step. */
@@ -20,7 +22,24 @@ const PAGE_SIZE = 60;
 const AUDIT_PAGE_SIZE = 100;
 
 export function ActivityPage() {
-  return <DocumentFactoryPageShell>{factory => <ActivityContent factoryId={factory.id} />}</DocumentFactoryPageShell>;
+  return (
+    <FactoryPage>
+      {factory => (
+        <PageLayout
+          breadcrumbs={
+            <FactoryBreadcrumbs
+              crumbs={[
+                { id: 'factory', label: factory.name, to: `/factories/${factory.id}/overview` },
+                { id: 'activity', label: 'Activity' },
+              ]}
+            />
+          }
+        >
+          <ActivityContent factoryId={factory.id} />
+        </PageLayout>
+      )}
+    </FactoryPage>
+  );
 }
 
 export function ActivityContent({ factoryId }: { factoryId: string }) {
@@ -53,7 +72,7 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="activity-heading">
       <div>
-        <h1 id="activity-heading" className="text-heading text-foreground m-0 font-semibold">
+        <h1 id="activity-heading" className="sr-only">
           Activity
         </h1>
         <Txt as="p" variant="caption" className="text-muted-foreground mt-1 mb-0">

@@ -6,7 +6,9 @@ import { useSearchParams } from 'react-router';
 
 import { useKnowledgeGraph } from '../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { FactoryPage } from '../domains/factory/components/FactoryPage';
+import { FactoryBreadcrumbs } from '../ui/FactoryBreadcrumbs';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
@@ -24,7 +26,25 @@ import { useInteractionIdle } from '../domains/factory/components/knowledge/useI
  * the `?thread=` search param so the view is linkable and back-button safe.
  */
 export function KnowledgePage() {
-  return <FactoryPageShell>{project => <KnowledgeContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  return (
+    <FactoryPage>
+      {project => (
+        <PageLayout
+          variant="fit"
+          breadcrumbs={
+            <FactoryBreadcrumbs
+              crumbs={[
+                { id: 'factory', label: project.name, to: `/factories/${project.id}/overview` },
+                { id: 'knowledge', label: 'Knowledge' },
+              ]}
+            />
+          }
+        >
+          <KnowledgeContent factoryProjectId={project.id} />
+        </PageLayout>
+      )}
+    </FactoryPage>
+  );
 }
 
 /** One hop in the node trail (A7): the nodes visited via clicks/wikilinks. */

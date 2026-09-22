@@ -1,3 +1,4 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -7,8 +8,6 @@ import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
-import { Sidebar } from '../Sidebar';
-import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { PageTitle } from '../domains/chat/components/PageTitle';
@@ -26,7 +25,6 @@ import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThr
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
-import { ChatLayout } from '../layouts/ChatLayout';
 
 import '../domains/chat/components/chat-enter.css';
 
@@ -42,21 +40,18 @@ export function ThreadPage() {
   const resolvingSession = factoryQuery.isPending || workspace.isPending;
 
   return (
-    <ChatLayout
-      sidebar={<Sidebar />}
-      main={
-        resolvingSession ? (
-          <ResolvingSessionMain />
-        ) : (
-          <ChatSessionBoundary threadId={threadId}>
-            <PageTitle />
-            <WorkspaceFilesProvider>
-              <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
-            </WorkspaceFilesProvider>
-          </ChatSessionBoundary>
-        )
-      }
-    />
+    <PageLayout variant="fit">
+      {resolvingSession ? (
+        <ResolvingSessionMain />
+      ) : (
+        <ChatSessionBoundary threadId={threadId}>
+          <PageTitle />
+          <WorkspaceFilesProvider>
+            <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
+          </WorkspaceFilesProvider>
+        </ChatSessionBoundary>
+      )}
+    </PageLayout>
   );
 }
 
@@ -65,9 +60,6 @@ function ResolvingSessionMain() {
     <>
       <SessionFavicon state="initializing" />
       <ChatShell className="flex-1">
-        <ChatShell.Bar>
-          <ChatHeader />
-        </ChatShell.Bar>
         <div className="grid min-h-0 flex-1 place-items-center">
           <Spinner aria-label="Loading session" className="text-muted-foreground" />
         </div>

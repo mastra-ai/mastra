@@ -28,6 +28,7 @@ export interface CrumbProps {
   as: React.ElementType;
   className?: string;
   to?: string;
+  href?: string;
   prefetch?: boolean | null;
   children?: React.ReactNode;
   /** Prefix icon (bare SVG). The crumb wraps it in `<Icon>` and aligns it like a Button adornment. */

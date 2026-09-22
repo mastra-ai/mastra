@@ -78,7 +78,7 @@ function GithubIntakeSection({
               ? 'Connect GitHub to sync issues from this organization.'
               : "Open issues from the selected repositories feed every member's board. Pull requests always appear in Review.";
   const action = statusUnavailable ? (
-    <Button size="xs" variant="ghost" disabled={statusRefetching} onClick={onRetryStatus}>
+    <Button size="sm" variant="ghost" disabled={statusRefetching} onClick={onRetryStatus}>
       Retry
     </Button>
   ) : undefined;

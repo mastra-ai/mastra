@@ -2,6 +2,7 @@ import { Badge, type BadgeVariant } from '@mastra/playground-ui/components/Badge
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
@@ -23,7 +24,8 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
 import { dayHeading, groupByDay } from '../domains/factory/activity';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { FactoryPage } from '../domains/factory/components/FactoryPage';
+import { FactoryBreadcrumbs } from '../ui/FactoryBreadcrumbs';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
 import { TIMESTAMP } from '../domains/factory/components/panel';
@@ -60,7 +62,24 @@ const STATUS_STYLE: Record<
 
 /** Rule decisions and their durable queued effects for the active Factory. */
 export function RulesPage() {
-  return <FactoryPageShell>{project => <RulesContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  return (
+    <FactoryPage>
+      {project => (
+        <PageLayout
+          breadcrumbs={
+            <FactoryBreadcrumbs
+              crumbs={[
+                { id: 'factory', label: project.name, to: `/factories/${project.id}/overview` },
+                { id: 'rules', label: 'Rules' },
+              ]}
+            />
+          }
+        >
+          <RulesContent factoryProjectId={project.id} />
+        </PageLayout>
+      )}
+    </FactoryPage>
+  );
 }
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {

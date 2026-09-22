@@ -24,10 +24,7 @@ export function ChatHeader({ mobileContent, children, className, ...props }: Cha
   if (!showHeaderControls && !content && !children) return null;
 
   return (
-    <header
-      className={cn('flex h-(--page-header-height) min-w-0 shrink-0 items-center gap-2 px-3', className)}
-      {...props}
-    >
+    <header className={cn('flex h-12 lg:h-11 min-w-0 shrink-0 items-center gap-2 px-3', className)} {...props}>
       <ChatHeaderSidebarTrigger isMobile={isMobile} sidebarCollapsed={sidebarCollapsed} />
       {content}
       {children}

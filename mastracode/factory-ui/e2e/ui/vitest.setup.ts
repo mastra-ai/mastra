@@ -1,7 +1,11 @@
 import * as matchers from '@testing-library/jest-dom/matchers';
 
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { expect, afterAll, afterEach, beforeAll } from 'vitest';
+
+// Animation-driven surfaces (activity line, transcript folds) settle right at
+// the 1s default under full-suite load; give `waitFor`/`findBy*` more headroom.
+configure({ asyncUtilTimeout: 3000 });
 
 // Extend Vitest's `expect` with jest-dom matchers explicitly. We avoid the
 // `@testing-library/jest-dom/vitest` auto-register entry because, under pnpm's

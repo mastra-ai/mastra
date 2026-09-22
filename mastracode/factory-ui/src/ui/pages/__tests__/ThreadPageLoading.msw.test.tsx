@@ -156,6 +156,42 @@ function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSI
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
+describe('ThreadPage page layout', () => {
+  describe('when the session is resolving', () => {
+    it('shows the loading spinner inside the page layout', async () => {
+      stubThreadRoute();
+      const { container } = renderThreadRoute();
+
+      const spinner = await screen.findByLabelText('Loading session');
+      const layout = container.querySelector('[data-slot="page-layout"]');
+      expect(layout).not.toBeNull();
+      expect(layout).toContainElement(spinner);
+    });
+  });
+
+  describe('when the thread route loads', () => {
+    it('renders the composer inside the page layout', async () => {
+      const { sessionGate, messagesGate } = stubThreadRoute();
+      sessionGate.resolve();
+      messagesGate.resolve();
+      const { container } = renderThreadRoute();
+
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      expect(container.querySelector('[data-slot="page-layout"]')).toContainElement(composer);
+    });
+
+    it('renders the sidebar trigger only once', async () => {
+      const { sessionGate, messagesGate } = stubThreadRoute();
+      sessionGate.resolve();
+      messagesGate.resolve();
+      renderThreadRoute();
+
+      await screen.findByRole('region', { name: 'Thread composer' });
+      expect(screen.queryAllByRole('button', { name: /navigation menu|toggle sidebar/i })).toHaveLength(0);
+    });
+  });
+});
+
 describe('ThreadPage loading shell', () => {
   it('keeps the sidebar mounted with a main-slot spinner while the session resolves, then shows the thread', async () => {
     const { sessionGate, messagesGate } = stubThreadRoute();

@@ -219,9 +219,8 @@ describe('WorkspaceViewerPanel', () => {
       const changesButton = await screen.findByRole('button', { name: /Changes No sandbox/ });
       await user.click(changesButton);
 
-      expect(
-        await screen.findByText('No sandbox running. Changes appear once the session sandbox starts.'),
-      ).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'No sandbox running' })).toBeInTheDocument();
+      expect(screen.getByText('Changes appear once the session sandbox starts.')).toBeInTheDocument();
     });
   });
 });

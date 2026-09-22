@@ -3,15 +3,15 @@ import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSideba
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
+import { Link, MemoryRouter, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
 import { expect } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
-import Chat from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
+import { ChatSessionRouteProvider } from '../ChatSessionRouteProvider';
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
 import { ActivityLine } from '../ActivityLine';
 import { Composer } from '../Composer';
@@ -335,14 +335,27 @@ function UserThreadRouteSurface() {
   );
 }
 
+/** The route-bound providers `FactoryAppFrame` mounts, without the app chrome. */
+function RouteProviders() {
+  return (
+    <MainSidebarProvider storageKey="preparing-route-test">
+      <ChatSessionRouteProvider>
+        <OverlaysProvider>
+          <Outlet />
+        </OverlaysProvider>
+      </ChatSessionRouteProvider>
+    </MainSidebarProvider>
+  );
+}
+
 export function renderDraft() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`]}>
       <Routes>
-        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<Chat />}>
+        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<RouteProviders />}>
           <Route index element={<DraftRouteSurface />} />
         </Route>
-        <Route path="/factories/:factoryId/user/threads/:threadId" element={<Chat />}>
+        <Route path="/factories/:factoryId/user/threads/:threadId" element={<RouteProviders />}>
           <Route index element={<UserThreadRouteSurface />} />
         </Route>
       </Routes>

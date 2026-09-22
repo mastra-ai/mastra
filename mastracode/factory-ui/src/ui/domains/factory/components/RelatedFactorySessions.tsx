@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
-import { ChatHeader } from '../../chat/components/ChatHeader';
+import { SessionBar } from '../../chat/components/SessionBar';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { useWorkspacePanel } from '../../workspace-viewer/context/useWorkspacePanel';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
@@ -66,7 +66,7 @@ export function FactorySessionHeader() {
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
 
   return (
-    <ChatHeader className={cn(hasSession && 'border-border border-b md:px-5')}>
+    <SessionBar className={cn(hasSession && 'border-border border-b md:px-5')}>
       {hasSession ? (
         <div role="region" aria-label="Factory session" className="flex min-w-0 flex-1 items-center gap-2">
           {currentItem ? <WorkItemBreadcrumb item={currentItem} factoryId={factoryId} /> : null}
@@ -84,8 +84,8 @@ export function FactorySessionHeader() {
             <WorkspaceFilesToggle />
           </div>
         </div>
-      ) : null}
-    </ChatHeader>
+      ) : undefined}
+    </SessionBar>
   );
 }
 

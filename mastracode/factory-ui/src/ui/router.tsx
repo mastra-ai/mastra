@@ -14,7 +14,6 @@
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import Chat from './domains/chat/Chat';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { AuditPage } from './pages/AuditPage';
@@ -36,6 +35,7 @@ import { ThreadPage } from './pages/ThreadPage';
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
+import { FactoryAppFrame } from './layouts/FactoryAppFrame';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
@@ -144,35 +144,19 @@ export function createAppRoutes(): RouteObject[] {
           element: <FactoryLayout />,
           children: [
             {
-              element: <Chat />,
-              children: [{ index: true, element: <FactoryHomeRedirect /> }],
-            },
-            {
-              path: 'workspaces/:sessionId',
-              element: <Chat />,
+              element: <FactoryAppFrame />,
               children: [
-                { index: true, element: <NewPage /> },
-                { path: 'threads/:threadId', element: <ThreadPage /> },
-              ],
-            },
-            {
-              path: 'user/new/:draftSessionId',
-              element: <Chat />,
-              children: [{ index: true, element: <NewPage /> }],
-            },
-            {
-              path: 'user/threads/:threadId',
-              element: <Chat />,
-              children: [{ index: true, element: <ThreadPage /> }],
-            },
-            {
-              path: 'supervisor',
-              element: <Chat />,
-              children: [{ index: true, element: <SupervisorPage /> }],
-            },
-            {
-              element: <Chat />,
-              children: [
+                { index: true, element: <FactoryHomeRedirect /> },
+                {
+                  path: 'workspaces/:sessionId',
+                  children: [
+                    { index: true, element: <NewPage /> },
+                    { path: 'threads/:threadId', element: <ThreadPage /> },
+                  ],
+                },
+                { path: 'user/new/:draftSessionId', element: <NewPage /> },
+                { path: 'user/threads/:threadId', element: <ThreadPage /> },
+                { path: 'supervisor', element: <SupervisorPage /> },
                 { path: 'new', element: <NewPage /> },
                 { path: 'new-factory', element: <CreateFactoryPage /> },
                 { path: 'work', element: <WorkBoardPage /> },

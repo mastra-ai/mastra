@@ -1,5 +1,6 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, Plus } from 'lucide-react';
@@ -20,7 +21,8 @@ import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumn
 import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
 import { BoardFilters } from '../domains/factory/components/BoardFilters';
 import { CandidateCard } from '../domains/factory/components/CandidateCard';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { FactoryPage } from '../domains/factory/components/FactoryPage';
+import { FactoryBreadcrumbs } from '../ui/FactoryBreadcrumbs';
 import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
 import { IntakeColumnExtras } from '../domains/factory/components/IntakeColumnExtras';
 import { IntakeFeedNotice } from '../domains/factory/components/IntakeFeedNotice';
@@ -61,16 +63,16 @@ import { settingsSectionPath } from '../domains/settings/settingsSections';
  * agent runs.
  */
 export function WorkBoardPage() {
-  return <FactoryPageShell bleed>{factory => <Board factory={factory} kind="work" />}</FactoryPageShell>;
+  return <FactoryPage>{factory => <Board factory={factory} kind="work" />}</FactoryPage>;
 }
 
 export function ReviewBoardPage() {
-  return <FactoryPageShell bleed>{factory => <Board factory={factory} kind="review" />}</FactoryPageShell>;
+  return <FactoryPage>{factory => <Board factory={factory} kind="review" />}</FactoryPage>;
 }
 
 export function CustomBoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
-  return <FactoryPageShell bleed>{factory => <Board factory={factory} kind={boardId ?? ''} />}</FactoryPageShell>;
+  return <FactoryPage>{factory => <Board factory={factory} kind={boardId ?? ''} />}</FactoryPage>;
 }
 
 function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {
@@ -79,7 +81,21 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
   if (catalog.isError) return <p role="alert">Unable to load boards.</p>;
   const definition = catalog.data.find(board => board.id === kind);
   if (!definition) return <p role="alert">Board unavailable: this board is not installed.</p>;
-  return <InstalledBoard factory={factory} definition={definition} />;
+  return (
+    <PageLayout
+      variant="fit"
+      breadcrumbs={
+        <FactoryBreadcrumbs
+          crumbs={[
+            { id: 'factory', label: factory.name, to: `/factories/${factory.id}/overview` },
+            { id: 'board', label: definition.title },
+          ]}
+        />
+      }
+    >
+      <InstalledBoard factory={factory} definition={definition} />
+    </PageLayout>
+  );
 }
 
 function InstalledBoard({ factory, definition }: { factory: FactoryProject; definition: InstalledBoardInfo }) {
@@ -89,26 +105,22 @@ function InstalledBoard({ factory, definition }: { factory: FactoryProject; defi
 
   if (!repository) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
-        <EmptyState
-          as="h2"
-          iconSlot={<GitBranch className="text-muted-foreground size-10" />}
-          titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
-          descriptionSlot={
-            review
-              ? 'Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.'
-              : 'Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
-          }
-          actionSlot={
-            <Link
-              to={settingsSectionPath(factory.id, 'repositories')}
-              className={buttonVariants({ variant: 'primary' })}
-            >
-              Open Repository settings
-            </Link>
-          }
-        />
-      </div>
+      <EmptyState
+        variant="fill"
+        as="h2"
+        iconSlot={<GitBranch className="text-muted-foreground size-10" />}
+        titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
+        descriptionSlot={
+          review
+            ? 'Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.'
+            : 'Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
+        }
+        actionSlot={
+          <Link to={settingsSectionPath(factory.id, 'repositories')} className={buttonVariants({ variant: 'primary' })}>
+            Open Repository settings
+          </Link>
+        }
+      />
     );
   }
 

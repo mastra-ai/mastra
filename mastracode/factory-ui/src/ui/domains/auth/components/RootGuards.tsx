@@ -3,16 +3,10 @@ import { FactoryWebTelemetry } from '../../telemetry/FactoryWebTelemetry';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
-import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
+import { Navigate, Outlet, useLocation } from 'react-router';
 
 export const RootGuards = () => {
-  return (
-    <>
-      {/* Data routers keep the window scroll across navigations without this. */}
-      <ScrollRestoration />
-      <AuthGuard />
-    </>
-  );
+  return <AuthGuard />;
 };
 
 const AuthGuard = () => {

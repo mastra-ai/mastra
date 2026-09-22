@@ -163,9 +163,11 @@ describe('SupervisorPage', () => {
       await userEvent.click(within(findings).getByRole('button', { name: 'Ask supervisor' }));
 
       const composer = screen.getByRole('region', { name: 'Supervisor composer' });
-      await waitFor(() =>
-        expect(within(composer).getByRole<HTMLTextAreaElement>('textbox').value).toContain('#22874 (dec-1)'),
-      );
+      await waitFor(() => {
+        const value = within(composer).getByRole<HTMLTextAreaElement>('textbox').value;
+        expect(value).toContain('"id":"dec-1"');
+        expect(value).toContain('"workItemNumber":22874');
+      });
     });
   });
 

@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -10,8 +11,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useSupervisorHealth } from '../../hooks/useSupervisorHealth';
-import { Sidebar } from '../Sidebar';
-import { ChatHeader } from '../domains/chat/components/ChatHeader';
+import { SessionBar } from '../domains/chat/components/SessionBar';
 import { SessionChatSurface } from '../domains/chat/components/SessionChatSurface';
 import { SessionFavicon } from '../domains/chat/components/SessionFavicon';
 import { useChatCommands } from '../domains/chat/context/ChatCommandsProvider';
@@ -25,7 +25,6 @@ import {
 } from '../domains/supervisor/components/SupervisorFindingsPanel';
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { chatColumnClass, DOCK_MIN_REM, threadGeometryClass } from '../domains/workspace-viewer/layout';
-import { ChatLayout } from '../layouts/ChatLayout';
 
 import '../domains/chat/components/chat-enter.css';
 
@@ -36,18 +35,15 @@ export function SupervisorPage() {
   const { sessionThreadId } = useChatSessionContext();
 
   return (
-    <ChatLayout
-      sidebar={<Sidebar />}
-      main={
-        factoryQuery.isPending ? (
-          <ResolvingSupervisorMain />
-        ) : (
-          <ChatSessionBoundary threadId={sessionThreadId}>
-            <SupervisorMain factoryProjectId={factoryId} factoryName={factoryQuery.data?.name} />
-          </ChatSessionBoundary>
-        )
-      }
-    />
+    <PageLayout variant="fit">
+      {factoryQuery.isPending ? (
+        <ResolvingSupervisorMain />
+      ) : (
+        <ChatSessionBoundary threadId={sessionThreadId}>
+          <SupervisorMain factoryProjectId={factoryId} factoryName={factoryQuery.data?.name} />
+        </ChatSessionBoundary>
+      )}
+    </PageLayout>
   );
 }
 
@@ -56,9 +52,6 @@ function ResolvingSupervisorMain() {
     <>
       <SessionFavicon state="initializing" />
       <ChatShell className="flex-1">
-        <ChatShell.Bar>
-          <ChatHeader />
-        </ChatShell.Bar>
         <div className="grid min-h-0 flex-1 place-items-center">
           <Spinner aria-label="Loading supervisor" className="text-muted-foreground" />
         </div>
@@ -87,7 +80,7 @@ function SupervisorMain({
   const findings = health.data?.findings ?? [];
 
   const header = (
-    <ChatHeader className="border-border border-b md:px-5">
+    <SessionBar className="border-border border-b md:px-5">
       <div role="region" aria-label="Supervisor session" className="flex min-w-0 flex-1 items-center gap-2">
         <nav className="text-caption flex min-w-0 items-center gap-2" aria-label="Supervisor session breadcrumb">
           <Link
@@ -112,7 +105,7 @@ function SupervisorMain({
           />
         </div>
       </div>
-    </ChatHeader>
+    </SessionBar>
   );
   const healthError = health.isError ? (
     <Txt variant="caption" className="text-accent2 px-3 py-2">

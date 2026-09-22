@@ -1,3 +1,4 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
@@ -5,8 +6,6 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Bot, GitBranch } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
 
-import { Sidebar } from '../Sidebar';
-import { ChatLayout } from '../layouts/ChatLayout';
 import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
@@ -16,7 +15,6 @@ import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '../domains/settings/components/provider-display-name';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
-import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
@@ -43,20 +41,16 @@ export function NewPage() {
   const configurationError = projectQuery.error ?? providersQuery.error ?? undefined;
 
   return (
-    <ChatLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      main={
-        <ChatSessionBoundary>
-          <NewPageContent
-            activeFactory={activeFactory}
-            missingDefaultModel={missingDefaultModel}
-            missingCredential={missingCredential}
-            configurationError={configurationError}
-          />
-        </ChatSessionBoundary>
-      }
-    />
+    <PageLayout variant="fit">
+      <ChatSessionBoundary>
+        <NewPageContent
+          activeFactory={activeFactory}
+          missingDefaultModel={missingDefaultModel}
+          missingCredential={missingCredential}
+          configurationError={configurationError}
+        />
+      </ChatSessionBoundary>
+    </PageLayout>
   );
 }
 

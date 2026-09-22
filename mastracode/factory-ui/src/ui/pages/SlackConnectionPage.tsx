@@ -22,6 +22,7 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 import { SlackNotConfigured } from '../domains/settings/components/ConnectedAccountsSection';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
 import { connectSlackUrl, type ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
+import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { SettingsPageLayout } from './SettingsPage';
 
 const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
@@ -30,8 +31,14 @@ const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 export function SlackConnectionPage() {
+  const { factoryId = '' } = useParams<{ factoryId: string }>();
   return (
-    <SettingsPageLayout>
+    <SettingsPageLayout
+      crumbs={[
+        { id: 'connections', label: 'Connections', to: settingsSectionPath(factoryId, 'connections') },
+        { id: 'slack', label: 'Slack' },
+      ]}
+    >
       <SlackConnectionSettings />
     </SettingsPageLayout>
   );

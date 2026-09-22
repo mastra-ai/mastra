@@ -149,7 +149,7 @@ export function AuditLogList({
     <div className="min-w-0 lg:min-w-[57rem] lg:pr-1">
       <div
         className={cn(
-          'sticky top-(--page-sticky-top) z-20 hidden items-center gap-4 rounded-lg bg-fill px-3 py-2 text-column font-semibold tracking-tight text-placeholder lg:grid',
+          'sticky top-0 z-20 hidden items-center gap-4 rounded-lg bg-fill px-3 py-2 text-column font-semibold tracking-tight text-placeholder lg:grid',
           AUDIT_GRID_CLASS,
         )}
       >

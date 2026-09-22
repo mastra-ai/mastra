@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ScrollText } from 'lucide-react';
 import { useState } from 'react';
 
@@ -9,7 +10,7 @@ import { AuditLogList } from '../domains/factory/components/audit/AuditLogList';
 import { AuditCategoryFilter } from '../domains/factory/components/audit/AuditCategoryFilter';
 import { AuditRangePicker } from '../domains/factory/components/audit/AuditRangePicker';
 import { AuditTimeline } from '../domains/factory/components/audit/AuditTimeline';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { FactoryPage } from '../domains/factory/components/FactoryPage';
 import {
   AUDIT_CATEGORIES,
   auditEventBounds,
@@ -19,6 +20,7 @@ import {
   type AuditNamespace,
   type AuditTimeRange,
 } from '../domains/factory/auditPresentation';
+import { FactoryBreadcrumbs } from '../ui/FactoryBreadcrumbs';
 import { SkeletonRows } from '../ui/SkeletonRows';
 
 function AuditLogEmptyState({
@@ -70,7 +72,41 @@ function AuditLogEmptyState({
 
 export function AuditPage() {
   return (
-    <DocumentFactoryPageShell>{project => <AuditContent factoryProjectId={project.id} />}</DocumentFactoryPageShell>
+    <FactoryPage>
+      {project => (
+        <PageLayout
+          breadcrumbs={
+            <FactoryBreadcrumbs
+              crumbs={[
+                { id: 'factory', label: project.name, to: `/factories/${project.id}/overview` },
+                { id: 'audit', label: 'Audit' },
+              ]}
+            />
+          }
+          headerActions={<AuditPortalButton />}
+        >
+          <AuditContent factoryProjectId={project.id} />
+        </PageLayout>
+      )}
+    </FactoryPage>
+  );
+}
+
+function AuditPortalButton() {
+  const portalQuery = useAuditPortalLink(true);
+  const portalUrl = portalQuery.data;
+  if (!portalUrl) return null;
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => {
+        window.open(portalUrl, '_blank', 'noopener,noreferrer');
+        void portalQuery.refetch();
+      }}
+    >
+      Open in WorkOS
+    </Button>
   );
 }
 
@@ -83,7 +119,6 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
   // The axis spans everything loaded, not the current filter: categories are compared by
   // toggling them, and a scale that rescales under each toggle makes marks impossible to place.
   const historyQuery = useAuditEvents(factoryProjectId, 'all', undefined);
-  const portalQuery = useAuditPortalLink(true);
 
   const toggleCategory = (category: AuditNamespace) => {
     setSelectedCategories(current => {
@@ -112,26 +147,10 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
   const visibleEvents = selectedRange ? events.filter(event => eventInAuditRange(event, selectedRange)) : events;
   const history = historyQuery.data?.pages.flatMap(page => page.events) ?? [];
   const bounds = auditEventBounds([...events, ...history]);
-  const portalUrl = portalQuery.data;
 
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-3" aria-label="Audit history">
       <h1 className="sr-only">Audit log</h1>
-
-      <div className="min-h-control-sm flex items-center justify-end">
-        {portalUrl ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              window.open(portalUrl, '_blank', 'noopener,noreferrer');
-              void portalQuery.refetch();
-            }}
-          >
-            Open in WorkOS
-          </Button>
-        ) : null}
-      </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         {bounds ? (

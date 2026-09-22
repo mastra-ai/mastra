@@ -1,19 +1,16 @@
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import type { CrumbDef } from '@mastra/playground-ui/components/PageBreadcrumbs';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
 
-import { Sidebar } from '../Sidebar';
-import { ChatHeader } from '../domains/chat/components/ChatHeader';
-import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
-import { isSettingsSection } from '../domains/settings/settingsSections';
-import { AppShell } from '../layouts/AppShell';
+import { isSettingsSection, SETTINGS_SECTION_LABELS, settingsSectionPath } from '../domains/settings/settingsSections';
+import { FactoryBreadcrumbs } from '../ui/FactoryBreadcrumbs';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;
- * unknown sections redirect to the default. With an active factory the page
- * keeps the standard app frame (sidebar swaps to section navigation); without
- * one it renders full-bleed, as there is no sidebar to frame.
+ * unknown sections redirect to the default. The sidebar swaps to section
+ * navigation; the page itself is a standard container layout.
  */
 export function SettingsPage() {
   const { section } = useParams();
@@ -23,35 +20,24 @@ export function SettingsPage() {
     return <Navigate to="../preferences" replace state={location.state} />;
   }
   return (
-    <SettingsPageLayout>
+    <SettingsPageLayout crumbs={[{ id: 'section', label: SETTINGS_SECTION_LABELS[section] }]}>
       <SettingsPanel />
     </SettingsPageLayout>
   );
 }
 
-export function SettingsPageLayout({ children }: { children: ReactNode }) {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const { isMobile } = useMainSidebar();
+export function SettingsPageLayout({ crumbs, children }: { crumbs: CrumbDef[]; children: ReactNode }) {
+  const { factoryId = '' } = useParams<{ factoryId: string }>();
 
-  if (!factoryId) {
-    return (
-      <main className="bg-background flex min-h-dvh flex-col">
-        {isMobile && (
-          <div className="bg-background sticky top-0 z-2 shrink-0 px-3 py-2">
-            <SettingsHeader autoFocus placement="mobile" />
-          </div>
-        )}
-        <div className="flex flex-1 flex-col px-5 pb-5 lg:px-0 lg:pb-0">{children}</div>
-      </main>
-    );
-  }
   return (
-    <AppShell
-      scroll="document"
-      sidebar={<Sidebar />}
-      header={<ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />}
+    <PageLayout
+      breadcrumbs={
+        <FactoryBreadcrumbs
+          crumbs={[{ id: 'settings', label: 'Settings', to: settingsSectionPath(factoryId, 'preferences') }, ...crumbs]}
+        />
+      }
     >
       {children}
-    </AppShell>
+    </PageLayout>
   );
 }

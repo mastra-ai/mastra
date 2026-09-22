@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Tree } from '@mastra/playground-ui/components/Tree';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeft, FileDiff, Folder, FolderOpen, RefreshCw } from 'lucide-react';
@@ -54,11 +55,13 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
 
 function ChangesEmptyState({ available }: { available: boolean }) {
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <Txt variant="caption" className="text-muted-foreground">
-        {available ? 'No changes' : 'No sandbox running. Changes appear once the session sandbox starts.'}
-      </Txt>
-    </div>
+    <EmptyState
+      variant="fill"
+      iconSlot={null}
+      titleSlot={available ? 'No changes' : 'No sandbox running'}
+      descriptionSlot={available ? undefined : 'Changes appear once the session sandbox starts.'}
+      className="px-6"
+    />
   );
 }
 

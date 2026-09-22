@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 
 import type { BoardKind } from '../boardStages';
 import { stageLabel } from '../stages';
@@ -101,13 +101,12 @@ export function BoardColumnEmptyState({
         }
       : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
   return (
-    <div className="border-border rounded-card flex min-h-24 flex-col justify-center border border-dashed px-4 py-4">
-      <Txt as="p" variant="column" className="text-muted-foreground m-0">
-        {copy.title}
-      </Txt>
-      <Txt as="p" variant="meta" className="text-muted-foreground mt-1 mb-0 max-w-60 leading-5">
-        {copy.description}
-      </Txt>
-    </div>
+    <EmptyState
+      as="h3"
+      iconSlot={null}
+      className="border-border rounded-card min-h-24 border border-dashed px-4 py-4"
+      titleSlot={copy.title}
+      descriptionSlot={copy.description}
+    />
   );
 }

@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode, SVGProps } from 'react';
+import type { CrumbDef, CrumbIcon } from '@mastra/playground-ui/components/PageBreadcrumbs';
 import { AgentCrumb, AgentSwitcherAction } from '@/domains/agents/agent-crumb';
 import { DatasetCrumb, DatasetSwitcherAction } from '@/domains/datasets/dataset-crumb';
 import { McpServerCrumb, McpServerSwitcherAction } from '@/domains/mcps/mcp-crumbs';
@@ -8,23 +8,7 @@ import { ToolCrumb, ToolSwitcherAction } from '@/domains/tools/tool-crumb';
 import { WorkflowCrumb, WorkflowSwitcherAction } from '@/domains/workflows/workflow-crumbs';
 import { findNavItem } from '@/lib/nav/nav-items';
 
-export type CrumbIcon = ComponentType<SVGProps<SVGSVGElement>>;
-
-interface CrumbBase {
-  /** Stable identifier used as the React key. Prefer semantic ids like `agent` or `dataset-item`. */
-  id: string;
-  to?: string;
-  icon?: CrumbIcon;
-  /** Hook-driven control rendered next to the crumb label (e.g. an icon-only entity switcher). */
-  Action?: ComponentType;
-}
-
-export type CrumbDef = CrumbBase &
-  (
-    | { label: string; node?: never; Component?: never }
-    | { node: ReactNode; label?: never; Component?: never }
-    | { Component: ComponentType; label?: never; node?: never }
-  );
+export type { CrumbDef, CrumbIcon };
 
 type NavCrumbOverrides = Partial<Pick<CrumbDef, 'id' | 'label' | 'to' | 'icon'>>;
 

@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -10,11 +11,12 @@ import { Link } from 'react-router';
 import { useSupervisorHealth } from '../../hooks/useSupervisorHealth';
 import { useRunningSessions, useWorkItemsQuery } from '../../hooks/useWorkItems';
 import { CommitRail } from '../domains/factory/components/CommitRail';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { FactoryPage } from '../domains/factory/components/FactoryPage';
 import { StageFunnel } from '../domains/factory/components/StageFunnel';
 import { ActivityFeed, AttentionPreview, RunningList, StalledList } from '../domains/factory/components/OverviewLists';
 import { computeFactoryOverview } from '../domains/factory/overview';
 import type { LinkedRepositoryPayload } from '../domains/workspaces/services/github';
+import { FactoryBreadcrumbs } from '../ui/FactoryBreadcrumbs';
 
 const DAY_MS = 86_400_000;
 
@@ -29,10 +31,25 @@ const DEFAULT_RANGE_DAYS = 30;
 const BLOCK_TITLE = 'text-column text-muted-foreground m-0 font-semibold';
 
 export function OverviewPage() {
+  const [rangeDays, setRangeDays] = useState(DEFAULT_RANGE_DAYS);
   return (
-    <DocumentFactoryPageShell>
-      {project => <OverviewContent factoryProjectId={project.id} repository={project.repositories[0]} />}
-    </DocumentFactoryPageShell>
+    <FactoryPage>
+      {project => (
+        <PageLayout
+          breadcrumbs={
+            <FactoryBreadcrumbs
+              crumbs={[
+                { id: 'factory', label: project.name, to: `/factories/${project.id}/overview` },
+                { id: 'overview', label: 'Overview' },
+              ]}
+            />
+          }
+          headerActions={<RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />}
+        >
+          <OverviewContent factoryProjectId={project.id} repository={project.repositories[0]} rangeDays={rangeDays} />
+        </PageLayout>
+      )}
+    </FactoryPage>
   );
 }
 
@@ -45,11 +62,12 @@ export function OverviewPage() {
 export function OverviewContent({
   factoryProjectId,
   repository,
+  rangeDays = DEFAULT_RANGE_DAYS,
 }: {
   factoryProjectId: string | undefined;
   repository: LinkedRepositoryPayload | undefined;
+  rangeDays?: number;
 }) {
-  const [rangeDays, setRangeDays] = useState(DEFAULT_RANGE_DAYS);
   const itemsQuery = useWorkItemsQuery(factoryProjectId);
   const activeSessions = useRunningSessions(factoryProjectId);
   const supervisorHealth = useSupervisorHealth(factoryProjectId);
@@ -70,10 +88,10 @@ export function OverviewContent({
   if (!items) return <OverviewLoading />;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-14 pt-4 pb-16">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-14 pb-16">
       <h1 className="sr-only">Overview</h1>
 
-      <Block title="Pipeline" action={<RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />}>
+      <Block title="Pipeline">
         <StageFunnel funnel={current.funnel} pullRequests={current.pullRequests} merged={current.merged} />
       </Block>
 

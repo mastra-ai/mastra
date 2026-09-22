@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Archive, Inbox, Mail } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
@@ -13,13 +14,14 @@ import { AttentionItemRow, KindIcon } from '../domains/factory/components/Attent
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { DayHeading, RailRow, RAIL_LIST } from '../domains/factory/components/Timeline';
 import { useAttentionItemActions } from '../domains/factory/components/useAttentionItemActions';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { FactoryPage } from '../domains/factory/components/FactoryPage';
 import { attentionCountsIn, attentionGroupOf } from '../domains/factory/services/attention';
 import type {
   FactoryAttentionGroup,
   FactoryAttentionItem,
   FactoryAttentionView,
 } from '../domains/factory/services/attention';
+import { FactoryBreadcrumbs } from '../ui/FactoryBreadcrumbs';
 import { SkeletonRows } from '../ui/SkeletonRows';
 
 const VIEWS: Array<{ value: FactoryAttentionView; label: string; icon: typeof Inbox }> = [
@@ -78,7 +80,24 @@ function AttentionRail({
 }
 
 export function AttentionPage() {
-  return <DocumentFactoryPageShell>{factory => <AttentionContent factoryId={factory.id} />}</DocumentFactoryPageShell>;
+  return (
+    <FactoryPage>
+      {factory => (
+        <PageLayout
+          breadcrumbs={
+            <FactoryBreadcrumbs
+              crumbs={[
+                { id: 'factory', label: factory.name, to: `/factories/${factory.id}/overview` },
+                { id: 'attention', label: 'Attention' },
+              ]}
+            />
+          }
+        >
+          <AttentionContent factoryId={factory.id} />
+        </PageLayout>
+      )}
+    </FactoryPage>
+  );
 }
 
 export function AttentionContent({ factoryId }: { factoryId: string }) {
@@ -102,7 +121,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="attention-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 id="attention-heading" className="text-heading text-foreground m-0 font-semibold">
+          <h1 id="attention-heading" className="sr-only">
             Needs attention
           </h1>
           <p className="text-caption text-muted-foreground mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
