@@ -17,7 +17,7 @@ describe('tryGenerateWithJsonFallback', () => {
         }),
       )
       .mockResolvedValueOnce({ object: { name: 'Ana' } });
-    const agent = { generate } as unknown as Agent;
+    const agent = { generate, __getLogger: () => ({ warn: () => {} }) } as unknown as Agent;
 
     await expect(
       tryGenerateWithJsonFallback(agent, 'prompt', {
