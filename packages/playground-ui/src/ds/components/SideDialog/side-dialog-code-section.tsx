@@ -111,9 +111,13 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
           {title}
         </Section.Heading>
         <ButtonsGroup>
-          <CopyButton content={codeStr || 'No content'} />
+          <CopyButton content={codeStr || 'No content'} size="sm" />
           {hasMultilineText && (
-            <Button onClick={() => setShowAsMultilineText(!showAsMultilineText)}>
+            <Button
+              size="sm"
+              aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+              onClick={() => setShowAsMultilineText(!showAsMultilineText)}
+            >
               {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
             </Button>
           )}
