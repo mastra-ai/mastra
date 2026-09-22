@@ -167,7 +167,7 @@ A `classifier` entry evaluates workflow data with a classifier registered on the
 }
 ```
 
-If `state` is omitted, the classifier evaluates the complete entry input. A state path can start with `inputData`, `initData`, `state`, or `stepResults`. Live selector functions aren't JSON-serializable and are rejected when a code-defined workflow is stored.
+If `state` is omitted, the classifier evaluates the complete entry input. A state path can start with `inputData`, `initData`, `state`, or `stepResults`. Live selector functions are omitted from the serialized graph, so use a path mapping when the workflow will be stored and rehydrated.
 
 Classifier output has three stable paths:
 

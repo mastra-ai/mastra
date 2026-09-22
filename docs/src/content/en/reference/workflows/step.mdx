@@ -212,7 +212,7 @@ The typed step output is JSON-safe:
 
 `maxRetries` controls classifier model-call retries. `retries` controls workflow step retries. Classifier warnings, response metadata, and raw provider data aren't included in workflow output.
 
-A classifier without constructor-configured questions can't be used as a workflow step. A function-based `state` selector works in a live workflow, but can't be serialized. Use a path such as `{ path: 'inputData.message' }` for a storable workflow definition.
+A classifier without constructor-configured questions can't be used as a workflow step. A function-based `state` selector works in the live workflow but is omitted from the serialized graph. Use a path such as `{ path: 'inputData.message' }` when the workflow will be stored and rehydrated.
 
 ## Constructor parameters
 

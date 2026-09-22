@@ -58,6 +58,18 @@ When a classifier instance is passed, question keys and choice literals are infe
 ]}
 />
 
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'workflow',
+    type: 'Workflow',
+    description: 'The workflow instance for method chaining',
+  },
+]}
+/>
+
 ## State selection
 
 If `state` is omitted, the classifier evaluates the complete `inputData`. A live workflow can select state with a function:
@@ -76,7 +88,7 @@ workflow.classifier('ticket-router', {
 })
 ```
 
-Serializable paths can start with `inputData`, `initData`, `state`, or `stepResults`. A function selector can't be persisted and causes serialization to fail rather than changing the workflow's behavior.
+Serializable paths can start with `inputData`, `initData`, `state`, or `stepResults`. A function selector is omitted from the serialized graph, so use a path mapping when the workflow will be stored and rehydrated.
 
 ## Output
 
