@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import { useFilterBarContext } from './filter-bar-context';
-import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
+import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOperator } from './types';
 
 // eslint-friendly access to mock call arguments (avoids non-null assertions).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -980,6 +980,227 @@ describe('FilterBar', () => {
         <Harness fields={fields} initial={[{ id: 'scope', fieldId: 'scope', operatorId: 'is', value: 'agent-1' }]} />,
       );
       expect(within(getChips()[0] as HTMLElement).getByText('Scope')).toBeTruthy();
+    });
+  });
+
+  describe('advanced filter', () => {
+    const getAdvancedChips = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-advanced"]');
+    const getLogicToggles = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-logic"]');
+    const getEditors = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-group-editor"]');
+    const openPopover = async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Advanced filter/ }));
+      return screen.findByRole('group', { name: /^Conditions joined with/ });
+    };
+
+    function ExpressionHarness({
+      initial,
+      onChange,
+      maxDepth,
+    }: {
+      initial: FilterBarExpression;
+      onChange?: (expression: FilterBarExpression) => void;
+      maxDepth?: number;
+    }) {
+      const [value, setValue] = useState<FilterBarExpression>(initial);
+      return (
+        <FilterBar
+          fields={FIELDS}
+          operators={OPERATORS}
+          value={value}
+          maxDepth={maxDepth}
+          onValueChange={next => {
+            setValue(next);
+            onChange?.(next);
+          }}
+        >
+          <FilterBar.Chips />
+          <FilterBar.Input placeholder="Filter…" />
+        </FilterBar>
+      );
+    }
+
+    const EXPRESSION: FilterBarExpression = {
+      logic: 'and',
+      nodes: [
+        { id: 'a', fieldId: 'status', operatorId: 'is', value: 'error' },
+        {
+          id: 'g',
+          kind: 'group',
+          logic: 'or',
+          nodes: [
+            { id: 'b', fieldId: 'tags', operatorId: 'in', value: ['prod'] },
+            { id: 'c', fieldId: 'tags', operatorId: 'in', value: ['staging'] },
+          ],
+        },
+        { id: 'd', fieldId: 'traceId', operatorId: 'is', value: 'abc' },
+      ],
+    };
+
+    describe('when the value is a flat list', () => {
+      it('offers no advanced filter option and no chip', async () => {
+        render(<Harness initial={[{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'error' }]} />);
+        getInput().focus();
+        await screen.findByRole('option', { name: 'Status' });
+        expect(screen.queryByRole('option', { name: 'Advanced filter…' })).toBeNull();
+        expect(getAdvancedChips()).toHaveLength(0);
+      });
+    });
+
+    describe('when the value is an expression', () => {
+      it('renders one chip per root group with its condition count and no connectors in the bar', () => {
+        render(<ExpressionHarness initial={EXPRESSION} />);
+        expect(getAdvancedChips()).toHaveLength(1);
+        expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+        // Sub-chips live in the (closed) popover, not in the bar.
+        expect(screen.queryByRole('group', { name: 'Tags prod' })).toBeNull();
+        expect(getLogicToggles()).toHaveLength(0);
+      });
+
+      it('opens the editor with one row per condition and a connector between them', async () => {
+        render(<ExpressionHarness initial={EXPRESSION} />);
+        const editor = await openPopover();
+        expect(within(editor).getByRole('group', { name: 'Tags prod' })).toBeTruthy();
+        expect(within(editor).getByRole('group', { name: 'Tags staging' })).toBeTruthy();
+        expect([...getLogicToggles()].map(t => t.dataset.logic)).toEqual(['or']);
+      });
+
+      it('emits the toggled logic for the group', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        await openPopover();
+        fireEvent.click(screen.getByRole('button', { name: 'Joined with or, switch to and' }));
+        expect(argAt(onChange, 0, 0)).toMatchObject({
+          logic: 'and',
+          nodes: [{ id: 'a' }, { id: 'g', logic: 'and' }, { id: 'd' }],
+        });
+      });
+
+      it('commits a new condition into the group from + Filter', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Filter' }));
+
+        const input = getInput();
+        expect(input.dataset.target).toBe('g');
+        expect(input.placeholder).toBe('Add condition…');
+        expect(editor.contains(input)).toBe(true);
+        // No nested "Advanced filter…" option inside the popover.
+        input.focus();
+        await screen.findByRole('option', { name: 'Trace ID' });
+        expect(screen.queryByRole('option', { name: 'Advanced filter…' })).toBeNull();
+
+        type('trace');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        type('xyz');
+        key('Enter');
+
+        const groupNode = argAt(onChange, 0, 0).nodes[1];
+        expect(groupNode.nodes.map((n: { id: string }) => n.id)).toEqual(['b', 'c', expect.any(String)]);
+        expect(groupNode.nodes[2]).toMatchObject({ fieldId: 'traceId', value: 'xyz' });
+        expect(within(editor).getByRole('group', { name: 'Trace ID is xyz' })).toBeTruthy();
+      });
+
+      it('returns focus to + Filter on Escape with an empty query', async () => {
+        render(<ExpressionHarness initial={EXPRESSION} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Filter' }));
+        key('Escape');
+        await waitFor(() =>
+          expect(within(editor).getByRole('button', { name: 'Filter' })).toBe(document.activeElement),
+        );
+        expect(getAdvancedChips()).toHaveLength(1);
+      });
+
+      it('nests a group from + Group with the opposite logic', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Group' }));
+
+        const nested = argAt(onChange, 0, 0).nodes[1].nodes[2];
+        expect(nested).toMatchObject({ kind: 'group', logic: 'and', nodes: [] });
+        expect(getEditors()).toHaveLength(2);
+        expect(getInput().dataset.target).toBe(nested.id);
+      });
+
+      it('disables + Group at maxDepth', async () => {
+        render(<ExpressionHarness initial={EXPRESSION} maxDepth={1} />);
+        const editor = await openPopover();
+        expect((within(editor).getByRole('button', { name: 'Group' }) as HTMLButtonElement).disabled).toBe(true);
+      });
+
+      it('prunes an emptied group when the popover closes', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getAllByRole('button', { name: 'Remove Tags filter' })[0] as HTMLElement);
+        fireEvent.click(within(editor).getByRole('button', { name: 'Remove Tags filter' }));
+        // Empty group persists while editing…
+        expect(argAt(onChange, 1, 0).nodes[1]).toMatchObject({ id: 'g', nodes: [] });
+        expect(getAdvancedChips()).toHaveLength(1);
+
+        // …and disappears on close.
+        fireEvent.keyDown(editor, { key: 'Escape' });
+        await waitFor(() => expect(argAt(onChange, 2, 0).nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'd']));
+        await waitFor(() => expect(getAdvancedChips()).toHaveLength(0));
+      });
+
+      it('removes the whole group from the chip remove button', () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove advanced filter' }));
+        expect(argAt(onChange, 0, 0).nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'd']);
+      });
+
+      it('walks ←/→ across the advanced chip in the bar', () => {
+        render(<ExpressionHarness initial={EXPRESSION} />);
+        getInput().focus();
+        key('ArrowLeft');
+        expect(screen.getByRole('group', { name: 'Trace ID is abc' }).contains(document.activeElement)).toBe(true);
+        pressActive({ key: 'ArrowLeft' });
+        pressActive({ key: 'ArrowLeft' });
+        pressActive({ key: 'ArrowLeft' });
+        pressActive({ key: 'ArrowLeft' });
+        const advanced = getAdvancedChips()[0] as HTMLElement;
+        expect(advanced.contains(document.activeElement)).toBe(true);
+        expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('remove');
+        pressActive({ key: 'ArrowLeft' });
+        expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('field');
+        pressActive({ key: 'ArrowLeft' });
+        expect(screen.getByRole('group', { name: 'Status is Error' }).contains(document.activeElement)).toBe(true);
+        // Back the other way: from the Status remove button onto the advanced chip, then past it.
+        pressActive({ key: 'ArrowRight' });
+        expect(advanced.contains(document.activeElement)).toBe(true);
+        expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('field');
+        pressActive({ key: 'ArrowRight' });
+        expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('remove');
+        pressActive({ key: 'ArrowRight' });
+        expect(screen.getByRole('group', { name: 'Trace ID is abc' }).contains(document.activeElement)).toBe(true);
+      });
+
+      it('creates an advanced filter from the input and opens its popover', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={{ logic: 'and', nodes: [] }} onChange={onChange} />);
+        getInput().focus();
+        type('adv');
+        fireEvent.click(await screen.findByRole('option', { name: 'Advanced filter…' }));
+
+        expect(argAt(onChange, 0, 0)).toMatchObject({ nodes: [{ kind: 'group', logic: 'or', nodes: [] }] });
+        const editor = await screen.findByRole('group', { name: 'Conditions joined with or' });
+        const input = getInput();
+        expect(editor.contains(input)).toBe(true);
+        expect(input.placeholder).toBe('Add condition…');
+      });
+
+      it('clears items and groups together', () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        expect(argAt(onChange, 0, 0)).toEqual({ logic: 'and', nodes: [] });
+      });
     });
   });
 });
