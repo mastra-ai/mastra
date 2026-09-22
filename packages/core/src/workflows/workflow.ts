@@ -3693,42 +3693,45 @@ export class Run<
     return this.#validateSchema(step.inputSchema, inputData, 'inputData');
   }
 
-  protected async _start({
-    inputData,
-    initialState,
-    requestContext,
-    outputWriter,
-    tracingOptions,
-    format,
-    outputOptions,
-    perStep,
-    actor,
-    ...rest
-  }: (TInput extends unknown
-    ? {
-        inputData?: TInput;
-      }
-    : {
-        inputData: TInput;
-      }) &
-    (TState extends unknown
+  protected async _start(
+    {
+      inputData,
+      initialState,
+      requestContext,
+      outputWriter,
+      tracingOptions,
+      format,
+      outputOptions,
+      perStep,
+      actor,
+      ...rest
+    }: (TInput extends unknown
       ? {
-          initialState?: TState;
+          inputData?: TInput;
         }
       : {
-          initialState: TState;
-        }) & {
-      requestContext?: RequestContext<TRequestContext>;
-      outputWriter?: OutputWriter;
-      tracingOptions?: TracingOptions;
-      format?: 'legacy' | 'vnext' | undefined;
-      outputOptions?: {
-        includeState?: boolean;
-        includeResumeLabels?: boolean;
-      };
-      perStep?: boolean;
-      actor?: ActorSignal;
-    } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+          inputData: TInput;
+        }) &
+      (TState extends unknown
+        ? {
+            initialState?: TState;
+          }
+        : {
+            initialState: TState;
+          }) & {
+        requestContext?: RequestContext<TRequestContext>;
+        outputWriter?: OutputWriter;
+        tracingOptions?: TracingOptions;
+        format?: 'legacy' | 'vnext' | undefined;
+        outputOptions?: {
+          includeState?: boolean;
+          includeResumeLabels?: boolean;
+        };
+        perStep?: boolean;
+        actor?: ActorSignal;
+      } & Partial<ObservabilityContext>,
+    onDispatched?: () => void,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
@@ -3776,6 +3779,42 @@ export class Run<
       workflowSpan?.error({ error: error as Error });
       throw error;
     });
+
+    if (onDispatched) {
+      const shouldPersistSnapshot =
+        this.executionEngine.getRunPersistenceOverride(this.runId) ??
+        this.executionEngine.options.shouldPersistSnapshot;
+      if (
+        this.workflowRunStatus === 'pending' &&
+        shouldPersistSnapshot({ workflowStatus: 'waiting', stepResults: {} })
+      ) {
+        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+        const initialRunSnapshot: WorkflowRunState = {
+          runId: this.runId,
+          status: 'waiting',
+          value: initialStateToUse as Record<string, any>,
+          context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+          requestContext: (requestContext ?? new RequestContext()).toJSON(),
+          activePaths: [0],
+          activeStepsPath: {},
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        };
+        await workflowsStore?.persistWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+          snapshot: this.executionEngine.options.pruneSnapshot
+            ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
+            : initialRunSnapshot,
+        });
+      }
+      this.workflowRunStatus = 'running';
+      onDispatched();
+    }
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3835,7 +3874,8 @@ export class Run<
 
   /**
    * Starts the workflow execution without waiting for completion (fire-and-forget).
-   * Returns immediately with the runId. The workflow executes in the background.
+   * Returns with the runId after startup validation, lifecycle hooks, and durable dispatch complete.
+   * The workflow continues executing in the background.
    * Use this when you don't need to wait for the result or want to avoid polling failures.
    * @param args The input data and configuration for the workflow
    * @returns A promise that resolves immediately with the runId
@@ -3858,9 +3898,17 @@ export class Run<
         requestContext?: RequestContext<TRequestContext>;
       } & WorkflowRunStartOptions,
   ): Promise<{ runId: string }> {
-    // Fire execution in background, don't await completion
-    this._start(args).catch(err => {
-      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
+    let notifyStarted!: () => void;
+    const started = new Promise<void>(resolve => {
+      notifyStarted = resolve;
+    });
+    const execution = this._start(args, notifyStarted);
+
+    // Surface startup failures, but don't wait for the workflow to finish.
+    await Promise.race([started, execution]);
+
+    void execution.catch(error => {
+      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
     });
     return { runId: this.runId };
   }
