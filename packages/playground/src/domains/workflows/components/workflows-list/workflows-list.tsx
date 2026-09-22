@@ -6,6 +6,7 @@ import {
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { ChevronRightIcon, PauseIcon, WorkflowIcon } from 'lucide-react';
@@ -42,11 +43,11 @@ function TreeConnector({ guides, isLastChild }: { guides: boolean[]; isLastChild
   return (
     <span aria-hidden className="-my-6 flex shrink-0 self-stretch">
       {guides.map((show, index) => (
-        <span key={index} className={cn('w-6', show && 'border-l border-border1')} />
+        <span key={index} className={cn('w-6', show && 'border-l border-border')} />
       ))}
       <span className="relative w-6">
-        <span className={cn('absolute left-0 top-0 border-l border-border1', isLastChild ? 'h-1/2' : 'h-full')} />
-        <span className="border-border1 absolute top-1/2 left-0 w-3.5 border-b" />
+        <span className={cn('absolute left-0 top-0 border-l border-border', isLastChild ? 'h-1/2' : 'h-full')} />
+        <span className="border-border absolute top-1/2 left-0 w-3.5 border-b" />
       </span>
     </span>
   );
@@ -78,7 +79,10 @@ function TreeToggleCell({
           type="button"
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} nested workflows of ${workflowName}`}
-          className="text-muted-foreground hover:text-placeholder relative grid size-5 shrink-0 place-items-center before:absolute before:-inset-1.5 before:content-['']"
+          className={cn(
+            quietTextHover,
+            "relative grid size-5 shrink-0 place-items-center before:absolute before:-inset-1.5 before:content-['']",
+          )}
           onClick={event => {
             event.stopPropagation();
             onToggle();
@@ -165,7 +169,7 @@ function WorkflowRow({
             {hasNested ? (
               <span
                 title={`Nested workflows: ${nestedIds.join(', ')}`}
-                className="text-ui-smd text-muted-foreground inline-flex shrink-0 items-center gap-1"
+                className="text-body-sm text-muted-foreground inline-flex shrink-0 items-center gap-1"
               >
                 <WorkflowIcon aria-hidden className="size-3.5" />
                 {nestedIds.length}
@@ -302,7 +306,7 @@ export function WorkflowsList({ workflows, isLoading, search = '', sort, onSortC
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
                     <span
                       title="Nested workflow not registered standalone"
-                      className="text-ui-smd text-muted-foreground shrink-0"
+                      className="text-body-sm text-muted-foreground shrink-0"
                     >
                       inline
                     </span>

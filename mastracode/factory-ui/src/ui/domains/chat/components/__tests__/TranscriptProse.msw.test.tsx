@@ -38,11 +38,13 @@ describe('assistant prose', () => {
     ]);
 
     expect(screen.getByText('agent.stream()').tagName).toBe('CODE');
-    fireEvent.click(screen.getByRole('button', { name: 'Hide reasoning' }));
+    const toggle = screen.getByRole('button', { name: 'Reasoning' });
+
+    fireEvent.click(toggle);
     expect(screen.queryByText('agent.stream()')).toBeNull();
     expect(screen.getByText('Here is the answer.')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show reasoning' }));
+    fireEvent.click(toggle);
     expect(screen.getByText('agent.stream()')).toBeTruthy();
   });
 
@@ -69,7 +71,7 @@ describe('assistant prose', () => {
     const finished = { ...part, state: 'done' as const };
     rerender(<TranscriptEntries entries={[assistant([finished])]} onApprove={() => {}} onRespond={() => {}} />);
     expect(screen.queryByText('Reasoning...')).toBeNull();
-    expect(screen.queryByRole('button', { name: /reasoning/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /reasoning/i })).toBeNull();
   });
 
   it('reads a reply cut into parts as one markdown document', () => {

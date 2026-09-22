@@ -170,14 +170,14 @@ function DatasetItemVersionsComparePage() {
             </CardHeader>
             <CardContent className="grid content-start gap-5 overflow-y-auto">
               {isLoading ? (
-                <div className="text-muted-foreground text-ui-md">Loading...</div>
+                <div className="text-muted-foreground text-body">Loading...</div>
               ) : leftItem ? (
                 <DatasetItemDetails
                   item={leftItem}
                   diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
                 />
               ) : (
-                <div className="text-muted-foreground text-ui-md">Item data not available</div>
+                <div className="text-muted-foreground text-body">Item data not available</div>
               )}
             </CardContent>
           </Card>
@@ -201,14 +201,14 @@ function DatasetItemVersionsComparePage() {
                   descriptionSlot="Pick a version above to compare it with the one on the left."
                 />
               ) : isRightLoading ? (
-                <div className="text-muted-foreground text-ui-md">Loading...</div>
+                <div className="text-muted-foreground text-body">Loading...</div>
               ) : rightItem ? (
                 <DatasetItemDetails
                   item={rightItem}
                   diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
                 />
               ) : (
-                <div className="text-muted-foreground text-ui-md">Version {rightNumber} not found</div>
+                <div className="text-muted-foreground text-body">Version {rightNumber} not found</div>
               )}
             </CardContent>
           </Card>

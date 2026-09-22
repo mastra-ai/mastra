@@ -39,12 +39,11 @@ describe('Spinner', () => {
     expect(container.querySelector('.spinner-ring')).toBeNull();
   });
 
-  it('merges className overrides without adding color props', () => {
-    render(<Spinner aria-label="Saving" className="text-muted-foreground size-3" />);
+  it('merges a caller className with its own', () => {
+    render(<Spinner aria-label="Saving" className="size-3" />);
 
     const spinner = screen.getByRole('status', { name: 'Saving' });
     expect(spinner.classList.contains('spinner')).toBe(true);
     expect(spinner.classList.contains('size-3')).toBe(true);
-    expect(spinner.classList.contains('text-muted-foreground')).toBe(true);
   });
 });

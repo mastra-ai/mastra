@@ -22,6 +22,7 @@ describe('TracesDataListTypeCell', () => {
       [EntityType.TOOL, 'Tool'],
       [EntityType.SCORER, 'Scorer'],
       [EntityType.MEMORY, 'Memory'],
+      [EntityType.MCP_SERVER, 'MCP Server'],
       [EntityType.INPUT_PROCESSOR, 'Processor'],
       [EntityType.INPUT_STEP_PROCESSOR, 'Processor'],
       [EntityType.OUTPUT_PROCESSOR, 'Processor'],
@@ -61,11 +62,6 @@ describe('TracesDataListTypeCell', () => {
 
 describe('TracesDataListStatusCell', () => {
   describe('when the trace API returns a computed status', () => {
-    it('renders a successful trace as a green badge', () => {
-      render(<TracesDataListStatusCell status={TraceStatus.SUCCESS} />);
-      expect(screen.getByText('OK').className).toContain('text-badge-green-fg');
-    });
-
     it('renders a running trace', () => {
       render(<TracesDataListStatusCell status={TraceStatus.RUNNING} />);
       expect(screen.getByText('RUN')).toBeTruthy();

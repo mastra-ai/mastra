@@ -17,11 +17,11 @@ export type LoginLayoutProps = {
  */
 export function LoginLayout({ title, description, errorBanner, children }: LoginLayoutProps) {
   return (
-    <div data-testid="login-page" className="bg-surface1 flex min-h-screen items-center justify-center">
+    <div data-testid="login-page" className="bg-sidebar flex min-h-screen items-center justify-center">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center space-y-2">
           <LogoWithoutText className="h-10 w-10" />
-          <h1 className="text-foreground text-header-md font-semibold">{title}</h1>
+          <h1 className="text-foreground text-heading">{title}</h1>
         </div>
 
         {description}

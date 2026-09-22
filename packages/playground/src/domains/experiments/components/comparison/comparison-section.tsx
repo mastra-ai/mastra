@@ -30,7 +30,7 @@ export function ComparisonSection({
       <div className="flex min-h-6 items-center justify-between gap-2">
         <CollapsibleTrigger
           className={cn(
-            'text-ui-md flex items-center gap-1.5 font-semibold [&>svg]:size-4',
+            'text-subheading flex items-center gap-1.5 [&>svg]:size-4',
             tone === 'negative' ? 'text-negative1' : 'text-foreground',
           )}
         >

@@ -1,6 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover, quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { ArrowUpIcon, BookOpen, FileText, GraduationCap, Wrench } from 'lucide-react';
 import { nanoid } from 'nanoid';
@@ -108,15 +111,15 @@ export const SkillBuilderStarter = () => {
   };
 
   return (
-    <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-4 py-16">
+    <div className="starter-aurora bg-sidebar flex min-h-full flex-col items-center justify-center px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <h1 className="starter-heading text-foreground text-header-lg md:text-header-xl text-center font-serif tracking-tight">
+        <h1 className="starter-heading text-foreground text-title md:text-display font-display text-center tracking-tight">
           What skill do you want to build?
         </h1>
 
         <form onSubmit={handleSubmit}>
           <div
-            className="starter-prompt border-border1 bg-surface2 duration-normal ease-out-custom focus-within:border-neutral3 rounded-2xl border transition-colors"
+            className="starter-prompt border-border bg-background duration-normal ease-out-custom focus-within:border-muted-foreground rounded-2xl border transition-colors"
             style={{ viewTransitionName: 'skill-chat-composer' }}
           >
             <Textarea
@@ -129,7 +132,7 @@ export const SkillBuilderStarter = () => {
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isCreating}
-              className="text-ui-md placeholder:text-muted-foreground min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
+              className="text-body placeholder:text-muted-foreground min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
               rows={3}
             />
             <div className="flex items-center justify-end px-3 pb-2.5">
@@ -164,9 +167,13 @@ export const SkillBuilderStarter = () => {
                 onClick={() => handleExampleClick(example.prompt)}
                 data-testid={`skill-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + i * 40}ms` }}
-                className="starter-chip group border-border1 text-ui-sm text-muted-foreground duration-normal ease-out-custom hover:border-border2 hover:bg-surface2 hover:text-foreground inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2 transition-colors"
+                className={cn(
+                  'starter-chip group border-border text-caption hover:border-border-strong hover:bg-fill-subtle inline-flex items-center gap-2 rounded-full border bg-transparent px-4 py-2',
+                  quietTextHover,
+                  controlStateColorTransition,
+                )}
               >
-                <Icon className="text-muted-foreground group-hover:text-foreground h-3.5 w-3.5 transition-colors" />
+                <Icon className={cn('h-3.5 w-3.5', quietTextHoverInGroup, controlStateColorTransition)} />
                 {example.title}
               </button>
             );
