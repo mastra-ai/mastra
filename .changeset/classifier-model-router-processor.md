@@ -28,4 +28,6 @@ new Agent({
 
 `onRoute` reports which model was chosen, the confidence behind it, and why the router abstained when it did.
 
+Routing isn't guaranteed to save money. Prompt caches aren't shared between models, so switching models pays full price for the conversation again, and a cheaper model can take more steps. Measure total cost and quality on your own traffic before enabling it.
+
 Pass a `classifier` you already own instead of `choices` to route on an existing `Classifier`, using `question`/`models` for a single choice question or `select` to combine several questions at once. Routing applies to the whole run by default; `scope: 'first-step'` routes only the opening call. Routing fails open to the agent's configured model on classifier error, and `minProbability` fails closed when the evaluation model returns no distribution for a choice answer.
