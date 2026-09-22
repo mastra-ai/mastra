@@ -1075,11 +1075,11 @@ describe('FilterBar', () => {
         });
       });
 
-      it('commits a new condition into the group from + Filter', async () => {
+      it('commits a new condition into the group from + Condition', async () => {
         const onChange = vi.fn();
         render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
         const editor = await openPopover();
-        fireEvent.click(within(editor).getByRole('button', { name: 'Filter' }));
+        fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
 
         const input = getInput();
         expect(input.dataset.target).toBe('g');
@@ -1103,13 +1103,13 @@ describe('FilterBar', () => {
         expect(within(editor).getByRole('group', { name: 'Trace ID is xyz' })).toBeTruthy();
       });
 
-      it('returns focus to + Filter on Escape with an empty query', async () => {
+      it('returns focus to + Condition on Escape with an empty query', async () => {
         render(<ExpressionHarness initial={EXPRESSION} />);
         const editor = await openPopover();
-        fireEvent.click(within(editor).getByRole('button', { name: 'Filter' }));
+        fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
         key('Escape');
         await waitFor(() =>
-          expect(within(editor).getByRole('button', { name: 'Filter' })).toBe(document.activeElement),
+          expect(within(editor).getByRole('button', { name: 'Condition' })).toBe(document.activeElement),
         );
         expect(getAdvancedChips()).toHaveLength(1);
       });
@@ -1124,6 +1124,24 @@ describe('FilterBar', () => {
         expect(nested).toMatchObject({ kind: 'group', logic: 'and', nodes: [] });
         expect(getEditors()).toHaveLength(2);
         expect(getInput().dataset.target).toBe(nested.id);
+      });
+
+      it('lets a nested group switch logic and be removed from its header', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Group' }));
+        // The new group's input opens its typeahead, which aria-hides the rest of the popover.
+        key('Escape');
+        const card = editor.querySelector('[data-slot="filter-bar-editor-nested"]') as HTMLElement;
+        await waitFor(() => expect(within(card).getByText('· 0 conditions')).toBeTruthy());
+
+        fireEvent.click(within(card).getByRole('radio', { name: 'Join with or' }));
+        expect(onChange.mock.lastCall?.[0].nodes[1].nodes[2]).toMatchObject({ kind: 'group', logic: 'or' });
+
+        fireEvent.click(within(card).getByRole('button', { name: 'Remove group' }));
+        expect(onChange.mock.lastCall?.[0].nodes[1].nodes.map((n: { id: string }) => n.id)).toEqual(['b', 'c']);
+        await waitFor(() => expect(getEditors()).toHaveLength(1));
       });
 
       it('disables + Group at maxDepth', async () => {

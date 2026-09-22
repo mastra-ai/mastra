@@ -1,14 +1,18 @@
-import { FolderPlusIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { FolderIcon, FolderPlusIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { FilterBarChip } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
+import { countLeaves } from './filter-bar-tree';
 import type { FilterBarGroup, FilterBarLogic } from './types';
 import { isFilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
+
+const connectorClass =
+  'flex h-control-sm w-14 shrink-0 items-center justify-center rounded-md text-column tracking-wide text-muted-foreground uppercase';
 
 export type FilterBarLogicToggleProps = {
   groupId: string;
@@ -16,7 +20,7 @@ export type FilterBarLogicToggleProps = {
   className?: string;
 };
 
-/** Tiny `and` / `or` button between two rows; every connector of a group shares its logic. */
+/** `and` / `or` connector in front of a row; every connector of a group shares its logic. */
 export function FilterBarLogicToggle({ groupId, logic, className }: FilterBarLogicToggleProps) {
   const ctx = useFilterBarContext();
   const next: FilterBarLogic = logic === 'and' ? 'or' : 'and';
@@ -28,8 +32,9 @@ export function FilterBarLogicToggle({ groupId, logic, className }: FilterBarLog
       aria-label={`Joined with ${logic}, switch to ${next}`}
       title={`Switch to ${next}`}
       className={cn(
-        'filter-bar-logic w-fit shrink-0 cursor-pointer rounded-md px-1 text-column tracking-wide text-muted-foreground uppercase outline-none',
-        'hover:bg-fill-subtle hover:text-foreground focus-visible:bg-fill-hover focus-visible:text-foreground',
+        connectorClass,
+        'filter-bar-logic cursor-pointer border border-border bg-fill-subtle outline-none',
+        'hover:bg-fill-hover hover:text-foreground focus-visible:bg-fill-hover focus-visible:text-foreground',
         className,
       )}
       onClick={() => ctx.setLogic(groupId, next)}
@@ -39,21 +44,52 @@ export function FilterBarLogicToggle({ groupId, logic, className }: FilterBarLog
   );
 }
 
+/** Segmented `and | or` control shown in a nested group's header. */
+function FilterBarLogicSwitch({ groupId, logic }: { groupId: string; logic: FilterBarLogic }) {
+  const ctx = useFilterBarContext();
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Group logic"
+      className="h-control-sm border-border bg-fill-subtle flex items-center gap-0.5 rounded-md border p-0.5"
+    >
+      {(['and', 'or'] as const).map(value => (
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={logic === value}
+          aria-label={`Join with ${value}`}
+          className={cn(
+            'h-full cursor-pointer rounded-sm px-1.5 text-column tracking-wide uppercase outline-none',
+            'focus-visible:bg-fill-hover',
+            logic === value ? 'bg-fill-hover text-foreground' : 'text-muted-foreground hover:text-foreground',
+          )}
+          onClick={() => logic !== value && ctx.setLogic(groupId, value)}
+        >
+          {value}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export type FilterBarGroupEditorProps = {
   group: FilterBarGroup;
   /** Nesting level of `group` (root-level group = 1). */
   depth: number;
-  /** Drops this group; rendered as a trailing action in the footer. */
+  /** Drops this group; rendered as a trailing `Clear all` in the footer. */
   onRemove?: () => void;
   removeLabel?: string;
   className?: string;
 };
 
 /**
- * Recursive rule builder shown in an advanced-filter popover: one editable chip per
- * condition, a shared connector between rows, nested groups as indented blocks, and
- * `+ Filter` / `+ Group` actions. The shared typeahead input renders inline at the end of
- * the group it is pointed at.
+ * Recursive rule builder shown in an advanced-filter popover. Rows are laid out as
+ * `connector | condition`: the first row reads `where`, the following ones carry the
+ * group's `and` / `or` toggle. Nested groups render as bordered cards with their own
+ * header (logic switch + remove) and footer. The shared typeahead input renders as the
+ * last row of the group it is pointed at.
  */
 export function FilterBarGroupEditor({
   group,
@@ -68,7 +104,7 @@ export function FilterBarGroupEditor({
   const targeted = ctx.inputTarget === group.id;
   const canNest = depth < ctx.maxDepth;
 
-  // `+ Filter` is hidden while the input is open; focus it once it remounts.
+  // `+ Condition` is hidden while the input is open; focus it once it remounts.
   useEffect(() => {
     if (targeted || !focusAddFilter.current) return;
     focusAddFilter.current = false;
@@ -76,27 +112,46 @@ export function FilterBarGroupEditor({
   }, [targeted]);
 
   const rows: ReactNode[] = [];
-  const connector = (key: string) => (
-    <FilterBarLogicToggle key={`${key}:logic`} groupId={group.id} logic={group.logic} />
-  );
+  const connector = (key: string) =>
+    rows.length === 0 ? (
+      <span key={`${key}:where`} className={connectorClass}>
+        where
+      </span>
+    ) : (
+      <FilterBarLogicToggle key={`${key}:logic`} groupId={group.id} logic={group.logic} />
+    );
   for (const node of group.nodes) {
-    if (rows.length > 0) rows.push(connector(node.id));
     rows.push(
-      isFilterBarGroup(node) ? (
-        <NestedGroupRow key={node.id} group={node} depth={depth + 1} />
-      ) : (
-        <Fragment key={node.id}>
+      <Fragment key={node.id}>
+        {connector(node.id)}
+        {isFilterBarGroup(node) ? (
+          <NestedGroupCard group={node} depth={depth + 1} />
+        ) : (
           <FilterBarChip item={node} className="w-fit" />
-        </Fragment>
-      ),
+        )}
+      </Fragment>,
     );
   }
   if (ctx.draft && ctx.draft.groupId === group.id) {
     const { id, fieldId, operatorId = '' } = ctx.draft;
-    if (rows.length > 0) rows.push(connector(id));
     rows.push(
       <Fragment key={id}>
+        {connector(id)}
         <FilterBarChip draft item={{ id, fieldId, operatorId, value: '' }} className="w-fit" />
+      </Fragment>,
+    );
+  }
+  if (targeted) {
+    rows.push(
+      <Fragment key="input">
+        {connector('input')}
+        <FilterBarInput
+          groupId={group.id}
+          placeholder="Add condition…"
+          onLeave={() => {
+            focusAddFilter.current = true;
+          }}
+        />
       </Fragment>,
     );
   }
@@ -107,44 +162,47 @@ export function FilterBarGroupEditor({
       data-depth={depth}
       role="group"
       aria-label={`Conditions joined with ${group.logic}`}
-      className={cn('flex min-w-0 flex-col items-start gap-1.5', className)}
+      className={cn('flex min-w-0 flex-col', className)}
     >
-      {rows}
-      {targeted && (
-        <FilterBarInput
-          groupId={group.id}
-          placeholder="Add condition…"
-          onLeave={() => {
-            focusAddFilter.current = true;
-          }}
-          className={rows.length > 0 ? 'mt-1' : undefined}
-        />
+      {rows.length > 0 && (
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1.5 p-2">{rows}</div>
       )}
-      <div data-slot="filter-bar-editor-actions" className="text-muted-foreground flex w-full items-center gap-0.5">
+      <div
+        data-slot="filter-bar-editor-actions"
+        className={cn('flex w-full items-center gap-1 p-1', rows.length > 0 && 'border-t border-border')}
+      >
         {!targeted && (
           <Button
             ref={addFilterRef}
             variant="ghost"
-            size="icon-sm"
-            tooltip="Filter"
+            size="sm"
+            icon={<PlusIcon />}
             onClick={() => ctx.openGroupInput(group.id)}
           >
-            <PlusIcon />
+            Condition
           </Button>
         )}
         <Button
           variant="ghost"
-          size="icon-sm"
-          aria-label="Group"
-          tooltip={canNest ? 'Group' : `Groups can nest ${ctx.maxDepth} levels deep`}
+          size="sm"
+          icon={<FolderPlusIcon />}
+          className="text-muted-foreground"
+          tooltip={canNest ? undefined : `Groups can nest ${ctx.maxDepth} levels deep`}
           disabled={!canNest}
           onClick={() => ctx.addGroup(group.id, group.logic === 'and' ? 'or' : 'and')}
         >
-          <FolderPlusIcon />
+          Group
         </Button>
         {onRemove && (
-          <Button variant="ghost" size="icon-sm" className="ml-auto" tooltip={removeLabel} onClick={onRemove}>
-            <Trash2Icon />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Trash2Icon />}
+            className="text-muted-foreground ml-auto"
+            aria-label={removeLabel}
+            onClick={onRemove}
+          >
+            Clear all
           </Button>
         )}
       </div>
@@ -152,11 +210,12 @@ export function FilterBarGroupEditor({
   );
 }
 
-function NestedGroupRow({ group, depth }: { group: FilterBarGroup; depth: number }) {
+function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: number }) {
   const ctx = useFilterBarContext();
   const rootRef = useRef<HTMLDivElement>(null);
   const leaving = ctx.leaving.has(group.id);
   useSettleOnLeave(group.id, leaving, rootRef);
+  const count = countLeaves(group);
 
   return (
     <div
@@ -165,15 +224,30 @@ function NestedGroupRow({ group, depth }: { group: FilterBarGroup; depth: number
       data-leaving={leaving || undefined}
       aria-hidden={leaving || undefined}
       className={cn(
-        'filter-bar-editor-nested my-1 w-full rounded-lg border border-border p-2',
+        'filter-bar-editor-nested w-full overflow-hidden rounded-lg border border-border',
         leaving && 'pointer-events-none',
       )}
     >
-      <FilterBarGroupEditor
-        group={group}
-        depth={depth}
-        onRemove={leaving ? undefined : () => ctx.removeGroup(group.id)}
-      />
+      <div className="border-border flex items-center gap-2 border-b px-2 py-1">
+        <FolderIcon className="text-muted-foreground size-3.5" />
+        <span className="text-label text-foreground">Group</span>
+        <span className="text-label text-muted-foreground">
+          · {count} {count === 1 ? 'condition' : 'conditions'}
+        </span>
+        <div className="ml-auto flex items-center gap-1">
+          <FilterBarLogicSwitch groupId={group.id} logic={group.logic} />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            tooltip="Remove group"
+            disabled={leaving}
+            onClick={() => ctx.removeGroup(group.id)}
+          >
+            <Trash2Icon />
+          </Button>
+        </div>
+      </div>
+      <FilterBarGroupEditor group={group} depth={depth} />
     </div>
   );
 }
