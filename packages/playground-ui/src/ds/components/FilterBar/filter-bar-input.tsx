@@ -201,13 +201,12 @@ export function FilterBarInput({
     }
   };
 
-  const items: readonly Item[] = emptyForStepChange
-    ? EMPTY_ITEMS
-    : step === 'field'
-      ? visibleFields
-      : step === 'operator'
-        ? fieldOperators
-        : valueStep.options;
+  const optionsForStep: Record<Step, readonly Item[]> = {
+    field: visibleFields,
+    operator: fieldOperators,
+    value: valueStep.options,
+  };
+  const items: readonly Item[] = emptyForStepChange ? EMPTY_ITEMS : optionsForStep[step];
 
   // A search field is the way out for text that names no field, so it survives the field
   // step's own filtering whatever was typed; every other item matches on its label.

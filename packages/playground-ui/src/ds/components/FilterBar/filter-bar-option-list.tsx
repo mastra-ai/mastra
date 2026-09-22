@@ -24,7 +24,7 @@ export function FilterBarOptionLabel({ option }: { option: FilterBarOption }) {
   return (
     <>
       {option.start}
-      <span className="truncate">{option.label ?? option.value}</span>
+      <span className="min-w-0 truncate">{option.label ?? option.value}</span>
     </>
   );
 }
