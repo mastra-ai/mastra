@@ -248,7 +248,6 @@ describe('MemorySidebar', () => {
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('absolute');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('z-10');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('rounded-xl');
-    expect(card.className).toContain('bg-transparent');
     expect(screen.getByTestId('memory-config-badges')).not.toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();

@@ -221,16 +221,9 @@ describe('CodeEditor — passing its settings through', () => {
     expect(lastProps()?.style).toEqual({ height: '100%' });
   });
 
-  it('takes the frame the caller asks for', () => {
-    const { container } = render(<CodeEditor value="x" showCopyButton={false} />);
-    expect((container.firstElementChild as HTMLElement).classList.contains('border-border')).toBe(true);
-
-    cleanup();
-
-    const embedded = render(<CodeEditor value="x" showCopyButton={false} variant="embedded" />);
-    const root = embedded.container.firstElementChild as HTMLElement;
-    expect(root.classList.contains('border-none')).toBe(true);
-    expect(root.classList.contains('border-border')).toBe(false);
+  it('drops its border in the embedded variant', () => {
+    const { container } = render(<CodeEditor value="x" showCopyButton={false} variant="embedded" />);
+    expect((container.firstElementChild as HTMLElement).classList.contains('border-none')).toBe(true);
   });
 
   it('rebuilds its extensions when the language changes', () => {

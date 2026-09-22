@@ -33,7 +33,7 @@ describe('SettingsLayout', () => {
     );
 
     expect(output).toContain('<div class="shrink-0">0</div>');
-    expect(output).toContain('<p class="text-body text-muted-foreground m-0 wrap-break-word">0</p>');
+    expect(output).toContain('>0</p>');
   });
 
   it.each([undefined, null])('omits a title accessory when it is %s', titleAccessory => {

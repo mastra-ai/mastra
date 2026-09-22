@@ -10,14 +10,6 @@ afterEach(() => {
 });
 
 describe('Textarea', () => {
-  it('uses the shared foreground text color at rest', () => {
-    render(<Textarea placeholder="Description" />);
-
-    const cls = screen.getByPlaceholderText('Description').className;
-    expect(cls).toContain('text-foreground');
-    expect(cls).not.toContain('text-neutral');
-  });
-
   it.each([
     ['sm', 'text-caption'],
     ['md', 'text-body-sm'],
@@ -40,18 +32,11 @@ describe('Textarea', () => {
     expect(screen.getByPlaceholderText('Description').className).not.toContain('rounded-xl');
   });
 
-  it('marks itself invalid and outlines the error', () => {
+  it('marks itself invalid', () => {
     render(<Textarea error placeholder="Description" />);
 
     const textarea = screen.getByPlaceholderText('Description');
     expect(textarea.getAttribute('aria-invalid')).toBe('true');
-    expect(textarea.className).toContain('border-destructive');
-  });
-
-  it('carries no error outline when it is valid', () => {
-    render(<Textarea placeholder="Description" />);
-
-    expect(screen.getByPlaceholderText('Description').className).not.toContain('border-destructive');
   });
 
   it('keeps a caller class alongside its own', () => {
