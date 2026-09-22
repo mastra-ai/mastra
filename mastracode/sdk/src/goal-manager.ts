@@ -234,6 +234,13 @@ export class GoalManager {
    * Persist the active objective to ThreadState via the agent. The objective
    * record is the source of truth; the legacy thread-metadata key is cleared so
    * stale state from older sessions does not resurface.
+   *
+   * This method only ever upserts. An empty in-memory mirror means "I have
+   * nothing *loaded*", which is not the same statement as "there is nothing" —
+   * the mirror is emptied by storage failures and thread switches as well as by
+   * the user. Only an explicit clear makes the second statement, so deletion
+   * lives in {@link deleteFromThread} and a save with an empty mirror is a
+   * complete no-op, legacy metadata included.
    */
   async saveToThread(state: GoalManagerState): Promise<void> {
     const threadId = state.session.thread.getId();
@@ -272,11 +279,37 @@ export class GoalManager {
               });
             }
           }
-        } else {
-          await agent.clearObjective({ threadId });
+          // Clear any legacy thread-metadata goal so it can't shadow the
+          // record we just wrote. Only on the path that actually wrote: on the
+          // no-op path a pre-migration thread's only goal may live in that key.
+          await state.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
         }
       }
-      // Clear any legacy thread-metadata goal so it can't shadow the record.
+    } catch {
+      // Persistence is not critical.
+    }
+  }
+
+  /**
+   * Remove the objective from the thread. This is the only method that deletes,
+   * and the caller — not the state of the in-memory mirror — expresses that
+   * intent, so it works just as well when the mirror is already empty.
+   *
+   * An explicit clear removes every place a goal can live. The legacy
+   * thread-metadata key is reachable without an agent, so it is wiped
+   * unconditionally while the durable record needs an agent and a thread. That
+   * asymmetry with {@link saveToThread} (which now writes nothing at all when
+   * its mirror is empty) is deliberate — it mirrors where this wipe sat before
+   * deletion was split out, and stops a pre-migration goal resurfacing as a
+   * shadow. Do not tidy it into symmetry.
+   */
+  async deleteFromThread(state: GoalManagerState): Promise<void> {
+    const threadId = state.session.thread.getId();
+    const agent = this.getAgent(state);
+    try {
+      if (agent && threadId) {
+        await agent.clearObjective({ threadId });
+      }
       await state.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
     } catch {
       // Persistence is not critical.

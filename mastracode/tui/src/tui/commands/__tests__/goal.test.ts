@@ -791,6 +791,7 @@ describe('handleGoalCommand', () => {
     const goalManager = {
       clear: vi.fn(),
       saveToThread: vi.fn(),
+      deleteFromThread: vi.fn(),
     };
     const abort = vi.fn();
     const state = createMockState({
@@ -812,7 +813,10 @@ describe('handleGoalCommand', () => {
     await handleGoalCommand(ctx, ['clear']);
 
     expect(goalManager.clear).toHaveBeenCalled();
-    expect(goalManager.saveToThread).toHaveBeenCalledWith(state);
+    // Deletion is a verb of its own: an explicit clear must ask for it, and a
+    // save must never be what removes the goal.
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBeUndefined();
     expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
     // Not running → must not abort.
@@ -823,6 +827,7 @@ describe('handleGoalCommand', () => {
     const goalManager = {
       clear: vi.fn(),
       saveToThread: vi.fn(),
+      deleteFromThread: vi.fn(),
     };
     const abort = vi.fn();
     const state = createMockState({
@@ -844,6 +849,8 @@ describe('handleGoalCommand', () => {
     await handleGoalCommand(ctx, ['clear']);
 
     expect(goalManager.clear).toHaveBeenCalled();
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(abort).toHaveBeenCalledTimes(1);
     expect((state as any).userInitiatedAbort).toBe(true);
     expect(state.activeInlineQuestion).toBeUndefined();
