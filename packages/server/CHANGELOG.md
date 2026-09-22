@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.69.0-alpha.1
+
+### Patch Changes
+
+- Fixed @mastra/server compatibility by requiring @mastra/core 1.58.0 or newer. Older versions of @mastra/core are missing functionality that @mastra/server depends on, so installing them together resulted in a broken setup rather than a clear version conflict. ([#24692](https://github.com/mastra-ai/mastra/pull/24692))
+
+- Updated dependencies:
+  - @mastra/core@1.69.0-alpha.1
+
 ## 1.69.0-alpha.0
 
 ### Patch Changes
