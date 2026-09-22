@@ -33,13 +33,13 @@ function item(overrides: Partial<WorkItemRow> = {}): WorkItemRow {
   } as WorkItemRow;
 }
 
-function harness(row: WorkItemRow, extraBoards = true) {
+function harness(row: WorkItemRow) {
   const update = vi.fn().mockResolvedValue({ item: row, previous: row });
   const supersedeDecisionsForWorkItem = vi.fn().mockResolvedValue(0);
   return {
     update,
     supersedeDecisionsForWorkItem,
-    boards: createBoardRegistry({ boards: extraBoards ? [createTestBoard()] : [] }),
+    boards: createBoardRegistry({ boards: [createTestBoard()] }),
   };
 }
 

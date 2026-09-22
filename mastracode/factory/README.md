@@ -409,6 +409,9 @@ Handlers receive the existing typed GitHub context and return one decision or `u
 **Placement, not transition.** An `upsertLinkedWorkItem` decision normally names a destination: the card is materialized on the board's initial phase, the arrival rule runs, and a governed transition moves it to `stage` where that phase's entry rule runs. Set `skipRules: true` to file it on `stage` directly instead, as its first entry, with none of the board's phase rules run for it — no arrival, no destination entry, no transition row. The card is filed and left parked for a person:
 
 ```typescript
+import { PlatformGithubIntegration } from '@mastra/factory/integrations/platform/github/integration';
+import { defaultGithubRules } from '@mastra/factory/integrations/github/default-rules';
+
 new PlatformGithubIntegration({
   rules: {
     // An issue whose triage is already recorded skips the triage phase
