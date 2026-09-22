@@ -1,6 +1,5 @@
 import type { MCPToolType } from '@mastra/core/mcp';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { MainContentContent } from '@mastra/playground-ui/components/MainContent';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tabs, Tab, TabList } from '@mastra/playground-ui/components/Tabs';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -47,7 +46,7 @@ const ToolExecutorContent = ({
   const hasConfiguration = hasInputFields || Boolean(requestContextSchema);
 
   return (
-    <MainContentContent>
+    <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
       <div className="flex w-full flex-col items-center p-5 lg:flex-row lg:items-start lg:justify-center">
         <div className="grid w-full max-w-3xl min-w-0 content-start gap-5">
           <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
@@ -88,7 +87,7 @@ const ToolExecutorContent = ({
           <CodeEditor value={errorString || code} language="json" editable={false} />
         </div>
       </div>
-    </MainContentContent>
+    </div>
   );
 };
 

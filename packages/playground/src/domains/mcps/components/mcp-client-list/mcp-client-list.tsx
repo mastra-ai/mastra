@@ -145,11 +145,6 @@ export function MCPClientList() {
           <div className="rounded-xl border border-dashed border-border-strong py-5 text-center">
             <EmptyState
               className="py-4!"
-              iconSlot={
-                <div className="flex size-6 items-center justify-center rounded-full bg-card p-2 text-muted-foreground">
-                  <LaptopMinimal className="size-6" />
-                </div>
-              }
               titleSlot="No MCP clients configured yet."
               descriptionSlot="Add one to get started."
               actionSlot={

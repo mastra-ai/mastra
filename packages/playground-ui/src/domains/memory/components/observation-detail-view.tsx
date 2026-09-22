@@ -1,4 +1,3 @@
-import { CircleSlashIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Checkbox } from '../../../ds/components/Checkbox';
 import { CodeDiff } from '../../../ds/components/CodeDiff';
@@ -319,13 +318,11 @@ export function ObservationDetailView({
 
   if (!selected) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<CircleSlashIcon className="size-4" />}
-          titleSlot="No observations"
-          descriptionSlot="No observational memory snapshots available for this thread."
-        />
-      </div>
+      <EmptyState
+        titleSlot="No observations"
+        descriptionSlot="No observational memory snapshots available for this thread."
+        variant="fill"
+      />
     );
   }
 

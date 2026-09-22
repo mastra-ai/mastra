@@ -1,13 +1,16 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useLinkComponent } from '@/lib/framework';
-import { RouteHeaderActions } from '@/lib/route-header';
+
+const crumbs = [navCrumb('/agents'), { id: 'create-agent', label: 'Create agent' }];
 
 function CreateLayoutWrapper() {
   const { navigate, paths } = useLinkComponent();
@@ -18,25 +21,27 @@ function CreateLayoutWrapper() {
     onSuccess: agentId => navigate(paths.agentLink(agentId)),
   });
 
+  const actions = (
+    <Button variant="primary" size="sm" onClick={() => void handlePublish()} disabled={isSubmitting || !canPublish}>
+      {isSubmitting ? (
+        <>
+          <Spinner className="h-4 w-4" />
+          Creating...
+        </>
+      ) : (
+        <>
+          <Icon>
+            <Check />
+          </Icon>
+          Create agent
+        </>
+      )}
+    </Button>
+  );
+
   return (
-    <MainContentLayout>
-      <RouteHeaderActions owner="cms-agent-create">
-        <Button variant="primary" onClick={() => void handlePublish()} disabled={isSubmitting || !canPublish}>
-          {isSubmitting ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Icon>
-                <Check />
-              </Icon>
-              Create agent
-            </>
-          )}
-        </Button>
-      </RouteHeaderActions>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+      <h1 className="sr-only">Create agent</h1>
       <AgentCmsFormShell
         form={form}
         mode="create"
@@ -47,7 +52,7 @@ function CreateLayoutWrapper() {
       >
         <Outlet />
       </AgentCmsFormShell>
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

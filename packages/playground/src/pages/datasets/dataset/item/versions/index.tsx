@@ -3,20 +3,20 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/Card';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns';
-import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon, GitCompareIcon } from 'lucide-react';
+import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
 import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { RouteHeaderActions } from '@/lib/route-header';
+import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
 function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {
   return {
@@ -65,6 +65,19 @@ function parseVersionParam(value: string | null): number | null {
 function DatasetItemVersionsComparePage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const crumbs: CrumbDef[] = [
+    navCrumb('/datasets'),
+    datasetCrumb,
+    {
+      id: 'dataset-item',
+      label: truncateItemIdCrumb(itemId),
+      to:
+        datasetId && itemId
+          ? `/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`
+          : undefined,
+    },
+    { id: 'dataset-item-versions', label: 'Item Version History' },
+  ];
 
   // Whole view lives in the URL so a link reproduces it:
   // ?version=3 — left column; ?compare=2 — right column; ?view=diff
@@ -102,33 +115,32 @@ function DatasetItemVersionsComparePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Item Version History</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
-        </div>
-      </MainContentLayout>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Item Version History</h1>
+        <PermissionDenied variant="fill" resource="datasets" />
+      </PageLayout>
     );
   }
 
   if (!datasetId || !itemId) {
     return (
-      <MainContentLayout>
-        <MainContentContent>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Item Version History</h1>
+        <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="py-5 text-center text-muted-foreground">
             <p>Item not found.</p>
           </div>
-        </MainContentContent>
-      </MainContentLayout>
+        </div>
+      </PageLayout>
     );
   }
 
@@ -140,10 +152,12 @@ function DatasetItemVersionsComparePage() {
   const leftIsOlder = (leftVersion?.datasetVersion ?? 0) < (rightVersion?.datasetVersion ?? 0);
 
   return (
-    <MainContentLayout>
-      <RouteHeaderActions owner="dataset-item-versions">
-        {canDiff && (
-          <Button variant="outline" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
+    <PageLayout
+      variant="fit"
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      headerActions={
+        canDiff && (
+          <Button variant="ghost" size="sm" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
             {isDiffView ? (
               <>
                 <ColumnsIcon /> Default View
@@ -154,67 +168,65 @@ function DatasetItemVersionsComparePage() {
               </>
             )}
           </Button>
-        )}
-      </RouteHeaderActions>
-
-      <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
-        <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
-          <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
-            <CardHeader>
-              <VersionSelect
-                name="version"
-                value={leftNumber != null ? String(leftNumber) : ''}
-                options={versionOptions(allVersions ?? [], rightNumber != null ? new Set([rightNumber]) : undefined)}
-                onValueChange={val => setParam('version', Number(val))}
+        )
+      }
+    >
+      <h1 className="sr-only">Item Version History</h1>
+      <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
+        <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+          <CardHeader>
+            <VersionSelect
+              name="version"
+              value={leftNumber != null ? String(leftNumber) : ''}
+              options={versionOptions(allVersions ?? [], rightNumber != null ? new Set([rightNumber]) : undefined)}
+              onValueChange={val => setParam('version', Number(val))}
+            />
+          </CardHeader>
+          <CardContent className="grid content-start gap-5 overflow-y-auto">
+            {isLoading ? (
+              <div className="text-body text-muted-foreground">Loading...</div>
+            ) : leftItem ? (
+              <DatasetItemDetails
+                item={leftItem}
+                diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
               />
-            </CardHeader>
-            <CardContent className="grid content-start gap-5 overflow-y-auto">
-              {isLoading ? (
-                <div className="text-body text-muted-foreground">Loading...</div>
-              ) : leftItem ? (
-                <DatasetItemDetails
-                  item={leftItem}
-                  diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
-                />
-              ) : (
-                <div className="text-body text-muted-foreground">Item data not available</div>
-              )}
-            </CardContent>
-          </Card>
+            ) : (
+              <div className="text-body text-muted-foreground">Item data not available</div>
+            )}
+          </CardContent>
+        </Card>
 
-          <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
-            <CardHeader>
-              <VersionSelect
-                name="compare"
-                value={rightNumber != null ? String(rightNumber) : ''}
-                placeholder="Select a version to compare"
-                options={versionOptions(allVersions ?? [], leftNumber != null ? new Set([leftNumber]) : undefined)}
-                onValueChange={val => setParam('compare', Number(val))}
+        <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+          <CardHeader>
+            <VersionSelect
+              name="compare"
+              value={rightNumber != null ? String(rightNumber) : ''}
+              placeholder="Select a version to compare"
+              options={versionOptions(allVersions ?? [], leftNumber != null ? new Set([leftNumber]) : undefined)}
+              onValueChange={val => setParam('compare', Number(val))}
+            />
+          </CardHeader>
+          <CardContent className="grid content-start gap-5 overflow-y-auto">
+            {rightNumber == null ? (
+              <EmptyState
+                className="h-full"
+                titleSlot="No version selected"
+                descriptionSlot="Pick a version above to compare it with the one on the left."
               />
-            </CardHeader>
-            <CardContent className="grid content-start gap-5 overflow-y-auto">
-              {rightNumber == null ? (
-                <EmptyState
-                  className="h-full"
-                  iconSlot={<GitCompareIcon className="size-8 text-muted-foreground" />}
-                  titleSlot="No version selected"
-                  descriptionSlot="Pick a version above to compare it with the one on the left."
-                />
-              ) : isRightLoading ? (
-                <div className="text-body text-muted-foreground">Loading...</div>
-              ) : rightItem ? (
-                <DatasetItemDetails
-                  item={rightItem}
-                  diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
-                />
-              ) : (
-                <div className="text-body text-muted-foreground">Version {rightNumber} not found</div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </PageLayout>
-    </MainContentLayout>
+            ) : isRightLoading ? (
+              <div className="text-body text-muted-foreground">Loading...</div>
+            ) : rightItem ? (
+              <DatasetItemDetails
+                item={rightItem}
+                diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
+              />
+            ) : (
+              <div className="text-body text-muted-foreground">Version {rightNumber} not found</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </PageLayout>
   );
 }
 

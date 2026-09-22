@@ -9,7 +9,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, isToday } from 'date-fns';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -42,13 +42,7 @@ export function TraceScoresTab({ traceId, spanId, onScoreSelect }: TraceScoresTa
   const scores = scoresData?.scores ?? [];
 
   if (scores.length === 0) {
-    return (
-      <EmptyState
-        iconSlot={<CircleSlashIcon />}
-        titleSlot="No scores yet"
-        descriptionSlot="Score this trace to see results here."
-      />
-    );
+    return <EmptyState titleSlot="No scores yet" descriptionSlot="Score this trace to see results here." />;
   }
 
   return (

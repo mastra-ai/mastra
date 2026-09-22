@@ -3,7 +3,7 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { LockIcon, CircleSlashIcon } from 'lucide-react';
+import { LockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { FavoriteButton } from './favorite-button';
 import { useLinkComponent } from '@/lib/framework';
@@ -88,11 +88,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
   if (filtered.length === 0) {
     return (
       <div className="flex items-center-safe justify-center-safe">
-        <EmptyState
-          iconSlot={<CircleSlashIcon className="h-8 w-8 text-muted-foreground" />}
-          titleSlot="No agents match your search"
-          descriptionSlot="Try a different name or description."
-        />
+        <EmptyState titleSlot="No agents match your search" descriptionSlot="Try a different name or description." />
       </div>
     );
   }

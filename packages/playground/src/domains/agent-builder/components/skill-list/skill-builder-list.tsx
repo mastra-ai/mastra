@@ -2,7 +2,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { CopyIcon, DownloadIcon, LockIcon, CircleSlashIcon } from 'lucide-react';
+import { CopyIcon, DownloadIcon, LockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillFavoriteButton } from './skill-favorite-button';
 import { getSkillOrigin } from '@/domains/agent-builder/utils/skill-origin';
@@ -28,11 +28,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
   if (filtered.length === 0) {
     return (
       <div className="flex items-center-safe justify-center-safe">
-        <EmptyState
-          iconSlot={<CircleSlashIcon className="h-8 w-8 text-muted-foreground" />}
-          titleSlot="No skills match your search"
-          descriptionSlot="Try a different name or description."
-        />
+        <EmptyState titleSlot="No skills match your search" descriptionSlot="Try a different name or description." />
       </div>
     );
   }

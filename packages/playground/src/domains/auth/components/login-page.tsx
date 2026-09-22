@@ -56,19 +56,11 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   const [password, setPassword] = useState('');
 
   if (isLoadingCapabilities) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-sidebar">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <div className="text-muted-foreground">Loading...</div>;
   }
 
   if (!capabilities?.enabled || !capabilities?.login) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-sidebar">
-        <div className="text-muted-foreground">Authentication is not configured</div>
-      </div>
-    );
+    return <div className="text-muted-foreground">Authentication is not configured</div>;
   }
 
   const { login } = capabilities;

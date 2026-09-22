@@ -84,7 +84,7 @@ const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
 const StudioFrame = ({ children }: { children: React.ReactNode }) => (
   <div className="flex h-180 w-270 overflow-hidden bg-sidebar">
     {children}
-    <main className="flex min-w-0 flex-1 flex-col">
+    <main className="flex min-w-0 flex-1 flex-col pr-1.5 pb-1.5 lg:pr-2 lg:pb-2">
       <header className="mx-2 mt-1.5 flex h-12 shrink-0 items-center justify-between px-3">
         <div className="min-w-0">
           <p className="truncate text-heading text-foreground">Traces</p>
@@ -92,7 +92,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
         </div>
         <span className="rounded-md border border-border bg-card px-2.5 py-1 text-meta text-foreground">Live</span>
       </header>
-      <section className="mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto rounded-studio-frame bg-card shadow-raised [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
+      <section className="min-h-0 flex-1 overflow-y-auto rounded-studio-frame bg-card shadow-raised [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem]">
         <div className="grid min-h-full grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
           <div className="grid grid-cols-3 gap-3">
             {[

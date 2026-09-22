@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { PageHeadingContext } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
@@ -16,6 +15,7 @@ import { Search } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
+import { StudioCard } from './studio-card';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
@@ -25,14 +25,6 @@ import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
 import { NavigationCommand, useNavigationCommand } from '@/lib/command';
-import {
-  RouteHeader,
-  RouteHeaderActionsProvider,
-  RouteHeaderCrumbsProvider,
-  getRouteHeaderHeading,
-  useRouteHeader,
-  useRouteHeaderCrumbsOverride,
-} from '@/lib/route-header';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
 
@@ -117,7 +109,7 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               className="min-w-0"
               onResize={size => onPanelResize(size.inPixels)}
             >
-              <RouteSidePanelSlot className="h-full min-h-0 py-1.5 pr-1.5 lg:py-2 lg:pr-2" />
+              <RouteSidePanelSlot className="h-full min-h-0" />
             </CollapsiblePanel>
           </>
         )}
@@ -134,9 +126,6 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
-  const { crumbs: handleCrumbs } = useRouteHeader();
-  const overrideCrumbs = useRouteHeaderCrumbsOverride();
-  const pageHeading = getRouteHeaderHeading(overrideCrumbs ?? handleCrumbs);
   // Optimistic: render chrome by default so cold loads don't jump.
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = !shouldHideSidebar;
@@ -144,23 +133,18 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <>
       <NavigationCommand />
-      <div className={cn('h-full', shouldShowSidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]')}>
-        {shouldShowSidebar && <AppSidebar />}
-        <AppShell
-          mainLabel={pageHeading ?? 'Page content'}
-          mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
-          routeHeader={shouldShowSidebar ? <RouteHeader /> : undefined}
-          renderFrame={({ children: frame, className }) => (
-            <PageHeadingContext.Provider value={pageHeading}>
-              <StudioFrame className={className}>{frame}</StudioFrame>
-            </PageHeadingContext.Provider>
-          )}
-        >
-          <AuthRequired>
-            <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-          </AuthRequired>
-        </AppShell>
-      </div>
+      <AppShell
+        sidebar={shouldShowSidebar ? <AppSidebar /> : undefined}
+        mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
+      >
+        <StudioFrame className="flex min-h-0 flex-1 flex-col">
+          <StudioCard>
+            <AuthRequired>
+              <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+            </AuthRequired>
+          </StudioCard>
+        </StudioFrame>
+      </AppShell>
     </>
   );
 }
@@ -176,13 +160,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>
               <SidebarShortcuts />
-              <RouteHeaderActionsProvider>
-                <RouteHeaderCrumbsProvider>
-                  <RouteSidePanelProvider>
-                    <LayoutContent>{children}</LayoutContent>
-                  </RouteSidePanelProvider>
-                </RouteHeaderCrumbsProvider>
-              </RouteHeaderActionsProvider>
+              <RouteSidePanelProvider>
+                <LayoutContent>{children}</LayoutContent>
+              </RouteSidePanelProvider>
             </MainSidebarProvider>
           </ExperimentalUIProvider>
         </TooltipProvider>

@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -62,14 +63,18 @@ export const AgentBuilderInfrastructure = () => {
   const { data, isLoading, error } = useInfrastructureStatus({ enabled: canViewInfrastructure });
 
   return (
-    <PageLayout width="narrow">
-      <PageLayout.TopArea>
-        <PageHeader>
-          <PageHeader.Title>Infrastructure</PageHeader.Title>
-        </PageHeader>
-      </PageLayout.TopArea>
-
-      <PageLayout.MainArea className="mt-6 flex flex-col gap-5">
+    <PageLayout
+      actionRow={
+        <ActionRow>
+          <ActionRow.Start>
+            <PageHeader>
+              <PageHeader.Title>Infrastructure</PageHeader.Title>
+            </PageHeader>
+          </ActionRow.Start>
+        </ActionRow>
+      }
+    >
+      <div className="mt-6 flex flex-col gap-5">
         <SectionCard
           title="Agent Builder Infrastructure"
           description="Deployment-level defaults Agent Builder applies when users create or run builder agents."
@@ -99,7 +104,7 @@ export const AgentBuilderInfrastructure = () => {
                 {data.channels.providers.length === 0 ? (
                   <EmptyRow message="No configured channel providers for Agent Builder." />
                 ) : (
-                  <ul className="flex flex-col gap-2">
+                  <ul className="grid content-start gap-2">
                     {data.channels.providers.map(provider => (
                       <li key={provider.id} className="rounded-md border border-border px-3 py-3">
                         <div className="flex items-start justify-between gap-3">
@@ -218,7 +223,7 @@ export const AgentBuilderInfrastructure = () => {
             </div>
           )}
         </SectionCard>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 };

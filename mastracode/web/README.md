@@ -18,9 +18,29 @@ pnpm --dir mastracode/web run prebuild
 
 ## Development
 
-Local development uses LibSQL and local sandboxes. Onboarding requires sign-in and a GitHub App.
+### Guided setup
 
-### Configure local onboarding
+From the repository root, run the guided setup for Factory development:
+
+```shell
+pnpm factory:dev
+```
+
+On the first run, the setup prompts you to:
+
+1. Sign in to Mastra and select an organization, project, and environment.
+2. Select local LibSQL, local PostgreSQL, or a platform-managed PostgreSQL database.
+3. Select a local or platform sandbox.
+
+Selecting local PostgreSQL starts the Docker services. Docker isn't required for LibSQL or a platform-managed database.
+
+The setup stores non-secret selections in `.factory/settings.json`. It writes resolved runtime values, including an organization-scoped platform key, to `mastracode/web/.env`. Both files are ignored by Git. Later runs reuse this configuration and start the API on port `4111` and the Vite UI on port `5173`.
+
+To select different resources, delete `.factory/settings.json` and run `pnpm factory:dev` again. The setup replaces the environment values it manages and preserves unrelated values in `mastracode/web/.env`.
+
+The linked monorepo packages must already be built. Run the commands under [Setup](#setup) first after a fresh checkout.
+
+### Configure local onboarding manually
 
 Create a [GitHub App](https://github.com/settings/apps/new) with URLs matching the mode you will run:
 

@@ -9,7 +9,6 @@ import {
   EntityIcon,
   EntityName,
 } from '@mastra/playground-ui/components/Entity';
-import { MainContentContent } from '@mastra/playground-ui/components/MainContent';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FolderIcon } from '@mastra/playground-ui/icons/FolderIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -61,17 +60,17 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
   if (!server)
     return (
-      <MainContentContent>
+      <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
         <Txt as="h1" variant="heading" tone="muted" className="py-20 text-center">
           Server not found
         </Txt>
-      </MainContentContent>
+      </div>
     );
 
   const commandLineConfig = `npx -y mcp-remote ${sseUrl}`;
 
   return (
-    <MainContentContent isDivided={true}>
+    <div className="grid h-full min-w-min grid-cols-[1fr_1fr] overflow-x-auto overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl px-5 py-8">
         <Txt as="h1" variant="heading" tone="ink" className="pb-4">
           {server.name}
@@ -147,7 +146,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       <div className="h-full overflow-y-scroll border-l border-border">
         <McpToolList server={server} />
       </div>
-    </MainContentContent>
+    </div>
   );
 };
 

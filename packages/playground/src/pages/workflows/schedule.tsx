@@ -1,19 +1,23 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';
+import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { decodeRouteParam, navCrumb } from '@/domains/navigation/crumbs';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
 import { ScheduleTriggersList } from '@/domains/schedules/components/schedule-triggers-list';
 import { useSchedule } from '@/domains/schedules/hooks/use-schedule';
 import { useScheduleTriggers } from '@/domains/schedules/hooks/use-schedule-triggers';
 import { useToggleSchedule } from '@/domains/schedules/hooks/use-toggle-schedule';
 import { formatRelativeTime, formatScheduleTimestamp } from '@/domains/schedules/utils/format';
+import { schedulesCrumb } from '@/domains/workflows/schedules-crumb';
 import { useLinkComponent } from '@/lib/framework';
 
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
@@ -29,6 +33,11 @@ function MetaItem({ label, children }: { label: string; children: React.ReactNod
 
 export default function SchedulePage() {
   const { scheduleId } = useParams<{ scheduleId: string }>();
+  const crumbs = [
+    navCrumb('/workflows'),
+    schedulesCrumb,
+    { id: 'schedule', label: decodeRouteParam(scheduleId), icon: CalendarClockIcon },
+  ];
   const { paths } = useLinkComponent();
   const { data: schedule, error } = useSchedule(scheduleId);
   const {
@@ -43,25 +52,28 @@ export default function SchedulePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scheduleId}</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="schedules" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scheduleId}</h1>
+        <PermissionDenied variant="fill" resource="schedules" />
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load schedule" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">{scheduleId}</h1>
+        <ErrorState variant="fill" title="Failed to load schedule" message={error.message} />
+      </PageLayout>
     );
   }
 
@@ -69,10 +81,11 @@ export default function SchedulePage() {
   const agentId = schedule?.agentId;
 
   return (
-    <PageLayout>
-      <PageLayout.TopArea>
-        <PageLayout.Row className="justify-end">
-          <PageLayout.Column className="flex justify-end gap-2">
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
+        <ActionRow>
+          <ActionRow.End>
             <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
               Back to schedules
             </Button>
@@ -100,10 +113,11 @@ export default function SchedulePage() {
                 )}
               </Button>
             ) : null}
-          </PageLayout.Column>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
-
+          </ActionRow.End>
+        </ActionRow>
+      }
+    >
+      <h1 className="sr-only">{scheduleId}</h1>
       {schedule ? (
         <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-4 overflow-hidden">
           <div className="flex h-fit flex-col gap-4 rounded-md border border-border p-4">
