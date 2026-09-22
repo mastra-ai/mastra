@@ -431,9 +431,7 @@ describe('Workflow (Default Engine Specifics)', () => {
       await expect(run.startAsync({ inputData: {} })).resolves.toEqual({ runId: run.runId });
       await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
 
-      expect(
-        persistSnapshot.mock.calls.some(([args]) => (args.snapshot as any).status === 'waiting'),
-      ).toBe(false);
+      expect(persistSnapshot.mock.calls.some(([args]) => (args.snapshot as any).status === 'waiting')).toBe(false);
     });
 
     it('does not add the startAsync dispatch snapshot to synchronous start', async () => {
@@ -460,9 +458,7 @@ describe('Workflow (Default Engine Specifics)', () => {
 
       await run.start({ inputData: {} });
 
-      expect(
-        persistSnapshot.mock.calls.some(([args]) => (args.snapshot as any).status === 'waiting'),
-      ).toBe(false);
+      expect(persistSnapshot.mock.calls.some(([args]) => (args.snapshot as any).status === 'waiting')).toBe(false);
     });
   });
 
