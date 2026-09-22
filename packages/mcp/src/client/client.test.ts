@@ -693,17 +693,46 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
         { name: 'bad_contains', inputSchema: { type: 'array', contains: { enum: 'nope' } } as any },
         { name: 'bad_if', inputSchema: { type: 'object', if: { properties: [] } } as any },
         { name: 'bad_def', inputSchema: { type: 'object', $defs: { x: { type: ['object', 7] } } } as any },
+        {
+          name: 'bad_tuple_item',
+          inputSchema: { type: 'array', items: [{ type: 'string' }, { type: 7 }] } as any,
+        },
+        {
+          name: 'bad_additional_items',
+          inputSchema: { type: 'array', items: [{ type: 'string' }], additionalItems: { required: 'nope' } } as any,
+        },
+        {
+          name: 'good_tuple',
+          inputSchema: {
+            type: 'array',
+            items: [{ type: 'string' }, { type: 'integer' }],
+            additionalItems: false,
+          } as any,
+        },
         { name: 'good_tool', inputSchema: { type: 'object', properties: { a: { type: 'string' } } } as any },
       ],
     });
 
     const tools = await client.tools();
 
-    expect(Object.keys(tools)).toEqual(['good_tool']);
+    expect(Object.keys(tools)).toEqual(['good_tuple', 'good_tool']);
     const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
-    for (const name of ['bad_pattern_property', 'bad_additional', 'bad_prefix_item', 'bad_contains', 'bad_if', 'bad_def']) {
+    for (const name of [
+      'bad_pattern_property',
+      'bad_additional',
+      'bad_prefix_item',
+      'bad_contains',
+      'bad_if',
+      'bad_def',
+      'bad_tuple_item',
+      'bad_additional_items',
+    ]) {
       expect(warnMessages).toContain(name);
     }
+    // draft-07 tuple-form items are valid: each entry is a schema, and a boolean
+    // additionalItems closes the tuple. The tool must be kept, not skipped.
+    expect(Object.keys(tools)).toEqual(['good_tuple', 'good_tool']);
+    expect(tools.good_tuple).toBeDefined();
   });
 
   it('should accept boolean input schemas without throwing and preserve false', async () => {

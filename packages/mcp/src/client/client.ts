@@ -1271,8 +1271,22 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     }
     if (node.items !== undefined) {
-      const itemsError = this.getInputSchemaShapeError(node.items, depth + 1);
-      if (itemsError) return `"items" ${itemsError}`;
+      // draft-07 allows tuple-form items: an array of schemas, one per position.
+      // 2020-12 moved that shape to prefixItems; validate each entry either way,
+      // plus additionalItems for the positions past the tuple.
+      if (Array.isArray(node.items)) {
+        for (const [index, itemSchema] of node.items.entries()) {
+          const itemError = this.getInputSchemaShapeError(itemSchema, depth + 1);
+          if (itemError) return `"items" entry ${index} ${itemError}`;
+        }
+        if (node.additionalItems !== undefined && typeof node.additionalItems !== 'boolean') {
+          const additionalError = this.getInputSchemaShapeError(node.additionalItems, depth + 1);
+          if (additionalError) return `"additionalItems" ${additionalError}`;
+        }
+      } else {
+        const itemsError = this.getInputSchemaShapeError(node.items, depth + 1);
+        if (itemsError) return `"items" ${itemsError}`;
+      }
     }
     for (const combinator of ['anyOf', 'oneOf', 'allOf'] as const) {
       const branches = node[combinator];
