@@ -60,40 +60,49 @@ afterEach(() => {
 });
 
 describe('durable tool-call provider-tool fallback', () => {
-  it('resolves a provider-defined tool by its model-facing name', async () => {
-    const executeMock = vi.fn().mockResolvedValue({ snippet: 'result' });
-    // Provider-defined tool: JS key `webSearch`, model-facing id `openai.web_search`
-    // The LLM emits `web_search`, which doesn't match the JS key.
-    globalRunRegistry.set(RUN_ID, {
-      tools: {
-        webSearch: {
-          type: 'provider-defined',
-          id: 'openai.web_search',
-          execute: executeMock,
+  it.each([undefined, ['webSearch'], []])(
+    'resolves provider names under the per-step allowlist %j',
+    async activeTools => {
+      const executeMock = vi.fn().mockResolvedValue({ snippet: 'result' });
+      // Provider-defined tool: JS key `webSearch`, model-facing id `openai.web_search`
+      // The LLM emits `web_search`, which doesn't match the JS key.
+      globalRunRegistry.set(RUN_ID, {
+        tools: {
+          webSearch: {
+            type: 'provider-defined',
+            id: 'openai.web_search',
+            execute: executeMock,
+          },
         },
-      },
-      model: {} as any,
-    } as any);
+        model: {} as any,
+      } as any);
 
-    const step = createDurableToolCallStep();
-    const result = await (step as any).execute({
-      inputData: {
-        toolCallId: 'call-1',
-        toolName: 'web_search',
-        args: { query: 'mastra' },
-      },
-      mastra: { getLogger: () => undefined },
-      suspend: vi.fn(),
-      resumeData: undefined,
-      requestContext: new Map(),
-      getInitData: () => makeInitData(),
-      [PUBSUB_SYMBOL]: mockPubsub(),
-    });
+      const step = createDurableToolCallStep();
+      const result = await (step as any).execute({
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'web_search',
+          args: { query: 'mastra' },
+          activeTools,
+        },
+        mastra: { getLogger: () => undefined },
+        suspend: vi.fn(),
+        resumeData: undefined,
+        requestContext: new Map(),
+        getInitData: () => makeInitData(),
+        [PUBSUB_SYMBOL]: mockPubsub(),
+      });
 
-    expect(executeMock).toHaveBeenCalledTimes(1);
-    expect(result.error).toBeUndefined();
-    expect(result.result).toEqual({ snippet: 'result' });
-  });
+      if (activeTools?.length === 0) {
+        expect(executeMock).not.toHaveBeenCalled();
+        expect(result.error?.name).toBe('ToolNotFoundError');
+        return;
+      }
+      expect(executeMock).toHaveBeenCalledTimes(1);
+      expect(result.error).toBeUndefined();
+      expect(result.result).toEqual({ snippet: 'result' });
+    },
+  );
 
   it('falls back to resolveTool() against the Mastra-wide registry when not in run registry', async () => {
     const executeMock = vi.fn().mockResolvedValue({ ok: true });

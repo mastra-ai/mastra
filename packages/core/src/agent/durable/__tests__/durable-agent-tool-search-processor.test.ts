@@ -16,7 +16,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -135,6 +135,104 @@ describe('DurableAgent ToolSearchProcessor meta-tool resolution (#19571)', () =>
 
   afterEach(async () => {
     await pubsub.close();
+  });
+
+  it('rejects a remembered global tool, exposes the error to the model, then permits discovery and use', async () => {
+    const execute = vi.fn(async ({ size }: { size: string }) => ({ size }));
+    const portrait = createTool({
+      id: 'portrait',
+      description: 'Generate a portrait image',
+      inputSchema: z.object({ size: z.enum(['1:1', '2:3']).default('1:1') }),
+      execute,
+    });
+    const model = createScriptedToolCallModel([
+      { toolName: 'portrait', args: {} },
+      { toolName: 'search_tools', args: { query: 'portrait' } },
+      { toolName: 'portrait', args: { size: '2:3' } },
+    ]);
+    const durable = createDurableAgent({
+      agent: new Agent({
+        id: 'current-schema',
+        name: 'Current schema',
+        instructions: 'Use current tools.',
+        model: model as LanguageModelV2,
+        inputProcessors: [new ToolSearchProcessor({ tools: { portrait }, search: { autoLoad: true } })],
+      }),
+      pubsub,
+    });
+    new Mastra({
+      agents: { durable: durable as any },
+      tools: { portrait },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+    const result = await durable.stream('Create one 2:3 portrait.', { maxSteps: 5 });
+    const chunks = await drain(result.fullStream);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![0]).toEqual({ size: '2:3' });
+    expect(toolErrors(chunks)).toHaveLength(1);
+    expect(JSON.stringify(model.doStreamCalls[1]!.prompt)).toContain('Available tools: search_tools');
+    expect(JSON.stringify(model.doStreamCalls[1]!.prompt)).toContain('error-text');
+    expect(model.doStreamCalls[0]!.tools?.map(t => t.name)).not.toContain('portrait');
+    expect(model.doStreamCalls[2]!.tools?.map(t => t.name)).toContain('portrait');
+    expect(resultsByTool(chunks).find(r => r.toolName === 'portrait')?.result).toEqual({ size: '2:3' });
+  });
+
+  it('does not require discovery for a schema already shown to the model', async () => {
+    const execute = vi.fn(async () => ({ ok: true }));
+    const direct = createTool({ id: 'direct', description: 'Direct tool', inputSchema: z.object({}), execute });
+    const model = createScriptedToolCallModel([{ toolName: 'direct', args: {} }]);
+    const durable = createDurableAgent({
+      agent: new Agent({
+        id: 'direct-schema',
+        name: 'Direct',
+        instructions: 'Use tools.',
+        model: model as LanguageModelV2,
+        tools: { direct },
+      }),
+      pubsub,
+    });
+    new Mastra({
+      agents: { durable: durable as any },
+      tools: { direct },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+    const result = await durable.stream('Use direct.', { maxSteps: 3 });
+    const chunks = await drain(result.fullStream);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(toolErrors(chunks)).toHaveLength(0);
+    expect(model.doStreamCalls[0]!.tools?.map(t => t.name)).toContain('direct');
+  });
+
+  it.each([false, true])('rejects a global tool with no current schema (removed by processor: %s)', async removed => {
+    const execute = vi.fn(async () => ({ ok: true }));
+    const hidden = createTool({ id: 'hidden', description: 'Hidden tool', inputSchema: z.object({}), execute });
+    const model = createScriptedToolCallModel([{ toolName: 'hidden', args: {} }]);
+    const durable = createDurableAgent({
+      agent: new Agent({
+        id: 'empty-schema',
+        name: 'Empty',
+        instructions: 'Answer.',
+        model: model as LanguageModelV2,
+        tools: removed ? { hidden } : {},
+        inputProcessors: removed ? [{ id: 'remove-tools', processInputStep: async () => ({ tools: {} }) }] : [],
+      }),
+      pubsub,
+    });
+    new Mastra({
+      agents: { durable: durable as any },
+      tools: { hidden },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+    const result = await durable.stream('Answer.', { maxSteps: 3 });
+    const chunks = await drain(result.fullStream);
+    expect(execute).not.toHaveBeenCalled();
+    expect(toolErrors(chunks)).toHaveLength(1);
   });
 
   async function runDurable(id: string, script: ScriptedCall[]) {

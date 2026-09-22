@@ -1348,7 +1348,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       providerMetadata: payload.providerMetadata as Record<string, unknown> | undefined,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
-                      activeTools: currentActiveTools ?? null,
+                      // Persist the tool set shown on this inference step, even when
+                      // no explicit allowlist was supplied. The tool step can resolve
+                      // globally registered tools after a restart; that must not let
+                      // a remembered but undiscovered tool bypass this step's schema.
+                      activeTools: currentActiveTools ?? Object.keys(currentTools ?? {}),
                     });
                     break;
                   }
