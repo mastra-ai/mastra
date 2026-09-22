@@ -2295,8 +2295,12 @@ export class HarnessPG extends HarnessStorage {
         // pending-PUT assert, and the held session lock prevents concurrent
         // inserts — the set collected there is complete.
         for (const attachment of attachmentRows) {
-          this.#requireAttachmentByteOwner(sessionId, String(attachment.attachment_id));
           const attachmentId = String(attachment.attachment_id);
+          // Pre-ownership rows keep inline bytes and have no external object.
+          // Deleting the metadata below is the whole cleanup; requiring a blob
+          // reference would make the session undeletable.
+          if (inlineAttachmentBlobRef(attachment) === null) continue;
+          this.#requireAttachmentByteOwner(sessionId, attachmentId);
           const attachmentIncarnation = requireAttachmentIncarnation(attachment, sessionId, attachmentId);
           const putOperation = await this.#loadAttachmentOperationTx(
             tx,
@@ -3423,41 +3427,52 @@ export class HarnessPG extends HarnessStorage {
             references.rows.map(rowToAttachmentReference),
           );
         }
-        this.#requireAttachmentByteOwner(sessionId, attachmentId);
-        const incarnation = requireAttachmentIncarnation(attachment, sessionId, attachmentId);
-        const putOperation = await this.#loadAttachmentOperationTx(
-          tx,
-          namespace,
-          sessionId,
-          attachmentId,
-          incarnation,
-          'put',
-        );
-        if (putOperation && putOperation.status !== 'completed') {
-          throw new HarnessStorageAttachmentPendingError(sessionId, attachmentId);
+        const inlineBlobRef = inlineAttachmentBlobRef(attachment);
+        if (inlineBlobRef === null) {
+          await tx.execute({
+            sql: `DELETE FROM ${
+              TABLE_HARNESS_ATTACHMENTS
+            } WHERE harness_name = ? AND session_id = ? AND attachment_id = ?`,
+            args: [namespace, sessionId, attachmentId],
+          });
+          await tx.commit();
+        } else {
+          this.#requireAttachmentByteOwner(sessionId, attachmentId);
+          const incarnation = requireAttachmentIncarnation(attachment, sessionId, attachmentId);
+          const putOperation = await this.#loadAttachmentOperationTx(
+            tx,
+            namespace,
+            sessionId,
+            attachmentId,
+            incarnation,
+            'put',
+          );
+          if (putOperation && putOperation.status !== 'completed') {
+            throw new HarnessStorageAttachmentPendingError(sessionId, attachmentId);
+          }
+          const blobRef = inlineBlobRef;
+          const operation = await this.#stageAttachmentDeleteTx(tx, {
+            namespace,
+            sessionId,
+            attachmentId,
+            incarnation,
+            name: String(attachment.name),
+            mimeType: String(attachment.mime_type),
+            source: toAttachmentSource(attachment.source),
+            bytes: Number(attachment.size_bytes),
+            sha256: String(attachment.sha256),
+            semantic: rowToAttachmentSemantic(attachment),
+            blobRef,
+          });
+          operationId = operation.id;
+          await tx.execute({
+            sql: `DELETE FROM ${
+              TABLE_HARNESS_ATTACHMENTS
+            } WHERE harness_name = ? AND session_id = ? AND attachment_id = ?`,
+            args: [namespace, sessionId, attachmentId],
+          });
+          await tx.commit();
         }
-        const blobRef = requireAttachmentBlobRef(attachment, sessionId, attachmentId);
-        const operation = await this.#stageAttachmentDeleteTx(tx, {
-          namespace,
-          sessionId,
-          attachmentId,
-          incarnation,
-          name: String(attachment.name),
-          mimeType: String(attachment.mime_type),
-          source: toAttachmentSource(attachment.source),
-          bytes: Number(attachment.size_bytes),
-          sha256: String(attachment.sha256),
-          semantic: rowToAttachmentSemantic(attachment),
-          blobRef,
-        });
-        operationId = operation.id;
-        await tx.execute({
-          sql: `DELETE FROM ${
-            TABLE_HARNESS_ATTACHMENTS
-          } WHERE harness_name = ? AND session_id = ? AND attachment_id = ?`,
-          args: [namespace, sessionId, attachmentId],
-        });
-        await tx.commit();
       }
     } catch (err) {
       if (!tx.closed) await tx.rollback();
@@ -3487,8 +3502,10 @@ export class HarnessPG extends HarnessStorage {
         args: [namespace, sessionId],
       });
       await this.#assertNoPendingAttachmentPutsTx(tx, namespace, sessionId);
-      if (attachments.rows.length > 0)
-        this.#requireAttachmentByteOwner(sessionId, String(attachments.rows[0]!.attachment_id));
+      const externalAttachments = attachments.rows.filter(row => inlineAttachmentBlobRef(row) !== null);
+      if (externalAttachments.length > 0) {
+        this.#requireAttachmentByteOwner(sessionId, String(externalAttachments[0]!.attachment_id));
+      }
       for (const attachment of attachments.rows) {
         const references = await tx.execute({
           sql: `SELECT 1 FROM ${TABLE_HARNESS_ATTACHMENT_REFERENCES}
@@ -3496,6 +3513,15 @@ export class HarnessPG extends HarnessStorage {
           args: [namespace, sessionId, String(attachment.attachment_id)],
         });
         if (references.rows.length > 0) continue;
+        const blobRef = inlineAttachmentBlobRef(attachment);
+        if (blobRef === null) {
+          await tx.execute({
+            sql: `DELETE FROM ${TABLE_HARNESS_ATTACHMENTS}
+                  WHERE harness_name = ? AND session_id = ? AND attachment_id = ?`,
+            args: [namespace, sessionId, String(attachment.attachment_id)],
+          });
+          continue;
+        }
         const incarnation = requireAttachmentIncarnation(attachment, sessionId, String(attachment.attachment_id));
         const putOperation = await this.#loadAttachmentOperationTx(
           tx,
@@ -3519,7 +3545,7 @@ export class HarnessPG extends HarnessStorage {
           bytes: Number(attachment.size_bytes),
           sha256: String(attachment.sha256),
           semantic: rowToAttachmentSemantic(attachment),
-          blobRef: requireAttachmentBlobRef(attachment, sessionId, String(attachment.attachment_id)),
+          blobRef,
         });
         operationIds.push(operation.id);
         await tx.execute({
@@ -9533,6 +9559,11 @@ function attachmentOperationMatchesInput(
     stableJson(normalizeAttachmentSemantic(operation.semantic)) ===
       stableJson(normalizeAttachmentSemantic(parseJson(input.semanticJson) as AttachmentSemanticMetadata | undefined))
   );
+}
+
+function inlineAttachmentBlobRef(row: Record<string, unknown>): string | null {
+  const blobRef = row.blob_ref == null ? '' : String(row.blob_ref);
+  return blobRef.length === 0 ? null : blobRef;
 }
 
 function requireAttachmentIncarnation(row: Record<string, unknown>, sessionId: string, attachmentId: string): string {

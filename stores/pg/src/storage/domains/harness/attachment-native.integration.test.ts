@@ -560,6 +560,54 @@ describe('HarnessPG native external attachment ownership', () => {
     await expect(harness.deleteSession({ sessionId: session.id })).resolves.toBeUndefined();
   });
 
+  it('deletes a session that still holds an inline-only legacy attachment', async () => {
+    const harness = store.stores.harness!;
+    const session = createSampleSessionRecord({
+      id: 'native-attachment-legacy-inline',
+      resourceId: 'legacy-resource',
+      threadId: 'legacy-thread',
+    });
+    await harness.createOrLoadActiveSession(session, {
+      initialLease: { ownerId: 'legacy-owner', ttlMs: 60_000 },
+    });
+    const stored = await store.db.one<{ harness_name: string }>(
+      `SELECT harness_name FROM "${schemaName}"."mastra_harness_sessions" WHERE id = $1`,
+      [session.id],
+    );
+    await store.db.none(
+      `INSERT INTO "${schemaName}"."mastra_harness_attachments"
+         (harness_name, session_id, attachment_id, name, mime_type, size_bytes, sha256, source, created_at, data_b64)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        stored.harness_name,
+        session.id,
+        'legacy-inline',
+        'legacy.txt',
+        'text/plain',
+        6,
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        'inline',
+        Date.now(),
+        'bGVnYWN5',
+      ],
+    );
+
+    await expect(harness.deleteSession({ sessionId: session.id })).resolves.toBeUndefined();
+    await expect(
+      store.db.any(`SELECT attachment_id FROM "${schemaName}"."mastra_harness_attachments" WHERE session_id = $1`, [
+        session.id,
+      ]),
+    ).resolves.toEqual([]);
+    await expect(
+      store.db.any(`SELECT id FROM "${schemaName}"."mastra_harness_attachment_operations" WHERE session_id = $1`, [
+        session.id,
+      ]),
+    ).resolves.toEqual([]);
+    await expect(
+      store.db.any(`SELECT id FROM "${schemaName}"."mastra_harness_sessions" WHERE id = $1`, [session.id]),
+    ).resolves.toEqual([]);
+  });
+
   it('rejects owner-unaddressable attachment identities without persisting an operation', async () => {
     const harness = store.stores.harness!;
     const session = createSampleSessionRecord({
