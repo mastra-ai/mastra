@@ -97,7 +97,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
         />
       </label>
       {error ? (
-        <Txt as="p" variant="ui-sm" role="alert" className="text-accent2">
+        <Txt as="p" variant="caption" role="alert" className="text-destructive">
           {error}
         </Txt>
       ) : null}
@@ -118,7 +118,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           {mode === 'sign-up' ? 'Have an account? Sign in' : 'New here? Sign up'}
         </Button>
       ) : (
-        <Txt as="p" variant="ui-sm" className="text-neutral3 text-center">
+        <Txt as="p" variant="caption" tone="muted" className="text-center">
           Account creation is managed by your administrator.
         </Txt>
       )}
@@ -145,7 +145,7 @@ export function SignInPage() {
   }
 
   return (
-    <main className="factory-signin-theme bg-surface1 text-neutral6 min-h-dvh">
+    <main className="bg-background text-foreground min-h-dvh">
       <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
         <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
           <h1 className="max-w-xl text-[clamp(2.625rem,5.3vw,4.25rem)] leading-[1.1] font-[520] tracking-[0.015em] text-balance [font-stretch:112%]">
@@ -153,8 +153,9 @@ export function SignInPage() {
           </h1>
           <Txt
             as="p"
-            variant="ui-lg"
-            className="text-neutral3 mt-6 max-w-lg text-[clamp(1.0625rem,1.65vw,1.375rem)] leading-[1.36] tracking-[0.015em]"
+            variant="body"
+            tone="muted"
+            className="mt-6 max-w-lg text-[clamp(1.0625rem,1.65vw,1.375rem)] leading-[1.36] tracking-[0.015em]"
           >
             Turn a repository into a working factory. Agents pick up scoped work, collaborate, and ship changes you can
             review.
@@ -162,17 +163,17 @@ export function SignInPage() {
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
             {authError ? (
-              <div role="alert" className="border-accent2/30 bg-surface3 mb-6 rounded-lg border px-4 py-3">
-                <Txt as="p" variant="ui-md" className="text-accent2 font-medium">
+              <div role="alert" className="border-destructive/30 bg-card mb-6 rounded-lg border px-4 py-3">
+                <Txt as="p" variant="subheading" className="text-destructive">
                   {accessDenied ? 'Access denied' : 'Sign-in failed'}
                 </Txt>
                 {authErrorDescription ? (
-                  <Txt as="p" variant="ui-sm" className="text-neutral4 mt-1 leading-5">
+                  <Txt as="p" variant="caption" tone="muted" className="mt-1 leading-5">
                     {authErrorDescription}
                   </Txt>
                 ) : null}
                 {accessDenied ? (
-                  <Txt as="p" variant="ui-sm" className="text-neutral3 mt-1 leading-5">
+                  <Txt as="p" variant="caption" tone="muted" className="mt-1 leading-5">
                     Ask an organization admin to add your account, then sign in again.
                   </Txt>
                 ) : null}
@@ -181,8 +182,8 @@ export function SignInPage() {
             {credentialForm ? (
               <>
                 <div className="mb-6">
-                  <h2 className="font-display text-2xl font-medium">Welcome back</h2>
-                  <Txt as="p" variant="ui-md" className="text-neutral3 mt-2 leading-6">
+                  <h2 className="font-display text-title">Welcome back</h2>
+                  <Txt as="p" variant="body" tone="muted" className="mt-2 leading-6">
                     Sign in to continue building with your team.
                   </Txt>
                 </div>

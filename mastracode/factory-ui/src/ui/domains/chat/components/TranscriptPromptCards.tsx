@@ -11,7 +11,7 @@ import { SubmitPlanCard } from './SubmitPlanCard';
 import { resultBlock, stringify, truncate } from './transcript-shared';
 
 const promptCardSuspension =
-  'my-2 rounded-lg border border-border1 border-l-4 border-l-accent2 bg-surface3 px-4 py-3 shadow-md';
+  'border-border border-l-accent2 bg-fill my-2 min-w-0 rounded-lg border border-l-4 px-4 py-3';
 const promptTitle = 'mb-1.5 text-sm font-semibold text-icon6';
 const promptActions = 'mt-2 flex gap-2';
 
@@ -205,14 +205,14 @@ function AskUserCard({
 
 export function SubagentCard({ entry }: { entry: SubagentEntry }) {
   return (
-    <div className="border-border1 border-l-accent5 bg-surface2 my-2 rounded-lg border border-l-4 px-3 py-2 shadow-sm">
+    <div className="border-border border-l-accent5 bg-fill my-2 rounded-lg border border-l-4 px-3 py-2">
       <div className="flex items-center gap-2">
         <Badge variant={entry.done ? 'green' : 'blue'}>subagent: {entry.agentType}</Badge>
-        <Txt variant="ui-xs" className="text-icon3">
+        <Txt variant="meta" className="text-icon3">
           {lastSegment(entry.modelId)}
         </Txt>
       </div>
-      <Txt variant="ui-sm" className="py-1">
+      <Txt variant="caption" className="py-1">
         {entry.task}
       </Txt>
     </div>

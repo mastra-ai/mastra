@@ -190,12 +190,12 @@ export function CommentList({
           {!showSkeleton && leading !== undefined && (
             <div
               aria-hidden
-              className="text-ui-xs text-icon3 stream-landing flex items-center gap-2 px-3 pb-1"
+              className="text-meta text-icon3 stream-landing flex items-center gap-2 px-3 pb-1"
               style={landingStyle(1)}
             >
-              <span className="bg-border1 h-px flex-1" />
+              <span className="bg-border h-px flex-1" />
               Activity
-              <span className="bg-border1 h-px flex-1" />
+              <span className="bg-border h-px flex-1" />
             </div>
           )}
           {showSkeleton ? (
@@ -206,7 +206,7 @@ export function CommentList({
             </div>
           ) : null}
           {comments.isError ? (
-            <div className="text-ui-sm text-icon3 flex items-center gap-2 px-2 py-2">
+            <div className="text-caption text-icon3 flex items-center gap-2 px-2 py-2">
               <span>Unable to load comments.</span>
               <Button type="button" variant="ghost" size="sm" onClick={() => void comments.refetch()}>
                 <RefreshCw aria-hidden />
@@ -215,7 +215,7 @@ export function CommentList({
             </div>
           ) : null}
           {!showSkeleton && !comments.isError && rows.length === 0 ? (
-            <div className="text-ui-sm text-neutral6/40 flex items-center justify-center gap-1.5 px-2 py-6">
+            <div className="text-caption text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
               <MessageCircle size={14} aria-hidden />
               <span>No activity yet</span>
             </div>

@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom';
 
 import { SANKEY_TOOLTIP_MAX_WIDTH_PX } from './use-sankey-hover-tooltip';
 import type { SankeyTooltipPosition } from './use-sankey-hover-tooltip';
+import { ChartTooltip } from '@/ds/components/ChartTooltip';
 
 export function SankeyPortalTooltip({
   id,
@@ -19,9 +20,9 @@ export function SankeyPortalTooltip({
   if (!visible || !position) return null;
 
   return createPortal(
-    <div
+    <ChartTooltip
       aria-label={`${title}: ${description}`}
-      className="border-border1 bg-surface5 text-foreground shadow-elevated text-ui-sm pointer-events-none fixed z-50 rounded-md border p-2"
+      className="pointer-events-none fixed z-50 p-2"
       id={id}
       role="tooltip"
       style={{
@@ -32,9 +33,9 @@ export function SankeyPortalTooltip({
         width: 'max-content',
       }}
     >
-      <div className="font-medium">{title}</div>
+      <div className="text-column">{title}</div>
       <div className="text-muted-foreground whitespace-pre-wrap">{description}</div>
-    </div>,
+    </ChartTooltip>,
     document.body,
   );
 }

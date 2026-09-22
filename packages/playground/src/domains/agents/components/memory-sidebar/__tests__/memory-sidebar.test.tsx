@@ -254,7 +254,7 @@ describe('MemorySidebar', () => {
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
     // The sidebar is still a single standalone bordered block with no nested container.
-    const blocks = container.querySelectorAll('.bg-surface3.border-border1\\/50');
+    const blocks = container.querySelectorAll('.bg-card.border-border\\/50');
     expect(blocks.length).toBe(1);
   });
 

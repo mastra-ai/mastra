@@ -12,7 +12,7 @@ export interface WorkflowCardProps {
 export const WorkflowCard = ({ header, children, footer }: WorkflowCardProps) => {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="border-border1 bg-surface4 rounded-lg border">
+    <div className="border-border bg-muted rounded-lg border">
       <button className="flex w-full items-center justify-between gap-3 px-2 py-1" onClick={() => setExpanded(s => !s)}>
         <div className="w-full">{header}</div>
         <Icon>
@@ -21,8 +21,8 @@ export const WorkflowCard = ({ header, children, footer }: WorkflowCardProps) =>
           />
         </Icon>
       </button>
-      {children && expanded && <div className="border-border1 max-h-[400px] overflow-y-auto border-t">{children}</div>}
-      {footer && <div className="border-border1 border-t px-2 py-1">{footer}</div>}
+      {children && expanded && <div className="border-border max-h-[400px] overflow-y-auto border-t">{children}</div>}
+      {footer && <div className="border-border border-t px-2 py-1">{footer}</div>}
     </div>
   );
 };

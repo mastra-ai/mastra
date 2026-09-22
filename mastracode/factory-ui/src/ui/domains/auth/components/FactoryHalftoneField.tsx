@@ -83,15 +83,22 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
     if (!context) return;
 
     const computedStyle = window.getComputedStyle(container);
-    const stageColors = [
-      computedStyle.getPropertyValue('--factory-blue').trim(),
-      computedStyle.getPropertyValue('--factory-green').trim(),
-      computedStyle.getPropertyValue('--factory-purple').trim(),
-      computedStyle.getPropertyValue('--factory-orange').trim(),
-    ];
-    const baseDot = computedStyle.getPropertyValue('--factory-dot').trim();
-    const laneLine = computedStyle.getPropertyValue('--factory-lane-line').trim();
-    const railLine = computedStyle.getPropertyValue('--factory-rail-line').trim();
+    let stageColors: string[] = [];
+    let baseDot = '';
+    let laneLine = '';
+    let railLine = '';
+
+    const readPalette = () => {
+      stageColors = [
+        computedStyle.getPropertyValue('--factory-intake').trim(),
+        computedStyle.getPropertyValue('--factory-build').trim(),
+        computedStyle.getPropertyValue('--factory-review').trim(),
+        computedStyle.getPropertyValue('--factory-ship').trim(),
+      ];
+      baseDot = computedStyle.getPropertyValue('--factory-dot').trim();
+      laneLine = computedStyle.getPropertyValue('--factory-lane-line').trim();
+      railLine = computedStyle.getPropertyValue('--factory-rail-line').trim();
+    };
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     let width = 0;
@@ -199,6 +206,11 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
       else animationFrame = window.requestAnimationFrame(animate);
     };
 
+    const handleThemeChange = () => {
+      readPalette();
+      if (reducedMotion.matches) draw(performance.now());
+    };
+
     const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(resize);
     resizeObserver?.observe(container);
     if (!resizeObserver) window.addEventListener('resize', resize, { passive: true });
@@ -212,6 +224,10 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
       container.addEventListener('pointerleave', handlePointerLeave);
     }
     reducedMotion.addEventListener('change', handleReducedMotionChange);
+    const themeObserver = typeof MutationObserver === 'undefined' ? undefined : new MutationObserver(handleThemeChange);
+    themeObserver?.observe(document.documentElement, { attributeFilter: ['class'] });
+
+    readPalette();
 
     resize();
     if (!reducedMotion.matches) animationFrame = window.requestAnimationFrame(animate);
@@ -219,6 +235,7 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
     return () => {
       if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
       resizeObserver?.disconnect();
+      themeObserver?.disconnect();
       window.removeEventListener('resize', resize);
       window.removeEventListener('pointermove', handlePointer);
       container.removeEventListener('pointermove', handlePointer);
@@ -252,7 +269,7 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
         <span className="factory-stage-label">Ship</span>
       </div>
       <canvas ref={canvasRef} className="absolute inset-0 size-full cursor-crosshair" aria-hidden="true" />
-      <span className="factory-visual-hint text-ui-xs text-neutral2 pointer-events-none absolute right-0 bottom-8 hidden items-center gap-2 lg:inline-flex">
+      <span className="factory-visual-hint text-meta text-neutral2 pointer-events-none absolute right-0 bottom-8 hidden items-center gap-2 lg:inline-flex">
         Move across the factory
       </span>
     </div>

@@ -91,7 +91,7 @@ export function MessageBubble({
           <>
             {steeringStatus && (
               <span
-                className={cn('text-ui-xs text-icon3', steeringFailed && 'text-notice-destructive-fg')}
+                className={cn('text-meta text-icon3', steeringFailed && 'text-notice-destructive-fg')}
                 aria-live="polite"
               >
                 {steeringStatus}
@@ -110,8 +110,8 @@ export function MessageBubble({
         {children}
       </Message>
     ),
-    System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
-    Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
+    System: ({ children }) => <div className="text-caption text-icon3">{children}</div>,
+    Signal: ({ children }) => <div className="text-caption text-icon3">{children}</div>,
   };
 
   const renderers = {

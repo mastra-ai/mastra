@@ -2,7 +2,7 @@ import type { BaseUIEvent } from '@base-ui/react/types';
 import { ListFilterIcon, Search } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { FilterBarFieldLabel } from './filter-bar-chip';
+import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
@@ -240,9 +240,9 @@ export function FilterBarInput({
             // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
             // and the Button icon offset); the bar itself has no chrome. Focus lives on the
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
-            comboboxTriggerClass({ variant: 'default', size: 'md' }),
+            comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
             'w-auto cursor-text',
-            'focus-within:bg-foreground/14',
+            'focus-within:bg-fill-hover',
             inputFocusBorderWithin,
             step === 'field' ? 'min-w-40' : 'min-w-28',
             className,
@@ -263,7 +263,7 @@ export function FilterBarInput({
             className={cn(
               unstyledFormElementStyle,
               'min-w-0 flex-1 bg-transparent',
-              'placeholder:text-placeholder placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
+              'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             )}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
@@ -333,11 +333,11 @@ export function FilterBarInput({
               )}
               {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
-                  <Txt variant="ui-sm" className="text-muted-foreground">
+                  <Txt variant="caption" tone="muted">
                     Type a value
                   </Txt>
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
                     disabled={!valueStep.canCommitQuery}
                     onMouseDown={e => e.preventDefault()}
@@ -349,9 +349,9 @@ export function FilterBarInput({
                 </div>
               )}
               {step === 'value' && valueStep.isMany && (
-                <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
+                <div className="border-border flex items-center justify-end gap-1 border-t p-1">
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}

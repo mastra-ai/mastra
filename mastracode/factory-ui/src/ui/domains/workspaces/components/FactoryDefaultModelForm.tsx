@@ -29,7 +29,7 @@ export function FactoryDefaultModelForm({
   if (choice.isPending) return <SkeletonRows label="Loading models" rows={2} rowClassName="h-9 w-full" />;
   if (choice.catalogError) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0" role="alert">
+      <Txt as="p" variant="caption" className="text-notice-destructive-fg m-0" role="alert">
         {choice.catalogError.message}
       </Txt>
     );
@@ -40,7 +40,7 @@ export function FactoryDefaultModelForm({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ProviderBrandIcon provider={provider.provider} />
-          <Txt as="span" variant="ui-md" className="text-icon6">
+          <Txt as="span" variant="body" className="text-icon6">
             {providerDisplayName(provider.provider)}
           </Txt>
         </div>
@@ -49,7 +49,7 @@ export function FactoryDefaultModelForm({
         </Button>
       </div>
       <label className="flex flex-col gap-2">
-        <Txt as="span" variant="ui-sm" className="text-icon5">
+        <Txt as="span" variant="caption" className="text-icon5">
           Factory default model
         </Txt>
         <ModelCombobox
@@ -62,7 +62,7 @@ export function FactoryDefaultModelForm({
       </label>
       <SharedCredentialNotice modelId={choice.modelId || undefined} />
       {choice.error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0" role="alert">
+        <Txt as="p" variant="caption" className="text-notice-destructive-fg m-0" role="alert">
           {choice.error}
         </Txt>
       )}

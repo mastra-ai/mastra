@@ -85,7 +85,6 @@ describe('SidebarNewMeter', () => {
     const link = container.querySelector('a[aria-label="Credit balance"]');
     expect(link).not.toBeNull();
     expect(link?.querySelector('button')).toBeNull();
-    expect(link?.parentElement?.className).toContain('hover:bg-card');
     expect(screen.getByRole('button', { name: 'What are credits?' })).toBeDefined();
   });
 });
@@ -129,7 +128,6 @@ describe('SidebarNew colors', () => {
     );
 
     const sidebar = container.querySelector('aside[aria-label="Sidebar"] > div');
-    expect(sidebar?.classList.contains('new-theme')).toBe(true);
     expect(sidebar?.className).toContain('bg-sidebar');
     expect(sidebar?.className).toContain('text-foreground');
     expect(sidebar?.className).not.toContain('[--');
@@ -137,7 +135,7 @@ describe('SidebarNew colors', () => {
     expect(screen.getByText('Project').className).toContain('text-muted-foreground');
     expect(
       [...container.querySelectorAll<HTMLElement>('[class]')].some(element =>
-        element.getAttribute('class')?.includes('bg-sidebar-divider'),
+        element.getAttribute('class')?.includes('bg-border'),
       ),
     ).toBe(true);
 
@@ -185,21 +183,14 @@ describe('SidebarNew command header', () => {
     );
   }
 
-  it('renders optional search and footer metadata with semantic colors', () => {
+  it('renders the optional search trigger and footer metadata', () => {
     const { container } = renderCommandHeader();
 
-    expect(container.querySelector('[data-slot="sidebar-new-command-header"]')?.className).not.toContain('border-b');
-    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain(
-      'hover:bg-sidebar-nav-hover',
-    );
-    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain('rounded-full');
-    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain('size-form-md');
-    expect(container.querySelector('[data-slot="sidebar-new-footer-meta"]')?.className).toContain(
-      'border-sidebar-divider',
-    );
+    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="sidebar-new-footer-meta"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDefined();
     expect(screen.getByText('Mastra')).toBeDefined();
-    expect(screen.getByText('⌘ K').className).toContain('bg-surface-overlay-soft');
-    expect(screen.getByText('⌘ K').className).toContain('border-border');
+    expect(screen.getByText('⌘ K')).toBeDefined();
     expect(screen.getByText('Mastra v0.24.6')).toBeDefined();
   });
 

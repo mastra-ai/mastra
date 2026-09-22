@@ -43,7 +43,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
         <div className="flex h-full flex-col items-center justify-center">
-          <Txt variant="ui-md" className="text-foreground text-center">
+          <Txt variant="body" tone="ink" className="text-center">
             No workflow ID provided
           </Txt>
         </div>

@@ -44,13 +44,13 @@ export function AgentProviderDetails({ agentName, provider, modelId }: AgentProv
       >
         <div className="grid gap-3">
           <CardTitle id={titleId}>Model</CardTitle>
-          <TextAndIcon className="text-ui-sm text-foreground">
+          <TextAndIcon className="text-caption text-foreground">
             <span aria-hidden="true">
               <ProviderLogo providerId={provider} className="dark:invert" />
             </span>
             <span className="overflow-wrap-anywhere min-w-0">{provider}</span>
           </TextAndIcon>
-          <span className="overflow-wrap-anywhere text-ui-sm text-foreground min-w-0">
+          <span className="overflow-wrap-anywhere text-caption text-foreground min-w-0">
             {modelId || 'No model configured'}
           </span>
         </div>

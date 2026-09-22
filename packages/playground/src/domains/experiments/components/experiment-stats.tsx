@@ -50,9 +50,9 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
     <div className={cn('grid justify-items-end gap-3', className)}>
       <div
         className={cn(
-          'flex items-center gap-3 text-muted-foreground text-ui-md ',
-          '[&>span]:flex [&>span]:gap-1 [&>span]:items-center ',
-          '[&_b]:text-muted-foreground [&_b]:font-semibold',
+          'flex items-center gap-3 text-muted-foreground text-caption',
+          '[&>span]:flex [&>span]:gap-1 [&>span]:items-center',
+          '[&_b]:text-column [&_b]:text-muted-foreground',
         )}
       >
         <span>

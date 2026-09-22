@@ -1,0 +1,166 @@
+/*
+ * Material: what a surface and a control's edge are made of, in both themes.
+ * Everything here is an alpha of `--fill-tint` — the one declaration that flips
+ * per theme — or an elevation drawn from it.
+ */
+
+:root {
+  /*
+   * Fill ladder — one language for anything sitting ABOVE its parent surface.
+   * Rungs are alphas of `--fill-tint`, the only part that flips per theme:
+   * light catching a dark surface, shade landing on a light one. Alpha
+   * compositing is linear in sRGB, so one alpha is one step in both themes —
+   * white over near-black spans 242 levels, near-black over near-white 233 —
+   * and a rung reads the same on the sidebar, the canvas and a card. The
+   * boundary ladder takes its alphas from the same tint, `--border` sitting a
+   * notch above `--fill` so its rim survives on a filled control.
+   *
+   * fill         rest of a filled control (input, button, trigger, chip) and of
+   *              a raised container; also press on a transparent base
+   * fill-hover   hover on a rest fill; rest of a selection control (checkbox,
+   *              switch, radio), which sits one rung up from field-sized surfaces
+   * fill-active  press / open / selected; selection-control hover
+   * fill-subtle  state layer on a transparent base: ghost hover, row hover, and
+   *              disabled fills
+   * fill-strong  selection-control press
+   */
+  --fill-tint: 100%;
+  --fill-subtle: oklch(var(--fill-tint) 0 0 / 4%);
+  --fill: oklch(var(--fill-tint) 0 0 / 6%);
+  --fill-hover: oklch(var(--fill-tint) 0 0 / 9%);
+  --fill-active: oklch(var(--fill-tint) 0 0 / 12%);
+  --fill-strong: oklch(var(--fill-tint) 0 0 / 18%);
+
+  /*
+   * Boundary ladder — the four states of a control's 1px edge, as alphas of
+   * `--fill-tint` so an edge reads the same on any surface and in either theme.
+   *
+   * border         rim of a filled control, divider, and the rim of a raised
+   *                surface (the `shadow-raised` utility draws it from this token)
+   * border-strong  the only affordance of a transparent control (outline
+   *                button/field at rest, selection control at rest)
+   * border-hover   hover on either of those. Deliberately nearer rest than focus: it
+   *                answers a pointer, and a pointer is not an event. Sitting midway
+   *                between the two (31%) made an outline control read as focused
+   *                under the cursor and left focus with nowhere louder to go.
+   * border-focus   focus, and the one rung that stays per-theme: it is authored
+   *                at the lowest alpha still clearing WCAG 1.4.11 (3:1 against
+   *                the fill it sits on) — 3.3:1 here, 3.2:1 in light at 50%.
+   *                Shade carries less weight than light at equal alpha, so
+   *                matching dark's 40% in light would drop it under the floor,
+   *                and raising dark to 50% reads as a highlight, not a focus.
+   */
+  --border: oklch(var(--fill-tint) 0 0 / 9%);
+  --border-strong: oklch(var(--fill-tint) 0 0 / 19%);
+  --border-hover: oklch(var(--fill-tint) 0 0 / 25%);
+  --border-focus: oklch(var(--fill-tint) 0 0 / 40%);
+  --ring: var(--border-focus);
+
+  /* Opaque twin of `--fill` over `--background`, for a scrolling panel whose
+   * sticky parts cannot let rows show through. Keep the two in sync: a panel and
+   * a resting control side by side on the canvas must read as one material. */
+  --surface-panel: oklch(0.2244 0 0);
+
+  --surface-overlay-soft: var(--fill-subtle);
+  --surface-overlay-strong: var(--gray-alpha-2);
+
+  --scrim: oklch(0% 0 0deg / 75%);
+
+  /*
+   * Two elevations, because there are two distances: a surface in the flow
+   * (card, field, list panel, settings container, app frame) and a detached
+   * overlay (popover, dropdown, dialog, drawer, tooltip).
+   *
+   * These are the drop layers only. The `shadow-raised` / `shadow-overlay`
+   * utilities in `src/index.css` assemble lip + rim + drops on the element
+   * itself, which is what lets a state repaint the rim: a custom property
+   * holding `var(--surface-rim)` would be substituted here, on the root, and
+   * every descendant would inherit the finished string.
+   *
+   * The rim is its own token, not `--border`. A divider inside a surface has
+   * the whole surface behind it and needs 9% to read; the rim sits on the
+   * boundary between two surfaces that already differ in fill and elevation,
+   * so the same 9% overshoots and the surface reads as framed. The reference
+   * skin uses its highlight colour for the rim in dark — 3%, the same alpha as
+   * the lip — and a 6% black ring in light, where no lip exists. Both are
+   * below the divider, on purpose.
+   *
+   * Focus moves that one edge (`--surface-rim-focus`) instead of adding a
+   * `border` beside it, which would read as two lines — and is why a field and
+   * a card can be the same material. Hover does not touch it: the rim is the
+   * loudest part of a borderless surface, so a pointer wash goes through
+   * `--surface-tint` (see `src/index.css`) and leaves the boundary alone.
+   *
+   * The rim is inset, so it cannot be clipped: the app frame and every
+   * ScrollArea viewport are `overflow-hidden`, and an outer ring on a surface
+   * sitting flush inside one is shaved off entirely. The cost is the mirror
+   * case — a child flush against the edge paints over it — which is why a panel
+   * holding a sticky header keeps a gutter (`p-1`) instead.
+   *
+   * In-flow surfaces keep the bleed short for the same reason. The drops fall
+   * outside the box and a scroller does clip those, so a tile reaching further
+   * than its clearance has its shadow sliced along the container edge.
+   *
+   * In dark a top lip adds light catching the edge, and the drops carry
+   * further: on a dark canvas a shadow has less room to darken, so the falloff
+   * has to be longer to read as the same height. The lip is a hint at 3% and
+   * not a line — anything near the rim's own weight reads as a second border on
+   * a small surface like a tooltip.
+   */
+  --elevation-lip: inset 0 1px 0 oklch(100% 0 0deg / 3%);
+  --surface-rim: oklch(100% 0 0deg / 5%);
+  --surface-rim-focus: oklch(100% 0 0deg / 14%);
+  --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 22%), 0 2px 3px -2px oklch(0% 0 0deg / 14%);
+  --elevation-overlay:
+    0 2px 2px oklch(0% 0 0deg / 10%), 0 4px 4px oklch(0% 0 0deg / 10%), 0 8px 8px oklch(0% 0 0deg / 10%);
+}
+
+html.light {
+  /* Shade instead of light, at the same alphas: the whole fill and boundary
+   * ladder re-resolves from here. */
+  --fill-tint: 20.5%;
+  /* Shade carries less weight than light at equal alpha, so focus needs a
+   * higher one here to hold its 3:1 floor against the fill it sits on. */
+  --border-focus: oklch(var(--fill-tint) 0 0 / 50%);
+  /* Opaque twin of the light `--fill` over `--background`. */
+  --surface-panel: oklch(0.9442 0 0);
+
+  --scrim: oklch(20.8% 0 0deg / 45%);
+
+  /* No lip: light does not catch one on a near-white surface, and the utility
+   * needs a value in that slot for the shadow list to stay valid. The rim is a
+   * shade here, and shade at equal alpha carries more weight than light, so it
+   * sits twice as low as the divider rather than level with the lip. Shorter
+   * falloff too — a shadow has room to darken here, so it reads as the same
+   * height over less distance. */
+  --elevation-lip: 0 0 #0000;
+  --surface-rim: oklch(0% 0 0deg / 8%);
+  --surface-rim-focus: oklch(0% 0 0deg / 18%);
+  --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 5%), 0 1px 3px -2px oklch(0% 0 0deg / 4%);
+  --elevation-overlay:
+    0 2px 4px -1px oklch(0% 0 0deg / 8%), 0 4px 8px -2px oklch(0% 0 0deg / 6%), 0 8px 16px -4px oklch(0% 0 0deg / 6%);
+}
+
+@theme {
+  --color-scrim: var(--scrim);
+  --color-surface-overlay-soft: var(--surface-overlay-soft);
+  --color-surface-overlay-strong: var(--surface-overlay-strong);
+
+  --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
+}
+
+/* Inline so a utility resolves var(--token) on the styled element and honors a
+   per-element override. */
+@theme inline {
+  --color-surface-panel: var(--surface-panel);
+  --color-fill-subtle: var(--fill-subtle);
+  --color-fill: var(--fill);
+  --color-fill-hover: var(--fill-hover);
+  --color-fill-active: var(--fill-active);
+  --color-fill-strong: var(--fill-strong);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-hover: var(--border-hover);
+  --color-border-focus: var(--border-focus);
+  --color-ring: var(--ring);
+}

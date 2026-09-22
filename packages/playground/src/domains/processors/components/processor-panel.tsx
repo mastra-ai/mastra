@@ -60,7 +60,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
   if (!processor)
     return (
       <div className="px-4 py-8 text-center">
-        <Txt variant="header-md" className="text-muted-foreground">
+        <Txt variant="heading" tone="muted">
           Processor not found
         </Txt>
       </div>
@@ -125,7 +125,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
   return (
     <div className="relative grid h-full min-w-min grid-cols-[auto_1fr] overflow-x-auto overflow-y-auto">
-      <div className="bg-surface2 border-border1 w-[22rem] overflow-y-auto border-r">
+      <div className="bg-background border-border w-[22rem] overflow-y-auto border-r">
         <ProcessorInformation processor={processor} />
 
         <div className="space-y-5 p-5">
@@ -145,7 +145,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 ))}
               </SelectContent>
             </Select>
-            <Txt variant="ui-xs" className="text-muted-foreground">
+            <Txt variant="meta" tone="muted">
               {PHASE_LABELS[selectedPhase]}
             </Txt>
           </div>
@@ -189,14 +189,14 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </Button>
 
           {selectedPhase === 'outputStream' && (
-            <Txt variant="ui-xs" className="text-accent6">
+            <Txt variant="meta" className="text-accent6">
               Output Stream phase cannot be executed directly. Use streaming instead.
             </Txt>
           )}
 
           {result && (
-            <div className="border-border1 space-y-2 border-t pt-4">
-              <Txt variant="ui-sm" className="text-muted-foreground">
+            <div className="border-border space-y-2 border-t pt-4">
+              <Txt variant="caption" tone="muted">
                 Status
               </Txt>
               <div className="flex items-center gap-2">
@@ -205,10 +205,10 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
                 <div className="bg-accent6Dark border-accent6/20 mt-2 rounded-md border p-3">
-                  <Txt variant="ui-sm" className="text-accent6 font-medium">
+                  <Txt variant="column" className="text-accent6">
                     Tripwire Reason
                   </Txt>
-                  <Txt variant="ui-sm" className="text-muted-foreground mt-1">
+                  <Txt variant="caption" tone="muted" className="mt-1">
                     {result.tripwire.reason}
                   </Txt>
                 </div>
@@ -235,12 +235,12 @@ interface ProcessorInformationProps {
 
 function ProcessorInformation({ processor }: ProcessorInformationProps) {
   return (
-    <div className="border-border1 border-b px-5 pt-5 pb-4">
-      <Txt variant="header-md" className="text-placeholder mb-2">
+    <div className="border-border border-b px-5 pt-5 pb-4">
+      <Txt variant="heading" tone="faint" className="mb-2">
         {processor.name || processor.id}
       </Txt>
       {processor.name && processor.name !== processor.id && (
-        <Txt variant="ui-sm" className="text-muted-foreground mb-3">
+        <Txt variant="caption" tone="muted" className="mb-3">
           {processor.id}
         </Txt>
       )}
@@ -250,7 +250,7 @@ function ProcessorInformation({ processor }: ProcessorInformationProps) {
         ))}
       </div>
       <div className="mt-3">
-        <Txt variant="ui-xs" className="text-muted-foreground">
+        <Txt variant="meta" tone="muted">
           Attached to {processor.configurations.length} agent{processor.configurations.length !== 1 ? 's' : ''}
         </Txt>
       </div>

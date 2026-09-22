@@ -38,7 +38,7 @@ export function AuditCategoryFilter({
         ))}
       </div>
       {countLabel ? (
-        <span className="text-ui-xs text-neutral2 justify-self-center tabular-nums sm:justify-self-end">
+        <span className="text-meta text-neutral2 justify-self-center tabular-nums sm:justify-self-end">
           {countLabel}
         </span>
       ) : null}

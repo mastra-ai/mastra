@@ -1,4 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Braces, FormInput } from 'lucide-react';
 
@@ -37,7 +40,8 @@ export function WorkflowInputTypeToggle({
       role="radiogroup"
       aria-label="Input view"
       className={cn(
-        'grid grid-flow-col auto-cols-fr gap-1 border border-border1 bg-surface3',
+        raisedSurfaceStyle,
+        'grid grid-flow-col auto-cols-fr gap-1',
         compact ? 'rounded-md p-px' : 'w-full rounded-lg p-1',
       )}
     >
@@ -54,15 +58,16 @@ export function WorkflowInputTypeToggle({
             disabled={disabled}
             onClick={() => onChange(option.value)}
             className={cn(
-              'flex items-center justify-center rounded-md transition-colors',
+              'flex items-center justify-center rounded-md',
+              controlStateColorTransition,
               compact ? 'gap-0.5 px-1 py-0' : 'gap-2 px-3 py-1.5',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
-              isActive ? 'bg-surface5 text-foreground' : 'text-muted-foreground hover:text-muted-foreground',
+              isActive ? 'bg-fill-hover text-foreground' : quietTextHover,
               disabled && 'cursor-not-allowed opacity-50',
             )}
           >
             {option.icon}
-            <Txt as="span" variant={compact ? 'ui-xs' : 'ui-sm'}>
+            <Txt as="span" variant={compact ? 'meta' : 'caption'}>
               {option.label}
             </Txt>
           </button>

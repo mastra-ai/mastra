@@ -96,7 +96,7 @@ function EntityIndexControls({
           </SelectContent>
         </Select>
         {headerAction}
-        <ButtonsGroup spacing="close" aria-label="Entities view">
+        <ButtonsGroup aria-label="Entities view">
           <Button
             type="button"
             variant={view === 'list' ? 'primary' : 'outline'}

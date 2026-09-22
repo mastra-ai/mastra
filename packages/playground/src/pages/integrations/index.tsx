@@ -60,8 +60,8 @@ export default function IntegrationsPage() {
 
   return (
     <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} className="grid grid-rows-[auto_minmax(0,1fr)] p-4">
-      <div className="max-w-3xl space-y-6 text-ui-md">
-        <p className="text-gray-500">
+      <div className="max-w-3xl space-y-6 text-body">
+        <p className="text-muted-foreground">
           Minimal page to verify the ToolProvider backend. Pick a provider and toolkit, then connect.
         </p>
 

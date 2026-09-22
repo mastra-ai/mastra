@@ -8,6 +8,7 @@ import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@/ds/components/MainSidebar';
 import { PageLayout } from '@/ds/components/PageLayout';
 import { TooltipProvider } from '@/ds/components/Tooltip';
+import { frameSurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 function SidebarBrand() {
@@ -36,7 +37,7 @@ function SidebarBrand() {
   return (
     <div className="flex items-center gap-2 px-3 py-2">
       <Boxes className="size-5 shrink-0" />
-      <span className="text-ui-md text-foreground font-semibold">Workspace</span>
+      <span className="text-subheading text-foreground">Workspace</span>
       {!isMobile && <MainSidebar.Trigger />}
     </div>
   );
@@ -65,10 +66,10 @@ function Sidebar() {
 
 function MobileHeader() {
   return (
-    <div className="border-border1 bg-surface1 flex h-12 shrink-0 items-center justify-between border-b px-3 lg:hidden">
+    <div className="border-border bg-sidebar flex h-12 shrink-0 items-center justify-between border-b px-3 lg:hidden">
       <span className="flex items-center gap-3">
         <MainSidebar.MobileTrigger />
-        <span className="text-ui-md text-foreground font-semibold">Workspace</span>
+        <span className="text-subheading text-foreground">Workspace</span>
       </span>
       <button type="button" aria-label="Search">
         <Search className="size-5" />
@@ -87,7 +88,7 @@ const crumbs = (
 
 function Frame({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame relative m-1.5 ml-0 min-h-0 flex-1 overflow-hidden border lg:m-2 lg:ml-0">
+    <div className={cn('rounded-studio-frame relative m-1.5 ml-0 min-h-0 flex-1 overflow-hidden lg:m-2 lg:ml-0', frameSurfaceStyle)}>
       {children}
     </div>
   );
@@ -104,9 +105,9 @@ function MainContent({ withHeader = true }: { withHeader?: boolean }) {
         <PageHeader.Description>Configuration and recent activity.</PageHeader.Description>
       </PageHeader>
       {Array.from({ length: 14 }, (_, index) => (
-        <article key={index} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
-          <p className="text-ui-sm text-foreground font-medium">Activity {index + 1}</p>
-          <p className="text-ui-xs text-muted-foreground mt-1">
+        <article key={index} className={cn(raisedSurfaceStyle, 'rounded-studio-panel p-4')}>
+          <p className="text-column text-foreground">Activity {index + 1}</p>
+          <p className="text-meta text-muted-foreground mt-1">
             A representative row that makes the content area scroll.
           </p>
         </article>
@@ -119,9 +120,9 @@ function FrameWithPanel({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-0 flex-1">
       <Frame>{children}</Frame>
-      <aside className="border-border1 bg-surface1 hidden w-72 shrink-0 border-l p-4 xl:block">
-        <p className="text-ui-sm text-foreground font-medium">Details panel</p>
-        <p className="text-ui-xs text-muted-foreground mt-1">
+      <aside className="border-border bg-sidebar hidden w-72 shrink-0 border-l p-4 xl:block">
+        <p className="text-column text-foreground">Details panel</p>
+        <p className="text-meta text-muted-foreground mt-1">
           A consumer-owned panel rendered beside the framed content.
         </p>
       </aside>
@@ -143,7 +144,7 @@ export const StandardDesktop: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
-        <div className="bg-surface1 h-dvh w-dvw font-sans">
+        <div className="bg-sidebar font-body h-dvh w-dvw">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <Frame>
               <MainContent />
@@ -166,7 +167,7 @@ export const CollapsedSidebar: Story = {
         collapseBelow={160}
         storageKey="app-shell-story-collapsed"
       >
-        <div className="bg-surface1 h-dvh w-dvw font-sans">
+        <div className="bg-sidebar font-body h-dvh w-dvw">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <Frame>
               <MainContent />
@@ -183,7 +184,7 @@ export const Mobile: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans">
+        <div className="bg-sidebar font-body h-dvh w-dvw">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <Frame>
               <MainContent />
@@ -199,7 +200,7 @@ export const WithoutRouteHeader: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans">
+        <div className="bg-sidebar font-body h-dvh w-dvw">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <Frame>
               <MainContent withHeader={false} />
@@ -223,7 +224,7 @@ export const WithFrameWrapper: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans">
+        <div className="bg-sidebar font-body h-dvh w-dvw">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <FrameWithPanel>
               <MainContent />
@@ -240,7 +241,7 @@ export const LightTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans">
+        <div className="bg-sidebar font-body h-dvh w-dvw">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <Frame>
               <MainContent />
@@ -257,7 +258,7 @@ export const DarkTheme: Story = {
   render: () => (
     <TooltipProvider>
       <MainSidebarProvider>
-        <div className="bg-surface1 h-dvh w-dvw font-sans">
+        <div className="bg-sidebar font-body h-dvh w-dvw">
           <AppShell sidebar={<Sidebar />} mobileHeader={<MobileHeader />}>
             <Frame>
               <MainContent />

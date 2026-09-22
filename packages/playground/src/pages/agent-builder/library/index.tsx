@@ -6,6 +6,9 @@ import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { CircleSlashIcon, LibraryIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -131,24 +134,24 @@ export default function AgentBuilderLibraryPage() {
           </div>
           <div className="flex items-center gap-4">
             {features.skills && (
-              <div className="border-border1 flex overflow-hidden rounded-lg border">
+              <div className="border-border flex overflow-hidden rounded-lg border">
                 <button
                   onClick={() => setTab('agents')}
-                  className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
-                    tab === 'agents'
-                      ? 'bg-surface4 text-foreground'
-                      : 'bg-surface2 text-muted-foreground hover:text-foreground'
-                  }`}
+                  className={cn(
+                    'text-column px-3 py-1.5',
+                    controlStateColorTransition,
+                    tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                  )}
                 >
                   Agents
                 </button>
                 <button
                   onClick={() => setTab('skills')}
-                  className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
-                    tab === 'skills'
-                      ? 'bg-surface4 text-foreground'
-                      : 'bg-surface2 text-muted-foreground hover:text-foreground'
-                  }`}
+                  className={cn(
+                    'text-column px-3 py-1.5',
+                    controlStateColorTransition,
+                    tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                  )}
                 >
                   Skills
                 </button>

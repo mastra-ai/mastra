@@ -29,25 +29,24 @@ describe('ProcessStepListItem', () => {
 
   it('leaves the active step without a card surface in the plain variant', () => {
     render(<ProcessStepListItem step={step} isActive position={2} />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(true);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-card')).toBe(true);
 
     cleanup();
 
     render(<ProcessStepListItem step={step} isActive position={2} variant="plain" />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(false);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-card')).toBe(false);
   });
 
-  it('drops the filled disc and its glow from a completed marker in the plain variant', () => {
+  it('drops the filled disc from a completed marker in the plain variant', () => {
     const completed: ProcessStep = { ...step, status: 'success', isActive: false };
 
     render(<ProcessStepListItem step={completed} isActive={false} position={2} />);
-    expect(document.querySelector('.bg-accent1Dark.shadow-glow-accent1')).toBeTruthy();
+    expect(document.querySelector('.bg-accent1Dark')).toBeTruthy();
 
     cleanup();
 
     render(<ProcessStepListItem step={completed} isActive={false} position={2} variant="plain" />);
     expect(document.querySelector('.bg-accent1Dark')).toBeNull();
-    expect(document.querySelector('.shadow-glow-accent1')).toBeNull();
   });
 
   const markerOf = (title: string) =>
@@ -77,7 +76,7 @@ describe('ProcessStepListItem', () => {
   it('leaves an inactive step without the card surface', () => {
     render(<ProcessStepListItem step={step} isActive={false} position={1} />);
 
-    expect(cardOf('Cloning repository')?.classList.contains('bg-surface3')).toBe(false);
+    expect(cardOf('Cloning repository')?.classList.contains('bg-card')).toBe(false);
   });
 
   it('draws a dashed ring for a step that has not started', () => {
@@ -180,12 +179,11 @@ describe('ProcessStepListItem', () => {
     expect(markerOf('Cloning repository')?.classList.contains('border-dashed')).toBe(false);
   });
 
-  it('leaves a running default marker unfilled and unglowing', () => {
+  it('leaves a running default marker unfilled', () => {
     render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} />);
 
     const marker = markerOf('Cloning repository');
     expect(marker?.classList.contains('bg-accent1Dark')).toBe(false);
-    expect(marker?.classList.contains('shadow-glow-accent1')).toBe(false);
   });
 
   it('reserves border space for the card only in the default variant', () => {
