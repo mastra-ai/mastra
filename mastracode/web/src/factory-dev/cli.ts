@@ -54,19 +54,49 @@ async function apiJson<T>(url: string, token: string, orgId: string): Promise<T>
   return (await response.json()) as T;
 }
 
-async function mintOrgApiKey(token: string, orgId: string, projectName: string): Promise<string> {
+interface OrganizationToken {
+  id: string;
+  name: string;
+}
+
+async function deleteOrgApiKey(token: string, orgId: string, tokenId: string): Promise<void> {
+  const response = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens/${encodeURIComponent(tokenId)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token, orgId),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(extractApiErrorDetail(body) || `Failed to delete platform API key (${response.status})`);
+  }
+}
+
+async function mintOrgApiKey(
+  token: string,
+  orgId: string,
+  projectName: string,
+): Promise<{ id: string; secret: string }> {
+  const name = `factory-dev: ${projectName}`;
+  const existing = await apiJson<{ tokens: OrganizationToken[] }>(
+    `${MASTRA_PLATFORM_API_URL}/v1/auth/tokens`,
+    token,
+    orgId,
+  );
+  await Promise.all(
+    existing.tokens.filter(item => item.name === name).map(item => deleteOrgApiKey(token, orgId, item.id)),
+  );
+
   const response = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens`, {
     method: 'POST',
     headers: { ...authHeaders(token, orgId), 'content-type': 'application/json' },
-    body: JSON.stringify({ name: `factory-dev: ${projectName}` }),
+    body: JSON.stringify({ name }),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(extractApiErrorDetail(body) || `Failed to create platform API key (${response.status})`);
   }
-  const body = (await response.json()) as { secret?: string };
-  if (!body.secret) throw new Error('Platform did not return the new API key.');
-  return body.secret;
+  const body = (await response.json()) as { token?: { id?: string }; secret?: string };
+  if (!body.token?.id || !body.secret) throw new Error('Platform did not return the new API key.');
+  return { id: body.token.id, secret: body.secret };
 }
 
 async function choose<T extends string>(
@@ -239,11 +269,15 @@ async function run() {
   let platformSecretKey = existingSettings
     ? await loadEnvironmentValue(envFile, 'MASTRA_PLATFORM_SECRET_KEY')
     : undefined;
+  let createdToken: { id: string; secret: string } | undefined;
+  let setupToken: string | undefined;
   if (!platformSecretKey) {
     const spinner = p.spinner();
     spinner.start('Creating organization-scoped platform API key');
     try {
-      platformSecretKey = await mintOrgApiKey(await getToken(), settings.organization.id, settings.project.name);
+      setupToken = await getToken();
+      createdToken = await mintOrgApiKey(setupToken, settings.organization.id, settings.project.name);
+      platformSecretKey = createdToken.secret;
       spinner.stop('Platform API key created');
     } catch (error) {
       spinner.stop('Platform API key creation failed');
@@ -252,16 +286,29 @@ async function run() {
   }
   env.MASTRA_PLATFORM_SECRET_KEY = platformSecretKey;
   delete env.MASTRA_PLATFORM_ACCESS_TOKEN;
-  await saveEnvironment(envFile, {
-    MASTRA_PLATFORM_ACCESS_TOKEN: undefined,
-    MASTRA_PLATFORM_SECRET_KEY: env.MASTRA_PLATFORM_SECRET_KEY,
-    MASTRA_ORGANIZATION_ID: env.MASTRA_ORGANIZATION_ID,
-    MASTRA_PROJECT_ID: env.MASTRA_PROJECT_ID,
-    MASTRA_ENVIRONMENT_ID: env.MASTRA_ENVIRONMENT_ID,
-    FACTORY_SANDBOX_PROVIDER: env.FACTORY_SANDBOX_PROVIDER,
-    DATABASE_URL: env.DATABASE_URL,
-    REDIS_URL: settings.database.provider === 'postgres-local' ? env.REDIS_URL : undefined,
-  });
+  try {
+    await saveEnvironment(envFile, {
+      MASTRA_PLATFORM_ACCESS_TOKEN: undefined,
+      MASTRA_PLATFORM_SECRET_KEY: env.MASTRA_PLATFORM_SECRET_KEY,
+      MASTRA_ORGANIZATION_ID: env.MASTRA_ORGANIZATION_ID,
+      MASTRA_PROJECT_ID: env.MASTRA_PROJECT_ID,
+      MASTRA_ENVIRONMENT_ID: env.MASTRA_ENVIRONMENT_ID,
+      FACTORY_SANDBOX_PROVIDER: env.FACTORY_SANDBOX_PROVIDER,
+      DATABASE_URL: env.DATABASE_URL,
+      APP_DATABASE_URL: undefined,
+      REDIS_URL: settings.database.provider === 'postgres-local' ? env.REDIS_URL : undefined,
+    });
+  } catch (error) {
+    if (createdToken && setupToken) {
+      await deleteOrgApiKey(setupToken, settings.organization.id, createdToken.id).catch(cleanupError => {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Failed to save Factory environment and revoke its platform API key.',
+        );
+      });
+    }
+    throw error;
+  }
   const dev = await x(
     'pnpm',
     [

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -18,6 +19,17 @@ export interface FactoryDevSettings {
 
 export const settingsPath = (root: string) => path.join(root, '.factory', 'settings.json');
 
+async function atomicWrite(file: string, contents: string): Promise<void> {
+  const tempFile = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    await fs.writeFile(tempFile, contents, { mode: 0o600 });
+    await fs.chmod(tempFile, 0o600);
+    await fs.rename(tempFile, file);
+  } finally {
+    await fs.rm(tempFile, { force: true });
+  }
+}
+
 export async function loadSettings(root: string): Promise<FactoryDevSettings | null> {
   try {
     const value = JSON.parse(await fs.readFile(settingsPath(root), 'utf8')) as FactoryDevSettings;
@@ -32,7 +44,7 @@ export async function loadSettings(root: string): Promise<FactoryDevSettings | n
 export async function saveSettings(root: string, settings: FactoryDevSettings): Promise<void> {
   const file = settingsPath(root);
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+  await atomicWrite(file, `${JSON.stringify(settings, null, 2)}\n`);
 }
 
 export async function loadEnvironmentValue(file: string, key: string): Promise<string | undefined> {
@@ -66,8 +78,7 @@ export async function saveEnvironment(file: string, values: Record<string, strin
   for (const [key, value] of Object.entries(values)) {
     if (value !== undefined) lines.push(`${key}=${JSON.stringify(value)}`);
   }
-  await fs.writeFile(file, `${lines.join('\n')}\n`, { mode: 0o600 });
-  await fs.chmod(file, 0o600);
+  await atomicWrite(file, `${lines.join('\n')}\n`);
 }
 
 export function localPostgresUrl(env: NodeJS.ProcessEnv): string {

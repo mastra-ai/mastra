@@ -49,18 +49,23 @@ describe('Factory development settings', () => {
     expect(contents).not.toContain('token');
     expect(contents).not.toContain('DATABASE_URL');
     expect((await fs.stat(settingsPath(root))).mode & 0o777).toBe(0o600);
+    expect(await fs.readdir(path.dirname(settingsPath(root)))).toEqual(['settings.json']);
   });
 
   it('writes resolved values to .env while preserving unmanaged values and removing stale managed values', async () => {
     const root = await createTempDir();
     const file = path.join(root, '.env');
-    await fs.writeFile(file, 'OPENAI_API_KEY=existing\nDATABASE_URL=stale\nFACTORY_SANDBOX_PROVIDER=local\n');
+    await fs.writeFile(
+      file,
+      'OPENAI_API_KEY=existing\nDATABASE_URL=stale\nAPP_DATABASE_URL=deprecated\nFACTORY_SANDBOX_PROVIDER=local\n',
+    );
 
     await saveEnvironment(file, {
       MASTRA_PLATFORM_ACCESS_TOKEN: undefined,
       MASTRA_PLATFORM_SECRET_KEY: 'sk_selected-org',
       MASTRA_PROJECT_ID: 'project-1',
       DATABASE_URL: 'postgres://platform/database',
+      APP_DATABASE_URL: undefined,
       FACTORY_SANDBOX_PROVIDER: undefined,
     });
 
@@ -72,7 +77,9 @@ describe('Factory development settings', () => {
     );
     expect(await loadEnvironmentValue(file, 'MASTRA_PLATFORM_SECRET_KEY')).toBe('sk_selected-org');
     expect(await loadEnvironmentValue(file, 'MASTRA_PLATFORM_ACCESS_TOKEN')).toBeUndefined();
+    expect(await loadEnvironmentValue(file, 'APP_DATABASE_URL')).toBeUndefined();
     expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
+    expect(await fs.readdir(root)).toEqual(['.env']);
   });
 
   it('derives the local PostgreSQL URL without persisting credentials', () => {
