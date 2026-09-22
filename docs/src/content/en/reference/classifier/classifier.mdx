@@ -360,7 +360,7 @@ const classifier = new Classifier({
 
 ## Registering classifiers
 
-Register classifiers on the `Mastra` instance to share them across your application. Registration wires the classifier to Mastra's observability, and makes it retrievable by key or ID.
+Register classifiers on the `Mastra` instance to share them across your application and retrieve them by key or ID. When a registered classifier is evaluated without an active trace, it starts a root `CLASSIFIER_EVALUATION` span through the `Mastra` instance's configured observability provider.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

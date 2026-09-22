@@ -452,7 +452,7 @@ export interface Config<
 
   /**
    * Classifiers return typed fixed-option decisions from evaluation models.
-   * Registered classifiers can be referenced by id from processors.
+   * Registered classifiers can be retrieved with getClassifier() or getClassifierById().
    */
   classifiers?: TClassifiers;
 
@@ -4384,26 +4384,12 @@ export class Mastra<
     if (!classifiers) return false;
 
     if (classifiers[keyOrId]) {
-      const classifier = classifiers[keyOrId];
-      const hasOtherRegistration = Object.entries(classifiers).some(
-        ([key, value]) => key !== keyOrId && value === classifier,
-      );
-      if (!hasOtherRegistration) {
-        classifier.__unregisterMastra(this);
-      }
       delete classifiers[keyOrId];
       return true;
     }
 
     const key = Object.keys(classifiers).find(k => classifiers[k]?.id === keyOrId);
     if (key) {
-      const classifier = classifiers[key];
-      const hasOtherRegistration = Object.entries(classifiers).some(
-        ([registeredKey, value]) => registeredKey !== key && value === classifier,
-      );
-      if (classifier && !hasOtherRegistration) {
-        classifier.__unregisterMastra(this);
-      }
       delete classifiers[key];
       return true;
     }

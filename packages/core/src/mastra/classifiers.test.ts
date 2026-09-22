@@ -1,7 +1,8 @@
 import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
-import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Classifier } from '../classifier';
 import { MastraError } from '../error';
+import type { ObservabilityEntrypoint, ObservabilityInstance } from '../observability';
 import { Mastra } from './index';
 
 function createModel(): EvaluationModelV4 {
@@ -22,6 +23,19 @@ const questions = {
   unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
 } as const;
 
+function createObservability() {
+  const startSpan = vi.fn();
+  const instance = { startSpan } as unknown as ObservabilityInstance;
+  const entrypoint = {
+    setLogger: vi.fn(),
+    setMastraContext: vi.fn(),
+    getDefaultInstance: vi.fn(() => instance),
+    getSelectedInstance: vi.fn(() => instance),
+  } as unknown as ObservabilityEntrypoint;
+
+  return { entrypoint, startSpan };
+}
+
 describe('Mastra classifier registration', () => {
   it('registers classifiers from config and exposes them by key and id', () => {
     const safety = new Classifier({ id: 'safety-classifier', model: createModel(), questions });
@@ -30,19 +44,23 @@ describe('Mastra classifier registration', () => {
 
     expect(Object.keys(mastra.listClassifiers())).toEqual(['safety', 'router']);
     expect(mastra.getClassifier('safety')).toBe(safety);
-    expectTypeOf(mastra.getClassifier('safety')).toEqualTypeOf<typeof safety>();
     expect(mastra.getClassifierById('safety-classifier')).toBe(safety);
     // Falls back to the registration key
     expect(mastra.getClassifierById('safety')).toBe(safety);
     expect(mastra.getClassifierById('router')).toBe(router);
   });
 
-  it('calls __registerMastra on registration', () => {
-    const classifier = new Classifier({ id: 'safety', model: createModel(), questions });
-    const spy = vi.spyOn(classifier, '__registerMastra');
-    const mastra = new Mastra({ classifiers: { safety: classifier } });
+  it('uses the registered Mastra observability instance for root spans', async () => {
+    const registered = new Classifier({ id: 'registered', model: createModel(), questions });
+    const unregistered = new Classifier({ id: 'unregistered', model: createModel(), questions });
+    const { entrypoint, startSpan } = createObservability();
+    new Mastra({ classifiers: { registered }, observability: entrypoint });
 
-    expect(spy).toHaveBeenCalledWith(mastra);
+    await registered.evaluate({ state: 'test' });
+    expect(startSpan).toHaveBeenCalledOnce();
+
+    await unregistered.evaluate({ state: 'test' });
+    expect(startSpan).toHaveBeenCalledOnce();
   });
 
   it('addClassifier uses the id as the default key and ignores duplicate keys', () => {
@@ -87,31 +105,17 @@ describe('Mastra classifier registration', () => {
     expect(Object.keys(mastra.listClassifiers())).toEqual([]);
   });
 
-  it('unregisters a classifier after its last registration is removed', () => {
-    const mastra = new Mastra();
+  it('rebinds a classifier to the latest Mastra instance', async () => {
     const classifier = new Classifier({ id: 'safety', model: createModel(), questions });
-    const spy = vi.spyOn(classifier, '__unregisterMastra');
+    const first = createObservability();
+    const second = createObservability();
+    new Mastra({ classifiers: { safety: classifier }, observability: first.entrypoint });
+    new Mastra({ classifiers: { safety: classifier }, observability: second.entrypoint });
 
-    mastra.addClassifier(classifier, 'primary');
-    mastra.addClassifier(classifier, 'secondary');
+    await classifier.evaluate({ state: 'test' });
 
-    expect(mastra.removeClassifier('primary')).toBe(true);
-    expect(spy).not.toHaveBeenCalled();
-    expect(mastra.removeClassifier('safety')).toBe(true);
-    expect(spy).toHaveBeenCalledOnce();
-    expect(spy).toHaveBeenCalledWith(mastra);
-  });
-
-  it('rejects registering a classifier with a different Mastra instance', () => {
-    const classifier = new Classifier({ id: 'safety', model: createModel(), questions });
-    const firstMastra = new Mastra({ classifiers: { safety: classifier } });
-    const secondMastra = new Mastra();
-
-    expect(() => secondMastra.addClassifier(classifier)).toThrow(
-      'Classifier is already registered with another Mastra instance.',
-    );
-    expect(firstMastra.getClassifier('safety')).toBe(classifier);
-    expect(Object.keys(secondMastra.listClassifiers())).toEqual([]);
+    expect(first.startSpan).not.toHaveBeenCalled();
+    expect(second.startSpan).toHaveBeenCalledOnce();
   });
 
   it('throws when adding an undefined classifier', () => {

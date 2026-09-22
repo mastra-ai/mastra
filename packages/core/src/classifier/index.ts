@@ -211,16 +211,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
    * through the registered observability instance when no span is active.
    */
   __registerMastra(mastra: Mastra): void {
-    if (this.#mastra && this.#mastra !== mastra) {
-      throw new Error('Classifier is already registered with another Mastra instance.');
-    }
     this.#mastra = mastra;
-  }
-
-  __unregisterMastra(mastra: Mastra): void {
-    if (this.#mastra === mastra) {
-      this.#mastra = undefined;
-    }
   }
 
   async evaluate(
