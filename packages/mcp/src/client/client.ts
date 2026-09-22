@@ -541,21 +541,29 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private async connectStdio(command: string) {
     this.log('debug', `Using Stdio transport for command: ${command}`);
+    // Held locally until the connect succeeds, mirroring connectHttp, so a failed
+    // attempt leaves `this.transport` unset. connect()'s failure branch keys the
+    // process-hook release on that, and a lingering transport would suppress it.
+    const transport = new StdioClientTransport({
+      command,
+      args: this.serverConfig.args,
+      env: this.buildStdioEnv(),
+      stderr: this.serverConfig.stderr,
+      cwd: this.serverConfig.cwd,
+    });
     try {
-      this.transport = new StdioClientTransport({
-        command,
-        args: this.serverConfig.args,
-        env: this.buildStdioEnv(),
-        stderr: this.serverConfig.stderr,
-        cwd: this.serverConfig.cwd,
-      });
-      await this.client.connect(this.transport, {
+      await this.client.connect(transport, {
         timeout: this.serverConfig.timeout ?? this.timeout,
         prior: this.priorDiscovery,
       });
+      this.transport = transport;
       this.log('debug', `Successfully connected to MCP server via Stdio`);
     } catch (e) {
       this.log('error', e instanceof Error ? e.stack || e.message : JSON.stringify(e));
+      // client.connect() may already have spawned the child before throwing, and
+      // nothing else holds this transport now, so close it here or the subprocess
+      // outlives the failed attempt.
+      await transport.close().catch(() => {});
       throw e;
     }
   }
