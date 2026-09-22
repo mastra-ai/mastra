@@ -54,7 +54,7 @@ function AuditLogEmptyState({
     <EmptyState
       className="min-h-48"
       as="h2"
-      iconSlot={<ScrollText className="text-icon3 size-5" aria-hidden />}
+      iconSlot={<ScrollText className="text-muted-foreground size-5" aria-hidden />}
       titleSlot={state.title}
       descriptionSlot={state.description}
       actionSlot={
@@ -139,7 +139,7 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
             <AuditTimeline events={events} bounds={bounds} range={selectedRange} />
           </AuditRangePicker>
         ) : (
-          <p className="text-meta text-neutral2 flex h-28 items-center justify-center">Nothing recorded yet</p>
+          <p className="text-meta text-placeholder flex h-28 items-center justify-center">Nothing recorded yet</p>
         )}
         <AuditCategoryFilter
           selectedCategories={selectedCategories}

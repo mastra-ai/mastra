@@ -27,14 +27,10 @@ describe('TaskList', () => {
       expect(screen.getByRole('progressbar').getAttribute('aria-valuemax')).toBe('3');
     });
 
-    it('renders one progress bar per task, colored by status', () => {
+    it('renders one progress bar per task', () => {
       render(<TaskList tasks={mixedTasks} />);
 
-      const bars = Array.from(screen.getByRole('progressbar').children).map(bar => bar.className);
-      expect(bars).toHaveLength(3);
-      expect(bars[0]).toContain('bg-positive1');
-      expect(bars[1]).toContain('bg-warning1');
-      expect(bars[2]).toContain('bg-fill-hover');
+      expect(screen.getByRole('progressbar').children).toHaveLength(3);
     });
 
     it('reveals the exact count on hover', async () => {

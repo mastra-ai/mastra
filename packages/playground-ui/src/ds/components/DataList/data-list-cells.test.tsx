@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { format } from 'date-fns';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -367,16 +368,24 @@ describe('DataListDateCell', () => {
 });
 
 describe('DataListCreatedCell', () => {
-  it('shows date and 12-hour time without milliseconds', () => {
-    const { container } = render(<DataListCreatedCell timestamp={new Date(2026, 7, 31, 13, 7, 47, 657)} />);
+  it('shows a short date and 24-hour time without milliseconds', () => {
+    const { container } = render(<DataListCreatedCell timestamp={new Date(2020, 7, 31, 13, 7, 47, 657)} />);
 
-    expect(container.textContent).toBe('Aug 31 1:07:47 pm');
+    expect(container.textContent).toBe('Aug 31 13:07:47');
+  });
+
+  it('keeps the date even when the timestamp is today', () => {
+    const today = new Date();
+    today.setHours(9, 5, 3, 0);
+    const { container } = render(<DataListCreatedCell timestamp={today} />);
+
+    expect(container.textContent).toBe(`${format(today, 'MMM d')} 09:05:03`);
   });
 
   it('reads a timestamp given as a string', () => {
-    const { container } = render(<DataListCreatedCell timestamp={new Date(2026, 4, 19, 9, 5, 3).toISOString()} />);
+    const { container } = render(<DataListCreatedCell timestamp={new Date(2020, 4, 19, 9, 5, 3).toISOString()} />);
 
-    expect(container.textContent).toBe('May 19 9:05:03 am');
+    expect(container.textContent).toBe('May 19 09:05:03');
   });
 
   it('shows nothing for a date it cannot read', () => {

@@ -65,7 +65,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
           <DialogDescription>Authorize your account and paste the returned code.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4">
-          <Txt as="p" variant="caption" className="text-icon4">
+          <Txt as="p" variant="caption" className="text-muted-foreground">
             {session.instructions}
           </Txt>
           <Button variant="outline" onClick={() => openAuthorizationUrl(session.url)}>
@@ -175,7 +175,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
               {flowError}
             </Txt>
           ) : (
-            <div className="text-icon4 flex items-center gap-2" role="status">
+            <div className="text-muted-foreground flex items-center gap-2" role="status">
               <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
               <Txt as="span" variant="caption">
                 Waiting for authorization…

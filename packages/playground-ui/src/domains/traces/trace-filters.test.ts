@@ -10,6 +10,7 @@ import {
   hasAnyTraceFilterParams,
   loadTraceFiltersFromStorage,
   saveTraceFiltersToStorage,
+  TRACE_FILTER_BAR_OPERATORS,
   traceTokensToFilterBarItems,
 } from './trace-filters';
 
@@ -39,6 +40,24 @@ describe('saveTraceFiltersToStorage', () => {
 
     expect(loadTraceFiltersFromStorage(KEY)).toBeNull();
     expect(localStorage.getItem(KEY)).toBeNull();
+  });
+});
+
+describe('TRACE_FILTER_BAR_OPERATORS', () => {
+  it('labels every operator in plain English', () => {
+    const labels = Object.fromEntries(TRACE_FILTER_BAR_OPERATORS.map(o => [o.id, o.label]));
+    expect(labels).toEqual({
+      is: 'is',
+      isNot: 'is not',
+      in: 'is any of',
+      notIn: 'is none of',
+      exists: 'exists',
+      notExists: 'does not exist',
+      gt: 'greater than',
+      gte: 'at least',
+      lt: 'less than',
+      lte: 'at most',
+    });
   });
 });
 
@@ -104,6 +123,24 @@ describe('createTraceFilterBarFields', () => {
     ]);
     expect(byId('scores.score')?.type).toBe('number');
     expect(byId('feedback.value')?.type).toBe('number');
+  });
+
+  describe('when a field is not an identifier', () => {
+    it('offers a strict value list for the is operator', () => {
+      for (const id of ['environment', 'entityName', 'status', 'rootEntityType']) {
+        expect(byId(id)?.strict, id).toBe(true);
+        expect(Array.isArray(byId(id)?.suggestions), id).toBe(true);
+      }
+    });
+  });
+
+  describe('when a field is an identifier', () => {
+    it('stays free text with no value list', () => {
+      for (const id of ['traceId', 'threadId', 'resourceId', 'entityId']) {
+        expect(byId(id)?.strict, id).toBeUndefined();
+        expect(byId(id)?.suggestions, id).toBeUndefined();
+      }
+    });
   });
 
   it('offers only presence operators on presence fields', () => {

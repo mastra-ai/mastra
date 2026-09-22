@@ -78,14 +78,14 @@ function TokenRow({
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
-            <Txt variant="body" className="text-icon5">
+            <Txt variant="body" className="text-foreground">
               {title}
             </Txt>
             <Badge size="sm" variant={configured ? 'green' : 'neutral'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>
-          <Txt variant="caption" className="text-icon3">
+          <Txt variant="caption" className="text-muted-foreground">
             {description}
           </Txt>
         </div>

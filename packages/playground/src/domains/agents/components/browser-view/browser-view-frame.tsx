@@ -169,7 +169,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
       {isReconnecting && (
         <div className="bg-sidebar/80 absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-2">
-            <div className="border-neutral4 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
+            <div className="border-muted-foreground h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
             <span className="text-muted-foreground text-body">Reconnecting...</span>
           </div>
         </div>

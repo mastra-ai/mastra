@@ -47,7 +47,7 @@ function StepStatusMarker({ status, variant }: { status: string; variant: Proces
         {
           '[&>svg]:text-notice-success-fg': status === 'success',
           '[&>svg]:text-notice-destructive-fg': status === 'failed',
-          'border border-dashed border-neutral2': status === 'pending',
+          'border border-dashed border-placeholder': status === 'pending',
           '[&>svg]:size-4': status !== 'running',
           'bg-accent1Dark': status === 'success',
           'bg-accent2Dark': status === 'failed',
@@ -77,7 +77,7 @@ export function ProcessStepListItem({ step, isActive, position, variant = 'defau
         transitions.colors,
         {
           'border border-transparent': variant === 'default',
-          'border-dashed border-neutral2 bg-card': isActive && variant === 'default',
+          'border-dashed border-placeholder bg-card': isActive && variant === 'default',
         },
       )}
     >

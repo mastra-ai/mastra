@@ -161,7 +161,7 @@ export function BoardRelevanceFilters({
           </div>
           <div className="min-h-0 overflow-y-auto">
             {visibleLabels.length === 0 && (
-              <div className="text-icon3 px-3 py-1.5 text-xs">
+              <div className="text-muted-foreground px-3 py-1.5 text-xs">
                 {availableLabels.length === 0 ? 'No labels available.' : 'No labels match.'}
               </div>
             )}

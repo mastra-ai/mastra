@@ -30,7 +30,7 @@ export function Message({ from, avatar, footer, pending, children, className, ..
           data-slot="message-content"
           className={cn(
             'max-w-full min-w-0 text-body break-words',
-            isUser && 'rounded-xl border border-transparent bg-fill-subtle px-4 py-2 text-text1',
+            isUser && 'rounded-xl border border-transparent bg-fill-subtle px-4 py-2 text-foreground',
             isUser && pending && 'border-dashed border-border',
             !isUser && footer && '[&>:last-child]:mb-0',
           )}
@@ -67,6 +67,6 @@ export function MessageActions({ visibility = 'hover', children, className, ...p
 
 export function MessageMetadata({ className, ...props }: ComponentProps<'span'>) {
   return (
-    <span {...props} className={cn('text-muted-foreground inline-flex items-center gap-1 text-meta', className)} />
+    <span {...props} className={cn('inline-flex items-center gap-1 text-meta text-muted-foreground', className)} />
   );
 }

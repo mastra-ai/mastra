@@ -86,7 +86,7 @@ function RepositoryVisibilitySwitch() {
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="repository-visibility-icons">Repository visibility</Label>
         <span className="inline-flex items-center gap-2">
-          <span className="text-foreground text-column">{isPrivate ? 'Private' : 'Public'}</span>
+          <span className="text-column text-foreground">{isPrivate ? 'Private' : 'Public'}</span>
           <Switch
             id="repository-visibility-icons"
             checked={isPrivate}
@@ -198,7 +198,7 @@ export const AllStates: Story = {
           aria-label="focused on"
           checked
           onCheckedChange={() => {}}
-          className="outline-neutral5/55 outline-1 outline-offset-2 outline-solid"
+          className="outline-border-focus outline-1 outline-offset-2 outline-solid"
         />
 
         <span className="text-foreground">Disabled</span>
@@ -209,7 +209,7 @@ export const AllStates: Story = {
           checked
           disabled
           onCheckedChange={() => {}}
-          className="outline-neutral5/35 outline-1 outline-offset-2 outline-solid"
+          className="outline-border-focus outline-1 outline-offset-2 outline-solid"
         />
       </div>
     </div>
@@ -264,7 +264,7 @@ export const WithDescription: Story = {
     <div className="flex w-[350px] items-start justify-between gap-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="dark-mode">Dark mode</Label>
-        <span className="text-muted-foreground text-caption">Switch to a darker color scheme</span>
+        <span className="text-caption text-muted-foreground">Switch to a darker color scheme</span>
       </div>
       <Switch id="dark-mode" />
     </div>

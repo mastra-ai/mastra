@@ -32,8 +32,8 @@ const statusLineClasses: Partial<Record<ReportedStatus, string>> = {
   failed: 'after:bg-negative1',
   tripwire: 'after:bg-warning1',
   waiting: 'after:bg-accent5',
-  paused: 'after:bg-neutral3',
-  skipped: 'after:bg-neutral3',
+  paused: 'after:bg-muted-foreground',
+  skipped: 'after:bg-muted-foreground',
 };
 
 const footerStatusClasses: Partial<Record<ReportedStatus, string>> = {
@@ -82,7 +82,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
     <div
       className={cn(
         'relative isolate w-[274px]',
-        isBodyExpanded && 'w-[688px]',
+        isBodyExpanded && 'w-172',
         isStacked &&
           'pb-3 before:absolute before:inset-x-1.5 before:top-2 before:bottom-1.5 before:-z-10 before:rounded-xl before:border before:border-border before:bg-card after:absolute after:inset-x-3 after:top-3.5 after:bottom-0 after:-z-20 after:rounded-xl after:border after:border-border after:bg-card',
       )}
@@ -96,8 +96,8 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
           'after:pointer-events-none after:absolute after:inset-x-4 after:-top-px after:h-px after:mask-x-from-76%',
           displayStatus && statusLineClasses[displayStatus],
           'has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-accent3',
-          isSelected && 'outline-1 outline-offset-4 outline-neutral3',
-          isBodyExpanded && 'border-dashed border-neutral3/40 shadow-none',
+          isSelected && 'outline-1 outline-offset-4 outline-border-focus',
+          isBodyExpanded && 'border-dashed border-muted-foreground/40 shadow-none',
           isWaiting && 'border-accent3',
           isHovered && !isSelected && 'bg-muted',
         )}
@@ -181,7 +181,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
               <CollapsibleTrigger
                 className={cn(
                   surfaceStateLayerStyle,
-                  'nodrag nopan border-border bg-card text-caption flex min-h-11 w-full items-center justify-between border-t px-3.5 py-2.5 focus-visible:shadow-none focus-visible:ring-0',
+                  'nodrag nopan flex min-h-11 w-full items-center justify-between border-t border-border bg-card px-3.5 py-2.5 text-caption focus-visible:shadow-none focus-visible:ring-0',
                 )}
               >
                 <span>
@@ -189,7 +189,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                 </span>
                 <ChevronRight aria-hidden size={14} />
               </CollapsibleTrigger>
-              <CollapsibleContent className="border-border h-[620px] overflow-hidden border-t border-dashed">
+              <CollapsibleContent className="border-border h-155 overflow-hidden border-t border-dashed">
                 {body}
               </CollapsibleContent>
             </>

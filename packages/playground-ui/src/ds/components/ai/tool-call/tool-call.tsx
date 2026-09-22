@@ -82,7 +82,7 @@ export function ToolCall({
 export const ToolCallTrigger = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
   <CollapsibleTrigger
     className={cn(
-      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-neutral6/5 focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden motion-reduce:transition-none',
+      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-fill focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden motion-reduce:transition-none',
       className,
     )}
     {...props}
@@ -154,7 +154,7 @@ export const ToolCallDisclosure = ({ className, children, ...props }: ComponentP
       <span
         aria-hidden
         className={cn(
-          'text-muted-foreground flex shrink-0 items-center opacity-0 transition duration-150 motion-reduce:transition-none',
+          'flex shrink-0 items-center text-muted-foreground opacity-0 transition duration-150 motion-reduce:transition-none',
           'group-hover/row:opacity-100 group-focus-visible/row:opacity-100',
           open && 'rotate-90 opacity-100',
         )}
@@ -231,7 +231,7 @@ export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCa
   <div className="group/block relative max-w-full min-w-0">
     <pre
       className={cn(
-        'm-0 max-h-60 max-w-full overflow-auto rounded-md bg-neutral6/5 px-3 py-2 font-mono text-caption break-words whitespace-pre-wrap',
+        'm-0 max-h-60 max-w-full overflow-auto rounded-md bg-fill px-3 py-2 font-mono text-caption break-words whitespace-pre-wrap',
         className,
       )}
       {...props}

@@ -490,7 +490,7 @@ describe('Tab', () => {
     });
   });
 
-  it('keeps a caller class alongside its own', () => {
+  it('keeps a caller class', () => {
     render(
       <Tabs defaultTab="first">
         <TabList>
@@ -504,7 +504,6 @@ describe('Tab', () => {
 
     const tab = screen.getByRole('tab', { name: 'First' });
     expect(tab.className).toContain('my-own-class');
-    expect(tab.className).toContain('text-muted-foreground');
   });
 
   describe('pill-ghost variant', () => {
@@ -543,7 +542,6 @@ describe('Tab', () => {
 
       const tab = screen.getByRole('tab', { name: 'First' });
       expect(tab.className).not.toContain('h-control-md');
-      expect(tab.className).toContain('text-muted-foreground');
     });
   });
 

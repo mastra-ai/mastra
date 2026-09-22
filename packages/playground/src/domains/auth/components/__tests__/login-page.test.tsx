@@ -90,14 +90,24 @@ describe('LoginPage UI parity for /login and /signup', () => {
     expect(root).toBeTruthy();
   });
 
-  it('does not render its own card or viewport wrapper (the auth shell owns those)', async () => {
+  it('does not render its own card or viewport wrapper on either route (the auth shell owns those)', async () => {
     mockCapabilities(credentialsCapabilities);
-    renderLogin();
+    const { unmount } = renderLogin();
 
-    const root = await screen.findByTestId('login-page');
-    expect(root.className).not.toMatch(/min-h-screen/);
-    expect(root.className).not.toMatch(/bg-sidebar/);
-    expect(root.closest('[data-slot="studio-card"]')).toBeNull();
+    const loginRoot = await screen.findByTestId('login-page');
+    expect(loginRoot.className).not.toMatch(/min-h-screen/);
+    expect(loginRoot.className).not.toMatch(/bg-sidebar/);
+    expect(loginRoot.closest('[data-slot="studio-card"]')).toBeNull();
+
+    unmount();
+    cleanup();
+
+    mockCapabilities(credentialsCapabilities);
+    renderSignUp();
+    const signUpRoot = await screen.findByTestId('login-page');
+    expect(signUpRoot.className).not.toMatch(/min-h-screen/);
+    expect(signUpRoot.className).not.toMatch(/bg-sidebar/);
+    expect(signUpRoot.closest('[data-slot="studio-card"]')).toBeNull();
   });
 
   it('shows the sign in heading on /login by default', async () => {

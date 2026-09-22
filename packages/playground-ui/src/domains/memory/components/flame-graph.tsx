@@ -64,10 +64,10 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="text-muted-foreground border-border/50 text-meta flex items-center self-stretch border-r pl-3">
+      <p className="border-border/50 text-meta text-muted-foreground flex items-center self-stretch border-r pl-3">
         Time
       </p>
-      <div className="text-muted-foreground text-meta flex justify-between px-1 py-1.5 font-mono">
+      <div className="text-meta text-muted-foreground flex justify-between px-1 py-1.5 font-mono">
         {ticks.map(t => (
           <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
         ))}
@@ -136,7 +136,7 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
 
   return (
     <div className="border-border/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-muted-foreground border-border/50 text-meta flex items-center self-stretch border-r pl-3">
+      <p className="border-border/50 text-meta text-muted-foreground flex items-center self-stretch border-r pl-3">
         {label}
       </p>
       <div>
@@ -185,7 +185,7 @@ interface EventRowProps {
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
     <div className="border-border/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-muted-foreground border-border/50 text-meta flex items-center self-stretch border-r pl-3">
+      <p className="border-border/50 text-meta text-muted-foreground flex items-center self-stretch border-r pl-3">
         {label}
       </p>
       <div>
@@ -246,7 +246,7 @@ function CombinedRow({
 
   return (
     <div className="border-border/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
-      <p className="text-muted-foreground border-border/50 text-meta flex items-center self-stretch border-r pl-3">
+      <p className="border-border/50 text-meta text-muted-foreground flex items-center self-stretch border-r pl-3">
         {label}
       </p>
       <div>
@@ -355,7 +355,7 @@ function ZoomTrack({
   return (
     <div className="border-border/50 grid grid-cols-[6rem_1fr] items-center border-b">
       <div className="border-border/50 flex items-center gap-1 self-stretch border-r pl-3">
-        <p className="text-muted-foreground text-meta">Zoom</p>
+        <p className="text-meta text-muted-foreground">Zoom</p>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
         </Button>
@@ -396,7 +396,7 @@ function ZoomTrack({
         />
         <div
           data-zoom-handle="left"
-          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
+          className="bg-foreground/50 hover:bg-foreground absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();
@@ -406,7 +406,7 @@ function ZoomTrack({
         />
         <div
           data-zoom-handle="right"
-          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
+          className="bg-foreground/50 hover:bg-foreground absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${rightPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();

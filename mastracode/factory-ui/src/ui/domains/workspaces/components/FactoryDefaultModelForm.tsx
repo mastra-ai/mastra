@@ -40,7 +40,7 @@ export function FactoryDefaultModelForm({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ProviderBrandIcon provider={provider.provider} />
-          <Txt as="span" variant="body" className="text-icon6">
+          <Txt as="span" variant="body" className="text-foreground">
             {providerDisplayName(provider.provider)}
           </Txt>
         </div>
@@ -49,7 +49,7 @@ export function FactoryDefaultModelForm({
         </Button>
       </div>
       <label className="flex flex-col gap-2">
-        <Txt as="span" variant="caption" className="text-icon5">
+        <Txt as="span" variant="caption" className="text-foreground">
           Factory default model
         </Txt>
         <ModelCombobox

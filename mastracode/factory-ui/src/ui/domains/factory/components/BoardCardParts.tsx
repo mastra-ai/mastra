@@ -70,7 +70,11 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 
   if (status.kind === 'busy') {
     return (
-      <span role="status" aria-live="polite" className="text-meta text-icon4 flex shrink-0 items-center gap-1.5">
+      <span
+        role="status"
+        aria-live="polite"
+        className="text-meta text-muted-foreground flex shrink-0 items-center gap-1.5"
+      >
         <Spinner size="sm" aria-hidden className="size-3" />
         {status.label}
       </span>
@@ -111,7 +115,7 @@ function labelDotClass(label: string): string {
   if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-accent1';
   if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-accent3';
   if (normalized.includes('work') || normalized.includes('trio')) return 'bg-accent6';
-  return 'bg-icon3';
+  return 'bg-muted-foreground';
 }
 
 export function CardLabels({
@@ -129,7 +133,7 @@ export function CardLabels({
         {displayLabels.map(label => (
           <span
             key={label}
-            className="border-border text-meta text-icon4 inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
+            className="border-border text-meta text-muted-foreground inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
             title={label}
           >
             <span

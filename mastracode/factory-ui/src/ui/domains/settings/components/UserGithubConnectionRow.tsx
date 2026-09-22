@@ -21,7 +21,7 @@ export function UserGithubConnectionRow() {
           <SettingsRow
             label={
               <span className="flex items-center gap-2">
-                <GithubIcon className="text-icon3 size-4 shrink-0" />
+                <GithubIcon className="text-muted-foreground size-4 shrink-0" />
                 {`@${status.userGithubUsername ?? 'unknown'}`}
               </span>
             }

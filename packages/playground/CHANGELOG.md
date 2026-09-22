@@ -1,5 +1,20 @@
 # @internal/playground
 
+## 1.31.0-alpha.13
+
+### Patch Changes
+
+- Fixed experiment span badges rendering without their colour wash. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+  The badges set `backgroundColor` to a Tailwind class name (`bg-oklch(...)`), which is not valid CSS, so the tint never painted. They now derive the wash from the shared span type tokens and use the same palette as the trace timeline instead of a second local copy.
+
+  **Changed.** The model switcher, file browser, integration pages, template failure view and agent builder layouts used Tailwind palette classes, hex values and the `font-sans` alias. They now use the design system roles, so those pages follow the theme instead of staying dark.
+
+- Fixed the Studio frame losing its rim and shadow on the sidebar side. The frame lives inside a resizable panel, and `react-resizable-panels` hardcodes `overflow: hidden`/`auto` inline on the group and panel elements, which clipped the shadow at the panel edge. The Studio panel group and frame panel now opt out of that clip, so the frame keeps its full elevation without changing any spacing — the frame already clips its own content. ([#24562](https://github.com/mastra-ai/mastra/pull/24562))
+
+- Updated dependencies [[`4c77d0f`](https://github.com/mastra-ai/mastra/commit/4c77d0fa1ea4642a9c11ec9067783750e93c0388), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`3c0a53b`](https://github.com/mastra-ai/mastra/commit/3c0a53b7594994e9b91b29922402090dbbb3d4ec), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`405afd4`](https://github.com/mastra-ai/mastra/commit/405afd4891b0b4f06c2767d9440b072576f25380), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430), [`c14edef`](https://github.com/mastra-ai/mastra/commit/c14edefe2f94f0f458c81715004cbef1d09db430)]:
+  - @mastra/playground-ui@56.0.0-alpha.13
+
 ## 1.31.0-alpha.12
 
 ### Patch Changes

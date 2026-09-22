@@ -90,7 +90,7 @@ export function ActivityLine() {
         as="p"
         variant="caption"
         aria-hidden
-        className={cn('text-icon3 px-1.5 py-1 transition-opacity duration-300', !thinking && 'opacity-0')}
+        className={cn('text-muted-foreground px-1.5 py-1 transition-opacity duration-300', !thinking && 'opacity-0')}
       >
         <Shimmer active={thinking}>Thinking</Shimmer>
       </Txt>

@@ -134,7 +134,7 @@ function buildLightTheme(): Extension {
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
       borderRight: 'none',
     },
     '.cm-content': {
@@ -153,7 +153,7 @@ function buildLightTheme(): Extension {
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
+    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
     { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
     { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
@@ -331,7 +331,7 @@ export function DataCodeSection({
       <div
         className={cn(
           raisedSurfaceStyle,
-          'text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+          'max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
         )}
       >
         {usePlainTextView ? (
@@ -399,7 +399,7 @@ export function DataCodeSection({
               <div
                 className={cn(
                   raisedSurfaceStyle,
-                  'text-caption text-muted-foreground overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+                  'overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
                 )}
               >
                 <div className="text-muted-foreground font-mono break-all">

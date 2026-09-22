@@ -32,13 +32,13 @@ function ActorIcon({ by }: { by: string | undefined }) {
           : by.startsWith('factory-')
             ? [Zap, 'a rule']
             : [User, 'a person'];
-  return <Glyph className="text-icon3 size-[13px] shrink-0" aria-label={`Moved by ${label}`} />;
+  return <Glyph className="text-muted-foreground size-[13px] shrink-0" aria-label={`Moved by ${label}`} />;
 }
 
 function Empty({ children }: { children: ReactNode }) {
   return (
     <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="caption" className="text-icon3 m-0 text-center">
+      <Txt as="p" variant="caption" className="text-muted-foreground m-0 text-center">
         {children}
       </Txt>
     </div>
@@ -68,11 +68,11 @@ function ItemRow({
     <>
       {leading}
       <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="column" className="text-icon6 truncate">
+        <Txt as="span" variant="column" className="text-foreground truncate">
           {title}
         </Txt>
         {subtitle ? (
-          <Txt as="span" variant="meta" className="text-icon3 truncate">
+          <Txt as="span" variant="meta" className="text-muted-foreground truncate">
             {subtitle}
           </Txt>
         ) : null}
@@ -127,7 +127,7 @@ function ShowMore({ total, expanded, onToggle }: { total: number; expanded: bool
       <button
         type="button"
         onClick={onToggle}
-        className={`${PANEL_ROW_LINK} text-meta text-icon3 hover:text-icon5 w-full cursor-pointer`}
+        className={`${PANEL_ROW_LINK} text-meta text-muted-foreground hover:text-foreground w-full cursor-pointer`}
       >
         <span className="flex-1 text-left">
           {expanded ? 'Show less' : `Show ${Math.min(total, EXPANDED_ROWS) - PREVIEW_ROWS} more`}
@@ -226,7 +226,7 @@ const ATTENTION_GLYPHS: Record<FactoryAttentionItem['kind'], { Glyph: LucideIcon
   'automation-failed': { Glyph: CircleAlert, tone: 'text-badge-red-fg', label: 'Failed run' },
   'automation-proposed': { Glyph: Sparkles, tone: 'text-warning1', label: 'Suggested run' },
   'supervisor-finding': { Glyph: Brain, tone: 'text-accent1', label: 'Supervisor finding' },
-  activity: { Glyph: MessageSquare, tone: 'text-icon3', label: 'Comment' },
+  activity: { Glyph: MessageSquare, tone: 'text-muted-foreground', label: 'Comment' },
   'agent-waiting': { Glyph: Hourglass, tone: 'text-warning1', label: 'Agent waiting' },
 };
 
