@@ -82,7 +82,7 @@ export const StatusFoundations: Story = {
         </Txt>
       }
       note="Light is not the dark value dimmed: the base keeps its saturation while the foreground flips to a deep tint, because ink has to darken when the surface turns white."
-      noteAside="Utilities: bg-notice-*, text-notice-*-fg, bg-badge-*, text-badge-*-fg."
+      noteAside="Utilities: bg-notice-*, text-notice-*-fg, bg-badge-*, text-badge-*-fg, text-warning1, text-positive1."
     >
       <FoundationSection
         label="Notice"
@@ -160,8 +160,8 @@ export const StatusFoundations: Story = {
       </FoundationSection>
 
       <FoundationSection
-        label="Semantic aliases"
-        description="Older surfaces name a status instead of an accent. These are pointers onto the accent ramp, not a fourth palette — each swatch is split, alias on the left and source on the right, so a seam would mean one of them moved."
+        label="Status ink"
+        description="Status with no wash under it: a bare warning line, a live dot, a progress fill. Reach for these, not a notice pair — a notice -fg is built for its own 20% wash and reads near-white on a plain background. Light is the constraint: the aliases clear 8:1 on the dark shell but land near 3:1 on white, enough for an icon or a dot and not for a sentence, so put the hue on the icon and leave the words on --foreground. Only --error clears 4.5:1 in both, which is why form errors wear it."
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {statusAliases.map(alias => (

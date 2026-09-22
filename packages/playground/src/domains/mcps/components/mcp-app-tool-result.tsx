@@ -44,7 +44,9 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
 
   if (isLoading || !html) {
     return (
-      <div className="border-border bg-background text-text2 text-body rounded-md border p-4">Loading MCP App UI…</div>
+      <div className="border-border bg-background text-muted-foreground text-body rounded-md border p-4">
+        Loading MCP App UI…
+      </div>
     );
   }
 

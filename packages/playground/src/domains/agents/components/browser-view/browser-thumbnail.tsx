@@ -117,7 +117,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
             </div>
           )}
           {/* Live indicator dot */}
-          {isLive && <div className="bg-success absolute top-1 right-1 h-2 w-2 animate-pulse rounded-full" />}
+          {isLive && <div className="bg-positive1 absolute top-1 right-1 h-2 w-2 animate-pulse rounded-full" />}
         </div>
 
         {/* Info section */}

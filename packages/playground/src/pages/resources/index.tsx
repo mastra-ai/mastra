@@ -70,7 +70,7 @@ export default function Resources() {
                   <ExternalLinkIcon className="text-muted-foreground ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
-              <p className="text-caption text-text3">{resource.description}</p>
+              <p className="text-caption text-muted-foreground">{resource.description}</p>
             </a>
           ))}
         </div>

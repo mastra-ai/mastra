@@ -70,11 +70,6 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
           </span>
         )}
       </div>
-
-      {/* <div className="flex items-center gap-1.5 text-ui text-muted-foreground">
-        <span className="text-muted-foreground">{experiment.targetType}:</span>
-        <span className="text-foreground font-mono">{experiment.targetId}</span>
-      </div> */}
     </div>
   );
 }
