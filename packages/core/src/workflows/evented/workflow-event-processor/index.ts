@@ -1464,6 +1464,24 @@ export class WorkflowEventProcessor extends EventProcessor {
       // writes recovery still routes through the old path, whereas the reverse
       // order would point restart at a step whose input was never recorded.
       if (!isResumedEntry && step.type !== 'foreach') {
+        // Redelivery guard: a `step.run` redelivered (at-least-once transport)
+        // after the step suspended must not clobber the stored 'suspended'
+        // record — its suspendPayload is the resume artifact (stream state,
+        // nested-run ids). Both conditions matter: a suspended leaf record
+        // alone is NOT proof of a spurious delivery — after a resume, a loop
+        // re-entry (dountil around a suspending nested workflow, bug #5650)
+        // publishes a fresh non-resume `step.run` while the leaf record still
+        // reads 'suspended' (the resume path deliberately leaves it
+        // untouched). What discriminates the spurious case is the RUN being
+        // parked too: no legitimate non-resume delivery for a suspended leaf
+        // exists while the whole run sits in 'suspended'. Read-then-write
+        // narrows the race window rather than closing it — closing it needs
+        // an expectedStatus compare-and-set on `updateWorkflowResults` across
+        // all storage adapters.
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        if (snapshot?.status === 'suspended' && (snapshot.context as any)?.[leafId]?.status === 'suspended') {
+          return;
+        }
         await workflowsStore.updateWorkflowResults({
           workflowName: workflowId,
           runId,
