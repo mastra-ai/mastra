@@ -115,12 +115,14 @@ describe('processor span payload types', () => {
     }
   });
 
-  it('types a processor span record through the payload maps', () => {
+  it('keeps processor payloads unmapped, narrowing them by phase instead', () => {
     const span = {} as SpanRecord;
 
     if (isSpanRecordOfType(span, SpanType.PROCESSOR_RUN)) {
-      expectTypeOf(span.input).toEqualTypeOf<ProcessorRunInput | null | undefined>();
-      expectTypeOf(span.output).toEqualTypeOf<ProcessorRunOutput | null | undefined>();
+      // Unmapped on purpose: three executors record different processor shapes,
+      // so the payload stays `any` and the phase narrows it at read time.
+      expectTypeOf(span.input).toBeAny();
+      expectTypeOf(span.output).toBeAny();
       expectTypeOf(span.attributes?.processorPhase).toEqualTypeOf<ProcessorSpanPayloadPhase | undefined>();
     }
   });

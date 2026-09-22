@@ -1242,16 +1242,18 @@ export type ProcessorRunOutput = ProcessorRunOutputByPhase[ProcessorSpanPayloadP
  * the like are caller-defined, `MODEL_CHUNK` multiplexes several chunk shapes
  * on one span type, and `GENERIC` is the escape hatch for custom spans.
  *
- * `PROCESSOR_RUN` is the union of every phase's payload, because the phase that
- * picks one arm lives in `attributes`, not in the type parameter. Narrow it to a
- * single phase with `describeSpanInput` / `describeSpanOutput`.
+ * `PROCESSOR_RUN` is absent on purpose. Three executors emit processor spans —
+ * the legacy runner, the processor workflow, and the Inngest workflow — and they
+ * record different shapes, so a mapped type here would type the write side
+ * against a contract two of them do not meet. The read side is where the shape
+ * is known: `describeSpanInput` / `describeSpanOutput` narrow a payload by the
+ * phase the span recorded, and fall back to JSON when it recorded none.
  */
 export interface SpanInputMap {
   [SpanType.AGENT_RUN]: AgentRunInput;
   [SpanType.MODEL_GENERATION]: ModelGenerationInput;
   [SpanType.MODEL_STEP]: ModelStepInput;
   [SpanType.MODEL_INFERENCE]: ModelStepInput;
-  [SpanType.PROCESSOR_RUN]: ProcessorRunInput;
 }
 
 /** Span types whose `output` Mastra writes itself with a fixed shape. Same rules as `SpanInputMap`. */
@@ -1260,7 +1262,6 @@ export interface SpanOutputMap {
   [SpanType.MODEL_GENERATION]: ModelGenerationOutput;
   [SpanType.MODEL_STEP]: ModelStepOutput;
   [SpanType.MODEL_INFERENCE]: ModelStepResult;
-  [SpanType.PROCESSOR_RUN]: ProcessorRunOutput;
 }
 
 /** `input` payload of a span: the mapped shape when `SpanInputMap` lists the type, otherwise `any`. */

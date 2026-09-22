@@ -193,13 +193,14 @@ pipeline?.tripwireAbort?.reason // why the processor blocked the run
 pipeline?.rest // attributes this description does not explain
 ```
 
-`SpanInputMap` and `SpanOutputMap` type `PROCESSOR_RUN` as the union of every phase's
-payload, because the phase that picks one arm lives in `attributes`. Narrowing on
-`phase` narrows `data` to that phase alone.
+`PROCESSOR_RUN` is absent from `SpanInputMap` and `SpanOutputMap` on purpose: three
+executors emit processor spans and record different shapes. The payload is narrowed at
+read time instead, by the phase the span recorded, and narrowing on `phase` narrows
+`data` to that phase alone.
 
 `describeSpanInput`, `describeSpanOutput` and `describeProcessorPipeline` return the
 JSON fallback for a span with no recorded phase, or one written by a newer version
-with a phase this release does not know. The stored payload and the JSON view remain
+with a phase this release doesn't know. The stored payload and the JSON view remain
 unchanged.
 
 ### Span
