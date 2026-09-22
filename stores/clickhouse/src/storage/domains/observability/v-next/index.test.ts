@@ -5568,12 +5568,11 @@ LIMIT 1`,
         };
         const dropsBefore = await countDropViews();
 
-        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        const storage = new ObservabilityStorageClickhouseVNext({ client });
+        await storage.init();
         expect(await readMvDdl()).toContain('NOT IN');
         expect(await countDropViews()).toBe(dropsBefore);
 
-        const storage = new ObservabilityStorageClickhouseVNext({ client });
-        await storage.init();
         await storage.createScore({ score });
         await storage.createScore({ score });
 
@@ -5583,6 +5582,11 @@ LIMIT 1`,
           format: 'JSONEachRow',
         });
         expect((await deltaResult.json<{ count: string | number }>()).map(row => Number(row.count))).toEqual([1]);
+
+        // A missing view is created by the regular CREATE pass, nothing to alter.
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_SCORE_EVENTS_DELTA}` });
+        await storage.init();
+        expect(await readMvDdl()).toContain('NOT IN');
       } finally {
         await new ObservabilityStorageClickhouseVNext({ client }).init();
         await client.close();

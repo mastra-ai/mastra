@@ -768,15 +768,17 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
 
-      // Skipped when delta polling is disabled (mixed cursor schemas): there is
-      // no single strategy to build the view query from.
-      if (this.#deltaCursorStrategy !== null) {
-        await reconcileScoreDeltaMv(this.#client, this.#replication, this.#deltaCursorStrategy, this.logger);
-      }
-
       const coreMvDdl = this.#deltaCursorStrategy === null ? BASE_MV_DDL : buildAllMvDDL(this.#deltaCursorStrategy);
       for (const ddl of coreMvDdl) {
         await this.#client.command({ query: applyReplicationToDDL(ddl, this.#replication) });
+      }
+
+      // Runs after the CREATE ... IF NOT EXISTS pass so every replica has a
+      // view before ALTER ... MODIFY QUERY is sent ON CLUSTER; only legacy
+      // copies are left to upgrade. Skipped when delta polling is disabled
+      // (mixed cursor schemas): there is no single strategy to build from.
+      if (this.#deltaCursorStrategy !== null) {
+        await reconcileScoreDeltaMv(this.#client, this.#replication, this.#deltaCursorStrategy, this.logger);
       }
 
       // The current-state MV is live before this one-time backfill, so writes
