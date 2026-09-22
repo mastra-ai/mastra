@@ -22,17 +22,6 @@ import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
  * One list rather than a component per phase: the phases share most of their
  * keys, and a payload only ever carries the subset its phase recorded.
  */
-const MESSAGE_FIELDS = [
-  { key: 'messages', label: 'Messages' },
-  { key: 'systemMessages', label: 'System messages' },
-] as const;
-
-const TEXT_FIELDS = [
-  { key: 'text', label: 'Text' },
-  { key: 'accumulatedText', label: 'Accumulated text' },
-  { key: 'error', label: 'Error' },
-] as const;
-
 const SCALAR_FIELDS = [
   { key: 'toolName', label: 'Tool' },
   { key: 'toolCallId', label: 'Tool call id' },
@@ -58,6 +47,8 @@ const CONTEXT_FIELDS = [
   { key: 'toolChoice', label: 'Tool choice' },
   { key: 'activeTools', label: 'Active tools' },
 ] as const;
+
+const hasItems = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0;
 
 /** A scalar this view can print as one line; anything else belongs in the JSON block. */
 const SCALAR_RENDERABLE = (value: unknown): boolean =>
@@ -109,39 +100,39 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
   // rather than silently dropped.
   const laidOut = new Set<string>();
 
-  for (const field of MESSAGE_FIELDS) {
-    const messages = payload[field.key];
-    if (!Array.isArray(messages)) continue;
-    laidOut.add(field.key);
-    sections.push(
-      <SpanPayloadField key={field.key} label={field.label}>
-        {messages.length > 0 ? (
-          <SpanPayloadMessages value={messages} />
-        ) : (
-          <span className="text-body text-placeholder">
-            {field.key === 'messages' ? 'No messages' : 'No system messages'}
-          </span>
-        )}
-      </SpanPayloadField>,
-    );
-  }
+  // One message list, as the agent and model renderers show it: each bubble's
+  // role tag already says which messages are system messages.
+  const systemMessages = payload.systemMessages;
+  const messages = payload.messages;
+  if (Array.isArray(systemMessages)) laidOut.add('systemMessages');
+  if (Array.isArray(messages)) laidOut.add('messages');
+  const allMessages = [
+    ...(Array.isArray(systemMessages) ? systemMessages : []),
+    ...(Array.isArray(messages) ? messages : []),
+  ];
+  if (allMessages.length > 0) sections.push(<SpanPayloadMessages key="messages" value={allMessages} />);
 
-  if (Array.isArray(payload.toolCalls) && payload.toolCalls.length > 0) {
+  if (hasItems(payload.toolCalls)) {
     laidOut.add('toolCalls');
     sections.push(
-      <SpanPayloadField key="toolCalls" label="Tool calls">
+      <SpanPayloadField key="toolCalls" label={`Tool calls (${payload.toolCalls.length})`}>
         <SpanPayloadToolCalls toolCalls={payload.toolCalls} />
       </SpanPayloadField>,
     );
   }
 
-  for (const field of TEXT_FIELDS) {
-    const text = payload[field.key];
+  for (const key of ['text', 'accumulatedText'] as const) {
+    const text = payload[key];
     if (typeof text !== 'string' || text.length === 0) continue;
-    laidOut.add(field.key);
+    laidOut.add(key);
+    sections.push(<SpanPayloadMarkdown key={key}>{text}</SpanPayloadMarkdown>);
+  }
+
+  if (typeof payload.error === 'string' && payload.error.length > 0) {
+    laidOut.add('error');
     sections.push(
-      <SpanPayloadField key={field.key} label={field.label}>
-        <SpanPayloadMarkdown>{text}</SpanPayloadMarkdown>
+      <SpanPayloadField key="error" label="Error">
+        <SpanPayloadMarkdown>{payload.error}</SpanPayloadMarkdown>
       </SpanPayloadField>,
     );
   }
@@ -157,6 +148,8 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
   for (const { key, label } of CONTEXT_FIELDS) {
     if (payload[key] === undefined) continue;
     laidOut.add(key);
+    // Empty lists are left out, as the other span renderers leave them out.
+    if (Array.isArray(payload[key]) && payload[key].length === 0) continue;
     sections.push(
       <SpanPayloadCollapsible
         key={key}
@@ -176,17 +169,11 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
     );
   }
 
-  // The phase itself is shown once, in the Attributes preview. Most phases record
-  // only what the processor changed, so an empty payload means it changed nothing.
+  // The phase itself is shown once, in the Attributes preview. A payload with
+  // nothing to lay out stays JSON, as any other span's would.
   return (
     <div data-slot="span-payload-processor" data-phase={value.phase} className="flex flex-col gap-6">
-      {sections.length > 0 ? (
-        sections
-      ) : Object.keys(payload).length === 0 ? (
-        <span className="text-body text-placeholder">No changes</span>
-      ) : (
-        <SpanPayloadJson value={payload} />
-      )}
+      {sections.length > 0 ? sections : <SpanPayloadJson value={payload} />}
     </div>
   );
 }

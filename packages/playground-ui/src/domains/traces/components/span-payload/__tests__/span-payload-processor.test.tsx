@@ -13,6 +13,7 @@ import {
   processorClearedMessagesSpan,
   processorSystemMutationSpan,
   processorInputSpan,
+  processorInputStepSpan,
   processorOutputStreamSpan,
   processorRequestErrorSpan,
   processorToolResultSpan,
@@ -49,11 +50,27 @@ describe('processor span payloads', () => {
     expect(screen.getByText('Answer in exactly three words.')).toBeTruthy();
   });
 
-  it('says a processor changed nothing instead of showing an empty object', () => {
+  it('keeps an empty output as JSON, as any other span would', () => {
     const { container } = render(<SpanOutputRenderer span={processorSystemMutationSpan} />);
 
-    expect(screen.getByText('No changes')).toBeTruthy();
-    expect(container.textContent).not.toContain('{}');
+    expect(container.querySelector('[data-slot="span-payload-messages"]')).toBeNull();
+    expect(container.textContent).toContain('{}');
+  });
+
+  it('leaves out empty lists instead of an empty collapsible', () => {
+    render(<SpanInputRenderer span={processorInputStepSpan} />);
+
+    expect(screen.queryByText(/^Tools/)).toBeNull();
+    expect(screen.getByText('Active tools (1)')).toBeTruthy();
+  });
+
+  it('shows system and user messages as one list tagged by role', () => {
+    const { container } = render(<SpanInputRenderer span={processorRequestErrorSpan} />);
+
+    expect(container.querySelectorAll('[data-slot="span-payload-messages"]')).toHaveLength(1);
+    expect(screen.getByText('You are helpful.')).toBeTruthy();
+    expect(screen.getByText('What colour is the sky?')).toBeTruthy();
+    expect(screen.queryByText('System messages')).toBeNull();
   });
 
   it('shows the error a request-error processor saw', () => {
@@ -157,8 +174,6 @@ describe('processor spans in both span layouts', () => {
     expect(within(attributes).queryByText('messageListMutations')).toBeNull();
 
     rerender(renderView(processorClearedMessagesSpan));
-    expect(screen.getByText('No messages')).toBeTruthy();
-    expect(screen.getByText('No system messages')).toBeTruthy();
     expect(screen.getByText('Cleared messages')).toBeTruthy();
 
     // A phase this release knows still previews. Values the layout cannot place

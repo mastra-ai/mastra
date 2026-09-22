@@ -6,6 +6,7 @@ import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
 import { SpanPayloadCollapsible, SpanPayloadField } from './span-payload-primitives';
 import { asCoreSpan } from './span-payload-registry';
+import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { Notice } from '@/ds/components/Notice';
 import { formatDuration } from '@/utils/duration';
@@ -70,67 +71,72 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
   const processorName = span.entityName ?? span.entityId;
   const hookDuration = hookDurationMs === undefined ? undefined : formatDuration(hookDurationMs);
 
+  // Carded like the Input and Output previews, so the three sections read alike.
   return (
-    <div data-slot="span-processor-attributes" className="flex flex-col gap-6">
-      <DataKeysAndValues>
-        {processorName && (
-          <Fragment>
-            <DataKeysAndValues.Key>Processor</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{processorName}</DataKeysAndValues.Value>
-          </Fragment>
-        )}
-        <Fragment>
-          <DataKeysAndValues.Key>Phase</DataKeysAndValues.Key>
-          <DataKeysAndValues.Value>{phaseLabel}</DataKeysAndValues.Value>
-        </Fragment>
-        {executor && (
-          <Fragment>
-            <DataKeysAndValues.Key>Executor</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{executor === 'workflow' ? 'Workflow' : 'Legacy'}</DataKeysAndValues.Value>
-          </Fragment>
-        )}
-        {processorIndex !== undefined && (
-          <Fragment>
-            <DataKeysAndValues.Key>Pipeline position</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{processorIndex + 1}</DataKeysAndValues.Value>
-          </Fragment>
-        )}
-        {hookDuration && (
-          <Fragment>
-            <DataKeysAndValues.Key>Hook duration</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{hookDuration}</DataKeysAndValues.Value>
-          </Fragment>
-        )}
-      </DataKeysAndValues>
+    <Card data-slot="span-processor-attributes-card" className="min-w-0">
+      <CardContent>
+        <div data-slot="span-processor-attributes" className="flex flex-col gap-6">
+          <DataKeysAndValues>
+            {processorName && (
+              <Fragment>
+                <DataKeysAndValues.Key>Processor</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>{processorName}</DataKeysAndValues.Value>
+              </Fragment>
+            )}
+            <Fragment>
+              <DataKeysAndValues.Key>Phase</DataKeysAndValues.Key>
+              <DataKeysAndValues.Value>{phaseLabel}</DataKeysAndValues.Value>
+            </Fragment>
+            {executor && (
+              <Fragment>
+                <DataKeysAndValues.Key>Executor</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>{executor === 'workflow' ? 'Workflow' : 'Legacy'}</DataKeysAndValues.Value>
+              </Fragment>
+            )}
+            {processorIndex !== undefined && (
+              <Fragment>
+                <DataKeysAndValues.Key>Pipeline position</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>{processorIndex + 1}</DataKeysAndValues.Value>
+              </Fragment>
+            )}
+            {hookDuration && (
+              <Fragment>
+                <DataKeysAndValues.Key>Hook duration</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>{hookDuration}</DataKeysAndValues.Value>
+              </Fragment>
+            )}
+          </DataKeysAndValues>
 
-      {tripwireAbort && (
-        <Notice variant="destructive" title="Tripwire">
-          {tripwireAbort.reason && <Notice.Message>{tripwireAbort.reason}</Notice.Message>}
-          {tripwireAbort.retry !== undefined && (
-            <DataKeysAndValues>
-              <DataKeysAndValues.Key>Retry</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>{tripwireAbort.retry ? 'Requested' : 'No'}</DataKeysAndValues.Value>
-            </DataKeysAndValues>
+          {tripwireAbort && (
+            <Notice variant="destructive" title="Tripwire">
+              {tripwireAbort.reason && <Notice.Message>{tripwireAbort.reason}</Notice.Message>}
+              {tripwireAbort.retry !== undefined && (
+                <DataKeysAndValues>
+                  <DataKeysAndValues.Key>Retry</DataKeysAndValues.Key>
+                  <DataKeysAndValues.Value>{tripwireAbort.retry ? 'Requested' : 'No'}</DataKeysAndValues.Value>
+                </DataKeysAndValues>
+              )}
+              {tripwireAbort.metadata !== undefined && (
+                <SpanPayloadCollapsible label="Metadata">
+                  <SpanPayloadJson value={tripwireAbort.metadata} />
+                </SpanPayloadCollapsible>
+              )}
+            </Notice>
           )}
-          {tripwireAbort.metadata !== undefined && (
-            <SpanPayloadCollapsible label="Metadata">
-              <SpanPayloadJson value={tripwireAbort.metadata} />
+
+          {messageListMutations && messageListMutations.length > 0 && (
+            <SpanPayloadField label="Message list changes">
+              <Mutations mutations={messageListMutations} />
+            </SpanPayloadField>
+          )}
+
+          {rest && (
+            <SpanPayloadCollapsible label="Other attributes">
+              <SpanPayloadJson value={rest} />
             </SpanPayloadCollapsible>
           )}
-        </Notice>
-      )}
-
-      {messageListMutations && messageListMutations.length > 0 && (
-        <SpanPayloadField label="Message list changes">
-          <Mutations mutations={messageListMutations} />
-        </SpanPayloadField>
-      )}
-
-      {rest && (
-        <SpanPayloadCollapsible label="Other attributes">
-          <SpanPayloadJson value={rest} />
-        </SpanPayloadCollapsible>
-      )}
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

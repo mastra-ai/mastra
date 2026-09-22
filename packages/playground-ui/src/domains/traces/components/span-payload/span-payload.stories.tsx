@@ -200,6 +200,7 @@ const PROCESSOR_FIXTURES = [
   'processorTripwireSpan',
   'processorToolResultSpan',
   'processorOutputStreamSpan',
+  'processorInputStepSpan',
   'processorRequestErrorSpan',
   'legacyProcessorSpan',
 ] as const satisfies readonly FixtureName[];

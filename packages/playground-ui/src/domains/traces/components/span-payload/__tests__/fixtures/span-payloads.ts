@@ -305,6 +305,21 @@ export const malformedProcessorSpan = makeSpan({
   metadata: { customMetadata: 'keep-this-value' },
 });
 
+export const processorInputStepSpan = makeSpan({
+  spanId: 'span-processor-input-step',
+  name: 'input step processor: polite-step',
+  spanType: SpanType.PROCESSOR_RUN,
+  entityType: 'input_step_processor',
+  entityId: 'polite-step',
+  attributes: { processorPhase: 'inputStep', processorExecutor: 'workflow', processorIndex: 0 },
+  input: {
+    messages: [{ role: 'user', content: 'Why is the sky blue?' }],
+    stepNumber: 0,
+    tools: [],
+    activeTools: [{ id: 'get-weather', name: 'get-weather' }],
+  },
+});
+
 /** A request-error processor that failed itself: the payload and the span error both carry the cause. */
 export const processorRequestErrorSpan = makeSpan({
   spanId: 'span-processor-request-error',
@@ -316,6 +331,7 @@ export const processorRequestErrorSpan = makeSpan({
   attributes: { processorPhase: 'requestError', processorExecutor: 'legacy', processorIndex: 0 },
   input: {
     messages: [{ role: 'user', content: 'What colour is the sky?' }],
+    systemMessages: [{ role: 'system', content: 'You are helpful.' }],
     error: 'Provider returned 429',
     stepNumber: 1,
   },
@@ -349,6 +365,7 @@ export const ALL_SPAN_FIXTURES = {
   processorTripwireSpan,
   processorToolResultSpan,
   processorOutputStreamSpan,
+  processorInputStepSpan,
   processorRequestErrorSpan,
   legacyProcessorSpan,
 } as const;
