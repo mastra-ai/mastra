@@ -10225,7 +10225,7 @@ export type PostObservabilityTracesQueryFields_Body = {
 export type PostObservabilityTracesQueryFields_Response = {
   canonicalFields: {
     path: string;
-    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence' | 'stringList';
+    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence' | 'array';
     operators: (
       | 'eq'
       | 'ne'

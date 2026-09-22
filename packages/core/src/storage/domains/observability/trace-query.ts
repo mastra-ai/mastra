@@ -161,7 +161,7 @@ export const traceQueryValueKindSchema = z.enum([
   'stringOrNumber',
   'timestamp',
   'presence',
-  'stringList',
+  'array',
 ]);
 
 const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine((timeRange, context) => {
@@ -492,7 +492,7 @@ export const TRACE_QUERY_STRING_OPERATORS = ['eq', 'ne', 'in', 'notIn', 'exists'
 export const TRACE_QUERY_ORDERED_OPERATORS = [...TRACE_QUERY_STRING_OPERATORS, 'lt', 'lte', 'gt', 'gte'] as const;
 export const TRACE_QUERY_PRESENCE_OPERATORS = ['exists', 'notExists'] as const;
 /** Stored string collections such as `tags`. `exists` means at least one member; `notExists` means none. */
-export const TRACE_QUERY_STRING_LIST_OPERATORS = ['includes', 'notIncludes', 'exists', 'notExists'] as const;
+export const TRACE_QUERY_ARRAY_OPERATORS = ['includes', 'notIncludes', 'exists', 'notExists'] as const;
 
 const stringField = (valueSuggestions: boolean): FieldRule => ({
   valueKind: 'string',
@@ -509,9 +509,9 @@ const presenceField = (): FieldRule => ({
   operators: TRACE_QUERY_PRESENCE_OPERATORS,
   valueSuggestions: false,
 });
-const stringListField = (): FieldRule => ({
-  valueKind: 'stringList',
-  operators: TRACE_QUERY_STRING_LIST_OPERATORS,
+const arrayField = (): FieldRule => ({
+  valueKind: 'array',
+  operators: TRACE_QUERY_ARRAY_OPERATORS,
   valueSuggestions: true,
   nonEmpty: true,
 });
@@ -527,7 +527,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     entityType: stringField(true),
     environment: stringField(true),
     status: stringField(true),
-    tags: stringListField(),
+    tags: arrayField(),
   },
   spans: {
     name: stringField(true),
@@ -1386,7 +1386,7 @@ function planPredicate(
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
-    if (rule.valueKind === 'stringList') {
+    if (rule.valueKind === 'array') {
       return {
         type: 'collection',
         field: field as TraceQueryPredicateField,
@@ -1557,7 +1557,7 @@ function normalizeLiteral(
     const timestamp = timestampLiteralSchema.safeParse(value);
     return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
   }
-  if (rule.valueKind === 'string' || rule.valueKind === 'stringList') {
+  if (rule.valueKind === 'string' || rule.valueKind === 'array') {
     return typeof value === 'string' && (!rule.nonEmpty || value.trim().length > 0) ? value : undefined;
   }
   return undefined;
