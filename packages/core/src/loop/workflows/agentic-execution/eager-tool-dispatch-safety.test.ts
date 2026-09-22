@@ -1426,8 +1426,31 @@ describe('eager tool dispatch — unsafe terminations', () => {
    * This carries no processor at all: the exclusion above removed the scenario that
    * used to cover this invariant, but the invariant itself never depended on one.
    */
-  it('runs a call in flight at the model finish exactly once', async () => {
+  it('runs a call in flight at the backstop exactly once', async () => {
     const { events, record } = createRecorder();
+
+    // The barrier is keyed on the backstop itself rather than on the model's `finish`,
+    // because `finish` is recorded when the mock enqueues the chunk — a tool timed to
+    // outlast that can still settle before the backstop runs under load, at which point
+    // there is nothing left to cancel and the test passes for the wrong reason. Holding
+    // the tool open until `stop()` has actually been reached makes the window real
+    // rather than inferred. `onModelFinished` calls `stop()` first, the backstop second.
+    let releaseSlow: () => void;
+    const slowReleased = new Promise<void>(resolve => {
+      releaseSlow = resolve;
+    });
+    let stopCalls = 0;
+    const originalStop = EagerToolExecutionCoordinator.prototype.stop;
+    const stopSpy = vi.spyOn(EagerToolExecutionCoordinator.prototype, 'stop').mockImplementation(function (
+      this: EagerToolExecutionCoordinator,
+      ...args: any[]
+    ) {
+      // Call through first: the backstop's own cancellation decision is the behaviour
+      // under test, so it must happen before the tool is released, not after.
+      const completed = (originalStop as any).apply(this, args);
+      if (++stopCalls === 2) releaseSlow();
+      return completed;
+    });
 
     const model = createToolCallModel(
       [{ toolCallId: 'call-slow', toolName: 'slow-tool', input: { value: 'slow' } }],
@@ -1447,7 +1470,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
           outputSchema: z.object({ value: z.string() }),
           execute: async ({ value }) => {
             record('enter-slow');
-            await new Promise(resolve => setTimeout(resolve, 150));
+            await slowReleased;
             record('finish-slow');
             return { value };
           },
@@ -1455,10 +1478,18 @@ describe('eager tool dispatch — unsafe terminations', () => {
       },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+    try {
+      await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+    } finally {
+      releaseSlow!();
+      stopSpy.mockRestore();
+    }
 
-    // Dispatched early, still in flight at `finish`, and adopted — so the backstop had
-    // something to cancel and must not have cancelled it.
+    // The barrier only lifts once `stop()` has been reached twice, so the tool was
+    // provably still running when the backstop made its cancellation decision — and the
+    // decision must have been to leave it alone. A reorder that changes which call is
+    // the backstop surfaces here as a hang rather than a silent pass.
+    expect(stopCalls).toBeGreaterThanOrEqual(2);
     expect(events.indexOf('enter-slow')).toBeLessThan(events.indexOf('finish'));
     expect(events.indexOf('finish-slow')).toBeGreaterThan(events.indexOf('finish'));
     expect(events.filter(event => event === 'enter-slow')).toHaveLength(1);
