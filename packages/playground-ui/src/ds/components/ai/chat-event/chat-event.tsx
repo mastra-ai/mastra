@@ -54,7 +54,7 @@ export function ChatEvent({
   if (density === 'card') {
     const header = (
       <div className="flex w-full items-start gap-3 text-left">
-        <span className="text-muted-foreground mt-0.5 flex size-4 shrink-0 items-center justify-center">{icon}</span>
+        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center text-muted-foreground">{icon}</span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Txt variant="column" tone="ink">
@@ -72,13 +72,13 @@ export function ChatEvent({
         {folds && (
           <ChevronRight
             aria-hidden
-            className="text-muted-foreground size-4 shrink-0 group-data-[panel-open]/event:rotate-90 motion-safe:transition-transform"
+            className="size-4 shrink-0 text-muted-foreground group-data-[panel-open]/event:rotate-90 motion-safe:transition-transform"
           />
         )}
       </div>
     );
 
-    const card = cn(raisedSurfaceStyle, 'text-foreground overflow-hidden rounded-lg');
+    const card = cn(raisedSurfaceStyle, 'overflow-hidden rounded-lg text-foreground');
 
     if (!folds) {
       return (
@@ -93,7 +93,7 @@ export function ChatEvent({
         <CollapsibleTrigger className="group/event state-layer w-full cursor-pointer px-4 py-3">
           {header}
         </CollapsibleTrigger>
-        <CollapsibleContent className="border-border border-t px-4 py-3">{children}</CollapsibleContent>
+        <CollapsibleContent className="border-t border-border px-4 py-3">{children}</CollapsibleContent>
       </Collapsible>
     );
   }
@@ -113,7 +113,7 @@ export function ChatEvent({
       <span aria-hidden className="min-w-2 flex-1" />
       <span aria-hidden className="flex size-4 shrink-0 items-center justify-center">
         {folds && (
-          <span className="text-muted-foreground/60 group-hover/event:text-muted-foreground group-focus-visible/event:text-muted-foreground group-data-[panel-open]/event:text-muted-foreground flex group-data-[panel-open]/event:rotate-90 motion-safe:transition motion-safe:duration-150">
+          <span className="flex text-muted-foreground/60 group-hover/event:text-muted-foreground group-focus-visible/event:text-muted-foreground group-data-[panel-open]/event:rotate-90 group-data-[panel-open]/event:text-muted-foreground motion-safe:transition motion-safe:duration-150">
             <ChevronRight size={13} />
           </span>
         )}
@@ -132,11 +132,11 @@ export function ChatEvent({
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="max-w-full min-w-0" role="group" {...props}>
-      <CollapsibleTrigger className="group/event hover:bg-fill-subtle w-full cursor-pointer rounded-md text-left motion-safe:transition-colors">
+      <CollapsibleTrigger className="group/event w-full cursor-pointer rounded-md text-left hover:bg-fill-subtle motion-safe:transition-colors">
         {header}
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div className="before:bg-border relative ml-[14px] max-w-full min-w-0 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']">
+        <div className="relative ml-[14px] max-w-full min-w-0 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']">
           {children}
         </div>
       </CollapsibleContent>

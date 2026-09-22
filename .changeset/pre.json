@@ -190,7 +190,34 @@
     "@mastra/vercel": "1.6.0"
   },
   "changesets": [
+    "action-row-primitives",
+    "app-shell-body-inset",
+    "app-shell-sidebar-slot",
+    "automated-provider-registry-20260922-123021",
+    "calm-cases-spend",
+    "cool-pants-knock",
+    "empty-state-default-icon",
+    "empty-state-fill-variant",
+    "fancy-gifts-marry",
+    "fifty-radios-behave",
+    "filter-bar-groups",
+    "github-shared-tool-subscription",
+    "gold-yaks-write",
+    "lemon-cobras-camp",
+    "little-seals-admire",
+    "page-layout-minimal-api",
+    "page-layout-owns-header",
+    "review-session-trust-restore",
     "smart-points-leave",
-    "spicy-toys-repair"
+    "social-turtles-cheat",
+    "spicy-toys-repair",
+    "spotty-pandas-push",
+    "status-states-fill-variant",
+    "thin-mails-hope",
+    "tidy-pugs-attack",
+    "traces-advanced-filters",
+    "tricky-owls-dance",
+    "wacky-pillows-drive",
+    "yellow-ants-love"
   ]
 }

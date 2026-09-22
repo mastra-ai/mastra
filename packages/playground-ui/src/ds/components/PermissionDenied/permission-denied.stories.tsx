@@ -32,7 +32,7 @@ export const CustomRecovery: Story = {
 export const Fill: Story = {
   args: { variant: 'fill' },
   render: args => (
-    <div className="border-border h-120 border border-dashed">
+    <div className="h-120 border border-dashed border-border">
       <PermissionDenied {...args} />
     </div>
   ),

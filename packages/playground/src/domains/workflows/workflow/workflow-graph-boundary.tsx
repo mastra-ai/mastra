@@ -16,7 +16,7 @@ export function WorkflowGraphBoundary({
 }) {
   if (stepGraph.length === 0) {
     return (
-      <p role="status" className="text-caption text-muted-foreground p-4">
+      <p role="status" className="p-4 text-caption text-muted-foreground">
         This workflow has no steps to display.
       </p>
     );
@@ -31,12 +31,12 @@ export function WorkflowGraphBoundary({
             <div className={cn(raisedSurfaceStyle, 'space-y-3 rounded-lg p-4')}>
               <h3 className="text-subheading text-foreground">Graph unavailable</h3>
               <p className="text-caption text-muted-foreground">Studio could not display this workflow graph.</p>
-              <p className="text-meta text-muted-foreground break-words">{error.message}</p>
+              <p className="text-meta break-words text-muted-foreground">{error.message}</p>
               <Button onClick={reset}>Try again</Button>
               <details>
-                <summary className="text-caption cursor-pointer">View workflow definition</summary>
+                <summary className="cursor-pointer text-caption">View workflow definition</summary>
                 <CopyButton content={definition} tooltip="Copy workflow definition" />
-                <pre className="text-meta mt-2 max-h-64 overflow-auto break-words whitespace-pre-wrap">
+                <pre className="mt-2 max-h-64 overflow-auto text-meta break-words whitespace-pre-wrap">
                   {definition}
                 </pre>
               </details>

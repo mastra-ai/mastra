@@ -209,14 +209,14 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
               <button
                 type="button"
                 aria-label="Close"
-                className="group duration-fast absolute top-2 -right-12 z-10 inline-flex size-11 touch-manipulation items-center justify-center transition-opacity group-data-[ending-style]/popup:opacity-0 focus-visible:outline-hidden motion-reduce:duration-0"
+                className="group absolute top-2 -right-12 z-10 inline-flex size-11 touch-manipulation items-center justify-center transition-opacity duration-fast group-data-[ending-style]/popup:opacity-0 focus-visible:outline-hidden motion-reduce:duration-0"
               >
                 <span
                   className={cn(
                     overlaySurfaceStyle,
                     quietTextHoverInGroup,
                     surfaceGroupStateLayerStyle,
-                    'group-focus-visible:ring-accent1 inline-flex size-9 items-center justify-center rounded-full backdrop-blur-sm group-focus-visible:ring-1',
+                    'inline-flex size-9 items-center justify-center rounded-full backdrop-blur-sm group-focus-visible:ring-1 group-focus-visible:ring-accent1',
                   )}
                 >
                   <MenuIcon className="size-4" />

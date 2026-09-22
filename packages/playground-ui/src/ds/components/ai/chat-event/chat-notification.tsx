@@ -83,7 +83,7 @@ function NotificationLink({ link, message }: { link: NonNullable<ChatNotificatio
       target="_blank"
       rel="noreferrer"
       aria-label={`Open notification target: ${message}`}
-      className="text-muted-foreground hover:text-foreground text-meta flex w-fit items-center gap-1"
+      className="flex w-fit items-center gap-1 text-meta text-muted-foreground hover:text-foreground"
     >
       {link.label}
       <ExternalLink size={12} aria-hidden />

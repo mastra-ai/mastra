@@ -140,7 +140,7 @@ describe('useLinkRepositoryMutation', () => {
     ]);
     expect(saved).toEqual([
       {
-        github: { enabled: true, sourceIds: null },
+        github: { enabled: false, sourceIds: null },
         linear: { enabled: false, sourceIds: null },
         gitlab: { enabled: true, sourceIds: ['gitlab-project:encoded'] },
         jira: { enabled: false, sourceIds: null },

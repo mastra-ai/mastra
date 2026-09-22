@@ -114,7 +114,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
   }
 
   if (!comparison || comparison.items.length === 0) {
-    return <div className="text-muted-foreground text-body py-5 text-center">No comparison data</div>;
+    return <div className="py-5 text-center text-body text-muted-foreground">No comparison data</div>;
   }
 
   return (
@@ -123,12 +123,12 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
         {/* Header row: Items / Baseline / Contender */}
         <div
           role="row"
-          className="border-border grid border-y xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
+          className="grid border-y border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
         >
           <div
             role="columnheader"
             aria-label="Items"
-            className={`${cell} text-muted-foreground text-caption uppercase`}
+            className={`${cell} text-caption text-muted-foreground uppercase`}
           >
             Items
           </div>
@@ -159,14 +159,14 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
               key={row.itemId}
               role="row"
               aria-label={row.itemId}
-              className="border-border grid border-b xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
+              className="grid border-b border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-[var(--border)]"
             >
               <div role="cell" className={`${cell} grid content-start gap-1`}>
                 <Link
                   href={paths.datasetItemLink(datasetId, row.itemId)}
                   aria-label={`Open item ${row.itemId}`}
                   className={cn(
-                    'text-caption flex items-start gap-1.5 font-mono break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
+                    'flex items-start gap-1.5 font-mono text-caption break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
                     row.baseline.present && row.contender.present ? 'text-muted-foreground' : 'text-placeholder',
                   )}
                 >

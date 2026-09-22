@@ -102,7 +102,7 @@ export const AllVariants: Story = {
 export const Fill: Story = {
   parameters: { layout: 'fullscreen' },
   render: () => (
-    <div className="border-border h-120 border border-dashed">
+    <div className="h-120 border border-dashed border-border">
       <Spinner fill size="lg" />
     </div>
   ),

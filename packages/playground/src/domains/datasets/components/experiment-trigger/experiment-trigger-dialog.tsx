@@ -106,7 +106,7 @@ function PipelineStep({
         >
           {index}
         </span>
-        {!isLast && <span aria-hidden="true" className="bg-border mt-2 w-px flex-1" />}
+        {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
       </div>
       <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
     </li>
@@ -251,9 +251,9 @@ export function ExperimentTriggerDialog({
         className="w-[640px] max-w-[calc(100vw-2rem)] gap-0 p-0"
         onKeyDown={handleKeyDown}
       >
-        <DialogHeader className="border-border border-b px-4 py-4">
+        <DialogHeader className="border-b border-border px-4 py-4">
           <DialogTitle>Run experiment</DialogTitle>
-          <DialogDescription className="text-caption text-muted-foreground not-sr-only">
+          <DialogDescription className="not-sr-only text-caption text-muted-foreground">
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
@@ -342,7 +342,7 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger className="text-caption flex items-center gap-2">
+            <CollapsibleTrigger className="flex items-center gap-2 text-caption">
               <ChevronRight className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
@@ -367,7 +367,7 @@ export function ExperimentTriggerDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter className="border-border items-center border-t px-4 py-4 sm:justify-between">
+        <DialogFooter className="items-center border-t border-border px-4 py-4 sm:justify-between">
           <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
             {missing.length === 0 ? (
               <>
