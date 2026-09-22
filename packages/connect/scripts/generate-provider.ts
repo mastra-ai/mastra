@@ -247,10 +247,17 @@ function simplifyScalarQuerySerialization(execBody: string, inputSchemaText: str
 /**
  * Provider responses evolve independently of the template pin. Enums on the
  * response side accept any string so a new provider value never rejects an
- * otherwise valid response; request-side enums stay strict.
+ * otherwise valid response; request-side enums stay strict. When a response
+ * schema builds on an input-side schema (e.g. via `.extend()`), a widened
+ * clone of that input-side schema is emitted and the response side references
+ * the clone, so the permissiveness survives schema reuse.
  */
 function widenResponseEnums(statements: string[], inputSchemaName: string): string[] {
   const declared = statements.map(statement => statement.match(/^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)/)?.[1]);
+  const references = (statement: string, name: string) => new RegExp(`\\b${escapeRegExp(name)}\\b`).test(statement);
+  const widenLiterals = (statement: string) =>
+    statement.replace(/z\.enum\((\[[^\]]*\])\)(?!\.or\()/g, 'z.enum($1).or(z.string())');
+
   const inputSide = new Set<string>([inputSchemaName]);
   let changed = true;
   while (changed) {
@@ -259,17 +266,66 @@ function widenResponseEnums(statements: string[], inputSchemaName: string): stri
       const name = declared[index];
       if (!name || !inputSide.has(name)) return;
       for (const other of declared) {
-        if (other && !inputSide.has(other) && new RegExp(`\\b${escapeRegExp(other)}\\b`).test(statement)) {
+        if (other && !inputSide.has(other) && references(statement, other)) {
           inputSide.add(other);
           changed = true;
         }
       }
     });
   }
-  return statements.map((statement, index) => {
+
+  // Input-side declarations whose inferred type would change if widened,
+  // directly (literal enum) or through a reference to another such declaration.
+  const enumBearing = new Set<string>();
+  changed = true;
+  while (changed) {
+    changed = false;
+    statements.forEach((statement, index) => {
+      const name = declared[index];
+      if (!name || !inputSide.has(name) || enumBearing.has(name)) return;
+      const carriesEnum =
+        widenLiterals(statement) !== statement || [...enumBearing].some(other => references(statement, other));
+      if (carriesEnum) {
+        enumBearing.add(name);
+        changed = true;
+      }
+    });
+  }
+
+  // Enum-bearing input-side declarations the response side reaches, including
+  // the ones their clones will need transitively.
+  const needsClone = new Set<string>();
+  const visit = (name: string) => {
+    if (needsClone.has(name)) return;
+    needsClone.add(name);
+    const statement = statements[declared.indexOf(name)];
+    if (statement === undefined) return;
+    for (const other of enumBearing) {
+      if (other !== name && references(statement, other)) visit(other);
+    }
+  };
+  statements.forEach((statement, index) => {
     const name = declared[index];
-    if (name && inputSide.has(name)) return statement;
-    return statement.replace(/z\.enum\((\[[^\]]*\])\)(?!\.or\()/g, 'z.enum($1).or(z.string())');
+    if (name && inputSide.has(name)) return;
+    for (const candidate of enumBearing) {
+      if (references(statement, candidate)) visit(candidate);
+    }
+  });
+
+  const redirectToClones = (statement: string) => {
+    let result = statement;
+    for (const name of needsClone) {
+      result = result.replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, 'g'), `${name}Widened`);
+    }
+    return result;
+  };
+
+  return statements.flatMap((statement, index) => {
+    const name = declared[index];
+    if (name && inputSide.has(name)) {
+      return needsClone.has(name) ? [statement, widenLiterals(redirectToClones(statement))] : [statement];
+    }
+    return [widenLiterals(redirectToClones(statement))];
   });
 }
 
@@ -291,28 +347,10 @@ async function formatGeneratedFiles(directory: string): Promise<void> {
   );
 }
 
-/**
- * Actions excluded by hand, keyed by provider and action slug. Use this for
- * templates that generate uncompilable or unsafe code that the automated
- * checks can't detect; record why so the exclusion can be dropped once the
- * upstream template is fixed.
- */
-const EXCLUDED_ACTIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  'google-calendar': {
-    'import-event':
-      'upstream type bug: provider response schema widens attendee responseStatus to string while the output schema keeps the strict enum, so the generated module does not compile',
-  },
-};
-
 function extractAction(
   project: Project,
   candidate: ActionCandidate,
 ): { kind: 'ok'; value: ExtractedAction } | { kind: 'skip'; reason: string } {
-  const exclusionReason = Object.prototype.hasOwnProperty.call(EXCLUDED_ACTIONS, candidate.providerId)
-    ? EXCLUDED_ACTIONS[candidate.providerId]?.[candidate.actionSlug]
-    : undefined;
-  if (exclusionReason) return { kind: 'skip', reason: `excluded: ${exclusionReason}` };
-
   const source = project.addSourceFileAtPath(candidate.file);
   const importReason = unsupportedImportReason(source);
   if (importReason) return { kind: 'skip', reason: importReason };

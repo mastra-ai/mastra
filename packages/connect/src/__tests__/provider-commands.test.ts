@@ -372,6 +372,66 @@ export default createAction({
     ]);
   });
 
+  it('widens response-side enums, cloning schemas the response shares with the input side', async () => {
+    const actionDir = resolve(packageRoot, '.templates/integrations/shared-enum-provider/actions');
+    mkdirSync(actionDir, { recursive: true });
+    writeFileSync(
+      resolve(actionDir, 'round-trip.ts'),
+      `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const StatusSchema = z.object({
+  state: z.enum(['open', 'closed']).optional(),
+});
+
+const InputSchema = z.object({ item: StatusSchema });
+const OutputSchema = z.object({
+  item: StatusSchema.extend({ note: z.string().optional() }),
+  kind: z.enum(['a', 'b']).optional(),
+});
+
+const action = createAction({
+  description: 'Round-trip an item whose status schema is shared with the input side.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.post({ endpoint: '/items', data: input });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`,
+    );
+
+    await addProvider({
+      providerId: 'shared-enum-provider',
+      localId: 'shared-enum-provider',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const generatedTool = readFileSync(
+      resolve(packageRoot, 'src/providers/shared-enum-provider/tools/round-trip.ts'),
+      'utf8',
+    );
+    // The input-side declaration stays strict; the response side references a
+    // widened clone so a new provider value never rejects a valid response.
+    const originalDecl = generatedTool.slice(
+      generatedTool.indexOf('const StatusSchema ='),
+      generatedTool.indexOf('const StatusSchemaWidened'),
+    );
+    expect(originalDecl).toMatch(/z\.enum\(\[["']open["'], ["']closed["']\]\)/);
+    expect(originalDecl).not.toContain('.or(z.string())');
+    const cloneDecl = generatedTool.slice(generatedTool.indexOf('const StatusSchemaWidened'));
+    expect(cloneDecl).toContain('.or(z.string())');
+    expect(generatedTool).toContain('item: StatusSchema ');
+    expect(generatedTool).toContain('StatusSchemaWidened.extend(');
+    expect(generatedTool).toMatch(/kind: z\s*\.enum\(\[["']a["'], ["']b["']\]\)\s*\.or\(z\.string\(\)\)/);
+  });
+
   it('adds model-native image output to the OpenAI image generation tool', async () => {
     await addProvider({ providerId: 'openai', localId: 'openai', yes: true, expectedTemplateSha: templateSha });
 
