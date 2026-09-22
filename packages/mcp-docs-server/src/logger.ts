@@ -99,11 +99,7 @@ export const writeErrorLog = (message: string, data?: any) => {
 export function createLogger(): Logger {
   const sendLog = async (level: LoggingLevel, message: string, data?: any) => {
     if (!shouldLog(level)) return;
-    const entry = {
-      level,
-      message,
-      ...(data ? (typeof data === 'object' ? data : { data }) : {}),
-    };
+    const entry = data === undefined ? { level, message } : { level, message, data };
     console.error(JSON.stringify(entry));
   };
 

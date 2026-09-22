@@ -16,7 +16,7 @@ Start the server from an MCP client configuration or the command line.
 npx @mastra/mcp-docs-server
 ```
 
-Version 2.x speaks the MCP `2026-07-28` revision. For tools that still use the earlier `initialize` handshake, pin the previous major:
+Version 2.x speaks the MCP `2026-07-28` revision. For tools that still use the earlier `initialize` handshake, pin the previous major in place of `@latest` or an unversioned package name:
 
 ```bash
 npx @mastra/mcp-docs-server@^1
