@@ -145,14 +145,24 @@ describe('TranscriptEntries signal rows', () => {
     expect(row).toHaveAttribute('data-signal-kind', 'reminder');
   });
 
-  it('renders the contents of a live system reminder data part', async () => {
+  it('renders the contents of a live system reminder data part on its line', () => {
     renderEntries([
       streamedReactiveSignalEntry('sig-reminder', 'system-reminder', 'Remember to run the focused tests.'),
     ]);
 
+    const row = screen.getByRole('group', { name: 'Signal: System reminder' });
+    expect(row).toHaveTextContent('Remember to run the focused tests.');
+    expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('folds a reminder its line cannot hold', async () => {
+    const reminder =
+      'Remember to run the focused tests before submitting, and keep every change scoped to the package you touched.';
+    renderEntries([streamedReactiveSignalEntry('sig-reminder', 'system-reminder', reminder)]);
+
     await userEvent.click(screen.getByRole('button', { name: /System reminder/ }));
 
-    expect(screen.getAllByText('Remember to run the focused tests.')).toHaveLength(2);
+    expect(screen.getByText(reminder)).toBeVisible();
   });
 
   it('renders a content-less system reminder without an empty disclosure', () => {

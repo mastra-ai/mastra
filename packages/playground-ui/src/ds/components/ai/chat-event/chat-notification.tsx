@@ -1,7 +1,7 @@
 import { Bell, ExternalLink } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ChatEvent } from './chat-event';
-import { chatEventPreview } from './chat-event-preview';
+import { chatEventPreview, chatEventPreviewShowsAll } from './chat-event-preview';
 import { getNotificationNoticeVariant } from './notification-variant';
 import { Badge } from '@/ds/components/Badge';
 import { Notice } from '@/ds/components/Notice';
@@ -35,12 +35,7 @@ export function ChatNotification({
   if (variant === 'notice') {
     const hasContent = Boolean(priority || status || pending || message || link);
     return (
-      <Notice
-        variant={getNotificationNoticeVariant(priority)}
-        title={label}
-        icon={icon ?? <Bell />}
-        className="my-2 max-w-[80%]"
-      >
+      <Notice variant={getNotificationNoticeVariant(priority)} title={label} icon={icon ?? <Bell />}>
         {hasContent && (
           <div className="flex flex-col gap-2">
             {(priority || status || pending) && (
@@ -58,19 +53,25 @@ export function ChatNotification({
     );
   }
 
+  const preview = chatEventPreview(message);
+  const bodyRepeatsPreview = chatEventPreviewShowsAll(message);
+
   return (
     <ChatEvent
       label={label}
-      detail={chatEventPreview(message)}
+      detail={preview}
+      detailFont="sans"
       icon={icon ?? <Bell size={13} className="text-warning1" aria-hidden />}
       defaultOpen={defaultOpen}
       data-notification-state={state}
       aria-label={`Notification: ${label}`}
     >
-      <div className="flex flex-col gap-2">
-        <Txt variant="caption">{message}</Txt>
-        {link && <NotificationLink link={link} message={message} />}
-      </div>
+      {(!bodyRepeatsPreview || link) && (
+        <div className="flex flex-col gap-2">
+          {!bodyRepeatsPreview && <Txt variant="caption">{message}</Txt>}
+          {link && <NotificationLink link={link} message={message} />}
+        </div>
+      )}
     </ChatEvent>
   );
 }

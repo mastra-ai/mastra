@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
+import { UserTextPartRenderer } from '../messages/renderers/user-text-part-renderer';
 import { SignalBadge } from '../messages/signal-badge';
 import type { SignalData } from '../messages/signal-data';
 
@@ -9,7 +11,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Studio signal adapter using the shared ChatSignal and ChatNotification components. AI/Chat events documents their row and card variants; AI/Chat assembles the full Studio and Factory conversations.',
+          'Studio adapters over the shared ChatSignal and ChatNotification components. `SignalBadge` maps a signal part to a card; `UserTextPartRenderer` parses `<system-reminder>` user text into the same card, folded. AI/Chat event documents the row and card presentations; AI/Chat assembles the full Studio and Factory conversations.',
       },
     },
   },
@@ -45,5 +47,22 @@ export const Notification: Story = {
       attributes: { source: 'review', kind: 'completed', priority: 'high', status: 'pending' },
       contents: 'Two files need attention before this change can be merged.',
     } satisfies SignalData,
+  },
+};
+
+const reminderText =
+  '<system-reminder path="/repo/AGENTS.md">Keep changes scoped to the requested package.</system-reminder>';
+
+export const SystemReminder: Story = {
+  args: { signal: undefined },
+  render: () => <UserTextPartRenderer part={{ type: 'text', text: reminderText }} />,
+};
+
+export const SystemReminderExpanded: Story = {
+  ...SystemReminder,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: /System reminder/ }));
+    await expect(canvas.getByText('Keep changes scoped to the requested package.')).toBeVisible();
   },
 };

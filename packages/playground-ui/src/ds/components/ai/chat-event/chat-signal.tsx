@@ -1,57 +1,67 @@
-import { Database, Info, Layers, Radio } from 'lucide-react';
+import { Database, FileText, Info, Layers, Radio } from 'lucide-react';
 import { ChatEvent } from './chat-event';
-import { chatEventPreview } from './chat-event-preview';
+import { chatEventPreview, chatEventPreviewShowsAll } from './chat-event-preview';
+import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 
 export interface ChatSignalProps {
   kind: 'state' | 'reactive' | 'reminder';
   label: string;
   message: string;
+  detail?: string;
   mode?: string;
   variant?: 'row' | 'card';
+  collapsible?: boolean;
   defaultOpen?: boolean;
 }
 
-const rowIcons = {
-  state: <Layers size={13} className="text-purple-400" aria-hidden />,
-  reminder: <Info size={13} className="text-accent3" aria-hidden />,
-  reactive: <Info size={13} className="text-muted-foreground" aria-hidden />,
-};
+const signalKinds = {
+  state: {
+    rowIcon: <Layers size={13} className="text-purple-400" aria-hidden />,
+    cardIcon: <Database className="size-4" aria-hidden />,
+    body: { variant: 'caption' },
+  },
+  reactive: {
+    rowIcon: <Info size={13} className="text-muted-foreground" aria-hidden />,
+    cardIcon: <Radio className="size-4" aria-hidden />,
+    body: { variant: 'caption' },
+  },
+  reminder: {
+    rowIcon: <Info size={13} className="text-accent3" aria-hidden />,
+    cardIcon: <FileText className="size-4" aria-hidden />,
+    body: { variant: 'meta', font: 'mono' },
+  },
+} as const;
 
-export function ChatSignal({ kind, label, message, mode, variant = 'row', defaultOpen }: ChatSignalProps) {
-  if (variant === 'card') {
-    const Icon = kind === 'state' ? Database : Radio;
-    return (
-      <div className="border-border bg-background text-foreground my-2 max-w-[80%] rounded-lg border px-4 py-3">
-        <div className="flex items-start gap-3">
-          <Icon className="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-column text-foreground">{label}</p>
-              {mode && (
-                <span className="border-border text-caption text-muted-foreground inline-flex items-center rounded-full border px-1.5 py-0.5 leading-none">
-                  {mode}
-                </span>
-              )}
-            </div>
-            {message && <p className="text-caption mt-2 break-words whitespace-pre-wrap">{message}</p>}
-          </div>
-        </div>
-      </div>
-    );
-  }
+export function ChatSignal({
+  kind,
+  label,
+  message,
+  detail,
+  mode,
+  variant = 'row',
+  collapsible,
+  defaultOpen,
+}: ChatSignalProps) {
+  const { rowIcon, cardIcon, body } = signalKinds[kind];
+  const isCard = variant === 'card';
+  const preview = chatEventPreview(message);
+  const bodyRepeatsPreview = !isCard && chatEventPreviewShowsAll(message);
 
   return (
     <ChatEvent
+      density={isCard ? 'card' : 'row'}
+      icon={isCard ? cardIcon : rowIcon}
       label={label}
-      detail={chatEventPreview(message)}
-      icon={rowIcons[kind]}
+      detail={isCard ? detail : preview}
+      badges={isCard && mode ? <Badge size="sm">{mode}</Badge> : undefined}
+      collapsible={collapsible}
       defaultOpen={defaultOpen}
       data-signal-kind={kind}
       aria-label={`Signal: ${label}`}
     >
-      {message && (
-        <Txt variant="caption" className="break-words whitespace-pre-wrap">
+      {message && !bodyRepeatsPreview && (
+        <Txt {...body} className="break-words whitespace-pre-wrap">
           {message}
         </Txt>
       )}
