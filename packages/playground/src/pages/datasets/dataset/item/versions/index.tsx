@@ -115,7 +115,7 @@ function DatasetItemVersionsComparePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -125,7 +125,7 @@ function DatasetItemVersionsComparePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="datasets" />
         </div>
@@ -135,7 +135,7 @@ function DatasetItemVersionsComparePage() {
 
   if (!datasetId || !itemId) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Item not found.</p>
@@ -153,7 +153,7 @@ function DatasetItemVersionsComparePage() {
   const leftIsOlder = (leftVersion?.datasetVersion ?? 0) < (rightVersion?.datasetVersion ?? 0);
 
   return (
-    <PageLayout
+    <PageLayout variant="fit"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         canDiff && (

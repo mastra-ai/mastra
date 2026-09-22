@@ -17,7 +17,7 @@ const MCPServerToolExecutor = () => {
   const { data: mcpTool, isLoading } = useMCPServerTool(serverId!, toolId!);
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       {!isLoading && mcpTool && (
         <div className="h-full w-full overflow-y-auto">
           <MCPToolPanel toolId={toolId!} serverId={serverId!} />

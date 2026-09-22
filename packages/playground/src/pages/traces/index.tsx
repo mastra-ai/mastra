@@ -73,6 +73,8 @@ const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
 
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
+  // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
+  const breadcrumbs = isScoped ? undefined : <PageBreadcrumbs crumbs={crumbs} />;
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Must run before `useTraceFilterPersistence` hydrates: react-router resolves functional
@@ -362,7 +364,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
   if (isDiscoveryLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout breadcrumbs={breadcrumbs}>
         <div>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
         </div>
@@ -372,7 +374,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   if (tracesError) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
         <div className="flex h-full items-center justify-center">
           <TracesErrorContent error={tracesError} resource="traces" errorTitle="Failed to load traces" />
         </div>
@@ -384,7 +386,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
         <div className="flex h-full items-center justify-center">
           <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
         </div>
@@ -393,7 +395,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+    <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
       <TracesListView
         traces={traces}
         isLoading={isTracesLoading}

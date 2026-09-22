@@ -66,6 +66,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
           <WorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
             <WorkflowSelectedStepProvider>
               <PageLayout
+                variant="fit"
                 breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
                 headerActions={<WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />}
               >

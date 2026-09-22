@@ -52,7 +52,7 @@ function DatasetCompareVersionsPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -62,7 +62,7 @@ function DatasetCompareVersionsPage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="datasets" />
         </div>
@@ -72,7 +72,7 @@ function DatasetCompareVersionsPage() {
 
   if (!datasetId || versionNumbers.length < 2) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Select at least two versions to compare.</p>
@@ -89,7 +89,7 @@ function DatasetCompareVersionsPage() {
   };
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-4">
           <MainHeader>

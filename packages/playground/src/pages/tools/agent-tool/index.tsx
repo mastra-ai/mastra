@@ -14,7 +14,7 @@ const AgentTool = () => {
   ];
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div className="h-full w-full overflow-y-auto">
         <AgentToolPanel toolId={toolId!} agentId={agentId!} />
       </div>

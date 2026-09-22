@@ -45,7 +45,7 @@ function CompareExperimentsPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -55,7 +55,7 @@ function CompareExperimentsPage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="experiments" />
         </div>
@@ -65,7 +65,7 @@ function CompareExperimentsPage() {
 
   if (!datasetId || !experimentIdA || !experimentIdB) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Select two experiments to compare.</p>
@@ -83,7 +83,7 @@ function CompareExperimentsPage() {
 
   if (error && !is404NotFoundError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="flex h-full items-center justify-center">
           <ErrorState title="Failed to load experiments" message={error.message} />
         </div>
@@ -94,7 +94,7 @@ function CompareExperimentsPage() {
   // 404 (or no data): the experiment does not exist or belongs to another dataset.
   if (error || !experimentA.data || !experimentB.data) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="text-muted-foreground py-5 text-center">
             <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
@@ -112,7 +112,7 @@ function CompareExperimentsPage() {
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
         {/* Padding lives on the toolbar only: the comparison table runs edge to edge. */}
         <div className="grid w-full content-start">

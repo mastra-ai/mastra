@@ -125,7 +125,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
   return (
     <div className="relative grid h-full min-w-min grid-cols-[auto_1fr] overflow-x-auto overflow-y-auto">
-      <div className="bg-background border-border w-[22rem] overflow-y-auto border-r">
+      <div className="border-border w-[22rem] overflow-y-auto border-r">
         <ProcessorInformation processor={processor} />
 
         <div className="space-y-5 p-5">

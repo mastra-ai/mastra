@@ -39,6 +39,24 @@ describe('PageLayout', () => {
     });
   });
 
+  describe('variant', () => {
+    it('pads the body by default and removes padding with "fit"', () => {
+      const { rerender } = render(
+        <PageLayout>
+          <p>Body</p>
+        </PageLayout>,
+      );
+      expect(screen.getByRole('main').className).toContain('p-4');
+
+      rerender(
+        <PageLayout variant="fit">
+          <p>Body</p>
+        </PageLayout>,
+      );
+      expect(screen.getByRole('main').className).not.toContain('p-4');
+    });
+  });
+
   describe('when neither breadcrumbs nor header actions are provided', () => {
     it('does not render a header', () => {
       render(

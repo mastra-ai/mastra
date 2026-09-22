@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 import { Header } from '../Header';
 
 export interface PageLayoutProps {
@@ -9,9 +10,11 @@ export interface PageLayoutProps {
   headerActions?: ReactNode;
   /** Controls pinned between the header and the scrollable body (search, filters, toggles…). */
   actionRow?: ReactNode;
+  /** `container` pads the body (default); `fit` lets the body fill the page edge to edge. */
+  variant?: 'container' | 'fit';
 }
 
-export function PageLayout({ children, breadcrumbs, headerActions, actionRow }: PageLayoutProps) {
+export function PageLayout({ children, breadcrumbs, headerActions, actionRow, variant = 'container' }: PageLayoutProps) {
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions) && (
@@ -27,7 +30,15 @@ export function PageLayout({ children, breadcrumbs, headerActions, actionRow }: 
           {actionRow}
         </div>
       )}
-      <main className="min-h-0 flex-1 overflow-y-auto p-4">{children}</main>
+      <main
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto',
+          // `fit` hands the whole body height to its child (panels, graphs, tables that own their scroll).
+          variant === 'container' ? 'p-4' : 'grid grid-rows-[minmax(0,1fr)]',
+        )}
+      >
+        {children}
+      </main>
     </div>
   );
 }

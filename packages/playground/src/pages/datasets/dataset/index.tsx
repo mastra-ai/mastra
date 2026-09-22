@@ -132,7 +132,7 @@ function DatasetPage() {
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
       <div className="h-full">
-        <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
           <div>
             <DatasetItemsView
               datasetId={datasetId}

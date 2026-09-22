@@ -13,7 +13,7 @@ export const McpServerPage = () => {
   const server = mcpServers.find(server => server.id === serverId);
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <div className="h-full w-full overflow-hidden">
         <MCPDetail isLoading={isLoading} server={server} />
       </div>

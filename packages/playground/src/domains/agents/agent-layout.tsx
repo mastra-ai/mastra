@@ -61,17 +61,19 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           <AgentOverviewPanel agentId={agentId!} />
         </ActivatedSkillsProvider>
       </RouteSidePanel>
-      <PageLayout
+      <PageLayout variant="fit"
         breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
         headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
       >
-        <AgentPageTabs
-          agentId={agentId!}
-          activeTab={activeTab}
-          showPlayground={showPlayground}
-          showObservability={showObservability}
-        />
-        {children}
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+          <AgentPageTabs
+            agentId={agentId!}
+            activeTab={activeTab}
+            showPlayground={showPlayground}
+            showObservability={showObservability}
+          />
+          {children}
+        </div>
       </PageLayout>
     </KeyboardScope>
   );

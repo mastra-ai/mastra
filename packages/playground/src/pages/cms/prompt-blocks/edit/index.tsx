@@ -250,7 +250,7 @@ function CmsPromptBlocksEditPage() {
 
   if (isLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <AgentEditLayout
           leftSlot={
             <div className="flex h-full items-center justify-center">
@@ -268,7 +268,7 @@ function CmsPromptBlocksEditPage() {
 
   if (!block || !blockId) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <AgentEditLayout
           leftSlot={
             <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
@@ -295,7 +295,7 @@ function CmsPromptBlocksEditPage() {
   );
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       <CmsPromptBlocksEditForm
         block={block}
         blockId={blockId}

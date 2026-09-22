@@ -10,7 +10,7 @@ function CmsPromptBlocksCreatePage() {
   const { navigate, paths } = useLinkComponent();
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <PromptBlockCreateContent onSuccess={block => navigate(paths.cmsPromptBlockEditLink(block.id))} />
     </PageLayout>
   );
