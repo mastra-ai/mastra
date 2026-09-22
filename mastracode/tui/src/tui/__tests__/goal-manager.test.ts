@@ -432,6 +432,45 @@ describe('GoalManager adapter', () => {
     expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
   });
 
+  // The legacy wipe exists to stop a stale key shadowing the record we just
+  // wrote. With no goal store, `updateObjectiveOptions` and `setObjective` both
+  // return undefined and nothing durable is written — so there is no record to
+  // shadow, and wiping would destroy a pre-migration thread's only copy.
+  it('leaves the legacy key alone when the durable write never lands', async () => {
+    const agent = createAgent();
+    agent.updateObjectiveOptions.mockResolvedValue(undefined);
+    agent.setObjective.mockResolvedValue(undefined);
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    await manager.saveToThread(state);
+
+    // Pins "attempted the write, then declined the wipe" rather than the weaker
+    // "no wipe", which would also hold if the save never reached the upsert.
+    expect(agent.setObjective).toHaveBeenCalled();
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  // The rejected half of the same review suggestion: once `setObjective` has
+  // written a record, a status reapply that comes back empty does not undo it,
+  // so a stale legacy key can still shadow it and the wipe must go ahead.
+  it('still wipes the legacy key when only the status reapply comes back empty', async () => {
+    const agent = createAgent();
+    agent.updateObjectiveOptions.mockResolvedValue(undefined);
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.pause();
+
+    await manager.saveToThread(state);
+
+    expect(agent.setObjective).toHaveBeenCalled();
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+  });
+
   it('does not delete the durable objective when a failed read left the mirror empty', async () => {
     const agent = createAgent();
     agent.getObjective.mockRejectedValue(new Error('storage unavailable'));

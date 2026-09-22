@@ -232,8 +232,9 @@ export class GoalManager {
 
   /**
    * Persist the active objective to ThreadState via the agent. The objective
-   * record is the source of truth; the legacy thread-metadata key is cleared so
-   * stale state from older sessions does not resurface.
+   * record is the source of truth; the legacy thread-metadata key is cleared on
+   * a save that actually wrote, so stale state from older sessions cannot
+   * shadow the record — and a save that wrote nothing leaves it alone.
    *
    * This method only ever upserts. An empty in-memory mirror means "I have
    * nothing *loaded*", which is not the same statement as "there is nothing" —
@@ -263,7 +264,7 @@ export class GoalManager {
             // the local goal was already paused/done — otherwise the resumed
             // thread state would no longer match the in-memory state.
             const desiredStatus = this.record.status;
-            await agent.setObjective(this.record.objective, {
+            const created = await agent.setObjective(this.record.objective, {
               id: this.record.id,
               threadId,
               resourceId: state.session.identity.getResourceId(),
@@ -271,6 +272,10 @@ export class GoalManager {
               ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
               ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
             });
+            // Nothing durable was written (no goal store, or no thread), so
+            // there is no record for a legacy key to shadow — and wiping it
+            // would take a pre-migration thread's only copy with it.
+            if (!created) return;
             if (desiredStatus !== 'active') {
               await agent.updateObjectiveOptions({
                 threadId,
