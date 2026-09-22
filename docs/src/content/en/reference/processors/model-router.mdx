@@ -289,12 +289,10 @@ This is the opposite of the fail-closed stance appropriate for [tool approval](/
 
 ## Cost tradeoffs
 
-Routing trades a classifier call on every request for a cheaper model on some requests. Whether that saves money depends on your traffic, and it can cost more than it saves:
+Routing trades a classifier call on every request for a cheaper model on some requests. Whether that saves money depends on your traffic:
 
 - **Prompt caching**: Providers cache the prompt prefix per model and bill cached input at a fraction of the normal price. Caches aren't shared between models. When a call goes to a different model than the call before it, that model pays full input price, and on some providers a cache-write charge, for any of the conversation it hasn't cached. Each request is classified on its own, so consecutive turns in a thread can alternate between models. On agents with a large system prompt, retrieved context, or long history, one switch can cost more than the cheaper model saves.
-- **Extra work from the cheaper model**: A cheaper model can make more mistakes, take more steps, or call more tools to finish the same task. Every extra step re-reads the growing context, and a user who has to ask again adds another full request.
-- **Misrouting**: The evaluation model doesn't always pick the right model. With the default `scope: 'run'`, a request that needs the capable model but is sent to the cheaper one stays there for the whole run.
-- **Classifier cost**: The classifier reads only the latest user message, and its cost doesn't grow with the agent's context. On agents with a short prompt it can be comparable to the call it replaces.
+- **Extra work from the cheaper model**: A cheaper model can make more mistakes, take more steps, or call more tools to finish the same task. When a later call switches back to the capable model, for example the next request in the thread or step two under `scope: 'first-step'`, every step the cheaper model took, including its tool calls and results, is billed as uncached input on the capable model.
 
 Routing is only useful when the models you route between actually differ on your traffic. If the cheaper model answers your requests as accurately as the capable one, configure the cheaper model directly instead.
 
