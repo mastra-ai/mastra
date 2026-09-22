@@ -58,7 +58,7 @@ function FindingsContent({
     >
       <div className="flex shrink-0 items-center gap-2 px-3 py-3">
         <Brain className="size-4" aria-hidden />
-        <Txt variant="body" className="text-neutral6">
+        <Txt variant="body" className="text-foreground">
           Findings
         </Txt>
         <Badge variant="neutral" size="sm">
@@ -69,7 +69,7 @@ function FindingsContent({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {groups.length === 0 ? (
           <div className="px-2 py-8 text-center">
-            <Txt variant="caption" className="text-neutral3">
+            <Txt variant="caption" className="text-muted-foreground">
               No findings — everything looks healthy.
             </Txt>
           </div>
@@ -82,7 +82,7 @@ function FindingsContent({
                     className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90"
                     aria-hidden
                   />
-                  <Txt variant="caption" className="text-neutral6 min-w-0 flex-1">
+                  <Txt variant="caption" className="text-foreground min-w-0 flex-1">
                     {FINDING_LABELS[kind]}
                   </Txt>
                   <Badge variant="neutral" size="sm">
@@ -95,15 +95,15 @@ function FindingsContent({
                       <li key={finding.id} className="flex flex-col gap-2 px-2 py-2">
                         <div className="flex min-w-0 items-start gap-2">
                           <div className="min-w-0 flex-1">
-                            <Txt variant="caption" className="text-neutral6 block wrap-anywhere">
+                            <Txt variant="caption" className="text-foreground block wrap-anywhere">
                               {finding.title}
                             </Txt>
-                            <Txt variant="meta" className="text-neutral3 mt-0.5 block wrap-anywhere">
+                            <Txt variant="meta" className="text-muted-foreground mt-0.5 block wrap-anywhere">
                               {finding.evidence}
                             </Txt>
                           </div>
                           {finding.beganAt !== null && (
-                            <Txt variant="meta" className="text-neutral3 shrink-0">
+                            <Txt variant="meta" className="text-muted-foreground shrink-0">
                               {relativeTime(finding.beganAt)}
                             </Txt>
                           )}
@@ -124,7 +124,7 @@ function FindingsContent({
       {findings.length > 0 && factoryId && (
         <Link
           to={`/factories/${factoryId}/attention`}
-          className="border-border text-caption text-neutral4 hover:text-neutral6 shrink-0 border-t px-4 py-3 text-center transition-colors"
+          className="border-border text-caption text-muted-foreground hover:text-foreground shrink-0 border-t px-4 py-3 text-center transition-colors"
         >
           View all in Attention
         </Link>

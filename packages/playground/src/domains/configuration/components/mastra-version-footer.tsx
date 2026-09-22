@@ -206,7 +206,7 @@ const PackagesModalContent = ({
           <div className="text-body grid grid-cols-[1fr_auto_auto]">
             {packages.map((pkg, index) => (
               <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border')}>
-                <div className="text-text1 min-w-0 truncate px-3 py-2 font-mono">
+                <div className="text-foreground min-w-0 truncate px-3 py-2 font-mono">
                   <a
                     href={`https://www.npmjs.com/package/${pkg.name}`}
                     target="_blank"

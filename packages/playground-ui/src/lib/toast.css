@@ -24,7 +24,7 @@ html.light {
    (specificity 0,2,0) and adds our class for (0,3,0) so our notice tokens win without !important. */
 [data-sonner-toaster][data-sonner-theme].mastra-toaster {
   --normal-bg: var(--card);
-  --normal-text: var(--neutral5);
+  --normal-text: var(--foreground);
   --normal-border: var(--border);
   --success-bg: var(--toast-success-bg);
   --success-text: var(--notice-success-fg);
@@ -69,7 +69,7 @@ html.light {
      --close-bg       → chip surface, equal to the toast's own bg so the chip blends at rest
      --close-border   → chip border, equal to the toast's own border so the chip blends at rest */
 [data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) {
-  --close-tint: var(--neutral5);
+  --close-tint: var(--foreground);
   --close-bg: var(--normal-bg);
   --close-border: var(--normal-border);
 }

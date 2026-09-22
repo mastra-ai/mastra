@@ -17,8 +17,8 @@ export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeMod
         className={cn(
           'relative flex h-[38px] w-28 items-center justify-center text-muted-foreground after:absolute after:inset-x-0 after:mask-x-from-60%',
           isStart
-            ? 'after:bottom-0 after:h-px after:bg-neutral3'
-            : 'after:top-0 after:h-1 after:border-y after:border-neutral3',
+            ? 'after:bottom-0 after:h-px after:bg-muted-foreground'
+            : 'after:top-0 after:h-1 after:border-y after:border-muted-foreground',
         )}
       >
         <Txt variant="meta">{data.label}</Txt>

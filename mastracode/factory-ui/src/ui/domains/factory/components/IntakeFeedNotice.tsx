@@ -27,7 +27,7 @@ export function IntakeFeedNotice({ source, feed }: { source?: IntakeSource; feed
 function LinearReauthNotice({ onConnect }: { onConnect: () => void }) {
   return (
     <div className="flex flex-col items-start gap-2 p-1">
-      <Txt as="span" variant="meta" className="text-icon3">
+      <Txt as="span" variant="meta" className="text-muted-foreground">
         Linear authorization expired. Reconnect to keep syncing issues.
       </Txt>
       <Button size="sm" onClick={onConnect}>

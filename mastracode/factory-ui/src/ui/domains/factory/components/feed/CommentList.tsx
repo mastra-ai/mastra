@@ -190,7 +190,7 @@ export function CommentList({
           {!showSkeleton && leading !== undefined && (
             <div
               aria-hidden
-              className="text-meta text-icon3 stream-landing flex items-center gap-2 px-3 pb-1"
+              className="text-meta text-muted-foreground stream-landing flex items-center gap-2 px-3 pb-1"
               style={landingStyle(1)}
             >
               <span className="bg-border h-px flex-1" />
@@ -206,7 +206,7 @@ export function CommentList({
             </div>
           ) : null}
           {comments.isError ? (
-            <div className="text-caption text-icon3 flex items-center gap-2 px-2 py-2">
+            <div className="text-caption text-muted-foreground flex items-center gap-2 px-2 py-2">
               <span>Unable to load comments.</span>
               <Button type="button" variant="ghost" size="sm" onClick={() => void comments.refetch()}>
                 <RefreshCw aria-hidden />

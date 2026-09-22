@@ -12,7 +12,7 @@ import { resultBlock, stringify, truncate } from './transcript-shared';
 
 const promptCardSuspension =
   'border-border border-l-accent2 bg-fill my-2 min-w-0 rounded-lg border border-l-4 px-4 py-3';
-const promptTitle = 'mb-1.5 text-sm font-semibold text-icon6';
+const promptTitle = 'mb-1.5 text-sm font-semibold text-foreground';
 const promptActions = 'mt-2 flex gap-2';
 
 function lastSegment(id: string): string {
@@ -116,7 +116,7 @@ export function SuspensionCard({
     return (
       <div className={promptCardSuspension} role="group" aria-label="Access request">
         <div className={promptTitle}>Grant access to {payload.requestedPath ?? 'a path'}?</div>
-        {payload.reason && <div className="text-icon3 mt-0.5 text-xs">Reason: {payload.reason}</div>}
+        {payload.reason && <div className="text-muted-foreground mt-0.5 text-xs">Reason: {payload.reason}</div>}
         <div className={promptActions}>
           <Button
             variant="primary"
@@ -174,7 +174,7 @@ function AskUserCard({
               onClick={() => onRespond(prompt.toolCallId, opt.label, prompt.id)}
             >
               <strong>{opt.label}</strong>
-              {opt.description && <span className="text-icon3"> — {opt.description}</span>}
+              {opt.description && <span className="text-muted-foreground"> — {opt.description}</span>}
             </Button>
           ))}
         </div>
@@ -208,7 +208,7 @@ export function SubagentCard({ entry }: { entry: SubagentEntry }) {
     <div className="border-border border-l-accent5 bg-fill my-2 rounded-lg border border-l-4 px-3 py-2">
       <div className="flex items-center gap-2">
         <Badge variant={entry.done ? 'green' : 'blue'}>subagent: {entry.agentType}</Badge>
-        <Txt variant="meta" className="text-icon3">
+        <Txt variant="meta" className="text-muted-foreground">
           {lastSegment(entry.modelId)}
         </Txt>
       </div>

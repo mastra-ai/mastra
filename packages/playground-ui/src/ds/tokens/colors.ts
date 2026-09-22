@@ -14,12 +14,6 @@ export const Colors = {
   accent3Darker: 'var(--accent3Darker)',
   accent5Darker: 'var(--accent5Darker)',
   accent6Darker: 'var(--accent6Darker)',
-  neutral1: 'var(--neutral1)',
-  neutral2: 'var(--neutral2)',
-  neutral3: 'var(--neutral3)',
-  neutral4: 'var(--neutral4)',
-  neutral5: 'var(--neutral5)',
-  neutral6: 'var(--neutral6)',
   background: 'var(--background)',
   sidebar: 'var(--sidebar)',
   card: 'var(--card)',
@@ -44,7 +38,6 @@ export const Colors = {
 
   scrim: 'var(--scrim)',
 
-  text1: 'var(--text1)',
   warning1: 'var(--warning1)',
   positive1: 'var(--positive1)',
   negative1: 'var(--negative1)',

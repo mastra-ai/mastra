@@ -31,11 +31,11 @@ const STATUS_CLASSES: Record<WorkspaceChangeStatus, string> = {
   untracked: 'text-notice-success/70!',
   conflicted: 'text-notice-destructive/70!',
 };
-const FOLDER_CLASS = 'text-neutral4!';
+const FOLDER_CLASS = 'text-muted-foreground!';
 
 function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'additions' | 'deletions' | 'binary'>) {
   if (binary) {
-    return <span className="text-meta text-icon3 shrink-0">Binary</span>;
+    return <span className="text-meta text-muted-foreground shrink-0">Binary</span>;
   }
   if (additions === undefined || deletions === undefined) return null;
 
@@ -55,7 +55,7 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
 function ChangesEmptyState({ available }: { available: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <Txt variant="caption" className="text-icon3">
+      <Txt variant="caption" className="text-muted-foreground">
         {available ? 'No changes' : 'No sandbox running. Changes appear once the session sandbox starts.'}
       </Txt>
     </div>
@@ -213,10 +213,10 @@ function DiffViewer({
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
-          <Txt variant="column" font="mono" className="text-icon6 truncate">
+          <Txt variant="column" font="mono" className="text-foreground truncate">
             {name}
           </Txt>
-          <Txt variant="meta" font="mono" className="text-icon3 truncate">
+          <Txt variant="meta" font="mono" className="text-muted-foreground truncate">
             {directory || 'Repository root'}
           </Txt>
         </div>
@@ -320,12 +320,12 @@ export function WorkspaceChangesPanel({
         <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
           <ArrowLeft />
         </Button>
-        <FileDiff className="text-icon3" size={14} />
-        <Txt as="h2" variant="column" className="text-icon6">
+        <FileDiff className="text-muted-foreground" size={14} />
+        <Txt as="h2" variant="column" className="text-foreground">
           Changes
         </Txt>
         {!isLoading && !error ? (
-          <Txt variant="meta" className="text-icon3 ml-auto">
+          <Txt variant="meta" className="text-muted-foreground ml-auto">
             {changes?.changes.length ?? 0} {changes?.changes.length === 1 ? 'file' : 'files'}
           </Txt>
         ) : null}

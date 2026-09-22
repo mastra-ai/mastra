@@ -100,7 +100,7 @@ describe('mastra-toaster CSS theming', () => {
 
   const expectedMappings: Array<[string, string]> = [
     ['--normal-bg', 'var(--card)'],
-    ['--normal-text', 'var(--neutral5)'],
+    ['--normal-text', 'var(--foreground)'],
     ['--normal-border', 'var(--border)'],
     ['--success-bg', 'var(--toast-success-bg)'],
     ['--success-text', 'var(--notice-success-fg)'],

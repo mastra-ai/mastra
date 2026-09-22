@@ -140,7 +140,7 @@ function DraftStart({
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <div className="flex flex-col items-center gap-3 text-center">
         <BrandLockup />
-        <h1 id="draft-start-heading" className="text-title text-icon6 m-0">
+        <h1 id="draft-start-heading" className="text-title text-foreground m-0">
           What do you want to work on?
         </h1>
         <FactoryContext activeFactory={activeFactory} />
@@ -162,7 +162,7 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
   return (
     <EmptyState
       as="h2"
-      iconSlot={<Bot size={40} className="text-icon3" />}
+      iconSlot={<Bot size={40} className="text-muted-foreground" />}
       titleSlot={`You don't have access to ${providerName}`}
       descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Models settings${orgHint}.`}
       actionSlot={
@@ -178,7 +178,7 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
   return (
     <EmptyState
       as="h2"
-      iconSlot={<Bot size={40} className="text-icon3" />}
+      iconSlot={<Bot size={40} className="text-muted-foreground" />}
       titleSlot="No default model configured for this Factory"
       descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
       actionSlot={
@@ -192,7 +192,7 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
 
 function BrandLockup() {
   return (
-    <div className="text-icon3 inline-flex items-center gap-2">
+    <div className="text-muted-foreground inline-flex items-center gap-2">
       <LogoWithoutText aria-hidden className="h-4 w-auto" />
       <span className="text-column tracking-widest uppercase">Mastra Code</span>
     </div>
@@ -208,14 +208,14 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
   const projectPath = sessionQuery.data?.sessionId;
   const gitBranch = repository?.gitBranch;
   return (
-    <div className="text-caption text-icon3 flex max-w-full items-center justify-center gap-1.5">
+    <div className="text-caption text-muted-foreground flex max-w-full items-center justify-center gap-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
-        <FolderIcon size={13} className="text-icon2 shrink-0" />
+        <FolderIcon size={13} className="text-placeholder shrink-0" />
         <span className="shrink-0 font-medium">{activeFactory?.name ?? 'Factory'}</span>
         {projectPath && (
           <>
-            <span className="text-icon2 shrink-0">·</span>
-            <span className="text-icon2 min-w-0 truncate" title={projectPath}>
+            <span className="text-placeholder shrink-0">·</span>
+            <span className="text-placeholder min-w-0 truncate" title={projectPath}>
               {projectPath}
             </span>
           </>
@@ -223,11 +223,11 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
       </div>
       {gitBranch && (
         <>
-          <span aria-hidden className="text-icon2 shrink-0">
+          <span aria-hidden className="text-placeholder shrink-0">
             ·
           </span>
           <div className="flex min-w-0 items-center gap-1.5">
-            <GitBranch size={13} aria-hidden className="text-icon2 shrink-0" />
+            <GitBranch size={13} aria-hidden className="text-placeholder shrink-0" />
             <span className="min-w-0 truncate" title={gitBranch}>
               {gitBranch}
             </span>

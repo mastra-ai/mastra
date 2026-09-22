@@ -8,7 +8,7 @@ export function TranscriptHistoryLoader() {
 
   return (
     <div className="flex w-full justify-center py-2">
-      <Spinner size="sm" className="text-icon3" aria-label="Loading older messages" />
+      <Spinner size="sm" className="text-muted-foreground" aria-label="Loading older messages" />
     </div>
   );
 }

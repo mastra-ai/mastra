@@ -37,11 +37,11 @@ export function WorkItemFeedPanel({
         <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
           <ArrowLeft />
         </Button>
-        <MessageSquare className="text-icon3" size={14} />
-        <Txt as="h2" variant="column" className="text-icon6">
+        <MessageSquare className="text-muted-foreground" size={14} />
+        <Txt as="h2" variant="column" className="text-foreground">
           Comments
         </Txt>
-        <Txt variant="meta" className="text-icon3 ml-auto">
+        <Txt variant="meta" className="text-muted-foreground ml-auto">
           {item.commentCount} {item.commentCount === 1 ? 'comment' : 'comments'}
         </Txt>
         <Button

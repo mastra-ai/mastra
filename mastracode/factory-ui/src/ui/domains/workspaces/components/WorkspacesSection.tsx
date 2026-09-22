@@ -230,9 +230,9 @@ export function WorkspacesSection() {
               <DialogTitle>Delete workspace?</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="caption" className="text-icon4 m-0">
-                This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout and its uncommitted
-                changes. This can’t be undone. Threads from this workspace are kept.
+              <Txt as="p" variant="caption" className="text-muted-foreground m-0">
+                This deletes the <span className="text-foreground">{confirmDelete.branch}</span> checkout and its
+                uncommitted changes. This can’t be undone. Threads from this workspace are kept.
               </Txt>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteWorkspace.isPending}>
@@ -347,7 +347,7 @@ function WorkspaceGroup({
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="text-icon3 hover:text-icon5 pl-3 text-left text-xs"
+          className="text-muted-foreground hover:text-foreground pl-3 text-left text-xs"
           onClick={() => setExpanded(value => !value)}
         >
           {expanded ? 'Show less' : `Show ${hiddenCount} more`}

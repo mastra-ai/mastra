@@ -19,7 +19,7 @@ const AUDIT_CATEGORY_STYLES: Record<AuditNamespace, AuditCategoryStyle> = {
   run: { tone: 'green', label: 'Runs', dotClass: 'bg-positive1', strokeClass: 'stroke-positive1' },
   git: { tone: 'orange', label: 'Git', dotClass: 'bg-(--chart-orange)', strokeClass: 'stroke-(--chart-orange)' },
   agent: { tone: 'blue', label: 'Agent', dotClass: 'bg-accent6', strokeClass: 'stroke-accent6' },
-  intake: { tone: 'cyan', label: 'Intake', dotClass: 'bg-neutral2', strokeClass: 'stroke-neutral2' },
+  intake: { tone: 'cyan', label: 'Intake', dotClass: 'bg-placeholder', strokeClass: 'stroke-placeholder' },
 };
 
 /** The server's namespaces, in its order, dressed for the page. */

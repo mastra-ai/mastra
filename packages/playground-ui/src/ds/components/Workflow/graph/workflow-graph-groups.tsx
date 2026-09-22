@@ -30,7 +30,7 @@ export function WorkflowGraphGroups({ nodes, groups }: { nodes: Node[]; groups: 
         return (
           <div
             key={group.id}
-            className="border-neutral3/25 bg-neutral3/3 absolute rounded-xl border border-dashed"
+            className="border-muted-foreground/25 bg-muted-foreground/3 absolute rounded-xl border border-dashed"
             style={{ transform: `translate(${left}px, ${top}px)`, width: right - left, height: bottom - top }}
           >
             <div className="text-meta text-muted-foreground flex items-center gap-2 px-5 py-4">
