@@ -30,9 +30,7 @@ function Agents() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -40,9 +38,7 @@ function Agents() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="agents" />
-        </div>
+        <PermissionDenied variant="fill" resource="agents" />
       </PageLayout>
     );
   }
@@ -50,9 +46,7 @@ function Agents() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load agents" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load agents" message={error.message} />
       </PageLayout>
     );
   }
@@ -60,9 +54,7 @@ function Agents() {
   if (Object.keys(agents).length === 0 && !isLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <NoAgentsInfo />
-        </div>
+        <NoAgentsInfo />
       </PageLayout>
     );
   }

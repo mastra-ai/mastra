@@ -310,9 +310,7 @@ export default function Workspace() {
   if (isLoadingWorkspaces) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <Spinner />
-        </div>
+        <Spinner fill />
       </PageLayout>
     );
   }
@@ -321,9 +319,7 @@ export default function Workspace() {
   if (isSessionExpired) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -332,9 +328,7 @@ export default function Workspace() {
   if (isPermissionDenied) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="workspaces" />
-        </div>
+        <PermissionDenied variant="fill" resource="workspaces" />
       </PageLayout>
     );
   }
@@ -343,9 +337,7 @@ export default function Workspace() {
   if (isWorkspaceNotSupported) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <WorkspaceNotSupported />
-        </div>
+        <WorkspaceNotSupported />
       </PageLayout>
     );
   }
@@ -355,9 +347,7 @@ export default function Workspace() {
   if (genericError) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load workspace" message={(genericError as Error).message} />
       </PageLayout>
     );
   }
@@ -366,9 +356,7 @@ export default function Workspace() {
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <NoWorkspacesInfo />
-        </div>
+        <NoWorkspacesInfo />
       </PageLayout>
     );
   }
@@ -378,9 +366,7 @@ export default function Workspace() {
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <WorkspaceNotConfigured />
-        </div>
+        <WorkspaceNotConfigured />
       </PageLayout>
     );
   }

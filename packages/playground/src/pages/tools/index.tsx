@@ -28,9 +28,7 @@ export default function Tools() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -38,9 +36,7 @@ export default function Tools() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="tools" />
-        </div>
+        <PermissionDenied variant="fill" resource="tools" />
       </PageLayout>
     );
   }
@@ -48,9 +44,7 @@ export default function Tools() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load tools" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load tools" message={error.message} />
       </PageLayout>
     );
   }
@@ -58,9 +52,7 @@ export default function Tools() {
   if (Object.keys(tools).length === 0 && !isLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <NoToolsInfo />
-        </div>
+        <NoToolsInfo />
       </PageLayout>
     );
   }

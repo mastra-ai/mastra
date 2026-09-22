@@ -53,9 +53,7 @@ function DatasetCompareVersionsPage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -63,9 +61,7 @@ function DatasetCompareVersionsPage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
-        </div>
+        <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
     );
   }

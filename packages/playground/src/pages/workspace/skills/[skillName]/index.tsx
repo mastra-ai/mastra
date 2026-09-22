@@ -1,6 +1,8 @@
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -85,9 +87,7 @@ export default function WorkspaceSkillDetailPage() {
   if (isLoading) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="grid h-full place-items-center">
-          <div className="border-accent1 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
-        </div>
+        <Spinner fill size="lg" />
       </PageLayout>
     );
   }
@@ -96,9 +96,7 @@ export default function WorkspaceSkillDetailPage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -107,9 +105,7 @@ export default function WorkspaceSkillDetailPage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="workspaces" />
-        </div>
+        <PermissionDenied variant="fill" resource="workspaces" />
       </PageLayout>
     );
   }
@@ -117,14 +113,11 @@ export default function WorkspaceSkillDetailPage() {
   if (error || !skill) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="grid h-full place-items-center">
-          <div className="text-center">
-            <p className="mb-2 text-red-400">Failed to load skill</p>
-            <p className="text-muted-foreground text-body">
-              {error instanceof Error ? error.message : 'Skill not found'}
-            </p>
-          </div>
-        </div>
+        <ErrorState
+          variant="fill"
+          title="Failed to load skill"
+          message={error instanceof Error ? error.message : 'Skill not found'}
+        />
       </PageLayout>
     );
   }

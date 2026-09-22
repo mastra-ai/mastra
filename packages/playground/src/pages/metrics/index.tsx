@@ -214,9 +214,7 @@ function MetricsContent() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -224,9 +222,7 @@ function MetricsContent() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="metrics" />
-        </div>
+        <PermissionDenied variant="fill" resource="metrics" />
       </PageLayout>
     );
   }
@@ -234,9 +230,7 @@ function MetricsContent() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load metrics" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load metrics" message={error.message} />
       </PageLayout>
     );
   }

@@ -120,9 +120,7 @@ export default function Experiments() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -130,9 +128,7 @@ export default function Experiments() {
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="experiments" />
-        </div>
+        <PermissionDenied variant="fill" resource="experiments" />
       </PageLayout>
     );
   }
@@ -140,9 +136,7 @@ export default function Experiments() {
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
-        </div>
+        <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
     );
   }
@@ -150,9 +144,7 @@ export default function Experiments() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load experiments" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load experiments" message={error.message} />
       </PageLayout>
     );
   }
@@ -169,10 +161,8 @@ export default function Experiments() {
   if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
-          {runDialog}
-        </div>
+        <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
+        {runDialog}
       </PageLayout>
     );
   }

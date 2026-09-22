@@ -46,9 +46,7 @@ function CompareExperimentsPage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -56,9 +54,7 @@ function CompareExperimentsPage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="experiments" />
-        </div>
+        <PermissionDenied variant="fill" resource="experiments" />
       </PageLayout>
     );
   }
@@ -84,9 +80,7 @@ function CompareExperimentsPage() {
   if (error && !is404NotFoundError(error)) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load experiments" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load experiments" message={error.message} />
       </PageLayout>
     );
   }

@@ -406,9 +406,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
       <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
-        <div className="flex h-full items-center justify-center">
-          <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
-        </div>
+        <NoTracesInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
       </PageLayout>
     );
   }

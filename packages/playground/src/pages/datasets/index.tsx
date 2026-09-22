@@ -5,7 +5,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
@@ -54,6 +54,9 @@ export default function Datasets() {
   const isLoading = isLoadingDatasets || isLoadingExperiments;
   const error = errorDatasets || errorExperiments;
 
+  const navigate = useNavigate();
+  const openCreatePage = () => void navigate('/datasets/new');
+
   const headerCreateAction = (
     <HeaderCreateAction href="/datasets/new" tooltip="Create a dataset">
       New dataset
@@ -63,9 +66,7 @@ export default function Datasets() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -73,9 +74,7 @@ export default function Datasets() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
-        </div>
+        <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
     );
   }
@@ -83,9 +82,7 @@ export default function Datasets() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load datasets" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load datasets" message={error.message} />
       </PageLayout>
     );
   }
@@ -94,9 +91,7 @@ export default function Datasets() {
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerCreateAction}>
-        <div className="flex h-full items-center justify-center">
-          <NoDatasetsInfo onCreateClick={openCreatePage} />
-        </div>
+        <NoDatasetsInfo onCreateClick={openCreatePage} />
       </PageLayout>
     );
   }

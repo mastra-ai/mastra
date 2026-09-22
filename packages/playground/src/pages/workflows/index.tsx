@@ -26,9 +26,7 @@ function Workflows() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -36,9 +34,7 @@ function Workflows() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="workflows" />
-        </div>
+        <PermissionDenied variant="fill" resource="workflows" />
       </PageLayout>
     );
   }
@@ -46,9 +42,7 @@ function Workflows() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load workflows" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load workflows" message={error.message} />
       </PageLayout>
     );
   }
@@ -56,9 +50,7 @@ function Workflows() {
   if (Object.keys(workflows || {}).length === 0 && !isLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <NoWorkflowsInfo />
-        </div>
+        <NoWorkflowsInfo />
       </PageLayout>
     );
   }

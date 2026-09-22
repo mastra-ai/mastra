@@ -23,9 +23,7 @@ export function Processors() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -33,9 +31,7 @@ export function Processors() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="processors" />
-        </div>
+        <PermissionDenied variant="fill" resource="processors" />
       </PageLayout>
     );
   }
@@ -43,9 +39,7 @@ export function Processors() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load processors" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load processors" message={error.message} />
       </PageLayout>
     );
   }
@@ -53,9 +47,7 @@ export function Processors() {
   if (Object.keys(processors).length === 0 && !isLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <NoProcessorsInfo />
-        </div>
+        <NoProcessorsInfo />
       </PageLayout>
     );
   }

@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -334,7 +335,7 @@ function EditLayoutWrapper() {
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       {isNotFound ? (
         <>
-          <div className="text-muted-foreground flex h-full items-center justify-center">Agent not found</div>
+          <EmptyState variant="fill" titleSlot="Agent not found" />
           <div className="hidden">
             <EditFormContent
               agentId={agentId ?? ''}

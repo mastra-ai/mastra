@@ -54,19 +54,11 @@ function AgentSession() {
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
   if (error && is401UnauthorizedError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <SessionExpired />
-      </div>
-    );
+    return <SessionExpired variant="fill" />;
   }
 
   if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
-      </div>
-    );
+    return <PermissionDenied variant="fill" resource="agents" />;
   }
 
   if (isAgentLoading) {

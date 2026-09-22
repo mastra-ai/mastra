@@ -198,9 +198,7 @@ export default function LogsPage() {
   if (logs.length === 0 && !isLoadingLogs && !contentFiltersApplied) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
-        <div className="flex h-full items-center justify-center">
-          <NoLogsInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
-        </div>
+        <NoLogsInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
       </PageLayout>
     );
   }

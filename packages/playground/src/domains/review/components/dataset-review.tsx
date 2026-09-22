@@ -538,9 +538,7 @@ export function DatasetReview({
   if (isLoadingReview) {
     return (
       <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
-        <div className="flex h-full items-center justify-center">
-          <Spinner className="h-6 w-6" />
-        </div>
+        <Spinner fill />
       </PageLayout>
     );
   }
@@ -702,9 +700,7 @@ export function DatasetReview({
       <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay ? (
-            <div className="flex h-full items-center justify-center">
-              <Spinner className="h-6 w-6" />
-            </div>
+            <Spinner fill />
           ) : displayItems.length === 0 ? (
             <EmptyState
               titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}

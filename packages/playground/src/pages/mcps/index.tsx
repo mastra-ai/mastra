@@ -23,9 +23,7 @@ const MCPs = () => {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -33,9 +31,7 @@ const MCPs = () => {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="MCP servers" />
-        </div>
+        <PermissionDenied variant="fill" resource="MCP servers" />
       </PageLayout>
     );
   }
@@ -43,9 +39,7 @@ const MCPs = () => {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load MCP servers" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load MCP servers" message={error.message} />
       </PageLayout>
     );
   }
@@ -53,9 +47,7 @@ const MCPs = () => {
   if (mcpServers.length === 0 && !isLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <NoMCPServersInfo />
-        </div>
+        <NoMCPServersInfo />
       </PageLayout>
     );
   }

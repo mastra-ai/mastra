@@ -52,9 +52,7 @@ export default function Evaluation() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
+        <SessionExpired variant="fill" />
       </PageLayout>
     );
   }
@@ -62,9 +60,7 @@ export default function Evaluation() {
   if (error && is403ForbiddenError(error)) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="evaluation" />
-        </div>
+        <PermissionDenied variant="fill" resource="evaluation" />
       </PageLayout>
     );
   }
@@ -72,9 +68,7 @@ export default function Evaluation() {
   if (error) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load evaluation data" message={error.message} />
-        </div>
+        <ErrorState variant="fill" title="Failed to load evaluation data" message={error.message} />
       </PageLayout>
     );
   }

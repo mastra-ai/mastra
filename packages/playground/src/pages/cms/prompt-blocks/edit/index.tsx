@@ -1,5 +1,6 @@
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -251,16 +252,8 @@ function CmsPromptBlocksEditPage() {
   if (isLoading) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <AgentEditLayout
-          leftSlot={
-            <div className="flex h-full items-center justify-center">
-              <Spinner className="size-8" />
-            </div>
-          }
-        >
-          <div className="flex h-full items-center justify-center">
-            <Spinner className="size-8" />
-          </div>
+        <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
+          <Spinner fill size="lg" />
         </AgentEditLayout>
       </PageLayout>
     );
@@ -269,12 +262,8 @@ function CmsPromptBlocksEditPage() {
   if (!block || !blockId) {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <AgentEditLayout
-          leftSlot={
-            <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
-          }
-        >
-          <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
+        <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Prompt block not found" />}>
+          <EmptyState variant="fill" titleSlot="Prompt block not found" />
         </AgentEditLayout>
       </PageLayout>
     );
