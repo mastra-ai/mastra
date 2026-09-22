@@ -151,7 +151,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
     return (
       <EmptyState
         as="h2"
-        iconSlot={<Brain size={40} className="text-icon3" />}
+        iconSlot={<Brain size={40} className="text-muted-foreground" />}
         titleSlot="No models configured"
         descriptionSlot="Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first."
         actionSlot={

@@ -1,7 +1,7 @@
 export const BorderRadius = {
-  none: '0px',
-  sm: '2px',
-  md: '4px',
-  lg: '6px',
-  xl: '12px',
+  none: 'var(--radius-none)',
+  sm: 'var(--radius-sm)',
+  md: 'var(--radius-md)',
+  lg: 'var(--radius-lg)',
+  xl: 'var(--radius-xl)',
 };

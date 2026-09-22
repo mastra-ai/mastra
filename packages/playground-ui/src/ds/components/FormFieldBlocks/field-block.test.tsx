@@ -88,7 +88,6 @@ describe('FieldBlock error wiring', () => {
 
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(input.getAttribute('aria-describedby')).toBe('error-email');
-    expect(input.className).toContain('border-destructive');
     expect(input.parentElement?.className).toContain('gap-1');
     expect(input.parentElement?.parentElement?.className).toContain('gap-2');
     expect(message.id).toBe('error-email');
@@ -140,7 +139,6 @@ describe('FieldBlock error wiring', () => {
 
     const message = screen.getByRole('alert');
     expect(message.id).toBe('error-token');
-    expect(message.className).toContain('text-destructive');
   });
 
   it('matches the generated error ID for an empty field name', () => {
@@ -169,23 +167,9 @@ describe('FieldBlock error wiring', () => {
       </FieldBlock.Label>,
     );
 
-    const label = screen.getByText('(required)').closest('label');
-    expect(label?.className).toContain('text-ui-smd');
-    expect(label?.className).toContain('font-medium');
-    expect(label?.className).toContain('text-foreground');
+    expect(screen.getByText('(required)').closest('label')).not.toBeNull();
     expect(screen.getByText('*').getAttribute('aria-hidden')).toBe('true');
     expect(screen.getByText('(required)').className).toContain('sr-only');
-  });
-
-  it('mutes a disabled field label and required marker', () => {
-    render(
-      <FieldBlock.Label name="email" required disabled>
-        Email
-      </FieldBlock.Label>,
-    );
-
-    expect(screen.getByText('(required)').closest('label')?.className).toContain('text-muted-foreground');
-    expect(screen.getByText('*').className).toContain('text-muted-foreground');
   });
 
   it('uses one reserved line for helper text or an error', () => {

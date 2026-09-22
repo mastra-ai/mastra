@@ -2,10 +2,12 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useMemo, useCallback } from 'react';
 
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
 import { ExperimentResultsList } from './experiment-results-list';
+import type { ExperimentResultsSortKey } from './experiment-results-list';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 
 export type ExperimentResultsSectionProps = {
@@ -18,6 +20,8 @@ export type ExperimentResultsSectionProps = {
   hasNextPage?: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (resultId: string) => void;
+  sort?: ListSort<ExperimentResultsSortKey>;
+  onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
 };
 
 /**
@@ -36,6 +40,8 @@ export function ExperimentResultsSection({
   hasNextPage,
   selectedIds,
   onToggleSelect,
+  sort,
+  onSortChange,
 }: ExperimentResultsSectionProps) {
   const { currentItemId, openItem, close } = useExperimentItemPanel();
 
@@ -77,6 +83,7 @@ export function ExperimentResultsSection({
       { name: 'status', label: 'Status', size: 'auto' },
       { name: 'input', label: 'Input', size: '1fr' },
       { name: 'tags', label: 'Tags', size: 'auto' },
+      { name: 'startedAt', label: 'Created', size: 'auto' },
       ...scorerIds.map(id => ({ name: id, label: id, size: 'auto' })),
     ],
     [scorerIds],
@@ -97,6 +104,8 @@ export function ExperimentResultsSection({
         hasNextPage={hasNextPage}
         selectedIds={selectedIds}
         onToggleSelect={onToggleSelect}
+        sort={sort}
+        onSortChange={onSortChange}
       />
     </div>
   );

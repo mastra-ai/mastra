@@ -53,7 +53,6 @@ export function ScorerEditSidebar({
             label="Name"
             required
             placeholder="My Scorer"
-            variant="outline"
             {...register('name')}
             errorMsg={errors.name?.message}
           />
@@ -62,7 +61,6 @@ export function ScorerEditSidebar({
             label="Description"
             required
             placeholder="Describe what this scorer does"
-            variant="outline"
             {...register('description')}
             errorMsg={errors.description?.message}
           />
@@ -114,7 +112,7 @@ export function ScorerEditSidebar({
 
           {/* Score Range */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5">Score Range</Label>
+            <Label className="text-foreground">Score Range</Label>
             <div className="flex items-center gap-2">
               <Controller
                 name="scoreRange.min"
@@ -123,13 +121,12 @@ export function ScorerEditSidebar({
                   <Input
                     type="number"
                     placeholder="Min"
-                    variant="outline"
                     value={field.value}
                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />
                 )}
               />
-              <span className="text-neutral3 text-ui-sm">to</span>
+              <span className="text-muted-foreground text-caption">to</span>
               <Controller
                 name="scoreRange.max"
                 control={control}
@@ -137,7 +134,6 @@ export function ScorerEditSidebar({
                   <Input
                     type="number"
                     placeholder="Max"
-                    variant="outline"
                     value={field.value}
                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />
@@ -148,7 +144,7 @@ export function ScorerEditSidebar({
 
           {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5">Default Sampling</Label>
+            <Label className="text-foreground">Default Sampling</Label>
             <Controller
               name="defaultSampling.type"
               control={control}
@@ -156,13 +152,13 @@ export function ScorerEditSidebar({
                 <RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange}>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="none" id="sampling-none" />
-                    <Label htmlFor="sampling-none" className="text-neutral5">
+                    <Label htmlFor="sampling-none" className="text-foreground">
                       None
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="ratio" id="sampling-ratio" />
-                    <Label htmlFor="sampling-ratio" className="text-neutral5">
+                    <Label htmlFor="sampling-ratio" className="text-foreground">
                       Ratio
                     </Label>
                   </div>
@@ -180,7 +176,6 @@ export function ScorerEditSidebar({
                     min="0"
                     max="1"
                     placeholder="Rate (0-1)"
-                    variant="outline"
                     value={field.value ?? ''}
                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />

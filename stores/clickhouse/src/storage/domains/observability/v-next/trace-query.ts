@@ -19,9 +19,12 @@ import type {
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
+import { z } from 'zod/v4';
 
-import { TABLE_FEEDBACK_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
+import { TABLE_FEEDBACK_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_ROOTS_DELTA } from './ddl';
 import { CH_SETTINGS, parseJson } from './helpers';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported } from './polling';
 import { currentScoresRelation } from './scores';
 
 type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
@@ -387,7 +390,29 @@ function compileClickHouseTraceScope(
   return ctes;
 }
 
-export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): CompiledClickHouseTraceQuery {
+const deltaWatermarkSchema = z
+  .object({
+    cursorId: z
+      .string()
+      .regex(/^\d+$/)
+      .refine(value => BigInt(value) <= 18446744073709551615n),
+    traceId: z.string(),
+  })
+  .strict();
+type DeltaWatermark = z.infer<typeof deltaWatermarkSchema>;
+
+function parseDeltaWatermark(value: string): DeltaWatermark {
+  try {
+    return deltaWatermarkSchema.parse(JSON.parse(value));
+  } catch {
+    throw new coreStorage.TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
+}
+
+export function compileClickHouseTraceQuery(
+  plan: TrustedTraceQueryPlan,
+  deltaHead?: DeltaWatermark,
+): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const relationCollections = collectRelationCollections(plan.where);
   const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters);
@@ -412,6 +437,31 @@ GROUP BY threadId
 ORDER BY threadId ASC
 LIMIT ${limit}`,
       query_params: parameters.params,
+    };
+  }
+
+  if (plan.paginationMode === 'delta') {
+    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'clickhouse');
+    const after = watermark ? parseDeltaWatermark(watermark) : { cursorId: '0', traceId: '' };
+    const lower = `tuple(${parameters.add(after.cursorId, 'UInt64')}, ${parameters.add(after.traceId, 'String')})`;
+    const upper = deltaHead
+      ? `AND tuple(cursorId, traceId) <= tuple(${parameters.add(deltaHead.cursorId, 'UInt64')}, ${parameters.add(deltaHead.traceId, 'String')})`
+      : '';
+    const limit = parameters.add(plan.limit + 1, 'UInt64');
+    return {
+      query: `${candidates}, delta_candidates AS (
+  SELECT traceId, max(cursorId) AS latestCursorId
+  FROM ${TABLE_TRACE_ROOTS_DELTA}
+  WHERE tuple(cursorId, traceId) > ${lower} ${upper}
+  GROUP BY traceId
+)
+SELECT c.*, toString(d.latestCursorId) AS __delta_cursor
+FROM candidates c
+INNER JOIN delta_candidates d ON c.traceId = d.traceId
+ORDER BY d.latestCursorId ASC, c.traceId ASC
+LIMIT ${limit}`,
+      query_params: parameters.params,
+      sharedSnapshot: true,
     };
   }
 
@@ -687,9 +737,50 @@ export async function queryTraces(
   client: ClickHouseClient,
   plan: TrustedTraceQueryPlan,
   timeoutMs: number,
+  strategy: ClickHouseDeltaCursorStrategy | null = null,
 ): Promise<TraceQueryResponse> {
+  const deadline = performance.now() + coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
+  const remaining = () => {
+    const value = Math.floor(deadline - performance.now());
+    if (value <= 0) throw new coreStorage.TraceQueryExecutionError();
+    return value;
+  };
+  let deltaHead: DeltaWatermark | undefined;
+  if (plan.paginationMode === 'delta') {
+    assertDeltaPollingSupported(strategy);
+    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'clickhouse');
+    if (watermark) parseDeltaWatermark(watermark);
+  }
+  // The list-polling feature predates the trace-query cursor encoder.
+  if (
+    plan.paginationMode === 'delta' ||
+    (plan.paginationMode === 'page' &&
+      deltaPollingSupported(strategy) &&
+      typeof coreStorage.encodeTraceQueryDeltaCursor === 'function')
+  ) {
+    const head = await runWithClickHouseTraceQueryTimeout(
+      client,
+      { timeoutMs: remaining() },
+      {
+        query: `SELECT toString(cursorId) AS cursorId, traceId FROM ${TABLE_TRACE_ROOTS_DELTA} ORDER BY cursorId DESC, traceId DESC LIMIT 1`,
+        query_params: {},
+      },
+    );
+    deltaHead = head[0] ? parseDeltaWatermark(JSON.stringify(head[0])) : { cursorId: '0', traceId: '' };
+    if (plan.paginationMode === 'delta' && !plan.deltaCursor) {
+      return coreStorage.traceQueryResponseSchema.parse({
+        traces: [],
+        delta: { limit: plan.limit, hasMore: false },
+        deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(deltaHead)),
+      });
+    }
+  }
   if (plan.paginationMode === 'page') {
-    const rows = await runWithClickHouseTraceQueryTimeout(client, { timeoutMs }, compileClickHouseTraceQuery(plan));
+    const rows = await runWithClickHouseTraceQueryTimeout(
+      client,
+      { timeoutMs: deltaHead ? remaining() : timeoutMs },
+      compileClickHouseTraceQuery(plan, deltaHead),
+    );
     const total = Number(rows.at(-1)?.total ?? 0);
     const traces = rows
       .filter(row => Number(row.__metadata) === 0)
@@ -713,6 +804,9 @@ export async function queryTraces(
       }));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
+      ...(deltaHead
+        ? { deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(deltaHead)) }
+        : {}),
       pagination: {
         total,
         page: plan.page,
@@ -722,7 +816,11 @@ export async function queryTraces(
     });
   }
 
-  const rows = await runWithClickHouseTraceQueryTimeout(client, { timeoutMs }, compileClickHouseTraceQuery(plan));
+  const rows = await runWithClickHouseTraceQueryTimeout(
+    client,
+    { timeoutMs: deltaHead ? remaining() : timeoutMs },
+    compileClickHouseTraceQuery(plan, deltaHead),
+  );
   const visibleRows = rows.slice(0, plan.limit);
 
   if (plan.result === 'groups') {
@@ -758,6 +856,24 @@ export async function queryTraces(
     status: row.status,
   }));
   const last = traces.at(-1);
+  if (plan.paginationMode === 'delta') {
+    const lastRow = visibleRows.at(-1);
+    let watermark = lastRow
+      ? { cursorId: String(lastRow.__delta_cursor), traceId: String(lastRow.traceId) }
+      : deltaHead!;
+    const previous = parseDeltaWatermark(coreStorage.getTraceQueryDeltaWatermark(plan, 'clickhouse')!);
+    // Retention can empty the index; never move a continuation cursor backwards.
+    if (
+      BigInt(previous.cursorId) > BigInt(watermark.cursorId) ||
+      (previous.cursorId === watermark.cursorId && previous.traceId > watermark.traceId)
+    )
+      watermark = previous;
+    return coreStorage.traceQueryResponseSchema.parse({
+      traces,
+      delta: { limit: plan.limit, hasMore: rows.length > plan.limit },
+      deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(watermark)),
+    });
+  }
   return coreStorage.traceQueryResponseSchema.parse({
     traces,
     page: {

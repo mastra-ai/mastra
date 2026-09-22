@@ -11,8 +11,8 @@ import { SubmitPlanCard } from './SubmitPlanCard';
 import { resultBlock, stringify, truncate } from './transcript-shared';
 
 const promptCardSuspension =
-  'my-2 rounded-lg border border-border1 border-l-4 border-l-accent2 bg-surface3 px-4 py-3 shadow-md';
-const promptTitle = 'mb-1.5 text-sm font-semibold text-icon6';
+  'border-border border-l-accent2 bg-fill my-2 min-w-0 rounded-lg border border-l-4 px-4 py-3';
+const promptTitle = 'mb-1.5 text-sm font-semibold text-foreground';
 const promptActions = 'mt-2 flex gap-2';
 
 function lastSegment(id: string): string {
@@ -116,7 +116,7 @@ export function SuspensionCard({
     return (
       <div className={promptCardSuspension} role="group" aria-label="Access request">
         <div className={promptTitle}>Grant access to {payload.requestedPath ?? 'a path'}?</div>
-        {payload.reason && <div className="text-icon3 mt-0.5 text-xs">Reason: {payload.reason}</div>}
+        {payload.reason && <div className="text-muted-foreground mt-0.5 text-xs">Reason: {payload.reason}</div>}
         <div className={promptActions}>
           <Button
             variant="primary"
@@ -174,7 +174,7 @@ function AskUserCard({
               onClick={() => onRespond(prompt.toolCallId, opt.label, prompt.id)}
             >
               <strong>{opt.label}</strong>
-              {opt.description && <span className="text-icon3"> — {opt.description}</span>}
+              {opt.description && <span className="text-muted-foreground"> — {opt.description}</span>}
             </Button>
           ))}
         </div>
@@ -205,14 +205,14 @@ function AskUserCard({
 
 export function SubagentCard({ entry }: { entry: SubagentEntry }) {
   return (
-    <div className="border-border1 border-l-accent5 bg-surface2 my-2 rounded-lg border border-l-4 px-3 py-2 shadow-sm">
+    <div className="border-border border-l-accent5 bg-fill my-2 rounded-lg border border-l-4 px-3 py-2">
       <div className="flex items-center gap-2">
         <Badge variant={entry.done ? 'green' : 'blue'}>subagent: {entry.agentType}</Badge>
-        <Txt variant="ui-xs" className="text-icon3">
+        <Txt variant="meta" className="text-muted-foreground">
           {lastSegment(entry.modelId)}
         </Txt>
       </div>
-      <Txt variant="ui-sm" className="py-1">
+      <Txt variant="caption" className="py-1">
         {entry.task}
       </Txt>
     </div>

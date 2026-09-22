@@ -4,7 +4,8 @@ import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { transitions } from '@/ds/primitives/transitions';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export interface BreadcrumbProps {
@@ -48,7 +49,7 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
 
   return (
     <>
-      <li className={cn('group flex h-form-sm min-w-0 items-center', isCurrent ? 'shrink' : 'shrink-0')}>
+      <li className={cn('group flex h-control-sm min-w-0 items-center', isCurrent ? 'shrink' : 'shrink-0')}>
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
@@ -56,11 +57,11 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
             // icon-sm control sitting next to it share height, radius, padding and colors.
             'inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-full px-[.9em]',
             controlSizeClasses.sm,
-            transitions.colors,
+            controlStateColorTransition,
             // Long labels truncate: the current crumb gets more room than nav crumbs.
             isCurrent
-              ? 'max-w-xs cursor-default font-medium text-neutral6'
-              : 'max-w-48 cursor-pointer text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
+              ? 'max-w-xs cursor-default text-foreground'
+              : cn(quietTextHover, 'max-w-48 cursor-pointer hover:bg-fill-subtle active:bg-fill'),
             className,
           )}
           {...props}
@@ -84,11 +85,11 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
             <span className="min-w-0 flex-1 truncate">{children}</span>
           )}
         </Root>
-        {action && <span className="h-form-sm -ml-1 flex shrink-0 items-center">{action}</span>}
+        {action && <span className="h-control-sm -ml-1 flex shrink-0 items-center">{action}</span>}
       </li>
       {!isCurrent && (
         <li role="separator" className="flex h-full items-center">
-          <Icon className={cn('text-neutral2', transitions.colors)}>
+          <Icon className="text-placeholder">
             <SlashIcon />
           </Icon>
         </li>

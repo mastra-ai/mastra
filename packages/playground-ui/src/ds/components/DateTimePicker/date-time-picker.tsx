@@ -65,7 +65,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl bg-surface4 w-auto max-w-66 p-0!"
+        className="backdrop-blur-4xl bg-muted w-auto max-w-66 p-0!"
         align="start"
         data-testid="datepicker-calendar"
       >
@@ -282,9 +282,9 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
         {...props}
       >
         {value ? (
-          <span className="text-neutral6">{format(value, 'PP p')}</span>
+          <span className="text-foreground">{format(value, 'PP p')}</span>
         ) : (
-          <span className="text-neutral3">{placeholder ?? 'Pick a date'}</span>
+          <span className="text-muted-foreground">{placeholder ?? 'Pick a date'}</span>
         )}
       </Button>
     );

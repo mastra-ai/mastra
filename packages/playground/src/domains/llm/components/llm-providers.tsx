@@ -1,6 +1,7 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info } from 'lucide-react';
 import type { MouseEvent } from 'react';
@@ -70,8 +71,9 @@ export const LLMProviders = ({
       end: provider.docUrl ? (
         <Info
           className={cn(
-            'size-3.5 text-neutral2 opacity-0 transition-opacity duration-100 cursor-pointer',
-            'hover:text-neutral4 hover:opacity-100',
+            'size-3.5 opacity-0 transition-opacity duration-100 cursor-pointer',
+            quietTextHover,
+            'hover:opacity-100',
             'group-data-[highlighted]/item:opacity-100',
           )}
           onClick={(e: MouseEvent<SVGSVGElement>) => {

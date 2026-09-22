@@ -43,7 +43,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
   };
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border">
+    <div className="border-border bg-background rounded-md border">
       <Controller
         name="scorers"
         control={control}
@@ -85,17 +85,17 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
           return (
             <>
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="bg-surface3 flex items-center justify-between p-3">
+                <div className="bg-card flex items-center justify-between p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="text-neutral3 h-4 w-4" />
-                    <SectionTitle icon={<JudgeIcon className="text-neutral3" />}>
-                      Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+                    <ChevronRight className="text-muted-foreground h-4 w-4" />
+                    <SectionTitle icon={<JudgeIcon className="text-muted-foreground" />}>
+                      Scorers{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
                 </div>
 
                 <CollapsibleContent>
-                  <div className="border-border1 border-t p-3">
+                  <div className="border-border border-t p-3">
                     <div className="flex flex-col gap-2">
                       <Combobox
                         multiple
@@ -181,10 +181,10 @@ function ScorerConfigPanel({
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Icon size="sm">
-            <JudgeIcon className="text-neutral3" />
+          <Icon size="xs">
+            <JudgeIcon className="text-muted-foreground" />
           </Icon>
-          <span className="text-neutral6 text-ui-sm font-medium">{scorerName}</span>
+          <span className="text-foreground text-column">{scorerName}</span>
         </div>
         {!readOnly && (
           <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -198,13 +198,13 @@ function ScorerConfigPanel({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this scorer..."
-        className="bg-surface3 text-ui-sm min-h-[40px] border-dashed px-2 py-1"
+        className="bg-card text-caption min-h-[40px] border-dashed px-2 py-1"
         size="sm"
         disabled={readOnly}
       />
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-muted-foreground">
           Sampling
         </Label>
         <RadioGroup
@@ -216,13 +216,13 @@ function ScorerConfigPanel({
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="text-foreground cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-foreground cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>
@@ -230,7 +230,7 @@ function ScorerConfigPanel({
 
         {samplingType === 'ratio' && (
           <div className="mt-1 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4">
+            <Label htmlFor={`rate-${scorerId}`} className="text-muted-foreground">
               Sample Rate (0-1)
             </Label>
             <Input

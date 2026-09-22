@@ -1,4 +1,6 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
@@ -14,6 +16,7 @@ import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility'
 import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
+import type { SkillsSort } from '@/domains/workspace/components/skills-table';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
 import { isImageFile, isVideoFile } from '@/domains/workspace/file-type-utils';
@@ -37,12 +40,12 @@ export default function Workspace() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
-  const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
   const [showAddSkillDialog, setShowAddSkillDialog] = useState(false);
   const [removingSkillName, setRemovingSkillName] = useState<string | null>(null);
   const [updatingSkillName, setUpdatingSkillName] = useState<string | null>(null);
   // Track if we installed a skill that wasn't discovered (client-side only, resets on refresh)
   const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
+  const [skillsSort, setSkillsSort] = useState<SkillsSort>();
 
   // Get state from URL query params (path, file, tab are still query params)
   const fileFromUrl = searchParams.get('file');
@@ -380,77 +383,58 @@ export default function Workspace() {
       <PageLayout.MainArea className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-4' : 'grid content-start gap-4'}>
         {/* Workspace Selector - shown when multiple workspaces exist */}
         {workspaces.length > 1 && (
-          <div className="relative">
-            <button
-              onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-              className="border-border1 bg-surface2 hover:bg-surface3 text-ui-md flex w-full max-w-md items-center gap-2 rounded-lg border px-3 py-2 transition-colors"
-            >
-              {selectedWorkspace?.source === 'agent' ? (
-                <Bot className="text-accent1 h-4 w-4" />
-              ) : (
-                <Server className="text-neutral4 h-4 w-4" />
-              )}
-              <span className="flex-1 truncate text-left">
-                {selectedWorkspace?.name ?? 'Select workspace'}
-                {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
-                  <span className="text-neutral4 ml-1">({selectedWorkspace.agentName})</span>
-                )}
-              </span>
-              <ChevronDown
-                className={`text-neutral4 h-4 w-4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
-              />
-            </button>
-
-            {showWorkspaceDropdown && (
-              <div className="bg-surface2 border-border1 absolute z-50 mt-1 w-full max-w-md overflow-hidden rounded-lg border shadow-lg">
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Button
+                  size="md"
+                  className="w-full max-w-md justify-start"
+                  icon={selectedWorkspace?.source === 'agent' ? <Bot className="text-accent1" /> : <Server />}
+                >
+                  <span className="flex-1 truncate text-left">
+                    {selectedWorkspace?.name ?? 'Select workspace'}
+                    {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
+                      <span className="text-muted-foreground ml-1">({selectedWorkspace.agentName})</span>
+                    )}
+                  </span>
+                  <ChevronDown className="text-muted-foreground shrink-0" />
+                </Button>
+              }
+            />
+            <DropdownMenu.Content align="start" className="w-full max-w-md">
+              <DropdownMenu.RadioGroup value={selectedWorkspace?.id} onValueChange={setSelectedWorkspaceId}>
                 {workspaces.map(workspace => (
-                  <button
-                    key={workspace.id}
-                    onClick={() => {
-                      setSelectedWorkspaceId(workspace.id);
-                      setShowWorkspaceDropdown(false);
-                    }}
-                    className={`hover:bg-surface3 flex w-full items-center gap-3 px-3 py-2 text-left transition-colors ${
-                      selectedWorkspace?.id === workspace.id ? 'bg-surface3' : ''
-                    }`}
-                  >
+                  <DropdownMenu.RadioItem key={workspace.id} value={workspace.id} className="gap-3">
                     {workspace.source === 'agent' ? (
-                      <Bot className="text-accent1 h-4 w-4 shrink-0" />
+                      <Bot className="text-accent1 shrink-0" />
                     ) : (
-                      <Server className="text-neutral4 h-4 w-4 shrink-0" />
+                      <Server className="shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-neutral6 text-ui-md truncate font-medium">{workspace.name}</div>
-                      <div className="text-neutral4 text-ui-sm truncate">
+                      <div className="text-foreground text-body-sm truncate">{workspace.name}</div>
+                      <div className="text-muted-foreground text-caption truncate">
                         {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
                       </div>
                     </div>
                     <div className="flex shrink-0 gap-1">
                       {workspace.safety?.readOnly && (
-                        <span className="text-ui-xs rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-400">
+                        <Badge size="xs" variant="yellow">
                           Read-only
-                        </span>
+                        </Badge>
                       )}
-                      {workspace.capabilities.hasFilesystem && (
-                        <span className="bg-surface4 text-neutral4 text-ui-xs rounded px-1.5 py-0.5">FS</span>
-                      )}
-                      {workspace.capabilities.hasSandbox && (
-                        <span className="bg-surface4 text-neutral4 text-ui-xs rounded px-1.5 py-0.5">Sandbox</span>
-                      )}
-                      {workspace.capabilities.hasSkills && (
-                        <span className="bg-surface4 text-neutral4 text-ui-xs rounded px-1.5 py-0.5">Skills</span>
-                      )}
+                      {workspace.capabilities.hasFilesystem && <Badge size="xs">FS</Badge>}
+                      {workspace.capabilities.hasSandbox && <Badge size="xs">Sandbox</Badge>}
+                      {workspace.capabilities.hasSkills && <Badge size="xs">Skills</Badge>}
                     </div>
-                  </button>
+                  </DropdownMenu.RadioItem>
                 ))}
-              </div>
-            )}
-          </div>
+              </DropdownMenu.RadioGroup>
+            </DropdownMenu.Content>
+          </DropdownMenu>
         )}
 
-        {/* Single workspace info badge - shown when only one workspace */}
         {workspaces.length === 1 && selectedWorkspace && (
-          <div className="text-neutral4 text-ui-md flex items-center gap-2">
+          <div className="text-muted-foreground text-body flex items-center gap-2">
             {selectedWorkspace.source === 'agent' ? (
               <Bot className="text-accent1 h-4 w-4" />
             ) : (
@@ -458,10 +442,12 @@ export default function Workspace() {
             )}
             <span>{selectedWorkspace.name}</span>
             {selectedWorkspace.source === 'agent' && selectedWorkspace.agentName && (
-              <span className="text-neutral3">({selectedWorkspace.agentName})</span>
+              <span className="text-muted-foreground">({selectedWorkspace.agentName})</span>
             )}
             {isReadOnly && (
-              <span className="text-ui-xs rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-400">Read-only</span>
+              <Badge size="xs" variant="yellow">
+                Read-only
+              </Badge>
             )}
           </div>
         )}
@@ -507,9 +493,7 @@ export default function Workspace() {
                 <Tab value="skills">
                   <Wand2 className="h-4 w-4" />
                   Skills
-                  {isSkillsConfigured && skills.length > 0 && (
-                    <span className="bg-surface4 text-neutral4 text-ui-sm rounded px-1.5 py-0.5">{skills.length}</span>
-                  )}
+                  {isSkillsConfigured && skills.length > 0 && <Badge size="xs">{skills.length}</Badge>}
                 </Tab>
               )}
             </TabList>
@@ -555,6 +539,8 @@ export default function Workspace() {
                 <SkillsTable
                   skills={skills}
                   isLoading={isLoadingSkills}
+                  sort={skillsSort}
+                  onSortChange={(direction, key) => setSkillsSort({ key, direction })}
                   isSkillsConfigured={isSkillsConfigured}
                   hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
                   basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
@@ -570,7 +556,7 @@ export default function Workspace() {
         )}
 
         {!hasFilesystem && !hasSkills && !isLoadingInfo && (
-          <div className="text-neutral4 py-8 text-center">
+          <div className="text-muted-foreground py-8 text-center">
             <p>No workspace capabilities are configured.</p>
           </div>
         )}
@@ -621,15 +607,15 @@ function WorkspaceSearchPanel({
   const searchSkills = useSearchWorkspaceSkills();
 
   return (
-    <div className="border-border1 bg-surface2 space-y-4 rounded-lg border p-4">
+    <div className="border-border bg-fill-subtle space-y-4 rounded-lg border p-4">
       {canSearchFiles && (
         <div>
-          <h3 className="text-neutral5 text-ui-md mb-3 flex items-center gap-2 font-medium">
+          <h3 className="text-foreground text-subheading mb-3 flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Search Indexed Files
           </h3>
           {showInitWarning && (
-            <p className="text-ui-sm mb-3 text-amber-400">
+            <p className="text-caption mb-3 text-amber-400">
               File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
               configured <code className="text-amber-300">autoIndexPaths</code>.
             </p>
@@ -654,7 +640,7 @@ function WorkspaceSearchPanel({
 
       {canSearchSkills && (
         <div>
-          <h3 className="text-neutral5 text-ui-md mb-3 flex items-center gap-2 font-medium">
+          <h3 className="text-foreground text-subheading mb-3 flex items-center gap-2">
             <Wand2 className="h-4 w-4" />
             Search Skills
           </h3>

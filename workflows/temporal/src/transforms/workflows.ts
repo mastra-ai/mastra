@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { builtinModules } from 'node:module';
 import { basename, join } from 'node:path';
 import { generate } from '@babel/generator';
 import { parse } from '@babel/parser';
@@ -571,6 +572,12 @@ function getCommittedWorkflowName(statement: t.Statement): string | null {
   return expression.callee.object.name;
 }
 
+const nodeBuiltinModules = new Set(builtinModules.flatMap(moduleName => [moduleName, `node:${moduleName}`]));
+
+function isNodeBuiltinModule(moduleId: string): boolean {
+  return nodeBuiltinModules.has(moduleId);
+}
+
 interface WorkflowTransformState {
   statements: t.Statement[];
   workflowNames: Set<string>;
@@ -878,13 +885,27 @@ export async function buildTemporalWorkflowModule(
 
   try {
     const baseName = basename(outputFileName);
-    const { output } = await bundle.write({
+    const outputOptions = {
       dir: outputDirectory,
       entryFileNames: outputFileName,
       chunkFileNames: `${baseName}-[hash].mjs`,
-      format: 'esm',
-      sourcemap: 'inline',
-    });
+      format: 'esm' as const,
+      sourcemap: 'inline' as const,
+    };
+    const generated = await bundle.generate(outputOptions);
+    const forbiddenImport = generated.output
+      .filter(output => output.type === 'chunk')
+      .flatMap(chunk => [...chunk.imports, ...chunk.dynamicImports])
+      .find(isNodeBuiltinModule);
+
+    if (forbiddenImport) {
+      throw new Error(
+        `Temporal workflow bundle cannot depend on Node.js builtin '${forbiddenImport}'. ` +
+          'Move the dependency into an activity or remove it from workflow initialization.',
+      );
+    }
+
+    const { output } = await bundle.write(outputOptions);
 
     return {
       outputPath: join(outputDirectory, output.find(chunk => chunk.type === 'chunk' && chunk.isEntry)!.fileName),

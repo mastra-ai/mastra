@@ -60,6 +60,8 @@ Visualize your workflow as a graph and run it step by step with a custom input. 
 
 Workflow traces show tool calls and raw JSON outputs, along with any execution errors.
 
+Select **Run Options** beside the run button to set a **Resource ID** for the runs you start. Studio remembers the value per workflow, and the runs it creates are listed by `GET /api/workflows/:workflowId/runs?resourceId=...`. Leave it empty to create runs without a resource. When your server derives the resource ID from the authenticated user, that value takes precedence over the one you type.
+
 ### Processors
 
 View the input and output processors attached to each agent. The agent detail panel lists every processor by name and type, so you can verify your guardrails and token limiters, plus custom processors are wired up correctly before testing.

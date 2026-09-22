@@ -6,6 +6,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
@@ -17,7 +19,7 @@ import { WorkflowInputData } from './workflow-input-data';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
-const buttonClass = 'text-neutral3 hover:text-neutral6';
+const buttonClass = quietTextHover;
 
 export type WorkflowTimeTravelFormProps = {
   stepKey: string;
@@ -81,9 +83,9 @@ const JsonField = ({
   return (
     <>
       {isExampleOpen && (
-        <div className="border-border1 bg-surface3 space-y-2 rounded-lg border p-3">
+        <div className={cn(raisedSurfaceStyle, 'space-y-2 rounded-lg p-3')}>
           <div className="flex items-center gap-2">
-            <Txt as="p" variant="ui-sm" className="text-neutral3">
+            <Txt as="p" variant="caption" tone="muted">
               Example {label}
             </Txt>
             <Tooltip>
@@ -112,14 +114,14 @@ const JsonField = ({
           />
         </div>
       )}
-      <Collapsible className="border-border1 bg-surface3 rounded-lg border" open={isOpen} onOpenChange={setIsOpen}>
+      <Collapsible className={cn(raisedSurfaceStyle, 'rounded-lg')} open={isOpen} onOpenChange={setIsOpen}>
         <div className="flex w-full items-center justify-between px-3">
           <div>
             <FieldBlock.Label name={fieldName} size="bigger">
               {label}
             </FieldBlock.Label>
             {helperText && (
-              <Txt variant="ui-xs" className="text-neutral3">
+              <Txt variant="meta" tone="muted">
                 {helperText}
               </Txt>
             )}
@@ -287,10 +289,10 @@ export const WorkflowTimeTravelForm = ({
     <TooltipProvider>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Txt as="p" variant="ui-lg" className="text-neutral3">
+          <Txt as="p" variant="heading" tone="muted">
             Input data
           </Txt>
-          <Txt variant="ui-xs" className="text-neutral3">
+          <Txt variant="meta" tone="muted">
             Step: {stepKey}
           </Txt>
         </div>

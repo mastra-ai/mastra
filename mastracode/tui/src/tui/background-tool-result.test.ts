@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseBackgroundToolTaskId } from './background-tool-result.js';
+import { getBackgroundToolMetadata } from './background-tool-result.js';
 
-describe('parseBackgroundToolTaskId', () => {
-  it('parses placeholders with or without trailing detail', () => {
-    expect(parseBackgroundToolTaskId('Background task started. Task ID: task-1')).toBe('task-1');
+describe('getBackgroundToolMetadata', () => {
+  it.each(['running', 'completed', 'failed'])('reads core-owned %s metadata', status => {
     expect(
-      parseBackgroundToolTaskId(
-        'Background task started. Task ID: task-2. The tool "view" is running in the background.',
-      ),
-    ).toBe('task-2');
+      getBackgroundToolMetadata({ mastra: { backgroundTask: { taskId: 'task-1', status }, modelOutput: null } }),
+    ).toEqual({ taskId: 'task-1', status });
   });
 
-  it('ignores non-placeholder results', () => {
-    expect(parseBackgroundToolTaskId('Done')).toBeUndefined();
+  it.each([
+    undefined,
+    'Background task started. Task ID: task-1',
+    { content: 'Background task started. Task ID: task-1' },
+    { taskId: 'task-1', status: 'running' },
+    { mastra: { backgroundTask: { taskId: '', status: 'running' } } },
+    { mastra: { backgroundTask: { taskId: 'task-1', status: 'unknown' } } },
+  ])('rejects text and malformed metadata (%j)', metadata => {
+    expect(getBackgroundToolMetadata(metadata)).toBeUndefined();
   });
 });

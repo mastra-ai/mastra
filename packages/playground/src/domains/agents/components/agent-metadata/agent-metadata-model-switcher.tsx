@@ -2,6 +2,8 @@ import type { UpdateModelParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
@@ -140,7 +142,7 @@ export const AgentMetadataModelSwitcher = ({
     return (
       <div className="flex items-center gap-2">
         <Spinner />
-        <span className="text-ui-md text-gray-500">Loading providers...</span>
+        <span className="text-body text-muted-foreground">Loading providers...</span>
       </div>
     );
   }
@@ -177,12 +179,12 @@ export const AgentMetadataModelSwitcher = ({
           : 'Locked by admin';
     return (
       <div
-        className="border-border1 bg-surface3 flex items-center gap-2 rounded-md border px-3 py-2"
+        className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
         data-testid="agent-metadata-model-locked"
       >
-        <Lock className="text-neutral3 h-4 w-4 shrink-0" />
-        <span className="text-ui-sm text-neutral6 truncate">{lockedLabel}</span>
-        <span className="text-ui-xs text-neutral3 ml-auto shrink-0">Set by admin</span>
+        <Lock className="text-muted-foreground h-4 w-4 shrink-0" />
+        <span className="text-caption text-foreground truncate">{lockedLabel}</span>
+        <span className="text-meta text-muted-foreground ml-auto shrink-0">Set by admin</span>
       </div>
     );
   }
@@ -220,7 +222,7 @@ export const AgentMetadataModelSwitcher = ({
           size="md"
           onClick={handleReset}
           disabled={loading}
-          className="text-ui-sm flex items-center gap-1.5 border-0! whitespace-nowrap"
+          className="text-caption flex items-center gap-1.5 border-0! whitespace-nowrap"
           title="Reset to original model"
         >
           <RotateCcw className="h-3.5 w-3.5" />

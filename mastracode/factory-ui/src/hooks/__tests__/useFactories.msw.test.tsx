@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
+import type { GitLabRepository } from '../../ui/domains/factory/services/gitlab';
 import type { GithubRepo } from '../../ui/domains/workspaces/services/github';
 import { useFactoriesQuery, useLinkRepositoryMutation } from '../useFactories';
 import { useIntakeConfigQuery } from '../useIntakeConfig';
@@ -30,6 +31,19 @@ const repo: GithubRepo = {
   installationStorageId: 'inst-7',
   sandboxProvider: 'local',
   sandboxWorkdir: '/workspace/hello',
+};
+
+const gitlabRepo: GitLabRepository = {
+  provider: 'gitlab',
+  id: 'gitlab-project:encoded',
+  externalId: '10',
+  fullName: 'acme/app',
+  name: 'app',
+  owner: 'acme',
+  defaultBranch: 'main',
+  private: true,
+  sandboxProvider: 'local',
+  sandboxWorkdir: '/workspace/app',
 };
 
 function stubRepositoryLink() {
@@ -51,14 +65,15 @@ function stubRepositoryLink() {
 }
 
 /** Stateful intake config: each PUT becomes what the next GET returns. */
-function stubIntakeConfig(initial: IntakeConfig) {
-  let config = initial;
+function stubIntakeConfig(initial: Partial<IntakeConfig>) {
+  let config: Partial<IntakeConfig> = initial;
   const saved: IntakeConfig[] = [];
   server.use(
     http.get(CONFIG_URL, () => HttpResponse.json({ config })),
     http.put<never, IntakeConfig>(CONFIG_URL, async ({ request }) => {
-      config = await request.json();
-      saved.push(config);
+      const next = await request.json();
+      config = next;
+      saved.push(next);
       return HttpResponse.json({ config });
     }),
   );
@@ -66,11 +81,80 @@ function stubIntakeConfig(initial: IntakeConfig) {
 }
 
 describe('useLinkRepositoryMutation', () => {
+  it('links a GitLab project through its provider partition and feeds GitLab intake', async () => {
+    const requests: unknown[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/gitlab/projects/registration`, async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({
+          project: {
+            id: 'gitlab-project:encoded',
+            name: 'acme/app',
+            projectId: '10',
+            projectPath: 'acme/app',
+            installationStorageId: 'gitlab-inst-1',
+            defaultBranch: 'main',
+            sandboxProvider: 'local',
+            sandboxWorkdir: '/workspace/app',
+          },
+        });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({ connection: { id: 'conn-gl-1' } }, { status: 201 });
+      }),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-gl-1/repositories`,
+        async ({ request }) => {
+          requests.push(await request.json());
+          return HttpResponse.json({
+            projectRepository: {
+              id: 'glp-1',
+              branch: 'main',
+              sandboxWorkdir: '/workspace/app',
+              repository: { slug: 'acme/app', defaultBranch: 'main' },
+            },
+          });
+        },
+      ),
+    );
+    const saved = stubIntakeConfig({ gitlab: { enabled: false, sourceIds: null } });
+    const { client, result } = renderHookWithProviders(() => useLinkRepositoryMutation());
+
+    result.current.mutate({ factoryProjectId: 'fp-1', repo: gitlabRepo });
+
+    await waitForMutationsIdle(client);
+    expect(result.current.isSuccess).toBe(true);
+    expect(requests).toEqual([
+      { sourceId: 'gitlab-project:encoded' },
+      { integrationId: 'gitlab', installationId: 'gitlab-inst-1' },
+      {
+        repository: { externalId: '10', slug: 'acme/app' },
+        branch: 'main',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/workspace/app',
+      },
+    ]);
+    expect(saved).toEqual([
+      {
+        github: { enabled: true, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
+        gitlab: { enabled: true, sourceIds: ['gitlab-project:encoded'] },
+        jira: { enabled: false, sourceIds: null },
+        incidentio: { enabled: false, sourceIds: null },
+      },
+    ]);
+  });
+
   it('given a repository outside issue intake, when it is linked, then its issues feed the caller’s intake', async () => {
     stubRepositoryLink();
     const saved = stubIntakeConfig({
       github: { enabled: true, sourceIds: null },
       linear: { enabled: false, sourceIds: null },
+      gitlab: { enabled: false, sourceIds: null },
       jira: { enabled: false, sourceIds: null },
       incidentio: { enabled: false, sourceIds: null },
     });
@@ -89,6 +173,7 @@ describe('useLinkRepositoryMutation', () => {
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
         linear: { enabled: false, sourceIds: null },
+        gitlab: { enabled: false, sourceIds: null },
         jira: { enabled: false, sourceIds: null },
         incidentio: { enabled: false, sourceIds: null },
       },
@@ -101,6 +186,7 @@ describe('useLinkRepositoryMutation', () => {
     const saved = stubIntakeConfig({
       github: { enabled: false, sourceIds: ['octo/other'] },
       linear: { enabled: false, sourceIds: null },
+      gitlab: { enabled: false, sourceIds: null },
       jira: { enabled: false, sourceIds: null },
       incidentio: { enabled: false, sourceIds: null },
     });
@@ -115,6 +201,7 @@ describe('useLinkRepositoryMutation', () => {
       {
         github: { enabled: true, sourceIds: ['octo/other', 'octo/hello'] },
         linear: { enabled: false, sourceIds: null },
+        gitlab: { enabled: false, sourceIds: null },
         jira: { enabled: false, sourceIds: null },
         incidentio: { enabled: false, sourceIds: null },
       },
@@ -126,6 +213,7 @@ describe('useLinkRepositoryMutation', () => {
     const saved = stubIntakeConfig({
       github: { enabled: true, sourceIds: ['octo/hello'] },
       linear: { enabled: false, sourceIds: null },
+      gitlab: { enabled: false, sourceIds: null },
       jira: { enabled: false, sourceIds: null },
       incidentio: { enabled: false, sourceIds: null },
     });

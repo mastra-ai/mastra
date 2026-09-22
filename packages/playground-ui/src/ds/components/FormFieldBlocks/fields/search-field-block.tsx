@@ -25,7 +25,6 @@ export type SearchFieldBlockProps = {
   layout?: 'horizontal' | 'vertical';
   className?: string;
   size?: InputProps['size'];
-  variant?: InputProps['variant'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
   /** Gives the caller access to the underlying input, e.g. to focus it from a keyboard shortcut. */
@@ -48,7 +47,6 @@ export function SearchFieldBlock({
   onReset,
   className,
   size,
-  variant,
   isMinimized,
   onMinimizedChange,
   inputRef: externalInputRef,
@@ -114,21 +112,14 @@ export function SearchFieldBlock({
               placeholder={placeholder}
               onChange={onChange}
               size={size}
-              variant={variant}
               error={error || Boolean(errorMsg)}
               aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
-              className={cn(
-                size === 'xs' && 'px-7',
-                size === 'sm' && 'px-8',
-                (!size || size === 'md') && 'px-9',
-                size === 'lg' && 'px-10',
-              )}
+              className={cn(size === 'sm' && 'px-8', (!size || size === 'md') && 'px-9', size === 'lg' && 'px-10')}
             />
             <SearchIcon
               aria-hidden="true"
               className={cn(
                 'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
-                size === 'xs' && 'size-3',
                 size === 'sm' && 'size-3.5',
                 (!size || size === 'md') && 'size-4',
                 size === 'lg' && 'size-[1.125rem]',

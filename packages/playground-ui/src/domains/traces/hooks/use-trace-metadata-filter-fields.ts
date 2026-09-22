@@ -1,5 +1,10 @@
 import { MastraClientError } from '@mastra/client-js';
-import type { GetTraceQueryFieldsArgs, GetTraceQueryFieldsResponse } from '@mastra/client-js';
+import type {
+  GetTraceQueryFieldsArgs,
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesArgs,
+  MastraClient,
+} from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
@@ -33,6 +38,23 @@ const isDiscoveryUnsupportedError = (error: unknown) =>
 
 export const traceQueryFieldsQueryKey = (timeRange: TraceQueryDiscoveryTimeRange) =>
   ['trace-query-fields', timeRange.from, timeRange.to] as const;
+
+/** Lazy FilterBar suggestions resolver backed by the value-discovery endpoint for one
+ *  `predicateScope` + `path`. FilterBar owns debounce/abort; this only fetches. */
+export const createTraceQueryValuesResolver = (
+  client: MastraClient,
+  timeRange: TraceQueryDiscoveryTimeRange,
+  predicateScope: GetTraceQueryValuesArgs['predicateScope'],
+  path: string,
+): FilterBarSuggestionsResolver => {
+  return async ({ query: search, signal }) => {
+    const { values } = await client.getTraceQueryValues(
+      { timeRange, predicateScope, path, search: search.trim() || undefined, limit: DISCOVERY_LIMIT },
+      { signal },
+    );
+    return values.map(({ value }) => ({ value }));
+  };
+};
 
 /**
  * Discovers the `metadata.*` fields observed on traces in the given time range and returns
@@ -78,19 +100,7 @@ export const useTraceMetadataFilterFields = ({
     () =>
       (observedFields ?? []).map(field => ({
         path: field.path,
-        suggestions: async ({ query: search, signal }) => {
-          const { values } = await client.getTraceQueryValues(
-            {
-              timeRange,
-              predicateScope: 'trace',
-              path: field.path,
-              search: search.trim() || undefined,
-              limit: DISCOVERY_LIMIT,
-            },
-            { signal },
-          );
-          return values.map(({ value }) => ({ value }));
-        },
+        suggestions: createTraceQueryValuesResolver(client, timeRange, 'trace', field.path),
       })),
     [observedFields, client, timeRange],
   );

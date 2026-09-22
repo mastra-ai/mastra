@@ -34,8 +34,8 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr] overflow-hidden">
-      <div className="border-border1 border-b px-3 py-2.5">
-        <InputGroup variant="outline" size="sm">
+      <div className="border-border border-b px-3 py-2.5">
+        <InputGroup size="sm">
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>
@@ -59,7 +59,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
             ))
           ) : tools.length === 0 ? (
             <div className="flex items-center justify-center py-8">
-              <Txt variant="ui-sm" className="text-neutral3">
+              <Txt variant="caption" tone="muted">
                 No tools found
               </Txt>
             </div>
@@ -86,9 +86,9 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
                       : undefined
                   }
                   className={cn(
-                    'flex items-start gap-3 rounded-md px-3 py-2.5',
-                    onToggle ? 'cursor-pointer hover:bg-surface4' : 'hover:bg-surface4',
-                    isSelected && 'bg-surface4',
+                    'state-layer flex items-start gap-3 rounded-md px-3 py-2.5',
+                    onToggle && 'cursor-pointer',
+                    isSelected && 'bg-fill-hover',
                   )}
                 >
                   {onToggle && (
@@ -103,13 +103,13 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
                   <div className="flex min-w-0 flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <Txt variant="ui-sm" className="text-neutral6 font-medium">
+                      <Txt variant="column" tone="ink">
                         {tool.name}
                       </Txt>
                       {toolkit === undefined && tool.toolkit && <Badge>{tool.toolkit}</Badge>}
                     </div>
                     {tool.description && (
-                      <Txt variant="ui-sm" className="text-neutral3 line-clamp-2">
+                      <Txt variant="caption" tone="muted" className="line-clamp-2">
                         {tool.description}
                       </Txt>
                     )}

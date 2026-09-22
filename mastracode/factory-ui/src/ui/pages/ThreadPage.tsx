@@ -69,7 +69,7 @@ function ResolvingSessionMain() {
           <ChatHeader />
         </ChatShell.Bar>
         <div className="grid min-h-0 flex-1 place-items-center">
-          <Spinner aria-label="Loading session" className="text-icon3" />
+          <Spinner aria-label="Loading session" className="text-muted-foreground" />
         </div>
       </ChatShell>
     </>

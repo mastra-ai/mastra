@@ -30,8 +30,8 @@ interface MCPClientFormSidebarProps {
 
 // Pin these fields to a solid surface. The filled Input/Textarea default otherwise swaps the
 // background to a translucent overlay on hover/focus, which leaks through the forced solid bg —
-// re-stating it for hover/focus-visible keeps the whole form a uniform surface3 (incl. the Select).
-const SOLID_FIELD = 'bg-surface3 hover:bg-surface3 focus-visible:bg-surface3';
+// re-stating it for hover/focus-visible keeps the whole form a uniform card (incl. the Select).
+const SOLID_FIELD = 'bg-card hover:bg-card focus-visible:bg-card';
 
 export function MCPClientFormSidebar({
   form,
@@ -93,7 +93,7 @@ export function MCPClientFormSidebar({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-description" className="text-neutral5">
+            <Label htmlFor="mcp-client-description" className="text-foreground">
               Description
             </Label>
             <Textarea
@@ -145,13 +145,13 @@ export function MCPClientFormSidebar({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5">Server Type</Label>
+            <Label className="text-foreground">Server Type</Label>
             <Controller
               name="serverType"
               control={control}
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange} disabled={readOnly}>
-                  <SelectTrigger className="bg-surface3">
+                  <SelectTrigger className="bg-card">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -182,7 +182,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-timeout" className="text-neutral5">
+                <Label htmlFor="mcp-timeout" className="text-foreground">
                   Timeout (ms)
                 </Label>
                 <Input
@@ -218,7 +218,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-args" className="text-neutral5">
+                <Label htmlFor="mcp-args" className="text-foreground">
                   Arguments (one per line)
                 </Label>
                 <Textarea
@@ -231,7 +231,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5">Environment Variables</Label>
+                <Label className="text-foreground">Environment Variables</Label>
                 <div className="flex flex-col gap-2">
                   {env.map((_, index) => (
                     <div key={index} className="flex items-center gap-2">

@@ -94,10 +94,10 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
   }
 
   const streamWorkflow = useMutation<void, Error, StreamWorkflowParams>(
-    ({ workflowId, runId, inputData, initialState, requestContext, perStep }) => {
+    ({ workflowId, runId, inputData, initialState, requestContext, perStep, resourceId }) => {
       setStreamResult({ status: 'pending', input: inputData, steps: {} });
       return consumeStream(async signal => {
-        const run = await client.getWorkflow(workflowId).createRun({ runId });
+        const run = await client.getWorkflow(workflowId).createRun({ runId, resourceId });
         if (signal.aborted) return;
         return run.stream({
           inputData,
@@ -106,6 +106,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
           closeOnSuspend: true,
           tracingOptions,
           perStep: perStep ?? debugMode,
+          resourceId,
         });
       }, 'Error streaming workflow');
     },

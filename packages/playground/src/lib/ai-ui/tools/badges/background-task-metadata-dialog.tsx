@@ -62,21 +62,19 @@ const BackgroundTaskMetadata = ({
     const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
     argSlot = <CodeEditor data={formattedArgs} />;
   } catch {
-    argSlot = (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{args as unknown as string}</pre>
-    );
+    argSlot = <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{args as unknown as string}</pre>;
   }
 
   const resultSlot =
     typeof result === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{result}</pre>
+      <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{result}</pre>
     ) : (
       <CodeEditor data={result} />
     );
 
   const suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
     ) : (
       <CodeEditor data={suspendPayload as Record<string, unknown> | Record<string, unknown>[] | undefined} />
     );
@@ -91,25 +89,27 @@ const BackgroundTaskMetadata = ({
 
         <DialogBody className="space-y-4">
           <div className="space-y-2">
-            <Txt className="text-neutral3">Background Task Duration</Txt>
-            <Txt className="text-neutral6 text-ui-md">{toSigFigs(timeDiff, 3)}ms</Txt>
+            <Txt tone="muted">Background Task Duration</Txt>
+            <Txt tone="ink" className="text-body">
+              {toSigFigs(timeDiff, 3)}ms
+            </Txt>
           </div>
 
           <div className="space-y-2">
-            <Txt className="text-neutral3">Background Task Arguments</Txt>
+            <Txt tone="muted">Background Task Arguments</Txt>
             {argSlot}
           </div>
 
           {suspendPayloadSlot !== undefined && suspendPayload && (
             <div className="space-y-2">
-              <Txt className="text-neutral3">Background Task Suspend Data</Txt>
+              <Txt tone="muted">Background Task Suspend Data</Txt>
               {suspendPayloadSlot}
             </div>
           )}
 
           {resultSlot !== undefined && result && (
             <div className="space-y-2">
-              <Txt className="text-neutral3">Background Task Result</Txt>
+              <Txt tone="muted">Background Task Result</Txt>
               {resultSlot}
             </div>
           )}
@@ -139,9 +139,9 @@ export const BackgroundTaskMetadataDialogTrigger = ({ backgroundTask }: Backgrou
         onClick={() => setIsOpen(s => !s)}
       >
         {backgroundTask.completedAt || backgroundTask.suspendedAt ? (
-          <Share2 className="text-neutral3 size-5" />
+          <Share2 className="text-muted-foreground size-5" />
         ) : (
-          <Loader2Icon className="text-neutral3 size-5 animate-spin" />
+          <Loader2Icon className="text-muted-foreground size-5 animate-spin" />
         )}
       </Button>
 

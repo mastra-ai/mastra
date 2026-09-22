@@ -5,6 +5,13 @@ import type { RefObject } from 'react';
 import { queryKeys } from '../api/keys';
 import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
 
+/** Latest run state written into the cache from the event stream. */
+export interface AgentControllerLiveState {
+  threadId?: string;
+  tasks?: AgentControllerTaskSnapshot[];
+  running?: boolean;
+}
+
 interface UseAgentControllerSessionSyncArgs {
   agentControllerId: string;
   resourceId: string;
@@ -13,12 +20,18 @@ interface UseAgentControllerSessionSyncArgs {
   baseUrl?: string;
   enabled?: boolean;
   sseConnected: boolean;
-  taskEventGeneration: RefObject<number>;
-  liveTasks: RefObject<{ threadId?: string; tasks: AgentControllerTaskSnapshot[] } | undefined>;
+  liveEventGeneration: RefObject<number>;
+  liveState: RefObject<AgentControllerLiveState | undefined>;
 }
 
-export function reconnectRefetchInterval(sseConnected: boolean, fetchFailureCount: number): false | number {
-  if (sseConnected) return false;
+export function reconnectRefetchInterval(
+  sseConnected: boolean,
+  fetchFailureCount: number,
+  running = false,
+): false | number {
+  // The stream is best-effort and does not replay events. A missed final
+  // message/end event must not leave an apparently active run stale forever.
+  if (sseConnected) return running ? 15_000 : false;
   if (fetchFailureCount >= 10) return false;
   return Math.min(1000 * 2 ** fetchFailureCount, 30_000);
 }
@@ -31,8 +44,8 @@ export function useAgentControllerSessionSync({
   baseUrl = '',
   enabled = true,
   sseConnected,
-  taskEventGeneration,
-  liveTasks,
+  liveEventGeneration,
+  liveState,
 }: UseAgentControllerSessionSyncArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
@@ -45,18 +58,25 @@ export function useAgentControllerSessionSync({
   return useQuery({
     queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, threadId),
     queryFn: async () => {
-      const generationAtRequestStart = taskEventGeneration.current;
+      const generationAtRequestStart = liveEventGeneration.current;
       const state = await session!.state({ threadId });
-      const latestTasks = liveTasks.current;
-      const liveEventOvertookRequest = generationAtRequestStart !== taskEventGeneration.current;
-      return liveEventOvertookRequest && latestTasks && latestTasks.threadId === threadId
-        ? { ...state, tasks: latestTasks.tasks }
+      const latest = liveState.current;
+      const liveEventOvertookRequest = generationAtRequestStart !== liveEventGeneration.current;
+      // A stream event that landed while the request was in flight is newer
+      // than the response, so its tasks and running flag win over the snapshot.
+      return liveEventOvertookRequest && latest && latest.threadId === threadId
+        ? {
+            ...state,
+            ...(latest.tasks ? { tasks: latest.tasks } : {}),
+            ...(typeof latest.running === 'boolean' ? { running: latest.running } : {}),
+          }
         : state;
     },
     enabled: enabled && Boolean(session),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchInterval: query => reconnectRefetchInterval(sseConnected, query.state.fetchFailureCount),
+    refetchInterval: query =>
+      reconnectRefetchInterval(sseConnected, query.state.fetchFailureCount, query.state.data?.running === true),
   });
 }

@@ -262,7 +262,8 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMess
 
     if (stopReason === 'aborted' || stopReason === 'error') {
       const abortMessage = errorMessage || 'Operation aborted';
-      for (const [, component] of state.pendingTools) {
+      for (const [toolCallId, component] of state.pendingTools) {
+        if (component.getBackgroundTaskId?.()) continue;
         component.updateResult(
           {
             content: [{ type: 'text', text: abortMessage }],
@@ -270,10 +271,10 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMess
           },
           false,
         );
+        state.pendingTools.delete(toolCallId);
+        state.pendingTaskToolIds?.delete(toolCallId);
       }
       reconcileChatBoundarySpacers(state.chatContainer);
-      state.pendingTools.clear();
-      state.pendingTaskToolIds?.clear();
     }
 
     state.assistantRenderRegistry.finalize(message.id);

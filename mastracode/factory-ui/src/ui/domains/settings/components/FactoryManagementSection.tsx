@@ -26,7 +26,7 @@ export function FactoryManagementSection() {
           <AlertDialog>
             <AlertDialog.Trigger asChild>
               <Button
-                size="xs"
+                size="sm"
                 variant="outline"
                 className="text-notice-destructive border-notice-destructive/25 hover:bg-notice-destructive/10 hover:text-notice-destructive"
                 disabled={deleteMutation.isPending}

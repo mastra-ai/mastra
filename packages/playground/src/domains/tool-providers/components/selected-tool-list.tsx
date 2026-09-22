@@ -25,7 +25,7 @@ export function SelectedToolList({ providerId, selectedTools, onToggle }: Select
   if (tools.length === 0) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Txt variant="ui-sm" className="text-neutral3">
+        <Txt variant="caption" tone="muted">
           No tools selected
         </Txt>
       </div>
@@ -52,7 +52,7 @@ export function SelectedToolList({ providerId, selectedTools, onToggle }: Select
                   }
                 : undefined
             }
-            className={cn('flex items-start gap-3 rounded-md px-3 py-2.5 bg-surface4', onToggle && 'cursor-pointer')}
+            className={cn('flex items-start gap-3 rounded-md px-3 py-2.5 bg-muted', onToggle && 'cursor-pointer')}
           >
             {onToggle && (
               <div className="pt-0.5">
@@ -65,11 +65,11 @@ export function SelectedToolList({ providerId, selectedTools, onToggle }: Select
             )}
 
             <div className="flex min-w-0 flex-col gap-1">
-              <Txt variant="ui-sm" className="text-neutral6 font-medium">
+              <Txt variant="column" tone="ink">
                 {tool.slug}
               </Txt>
               {tool.description && (
-                <Txt variant="ui-sm" className="text-neutral3 line-clamp-2">
+                <Txt variant="caption" tone="muted" className="line-clamp-2">
                   {tool.description}
                 </Txt>
               )}

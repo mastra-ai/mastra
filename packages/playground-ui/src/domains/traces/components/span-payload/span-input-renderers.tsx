@@ -70,7 +70,7 @@ export function SpanInputRenderer({ span }: SpanInputRendererProps) {
   if (description.type === 'json') return <SpanPayloadJson value={description.value} />;
   const Renderer = pickRenderer(SPAN_INPUT_RENDERERS, description);
   return (
-    <Card data-slot="span-input-card" appearance="surface" elevation="raised" className="border-border1 min-w-0 border">
+    <Card data-slot="span-input-card" className="min-w-0">
       <CardContent>
         <Renderer value={description.value} />
       </CardContent>

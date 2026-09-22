@@ -9,7 +9,7 @@ export function PageHeaderIcon({ className, ...props }: PageHeaderIconProps) {
     <div
       data-slot="page-header-icon"
       className={cn(
-        'col-start-[icon] row-start-1 flex items-center self-center text-neutral3 [&>svg]:size-6',
+        'col-start-[icon] row-start-1 flex items-center self-center text-muted-foreground [&>svg]:size-6',
         className,
       )}
       {...props}
