@@ -11,7 +11,7 @@ const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
 export function ChannelOriginBadge({ origin }: { origin: ChannelOrigin }) {
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
   return (
-    <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
+    <div className="text-meta text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
       {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
       <span>
         via {label}

@@ -24,7 +24,7 @@ export function SharedCredentialNotice({ modelId }: { modelId?: string }) {
   if (!personalOnly) return null;
 
   return (
-    <Txt as="p" variant="ui-sm" className="text-icon4 m-0" role="note">
+    <Txt as="p" variant="caption" className="text-icon4 m-0" role="note">
       Personal {providerDisplayName(provider.provider)} credential — teammates without their own can&apos;t run this
       model.
     </Txt>

@@ -24,7 +24,9 @@ import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { controlHeight } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
@@ -32,21 +34,36 @@ import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
 // `filter-bar-segment` carries the left-to-right entrance (see filter-bar-chip.css).
+// No `first:`/`last:` rounding here: a segment is not reliably the first or last child.
+// Base UI interleaves a hidden input after every combobox and wraps an open trigger in
+// focus guards, so the rounded end would silently drop the moment a popup opened and the
+// segment's own state fill — the one state a chip has — would paint square corners
+// straight through the chip's pill edge. The chip clips instead (see `chipClass`).
 export const segmentClass = cn(
-  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-ui-smd leading-ui-smd whitespace-nowrap outline-none',
-  'first:rounded-l-full last:rounded-r-full',
+  'filter-bar-segment flex max-w-48 min-w-0 items-center gap-1 overflow-hidden px-2 text-label whitespace-nowrap outline-none',
 );
 
-// A chip shares the `md` control height (border-box, like the typeahead pill beside it and the default Button).
+// A filter bar is a dense row: it sits above a list, carries many chips at once, and never
+// competes with the page's own controls. Chip and typeahead pill read this one rung so they
+// stay the same height by construction rather than by two call sites agreeing.
+export const FILTER_BAR_CONTROL_SIZE: ControlSize = 'sm';
+
+// A chip is a field whose value is edited in place, so it wears the field material rather than a
+// fill rung: on a light canvas a `bg-fill` chip read as a grey slab beside the white typeahead
+// pill it belongs to. The segments layer their own state over that card, which is why the chip
+// keeps `divide-border` for the internal seams and takes its outer edge from the material's rim.
+// `overflow-hidden` is what gives every segment its end cap: the chip is the only node that
+// knows where the pill ends, and it keeps knowing it while a framework injects children.
 export const chipClass = cn(
-  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface5 text-foreground',
-  controlHeight.md,
+  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border overflow-hidden rounded-full',
+  inputSurfaceAndFocusWithinStyle,
+  controlHeight[FILTER_BAR_CONTROL_SIZE],
 );
 
 export const editableSegmentClass = cn(
   segmentClass,
-  'cursor-pointer transition-colors hover:bg-neutral6/5 hover:text-foreground',
-  'focus-visible:bg-neutral6/10 focus-visible:text-foreground data-[popup-open]:bg-neutral6/10 data-[popup-open]:text-foreground',
+  'cursor-pointer hover:bg-fill-subtle hover:text-foreground',
+  'focus-visible:bg-fill-hover focus-visible:text-foreground data-[popup-open]:bg-fill-hover data-[popup-open]:text-foreground',
 );
 
 /** Field label with its optional leading icon — used by chips, the draft chip and field option lists. */
@@ -583,11 +600,11 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
         />
       )}
       {step.isMany && (
-        <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
-          <Button size="xs" variant="ghost" onClick={onCancel}>
+        <div className="border-border flex items-center justify-end gap-1 border-t p-1">
+          <Button size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="xs" variant="default" onClick={() => step.commitSelection() || step.commitFreeText()}>
+          <Button size="sm" variant="default" onClick={() => step.commitSelection() || step.commitFreeText()}>
             Done
             <Kbd size="xs">{modEnterLabel}</Kbd>
           </Button>

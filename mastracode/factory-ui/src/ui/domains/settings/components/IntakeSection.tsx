@@ -61,7 +61,7 @@ function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps
 
         {config.github.enabled &&
           (slugs.length === 0 ? (
-            <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
+            <Txt as="p" variant="caption" className="text-icon3 px-4 py-3">
               No linked repositories yet — link a repository to a factory to add one.
             </Txt>
           ) : (
@@ -120,7 +120,7 @@ function GitLabIntakeSection({
         : "Open issues from the selected projects feed every member's board.";
   const accounts = status?.accounts ?? [];
   const action = configured ? (
-    <Txt as="span" variant="ui-sm" className="text-icon3">
+    <Txt as="span" variant="caption" className="text-icon3">
       {accounts.length === 1 ? `Connected to ${accounts[0]}` : `${accounts.length} GitLab accounts connected`}
     </Txt>
   ) : undefined;
@@ -197,10 +197,10 @@ function LinearIntakeSection({
     </Button>
   ) : (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="ui-sm" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-icon3">
         Connected to {status?.workspace?.name ?? 'a Linear workspace'}
       </Txt>
-      <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
+      <Button size="sm" variant="ghost" onClick={() => connectLinear(baseUrl)}>
         Reconnect
       </Button>
     </span>
@@ -287,19 +287,19 @@ function JiraIntakeSection({
       provider="jira"
       reconnectConnectionId={reconnectTarget.id}
       label="Reconnect Jira"
-      size={configured ? 'xs' : 'sm'}
+      size="sm"
     />
   ) : (
     <ProviderConnectControl
       provider="jira"
       label={configured ? 'Connect another site' : 'Connect Jira'}
-      size={configured ? 'xs' : 'sm'}
+      size="sm"
       variant={configured ? 'ghost' : 'default'}
     />
   );
   const action = configured ? (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="ui-sm" className="text-icon3">
+      <Txt as="span" variant="caption" className="text-icon3">
         {connectionLabel}
       </Txt>
       {actionButton}
@@ -367,7 +367,7 @@ function IncidentioIntakeSection({
         title="incident.io follow-ups"
         description="Couldn't load incident.io connections."
         action={
-          <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
+          <Button size="sm" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
             Retry
           </Button>
         }
@@ -383,12 +383,12 @@ function IncidentioIntakeSection({
       <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
     ) : (
       <span className="flex items-center gap-2">
-        <Txt as="span" variant="ui-sm" className="text-icon3">
+        <Txt as="span" variant="caption" className="text-icon3">
           {active.length === 1
             ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
             : `${active.length} ${meta.displayName} accounts connected`}
         </Txt>
-        <ProviderConnectControl provider={provider} label="Connect another" size="xs" variant="ghost" />
+        <ProviderConnectControl provider={provider} label="Connect another" size="sm" variant="ghost" />
       </span>
     );
 
@@ -426,7 +426,7 @@ function IncidentioIntakeSection({
             </SettingsRow>
             {config.incidentio.enabled && active.length > 0 && sourcesQuery.isError && (
               <SettingsRow label="Follow-up sources" description="Couldn't load follow-up sources.">
-                <Button size="xs" variant="ghost" onClick={() => void sourcesQuery.refetch()}>
+                <Button size="sm" variant="ghost" onClick={() => void sourcesQuery.refetch()}>
                   Retry
                 </Button>
               </SettingsRow>
@@ -514,7 +514,7 @@ export function IntakeSection() {
   }
   if (configQuery.isError || !config) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-icon3">
+      <Txt as="p" variant="caption" className="text-icon3">
         Intake configuration is unavailable. Connect GitHub, GitLab, Linear, Jira, or incident.io first.
       </Txt>
     );

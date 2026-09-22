@@ -25,7 +25,7 @@ describe('DropdownMenu.Trigger', () => {
   it('forwards variant and size to the Button', () => {
     render(
       <DropdownMenu>
-        <DropdownMenu.Trigger variant="ghost" size="xs" className="tabular-nums">
+        <DropdownMenu.Trigger variant="ghost" size="sm" className="tabular-nums">
           Open
         </DropdownMenu.Trigger>
       </DropdownMenu>,

@@ -207,6 +207,21 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4-5-20250929',
     'anthropic/claude-sonnet-4-6',
     'anthropic/claude-sonnet-5',
+    'google/gemini-3-flash-preview',
+    'google/gemini-3.1-flash-lite',
+    'google/gemini-3.1-pro-preview',
+    'google/gemini-3.1-pro-preview-customtools',
+    'google/gemini-3.5-flash',
+    'google/gemini-3.5-flash-lite',
+    'google/gemini-3.6-flash',
+    'google/gemini-3.7-flash',
+    'google/gemini-3.8-flash',
+    'google/gemini-embedding-001',
+    'google/gemini-embedding-2',
+    'google/gemini-flash-latest',
+    'google/gemini-flash-lite-latest',
+    'google/gemma-4-26b-a4b-it',
+    'google/gemma-4-31b-it',
   ];
   readonly agentrouter: readonly ['claude-opus-4-8', 'claude-opus-5', 'deepseek-v4-flash', 'glm-5.3', 'gpt-5.6-sol'];
   readonly 'xiaomi-token-plan-cn': readonly [
@@ -217,6 +232,8 @@ export type ProviderModelsMap = {
     'mimo-v2.5-tts',
     'mimo-v2.5-tts-voiceclone',
     'mimo-v2.5-tts-voicedesign',
+    'mimo-v2.6-flash',
+    'mimo-v2.6-pro',
   ];
   readonly 'nano-gpt': readonly [
     'Doctor-Shotgun/MS3.2-24B-Magnum-Diamond',
@@ -2406,6 +2423,8 @@ export type ProviderModelsMap = {
     'mimo-v2.5-tts',
     'mimo-v2.5-tts-voiceclone',
     'mimo-v2.5-tts-voicedesign',
+    'mimo-v2.6-flash',
+    'mimo-v2.6-pro',
   ];
   readonly zeldoc: readonly ['zdev'];
   readonly dinference: readonly ['glm-4.7', 'glm-5', 'glm-5.1', 'glm-5.2', 'gpt-oss-120b', 'minimax-m2.5'];
@@ -2657,7 +2676,7 @@ export type ProviderModelsMap = {
     'qwen3.5-397b-a17b:free',
     'step-3.7-flash:free',
   ];
-  readonly coralbricks: readonly ['glm-5.3-flash-fp4', 'glm-5.3-fp4', 'gpt-oss-120b', 'kimi-k3'];
+  readonly coralbricks: readonly ['deepseek-v4.1-flash-fast-fp4', 'glm-5.3-flash-fp4', 'glm-5.3-fp4', 'gpt-oss-120b'];
   readonly hyper: readonly [
     'deepseek-v4-flash',
     'deepseek-v4-flash-0731',
@@ -2879,6 +2898,9 @@ export type ProviderModelsMap = {
     'mimo-v2.5',
     'mimo-v2.5-pro',
     'mimo-v2.5-pro-ultraspeed',
+    'mimo-v2.6-flash',
+    'mimo-v2.6-pro',
+    'mimo-v2.6-pro-ultraspeed',
   ];
   readonly huggingface: readonly [
     'MiniMaxAI/MiniMax-M2',
@@ -3790,6 +3812,9 @@ export type ProviderModelsMap = {
     'voyage/voyage-law-2',
     'xiaomi/mimo-v2.5',
     'xiaomi/mimo-v2.5-pro',
+    'xiaomi/mimo-v2.6-flash',
+    'xiaomi/mimo-v2.6-pro',
+    'xiaomi/mimo-v2.6-pro-ultraspeed',
     'zai/glm-4.5',
     'zai/glm-4.5-air',
     'zai/glm-4.5v',
@@ -3822,6 +3847,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V4-Flash-0731',
     'deepseek-ai/DeepSeek-V4-Pro',
     'deepseek-ai/DeepSeek-V4-Pro-0813',
+    'deepseek-ai/DeepSeek-V4.1-Flash',
     'google/gemma-4-31B-it',
     'ibm-granite/granite-4.1-8b',
     'ibm-granite/granite-4.2-8b',
@@ -4410,6 +4436,7 @@ export type ProviderModelsMap = {
     'mimo-v2-5-pro',
     'mimo-v2-6-flash',
     'mimo-v2-6-pro',
+    'mimo-v2-6-pro-ultraspeed',
     'minimax-m2-7',
     'minimax-m2-7-highspeed',
     'minimax-m3',
@@ -4786,7 +4813,9 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k3',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
+    'nex-agi/nex-n2.5-mini',
     'nex-agi/nex-n2.5-mini:free',
+    'nex-agi/nex-n2.5-pro',
     'nex-agi/nex-n2.5-pro:free',
     'nousresearch/hermes-3-llama-3.1-405b',
     'nousresearch/hermes-3-llama-3.1-70b',
@@ -5654,7 +5683,9 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k3',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
+    'nex-agi/nex-n2.5-mini',
     'nex-agi/nex-n2.5-mini:free',
+    'nex-agi/nex-n2.5-pro',
     'nex-agi/nex-n2.5-pro:free',
     'nousresearch/hermes-3-llama-3.1-405b',
     'nousresearch/hermes-3-llama-3.1-70b',
@@ -6094,6 +6125,8 @@ export type ProviderModelsMap = {
     'mimo-v2.5-tts',
     'mimo-v2.5-tts-voiceclone',
     'mimo-v2.5-tts-voicedesign',
+    'mimo-v2.6-flash',
+    'mimo-v2.6-pro',
   ];
   readonly neon: readonly [
     'claude-fable-5',
@@ -7389,6 +7422,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.3',
     'xai/grok-4.5',
     'xai/grok-4.6',
+    'xai/grok-4.7',
     'xai/grok-build-0.1',
     'xai/grok-latest',
     'zai/glm-4.6',

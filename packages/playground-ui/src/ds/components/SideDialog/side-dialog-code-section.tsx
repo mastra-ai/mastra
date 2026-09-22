@@ -12,13 +12,14 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { Section } from '@/ds/components/Section';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 /** Dark theme — matches original side-dialog draculaInit settings exactly. */
 function buildSideDialogDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-ui-smd)',
+      fontSize: 'var(--text-body-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -33,8 +34,8 @@ function buildSideDialogLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
-      fontSize: 'var(--text-ui-smd)',
+      color: 'var(--foreground)',
+      fontSize: 'var(--text-body-sm)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',
@@ -45,8 +46,8 @@ function buildSideDialogLightTheme(): Extension {
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--foreground)',
+      caretColor: 'var(--foreground)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -55,7 +56,7 @@ function buildSideDialogLightTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--foreground)',
     },
   });
 
@@ -119,7 +120,9 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
         </ButtonsGroup>
       </Section.Header>
       {codeStr && (
-        <div className="border-border1 bg-surface3 text-ui-md text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl border p-3 break-all dark:border-white/10 dark:bg-black/20">
+        <div
+          className={`${raisedSurfaceStyle} text-body text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl p-3 break-all`}
+        >
           {simplified ? (
             <div className="text-muted-foreground px-2 font-mono break-all">
               <pre className="text-wrap">{codeStr}</pre>

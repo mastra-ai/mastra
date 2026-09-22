@@ -79,7 +79,7 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
 
   return (
     <div className="flex flex-col gap-2">
-      <Txt as="p" variant="ui-xs" className="text-icon3 font-mono">
+      <Txt as="p" variant="meta" className="text-icon3 font-mono">
         {label}
       </Txt>
       <SettingsContainer>

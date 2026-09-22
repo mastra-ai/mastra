@@ -22,10 +22,10 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
     <span
       aria-label={`${count} of ${total} visible board tasks in ${label}`}
       title={`${count} of ${total} visible board tasks`}
-      className="border-border1 bg-surface2 text-ui-xs text-icon4 flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full border px-2 font-medium tabular-nums"
+      className="bg-fill text-meta text-icon4 flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 tabular-nums"
     >
       <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" aria-hidden>
-        <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border1" />
+        <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border" />
         <circle
           cx="7"
           cy="7"
@@ -99,7 +99,7 @@ export function BoardColumnHeader({
         <span
           aria-hidden
           className={cn(
-            'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
+            'text-meta text-icon3 flex h-8 items-center tabular-nums',
             headerAction &&
               'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
           )}
@@ -118,7 +118,7 @@ export function BoardColumnHeader({
         ) : null}
         <Txt
           as="h2"
-          variant="ui-smd"
+          variant="label"
           className="text-icon3 pointer-events-none absolute top-full right-0 m-0 py-1 font-semibold [writing-mode:horizontal-tb] lg:right-auto lg:left-1/2 lg:-translate-x-1/2 lg:[writing-mode:vertical-rl]"
         >
           {label}
@@ -131,7 +131,7 @@ export function BoardColumnHeader({
     <div className={cn(columnWidthClass(false), 'group/column flex min-h-8 items-start justify-between gap-2')}>
       <div className="flex h-8 min-w-0 items-center gap-2">
         <BoardStageIcon stage={stage} kind={phaseKind} />
-        <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 truncate font-semibold">
+        <Txt as="h2" variant="label" className="text-icon3 m-0 truncate font-semibold">
           {label}
         </Txt>
         {loading ? (
@@ -177,7 +177,7 @@ export function BoardColumn({
         columnWidthClass(collapsed),
         'flex flex-col transition-[width,background-color] motion-reduce:transition-none',
         collapsed && 'rounded-lg',
-        collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
+        collapsed && dragOver && 'bg-background ring-1 ring-border',
       )}
       onDragOver={event => {
         if (!event.dataTransfer.types.includes(CARD_MIME)) return;

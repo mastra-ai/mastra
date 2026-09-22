@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
 import { TooltipProvider } from '../Tooltip';
 import { CreateButton } from './CreateButton';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof CreateButton> = {
   title: 'Elements/CreateButton',
@@ -55,10 +56,7 @@ export const ShortcutDisabled: Story = {
 export const WithInput: Story = {
   render: args => (
     <div className="flex items-center gap-4">
-      <input
-        className="border-border1 bg-surface3 text-foreground rounded-md border px-2 py-1"
-        placeholder="Type c here"
-      />
+      <input className={`${raisedSurfaceStyle} text-foreground rounded-md px-2 py-1`} placeholder="Type c here" />
       <CreateButton {...args} />
     </div>
   ),

@@ -40,7 +40,7 @@
 }
 
 .composer-ring:focus-within {
-  background-color: var(--border2);
+  background-color: var(--border-strong);
 }
 
 @media (hover: hover) {
@@ -81,7 +81,7 @@
 }
 
 html.light .composer-ring {
-  --composer-ring-edge: color-mix(in oklab, var(--border2) 40%, transparent);
+  --composer-ring-edge: color-mix(in oklab, var(--border-strong) 40%, transparent);
 }
 
 @media (forced-colors: active) {

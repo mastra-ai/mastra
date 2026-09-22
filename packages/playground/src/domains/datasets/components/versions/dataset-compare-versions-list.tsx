@@ -69,13 +69,13 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
 
 function VersionInfo({ variant, version }: { variant?: VersionInfoVariant; version?: number }) {
   if (!variant) {
-    return <span className="text-ui-md text-muted-foreground">v. {version}</span>;
+    return <span className="text-body text-muted-foreground">v. {version}</span>;
   }
   const { badgeVariant, icon, tooltip } = versionInfoConfig[variant];
   return (
     <div className="grid grid-cols-[1fr_auto]">
       {version !== undefined && (
-        <span className="text-ui-md text-muted-foreground flex min-w-16 justify-end pr-3">v. {version}</span>
+        <span className="text-body text-muted-foreground flex min-w-16 justify-end pr-3">v. {version}</span>
       )}
       <span className="inline-flex" role="img" aria-label={tooltip}>
         <Badge variant={badgeVariant} size="xs" icon={icon} />

@@ -38,7 +38,7 @@ function ActorIcon({ by }: { by: string | undefined }) {
 function Empty({ children }: { children: ReactNode }) {
   return (
     <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="ui-sm" className="text-icon3 m-0 text-center">
+      <Txt as="p" variant="caption" className="text-icon3 m-0 text-center">
         {children}
       </Txt>
     </div>
@@ -68,11 +68,11 @@ function ItemRow({
     <>
       {leading}
       <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="ui-sm" className="text-icon6 truncate font-medium">
+        <Txt as="span" variant="column" className="text-icon6 truncate">
           {title}
         </Txt>
         {subtitle ? (
-          <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
+          <Txt as="span" variant="meta" className="text-icon3 truncate">
             {subtitle}
           </Txt>
         ) : null}
@@ -127,7 +127,7 @@ function ShowMore({ total, expanded, onToggle }: { total: number; expanded: bool
       <button
         type="button"
         onClick={onToggle}
-        className={`${PANEL_ROW_LINK} text-ui-xs text-icon3 hover:text-icon5 w-full cursor-pointer`}
+        className={`${PANEL_ROW_LINK} text-meta text-icon3 hover:text-icon5 w-full cursor-pointer`}
       >
         <span className="flex-1 text-left">
           {expanded ? 'Show less' : `Show ${Math.min(total, EXPANDED_ROWS) - PREVIEW_ROWS} more`}

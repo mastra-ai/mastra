@@ -75,7 +75,7 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
       <span className="flex w-32 shrink-0 justify-end">
         {inherited !== undefined &&
           (inheriting ? (
-            <span className="text-neutral2 text-ui-xs">Follows base</span>
+            <span className="text-neutral2 text-meta">Follows base</span>
           ) : (
             <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onChange()}>
               Reset to base
@@ -83,12 +83,12 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
           ))}
       </span>
 
-      <span className="text-ui-sm w-20 shrink-0 text-right">{label}</span>
+      <span className="text-caption w-20 shrink-0 text-right">{label}</span>
 
-      <span className="bg-surface4 relative flex h-7 w-36 items-center rounded-lg">
+      <span className="bg-fill relative flex h-7 w-36 items-center rounded-lg">
         <span
           aria-hidden
-          className="bg-surface6 absolute inset-y-0 left-0 rounded-lg"
+          className="bg-fill-strong absolute inset-y-0 left-0 rounded-lg"
           style={{ width: `calc(${travelled} + 6px)` }}
         />
         <span aria-hidden className="pointer-events-none absolute inset-x-[6.5px] flex justify-between">
@@ -148,7 +148,7 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         aria-checked={!muted}
         aria-label="Play a sound"
         className={cn(
-          'bg-surface4 text-neutral3 -mr-6 flex h-7 items-center rounded-full py-1 pr-8 pl-2.5',
+          'bg-fill text-neutral3 -mr-6 flex h-7 items-center rounded-full py-1 pr-8 pl-2.5',
           'transition-colors duration-150 motion-reduce:transition-none',
           'hover:text-neutral6 focus-visible:ring-neutral6/60 focus-visible:ring-2 focus-visible:outline-none',
         )}
@@ -170,10 +170,10 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
           size="sm"
           aria-label="Completion sound"
           className={cn(
-            'bg-surface3 relative z-10 w-32',
+            'bg-card relative z-10 w-32',
             // Opaque even when muted: the mute button is tucked underneath.
             'disabled:opacity-100',
-            muted && 'text-neutral1 hover:text-neutral1 border-border1/60 hover:bg-surface3 [&_svg]:opacity-25',
+            muted && 'text-neutral1 hover:text-neutral1 border-border/60 hover:bg-card [&_svg]:opacity-25',
           )}
         >
           {AUDIBLE_SOUNDS.find(option => option.value === lastAudible)?.label}
@@ -201,7 +201,7 @@ interface SegmentedProps<T extends string> {
 /** For choices that are alternatives rather than a ramp: policies, modes, delivery. */
 export function Segmented<T extends string>({ value, options, ariaLabel, disabled, onChange }: SegmentedProps<T>) {
   return (
-    <ButtonsGroup spacing="close" role="group" aria-label={ariaLabel}>
+    <ButtonsGroup role="group" aria-label={ariaLabel}>
       {options.map(o => (
         <Button
           key={o.value}
