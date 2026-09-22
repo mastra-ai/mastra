@@ -1412,7 +1412,57 @@ describe('eager tool dispatch — unsafe terminations', () => {
 
     await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
+    // Positively establish execution first: an absent body is `-1`, which would sail
+    // past the ordering comparison and turn "feature disabled" into a passing test.
+    expect(events.filter(event => event === 'execute-call-a')).toHaveLength(1);
     expect(events.indexOf('execute-call-a')).toBeLessThan(events.indexOf('finish'));
+  });
+
+  /**
+   * The dispatch backstop is unconditional, and on an ordinary finish the foreach is
+   * still going to adopt whatever is in flight. Cancelling there would strip the
+   * adoption entry and make the foreach run the body a second time.
+   *
+   * This carries no processor at all: the exclusion above removed the scenario that
+   * used to cover this invariant, but the invariant itself never depended on one.
+   */
+  it('runs a call in flight at the model finish exactly once', async () => {
+    const { events, record } = createRecorder();
+
+    const model = createToolCallModel(
+      [{ toolCallId: 'call-slow', toolName: 'slow-tool', input: { value: 'slow' } }],
+      record,
+    );
+
+    const agent = new Agent({
+      id: 'eager-inflight-at-finish-agent',
+      name: 'Eager in-flight at finish agent',
+      instructions: 'Call the tool.',
+      model,
+      tools: {
+        'slow-tool': createTool({
+          id: 'slow-tool',
+          description: 'Still running when the model stream finishes.',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            record('enter-slow');
+            await new Promise(resolve => setTimeout(resolve, 150));
+            record('finish-slow');
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+
+    // Dispatched early, still in flight at `finish`, and adopted — so the backstop had
+    // something to cancel and must not have cancelled it.
+    expect(events.indexOf('enter-slow')).toBeLessThan(events.indexOf('finish'));
+    expect(events.indexOf('finish-slow')).toBeGreaterThan(events.indexOf('finish'));
+    expect(events.filter(event => event === 'enter-slow')).toHaveLength(1);
+    expect(events.filter(event => event === 'finish-slow')).toHaveLength(1);
   });
 });
 

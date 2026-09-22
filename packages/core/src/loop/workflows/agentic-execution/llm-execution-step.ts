@@ -2105,8 +2105,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                               : 'processLLMResponse' in processor || 'processOutputStep' in processor,
                           ),
                         ),
-                        // `processToolResult` is a separate exclusion: it does not run
-                        // after the stream, it runs inside it, and its abort bails the
+                        // `processToolResult` is a separate exclusion: reached from a
+                        // provider-executed result in the stream, its abort bails the
                         // attempt before the post-stream pass ever starts the call.
                         hasToolResultProcessor: Boolean(
                           outputProcessors?.some(processor =>
@@ -2217,8 +2217,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           //
           // The bail below is the one path where nothing adopts the work, and it cannot
           // reach here holding any: a `processToolResult` hook is the only thing that
-          // reaches that branch, and a run declaring one never dispatches early in the
-          // first place (`isEagerlyExecutableToolCall`). Were it to dispatch, the bail
+          // reaches that branch, and a run declaring one does not dispatch early in the
+          // first place (`isEagerlyExecutableToolCall`), unless a hand-built processor
+          // workflow falsifies its own `__processToolResult`. Were it to dispatch, the bail
           // would start a tool the post-stream pass never starts at all, which is why
           // the exclusion is up front rather than repaired here.
           eagerCoordinator?.stop();

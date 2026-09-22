@@ -520,11 +520,14 @@ export function isEagerlyExecutableToolCall({
   // rewrite or drop the response before any tool runs, so nothing may start early.
   if (hasPostStreamProcessor) return false;
 
-  // A `processToolResult` processor can abort the turn from inside the model stream.
-  // That bail returns before the post-stream pass, so without early execution the tool
-  // is never started at all — not merely started and left unrecorded. Starting one
-  // early would make the two schedules disagree about whether the tool ran, so a run
-  // carrying this hook is left to the post-stream pass entirely.
+  // A `processToolResult` processor can abort the turn from inside the model stream,
+  // when the hook is reached from a provider-executed result arriving there. That bail
+  // returns before the post-stream pass, so without early execution the tool is never
+  // started at all — not merely started and left unrecorded. Starting one early would
+  // make the two schedules disagree about whether the tool ran, so a run carrying this
+  // hook is left to the post-stream pass entirely. (The hook's other site, on a
+  // server-executed result, runs after adoption and does not bail; the exclusion is
+  // keyed on the declared hook because which site fires is not knowable at dispatch.)
   if (hasToolResultProcessor) return false;
 
   // Arguments must be complete. Partial or absent arguments are never executed.
