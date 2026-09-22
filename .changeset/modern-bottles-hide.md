@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Added independent Auto choices for Observer and Reflector models, including effective-model display and per-role reset controls.
+Defaulted Observer and Reflector models to Auto so they follow the active main model's provider unless explicitly pinned. Added effective-model display and independent reset controls, and removed the observational-memory model choice from onboarding.
