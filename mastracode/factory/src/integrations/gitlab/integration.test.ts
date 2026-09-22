@@ -753,9 +753,11 @@ describe('PlatformGitLabIntegration', () => {
       'gitlab',
       'gitlab-group',
       'gitlab-group-token',
+      'gitlab-pat',
       'gitlab',
       'gitlab-group',
       'gitlab-group-token',
+      'gitlab-pat',
     ]);
   });
 });
