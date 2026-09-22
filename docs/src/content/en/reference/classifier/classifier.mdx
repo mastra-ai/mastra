@@ -357,3 +357,34 @@ const classifier = new Classifier({
 ```
 
 `transformResult()` runs after the provider call and before `Classifier` validates the response.
+
+## Registering classifiers
+
+Register classifiers on the `Mastra` instance to share them across your application. Registration wires the classifier to Mastra's logger and observability, and makes it retrievable by key or ID.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Classifier } from '@mastra/core/classifier'
+
+export const mastra = new Mastra({
+  classifiers: {
+    safety: new Classifier({
+      id: 'safety',
+      model,
+      questions: {
+        unsafe: { type: 'boolean' },
+      },
+    }),
+  },
+})
+
+mastra.getClassifier('safety')
+mastra.getClassifierById('safety')
+mastra.listClassifiers()
+```
+
+## Related
+
+- [getClassifier()](/reference/core/getClassifier)
+- [getClassifierById()](/reference/core/getClassifierById)
+- [listClassifiers()](/reference/core/listClassifiers)
