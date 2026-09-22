@@ -48,14 +48,14 @@ export const RuleOperatorSelect: React.FC<RuleOperatorSelectProps> = ({ value, o
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-surface4 text-neutral6" size="sm">
+        <SelectTrigger className="bg-surface4 text-foreground" size="sm">
           <SelectValue placeholder="Select operator" />
         </SelectTrigger>
         <SelectContent>
           {operatorList.map(operator => (
             <SelectItem key={operator} value={operator}>
               <span className="flex items-center gap-2">
-                <Icon size="sm" className="text-neutral3">
+                <Icon size="sm" className="text-muted-foreground">
                   {OPERATOR_ICONS[operator]}
                 </Icon>
                 {OPERATOR_LABELS[operator]}

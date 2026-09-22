@@ -158,8 +158,8 @@ export function MessageScrollerProvider({
   // tell the reader taking over from its own writes landing.
   const tripAnimationRef = React.useRef<TripAnimation | null>(null);
   const lastScrollTopRef = React.useRef(0);
-  // Mount sits at scrollTop 0 before the default scroll lands, indistinguishable
-  // from a reader asking for older history. Arms only once settled at the end.
+  // Only a reader moving backwards asks for older history: a mount sitting at
+  // scrollTop 0 before the default scroll lands has not moved.
   const reachStartArmedRef = React.useRef(false);
   const reachStartFiredRef = React.useRef(false);
   const prependAnchorRef = React.useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
@@ -243,7 +243,7 @@ export function MessageScrollerProvider({
       if (!viewportElement) {
         atEndRef.current = true;
         publishScrollable(DEFAULT_SCROLLABLE);
-        return;
+        return false;
       }
 
       const { scrollTop } = viewportElement;
@@ -262,6 +262,8 @@ export function MessageScrollerProvider({
         start: scrollTop > scrollEdgeThreshold,
         end: remainingScroll > scrollEdgeThreshold && !(autoScroll && followingRef.current),
       });
+
+      return wentBack;
     },
     [autoScroll, followTarget, publishScrollable, scrollEdgeThreshold, viewportElement],
   );
@@ -337,11 +339,11 @@ export function MessageScrollerProvider({
 
   const notifyScroll = React.useCallback(() => {
     const wasScrollable = Boolean(viewportElement && viewportElement.scrollHeight > viewportElement.clientHeight);
-    updateScrollable({ fromScroll: true });
+    const readerWentBack = updateScrollable({ fromScroll: true });
     updateVisibility();
     if (!viewportElement) return;
 
-    if (atEndRef.current && wasScrollable) reachStartArmedRef.current = true;
+    if (readerWentBack && wasScrollable) reachStartArmedRef.current = true;
 
     if (!reachStartArmedRef.current) return;
     if (!wasScrollable) return;
@@ -901,7 +903,7 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
         data-direction={direction}
         tabIndex={active ? tabIndex : -1}
         className={cn(
-          'absolute inset-s-1/2 inline-flex min-h-5 min-w-7 -translate-x-1/2 items-center justify-center rounded-full border border-border1 bg-surface3 text-neutral6 shadow-[0_1px_2px_-1px_oklch(0%_0_0deg/10%),0_8px_20px_-12px_oklch(0%_0_0deg/25%)] transition-[translate,scale,opacity] duration-200 hover:bg-surface4 data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:translate-y-0 data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=end]:data-[active=false]:translate-y-full data-[direction=start]:top-4 data-[direction=start]:data-[active=false]:-translate-y-full rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
+          'absolute inset-s-1/2 inline-flex min-h-5 min-w-7 -translate-x-1/2 items-center justify-center rounded-full border border-border1 bg-surface3 text-foreground shadow-[0_1px_2px_-1px_oklch(0%_0_0deg/10%),0_8px_20px_-12px_oklch(0%_0_0deg/25%)] transition-[translate,scale,opacity] duration-200 hover:bg-surface4 data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:translate-y-0 data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=end]:data-[active=false]:translate-y-full data-[direction=start]:top-4 data-[direction=start]:data-[active=false]:-translate-y-full rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
           className,
         )}
         onClick={event => {

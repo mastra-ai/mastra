@@ -1,5 +1,6 @@
 'use client';
 
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -76,11 +77,15 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
       {/* Hidden file input */}
       <input
         ref={inputRef}
+        id="input-csv-file"
+        name="csv-file"
         type="file"
         accept=".csv"
         onChange={handleFileChange}
         className="hidden"
         disabled={isParsing}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? fieldErrorId('csv-file') : undefined}
       />
 
       {/* Dropzone */}
@@ -106,23 +111,23 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         {isParsing ? (
           <>
             <Spinner />
-            <span className="text-neutral4 text-ui-md">Parsing CSV...</span>
+            <span className="text-muted-foreground text-ui-md">Parsing CSV...</span>
           </>
         ) : (
           <>
-            <Icon className="text-neutral4">
+            <Icon className="text-muted-foreground">
               <Upload className="h-8 w-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
-              <span className="text-neutral1 text-ui-md font-medium">Click to upload or drag and drop</span>
-              <span className="text-neutral4 text-ui-sm">CSV files only</span>
+              <span className="text-placeholder text-ui-md font-medium">Click to upload or drag and drop</span>
+              <span className="text-muted-foreground text-ui-sm">CSV files only</span>
             </div>
           </>
         )}
       </div>
 
       {/* Error message */}
-      {error && <div className="text-accent2 text-ui-md">{error}</div>}
+      {error && <FieldBlock.ErrorMsg name="csv-file">{error}</FieldBlock.ErrorMsg>}
     </div>
   );
 }

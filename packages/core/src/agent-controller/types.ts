@@ -799,38 +799,40 @@ export type AgentControllerEvent =
         | { type: 'part'; index: number; part: MastraMessagePart };
     }
   | { type: 'message_end'; id: string }
-  | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
-  | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
-  | {
-      type: 'tool_suspended';
-      toolCallId: string;
-      toolName: string;
-      args: unknown;
-      suspendPayload: unknown;
-      resumeSchema?: string;
-    }
-  | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
-  | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | {
-      type: 'tool_end';
-      toolCallId: string;
-      result: unknown;
-      isError: boolean;
-      /**
-       * True when the tool call resolved without ever running because the user
-       * denied its approval gate or the run was aborted while it was parked
-       * waiting for approval. `isError` stays `false` in that case (the tool
-       * did not fail — it simply never executed), so subscribers that gate on
-       * "the tool actually did work" must exclude `denied === true`.
-       */
-      denied?: boolean;
-      providerMetadata?: Record<string, unknown>;
-    }
-  | { type: 'tool_input_start'; toolCallId: string; toolName: string }
-  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
-  | { type: 'tool_input_end'; toolCallId: string }
-  | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
-  | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
+  | ({ threadId?: string } & (
+      | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
+      | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
+      | {
+          type: 'tool_suspended';
+          toolCallId: string;
+          toolName: string;
+          args: unknown;
+          suspendPayload: unknown;
+          resumeSchema?: string;
+        }
+      | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
+      | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
+      | {
+          type: 'tool_end';
+          toolCallId: string;
+          result: unknown;
+          isError: boolean;
+          /**
+           * True when the tool call resolved without ever running because the user
+           * denied its approval gate or the run was aborted while it was parked
+           * waiting for approval. `isError` stays `false` in that case (the tool
+           * did not fail — it simply never executed), so subscribers that gate on
+           * "the tool actually did work" must exclude `denied === true`.
+           */
+          denied?: boolean;
+          providerMetadata?: Record<string, unknown>;
+        }
+      | { type: 'tool_input_start'; toolCallId: string; toolName: string }
+      | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
+      | { type: 'tool_input_end'; toolCallId: string }
+      | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
+      | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
+    ))
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
   | {

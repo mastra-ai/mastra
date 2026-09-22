@@ -70,11 +70,11 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
       {/* Header */}
       <div className="flex items-start gap-4">
         <div className="bg-surface5 rounded-lg p-3">
-          <SkillIcon className="text-neutral4 h-6 w-6" />
+          <SkillIcon className="text-muted-foreground h-6 w-6" />
         </div>
         <div className="flex-1">
-          <h1 className="text-neutral6 text-header-md font-semibold">{skill.name}</h1>
-          <p className="text-neutral4 text-ui-md mt-1">{skill.description}</p>
+          <h1 className="text-foreground text-header-md font-semibold">{skill.name}</h1>
+          <p className="text-muted-foreground text-ui-md mt-1">{skill.description}</p>
         </div>
       </div>
 
@@ -98,7 +98,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               e.stopPropagation();
               setShowRawInstructions(!showRawInstructions);
             }}
-            className="text-neutral4 hover:text-neutral5 hover:bg-surface4 text-ui-sm flex items-center gap-1.5 rounded px-2 py-1 transition-colors"
+            className="text-muted-foreground hover:text-foreground hover:bg-surface4 text-ui-sm flex items-center gap-1.5 rounded px-2 py-1 transition-colors"
             title={showRawInstructions ? 'Show rendered' : 'Show source'}
           >
             {showRawInstructions ? <Eye className="h-3.5 w-3.5" /> : <FileCode2 className="h-3.5 w-3.5" />}
@@ -140,8 +140,8 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
                 onClick={() => onReferenceClick?.(ref)}
                 className="hover:bg-surface4 flex w-full items-center gap-2 rounded px-3 py-2 text-left transition-colors"
               >
-                <FileText className="text-neutral3 h-4 w-4" />
-                <span className="text-neutral5 text-ui-md">{ref}</span>
+                <FileText className="text-muted-foreground h-4 w-4" />
+                <span className="text-foreground text-ui-md">{ref}</span>
               </button>
             ))}
           </div>
@@ -158,8 +158,8 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
           <div className="space-y-1">
             {skill.scripts.map(script => (
               <div key={script} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
-                <Code className="text-neutral3 h-4 w-4" />
-                <span className="text-neutral5 text-ui-md">{script}</span>
+                <Code className="text-muted-foreground h-4 w-4" />
+                <span className="text-foreground text-ui-md">{script}</span>
               </div>
             ))}
           </div>
@@ -176,8 +176,8 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
           <div className="space-y-1">
             {skill.assets.map(asset => (
               <div key={asset} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
-                <Image className="text-neutral3 h-4 w-4" />
-                <span className="text-neutral5 text-ui-md">{asset}</span>
+                <Image className="text-muted-foreground h-4 w-4" />
+                <span className="text-foreground text-ui-md">{asset}</span>
               </div>
             ))}
           </div>
@@ -186,7 +186,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
 
       {/* Path */}
       <div className="border-border1 border-t pt-4">
-        <p className="text-neutral3 text-ui-sm">
+        <p className="text-muted-foreground text-ui-sm">
           Path: <code className="bg-surface4 rounded px-1 py-0.5">{skill.path}</code>
         </p>
       </div>
@@ -228,10 +228,10 @@ function MetadataCard({ label, value, icon }: { label: string; value: unknown; i
   const displayValue = formatDisplayValue(value);
   return (
     <div className="bg-surface3 rounded-lg p-3">
-      <p className="text-neutral3 text-ui-sm mb-1">{label}</p>
+      <p className="text-muted-foreground text-ui-sm mb-1">{label}</p>
       <div className="flex items-center gap-1.5">
-        {icon && <span className="text-neutral4">{icon}</span>}
-        <p className="text-neutral5 text-ui-md truncate font-medium" title={displayValue}>
+        {icon && <span className="text-muted-foreground">{icon}</span>}
+        <p className="text-foreground text-ui-md truncate font-medium" title={displayValue}>
           {displayValue}
         </p>
       </div>
@@ -257,11 +257,11 @@ function CollapsibleSection({
       <div className="bg-surface3 hover:bg-surface4 flex items-center transition-colors">
         <button onClick={onToggle} className="flex flex-1 items-center gap-2 px-4 py-3">
           {isExpanded ? (
-            <ChevronDown className="text-neutral3 h-4 w-4" />
+            <ChevronDown className="text-muted-foreground h-4 w-4" />
           ) : (
-            <ChevronRight className="text-neutral3 h-4 w-4" />
+            <ChevronRight className="text-muted-foreground h-4 w-4" />
           )}
-          <span className="text-neutral5 text-ui-md font-medium">{title}</span>
+          <span className="text-foreground text-ui-md font-medium">{title}</span>
         </button>
         {headerAction && <div className="pr-3">{headerAction}</div>}
       </div>

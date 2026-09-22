@@ -131,6 +131,8 @@ describe('Select', () => {
     // its default size.
     expect(trigger.classList.contains('text-ui-smd')).toBe(true);
     expect(trigger.classList.contains('text-ui-md')).toBe(false);
+    expect(trigger.classList.contains('font-normal')).toBe(true);
+    expect(trigger.className).toContain('aria-invalid:border-destructive');
     // Focus is the unified neutral border (from `buttonVariants`), not the old
     // bespoke focus border.
     expect(trigger.className).toContain('focus-visible:border-foreground/60');

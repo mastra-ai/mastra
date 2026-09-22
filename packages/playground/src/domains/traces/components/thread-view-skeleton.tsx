@@ -11,7 +11,11 @@ const ROWS = [0, 1, 2];
  */
 export function ThreadViewSkeleton() {
   return (
-    <div role="status" aria-label="Loading thread" className="min-h-0 overflow-hidden">
+    <div
+      role="status"
+      aria-label="Loading thread"
+      className="animate-in fade-in-0 fill-mode-backwards min-h-0 overflow-hidden delay-500 duration-200"
+    >
       {ROWS.map(idx => (
         <div key={idx} className="border-border1 grid grid-cols-[24rem_minmax(0,1fr)] border-b pr-4 pl-14">
           <TraceMessagesSkeleton className="border-border1 border-x pr-4 pl-0" />

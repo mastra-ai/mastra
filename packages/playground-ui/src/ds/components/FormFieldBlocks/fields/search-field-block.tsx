@@ -25,7 +25,6 @@ export type SearchFieldBlockProps = {
   layout?: 'horizontal' | 'vertical';
   className?: string;
   size?: InputProps['size'];
-  variant?: InputProps['variant'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
   /** Gives the caller access to the underlying input, e.g. to focus it from a keyboard shortcut. */
@@ -48,7 +47,6 @@ export function SearchFieldBlock({
   onReset,
   className,
   size,
-  variant,
   isMinimized,
   onMinimizedChange,
   inputRef: externalInputRef,
@@ -87,68 +85,73 @@ export function SearchFieldBlock({
     <FieldBlock.Layout layout={layout} className={className}>
       {layout === 'horizontal' ? (
         <FieldBlock.Column className={labelIsHidden ? 'sr-only' : undefined}>
-          <FieldBlock.Label name={name} required={required}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled}>
             {label}
           </FieldBlock.Label>
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column className={layout === 'horizontal' && labelIsHidden ? 'col-span-full' : undefined}>
         {layout === 'vertical' && label ? (
-          <FieldBlock.Label name={name} required={required} className={labelIsHidden ? 'sr-only' : undefined}>
+          <FieldBlock.Label
+            name={name}
+            required={required}
+            disabled={disabled}
+            className={labelIsHidden ? 'sr-only' : undefined}
+          >
             {label}
           </FieldBlock.Label>
         ) : null}
-        <div className="group relative">
-          <Input
-            ref={setInputRef}
-            id={`input-${name}`}
-            name={name}
-            disabled={disabled}
-            value={value}
-            placeholder={placeholder}
-            onChange={onChange}
-            size={size}
-            variant={variant}
-            error={error || Boolean(errorMsg)}
-            aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
-            className={cn(
-              size === 'xs' && 'px-7',
-              size === 'sm' && 'px-8',
-              (!size || size === 'md') && 'px-9',
-              size === 'lg' && 'px-10',
+        <FieldBlock.Column className="gap-1">
+          <div className="group relative">
+            <Input
+              ref={setInputRef}
+              id={`input-${name}`}
+              name={name}
+              disabled={disabled}
+              value={value}
+              placeholder={placeholder}
+              onChange={onChange}
+              size={size}
+              error={error || Boolean(errorMsg)}
+              aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
+              className={cn(
+                size === 'xs' && 'px-7',
+                size === 'sm' && 'px-8',
+                (!size || size === 'md') && 'px-9',
+                size === 'lg' && 'px-10',
+              )}
+            />
+            <SearchIcon
+              aria-hidden="true"
+              className={cn(
+                'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
+                size === 'xs' && 'size-3',
+                size === 'sm' && 'size-3.5',
+                (!size || size === 'md') && 'size-4',
+                size === 'lg' && 'size-[1.125rem]',
+              )}
+            />
+            {onReset && (value || isMinimized === false) && (
+              <Button
+                variant="ghost"
+                size={size || 'md'}
+                aria-label="Clear search"
+                onClick={() => {
+                  if (value) {
+                    onReset();
+                  }
+                  if (isMinimized === false) {
+                    onMinimizedChange?.(true);
+                  }
+                }}
+                className="absolute top-1/2 right-0 -translate-y-1/2"
+              >
+                <XIcon />
+              </Button>
             )}
-          />
-          <SearchIcon
-            aria-hidden="true"
-            className={cn(
-              'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
-              size === 'xs' && 'size-3',
-              size === 'sm' && 'size-3.5',
-              (!size || size === 'md') && 'size-4',
-              size === 'lg' && 'size-[1.125rem]',
-            )}
-          />
-          {onReset && (value || isMinimized === false) && (
-            <Button
-              variant="ghost"
-              size={size || 'md'}
-              aria-label="Clear search"
-              onClick={() => {
-                if (value) {
-                  onReset();
-                }
-                if (isMinimized === false) {
-                  onMinimizedChange?.(true);
-                }
-              }}
-              className="absolute top-1/2 right-0 -translate-y-1/2"
-            >
-              <XIcon />
-            </Button>
-          )}
-        </div>
-        {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg name={name}>{errorMsg}</FieldBlock.ErrorMsg>}
+          </div>
+          {helpText || errorMsg ? <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} /> : null}
+        </FieldBlock.Column>
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );

@@ -35,7 +35,7 @@ export const WorkflowEdgeDataButton = ({
         onClick={onInspect ?? (() => setIsOpen(true))}
         aria-label={`View ${dataLabel}`}
         aria-pressed={selected}
-        className="border-border1 bg-surface3 text-neutral5 shadow-panel hover:bg-surface4 aria-pressed:border-neutral3 aria-pressed:bg-surface4 h-7 rounded-lg border px-2"
+        className="border-border1 bg-surface3 text-foreground shadow-panel hover:bg-surface4 aria-pressed:border-neutral3 aria-pressed:bg-surface4 h-7 rounded-lg border px-2"
         icon={<Database className="text-accent1" />}
       >
         Data
@@ -48,7 +48,7 @@ export const WorkflowEdgeDataButton = ({
           </DialogHeader>
           <DialogBody className="overflow-auto" style={{ maxHeight: 700 }}>
             <div className="border-border1 bg-surface2 min-w-0 rounded-lg border p-3">
-              <Txt variant="ui-sm" className="text-neutral5 mb-2 block">
+              <Txt variant="ui-sm" className="text-foreground mb-2 block">
                 {dataLabel}
               </Txt>
               <WorkflowCodeContent data={output} />

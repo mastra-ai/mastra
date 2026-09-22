@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -64,6 +65,31 @@ describe('CodeEditor — what it shows', () => {
     render(<CodeEditor value="x" showCopyButton={false} />);
 
     expect(lastProps()?.['aria-label']).toBe('Code editor');
+  });
+
+  it('associates validation state with the editable content', () => {
+    render(
+      <CodeEditor
+        id="input-provider-options"
+        value="{}"
+        showCopyButton={false}
+        aria-label="Provider options"
+        aria-invalid
+        aria-describedby="error-provider-options"
+      />,
+    );
+
+    const parent = document.createElement('div');
+    const view = new EditorView({
+      state: EditorState.create({ extensions: lastProps()?.extensions ?? [] }),
+      parent,
+    });
+
+    expect(view.contentDOM.id).toBe('input-provider-options');
+    expect(view.contentDOM.getAttribute('aria-label')).toBe('Provider options');
+    expect(view.contentDOM.getAttribute('aria-invalid')).toBe('true');
+    expect(view.contentDOM.getAttribute('aria-describedby')).toBe('error-provider-options');
+    view.destroy();
   });
 });
 

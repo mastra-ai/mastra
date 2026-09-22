@@ -27,11 +27,11 @@ export function WorkflowStepDetailContent() {
             <WorkflowIcon className="h-4 w-4" style={{ color: BADGE_COLORS.workflow }} />
           )}
           <div className="flex flex-col">
-            <Txt variant="ui-md" className="text-neutral6 font-medium">
+            <Txt variant="ui-md" className="text-foreground font-medium">
               {stepDetail.type === 'map-config' ? `${stepDetail.stepName} Config` : `${stepDetail.stepName} Workflow`}
             </Txt>
             {stepDetail.type === 'map-config' && stepDetail.stepId && stepDetail.stepId !== stepDetail.stepName && (
-              <Txt variant="ui-xs" className="text-neutral3">
+              <Txt variant="ui-xs" className="text-muted-foreground">
                 {stepDetail.stepId}
               </Txt>
             )}
@@ -42,7 +42,7 @@ export function WorkflowStepDetailContent() {
           className="hover:bg-surface3 rounded p-1 transition-colors"
           aria-label="Close"
         >
-          <X className="text-neutral3 h-4 w-4" />
+          <X className="text-muted-foreground h-4 w-4" />
         </button>
       </div>
 

@@ -24,7 +24,7 @@ function MetricsColumn({ title }: { title: string }) {
   return (
     <Column className="p-5" withRightSeparator>
       <Column.Toolbar>
-        <h2 className="text-neutral5 text-header-sm">{title}</h2>
+        <h2 className="text-foreground text-header-sm">{title}</h2>
         <Button size="sm" variant="ghost">
           <SlidersHorizontalIcon />
           Configure
@@ -36,7 +36,7 @@ function MetricsColumn({ title }: { title: string }) {
             <CardHeader>
               <CardTitle>{value}</CardTitle>
             </CardHeader>
-            <CardContent density="compact" className="text-ui-sm text-neutral3">
+            <CardContent density="compact" className="text-ui-sm text-muted-foreground">
               {label}
             </CardContent>
           </Card>

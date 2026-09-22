@@ -504,7 +504,7 @@ describe('Tab', () => {
 
     const tab = screen.getByRole('tab', { name: 'First' });
     expect(tab.className).toContain('my-own-class');
-    expect(tab.className).toContain('text-neutral3');
+    expect(tab.className).toContain('text-muted-foreground');
   });
 
   describe('pill-ghost variant', () => {
@@ -543,7 +543,7 @@ describe('Tab', () => {
 
       const tab = screen.getByRole('tab', { name: 'First' });
       expect(tab.className).not.toContain('h-form-md');
-      expect(tab.className).toContain('text-neutral3');
+      expect(tab.className).toContain('text-muted-foreground');
     });
   });
 

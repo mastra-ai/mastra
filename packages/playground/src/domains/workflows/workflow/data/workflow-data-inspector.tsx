@@ -41,7 +41,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
           <Badge variant="neutral" emphasis="muted" icon={<DirectionIcon />}>
             {DIRECTION_LABELS[direction]}
           </Badge>
-          <Txt as="h2" variant="ui-sm" className="text-neutral6 font-medium break-words">
+          <Txt as="h2" variant="ui-sm" className="text-foreground font-medium break-words">
             {name}
           </Txt>
         </div>
@@ -51,7 +51,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
       </header>
       <div className="min-h-0 overflow-auto overscroll-contain p-3">
         {value === undefined ? (
-          <Txt as="p" variant="ui-sm" className="text-neutral3 p-2">
+          <Txt as="p" variant="ui-sm" className="text-muted-foreground p-2">
             No {direction} recorded for this selection.
           </Txt>
         ) : (

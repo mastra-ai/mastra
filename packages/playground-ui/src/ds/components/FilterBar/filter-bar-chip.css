@@ -1,0 +1,100 @@
+/* A chip is written left to right (field → operator → value), so it arrives the same
+ * way: each segment grows from zero width in turn, as if being typed out. Real width
+ * (not a transform) so the chip's border and neighbours move with it; that needs
+ * `interpolate-size` to tween `0 → auto`, so browsers without it simply show the chip. */
+
+@keyframes filter-bar-segment-in {
+  from {
+    width: 0;
+    padding-inline: 0;
+    opacity: 0;
+  }
+
+  to {
+    width: auto;
+    padding-inline: var(--filter-bar-segment-padding);
+    opacity: 1;
+  }
+}
+
+@supports (interpolate-size: allow-keywords) {
+  .filter-bar-segment {
+    --filter-bar-segment-padding: 0.5rem;
+    interpolate-size: allow-keywords;
+    /* `backwards` (not `both`) so the stylesheet padding takes over once it lands. */
+    animation: filter-bar-segment-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    /* A chip that was the draft already shows its first `--filter-bar-segments-settled`
+     * segments. Those must stay put even if React swaps their element (draft span →
+     * editor), so their duration collapses to 0; the sequence resumes from the first
+     * new one. */
+    --filter-bar-segment-fresh: clamp(
+      0,
+      var(--filter-bar-segment-index, 0) - var(--filter-bar-segments-settled, 0) + 1,
+      1
+    );
+    animation-duration: calc(160ms * var(--filter-bar-segment-fresh));
+    animation-delay: calc(max(0, var(--filter-bar-segment-index, 0) - var(--filter-bar-segments-settled, 0)) * 110ms);
+  }
+
+  /* Count segments (`of S`) rather than raw children — Base UI interleaves hidden
+   * inputs between them. */
+  .filter-bar-chip > .filter-bar-segment:nth-child(2 of .filter-bar-segment) {
+    --filter-bar-segment-index: 1;
+  }
+
+  .filter-bar-chip > .filter-bar-segment:nth-child(3 of .filter-bar-segment) {
+    --filter-bar-segment-index: 2;
+  }
+
+  .filter-bar-chip > .filter-bar-segment:nth-child(4 of .filter-bar-segment) {
+    --filter-bar-segment-index: 3;
+  }
+
+  .filter-bar-chip > .filter-bar-segment:nth-child(5 of .filter-bar-segment) {
+    --filter-bar-segment-index: 4;
+  }
+}
+
+/* Once the value lands, a slanted band in the field's accent colour (the chip sets
+ * `--filter-bar-chip-shine`, falling back to the text colour) sweeps across the chip
+ * like light catching a surface. Drawn as an overlay so no segment has to know. */
+
+/* With a 300% wide image and the band at 40–60%, positions 100% → 0% carry it from
+ * just off the left edge to just off the right edge — the whole run is on-chip. */
+@keyframes filter-bar-chip-shine {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0% 0;
+  }
+}
+
+.filter-bar-chip[data-shine]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: linear-gradient(
+    125deg,
+    transparent 40%,
+    color-mix(in oklab, var(--filter-bar-chip-shine, currentColor) 38%, transparent) 50%,
+    transparent 60%
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  animation: filter-bar-chip-shine 420ms cubic-bezier(0.4, 0, 0.2, 1) 60ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-bar-segment {
+    animation: none;
+  }
+
+  .filter-bar-chip[data-shine]::after {
+    animation: none;
+    display: none;
+  }
+}

@@ -43,7 +43,7 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false, color, tex
       ) : (
         <Txt
           variant="ui-md"
-          className={cn('text-center', !showFallbackTint && 'text-neutral4')}
+          className={cn('text-center', !showFallbackTint && 'text-muted-foreground')}
           style={showFallbackTint && textColor ? { color: textColor } : undefined}
         >
           {initial}

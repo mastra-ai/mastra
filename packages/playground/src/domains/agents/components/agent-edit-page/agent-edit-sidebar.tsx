@@ -1,12 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { FieldBlock, TextareaFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui/components/Tabs';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -141,78 +139,71 @@ export function AgentEditSidebar({
             <div className="flex flex-col gap-4 p-4">
               <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
-              {/* Agent Name */}
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="agent-name" className="text-icon5 text-ui-sm">
-                  Name <span className="text-accent2">*</span>
-                </Label>
-                <Input
-                  id="agent-name"
-                  placeholder="My Agent"
-                  className="bg-surface3"
-                  {...register('name')}
-                  error={!!errors.name}
-                  disabled={readOnly}
-                />
-                {errors.name && <span className="text-accent2 text-ui-sm">{errors.name.message}</span>}
-              </div>
+              <TextFieldBlock
+                label="Name"
+                required
+                placeholder="My Agent"
+                {...register('name')}
+                errorMsg={errors.name?.message}
+                disabled={readOnly}
+              />
 
-              {/* Description */}
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="agent-description" className="text-icon5 text-ui-sm">
-                  Description
-                </Label>
-                <Textarea
-                  id="agent-description"
-                  placeholder="Describe what this agent does"
-                  className="bg-surface3"
-                  {...register('description')}
-                  error={!!errors.description}
-                  disabled={readOnly}
-                />
-                {errors.description && <span className="text-accent2 text-ui-sm">{errors.description.message}</span>}
-              </div>
+              <TextareaFieldBlock
+                label="Description"
+                placeholder="Describe what this agent does"
+                {...register('description')}
+                errorMsg={errors.description?.message}
+                disabled={readOnly}
+              />
 
-              {/* Provider */}
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-icon5 text-ui-sm">
-                  Provider <span className="text-accent2">*</span>
-                </Label>
-                <Controller
-                  name="model.provider"
-                  control={control}
-                  render={({ field }) => (
-                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                      <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
-                    </div>
-                  )}
-                />
-                {errors.model?.provider && (
-                  <span className="text-accent2 text-ui-sm">{errors.model.provider.message}</span>
-                )}
-              </div>
+              <FieldBlock.Layout>
+                <FieldBlock.Column>
+                  <FieldBlock.Label name="model-provider" required>
+                    Provider
+                  </FieldBlock.Label>
+                  <Controller
+                    name="model.provider"
+                    control={control}
+                    render={({ field }) => (
+                      <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                        <LLMProviders
+                          id="input-model-provider"
+                          name="model-provider"
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          container={formRef}
+                          error={errors.model?.provider?.message}
+                        />
+                      </div>
+                    )}
+                  />
+                </FieldBlock.Column>
+              </FieldBlock.Layout>
 
-              {/* Model */}
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-icon5 text-ui-sm">
-                  Model <span className="text-accent2">*</span>
-                </Label>
-                <Controller
-                  name="model.name"
-                  control={control}
-                  render={({ field }) => (
-                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                      <LLMModels
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        llmId={form.watch('model.provider') || ''}
-                        container={formRef}
-                      />
-                    </div>
-                  )}
-                />
-                {errors.model?.name && <span className="text-accent2 text-ui-sm">{errors.model.name.message}</span>}
-              </div>
+              <FieldBlock.Layout>
+                <FieldBlock.Column>
+                  <FieldBlock.Label name="model-name" required>
+                    Model
+                  </FieldBlock.Label>
+                  <Controller
+                    name="model.name"
+                    control={control}
+                    render={({ field }) => (
+                      <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                        <LLMModels
+                          id="input-model-name"
+                          name="model-name"
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          llmId={form.watch('model.provider') || ''}
+                          container={formRef}
+                          error={errors.model?.name?.message}
+                        />
+                      </div>
+                    )}
+                  />
+                </FieldBlock.Column>
+              </FieldBlock.Layout>
             </div>
           </ScrollArea>
         </TabContent>

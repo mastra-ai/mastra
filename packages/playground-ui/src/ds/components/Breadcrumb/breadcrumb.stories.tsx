@@ -125,7 +125,7 @@ export const TruncatedLabel: Story = {
 
 const Usage = ({ title, children }: { title: string; children: ReactNode }) => (
   <div className="flex flex-col gap-1">
-    <Txt variant="ui-xs" className="text-neutral3">
+    <Txt variant="ui-xs" className="text-muted-foreground">
       {title}
     </Txt>
     <Header className="h-10 min-h-10 w-220 gap-2 overflow-hidden px-2">

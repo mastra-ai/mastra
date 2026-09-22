@@ -423,7 +423,6 @@ export function TraceDataPanelView({
                       onChange={e => setQuery(e.target.value)}
                       onReset={() => setQuery('')}
                       size="sm"
-                      variant="outline"
                       className="w-full"
                     />
                     <ButtonsGroup spacing="close" className="shrink-0">

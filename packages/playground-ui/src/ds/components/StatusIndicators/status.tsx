@@ -10,7 +10,7 @@ export type StatusProps = Omit<ComponentPropsWithoutRef<'span'>, 'children'> & {
 
 export function Status({ presentation, children, className, ...props }: StatusProps) {
   return (
-    <span className={cn('inline-flex items-center gap-2 text-neutral5', className)} {...props}>
+    <span className={cn('inline-flex items-center gap-2 text-foreground', className)} {...props}>
       <span className={statusDotClass(presentation)} aria-hidden />
       {children ?? (
         <Txt as="span" variant="ui-xs">

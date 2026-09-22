@@ -72,7 +72,7 @@ export function DatasetVersionsPanel({
   return (
     <div className="border-border1 grid w-64 grid-rows-[auto_1fr] gap-2 overflow-hidden border-l pt-3 pl-3">
       <div className="flex items-center justify-between gap-2 pr-1 pl-2">
-        <Txt as="h2" variant="ui-md" className="text-neutral3">
+        <Txt as="h2" variant="ui-md" className="text-muted-foreground">
           Versions
         </Txt>
         {isSelectionActive ? (
@@ -136,13 +136,13 @@ export function DatasetVersionsPanel({
                         />
                       )}
                       <span className="text-ui-sm flex min-w-0 flex-1 items-center gap-2">
-                        <span className="text-neutral5 shrink-0 font-medium">v.{item.version}</span>
+                        <span className="text-foreground shrink-0 font-medium">v.{item.version}</span>
                         {createdAtDate && (
-                          <span className="text-neutral3 min-w-0 flex-1 truncate">
+                          <span className="text-muted-foreground min-w-0 flex-1 truncate">
                             {format(createdAtDate, 'MMM d, yyyy HH:mm')}
                           </span>
                         )}
-                        {item.isCurrent && <span className="text-neutral3 shrink-0">latest</span>}
+                        {item.isCurrent && <span className="text-muted-foreground shrink-0">latest</span>}
                       </span>
                     </span>
                   </ThreadListItem>

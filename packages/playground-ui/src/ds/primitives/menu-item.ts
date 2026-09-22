@@ -69,8 +69,8 @@ export const menuEmptyClass =
 export const menuSearchClasses = {
   // Row = h-form-md input + py-0.5 → 32px, one notch above the 28px items so the
   // divider does not crowd the first option while the text stays on the item grid.
-  container: 'flex items-center gap-[.75em] border-b border-border px-[.9em] py-0.5 text-ui-smd',
+  container:
+    'flex items-center gap-[.75em] border-b border-border px-[.9em] py-0.5 text-ui-smd focus-within:bg-foreground/4',
   icon: 'size-[1.1em] shrink-0 text-muted-foreground',
-  input:
-    'h-form-md w-full bg-transparent text-ui-smd text-foreground outline-hidden placeholder:text-muted-foreground focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-foreground/45 focus-visible:outline-solid',
+  input: 'h-form-md w-full bg-transparent text-ui-smd text-foreground outline-hidden placeholder:text-muted-foreground',
 };

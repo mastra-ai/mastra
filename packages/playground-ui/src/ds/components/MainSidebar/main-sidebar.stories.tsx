@@ -64,8 +64,8 @@ const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, chi
 
 const HelperCopy = () => (
   <>
-    <p className="text-ui-md text-neutral5 font-medium">Main content area</p>
-    <p className="text-ui-sm text-neutral4 mt-2 max-w-[40ch]">
+    <p className="text-ui-md text-foreground font-medium">Main content area</p>
+    <p className="text-ui-sm text-muted-foreground mt-2 max-w-[40ch]">
       Hover the sidebar edge to reveal the handle. Drag to resize, or click to toggle.
     </p>
   </>
@@ -86,10 +86,10 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
     <main className="flex min-w-0 flex-1 flex-col">
       <header className="mx-2 mt-1.5 flex h-12 shrink-0 items-center justify-between px-3">
         <div className="min-w-0">
-          <p className="text-ui-lg text-neutral6 truncate font-semibold">Traces</p>
-          <p className="text-ui-xs text-neutral4 truncate">Observability / Traces</p>
+          <p className="text-ui-lg text-foreground truncate font-semibold">Traces</p>
+          <p className="text-ui-xs text-muted-foreground truncate">Observability / Traces</p>
         </div>
-        <span className="border-border1 bg-surface3 text-ui-xs text-neutral5 rounded-md border px-2.5 py-1 font-medium">
+        <span className="border-border1 bg-surface3 text-ui-xs text-foreground rounded-md border px-2.5 py-1 font-medium">
           Live
         </span>
       </header>
@@ -102,16 +102,16 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
               ['Error rate', '0.8%'],
             ].map(([label, value]) => (
               <div key={label} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
-                <p className="text-ui-xs text-neutral3 font-medium uppercase">{label}</p>
-                <p className="text-neutral6 text-header-lg mt-2 font-semibold">{value}</p>
+                <p className="text-ui-xs text-muted-foreground font-medium uppercase">{label}</p>
+                <p className="text-foreground text-header-lg mt-2 font-semibold">{value}</p>
               </div>
             ))}
           </div>
           <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_280px] gap-4">
             <div className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
               <div className="mb-4 flex items-center justify-between">
-                <p className="text-ui-md text-neutral6 font-semibold">Recent spans</p>
-                <p className="text-ui-xs text-neutral4">Updated now</p>
+                <p className="text-ui-md text-foreground font-semibold">Recent spans</p>
+                <p className="text-ui-xs text-muted-foreground">Updated now</p>
               </div>
               <div className="grid gap-2">
                 {['agent.generate', 'tool.weather.lookup', 'workflow.evaluate', 'llm.call'].map((name, index) => (
@@ -119,8 +119,8 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
                     key={name}
                     className="border-border1 bg-surface2 grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border px-3 py-2"
                   >
-                    <span className="text-ui-sm text-neutral6 truncate">{name}</span>
-                    <span className="text-ui-xs text-neutral4 text-right">
+                    <span className="text-ui-sm text-foreground truncate">{name}</span>
+                    <span className="text-ui-xs text-muted-foreground text-right">
                       {index === 1 ? '91ms' : `${220 + index * 56}ms`}
                     </span>
                     <span className="text-ui-xs text-accent1 text-right font-medium">ok</span>
@@ -129,19 +129,19 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
               </div>
             </div>
             <aside className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
-              <p className="text-ui-md text-neutral6 font-semibold">Trace detail</p>
+              <p className="text-ui-md text-foreground font-semibold">Trace detail</p>
               <dl className="text-ui-sm mt-4 grid gap-3">
                 <div>
-                  <dt className="text-neutral3">Service</dt>
-                  <dd className="text-neutral6 mt-1">studio</dd>
+                  <dt className="text-muted-foreground">Service</dt>
+                  <dd className="text-foreground mt-1">studio</dd>
                 </div>
                 <div>
-                  <dt className="text-neutral3">Environment</dt>
-                  <dd className="text-neutral6 mt-1">development</dd>
+                  <dt className="text-muted-foreground">Environment</dt>
+                  <dd className="text-foreground mt-1">development</dd>
                 </div>
                 <div>
-                  <dt className="text-neutral3">Status</dt>
-                  <dd className="text-neutral6 mt-1">Completed</dd>
+                  <dt className="text-muted-foreground">Status</dt>
+                  <dd className="text-foreground mt-1">Completed</dd>
                 </div>
               </dl>
             </aside>
@@ -156,12 +156,12 @@ const MobileFrame = ({ children }: { children: React.ReactNode }) => (
   <div className="bg-surface1 flex h-screen w-screen flex-col overflow-hidden">
     <header className="border-border1 flex h-12 shrink-0 items-center gap-3 border-b px-3">
       <MainSidebar.MobileTrigger />
-      <span className="text-neutral6 text-ui-md font-medium">Mastra Studio</span>
+      <span className="text-foreground text-ui-md font-medium">Mastra Studio</span>
     </header>
     {children}
     <div className="min-w-0 flex-1 p-4">
-      <p className="text-ui-md text-neutral5 font-medium">Mobile viewport</p>
-      <p className="text-ui-sm text-neutral4 mt-2 max-w-[34ch]">
+      <p className="text-ui-md text-foreground font-medium">Mobile viewport</p>
+      <p className="text-ui-sm text-muted-foreground mt-2 max-w-[34ch]">
         Switch viewports in the toolbar. The sidebar auto-detects via <code>matchMedia</code> against the iframe
         viewport — no manual prop needed.
       </p>
@@ -262,14 +262,14 @@ const StudioSidebarBody = () => {
             <button
               type="button"
               aria-label="Search and navigate"
-              className="border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5 border"
+              className="border-border1 bg-surface3 text-foreground hover:bg-surface4 hover:text-foreground active:bg-surface5 [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground border"
             >
               <Search />
               <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
               {state !== 'collapsed' && (
                 <kbd
                   aria-hidden="true"
-                  className="border-border1 bg-surface4 text-neutral3 text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                  className="border-border1 bg-surface4 text-muted-foreground text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                 >
                   ⌘K
                 </kbd>
@@ -303,7 +303,7 @@ const StudioSidebarBody = () => {
         {state !== 'collapsed' && (
           <>
             <hr className="bg-border1 mx-6 my-2 h-px border-0" />
-            <span className="bg-sidebar-nav-active text-ui-xs dark:text-neutral6 ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none font-semibold text-black/80">
+            <span className="bg-sidebar-nav-active text-ui-xs dark:text-foreground ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none font-semibold text-black/80">
               v0.0.0
             </span>
           </>
@@ -707,7 +707,9 @@ export const AsChild: Story = {
                       <DialogTitle>Contact support</DialogTitle>
                       <DialogDescription>asChild lets a NavLink act as a Dialog trigger.</DialogDescription>
                     </DialogHeader>
-                    <p className="text-ui-sm text-neutral4">Anything that can be clicked can be a sidebar item.</p>
+                    <p className="text-ui-sm text-muted-foreground">
+                      Anything that can be clicked can be a sidebar item.
+                    </p>
                   </DialogContent>
                 </Dialog>
 

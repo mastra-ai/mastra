@@ -1,8 +1,8 @@
-import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import CodeMirror from '@uiw/react-codemirror';
+import { useId } from 'react';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { WorkflowRunOptions } from '@/domains/workflows/workflow/workflow-run-options';
 
@@ -19,7 +19,7 @@ export const TracingRunOptions = ({
   hideTitle = false,
   showEditorHeader = false,
 }: TracingRunOptionsProps = {}) => {
-  const theme = useCodemirrorTheme();
+  const fieldName = useId();
   const { settings, setSettings, entityType } = useTracingSettings();
 
   const handleChange = (value: string) => {
@@ -45,32 +45,29 @@ export const TracingRunOptions = ({
   return (
     <div className={cn('px-5 py-2', !hideTitle && 'space-y-2', className)}>
       {!hideTitle && (
-        <Txt as="h3" variant="ui-md" className="text-neutral3">
+        <Txt as="h3" variant="ui-md" className="text-muted-foreground">
           Tracing Options
         </Txt>
       )}
 
       {showEditorHeader && (
         <div className="flex items-center justify-between pb-2">
-          <Txt as="label" variant="ui-md" className="text-neutral3">
+          <FieldBlock.Label name={fieldName} size="bigger">
             Tracing Options (JSON)
-          </Txt>
-          <Txt as="span" variant="ui-xs" className="text-neutral3">
+          </FieldBlock.Label>
+          <Txt as="span" variant="ui-xs" className="text-muted-foreground">
             Auto-applied on valid JSON
           </Txt>
         </div>
       )}
 
-      <CodeMirror
+      <CodeEditor
+        id={`input-${fieldName}`}
         value={strValue}
         onChange={handleChange}
-        theme={theme}
-        extensions={[jsonLanguage]}
-        className={cn(
-          editorClassName,
-          'overflow-y-scroll rounded-lg border border-border1 bg-surface2 overflow-hidden p-3',
-          '[&_.cm-editor]:!bg-surface2 [&_.cm-gutters]:!bg-surface2',
-        )}
+        language="json"
+        showCopyButton={false}
+        className={editorClassName}
       />
 
       {entityType === 'workflow' && <WorkflowRunOptions />}

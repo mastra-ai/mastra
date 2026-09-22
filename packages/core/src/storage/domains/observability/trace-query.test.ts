@@ -4,6 +4,8 @@ import {
   compareTraceQueryStrings,
   createTraceQueryObservedFieldDescriptor,
   encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
   getTraceQueryCanonicalFieldDescriptors,
   getTraceQueryFieldsArgsSchema,
   getTraceQueryFieldsResponseSchema,
@@ -36,6 +38,7 @@ import {
   traceQueryGroupResponseSchema,
   traceQueryPaginatedTraceResponseSchema,
   traceQueryRequestSchema,
+  traceQueryResponseSchema,
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
   TraceQueryExecutionError,
@@ -56,6 +59,80 @@ function parsed(request: unknown = baseRequest) {
 }
 
 const baseThreadRequest = { traces: baseRequest };
+
+describe('trace delta contract', () => {
+  it.each([
+    { mode: 'delta', page: {} },
+    { mode: 'delta', pagination: {} },
+    { mode: 'delta', group: { by: ['threadId'] } },
+    { mode: 'delta', orderBy: [{ field: 'startedAt', direction: 'desc' }] },
+    { after: 'cursor' },
+    { limit: 10 },
+    { mode: 'delta', limit: 0 },
+    { mode: 'delta', limit: 101 },
+  ])('rejects invalid pagination combinations: %j', fields => {
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, ...fields }).success).toBe(false);
+  });
+
+  it('shares the numbered-page binding with delta while permitting different batch sizes', () => {
+    const page = planTraceQuery(
+      parsed({ ...baseRequest, pagination: {}, orderBy: [{ field: 'endedAt', direction: 'asc' }] }),
+    );
+    if (page.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const after = encodeTraceQueryDeltaCursor(page, 'pg', '42:3');
+    const delta = planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after }));
+    expect(delta).toMatchObject({
+      paginationMode: 'delta',
+      limit: 10,
+      deltaCursor: { adapter: 'pg', watermark: '42:3' },
+    });
+    if (delta.paginationMode !== 'delta') throw new Error('Expected delta');
+    expect(getTraceQueryDeltaWatermark(delta, 'pg')).toBe('42:3');
+    expect(() => getTraceQueryDeltaWatermark(delta, 'duckdb')).toThrow(TraceQueryCursorError);
+    expect(planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after, limit: 100 }))).toMatchObject({ limit: 100 });
+  });
+
+  it('rejects malformed, keyset, predicate, time-range and authorization mismatches', () => {
+    const plan = planTraceQuery(parsed({ ...baseRequest, pagination: {} }), { authorizationBinding: 'tenant-a' });
+    if (plan.paginationMode !== 'page') throw new Error('Expected numbered page');
+    const after = encodeTraceQueryDeltaCursor(plan, 'pg', '42:3');
+    for (const fields of [
+      { after: 'garbage' },
+      { after, where: { op: 'exists', path: 'threadId' } },
+      { after, timeRange: { ...baseRequest.timeRange, to: '2026-08-31T00:00:00Z' } },
+    ]) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, mode: 'delta', ...fields }), { authorizationBinding: 'tenant-a' }),
+      ).toThrow(TraceQueryCursorError);
+    }
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after }), { authorizationBinding: 'tenant-b' }),
+    ).toThrow(TraceQueryCursorError);
+    const keyset = planTraceQuery(parsed());
+    if (keyset.result !== 'traces' || keyset.paginationMode !== 'keyset') throw new Error('Expected keyset');
+    const keysetCursor = encodeTraceQueryCursor(keyset, {
+      result: 'traces',
+      traceId: 'trace-a',
+      sortValue: '2026-08-01T00:00:00Z',
+    });
+    expect(() => planTraceQuery(parsed({ ...baseRequest, mode: 'delta', after: keysetCursor }))).toThrow(
+      TraceQueryCursorError,
+    );
+    expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after } }))).toThrow(TraceQueryCursorError);
+  });
+
+  it('requires exactly one metadata shape and rejects thread delta', () => {
+    const delta = { traces: [], delta: { limit: 10, hasMore: false }, deltaCursor: 'cursor' };
+    expect(traceQueryResponseSchema.safeParse(delta).success).toBe(true);
+    expect(traceQueryResponseSchema.safeParse({ ...delta, page: { next: null } }).success).toBe(false);
+    expect(
+      traceQueryResponseSchema.safeParse({ ...delta, pagination: { total: 0, page: 0, perPage: 10, hasMore: false } })
+        .success,
+    ).toBe(false);
+    expect(traceQueryResponseSchema.safeParse({ traces: [], delta: delta.delta }).success).toBe(false);
+    expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, mode: 'delta' }).success).toBe(false);
+  });
+});
 
 function parsedThreads(request: unknown = baseThreadRequest) {
   return parseQueryThreadsInput(request);

@@ -50,13 +50,13 @@ export function ReferenceViewerDialog({
         <div className="border-border1 bg-surface3 flex items-center justify-between border-b px-4 py-4">
           <div className="flex items-center gap-3">
             <div className="bg-surface5 rounded p-1.5">
-              <FileText className="text-neutral4 h-4 w-4" />
+              <FileText className="text-muted-foreground h-4 w-4" />
             </div>
             <div>
-              <h2 id="reference-viewer-title" className="text-neutral6 text-ui-md font-medium">
+              <h2 id="reference-viewer-title" className="text-foreground text-ui-md font-medium">
                 {referencePath}
               </h2>
-              <p className="text-neutral3 text-ui-sm">from {skillName}</p>
+              <p className="text-muted-foreground text-ui-sm">from {skillName}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -69,7 +69,7 @@ export function ReferenceViewerDialog({
             <button
               onClick={() => onOpenChange(false)}
               aria-label="Close reference viewer"
-              className="hover:bg-surface4 text-neutral3 hover:text-neutral5 rounded-lg p-2 transition-colors"
+              className="hover:bg-surface4 text-muted-foreground hover:text-foreground rounded-lg p-2 transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
@@ -85,14 +85,14 @@ export function ReferenceViewerDialog({
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <p className="mb-2 text-red-400">Failed to load reference</p>
-              <p className="text-neutral3 text-ui-md">{error}</p>
+              <p className="text-muted-foreground text-ui-md">{error}</p>
             </div>
           ) : content ? (
-            <pre className="text-neutral5 bg-surface3 text-ui-md overflow-auto rounded-lg p-4 font-mono whitespace-pre-wrap">
+            <pre className="text-foreground bg-surface3 text-ui-md overflow-auto rounded-lg p-4 font-mono whitespace-pre-wrap">
               {content}
             </pre>
           ) : (
-            <div className="text-neutral3 flex items-center justify-center py-8">No content available</div>
+            <div className="text-muted-foreground flex items-center justify-center py-8">No content available</div>
           )}
         </div>
       </div>

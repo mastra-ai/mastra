@@ -72,7 +72,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="text-ui-md text-neutral6 min-w-0 truncate" data-testid="skill-view-title">
+          <div className="text-ui-md text-foreground min-w-0 truncate" data-testid="skill-view-title">
             {skill.name}
           </div>
         </div>
@@ -101,9 +101,9 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
       {/* Body */}
       <div className="bg-surface1 min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[80ch] px-4 pt-4 pb-10 md:px-10">
-          <h1 className="text-header-md text-neutral6">{skill.name}</h1>
+          <h1 className="text-header-md text-foreground">{skill.name}</h1>
           {skill.description && (
-            <p className="text-ui-md text-neutral4 mt-2" data-testid="skill-view-description">
+            <p className="text-ui-md text-muted-foreground mt-2" data-testid="skill-view-description">
               {skill.description}
             </p>
           )}

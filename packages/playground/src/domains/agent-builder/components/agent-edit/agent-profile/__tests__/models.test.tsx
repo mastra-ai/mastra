@@ -116,12 +116,12 @@ describe('Models', () => {
   });
 
   describe('when rendering the model grid', () => {
-    it('renders an uppercase text-neutral3 section title per provider', async () => {
+    it('renders an uppercase text-muted-foreground section title per provider', async () => {
       const { getByTestId } = await renderModels();
 
       const openaiTitle = getByTestId('model-provider-section-title-openai');
       expect(openaiTitle.textContent).toBe('OpenAI');
-      expect(openaiTitle.className).toContain('text-neutral3');
+      expect(openaiTitle.className).toContain('text-muted-foreground');
       expect(openaiTitle.className).toContain('uppercase');
       expect(openaiTitle.className).toContain('text-ui-sm');
 

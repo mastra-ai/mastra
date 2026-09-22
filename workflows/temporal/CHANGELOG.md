@@ -1,5 +1,17 @@
 # @mastra/temporal
 
+## 0.4.6-alpha.10
+
+### Patch Changes
+
+- Fixed Temporal workflows to pass request context and run metadata to activities and child workflows. ([#24560](https://github.com/mastra-ai/mastra/pull/24560))
+
+- Fixed Temporal builds to preserve Node.js dependencies used by activities while rejecting builtins that remain in generated workflow bundles. ([#24142](https://github.com/mastra-ai/mastra/pull/24142))
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0), [`361f142`](https://github.com/mastra-ai/mastra/commit/361f142de0a50916b662e2a8fde4772a91f0566a)]:
+  - @mastra/core@1.68.0-alpha.10
+  - @mastra/deployer@1.68.0-alpha.10
+
 ## 0.4.6-alpha.9
 
 ### Patch Changes

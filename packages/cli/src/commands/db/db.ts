@@ -36,7 +36,7 @@ export function registerEnvDbCommands(envCommand: Command) {
       '[environment]',
       "Environment name, slug, or ID (default: the project's only environment, or prompt if there are several)",
     )
-    .requiredOption('--kind <kind>', 'Database provider (turso, neon, redis)')
+    .requiredOption('--kind <kind>', 'Database provider (turso, neon)')
     .option(...PROJECT_OPTION)
     .option('--name <name>', 'Database name (default: derived from the project slug)')
     .option('--region <region>', 'Provider region ID (shared databases only; environment region wins otherwise)')
@@ -280,8 +280,11 @@ async function listDatabasesAction(envArg: string | undefined, options: { projec
 /* ------------------------------------------------------------------ */
 
 function parseKind(kind: string): DatabaseKind {
+  // `redis` is still accepted so orgs with the managed-redis feature flag can
+  // provision one, but it's deliberately absent from user-facing hints until
+  // the feature is released — the platform rejects the attach for other orgs.
   if (kind !== 'turso' && kind !== 'neon' && kind !== 'redis') {
-    throw new Error(`Unsupported database kind: ${kind}. Supported kinds: turso, neon, redis`);
+    throw new Error(`Unsupported database kind: ${kind}. Supported kinds: turso, neon`);
   }
   return kind;
 }
