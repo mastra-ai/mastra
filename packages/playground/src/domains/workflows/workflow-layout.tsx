@@ -4,7 +4,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { useMatch, useNavigate, useParams } from 'react-router';
 import { WorkflowRunCopyAction, WorkflowRunCrumb } from './workflow-crumbs';
 import { WorkflowHeader } from './workflow-header';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -33,26 +33,26 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+const WORKFLOW_PAGE_TABS: readonly WorkflowPageTab[] = ['graph', 'traces', 'schedules'];
+const isWorkflowPageTab = (segment: string | undefined): segment is WorkflowPageTab =>
+  WORKFLOW_PAGE_TABS.includes(segment as WorkflowPageTab);
+
 /** Shadows the global "go to" sequences with workflow-scoped targets while a workflow page is mounted. */
 const WorkflowShortcuts = ({ workflowId }: { workflowId: string }) => {
   const navigate = useNavigate();
-  useKeydown({ 'g$+t': () => navigate(`/workflows/${workflowId}/traces`) });
+  useKeydown({ 'g$+t': () => navigate(`/workflows/${encodeURIComponent(workflowId)}/traces`) });
   return null;
 };
 
 function WorkflowRoute({ children }: { children: React.ReactNode }) {
   const { workflowId, runId } = useParams();
-  const location = useLocation();
+  // Match the child segment rather than searching the pathname, so a workflow whose id is
+  // itself "traces" or "schedules" doesn't get the wrong tab highlighted.
+  const tabMatch = useMatch('/workflows/:workflowId/:tab/*');
   const { isLoading: isWorkflowLoading } = useWorkflow(workflowId);
   const { hasObservability } = useHasObservability();
 
-  const activeTab: WorkflowPageTab | 'none' = location.pathname.includes('/graph')
-    ? 'graph'
-    : location.pathname.includes('/traces')
-      ? 'traces'
-      : location.pathname.includes('/schedules')
-        ? 'schedules'
-        : 'none';
+  const activeTab: WorkflowPageTab | 'none' = isWorkflowPageTab(tabMatch?.params.tab) ? tabMatch.params.tab : 'none';
   const crumbs: CrumbDef[] = [
     navCrumb('/workflows'),
     // The `to` link only renders on the nested graph/:runId route.

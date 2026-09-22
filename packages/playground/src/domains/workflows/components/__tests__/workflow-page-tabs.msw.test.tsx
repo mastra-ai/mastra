@@ -132,4 +132,37 @@ describe('WorkflowPageTabs', () => {
       await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith(`/workflows/${WORKFLOW_ID}/schedules`));
     });
   });
+
+  describe('when the workflow id is itself named "traces"', () => {
+    it('selects the tab from the route segment, not from a substring of the workflow id', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({ traces: weatherWorkflow })),
+        http.get(`${BASE_URL}/api/workflows/traces`, () => HttpResponse.json(weatherWorkflow)),
+        ...commonHandlers().slice(2),
+      );
+      renderLayout('/workflows/traces/schedules');
+
+      const schedules = await screen.findByRole('tab', { name: 'Schedules' });
+
+      expect(schedules.getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('tab', { name: 'Traces' }).getAttribute('aria-selected')).toBe('false');
+    });
+  });
+
+  describe('when the workflow id contains reserved URL characters', () => {
+    it('URL-encodes the id in the tab target', async () => {
+      const rawId = 'team/ship?v2';
+      const encodedId = encodeURIComponent(rawId);
+      server.use(
+        http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({ [rawId]: weatherWorkflow })),
+        http.get(`${BASE_URL}/api/workflows/${encodedId}`, () => HttpResponse.json(weatherWorkflow)),
+        ...commonHandlers().slice(2),
+      );
+      renderLayout(`/workflows/${encodedId}/traces`);
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Schedules' }));
+
+      await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith(`/workflows/${encodedId}/schedules`));
+    });
+  });
 });

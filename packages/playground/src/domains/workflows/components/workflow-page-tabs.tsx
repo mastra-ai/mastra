@@ -85,10 +85,11 @@ export function WorkflowPageTabs({ workflowId, activeTab, showObservability = fa
     </p>
   ) : undefined;
 
+  const encodedWorkflowId = encodeURIComponent(workflowId);
   const hrefMap: Record<WorkflowPageTab, string> = {
-    graph: `/workflows/${workflowId}/graph`,
-    traces: `/workflows/${workflowId}/traces`,
-    schedules: `/workflows/${workflowId}/schedules`,
+    graph: `/workflows/${encodedWorkflowId}/graph`,
+    traces: `/workflows/${encodedWorkflowId}/traces`,
+    schedules: `/workflows/${encodedWorkflowId}/schedules`,
   };
 
   const handleTabChange = (value: WorkflowPageTab | 'none') => {

@@ -120,6 +120,27 @@ describe('workflow keyboard shortcuts', () => {
     });
   });
 
+  describe('when the workflow id contains reserved URL characters', () => {
+    it('g then t keeps the id URL-encoded in the traces target', async () => {
+      const rawId = 'team/ship?v2';
+      const encodedId = encodeURIComponent(rawId);
+      server.use(
+        http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({ [rawId]: weatherWorkflow })),
+        http.get(`${BASE_URL}/api/workflows/${encodedId}`, () => HttpResponse.json(weatherWorkflow)),
+        http.get(`${BASE_URL}/api/schedules`, () => HttpResponse.json(noSchedules)),
+        http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
+        http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesWithObservability)),
+      );
+      renderAt(`/workflows/${encodedId}/schedules`);
+      await screen.findByTestId('workflow-schedules');
+
+      pressGThenT();
+
+      await locationIs(`/workflows/${encodedId}/traces`);
+      await screen.findByTestId('workflow-traces');
+    });
+  });
+
   describe('when leaving the workflow page for /workflows', () => {
     it('g then t goes back to the global traces page', async () => {
       installHandlers();
