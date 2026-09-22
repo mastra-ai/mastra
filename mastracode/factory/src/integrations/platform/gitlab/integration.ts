@@ -1,10 +1,16 @@
+import type { MastraWorker } from '@mastra/core/worker';
+
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.js';
 import type { GitLabRuleOverrides } from '../../gitlab/default-rules.js';
 import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.js';
 import type { GitLabStatusConnection } from '../../gitlab/integration.js';
+import { attachGitLabRules } from '../../gitlab/rules.js';
+import type { IntegrationContext } from '../../base.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
 import type { PlatformApiClientConfig } from '../api-client.js';
+import { PlatformGitLabEventWorker } from './event-worker.js';
+import type { PlatformGitLabEventStorage } from './event-worker.js';
 
 interface PlatformIntegrationConnection {
   id: string;
@@ -32,7 +38,15 @@ export interface PlatformGitLabIntegrationConfig {
   rules?: GitLabRuleOverrides;
   clientConfig?: PlatformApiClientConfig;
   connectionId?: string;
+  /**
+   * Optional. Only a direct project webhook to `/web/gitlab/webhook` needs it;
+   * a Platform-connected deployment receives events by polling instead.
+   */
   webhookSecret?: string;
+  /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED`, and to true when that is unset. */
+  pollingEnabled?: boolean;
+  /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS`, and to the worker's 20 s when unset. */
+  pollingIntervalMs?: number;
 }
 
 export class PlatformGitLabIntegration extends GitLabIntegrationBase {
@@ -40,6 +54,8 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   readonly #connectionId: string | undefined;
   readonly #endpointHost: string;
   readonly #webhookSecret: string | undefined;
+  readonly #pollingEnabled: boolean;
+  readonly #pollingIntervalMs: number | undefined;
 
   constructor(config: PlatformGitLabIntegrationConfig = {}) {
     super(config.rules);
@@ -49,6 +65,10 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
     this.#connectionId = connectionId;
     this.#endpointHost = new URL(clientConfig.baseUrl).host;
     this.#webhookSecret = config.webhookSecret?.trim() || process.env.MASTRA_GITLAB_WEBHOOK_SECRET?.trim() || undefined;
+    this.#pollingEnabled =
+      config.pollingEnabled ?? process.env.MASTRA_PLATFORM_GITLAB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
+    this.#pollingIntervalMs =
+      config.pollingIntervalMs ?? optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS');
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
@@ -103,6 +123,32 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
     return this.#context(connection);
   }
 
+  /**
+   * The reconcile sweeps from the base class plus, when polling is on, the
+   * Platform event poller. Polling replaces the direct project webhook: the
+   * webhook route stays mounted for deployments that also configured a secret,
+   * but nothing in Platform mode requires one.
+   */
+  override workers(ctx: IntegrationContext): MastraWorker[] {
+    const workers = super.workers(ctx);
+    if (!this.#pollingEnabled) return workers;
+    if (!ctx.controller) {
+      throw new Error('Platform GitLab event polling requires the mounted Mastra Code controller.');
+    }
+    return [
+      ...workers,
+      new PlatformGitLabEventWorker({
+        client: this.#client,
+        controller: ctx.controller,
+        gitlab: this,
+        storage: ctx.storage.generic as unknown as PlatformGitLabEventStorage,
+        listConnections: () => this.listConnections(),
+        ingestFactoryEvent: attachGitLabRules(this, ctx),
+        intervalMs: this.#pollingIntervalMs,
+      }),
+    ];
+  }
+
   diagnostics(): Record<string, unknown> {
     return {
       configured: true,
@@ -110,6 +156,8 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       endpointHost: this.#endpointHost,
       connectionFilterConfigured: Boolean(this.#connectionId),
       webhookConfigured: Boolean(this.#webhookSecret),
+      pollingEnabled: this.#pollingEnabled,
+      ...(this.#pollingIntervalMs === undefined ? {} : { pollingIntervalMs: this.#pollingIntervalMs }),
     };
   }
 
@@ -145,4 +193,14 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       },
     };
   }
+}
+
+function optionalPositiveIntegerEnv(name: 'MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS'): number | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) return undefined;
+  const parsed = Number(value);
+  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(parsed)) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return parsed;
 }

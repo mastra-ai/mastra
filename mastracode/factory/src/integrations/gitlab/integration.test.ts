@@ -462,7 +462,42 @@ describe('PlatformGitLabIntegration', () => {
       mode: 'platform',
       connectionFilterConfigured: true,
       webhookConfigured: false,
+      pollingEnabled: true,
     });
+    expect(gitlab.diagnostics()).not.toHaveProperty('pollingIntervalMs');
+  });
+
+  it('runs the Platform event poller by default and reports its settings without needing a webhook secret', () => {
+    const context = {
+      controller: {},
+      storage: { generic: { integrationId: 'gitlab', settings: { get: async () => null, save: async () => {} } } },
+    } as never;
+
+    expect(platform().workers(context).map(worker => worker.name)).toEqual(['platform-gitlab-events']);
+
+    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '45000');
+    const tuned = platform();
+    expect(tuned.diagnostics()).toMatchObject({ pollingEnabled: true, pollingIntervalMs: 45_000, webhookConfigured: false });
+    expect(tuned.workers(context)).toHaveLength(1);
+    expect(() => tuned.workers({ storage: context.storage } as never)).toThrow(
+      'Platform GitLab event polling requires the mounted Mastra Code controller.',
+    );
+
+    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '0');
+    expect(() => platform()).toThrow('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS must be a positive integer.');
+    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '');
+
+    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_ENABLED', 'false');
+    const disabled = platform();
+    expect(disabled.diagnostics()).toMatchObject({ pollingEnabled: false });
+    expect(disabled.workers({ storage: context.storage } as never)).toEqual([]);
+    expect(
+      new PlatformGitLabIntegration({
+        clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+        pollingEnabled: true,
+        pollingIntervalMs: 30_000,
+      }).diagnostics(),
+    ).toMatchObject({ pollingEnabled: true, pollingIntervalMs: 30_000 });
   });
   it.each([
     {
