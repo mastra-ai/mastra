@@ -7,8 +7,8 @@ import { Icon, iconSizeClasses, type IconSize } from '@/ds/icons/Icon';
 import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,
-  disabledFilledSurfaceStyle,
   disabledOutlineSurfaceStyle,
+  raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -48,11 +48,15 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // The raised card material, the same one a field wears: a neutral filled control is
+        // one material system-wide. No border of its own — the material's rim is its edge,
+        // and focus repaints that rim. Inside a ButtonsGroup the group flattens the rim and
+        // hands every segment the same 1px border instead (see `buttons-group.css`).
         default: cn(
-          'border border-border bg-fill text-foreground not-disabled:hover:bg-fill-hover not-disabled:active:bg-fill-active',
+          'border-0',
+          raisedControlSurfaceStyle,
           NEUTRAL_ICON_STATE,
-          disabledFilledSurfaceStyle,
-          'aria-disabled:border-border aria-disabled:bg-fill-subtle',
+          'disabled:bg-fill-subtle aria-disabled:bg-fill-subtle',
         ),
         // Filled variants take the opaque ladder: their rest fill is a colour, not a rung
         // layered on the surface, so a state that thinned it would let whatever the button
