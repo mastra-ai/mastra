@@ -1943,6 +1943,34 @@ export class MemoryPG extends MemoryStorage {
     return resource;
   }
 
+  mutateResourceWorkingMemory = async ({
+    resourceId,
+    update,
+  }: {
+    resourceId: string;
+    update: (current: string | null) => string;
+  }): Promise<void> => {
+    const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
+    await this.#db.client.tx(async transaction => {
+      const now = new Date().toISOString();
+      await transaction.none(
+        `INSERT INTO ${tableName} (id, "workingMemory", metadata, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
+         VALUES ($1, NULL, '{}', $2::timestamptz AT TIME ZONE 'UTC', $2::timestamptz AT TIME ZONE 'UTC', $2::timestamptz, $2::timestamptz) ON CONFLICT (id) DO NOTHING`,
+        [resourceId, now],
+      );
+      const current = await transaction.one<{ workingMemory: string | null }>(
+        `SELECT "workingMemory" FROM ${tableName} WHERE id = $1 FOR UPDATE`,
+        [resourceId],
+      );
+      const workingMemory = update(current.workingMemory ?? null);
+      if (typeof workingMemory !== 'string') throw new Error('Working-memory updater must return a string');
+      await transaction.none(
+        `UPDATE ${tableName} SET "workingMemory" = $2, "updatedAt" = $3::timestamptz AT TIME ZONE 'UTC', "updatedAtZ" = $3::timestamptz WHERE id = $1`,
+        [resourceId, workingMemory, new Date().toISOString()],
+      );
+    });
+  };
+
   async updateResource({
     resourceId,
     workingMemory,

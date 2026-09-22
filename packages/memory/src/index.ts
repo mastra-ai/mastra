@@ -1125,16 +1125,22 @@ export class Memory extends MastraMemory {
     }
   }
 
+  async supportsAtomicWorkingMemoryUpdates(): Promise<boolean> {
+    return typeof (await this.getMemoryStore()).mutateResourceWorkingMemory === 'function';
+  }
+
   async updateWorkingMemory({
     threadId,
     resourceId,
     workingMemory,
+    mode = 'replace',
     memoryConfig,
     observabilityContext,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
+    mode?: 'replace' | 'merge';
     memoryConfig?: MemoryConfigInternal;
     observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void> {
@@ -1174,7 +1180,27 @@ export class Memory extends MastraMemory {
 
       try {
         const memoryStore = await this.getMemoryStore();
-        if (scope === 'resource' && resourceId) {
+        if (mode === 'merge') {
+          if (scope !== 'resource' || !resourceId || !memoryStore.mutateResourceWorkingMemory) {
+            throw new Error('Atomic working-memory merge requires resource scope and a supporting storage adapter');
+          }
+          const patch: unknown = JSON.parse(workingMemory);
+          if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+            throw new Error('Working-memory merge requires a JSON object');
+          }
+          await memoryStore.mutateResourceWorkingMemory({
+            resourceId,
+            update: current => {
+              const existing: unknown = current === null ? {} : JSON.parse(current);
+              if (!existing || typeof existing !== 'object' || Array.isArray(existing)) {
+                throw new Error('Existing working memory must be a JSON object for merge');
+              }
+              return JSON.stringify(
+                deepMergeWorkingMemory(existing as Record<string, unknown>, patch as Record<string, unknown>),
+              );
+            },
+          });
+        } else if (scope === 'resource' && resourceId) {
           await memoryStore.updateResource({
             resourceId,
             workingMemory,

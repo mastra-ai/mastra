@@ -34,7 +34,9 @@ export function deepMergeWorkingMemory(
 
   for (const key of Object.keys(update)) {
     const updateValue = update[key];
-    const existingValue = result[key];
+    const existingValue = Object.hasOwn(result, key) ? result[key] : undefined;
+    const setValue = (value: unknown) =>
+      Object.defineProperty(result, key, { value, enumerable: true, writable: true, configurable: true });
 
     // undefined means the field was omitted - leave existing value untouched
     if (updateValue === undefined) {
@@ -47,7 +49,7 @@ export function deepMergeWorkingMemory(
     }
     // Arrays are replaced entirely (too complex to diff/merge arrays of objects)
     else if (Array.isArray(updateValue)) {
-      result[key] = updateValue;
+      setValue(updateValue);
     }
     // Recursively merge nested objects. Brand-new branches recurse too, so nulls inside
     // them are dropped instead of being stored literally.
@@ -57,11 +59,11 @@ export function deepMergeWorkingMemory(
           ? (existingValue as Record<string, unknown>)
           : undefined;
 
-      result[key] = deepMergeWorkingMemory(existingBranch, updateValue as Record<string, unknown>);
+      setValue(deepMergeWorkingMemory(existingBranch, updateValue as Record<string, unknown>));
     }
     // Primitive values or new properties: just set them
     else {
-      result[key] = updateValue;
+      setValue(updateValue);
     }
   }
 
@@ -84,7 +86,12 @@ function stripNullsFromOptional(value: unknown, schema: Record<string, unknown>)
         continue;
       }
 
-      result[key] = stripNullsFromOptional(propertyValue, properties[key] ?? {});
+      Object.defineProperty(result, key, {
+        value: stripNullsFromOptional(propertyValue, Object.hasOwn(properties, key) ? properties[key]! : {}),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
 
     return result;
@@ -232,23 +239,6 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
       let workingMemory: string;
 
       if (usesMergeSemantics) {
-        // Schema-based: fetch existing, merge, save
-        const existingRaw = await memory.getWorkingMemory({
-          threadId,
-          resourceId,
-          memoryConfig,
-        });
-
-        let existingData: Record<string, unknown> | null = null;
-        if (existingRaw) {
-          try {
-            existingData = typeof existingRaw === 'string' ? JSON.parse(existingRaw) : existingRaw;
-          } catch {
-            // If existing data is not valid JSON, start fresh
-            existingData = null;
-          }
-        }
-
         // Handle case where LLM passes empty object or no memory field
         const memoryInput = workingMemoryInput.memory;
         if (memoryInput === undefined || memoryInput === null) {
@@ -271,6 +261,25 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
           newData = memoryInput;
         }
 
+        if (scope === 'resource' && (await memory.supportsAtomicWorkingMemoryUpdates?.())) {
+          await memory.updateWorkingMemory({
+            threadId,
+            resourceId,
+            memoryConfig,
+            workingMemory: JSON.stringify(newData),
+            mode: 'merge',
+          });
+          return { success: true };
+        }
+        const existingRaw = await memory.getWorkingMemory({ threadId, resourceId, memoryConfig });
+        let existingData: Record<string, unknown> | null = null;
+        if (existingRaw) {
+          try {
+            existingData = typeof existingRaw === 'string' ? JSON.parse(existingRaw) : existingRaw;
+          } catch {
+            existingData = null;
+          }
+        }
         const mergedData = deepMergeWorkingMemory(existingData, newData as Record<string, unknown>);
         workingMemory = JSON.stringify(mergedData);
       } else {

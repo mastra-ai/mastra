@@ -3,6 +3,17 @@ import { z } from 'zod';
 import { deepMergeWorkingMemory, updateWorkingMemoryTool } from './working-memory';
 
 describe('deepMergeWorkingMemory', () => {
+  it('preserves prototype-shaped JSON keys as ordinary data without inheriting fields', () => {
+    const update = JSON.parse('{"__proto__":{"name":"Ada"},"constructor":{"prototype":{"name":"Grace"}}}');
+    const result = deepMergeWorkingMemory({}, update);
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(JSON.parse(JSON.stringify(result))).toEqual(update);
+    expect(Object.hasOwn(result, '__proto__')).toBe(true);
+    expect(({} as Record<string, unknown>).name).toBeUndefined();
+    expect(deepMergeWorkingMemory(result, JSON.parse('{"__proto__":null}'))).toEqual({
+      constructor: { prototype: { name: 'Grace' } },
+    });
+  });
   describe('null/undefined/empty update handling', () => {
     it('should return shallow copy of existing when update is null', () => {
       const existing = { name: 'Alice', age: 30 };

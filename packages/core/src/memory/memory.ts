@@ -711,6 +711,11 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig?: MemoryConfigInternal;
   }): Promise<WorkingMemoryTemplate | null>;
 
+  /** Whether resource-scoped JSON updates can be merged atomically by the storage adapter. */
+  async supportsAtomicWorkingMemoryUpdates(): Promise<boolean> {
+    return false;
+  }
+
   abstract updateWorkingMemory({
     threadId,
     resourceId,
@@ -721,6 +726,7 @@ https://mastra.ai/en/docs/memory/overview`,
     threadId: string;
     resourceId?: string;
     workingMemory: string;
+    mode?: 'replace' | 'merge';
     memoryConfig?: MemoryConfigInternal;
     observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void>;
