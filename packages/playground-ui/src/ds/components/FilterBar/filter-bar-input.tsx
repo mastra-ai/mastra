@@ -1,12 +1,13 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
 import { ListFilterIcon, Search } from 'lucide-react';
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
-import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
+import type { FilterBarDraft, FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
 import { parseFieldValue } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
@@ -50,20 +51,35 @@ export function FilterBarInput({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState<Item | null>(null);
+  const [emptyForStepChange, setEmptyForStepChange] = useState(false);
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
 
   // The draft lives in the provider so the chip list can render it; the step follows from it.
-  const { draft, setDraft, commitDraft } = ctx;
+  const { draft, setDraft: setDraftState, commitDraft } = ctx;
   const step: Step = !draft ? 'field' : !draft.operatorId ? 'operator' : 'value';
   const field = draft ? ctx.getField(draft.fieldId) : undefined;
   const operator = draft?.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
   const visibleFields = useMemo(() => ctx.fields.filter(f => !f.hidden), [ctx.fields]);
 
+  // Base UI owns the highlight index and keeps it when the list content changes, so a row
+  // reached with ArrowDown would carry over into the step that follows. An empty list committed
+  // first drops that index, and `autoHighlight` re-anchors on the first row of the new step.
+  const withHighlightReset = useCallback((change: () => void) => {
+    flushSync(() => setEmptyForStepChange(true));
+    change();
+    setEmptyForStepChange(false);
+  }, []);
+
+  const setDraft = useCallback(
+    (next: Omit<FilterBarDraft, 'id' | 'from'> | null) => withHighlightReset(() => setDraftState(next)),
+    [withHighlightReset, setDraftState],
+  );
+
   const reset = useCallback(() => {
-    setDraft(null);
+    setDraftState(null);
     setQuery('');
-  }, [setDraft]);
+  }, [setDraftState]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -72,11 +88,11 @@ export function FilterBarInput({
 
   const commit = useCallback(
     (fieldId: string, operatorId: string, value: FilterBarValue) => {
-      commitDraft({ fieldId, operatorId }, value);
+      withHighlightReset(() => commitDraft({ fieldId, operatorId }, value));
       setQuery('');
       inputRef.current?.focus();
     },
-    [commitDraft],
+    [withHighlightReset, commitDraft],
   );
 
   const selectOperator = useCallback(
@@ -185,15 +201,13 @@ export function FilterBarInput({
     }
   };
 
-  const stepItems: readonly Item[] =
-    step === 'field' ? visibleFields : step === 'operator' ? fieldOperators : valueStep.options;
-
-  // Base UI keeps its highlight index when the list content changes, so a field picked with
-  // ArrowDown would open the value step on its second option. Handing it an empty list for the
-  // commit that follows a step change drops the index; `autoHighlight` then re-anchors on the first.
-  const [itemsStep, setItemsStep] = useState(step);
-  useLayoutEffect(() => setItemsStep(step), [step]);
-  const items: readonly Item[] = itemsStep === step ? stepItems : EMPTY_ITEMS;
+  const items: readonly Item[] = emptyForStepChange
+    ? EMPTY_ITEMS
+    : step === 'field'
+      ? visibleFields
+      : step === 'operator'
+        ? fieldOperators
+        : valueStep.options;
 
   // A search field is the way out for text that names no field, so it survives the field
   // step's own filtering whatever was typed; every other item matches on its label.

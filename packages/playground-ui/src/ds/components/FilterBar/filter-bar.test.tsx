@@ -233,6 +233,22 @@ describe('FilterBar', () => {
       expect(screen.getByRole('option', { name: 'staging' }).hasAttribute('data-highlighted')).toBe(false);
     });
 
+    it('restarts the highlight on the first field once a chip is committed', async () => {
+      render(<Harness />);
+      getInput().focus();
+      await screen.findByRole('option', { name: 'Status' });
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      key('Enter');
+
+      await screen.findByRole('option', { name: 'Running' });
+      key('ArrowDown');
+      key('Enter');
+
+      const first = await screen.findByRole('option', { name: 'Status' });
+      await waitFor(() => expect(first.hasAttribute('data-highlighted')).toBe(true));
+    });
+
     it('keeps the draft when the input itself is clicked mid-flow', async () => {
       render(<Harness />);
       const input = getInput();
