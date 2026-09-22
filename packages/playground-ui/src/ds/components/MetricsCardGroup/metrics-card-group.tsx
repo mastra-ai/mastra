@@ -30,7 +30,7 @@ const variantClasses: Record<MetricsCardGroupVariant, string> = {
   // Wells swap the card's elevation for a bare 1px `--surface-rim`: the same edge
   // every raised surface draws, with no lift, so they stay crisp against the frame
   // in light, where `background` and `card` sit only a step apart.
-  inset: cn(raisedSurfaceStyle, '*:bg-background! *:shadow-[inset_0_0_0_1px_var(--surface-rim)]!'),
+  inset: cn(raisedSurfaceStyle, '*:bg-background! *:shadow-rim!'),
 };
 
 /**
@@ -44,9 +44,13 @@ export function MetricsCardGroup({
   minItemWidth = '16rem',
   className,
 }: MetricsCardGroupProps) {
+  const style: CSSProperties & Record<'--metrics-card-group-basis', string> = {
+    '--metrics-card-group-basis': `min(100%, ${minItemWidth})`,
+  };
+
   return (
     <div
-      style={{ '--metrics-card-group-basis': `min(100%, ${minItemWidth})` } as CSSProperties}
+      style={style}
       // Cards grow from a shared basis and wrap, so a short last row stretches to
       // fill instead of leaving empty columns.
       // Outer radius = card radius (8px) + 4px inset so the corners stay concentric.
