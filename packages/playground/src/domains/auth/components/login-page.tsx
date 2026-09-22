@@ -56,19 +56,11 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   const [password, setPassword] = useState('');
 
   if (isLoadingCapabilities) {
-    return (
-      <div className="bg-surface1 flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <div className="text-muted-foreground">Loading...</div>;
   }
 
   if (!capabilities?.enabled || !capabilities?.login) {
-    return (
-      <div className="bg-surface1 flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Authentication is not configured</div>
-      </div>
-    );
+    return <div className="text-muted-foreground">Authentication is not configured</div>;
   }
 
   const { login } = capabilities;
@@ -117,9 +109,9 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   };
 
   const description = login.description ? (
-    <div className="border-border1 bg-surface1 flex items-start gap-2.5 rounded-md border p-3">
-      <Lock className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-      <p className="text-muted-foreground text-ui-md">{login.description}</p>
+    <div className="flex items-start gap-2.5 rounded-md border border-border bg-sidebar p-3">
+      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <p className="text-body text-muted-foreground">{login.description}</p>
     </div>
   ) : null;
 
@@ -185,7 +177,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           </Button>
 
           {signUpEnabled && (
-            <div className="text-ui-md text-center">
+            <div className="text-center text-body">
               <span className="text-muted-foreground">
                 {isSignIn ? "Don't have an account? " : 'Already have an account? '}
               </span>
@@ -200,10 +192,10 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       {hasSSO && hasCredentials && (
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="border-border1 w-full border-t" />
+            <div className="w-full border-t border-border" />
           </div>
-          <div className="text-ui-md relative flex justify-center">
-            <span className="bg-surface1 text-muted-foreground px-2">or continue with</span>
+          <div className="relative flex justify-center text-body">
+            <span className="bg-sidebar px-2 text-muted-foreground">or continue with</span>
           </div>
         </div>
       )}

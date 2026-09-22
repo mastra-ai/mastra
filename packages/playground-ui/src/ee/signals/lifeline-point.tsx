@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import type { FocusEvent, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { ChartTooltip } from '@/ds/components/ChartTooltip';
 
 /** A theme-presence point with an instant portal tooltip. */
 export function LifelinePoint({
@@ -63,14 +64,14 @@ export function LifelinePoint({
       )}
       {tooltipPosition
         ? createPortal(
-            <div
-              className="border-border1 bg-surface5 text-foreground shadow-elevated text-ui-sm pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-md border px-2 py-1 font-mono whitespace-nowrap tabular-nums"
+            <ChartTooltip
+              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full px-2 py-1 font-mono whitespace-nowrap tabular-nums"
               id={tooltipId}
               role="tooltip"
               style={{ left: tooltipPosition.left, top: tooltipPosition.top }}
             >
               {title}
-            </div>,
+            </ChartTooltip>,
             document.body,
           )
         : null}

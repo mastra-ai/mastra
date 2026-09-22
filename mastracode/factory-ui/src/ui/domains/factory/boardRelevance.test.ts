@@ -233,9 +233,14 @@ describe('board relevance', () => {
   it('parses and serializes shareable relevance query values', () => {
     expect([...boardRelevanceFromQuery(null, 'work')]).toEqual(['worked', 'authored', 'assigned']);
     expect([...boardRelevanceFromQuery('assigned,review-requested', 'work')]).toEqual(['assigned']);
-    expect([...boardRelevanceFromQuery('none', 'review')]).toEqual([]);
+    expect([...boardRelevanceFromQuery('none', 'review')]).toEqual([
+      'worked',
+      'authored',
+      'assigned',
+      'review-requested',
+    ]);
     expect(boardRelevanceQueryValue(new Set(['worked', 'assigned']), 'work')).toBe('worked,assigned');
-    expect(boardRelevanceQueryValue(new Set(), 'review')).toBe('none');
+    expect(boardRelevanceQueryValue(new Set(), 'review')).toBeUndefined();
     expect(boardRelevanceQueryValue(new Set(['worked', 'authored', 'assigned']), 'work')).toBeUndefined();
   });
 

@@ -100,13 +100,13 @@ function PipelineStep({
         <span
           aria-hidden="true"
           className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full border text-ui-xs font-medium',
-            done ? 'border-accent1 bg-accent1 text-white' : 'border-border1 text-muted-foreground',
+            'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
+            done ? 'border-accent1 bg-accent1 text-white' : 'border-border text-muted-foreground',
           )}
         >
           {index}
         </span>
-        {!isLast && <span aria-hidden="true" className="bg-border1 mt-2 w-px flex-1" />}
+        {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
       </div>
       <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
     </li>
@@ -251,9 +251,9 @@ export function ExperimentTriggerDialog({
         className="w-[640px] max-w-[calc(100vw-2rem)] gap-0 p-0"
         onKeyDown={handleKeyDown}
       >
-        <DialogHeader className="border-border1 border-b px-4 py-4">
+        <DialogHeader className="border-b border-border px-4 py-4">
           <DialogTitle>Run experiment</DialogTitle>
-          <DialogDescription className="text-ui-sm text-muted-foreground not-sr-only">
+          <DialogDescription className="not-sr-only text-caption text-muted-foreground">
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
@@ -305,7 +305,7 @@ export function ExperimentTriggerDialog({
                 )}
               </div>
               {datasetId && itemCount !== undefined && (
-                <p className="text-ui-xs text-muted-foreground">
+                <p className="text-meta text-muted-foreground">
                   {itemCount} {itemCount === 1 ? 'item' : 'items'}
                 </p>
               )}
@@ -320,7 +320,7 @@ export function ExperimentTriggerDialog({
                 container={contentRef}
               />
               {targetType && !targetId && (
-                <p className="text-ui-xs text-muted-foreground">
+                <p className="text-meta text-muted-foreground">
                   Choose {targetType === 'agent' ? 'an' : 'a'} {targetType} to run
                 </p>
               )}
@@ -342,7 +342,7 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger className="text-ui-sm flex items-center gap-2">
+            <CollapsibleTrigger className="flex items-center gap-2 text-caption">
               <ChevronRight className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
@@ -367,14 +367,14 @@ export function ExperimentTriggerDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter className="border-border1 items-center border-t px-4 py-4 sm:justify-between">
+        <DialogFooter className="items-center border-t border-border px-4 py-4 sm:justify-between">
           <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
             {missing.length === 0 ? (
               <>
                 <Badge variant="green" indicator="dot">
                   Ready
                 </Badge>
-                <span className="text-ui-xs text-muted-foreground">
+                <span className="text-meta text-muted-foreground">
                   {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
                 </span>
               </>

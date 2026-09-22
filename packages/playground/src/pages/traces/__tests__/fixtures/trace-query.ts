@@ -24,6 +24,28 @@ export const traceQueryFieldsWithRegion: GetTraceQueryFieldsResponse = {
   observedFieldsTruncated: false,
 };
 
+/** Nested paths collapse to their top-level key for the columns picker. */
+export const traceQueryFieldsWithNestedTenant: GetTraceQueryFieldsResponse = {
+  canonicalFields: [],
+  observedFields: [
+    {
+      path: 'metadata.tenant.id',
+      valueKind: 'string',
+      operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'],
+      valueSuggestions: true,
+      occurrences: 3,
+    },
+    {
+      path: 'metadata.tenant.name',
+      valueKind: 'string',
+      operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'],
+      valueSuggestions: true,
+      occurrences: 3,
+    },
+  ],
+  observedFieldsTruncated: false,
+};
+
 export const traceQueryRegionValues: GetTraceQueryValuesResponse = {
   values: [
     { value: 'eu-west', count: 8 },
@@ -59,6 +81,19 @@ export const traceQueryPage: TraceQueryKeysetTraceResponse = {
       inputPreview: null,
       threadId: null,
       resourceId: null,
+    },
+  ],
+  page: { next: null },
+};
+
+export const traceQueryPageWithThreadAndEnvironment: Awaited<ReturnType<MastraClient['queryTraces']>> = {
+  traces: [
+    {
+      ...traceQueryPage.traces[0]!,
+      traceId: 'trace-env',
+      rootSpanId: 'span-env',
+      environment: 'production',
+      threadId: 'thread-42',
     },
   ],
   page: { next: null },

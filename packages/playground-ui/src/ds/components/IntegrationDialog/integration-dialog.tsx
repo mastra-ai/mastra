@@ -125,21 +125,17 @@ function IntegrationDialogContent({
                     disabled={item.disabled}
                     onClick={() => onSelect(item)}
                     className={cn(
-                      'flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border1 px-4 py-3 text-left transition-colors duration-normal ease-out-custom hover:bg-surface3 disabled:pointer-events-none disabled:opacity-50',
+                      'flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border px-4 py-3 text-left transition-colors duration-normal ease-out-custom hover:bg-fill-subtle disabled:pointer-events-none disabled:opacity-50',
                       controlFocusBorderVisible,
                     )}
                   >
-                    <span className="text-muted-foreground grid size-8 shrink-0 place-items-center [&>img]:size-full [&>img]:object-contain [&>svg]:size-4">
+                    <span className="grid size-8 shrink-0 place-items-center text-muted-foreground [&>img]:size-full [&>img]:object-contain [&>svg]:size-4">
                       {item.logo ?? <BlocksIcon />}
                     </span>
-                    <span className="text-ui-md leading-ui-md text-foreground min-w-0 truncate font-medium">
-                      {item.name}
-                    </span>
+                    <span className="min-w-0 truncate text-subheading text-foreground">{item.name}</span>
                     {item.badge ? <Badge size="sm">{item.badge}</Badge> : null}
                     {item.meta ? (
-                      <span className="text-ui-sm leading-ui-sm text-muted-foreground ml-auto shrink-0">
-                        {item.meta}
-                      </span>
+                      <span className="ml-auto shrink-0 text-caption text-muted-foreground">{item.meta}</span>
                     ) : null}
                   </button>
                 </li>
@@ -147,7 +143,7 @@ function IntegrationDialogContent({
             })}
           </ul>
         ) : (
-          <p role="status" className="text-ui-sm text-muted-foreground py-8 text-center">
+          <p role="status" className="py-8 text-center text-caption text-muted-foreground">
             {emptyMessage ?? (normalizedQuery ? `No integrations match “${query}”.` : 'No integrations are available.')}
           </p>
         )}

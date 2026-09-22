@@ -794,12 +794,13 @@ export const mastra = new Mastra({
 **Type:** `object`\
 **Default:** `undefined`
 
-MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable stateless mode for serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.) where persistent connections and in-memory session state aren't available.
+Options applied to every MCP HTTP route. MCP requests are self-contained, so no session state is kept between them and the routes run unchanged in serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.).
 
 | Property | Type | Default | Description |
 | - | - | - | - |
-| `serverless` | `boolean` | `false` | Run MCP in stateless mode without session management |
-| `sessionIdGenerator` | `() => string` | `undefined` | Custom session ID generator function |
+| `setRequestAuth` | `(req, requestContext) => void \| Promise<void>` | `undefined` | Sets `req.auth` on the request handed to the MCP transport, which surfaces as `context.mcp.extra.authInfo` in tools. When omitted, the principal resolved by `server.auth` is bridged automatically. |
+| `serverless` | `boolean` | `false` | Accepted for compatibility. Has no effect: every MCP request is already stateless. |
+| `sessionIdGenerator` | `() => string` | `undefined` | Accepted for compatibility. Has no effect: MCP requests carry no session. |
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -807,7 +808,10 @@ import { Mastra } from '@mastra/core'
 export const mastra = new Mastra({
   server: {
     mcpOptions: {
-      serverless: true,
+      setRequestAuth: (req, requestContext) => {
+        const payload = requestContext.get('bearerPayload')
+        req.auth = { token: payload.token, clientId: payload.sub, scopes: [] }
+      },
     },
   },
 })

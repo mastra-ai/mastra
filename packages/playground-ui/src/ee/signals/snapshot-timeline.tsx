@@ -37,7 +37,7 @@ export function TimelineTrack({
 
   return (
     <div aria-label="Snapshot landmarks" className="relative mx-2 h-12 min-w-40 flex-1" role="group">
-      <div aria-hidden="true" className="bg-border1 absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full" />
+      <div aria-hidden="true" className="absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full bg-border" />
       {snapshots.map((snapshot, index) => {
         const marker = markers.get(index);
         const grabbed = marker === 'compare-point' && index === grabbedIndex;
@@ -47,9 +47,9 @@ export function TimelineTrack({
             aria-current={marker === 'selected' ? 'true' : undefined}
             aria-label={snapshotTickLabel(snapshot, totalCount)}
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
-            className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 transition-colors ${
-              marker ? MARKER_TICK_CLASSES[marker] : 'border-surface2 bg-surface4 hover:bg-accent1/60'
-            } ${grabbed ? 'ring-accent1/70 ring-2' : ''}`}
+            className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 ${
+              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-accent1/60'
+            } ${grabbed ? 'ring-2 ring-accent1/70' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
             style={{ left: `${positions[index]}%` }}
@@ -62,7 +62,7 @@ export function TimelineTrack({
           <span
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
-            className="text-ui-xs text-muted-foreground absolute top-7 -translate-x-1/2 font-mono tabular-nums"
+            className="absolute top-7 -translate-x-1/2 font-mono text-meta text-muted-foreground tabular-nums"
             style={{ left: `${positions[index]}%` }}
           >
             {dayLabels[index]}
@@ -131,7 +131,7 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <p className="text-ui-sm text-muted-foreground font-mono tabular-nums" data-testid="snapshot-summary">
+        <p className="font-mono text-caption text-muted-foreground tabular-nums" data-testid="snapshot-summary">
           {summary}
         </p>
       </div>

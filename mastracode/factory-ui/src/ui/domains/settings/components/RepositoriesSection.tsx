@@ -52,7 +52,9 @@ export function RepositoriesSection() {
               </Button>
             )}
             {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
-              <span className="text-ui-xs text-icon3">GitLab managed by deployment environment variables</span>
+              <span className="text-meta text-muted-foreground">
+                GitLab managed by deployment environment variables
+              </span>
             )}
           </div>
         }

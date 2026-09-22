@@ -500,6 +500,7 @@ type InputShared_Type_14 =
   | 'model_inference'
   | 'model_chunk'
   | 'mcp_tool_call'
+  | 'mcp_server_request'
   | 'processor_run'
   | 'tool_call'
   | 'client_tool_call'
@@ -536,6 +537,7 @@ type InputShared_Type_15 =
   | 'tool_result_processor'
   | 'workflow_step'
   | 'tool'
+  | 'mcp_server'
   | 'workflow_run'
   | 'memory';
 
@@ -3258,6 +3260,7 @@ type Shared_Type_57 =
   | 'model_inference'
   | 'model_chunk'
   | 'mcp_tool_call'
+  | 'mcp_server_request'
   | 'processor_run'
   | 'tool_call'
   | 'client_tool_call'
@@ -3294,6 +3297,7 @@ type Shared_Type_58 =
   | 'tool_result_processor'
   | 'workflow_step'
   | 'tool'
+  | 'mcp_server'
   | 'workflow_run'
   | 'memory';
 
@@ -3552,6 +3556,7 @@ type Shared_Type_63 = {
 };
 
 type Shared_Type_64 = {
+  id?: string | undefined;
   name: string;
   description?: string | undefined;
   inputSchema: unknown;
@@ -9980,6 +9985,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'model_inference'
           | 'model_chunk'
           | 'mcp_tool_call'
+          | 'mcp_server_request'
           | 'processor_run'
           | 'tool_call'
           | 'client_tool_call'
@@ -13793,6 +13799,7 @@ export type GetMcpV0Servers_Response = {
       release_date: string;
       is_latest: boolean;
     };
+    transports?: ('streamable-http' | 'sse')[] | undefined;
   }[];
   total_count: number;
   next: string | null;
@@ -13841,6 +13848,7 @@ export type GetMcpV0ServersId_Response = {
   package_canonical?: string | undefined;
   packages?: unknown[] | undefined;
   remotes?: unknown[] | undefined;
+  transports?: ('streamable-http' | 'sse')[] | undefined;
 };
 
 export type GetMcpV0ServersId_Request = Simplify<

@@ -55,12 +55,12 @@ function StatusDotPopoverInner<T>({
           side="top"
           align="start"
           sideOffset={6}
-          className="text-ui-xs text-foreground w-auto max-w-xs px-2.5 py-1.5"
+          className="w-auto max-w-xs px-2.5 py-1.5 text-meta text-foreground"
           onMouseEnter={onHoverOpen}
           onMouseLeave={onHoverScheduleClose}
         >
-          <p className="text-foreground font-medium">{resolved.label}</p>
-          <p className="text-muted-foreground mt-1 text-pretty">{resolved.description}</p>
+          <p className="text-column text-foreground">{resolved.label}</p>
+          <p className="mt-1 text-pretty text-muted-foreground">{resolved.description}</p>
         </PopoverContent>
       </Popover>
     </span>

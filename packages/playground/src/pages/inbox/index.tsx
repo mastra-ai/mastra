@@ -9,12 +9,16 @@ import { ClipboardCheck, MessageSquare } from 'lucide-react';
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useFeedback, useUpdateFeedbackReviewStatus } from '@/domains/feedback/hooks/use-feedback';
 import { InboxDatasetReviewList } from '@/domains/inbox/components/inbox-dataset-review-list';
 import { InboxEmptyState } from '@/domains/inbox/components/inbox-empty-state';
 import { InboxFeedbackList } from '@/domains/inbox/components/inbox-feedback-list';
 import { InboxTracePanel } from '@/domains/inbox/components/inbox-trace-panel';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useInboxDatasetReviewItems } from '@/domains/review/hooks/use-inbox-review-items';
+
+const crumbs = [navCrumb('/inbox')];
 
 type InboxTab = 'dataset' | 'feedback';
 
@@ -119,8 +123,9 @@ export default function InboxPage() {
 
   return (
     <div className="relative h-full overflow-hidden">
-      <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
-        <PageLayout.MainArea className="min-h-0 overflow-hidden">
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Inbox</h1>
+        <div className="h-full min-h-0 overflow-hidden">
           {isInboxEmpty ? (
             <InboxEmptyState />
           ) : (
@@ -132,10 +137,10 @@ export default function InboxPage() {
             >
               <TabList variant="pill-ghost">
                 <Tab value="feedback">
-                  <Icon size="sm">
+                  <Icon size="xs">
                     <MessageSquare />
                   </Icon>
-                  <Txt variant="ui-sm" className="text-inherit">
+                  <Txt variant="caption" className="text-inherit">
                     Feedback
                   </Txt>
                   {feedbackCount > 0 && (
@@ -145,10 +150,10 @@ export default function InboxPage() {
                   )}
                 </Tab>
                 <Tab value="dataset">
-                  <Icon size="sm">
+                  <Icon size="xs">
                     <ClipboardCheck />
                   </Icon>
-                  <Txt variant="ui-sm" className="text-inherit">
+                  <Txt variant="caption" className="text-inherit">
                     Dataset items
                   </Txt>
                   {datasetItems.length > 0 && (
@@ -187,7 +192,7 @@ export default function InboxPage() {
               </TabContent>
             </Tabs>
           )}
-        </PageLayout.MainArea>
+        </div>
       </PageLayout>
 
       <InboxTracePanel

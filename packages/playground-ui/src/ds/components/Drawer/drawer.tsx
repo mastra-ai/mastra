@@ -5,6 +5,7 @@ import { XIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // Swipe/stack transforms live in drawer.css — unreadable as Tailwind arbitrary values.
@@ -15,7 +16,7 @@ export type DrawerSide = 'top' | 'right' | 'bottom' | 'left';
 const drawerBackdropVariants = cva('drawer-backdrop fixed inset-0 z-50', {
   variants: {
     overlay: {
-      visible: 'bg-overlay backdrop-blur-xs',
+      visible: 'bg-scrim backdrop-blur-xs',
       transparent: 'bg-transparent',
       none: 'hidden',
     },
@@ -71,7 +72,8 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
 const drawerPopupVariants = cva(
   cn(
     'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
-    'border-border1 bg-surface3 text-foreground shadow-dialog',
+    'text-foreground',
+    overlaySurfaceStyle,
     'data-[swiping]:select-none',
     "after:pointer-events-none after:absolute after:inset-0 after:bg-transparent after:transition-[background-color] after:duration-[450ms] after:content-['']",
     'data-[nested-drawer-open]:after:bg-black/25',
@@ -94,13 +96,13 @@ const drawerPopupVariants = cva(
         side: 'bottom',
         variant: 'default',
         className:
-          'h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full -mb-12 pb-12 rounded-t-xl border-x border-t',
+          '-mb-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-t-xl border-x border-t pb-12',
       },
       {
         side: 'top',
         variant: 'default',
         className:
-          'h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full -mt-12 pt-12 rounded-b-xl border-x border-b',
+          '-mt-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-b-xl border-x border-b pt-12',
       },
       {
         side: 'left',
@@ -354,7 +356,7 @@ const DrawerHandleBar = () => (
   <div
     aria-hidden
     data-slot="drawer-handle"
-    className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-surface5', nestedFadeClass)}
+    className={cn('mx-auto my-2 h-1 w-12 shrink-0 rounded-full bg-muted', nestedFadeClass)}
   />
 );
 DrawerHandleBar.displayName = 'DrawerHandleBar';
@@ -378,7 +380,7 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
         side === 'right' ? '-left-2' : '-right-2',
       )}
     >
-      <div className="bg-surface5/80 h-10 w-1 rounded-full shadow-sm" />
+      <div className="h-10 w-1 rounded-full bg-border-strong" />
     </div>
   );
 };
@@ -456,7 +458,7 @@ type DrawerTitleProps = Omit<DrawerPrimitive.Title.Props, 'className'> & {
 };
 
 const DrawerTitle = React.forwardRef<HTMLHeadingElement, DrawerTitleProps>(({ className, ...props }, ref) => (
-  <DrawerPrimitive.Title ref={ref} className={cn('text-ui-md font-medium text-foreground', className)} {...props} />
+  <DrawerPrimitive.Title ref={ref} className={cn('text-subheading text-foreground', className)} {...props} />
 ));
 DrawerTitle.displayName = 'DrawerTitle';
 
@@ -466,7 +468,7 @@ type DrawerDescriptionProps = Omit<DrawerPrimitive.Description.Props, 'className
 
 const DrawerDescription = React.forwardRef<HTMLParagraphElement, DrawerDescriptionProps>(
   ({ className, ...props }, ref) => (
-    <DrawerPrimitive.Description ref={ref} className={cn('text-ui-sm text-muted-foreground', className)} {...props} />
+    <DrawerPrimitive.Description ref={ref} className={cn('text-caption text-muted-foreground', className)} {...props} />
   ),
 );
 DrawerDescription.displayName = 'DrawerDescription';

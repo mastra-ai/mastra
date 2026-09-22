@@ -1,6 +1,7 @@
 import { ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { FileText, PenLine, PlusIcon } from 'lucide-react';
@@ -28,12 +29,15 @@ interface AddBlockButtonProps {
 const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonProps) => {
   return (
     <div className={cn('group/add flex items-center gap-2 py-0.5', className)}>
-      <div className="bg-border1 h-px flex-1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
+      <div className="h-px flex-1 bg-border opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground hover:bg-surface4 focus-visible:ring-accent1 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:outline-hidden"
+            className={cn(
+              'flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 hover:bg-fill-subtle focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+              quietTextHover,
+            )}
           >
             <Icon>
               <PlusIcon />
@@ -55,7 +59,7 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
-      <div className="bg-border1 h-px flex-1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
+      <div className="h-px flex-1 bg-border opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
     </div>
   );
 };
@@ -117,7 +121,7 @@ export const AgentCMSBlocks = ({
   };
 
   return (
-    <div className={cn('flex flex-col w-full h-full overflow-y-auto', className)}>
+    <div className={cn('flex h-full w-full flex-col overflow-y-auto', className)}>
       {items.length > 0 && (
         <div className="h-full overflow-y-auto pr-2 pl-10">
           <ContentBlocks items={items} onChange={onChange} className="flex w-full flex-col">

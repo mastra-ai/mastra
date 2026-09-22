@@ -5,6 +5,7 @@ import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
@@ -35,7 +36,7 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
     </span>
   );
   return (
-    <DataListCell className="text-ui-smd text-muted-foreground flex min-w-0 items-center gap-2">
+    <DataListCell className="flex min-w-0 items-center gap-2 text-body-sm text-muted-foreground">
       {showLevelTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{icon}</TooltipTrigger>
@@ -76,6 +77,7 @@ const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
   tool: { label: 'Tool', Icon: ToolsIcon },
   scorer: { label: 'Scorer', Icon: ScorersIcon },
   memory: { label: 'Memory', Icon: MemoryIcon },
+  mcp_server: { label: 'MCP Server', Icon: McpServerIcon },
   input_processor: { label: 'Processor', Icon: ProcessorIcon },
   input_step_processor: { label: 'Processor', Icon: ProcessorIcon },
   output_processor: { label: 'Processor', Icon: ProcessorIcon },
@@ -96,8 +98,8 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
     <DataListCell className="flex min-w-0 items-center gap-2">
       {display ? (
         <>
-          <display.Icon className="text-placeholder size-3.5 shrink-0" aria-hidden />
-          <span className="text-ui-smd min-w-0 truncate">{display.label}</span>
+          <display.Icon className="size-3.5 shrink-0 text-placeholder" aria-hidden />
+          <span className="min-w-0 truncate text-body-sm">{display.label}</span>
         </>
       ) : (
         '-'

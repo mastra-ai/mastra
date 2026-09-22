@@ -37,10 +37,10 @@ export function MainHeaderRoot({
     <header className={cn('grid gap-1 py-3', className)}>
       <h1
         className={cn(
-          'flex items-center gap-2 text-header-md font-normal text-foreground',
+          'flex items-center gap-2 text-heading text-foreground',
           '[&>svg]:size-6 [&>svg]:text-muted-foreground',
           {
-            'bg-surface4 w-60 max-w-[50%] rounded-md animate-pulse': titleIsLoading,
+            'w-60 max-w-[50%] animate-pulse rounded-md bg-muted': titleIsLoading,
           },
         )}
       >
@@ -54,8 +54,8 @@ export function MainHeaderRoot({
       </h1>
       {description && (
         <p
-          className={cn('m-0 text-ui-sm text-muted-foreground', {
-            'bg-surface4 w-[40rem] max-w-[80%] rounded-md animate-pulse': descriptionIsLoading,
+          className={cn('m-0 text-caption text-muted-foreground', {
+            'w-[40rem] max-w-[80%] animate-pulse rounded-md bg-muted': descriptionIsLoading,
           })}
         >
           {descriptionIsLoading ? <>&nbsp;</> : description}
