@@ -268,6 +268,40 @@ describe('durable tool-call background task dispatch', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it('returns an awaited cancellation without waiting for result reconciliation', async () => {
+    const pubsub = mockPubsub();
+    const execute = vi.fn().mockResolvedValue({ summary: 'sync fallback' });
+    setupRegistry({
+      tools: {
+        [TOOL_NAME]: {
+          execute,
+          backgroundConfig: { enabled: true },
+        },
+      },
+    });
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      disposition: 'awaited',
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const waitForCompletion = vi.fn().mockResolvedValue({ id: 'task-cancelled', status: 'cancelled' });
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch: vi.fn().mockResolvedValue({ task: { id: 'task-cancelled' }, fallbackToSync: false }),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
+      task: { id: 'task-cancelled' },
+      cancel: vi.fn(),
+      waitForCompletion,
+    } as any);
+
+    await expect(executeStep(pubsub, initData)).rejects.toThrow('Background task cancelled: task-cancelled');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('waits for resumed awaited background tasks', async () => {
     const pubsub = mockPubsub();
     setupRegistry();
