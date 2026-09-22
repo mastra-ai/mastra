@@ -10,6 +10,7 @@ const SOURCE_PROVIDER_CAPABILITIES_TIMEOUT_MS = 3000;
 
 // Default path of liveKitConnectionRoute() from @mastra/livekit — the exact route Studio posts to.
 const LIVEKIT_CONNECTION_DETAILS_PATH = '/voice/livekit/connection-details';
+const LIVEKIT_RECORDING_PATH = '/voice/livekit/recordings/:traceId';
 
 async function getSourceProviderCapabilities(
   getCapabilities: () => Promise<{
@@ -190,12 +191,16 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
           .getServer()
           ?.apiRoutes?.some(route => route.method === 'POST' && route.path === LIVEKIT_CONNECTION_DETAILS_PATH) ??
         false;
+      const liveKitRecordingRouteEnabled = mastra
+        .getServer()
+        ?.apiRoutes?.some(route => route.method === 'GET' && route.path === LIVEKIT_RECORDING_PATH);
 
       return {
         packages,
         isDev: process.env.MASTRA_DEV === 'true',
         cmsEnabled: !!editor,
         liveKitConnectionRouteEnabled,
+        ...(liveKitRecordingRouteEnabled ? { liveKitRecordingRouteEnabled: true } : {}),
         editorSource,
         editorSourceCapabilities,
         observabilityEnabled,
