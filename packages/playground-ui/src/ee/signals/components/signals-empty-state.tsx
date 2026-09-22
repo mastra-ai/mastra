@@ -26,7 +26,7 @@ const signalStyle = (label: string): CSSProperties => ({
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
     <div className="border-border w-full border-t border-dashed" />
-    <span className="signals-pipeline-connector bg-positive1 absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full shadow-[0_0_12px_currentColor]" />
+    <span className="signals-pipeline-connector bg-positive absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full shadow-[0_0_12px_currentColor]" />
   </div>
 );
 
@@ -240,10 +240,10 @@ export const SignalsEmptyState = ({
             <h2 className="text-heading text-foreground">Trace Intelligence</h2>
             <p className="text-caption text-muted-foreground mt-0.5">Finds recurring themes</p>
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
-              <span className="signals-engine-pulse border-positive1/15 absolute size-20 rounded-full border" />
-              <span className="border-positive1/25 absolute size-14 rounded-full border" />
-              <span className="border-positive1/40 bg-positive1/5 absolute size-9 rounded-full border shadow-[0_0_24px_var(--color-positive1)]" />
-              <CpuIcon className="text-positive1 relative size-4" />
+              <span className="signals-engine-pulse border-positive/15 absolute size-20 rounded-full border" />
+              <span className="border-positive/25 absolute size-14 rounded-full border" />
+              <span className="border-positive/40 bg-positive/5 absolute size-9 rounded-full border shadow-[0_0_24px_var(--color-positive)]" />
+              <CpuIcon className="text-positive relative size-4" />
             </div>
             <p className="text-meta text-muted-foreground mt-3 max-w-40">
               Clusters similar trace signals into themes for each dimension
@@ -293,7 +293,7 @@ export const SignalsEmptyState = ({
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden="true"
-              className="bg-warning1 mt-1.5 size-2 shrink-0 rounded-full shadow-[0_0_9px_currentColor]"
+              className="bg-warning mt-1.5 size-2 shrink-0 rounded-full shadow-[0_0_9px_currentColor]"
             />
             <div className="min-w-0 flex-1">
               <p className="text-caption text-muted-foreground">

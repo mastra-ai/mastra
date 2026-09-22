@@ -20,7 +20,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   if (invalidCount === 0) {
     return (
       <div className={cn('flex items-center gap-2 text-body', className)}>
-        <CheckCircleIcon className="text-positive1 h-4 w-4" />
+        <CheckCircleIcon className="text-positive h-4 w-4" />
         All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
       </div>
     );
@@ -30,7 +30,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
       <div className="text-body flex items-center gap-2">
-        <AlertTriangleIcon className="text-warning1 h-4 w-4" />
+        <AlertTriangleIcon className="text-warning h-4 w-4" />
         {invalidCount} of {totalRows} rows will be skipped (validation failed)
       </div>
 

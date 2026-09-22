@@ -61,9 +61,9 @@ const badgeHues: BadgeVariant[] = ['green', 'red', 'blue', 'yellow', 'purple', '
 const greenSteps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
 
 const statusAliases: { token: ColorToken; aliasOf?: ColorToken; note: string }[] = [
-  { token: 'warning1', aliasOf: 'accent6', note: 'Alias of --accent6 — amber' },
-  { token: 'positive1', aliasOf: 'accent1', note: 'Alias of --accent1 — green' },
-  { token: 'negative1', aliasOf: 'accent2', note: 'Alias of --accent2 — red' },
+  { token: 'warning', aliasOf: 'accent6', note: 'Alias of --accent6 — amber' },
+  { token: 'positive', aliasOf: 'accent1', note: 'Alias of --accent1 — green' },
+  { token: 'negative', aliasOf: 'accent2', note: 'Alias of --accent2 — red' },
   { token: 'error', note: 'Its own red, off the ramp — form and request failures' },
 ];
 
@@ -82,7 +82,7 @@ export const StatusFoundations: Story = {
         </Txt>
       }
       note="Light is not the dark value dimmed: the base keeps its saturation while the foreground flips to a deep tint, because ink has to darken when the surface turns white."
-      noteAside="Utilities: bg-notice-*, text-notice-*-fg, bg-badge-*, text-badge-*-fg, text-warning1, text-positive1."
+      noteAside="Utilities: bg-notice-*, text-notice-*-fg, bg-badge-*, text-badge-*-fg, text-warning, text-positive."
     >
       <FoundationSection
         label="Notice"

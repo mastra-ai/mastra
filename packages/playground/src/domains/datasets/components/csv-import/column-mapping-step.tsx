@@ -68,7 +68,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`min-h-header-default flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-border'} ${needsAttention ? 'border-warning1 bg-warning1/5' : ''} `}
+                    className={`min-h-header-default flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-border'} ${needsAttention ? 'border-warning bg-warning/5' : ''} `}
                   >
                     {isEmpty && !snapshot.isDraggingOver && (
                       <span className="text-muted-foreground text-caption italic">

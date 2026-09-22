@@ -64,7 +64,7 @@ export function BulkTagPicker({
               <button
                 type="button"
                 onClick={() => onRemoveTag(tag)}
-                className="text-placeholder hover:text-negative1 ml-2"
+                className="text-placeholder hover:text-negative ml-2"
               >
                 <X className="h-3 w-3" />
               </button>

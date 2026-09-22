@@ -38,7 +38,7 @@ export function WorkflowDataEdgeView({ output, label, dataControl, ...props }: W
   const arrowId = useId();
   const isExecuted = props.data?.edgeStatus === 'success';
   const pathColor = isExecuted
-    ? 'color-mix(in oklab, var(--positive1) 82%, var(--foreground))'
+    ? 'color-mix(in oklab, var(--positive) 82%, var(--foreground))'
     : 'var(--muted-foreground)';
 
   return (

@@ -22,8 +22,8 @@ export const TaskListHeader = ({ className, ...props }: ComponentProps<typeof Co
 );
 
 const barColors: Record<TaskListItem['status'], string> = {
-  completed: 'bg-positive1',
-  in_progress: 'bg-warning1',
+  completed: 'bg-positive',
+  in_progress: 'bg-warning',
   pending: 'bg-fill-hover',
 };
 
@@ -65,8 +65,8 @@ export const TaskListProgress = ({ tasks, className, ...props }: TaskListProgres
 };
 
 const icons: Record<TaskListItem['status'], ReactNode> = {
-  completed: <CheckCircle2 className="text-positive1 size-3.5 shrink-0" />,
-  in_progress: <Loader2 className="text-warning1 size-3.5 shrink-0 motion-safe:animate-spin" />,
+  completed: <CheckCircle2 className="text-positive size-3.5 shrink-0" />,
+  in_progress: <Loader2 className="text-warning size-3.5 shrink-0 motion-safe:animate-spin" />,
   pending: <Circle className="text-muted-foreground size-3.5 shrink-0" />,
 };
 
@@ -78,7 +78,7 @@ const statusLabels: Record<TaskListItem['status'], string> = {
 
 const textClasses: Record<TaskListItem['status'], string> = {
   completed: 'text-muted-foreground line-through',
-  in_progress: 'text-column text-warning1',
+  in_progress: 'text-column text-warning',
   pending: 'text-foreground',
 };
 

@@ -49,7 +49,7 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
   const pending = dragged ?? held?.stop;
   const shown = pending ?? settled;
   const label = THINKING_LEVELS[shown]?.label ?? '';
-  const tone = shown >= last - 1 ? 'text-warning1' : shown === 0 ? 'text-placeholder' : 'text-foreground';
+  const tone = shown >= last - 1 ? 'text-warning' : shown === 0 ? 'text-placeholder' : 'text-foreground';
   const valueText = `${label}${inheriting && pending === undefined ? ' \u00b7 follows base' : ''}`;
   const travelled = `calc(0.5rem + (100% - 1rem) * ${shown / last})`;
 

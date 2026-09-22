@@ -32,9 +32,9 @@ const KIND = {
   mention: { glyph: MessageSquare, label: 'mention', tone: 'text-accent1', badge: 'green' },
   activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-muted-foreground', badge: 'neutral' },
   'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
-  'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning1', badge: 'orange' },
+  'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning', badge: 'orange' },
   'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
-  'agent-waiting': { glyph: Hourglass, label: 'waiting', tone: 'text-warning1', badge: 'orange' },
+  'agent-waiting': { glyph: Hourglass, label: 'waiting', tone: 'text-warning', badge: 'orange' },
 } satisfies Record<
   FactoryAttentionItem['kind'],
   { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }

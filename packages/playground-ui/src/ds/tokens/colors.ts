@@ -38,9 +38,9 @@ export const Colors = {
 
   scrim: 'var(--scrim)',
 
-  warning1: 'var(--warning1)',
-  positive1: 'var(--positive1)',
-  negative1: 'var(--negative1)',
+  warning: 'var(--warning)',
+  positive: 'var(--positive)',
+  negative: 'var(--negative)',
 
   'notice-success': 'var(--notice-success)',
   'notice-success-fg': 'var(--notice-success-fg)',

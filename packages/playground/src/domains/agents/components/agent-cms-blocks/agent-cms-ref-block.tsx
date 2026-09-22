@@ -232,7 +232,7 @@ const RefBlockContent = ({
 
             {(isDraft || hasUnpublishedEdits) && (
               <div className="text-muted-foreground text-meta flex items-start gap-1.5 px-1 pb-1">
-                <TriangleAlert className="text-warning1 mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                <TriangleAlert className="text-warning mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {isDraft
                     ? 'This block is skipped at runtime until it is published.'

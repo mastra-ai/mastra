@@ -28,22 +28,22 @@ const statusLabels = {
 } satisfies Record<ReportedStatus, string>;
 
 const statusLineClasses: Partial<Record<ReportedStatus, string>> = {
-  success: 'after:bg-positive1',
-  failed: 'after:bg-negative1',
-  tripwire: 'after:bg-warning1',
+  success: 'after:bg-positive',
+  failed: 'after:bg-negative',
+  tripwire: 'after:bg-warning',
   waiting: 'after:bg-accent5',
   paused: 'after:bg-muted-foreground',
   skipped: 'after:bg-muted-foreground',
 };
 
 const footerStatusClasses: Partial<Record<ReportedStatus, string>> = {
-  success: 'text-positive1',
-  failed: 'text-negative1',
-  suspended: 'text-warning1',
-  tripwire: 'text-warning1',
+  success: 'text-positive',
+  failed: 'text-negative',
+  suspended: 'text-warning',
+  tripwire: 'text-warning',
 };
 
-const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning1)' };
+const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning)' };
 
 export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
   const {
@@ -139,7 +139,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                   </span>
                   {foreachProgress.totalCount > 0 ? (
                     <progress
-                      className="bg-muted accent-positive1 [&::-moz-progress-bar]:bg-positive1 [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-positive1 h-1 w-full appearance-none border-0"
+                      className="bg-muted accent-positive [&::-moz-progress-bar]:bg-positive [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-positive h-1 w-full appearance-none border-0"
                       aria-label={`${label} completed items`}
                       value={foreachProgress.completedCount}
                       max={foreachProgress.totalCount}
