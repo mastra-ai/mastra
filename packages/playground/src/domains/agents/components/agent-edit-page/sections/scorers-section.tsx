@@ -43,7 +43,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
   };
 
   return (
-    <div className="border-border bg-background rounded-md border">
+    <div className="rounded-md border border-border bg-background">
       <Controller
         name="scorers"
         control={control}
@@ -85,9 +85,9 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
           return (
             <>
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="bg-card flex items-center justify-between p-3">
+                <div className="flex items-center justify-between bg-card p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="text-muted-foreground h-4 w-4" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     <SectionTitle icon={<JudgeIcon className="text-muted-foreground" />}>
                       Scorers{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>
@@ -95,7 +95,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                 </div>
 
                 <CollapsibleContent>
-                  <div className="border-border border-t p-3">
+                  <div className="border-t border-border p-3">
                     <div className="flex flex-col gap-2">
                       <Combobox
                         multiple
@@ -184,7 +184,7 @@ function ScorerConfigPanel({
           <Icon size="xs">
             <JudgeIcon className="text-muted-foreground" />
           </Icon>
-          <span className="text-foreground text-column">{scorerName}</span>
+          <span className="text-column text-foreground">{scorerName}</span>
         </div>
         {!readOnly && (
           <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -198,7 +198,7 @@ function ScorerConfigPanel({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this scorer..."
-        className="bg-card text-caption min-h-[40px] border-dashed px-2 py-1"
+        className="min-h-[40px] border-dashed bg-card px-2 py-1 text-caption"
         size="sm"
         disabled={readOnly}
       />
@@ -216,13 +216,13 @@ function ScorerConfigPanel({
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-foreground cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="cursor-pointer text-foreground">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-foreground cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="cursor-pointer text-foreground">
               Ratio (percentage)
             </Label>
           </div>

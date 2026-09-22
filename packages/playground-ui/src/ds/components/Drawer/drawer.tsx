@@ -96,13 +96,13 @@ const drawerPopupVariants = cva(
         side: 'bottom',
         variant: 'default',
         className:
-          'h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full -mb-12 pb-12 rounded-t-xl border-x border-t',
+          '-mb-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-t-xl border-x border-t pb-12',
       },
       {
         side: 'top',
         variant: 'default',
         className:
-          'h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full -mt-12 pt-12 rounded-b-xl border-x border-b',
+          '-mt-12 h-[var(--drawer-height,auto)] max-h-[calc(85vh_+_3rem)] w-full rounded-b-xl border-x border-b pt-12',
       },
       {
         side: 'left',
@@ -380,7 +380,7 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
         side === 'right' ? '-left-2' : '-right-2',
       )}
     >
-      <div className="bg-border-strong h-10 w-1 rounded-full" />
+      <div className="h-10 w-1 rounded-full bg-border-strong" />
     </div>
   );
 };

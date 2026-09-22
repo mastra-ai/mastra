@@ -188,7 +188,7 @@ export function PropertyFilterCreator({
               >
                 <ArrowLeftIcon className="size-4" />
               </button>
-              <FilterIcon className="text-muted-foreground size-4 shrink-0" />
+              <FilterIcon className="size-4 shrink-0 text-muted-foreground" />
               <span className="text-caption text-muted-foreground">{`${selectedField.label} · is`}</span>
             </div>
           )}
@@ -252,7 +252,7 @@ export function PropertyFilterCreator({
                     >
                       <span className="truncate">{f.label}</span>
                       {used ? (
-                        <span className="text-muted-foreground ml-auto">In use</span>
+                        <span className="ml-auto text-muted-foreground">In use</span>
                       ) : (
                         <span
                           className={cn(

@@ -40,13 +40,13 @@ describe('SlackIntegration.channels', () => {
 
     const context = (currentStatus?: string) => ({ currentStatus, channelTools: new Set<string>() }) as any;
 
-    expect(typingStatus({ type: 'reasoning-delta' } as any, context())).toBe('is thinking..');
-    expect(typingStatus({ type: 'reasoning-delta' } as any, context('is thinking..'))).toBe('is thinking...');
+    expect(typingStatus({ type: 'reasoning-delta' } as any, context())).toBe('is thinking...');
+    expect(typingStatus({ type: 'reasoning-delta' } as any, context('is thinking...'))).toBe('is thinking...');
     expect(typingStatus({ type: 'text-delta' } as any, context())).toBe('is typing...');
-    expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe('is working..');
+    expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe('is working...');
     expect(
-      typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context('is working.....')),
-    ).toBe('is working..');
+      typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context('is working...')),
+    ).toBe('is working...');
   });
 
   it('defaults streaming when an explicit undefined value is provided', () => {

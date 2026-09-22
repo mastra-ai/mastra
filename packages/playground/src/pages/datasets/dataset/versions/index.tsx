@@ -73,7 +73,7 @@ function DatasetCompareVersionsPage() {
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Versions</h1>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
-          <div className="text-muted-foreground py-5 text-center">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Select at least two versions to compare.</p>
           </div>
         </div>

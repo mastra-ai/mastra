@@ -1,5 +1,31 @@
 # @mastra/deployer
 
+## 1.69.0-alpha.0
+
+### Minor Changes
+
+- Extended pnpm patch preservation to yarn (Berry) and bun, so `mastra build` keeps patches applied in the bundled output regardless of package manager. ([#21716](https://github.com/mastra-ai/mastra/pull/21716))
+
+  Yarn needs no configuration: `.yarn/patches/` is copied into the output and Yarn applies the patches its lockfile already references.
+
+  Bun declares patches in `package.json`, and `mastra build` rewrites them to output-relative paths in the bundled `package.json`:
+
+  ```json
+  {
+    "patchedDependencies": {
+      "lodash@4.17.21": "patches/lodash.patch"
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Fixed `mastra build` discarding pnpm patches. Patched dependencies declared in your workspace are now carried into the built output, so deployed apps run the same patched code as your source project. ([#21716](https://github.com/mastra-ai/mastra/pull/21716))
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`4053bf2`](https://github.com/mastra-ai/mastra/commit/4053bf25b2d74385471789f5ccf859b321f9d677), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed)]:
+  - @mastra/core@1.69.0-alpha.0
+  - @mastra/server@1.69.0-alpha.0
+
 ## 1.68.0
 
 ### Patch Changes

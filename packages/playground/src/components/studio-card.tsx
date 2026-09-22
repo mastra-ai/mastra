@@ -7,7 +7,7 @@ export function StudioCard({ children, className }: { children: ReactNode; class
   return (
     <div
       data-slot="studio-card"
-      className={cn('rounded-studio-frame relative min-h-0 flex-1 overflow-hidden', frameSurfaceStyle, className)}
+      className={cn('relative min-h-0 flex-1 overflow-hidden rounded-studio-frame', frameSurfaceStyle, className)}
     >
       {children}
     </div>

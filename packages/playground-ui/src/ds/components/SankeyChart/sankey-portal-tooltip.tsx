@@ -34,7 +34,7 @@ export function SankeyPortalTooltip({
       }}
     >
       <div className="text-column">{title}</div>
-      <div className="text-muted-foreground whitespace-pre-wrap">{description}</div>
+      <div className="whitespace-pre-wrap text-muted-foreground">{description}</div>
     </ChartTooltip>,
     document.body,
   );

@@ -1,5 +1,4 @@
-import type { McpToolInfo } from '@mastra/client-js';
-import type { ServerInfo } from '@mastra/core/mcp';
+import type { McpServerInfo, McpToolInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
@@ -22,7 +21,7 @@ import { useLinkComponent } from '@/lib/framework';
 
 export interface MCPDetailProps {
   isLoading: boolean;
-  server?: ServerInfo;
+  server?: McpServerInfo;
 }
 
 declare global {
@@ -67,7 +66,10 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       </div>
     );
 
-  const commandLineConfig = `npx -y mcp-remote ${sseUrl}`;
+  // MCP v2 servers speak Streamable HTTP only; the SSE endpoint exists for 1.x servers.
+  // Servers that predate transport reporting are 1.x, so absence means SSE is available.
+  const hasSse = server.transports?.includes('sse') ?? true;
+  const commandLineConfig = `npx -y mcp-remote ${hasSse ? sseUrl : httpStreamUrl}`;
 
   return (
     <div className="grid h-full min-w-min grid-cols-[1fr_1fr] overflow-x-auto overflow-y-auto">
@@ -84,14 +86,15 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </div>
 
         <Txt tone="muted" className="pb-4">
-          This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use
-          case.
+          {hasSse
+            ? 'This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use case.'
+            : 'This MCP server speaks Streamable HTTP only (protocol 2026-07-28).'}
         </Txt>
 
         <div className="flex flex-col gap-4">
           {/* HTTP Stream */}
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">HTTP</span>}>
+            <Badge icon={<span className="mr-1 w-6 font-mono font-medium text-accent1">HTTP</span>}>
               Regular HTTP Endpoint
             </Badge>
 
@@ -100,41 +103,43 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             </Txt>
 
             <div className="flex items-start gap-2">
-              <Txt className="bg-muted rounded-lg px-2 py-1">{httpStreamUrl}</Txt>
+              <Txt className="rounded-lg bg-muted px-2 py-1">{httpStreamUrl}</Txt>
               <div className="pt-1">
                 <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} />
               </div>
             </div>
           </div>
 
-          {/* SSE */}
-          <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">SSE</span>}>
-              Server-Sent Events
-            </Badge>
+          {/* SSE (legacy servers only) */}
+          {hasSse && (
+            <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
+              <Badge icon={<span className="mr-1 w-6 font-mono font-medium text-accent1">SSE</span>}>
+                Server-Sent Events
+              </Badge>
 
-            <Txt tone="muted" className="pt-1 pb-2">
-              Use for real-time communication via SSE.
-            </Txt>
+              <Txt tone="muted" className="pt-1 pb-2">
+                Use for real-time communication via SSE.
+              </Txt>
 
-            <div className="flex items-start gap-2">
-              <Txt className="bg-muted rounded-lg px-2 py-1">{sseUrl}</Txt>
-              <div className="pt-1">
-                <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
+              <div className="flex items-start gap-2">
+                <Txt className="rounded-lg bg-muted px-2 py-1">{sseUrl}</Txt>
+                <div className="pt-1">
+                  <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Command Line */}
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">CLI</span>}>Command Line</Badge>
+            <Badge icon={<span className="mr-1 w-6 font-mono font-medium text-accent1">CLI</span>}>Command Line</Badge>
 
             <Txt tone="muted" className="pt-1 pb-2">
               Use for local command-line access via npx and mcp-remote.
             </Txt>
 
             <div className="flex items-start gap-2">
-              <Txt className="bg-muted rounded-lg px-2 py-1">{commandLineConfig}</Txt>
+              <Txt className="rounded-lg bg-muted px-2 py-1">{commandLineConfig}</Txt>
               <div className="pt-1">
                 <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} />
               </div>
@@ -143,14 +148,14 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </div>
       </div>
 
-      <div className="border-border h-full overflow-y-scroll border-l">
+      <div className="h-full overflow-y-scroll border-l border-border">
         <McpToolList server={server} />
       </div>
     </div>
   );
 };
 
-const McpToolList = ({ server }: { server: ServerInfo }) => {
+const McpToolList = ({ server }: { server: McpServerInfo }) => {
   const { data: tools = {}, isLoading } = useMCPServerTools(server);
 
   if (isLoading) return null;
@@ -159,8 +164,8 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
 
   return (
     <div className="overflow-y-scroll p-5">
-      <div className="text-foreground flex items-center gap-2">
-        <Icon size="lg" className="bg-muted rounded-md p-1">
+      <div className="flex items-center gap-2 text-foreground">
+        <Icon size="lg" className="rounded-md bg-muted p-1">
           <McpServerIcon />
         </Icon>
 

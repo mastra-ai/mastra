@@ -44,7 +44,7 @@ export function MetricsLineChart({
           return (
             <div key={s.dataKey} className="inline-flex items-baseline gap-2">
               <div className="size-2 shrink-0 -translate-y-px rounded-full" style={{ backgroundColor: s.color }} />
-              <span className="text-caption text-muted-foreground max-w-24 truncate">{s.label}</span>
+              <span className="max-w-24 truncate text-caption text-muted-foreground">{s.label}</span>
               {aggregated && (
                 <span className="text-caption text-muted-foreground">
                   {aggregated.value}

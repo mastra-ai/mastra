@@ -201,7 +201,7 @@ export const ToolCallPresentedHeader = ({
       <ToolCallSpacer />
       {status === 'error' && (
         <ToolCallTrailing>
-          <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />
+          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" />
         </ToolCallTrailing>
       )}
       {disclosure && <ToolCallDisclosure />}

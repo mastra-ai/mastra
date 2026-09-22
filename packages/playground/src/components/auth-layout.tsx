@@ -8,7 +8,7 @@ import { StudioCard } from './studio-card';
 // Shell for `/login` and `/signup`: same providers and Studio card as the app, no sidebar, no auth gate.
 export function AuthLayout() {
   return (
-    <div className="bg-sidebar font-body h-screen">
+    <div className="h-screen bg-sidebar font-body">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>

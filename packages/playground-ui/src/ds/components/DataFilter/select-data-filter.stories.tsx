@@ -77,7 +77,7 @@ function FilterPreview(props: SelectDataFilterProps) {
           props.onChange(nextValue);
         }}
       />
-      <pre className="border-border bg-background text-caption text-muted-foreground w-full rounded-lg border p-4">
+      <pre className="w-full rounded-lg border border-border bg-background p-4 text-caption text-muted-foreground">
         {JSON.stringify(value, null, 2)}
       </pre>
     </div>

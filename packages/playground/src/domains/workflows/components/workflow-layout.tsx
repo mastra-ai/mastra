@@ -73,7 +73,7 @@ export function WorkflowPanelResizeHandle() {
       onPointerMove={followPointer}
       onKeyDown={nudgeWithArrows}
     >
-      <ResizeHandleIndicator className="group-focus-visible/resize:via-accent1 group-active/resize:via-foreground/45 group-hover/resize:opacity-100 group-focus-visible/resize:opacity-100 group-active/resize:opacity-100" />
+      <ResizeHandleIndicator className="group-hover/resize:opacity-100 group-focus-visible/resize:via-accent1 group-focus-visible/resize:opacity-100 group-active/resize:via-foreground/45 group-active/resize:opacity-100" />
     </div>
   );
 }
@@ -102,7 +102,7 @@ export const WorkflowLayout = ({ children, leftSlot }: WorkflowLayoutProps) => {
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="relative min-h-[180px] min-w-0 flex-1 overflow-hidden">{children}</div>
-        {leftSlot && <div className="bg-background min-h-0 min-w-0 basis-[44%] overflow-hidden">{leftSlot}</div>}
+        {leftSlot && <div className="min-h-0 min-w-0 basis-[44%] overflow-hidden bg-background">{leftSlot}</div>}
       </div>
     );
   }

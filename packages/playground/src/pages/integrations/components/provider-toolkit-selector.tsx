@@ -41,7 +41,7 @@ export function ProviderToolkitSelector({
   onConnect,
 }: ProviderToolkitSelectorProps) {
   return (
-    <div className="space-y-4 border rounded p-4">
+    <div className="space-y-4 rounded border p-4">
       <SelectFieldBlock
         name="provider"
         label="Provider"

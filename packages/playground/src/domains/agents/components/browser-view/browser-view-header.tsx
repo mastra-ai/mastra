@@ -30,13 +30,13 @@ export function BrowserViewHeader({
   return (
     <div
       className={cn(
-        'flex items-center justify-between px-3 py-2 border-b border-border bg-sidebar',
+        'flex items-center justify-between border-b border-border bg-sidebar px-3 py-2',
         isCollapsed ? 'rounded-md' : 'rounded-t-md',
         className,
       )}
     >
       <div className="mr-3 min-w-0 flex-1">
-        <span className={cn('text-body text-muted-foreground truncate block', !url && 'text-muted-foreground italic')}>
+        <span className={cn('block truncate text-body text-muted-foreground', !url && 'text-muted-foreground italic')}>
           {url || 'No URL'}
         </span>
       </div>
@@ -50,7 +50,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onTuck}
-            className={cn('hover:bg-fill-subtle rounded p-1', quietTextHover, controlStateColorTransition)}
+            className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             title="Minimize to pill"
           >
             <Minus className="h-4 w-4" />
@@ -61,7 +61,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className={cn('hover:bg-fill-subtle rounded p-1', quietTextHover, controlStateColorTransition)}
+            className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
           >
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -72,7 +72,7 @@ export function BrowserViewHeader({
           <button
             type="button"
             onClick={onClose}
-            className={cn('hover:bg-fill-subtle rounded p-1', quietTextHover, controlStateColorTransition)}
+            className={cn('rounded p-1 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             title="Close browser session"
           >
             <X className="h-4 w-4" />

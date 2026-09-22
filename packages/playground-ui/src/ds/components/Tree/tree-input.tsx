@@ -86,7 +86,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           onFocus={handleFocus}
-          className="text-foreground placeholder:text-muted-foreground text-caption min-w-0 flex-1 border-none bg-transparent outline-hidden"
+          className="min-w-0 flex-1 border-none bg-transparent text-caption text-foreground outline-hidden placeholder:text-muted-foreground"
         />
       </li>
     );

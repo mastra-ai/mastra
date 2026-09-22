@@ -139,7 +139,7 @@ export function DataListRoot({
     >
       {/* The highlight is the old row hover color. It sits between each row's
           `before` surface (-z-2) and the row content (see `dataListRowOuterStyles`). */}
-      <FluidMenuItems menu={menu} className="bg-fill-subtle rounded-none">
+      <FluidMenuItems menu={menu} className="rounded-none bg-fill-subtle">
         {children}
       </FluidMenuItems>
     </div>

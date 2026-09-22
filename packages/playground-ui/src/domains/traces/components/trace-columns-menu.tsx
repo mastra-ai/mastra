@@ -128,7 +128,7 @@ export function TraceColumnsMenu({
             </DropdownMenu.CheckboxItem>
           ))}
           {usageDisabledReason && (
-            <p className="text-meta text-placeholder px-2 py-1" role="note">
+            <p className="px-2 py-1 text-meta text-placeholder" role="note">
               {usageDisabledReason}
             </p>
           )}
