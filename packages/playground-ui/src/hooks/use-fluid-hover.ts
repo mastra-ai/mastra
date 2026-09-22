@@ -50,10 +50,15 @@ export interface UseFluidHoverReturn {
    */
   isMeasured: boolean;
   sessionRef: RefObject<number>;
+  /**
+   * Events whose target sits outside the container in the DOM are ignored:
+   * React bubbles events from a portaled child (a submenu) through its React
+   * parents, and those must not steer or click this list.
+   */
   handlers: {
     onMouseMove: (e: React.MouseEvent) => void;
-    onMouseEnter: () => void;
-    onMouseLeave: () => void;
+    onMouseEnter: (e: React.MouseEvent) => void;
+    onMouseLeave: (e: React.MouseEvent) => void;
     /**
      * Routes a click that lands between items (a gap, the padding, past the
      * last row) to the highlighted item, so the highlight and the click agree:
@@ -170,6 +175,11 @@ export function pickNearest({
 export const ACTIVE_ATTR = 'data-fluid-hover-active';
 /** Set on the container: the highlighted index, or absent. */
 export const ACTIVE_INDEX_ATTR = 'data-fluid-hover-active-index';
+
+/** False for an event bubbled through React from a portal outside the container, and for a detached target. */
+function isFromInside(e: React.SyntheticEvent) {
+  return e.currentTarget.contains(e.target as Node);
+}
 
 const ACTIVATOR_SELECTOR =
   "a[href], button, [role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox'], [role='option'], [role='radio'], [role='checkbox'], [role='tab'], [role='link'], [role='button']";
@@ -369,14 +379,19 @@ export function useFluidHover<T extends HTMLElement>(
       // Coalesce rapid register/unregister calls (e.g. when an AnimatePresence
       // remounts a list of rows) into a single remeasure on the next frame,
       // so consumers don't have to manually call measureItems after the
-      // container's children swap.
-      remeasure();
+      // container's children swap. A lit row keeps its element (unregistering
+      // it clears the highlight), so its rect stays good while the pass runs:
+      // dropping readiness then would blink the highlight every time a
+      // virtualized list mounts a row while scrolling.
+      if (activeIndexRef.current === null) remeasure();
+      else scheduleMeasurement(measurementAttempts);
     },
-    [remeasure, getItemRo],
+    [remeasure, scheduleMeasurement, getItemRo],
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      if (!isFromInside(e)) return;
       const mouseX = e.clientX;
       const mouseY = e.clientY;
 
@@ -410,11 +425,13 @@ export function useFluidHover<T extends HTMLElement>(
     [axis, containerRef, isItemDisabled],
   );
 
-  const handleMouseEnter = useCallback(() => {
+  const handleMouseEnter = useCallback((e: React.MouseEvent) => {
+    if (!isFromInside(e)) return;
     sessionRef.current += 1;
   }, []);
 
-  const handleMouseLeave = useCallback(() => {
+  const handleMouseLeave = useCallback((e: React.MouseEvent) => {
+    if (!isFromInside(e)) return;
     if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
@@ -424,16 +441,15 @@ export function useFluidHover<T extends HTMLElement>(
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
-      const target = e.target as Node | null;
-      if (!target) return;
+      // Outside the container in the DOM: a portaled child's click, or a row
+      // that unmounted while its own click was still bubbling (a pick whose
+      // primitive re-renders the list synchronously). Neither is a gap.
+      if (!isFromInside(e)) return;
+      const target = e.target as Node;
       // Inside an item: the item owns the click.
       for (const element of itemsRef.current.values()) {
         if (element.contains(target)) return;
       }
-      // A row that unmounted while its own click was still bubbling (a pick
-      // whose primitive re-renders the list synchronously, like a "create"
-      // row that becomes a real item) already landed; it is not a gap.
-      if (!target.isConnected) return;
       // A control that sits between the rows (a search field at the top of
       // a menu, a footer button) keeps its own click too.
       const control = (target as Element).closest?.(
