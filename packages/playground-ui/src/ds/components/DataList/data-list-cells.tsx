@@ -244,13 +244,12 @@ export interface DataListCreatedCellProps {
   timestamp: Date | string;
 }
 
-/** Compact date + time cell — 24h `HH:mm:ss` for today (e.g. `13:07:47`), otherwise `MMM d HH:mm:ss`
- *  (e.g. `Aug 31 13:07:47`). No milliseconds. */
+/** Compact date + time cell — always `MMM d HH:mm:ss` (e.g. `Aug 31 13:07:47`), 24h, no milliseconds. */
 export function DataListCreatedCell({ timestamp }: DataListCreatedCellProps) {
   const date = toDate(timestamp);
   return (
     <DataListCell className="text-muted-foreground tabular-nums">
-      {date ? format(date, isToday(date) ? 'HH:mm:ss' : 'MMM d HH:mm:ss') : null}
+      {date ? format(date, 'MMM d HH:mm:ss') : null}
     </DataListCell>
   );
 }

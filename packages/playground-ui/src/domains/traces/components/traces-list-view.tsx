@@ -45,9 +45,7 @@ const OVERSCAN = 8;
 const MAX_FILTER_VALUES = 20;
 
 function customColumnValue(trace: TracesListViewTrace, field: TraceCustomColumn): string | null | undefined {
-  const value = trace[field];
-  if (value instanceof Date) return value.toISOString();
-  return value;
+  return trace[field];
 }
 
 function distinctCustomColumnValues(traces: TracesListViewTrace[], field: TraceCustomColumn): string[] {
@@ -183,7 +181,7 @@ export function TracesListView({
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
         )}
-        {hasTraceColumn(columnPreferences, 'endTime') && <TracesDataList.TopCell>End time</TracesDataList.TopCell>}
+        {hasTraceColumn(columnPreferences, 'endTime') && <TracesDataList.TopCell>End</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'environment') && (
           <TracesDataList.TopCell>Environment</TracesDataList.TopCell>
         )}
@@ -309,15 +307,11 @@ export function TracesListView({
                     {usage?.estimatedCost === undefined ? undefined : formatCost(usage.estimatedCost, usage.costUnit)}
                   </DataList.NumberCell>
                 )}
-                {columnPreferences.customColumns.map(field =>
-                  field === 'startedAt' ? (
-                    <TracesDataList.CreatedCell key={field} timestamp={trace.startedAt ?? ''} />
-                  ) : (
-                    <DataList.TextCell font="mono" key={field}>
-                      {customColumnValue(trace, field) ?? undefined}
-                    </DataList.TextCell>
-                  ),
-                )}
+                {columnPreferences.customColumns.map(field => (
+                  <DataList.TextCell font="mono" key={field}>
+                    {customColumnValue(trace, field) ?? undefined}
+                  </DataList.TextCell>
+                ))}
                 {columnPreferences.metadataKeys.map(key => {
                   const value = formatTraceMetadataValue(trace.metadata, key);
                   return (

@@ -20,7 +20,7 @@ export const TRACE_USAGE_COLUMNS = [
 ] as const satisfies readonly TraceOptionalColumn[];
 
 /** Trace properties that are not regular columns but can be pinned as a custom column. */
-export const TRACE_CUSTOM_COLUMN_FIELDS = ['traceId', 'threadId', 'resourceId', 'entityId', 'startedAt'] as const;
+export const TRACE_CUSTOM_COLUMN_FIELDS = ['traceId', 'threadId', 'resourceId', 'entityId'] as const;
 
 export type TraceCustomColumn = (typeof TRACE_CUSTOM_COLUMN_FIELDS)[number];
 
@@ -29,7 +29,6 @@ export const TRACE_CUSTOM_COLUMN_LABELS: Record<TraceCustomColumn, string> = {
   threadId: 'Thread ID',
   resourceId: 'Resource ID',
   entityId: 'Entity ID',
-  startedAt: 'Started at',
 };
 
 export type TraceColumnPreferences = {
@@ -130,7 +129,7 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   columns.push('6rem');
 
   if (visible.has('duration')) columns.push('7rem');
-  if (visible.has('endTime')) columns.push('8rem');
+  if (visible.has('endTime')) columns.push('9rem');
   if (visible.has('environment')) columns.push('8rem');
   if (visible.has('inputTokens')) columns.push('8rem');
   if (visible.has('outputTokens')) columns.push('8rem');

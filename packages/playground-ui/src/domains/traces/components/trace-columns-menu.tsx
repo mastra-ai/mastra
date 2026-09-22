@@ -25,7 +25,7 @@ const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
   type: 'Type',
   input: 'Input',
   duration: 'Duration',
-  endTime: 'End time',
+  endTime: 'End',
   environment: 'Environment',
   inputTokens: 'Input tokens',
   outputTokens: 'Output tokens',

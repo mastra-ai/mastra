@@ -213,7 +213,7 @@ describe('trace list columns', () => {
       ['input', '9rem 14rem minmax(8rem,1fr) 6rem'],
       ['type', '9rem 7rem minmax(8rem,1fr) 6rem'],
       ['duration', '9rem minmax(8rem,1fr) 6rem 7rem'],
-      ['endTime', '9rem minmax(8rem,1fr) 6rem 8rem'],
+      ['endTime', '9rem minmax(8rem,1fr) 6rem 9rem'],
       ['environment', '9rem minmax(8rem,1fr) 6rem 8rem'],
       ['totalTokens', '9rem minmax(8rem,1fr) 6rem 8rem'],
       ['inputTokens', '9rem minmax(8rem,1fr) 6rem 8rem'],

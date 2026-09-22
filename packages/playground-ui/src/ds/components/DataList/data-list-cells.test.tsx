@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { format } from 'date-fns';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -373,12 +374,12 @@ describe('DataListCreatedCell', () => {
     expect(container.textContent).toBe('Aug 31 13:07:47');
   });
 
-  it('drops the date when the timestamp is today', () => {
+  it('keeps the date even when the timestamp is today', () => {
     const today = new Date();
     today.setHours(9, 5, 3, 0);
     const { container } = render(<DataListCreatedCell timestamp={today} />);
 
-    expect(container.textContent).toBe('09:05:03');
+    expect(container.textContent).toBe(`${format(today, 'MMM d')} 09:05:03`);
   });
 
   it('reads a timestamp given as a string', () => {

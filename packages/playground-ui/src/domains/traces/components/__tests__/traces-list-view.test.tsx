@@ -450,7 +450,7 @@ describe('TracesListView — environment and end time cells', () => {
         />,
       );
 
-      expect(screen.getByText('End time')).toBeTruthy();
+      expect(screen.getByText('End')).toBeTruthy();
       expect(screen.getByText('Jun 10 13:07:47')).toBeTruthy();
     });
   });
@@ -510,20 +510,6 @@ describe('TracesListView — custom columns', () => {
 
       expect(screen.queryByRole('button', { name: 'Thread ID' })).toBeNull();
       expect(screen.getByText('Thread ID')).toBeTruthy();
-    });
-  });
-
-  describe('when a startedAt custom column is added', () => {
-    it('formats the timestamp', () => {
-      render(
-        <TracesListView
-          traces={[makeTrace({ traceId: 'trace-1', startedAt: new Date(2026, 5, 10, 13, 7, 47) })]}
-          columnPreferences={{ visibleColumns: [], customColumns: ['startedAt'], metadataKeys: [] }}
-          onTraceClick={vi.fn()}
-        />,
-      );
-
-      expect(screen.getAllByText('Jun 10 13:07:47')).toHaveLength(2);
     });
   });
 });

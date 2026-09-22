@@ -74,7 +74,7 @@ describe('TraceColumnsMenu', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
 
-      expect(await screen.findByRole('menuitemcheckbox', { name: 'End time' })).toBeTruthy();
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'End' })).toBeTruthy();
       expect(screen.getByRole('menuitemcheckbox', { name: 'Environment' })).toBeTruthy();
       expect(screen.getByRole('menuitemcheckbox', { name: 'Total tokens' })).toBeTruthy();
     });
@@ -91,7 +91,8 @@ describe('TraceColumnsMenu', () => {
       expect(screen.getByRole('menuitemcheckbox', { name: 'Resource ID' })).toBeTruthy();
       expect(screen.getByRole('menuitemcheckbox', { name: 'Trace ID' })).toBeTruthy();
       expect(screen.getByRole('menuitemcheckbox', { name: 'Entity ID' })).toBeTruthy();
-      expect(screen.getByRole('menuitemcheckbox', { name: 'Started at' })).toBeTruthy();
+      // Start is already a fixed column, so it is not offered again as a custom one.
+      expect(screen.queryByRole('menuitemcheckbox', { name: /start/i })).toBeNull();
 
       fireEvent.click(threadId);
       expect(defaultProps.onAddCustomColumn).toHaveBeenCalledWith('threadId');
