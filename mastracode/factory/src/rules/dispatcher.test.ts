@@ -5050,13 +5050,17 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
-  it('redelivers a kickoff notification dropped onto an ending run once that run finishes', async () => {
+  it('redelivers a kickoff notification across consecutive ending runs until the session wakes', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    // First send lands `deliver` on a run that then ends without acting on the
-    // kickoff; the dispatcher must wait for that run's end and redeliver into
-    // the idle session instead of completing on the delivery ack.
+    // The first two sends land on consecutive runs that end without acting on
+    // the kickoff; the dispatcher must follow both boundaries and wake the idle
+    // session on the third send.
     const { controller, delivered, getAgentEndListenerCount } = createSession(undefined, {
-      notificationResponses: [{ action: 'deliver', endRun: true }, { action: 'wake' }],
+      notificationResponses: [
+        { action: 'deliver', endRun: true },
+        { action: 'deliver', endRun: true },
+        { action: 'wake' },
+      ],
     });
     const { transitionService } = await preparePromptKickoff(storage);
     const dispatcher = new FactoryDecisionDispatcher({
@@ -5069,7 +5073,11 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect(delivered).toEqual(['factory-kickoff:kickoff-1', 'factory-kickoff:kickoff-1:retry:1']);
+    expect(delivered).toEqual([
+      'factory-kickoff:kickoff-1',
+      'factory-kickoff:kickoff-1:retry:1:1',
+      'factory-kickoff:kickoff-1:retry:1:2',
+    ]);
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
     expect(getAgentEndListenerCount()).toBe(0);
   });

@@ -1539,23 +1539,23 @@ export class FactoryDecisionDispatcher {
             );
           try {
             let settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}`);
-            if (settled?.action === 'deliver') {
+            let deliveryGeneration = 0;
+            while (settled?.action === 'deliver') {
               // `deliver` only proves the signal was queued onto a run already
               // in flight. If that run ends without draining its queue the
-              // kickoff is dropped silently. There is no per-notification
-              // "processed" signal, so wait for the in-flight run to end and
-              // redeliver into the idle session unconditionally — the
-              // generation-scoped dedupeKey defeats inbox dedupe and the
-              // kickoff key keeps a duplicate run bounded, while a dropped
-              // kickoff strands the card forever.
+              // kickoff is dropped silently. Another run can start while the
+              // previous one is finishing, so follow every run boundary until
+              // the kickoff wakes an idle session. The generation-scoped
+              // dedupeKey defeats inbox dedupe and the kickoff key keeps a
+              // duplicate run bounded, while a dropped kickoff strands the card.
               if (!(await run.wait())) {
                 throw new Error('Factory kickoff is waiting on a run that has not ended.');
               }
               run.arm();
-              settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}:retry:${record.attempts}`);
-              if (settled?.action !== 'wake') {
-                throw new Error('Factory kickoff was queued onto an ending run and never reached the agent.');
-              }
+              deliveryGeneration += 1;
+              settled = await sendKickoff(
+                `factory-kickoff:${record.kickoffKey}:retry:${record.attempts}:${deliveryGeneration}`,
+              );
             }
             await this.#recordRunStart(
               session,
