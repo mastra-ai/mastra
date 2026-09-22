@@ -60,10 +60,10 @@ export function LogDetailsView({
           )}
 
           <ButtonsGroup>
-            <Button size="md" tooltip="Previous log" onClick={onPrevious} disabled={!onPrevious}>
+            <Button tooltip="Previous log" onClick={onPrevious} disabled={!onPrevious}>
               <ArrowUpIcon />
             </Button>
-            <Button size="md" tooltip="Next log" onClick={onNext} disabled={!onNext}>
+            <Button tooltip="Next log" onClick={onNext} disabled={!onNext}>
               <ArrowDownIcon />
             </Button>
           </ButtonsGroup>
@@ -81,7 +81,6 @@ export function LogDetailsView({
               {traceId && (
                 <ButtonsGroup className="w-full min-w-0">
                   <Button
-                    size="md"
                     className="min-w-0 flex-1 overflow-hidden"
                     icon={<ArrowRightIcon />}
                     onClick={() => onTraceClick?.(traceId)}
@@ -89,13 +88,12 @@ export function LogDetailsView({
                     <span>Trace</span>
                     <span className="text-caption text-placeholder ml-auto min-w-0 truncate"># {traceId}</span>
                   </Button>
-                  <CopyButton content={traceId} size="md" tooltip="Copy Trace ID to clipboard" />
+                  <CopyButton content={traceId} tooltip="Copy Trace ID to clipboard" />
                 </ButtonsGroup>
               )}
               {spanId && (
                 <ButtonsGroup className="w-full min-w-0">
                   <Button
-                    size="md"
                     className="min-w-0 flex-1 overflow-hidden"
                     disabled={!traceId || !onSpanClick}
                     onClick={() => traceId && onSpanClick?.(traceId, spanId)}
@@ -104,7 +102,7 @@ export function LogDetailsView({
                     <span>Span</span>
                     <span className="text-caption text-placeholder ml-auto min-w-0 truncate"># {spanId}</span>
                   </Button>
-                  <CopyButton content={spanId} size="md" tooltip="Copy Span ID to clipboard" />
+                  <CopyButton content={spanId} tooltip="Copy Span ID to clipboard" />
                 </ButtonsGroup>
               )}
             </div>

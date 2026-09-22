@@ -288,7 +288,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           />
           <ComposerActions>
             <StatusLine />
-            <ButtonsGroup className="ml-auto" aria-label="Composer actions">
+            <ButtonsGroup size="sm" className="ml-auto" aria-label="Composer actions">
               <Button
                 type="button"
                 variant="outline"

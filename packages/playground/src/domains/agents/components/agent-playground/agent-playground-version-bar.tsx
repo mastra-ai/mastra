@@ -213,7 +213,7 @@ export function AgentPlaygroundVersionBar({
         ) : readOnly && !isViewingPreviousVersion ? null : (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <ButtonsGroup>
-              <Button variant="default" size="md" onClick={() => onSaveDraft()} disabled={saveDisabled}>
+              <Button variant="default" onClick={() => onSaveDraft()} disabled={saveDisabled}>
                 {isSavingDraft ? (
                   <>
                     <Spinner className="size-3.5" />
@@ -230,7 +230,7 @@ export function AgentPlaygroundVersionBar({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="default" size="md" disabled={saveDisabled} aria-label="More save options">
+                  <Button variant="default" disabled={saveDisabled} aria-label="More save options">
                     <ChevronDown className="size-3.5" />
                   </Button>
                 </DropdownMenu.Trigger>

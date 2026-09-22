@@ -55,7 +55,6 @@ export const ComposerModelSwitcher = () => {
       <LLMProviders
         value={currentModelProvider}
         onValueChange={handleProviderSelect}
-        size="md"
         className={cn(
           'w-auto min-w-0 shrink-0 gap-1 px-3',
           // Collapse provider to icon-only in narrow containers.
@@ -68,7 +67,6 @@ export const ComposerModelSwitcher = () => {
         onValueChange={handleModelSelect}
         open={modelOpen}
         onOpenChange={setModelOpen}
-        size="md"
         className="w-auto max-w-[10rem] min-w-0 gap-1 px-3"
       />
     </ButtonsGroup>

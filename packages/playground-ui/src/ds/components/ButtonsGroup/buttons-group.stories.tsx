@@ -30,6 +30,39 @@ export const Default: Story = {
 };
 
 /**
+ * The rung lives on the group, not on the segments. Height, icon-mode width and glyph size all
+ * come from `size`, and a segment cannot lift itself off it: every row below asks for an
+ * `icon-lg` chevron and a `lg` trigger, and all three still come out flat.
+ *
+ * This is why a segment rarely needs a `size` of its own. `icon-*` stays on the button because
+ * it also picks the square shape — the rung part of it is overridden here.
+ */
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col items-start gap-4">
+      {(['sm', 'md', 'lg'] as const).map(size => (
+        <ButtonsGroup key={size} size={size} aria-label={`${size} group`}>
+          <Button icon={<CopyIcon />}>Copy</Button>
+          <ButtonsGroupText>{size}</ButtonsGroupText>
+          <Select defaultValue="recent">
+            <SelectTrigger size="lg" aria-label="Sort by">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="recent">Most recent</SelectItem>
+              <SelectItem value="oldest">Oldest</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="icon-lg" aria-label="More options">
+            <ChevronDownIcon />
+          </Button>
+        </ButtonsGroup>
+      ))}
+    </div>
+  ),
+};
+
+/**
  * A segmented view toggle: the selected segment is `default` (filled), the rest are `ghost`.
  * The group draws one continuous ring whether or not a segment is filled, and the seam between
  * two segments is a single pixel — never two stacked borders.
@@ -191,8 +224,8 @@ export const WithText: Story = {
  * InputGroup fills the row and the Select trigger sizes to its content. The group collapses the
  * touching borders into a divider and flattens the inner corners, leaving the outer pill rounded.
  *
- * Both segments sit on the same rung of the size ladder (`md`, the default on both): the group
- * imposes no height of its own, so a segment on a different rung pokes out of the pill.
+ * Neither segment names a size. They cannot: the group puts every segment on its own rung, so
+ * the pill is flat by construction (see `Sizes`).
  *
  * Only one class is passed: `rounded-full` on the `SelectTrigger`, an intentional shape choice
  * so its outer corner matches the InputGroup pill (the trigger's standalone default is
@@ -204,7 +237,7 @@ export const SearchWithDropdown: Story = {
     const [sort, setSort] = useState('recent');
     return (
       <ButtonsGroup className="w-105">
-        <InputGroup size="md">
+        <InputGroup>
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>

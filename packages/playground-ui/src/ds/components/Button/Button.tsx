@@ -236,8 +236,11 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       'aria-label': ariaLabel,
       // Expose the variant so a parent ButtonsGroup can detect FILLED segments in CSS
       // (filled buttons have an opaque background that hides a border seam, so the group
-      // paints their divider as an inset box-shadow instead — see buttons-group.tsx).
+      // paints their divider as an inset box-shadow instead — see buttons-group.css).
       'data-variant': variant,
+      // Icon-mode is a square: a group that overrides the rung has to move the width with
+      // the height or the circle turns into a pill (see buttons-group.css).
+      'data-shape': iconMode ? 'icon' : undefined,
       className: cn(buttonVariants({ variant, size: resolvedSize }), className),
       ...props,
     };

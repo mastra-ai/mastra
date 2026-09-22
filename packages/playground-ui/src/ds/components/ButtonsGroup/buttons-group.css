@@ -18,6 +18,66 @@
  * guards plus positioner anchor a Menu or Popover inserts while OPEN — a split button must
  * not lose its seam the moment its menu opens. */
 @layer utilities {
+  /* The rung. A segment brings its own height off the control ladder, so two segments on
+     different rungs render a step in the pill — a 30px `md` input beside a 32px `lg`
+     trigger. The group names one rung for every segment instead, and these rules win over
+     the segment's own `h-control-*` on specificity inside the same layer: a child's `size`
+     can no longer lift it off the group's rung.
+
+     Only the box and the glyph. Type is `text-label` on every rung for a button, a select
+     trigger and a text segment alike, so there is nothing to restate here. The values are
+     the same `--spacing-*` tokens the components read, so the ladder stays in one place. */
+  [data-slot='buttons-group'] {
+    --segment-height: var(--spacing-control-md);
+    --segment-glyph: var(--spacing-icon-md);
+    --segment-glyph-stroke: 1.5;
+  }
+
+  [data-slot='buttons-group'][data-size='sm'] {
+    --segment-height: var(--spacing-control-sm);
+    --segment-glyph: var(--spacing-icon-sm);
+    --segment-glyph-stroke: 1.75;
+  }
+
+  [data-slot='buttons-group'][data-size='lg'] {
+    --segment-height: var(--spacing-control-lg);
+    --segment-glyph: var(--spacing-icon-lg);
+    --segment-glyph-stroke: 1.25;
+  }
+
+  /* An InputGroup wrapping a textarea or a stacked addon is deliberately auto-height and
+     is not a rung — it would be the tallest thing in the group either way. */
+  [data-slot='buttons-group']
+    > :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :has(textarea, [data-align='block-start'], [data-align='block-end'])
+    ) {
+    height: var(--segment-height);
+  }
+
+  /* Icon-mode is a circle, so its width moves with its height or it renders as a pill. */
+  [data-slot='buttons-group'] > [data-shape='icon'] {
+    width: var(--segment-height);
+  }
+
+  /* The glyph rung: an `<Icon>` wrapper, or the bare `<svg>` a label-less button passes as
+     its child. Not `svg` at any depth — a Select's chevron is pinned at one size on purpose
+     and sits deeper, and a text segment's glyph is sized in `em` against its own label. */
+  [data-slot='buttons-group']
+    > :not([data-slot='buttons-group-text'])
+    > :is([data-slot='icon'], [data-slot='button-icon'])
+    > svg,
+  [data-slot='buttons-group'] > :not([data-slot='buttons-group-text']) > svg {
+    width: var(--segment-glyph);
+    height: var(--segment-glyph);
+    stroke-width: var(--segment-glyph-stroke);
+  }
+
+  /* The control inside an InputGroup is sized to the root's content box, so it follows the
+     rung the group just set rather than the one the InputGroup was given. */
+  [data-slot='buttons-group'] > [data-slot='input-group'] > [data-slot='input-group-control'] {
+    height: calc(var(--segment-height) - 2px);
+  }
+
   [data-slot='buttons-group'] > input {
     flex: 1;
   }

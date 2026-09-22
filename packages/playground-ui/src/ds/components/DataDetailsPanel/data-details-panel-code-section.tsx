@@ -128,11 +128,10 @@ export function DataDetailsPanelCodeSection({
         </div>
         <div className="flex items-center gap-2">
           {actions}
-          <ButtonsGroup>
-            <CopyButton content={codeStr || 'No content'} size="sm" />
+          <ButtonsGroup size="sm">
+            <CopyButton content={codeStr || 'No content'} />
             {hasMultilineText && (
               <Button
-                size="sm"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
               >

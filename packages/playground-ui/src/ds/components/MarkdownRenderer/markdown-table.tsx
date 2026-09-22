@@ -15,10 +15,9 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
   return (
     <div className="my-3 w-fit max-w-full min-w-0">
       <div className="flex justify-end">
-        <ButtonsGroup aria-label="Table actions">
+        <ButtonsGroup size="sm" aria-label="Table actions">
           <Button
             type="button"
-            size="sm"
             variant="ghost"
             disabled={typeof markdown !== 'string'}
             onClick={() => {

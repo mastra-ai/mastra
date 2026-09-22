@@ -425,9 +425,8 @@ export function TraceDataPanelView({
                       size="sm"
                       className="w-full"
                     />
-                    <ButtonsGroup className="shrink-0">
+                    <ButtonsGroup size="sm" className="shrink-0">
                       <Button
-                        size="sm"
                         variant={isTimeline ? 'default' : 'primary'}
                         aria-pressed={!isTimeline}
                         tooltip="Span tree"
@@ -436,7 +435,6 @@ export function TraceDataPanelView({
                         <ListTreeIcon />
                       </Button>
                       <Button
-                        size="sm"
                         variant={isTimeline ? 'primary' : 'default'}
                         aria-pressed={isTimeline}
                         tooltip="Timeline"
