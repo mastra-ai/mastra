@@ -120,7 +120,8 @@ The `mbenhamd/mastra` fork intentionally runs a small PR validation surface:
   type-checks Core,
   runs explicit affected-package checks for Okta Auth, Stagehand, Internal Core, CLI,
   Codemod, Deployer, MCP, Memory, Server, Fastify, AI SDK, the exact Client SDK Harness
-  resource and public-entrypoint pairs, shared Storage Test Utils, PostgreSQL, Redis, Convex, LibSQL,
+  resource and public-entrypoint pairs, shared Storage Test Utils, PostgreSQL, Redis, ClickHouse,
+  Cloudflare KV, Convex, LibSQL,
   Google Cloud PubSub, Redis Streams,
   Inngest, and the MastraCode SDK/TUI, and
   executes each supported changed Vitest file in full. The stateful Core Agent
@@ -266,11 +267,18 @@ The `mbenhamd/mastra` fork intentionally runs a small PR validation surface:
   resume type contract is admitted as a typecheck-only Vitest file alongside
   the existing runtime suite. Its JSON report must contain at least one passing
   type test, so an empty assertion file cannot satisfy the contract.
+  PF-4278 adds the exact ClickHouse DDL engine-map and Cloudflare KV record-type
+  pairs needed by the native attachment-ownership conformance edits: each
+  production source forces its paired db suite, and package typecheck, build,
+  and lint run for both workspaces.
   A production-only change in those paths forces its paired native test to run;
   an unrecognized source or test fails closed. Convex's admitted tests are
-  mocked/in-process, LibSQL uses a local database, and the admitted Inngest
-  files mock transport or execute in process. Other Convex or Inngest tests
-  remain rejected because they require credentials or a dedicated dev server.
+  mocked/in-process, LibSQL uses a local database, the admitted ClickHouse
+  suite runs against a fully mocked client, the admitted Cloudflare suite
+  uses an in-process Miniflare binding or mocked REST client, and the admitted
+  Inngest files mock transport or execute in process. Other Convex, ClickHouse,
+  Cloudflare, or Inngest tests remain rejected because they require credentials,
+  a container, or a dedicated dev server.
   PF-2042 has one additional exact exception:
   `workflows/inngest/src/index.test.ts`, `workflows/inngest/docker-compose.yaml`,
   and `workflows/inngest/src/__tests__/adapters/_utils.ts` must change together

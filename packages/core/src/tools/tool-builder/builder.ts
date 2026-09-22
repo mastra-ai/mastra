@@ -49,6 +49,7 @@ import {
   normalizeToolRecoverySchemaIdentity,
 } from '../recovery-fingerprint';
 import { ToolStream } from '../stream';
+import { inheritProcessorLoadedToolSource } from '../tool-provenance';
 import type {
   CoreTool,
   McpMetadata,
@@ -1162,7 +1163,7 @@ export class CoreToolBuilder extends MastraBase {
   build(): CoreTool {
     const providerTool = this.buildProviderTool(this.originalTool);
     if (providerTool) {
-      return providerTool;
+      return inheritProcessorLoadedToolSource(this.originalTool, providerTool);
     }
     const model = this.options.model;
 
@@ -1375,6 +1376,6 @@ export class CoreToolBuilder extends MastraBase {
     defineLazyToolRecoveryFingerprint(builtTool, () =>
       createToolRecoveryFingerprint(recoveryOriginalTool, recoverySchemas, recoveryOptions),
     );
-    return this.bindFGAResourceId(builtTool);
+    return inheritProcessorLoadedToolSource(this.originalTool, this.bindFGAResourceId(builtTool));
   }
 }

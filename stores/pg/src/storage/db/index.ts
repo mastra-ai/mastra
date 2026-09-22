@@ -15,6 +15,7 @@ import type {
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
+  HarnessAttachmentByteOwner,
   HarnessSessionRecordProjectionOption,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -56,6 +57,7 @@ export interface PgDomainClientConfig {
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
   indexes?: CreateIndexOptions[];
+  attachmentByteOwner?: HarnessAttachmentByteOwner;
   sessionRecordProjection?: HarnessSessionRecordProjectionOption;
 }
 
@@ -78,6 +80,7 @@ export interface PgDomainPoolConfig {
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
   indexes?: CreateIndexOptions[];
+  attachmentByteOwner?: HarnessAttachmentByteOwner;
   sessionRecordProjection?: HarnessSessionRecordProjectionOption;
 }
 
@@ -96,6 +99,7 @@ export type PgDomainRestConfig = {
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
   indexes?: CreateIndexOptions[];
+  attachmentByteOwner?: HarnessAttachmentByteOwner;
   sessionRecordProjection?: HarnessSessionRecordProjectionOption;
 } & (
   | {
@@ -123,6 +127,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
   disableInit?: boolean;
   skipDefaultIndexes?: boolean;
   indexes?: CreateIndexOptions[];
+  attachmentByteOwner?: HarnessAttachmentByteOwner;
   sessionRecordProjection?: HarnessSessionRecordProjectionOption;
 } {
   // Existing client
@@ -134,6 +139,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       disableInit: config.disableInit,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
+      attachmentByteOwner: config.attachmentByteOwner,
       sessionRecordProjection: config.sessionRecordProjection,
     };
   }
@@ -148,6 +154,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       disableInit: config.disableInit,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
+      attachmentByteOwner: config.attachmentByteOwner,
       sessionRecordProjection: config.sessionRecordProjection,
     };
   }
@@ -188,6 +195,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
     disableInit: config.disableInit,
     skipDefaultIndexes: config.skipDefaultIndexes,
     indexes: config.indexes,
+    attachmentByteOwner: config.attachmentByteOwner,
     sessionRecordProjection: config.sessionRecordProjection,
   };
 }

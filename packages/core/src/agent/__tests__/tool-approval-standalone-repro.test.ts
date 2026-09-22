@@ -413,11 +413,13 @@ describe('tool approval with ToolSearchProcessor', () => {
     agentId,
     inputProcessors,
     coldRestart = false,
+    resumeOptions,
   }: {
     toolId: string;
     agentId: string;
     inputProcessors: (args: { toolId: string; dynamicApprovalTool: any }) => any[];
     coldRestart?: boolean;
+    resumeOptions?: (args: { dynamicApprovalTool: any }) => Record<string, unknown>;
   }) => {
     const executeDynamicTool = vi.fn().mockResolvedValue({ ok: true });
 
@@ -551,15 +553,29 @@ describe('tool approval with ToolSearchProcessor', () => {
       toolCallId,
       memory,
       requestContext: createRequestContext(),
+      ...resumeOptions?.({ dynamicApprovalTool }),
     });
 
     const toolErrors: unknown[] = [];
+    const streamErrors: unknown[] = [];
+    let sawFinish = false;
     for await (const chunk of resumeResult.fullStream) {
       if (chunk.type === 'tool-error') {
         toolErrors.push(chunk.payload);
       }
+      if (chunk.type === 'error' || chunk.type === 'abort' || chunk.type === 'tripwire') {
+        streamErrors.push(chunk);
+      }
+      if (chunk.type === 'finish') {
+        sawFinish = true;
+      }
     }
 
+    // The resume must reach a clean finish: a post-approval processor failure
+    // (e.g. the PF-4374 loaded-tool collision) surfaces as an `error` chunk
+    // after the approved tool already executed, so toolErrors alone miss it.
+    expect(streamErrors).toEqual([]);
+    expect(sawFinish).toBe(true);
     expect(toolErrors).toEqual([]);
     expect(executeDynamicTool).toHaveBeenCalledWith({ value: 'approved input' });
   };
@@ -644,6 +660,34 @@ describe('tool approval with ToolSearchProcessor', () => {
           storage: 'context',
         }),
       ],
+    });
+  }, 30000);
+
+  it('executes a dynamically loaded tool when resume re-exposes it through a replacement tool surface', async () => {
+    // Mirrors the Harness resume path: the suspended turn's surface is restored
+    // as a `toolsetsMode: 'replace'` toolset, so the processor-loaded tool
+    // arrives in the resumed request's `tools` — as a converted copy, not the
+    // catalog instance — while the processor still tracks the name in its
+    // loaded set. The collision guard must recognize provenance instead of
+    // failing closed on the re-exposed executor (PF-4374).
+    await expectDynamicallyLoadedToolAfterApprovalResume({
+      toolId: 'dynamic_replacement_surface_tool',
+      agentId: 'replacement-surface-tool-search-agent',
+      inputProcessors: ({ toolId, dynamicApprovalTool }) => [
+        new ToolSearchProcessor({
+          tools: {
+            [toolId]: dynamicApprovalTool,
+          },
+        }),
+      ],
+      resumeOptions: ({ dynamicApprovalTool }) => ({
+        toolsets: {
+          'harness:retained-replacement': {
+            dynamic_replacement_surface_tool: dynamicApprovalTool,
+          },
+        },
+        toolsetsMode: 'replace',
+      }),
     });
   }, 30000);
 });

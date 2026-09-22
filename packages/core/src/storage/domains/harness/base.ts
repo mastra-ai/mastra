@@ -308,6 +308,46 @@ export class HarnessStorageAttachmentUnavailableError extends HarnessStorageDoma
 }
 
 /**
+ * The native attachment metadata is durable, but its external byte operation
+ * has not reached a verified terminal outcome. Callers may retry the same
+ * immutable operation; they must not treat this as a successful attachment.
+ */
+export class HarnessStorageAttachmentPendingError extends HarnessStorageDomainError {
+  readonly name = 'HarnessStorageAttachmentPendingError';
+  readonly code = 'harness.storage.attachment_pending' as const;
+  constructor(
+    public readonly sessionId: string,
+    public readonly attachmentId: string,
+  ) {
+    super(`Attachment "${attachmentId}" for session "${sessionId}" has a pending external operation`);
+  }
+}
+
+/** An immutable attachment id was reused with different metadata or bytes. */
+export class HarnessStorageAttachmentConflictError extends HarnessStorageDomainError {
+  readonly name = 'HarnessStorageAttachmentConflictError';
+  readonly code = 'harness.storage.attachment_conflict' as const;
+  constructor(
+    public readonly sessionId: string,
+    public readonly attachmentId: string,
+  ) {
+    super(`Attachment "${attachmentId}" for session "${sessionId}" conflicts with stored identity`);
+  }
+}
+
+/** The configured byte owner is absent or returned an unusable external object. */
+export class HarnessStorageAttachmentByteOwnerError extends HarnessStorageDomainError {
+  readonly name = 'HarnessStorageAttachmentByteOwnerError';
+  readonly code = 'harness.storage.attachment_byte_owner' as const;
+  constructor(
+    public readonly sessionId: string,
+    public readonly attachmentId: string,
+  ) {
+    super(`Attachment "${attachmentId}" for session "${sessionId}" has no verified external byte owner`);
+  }
+}
+
+/**
  * Thrown by lease/attachment operations when the targeted session record
  * does not exist in storage.
  */

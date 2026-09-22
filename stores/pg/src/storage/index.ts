@@ -288,6 +288,7 @@ export class PostgresStore extends MastraCompositeStore {
         disableInit: config.disableInit,
         skipDefaultIndexes: config.skipDefaultIndexes,
         indexes: config.indexes,
+        attachmentByteOwner: config.attachmentByteOwner,
         sessionRecordProjection: config.sessionRecordProjection,
       };
 
