@@ -1,10 +1,6 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, EntityType, listScoresArgsSchema, TABLE_SCORERS } from '@mastra/core/storage';
 import type {
-  BatchCreateScoresArgs,
-  CreateScoreArgs,
   ListScoresArgs,
   ListScoresResponse,
   ScoreRecord,
@@ -122,23 +118,6 @@ export async function listScores(db: PgDB, schema: string, args: ListScoresArgs)
   }
 }
 
-export async function createScore(db: PgDB, schema: string, args: CreateScoreArgs): Promise<void> {
-  await batchCreateScores(db, schema, { scores: [args.score] });
-}
-
-export async function batchCreateScores(db: PgDB, _schema: string, args: BatchCreateScoresArgs): Promise<void> {
-  if (args.scores.length === 0) return;
-
-  try {
-    await db.batchInsert({
-      tableName: TABLE_SCORERS,
-      records: args.scores.map(scoreRecordToTableRecord),
-    });
-  } catch (error) {
-    throw storageError('BATCH_CREATE_SCORES', { count: args.scores.length }, error);
-  }
-}
-
 export async function getScoreById(db: PgDB, schema: string, scoreId: string): Promise<ScoreRecord | null> {
   try {
     const row = await db.readClient.oneOrNone<ScoreRow>(
@@ -215,80 +194,6 @@ function transformScoreRow(row: ScoreRow): ScoreRecord {
     tags: firstStringArray(metadata?.tags, requestContext?.tags),
     scoreTraceId: firstString(metadata?.scoreTraceId, requestContext?.scoreTraceId),
     metadata,
-  };
-}
-
-function scoreRecordToTableRecord(score: ScoreRecord): Record<string, unknown> {
-  const id = score.scoreId ?? randomUUID();
-  const timestamp = toDate(score.timestamp, 'score timestamp');
-  const source = score.scoreSource ?? score.source ?? 'observability';
-  // A nullish top-level context value is absent, so preserve metadata-only values.
-  const contextualMetadata = Object.fromEntries(
-    Object.entries({
-      entityName: score.entityName,
-      entityVersionId: score.entityVersionId,
-      parentEntityType: score.parentEntityType,
-      parentEntityId: score.parentEntityId,
-      parentEntityName: score.parentEntityName,
-      parentEntityVersionId: score.parentEntityVersionId,
-      rootEntityType: score.rootEntityType,
-      rootEntityId: score.rootEntityId,
-      rootEntityName: score.rootEntityName,
-      rootEntityVersionId: score.rootEntityVersionId,
-      userId: score.userId,
-      organizationId: score.organizationId,
-      sessionId: score.sessionId,
-      requestId: score.requestId,
-      environment: score.environment,
-      serviceName: score.serviceName,
-      executionSource: score.executionSource,
-      experimentId: score.experimentId,
-      tags: score.tags,
-      scoreTraceId: score.scoreTraceId,
-      scope: score.scope,
-    }).filter(([, value]) => value != null),
-  );
-  const metadata = { ...(score.metadata ?? {}), ...contextualMetadata };
-
-  return {
-    id,
-    scorerId: score.scorerId,
-    traceId: score.traceId,
-    spanId: score.spanId,
-    runId: score.runId ?? firstString(metadata.runId) ?? score.traceId ?? id,
-    scorer: removeUndefined({
-      id: score.scorerId,
-      name: score.scorerName,
-      version: score.scorerVersion,
-    }),
-    preprocessStepResult: null,
-    extractStepResult: null,
-    analyzeStepResult: null,
-    score: score.score,
-    reason: score.reason,
-    metadata: removeUndefined(metadata),
-    preprocessPrompt: null,
-    extractPrompt: null,
-    generateScorePrompt: null,
-    generateReasonPrompt: null,
-    analyzePrompt: null,
-    reasonPrompt: null,
-    input: {},
-    output: {},
-    additionalContext: null,
-    requestContext: removeUndefined({
-      experimentId: score.experimentId,
-      scoreTraceId: score.scoreTraceId,
-    }),
-    entityType: score.entityType,
-    entity: removeUndefined({ id: score.entityId, name: score.entityName }),
-    entityId: score.entityId,
-    source,
-    resourceId: score.resourceId,
-    threadId: score.threadId,
-    organizationId: score.organizationId,
-    createdAt: timestamp,
-    updatedAt: timestamp,
   };
 }
 
@@ -410,10 +315,6 @@ function firstStringArray(...values: unknown[]): string[] | undefined {
     }
   }
   return undefined;
-}
-
-function removeUndefined(record: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
 }
 
 function optionalString(value: unknown): string | undefined {

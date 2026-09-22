@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { SaveScorePayload } from '@mastra/core/evals';
 import { EntityType, scoreRecordSchema } from '@mastra/core/storage';
-import type { ObservabilityStorage, ScoreRecord, ScoresFilter, ScoresStorage } from '@mastra/core/storage';
+import type { ObservabilityStorage, ScoresFilter, ScoresStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PostgresStore } from '../..';
@@ -13,6 +13,7 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const schemaName = `score_bridge_${process.pid}_${Date.now()}`;
 
+/** Build a valid score payload for the legacy persistence API. */
 function legacyScore(overrides: Partial<SaveScorePayload> = {}): SaveScorePayload {
   const scorerId = overrides.scorerId ?? `legacy-scorer-${randomUUID()}`;
   const entityId = overrides.entityId ?? `legacy-entity-${randomUUID()}`;
@@ -34,20 +35,23 @@ function legacyScore(overrides: Partial<SaveScorePayload> = {}): SaveScorePayloa
   };
 }
 
-function observabilityScore(overrides: Partial<ScoreRecord> = {}): ScoreRecord {
-  return {
-    scoreId: `observability-score-${randomUUID()}`,
-    timestamp: new Date('2026-01-01T00:00:00.000Z'),
-    scorerId: 'observability-scorer',
-    score: 0.5,
-    ...overrides,
-  };
-}
-
 describe('PostgresStore observability scores bridge', () => {
   let store: PostgresStore;
   let scores: ScoresStorage;
   let observability: ObservabilityStorage;
+
+  /** Seed historical records through the supported writer, then set their recorded time. */
+  async function saveLegacyScore(overrides: Partial<SaveScorePayload>, timestamp?: Date) {
+    const { score } = await scores.saveScore(legacyScore(overrides));
+    if (timestamp) {
+      await store.db.none(
+        `UPDATE ${getSchemaName(schemaName)}."mastra_scorers"
+         SET "createdAt" = $1, "createdAtZ" = $1 WHERE id = $2`,
+        [timestamp.toISOString(), score.id],
+      );
+    }
+    return score;
+  }
 
   beforeAll(async () => {
     store = new PostgresStore({ ...TEST_CONFIG, id: 'pg-observability-scores-bridge', schemaName });
@@ -157,14 +161,10 @@ describe('PostgresStore observability scores bridge', () => {
     const dayTwo = new Date('2026-02-02T00:00:00.000Z');
     const dayThree = new Date('2026-02-03T00:00:00.000Z');
     const scorerId = 'ordering-scorer';
-    await observability.batchCreateScores({
-      scores: [
-        observabilityScore({ scoreId: 'order-a', timestamp: dayOne, scorerId, score: 0.5 }),
-        observabilityScore({ scoreId: 'order-b', timestamp: dayTwo, scorerId, score: 0.9 }),
-        observabilityScore({ scoreId: 'order-c', timestamp: dayTwo, scorerId, score: 0.9 }),
-        observabilityScore({ scoreId: 'order-d', timestamp: dayThree, scorerId, score: 0.1 }),
-      ],
-    });
+    await saveLegacyScore({ id: 'order-a', scorerId, score: 0.5 }, dayOne);
+    await saveLegacyScore({ id: 'order-b', scorerId, score: 0.9 }, dayTwo);
+    await saveLegacyScore({ id: 'order-c', scorerId, score: 0.9 }, dayTwo);
+    await saveLegacyScore({ id: 'order-d', scorerId, score: 0.1 }, dayThree);
 
     const timestampRange = await observability.listScores({
       filters: {
@@ -206,7 +206,7 @@ describe('PostgresStore observability scores bridge', () => {
     });
   });
 
-  it('filters serialized legacy JSON with the same fallback precedence as returned records', async () => {
+  it('filters legacy JSON objects with the same fallback precedence as returned records', async () => {
     const { score: saved } = await scores.saveScore(
       legacyScore({
         organizationId: 'column-org',
@@ -284,7 +284,7 @@ describe('PostgresStore observability scores bridge', () => {
     });
   });
 
-  it('uses serialized scorer and entity fallbacks and UTC timestamps consistently in queries', async () => {
+  it('uses scorer and entity fallbacks and UTC timestamps consistently in queries', async () => {
     const { score: saved } = await scores.saveScore(
       legacyScore({
         scorer: { id: 'fallback-scorer', name: 'Fallback scorer', version: 'v1' },
@@ -298,7 +298,7 @@ describe('PostgresStore observability scores bridge', () => {
           "createdAtZ" = NULL, "createdAt" = $1 WHERE id = $2`,
       [timestamp.toISOString(), saved.id],
     );
-    await observability.createScore({ score: observabilityScore({ timestamp: new Date('2026-02-03T00:00:00Z') }) });
+    await saveLegacyScore({}, new Date('2026-02-03T00:00:00Z'));
     const result = await observability.listScores({
       filters: {
         scorerId: ['fallback-scorer'],
@@ -324,46 +324,46 @@ describe('PostgresStore observability scores bridge', () => {
   });
 
   it('supports first-class, contextual, metadata, source, and tag filters', async () => {
-    const target = observabilityScore({
-      scoreId: 'filter-target',
+    await saveLegacyScore({
+      id: 'filter-target',
       scorerId: 'filter-scorer',
-      scoreSource: 'manual',
+      source: 'TEST',
       traceId: 'filter-trace',
       spanId: 'filter-span',
-      entityType: EntityType.AGENT,
+      entityType: 'AGENT',
       entityId: 'filter-agent-id',
-      entityName: 'Filter agent',
-      entityVersionId: 'agent-version',
-      parentEntityType: EntityType.WORKFLOW_RUN,
-      parentEntityName: 'Parent workflow',
-      parentEntityVersionId: 'parent-version',
-      rootEntityType: EntityType.WORKFLOW_RUN,
-      rootEntityName: 'Root workflow',
-      rootEntityVersionId: 'root-version',
-      userId: 'filter-user',
+      entity: { id: 'filter-agent-id', name: 'Filter agent' },
       organizationId: 'filter-organization',
       resourceId: 'filter-resource',
       runId: 'filter-run',
-      sessionId: 'filter-session',
       threadId: 'filter-thread',
-      requestId: 'filter-request',
-      experimentId: 'filter-experiment',
-      environment: 'test',
-      serviceName: 'filter-service',
-      executionSource: 'integration-test',
-      tags: ['tag-a', 'tag-b'],
-      metadata: { region: 'west', nested: { active: true } },
+      metadata: {
+        entityVersionId: 'agent-version',
+        parentEntityType: 'WORKFLOW',
+        parentEntityName: 'Parent workflow',
+        parentEntityVersionId: 'parent-version',
+        rootEntityType: 'WORKFLOW',
+        rootEntityName: 'Root workflow',
+        rootEntityVersionId: 'root-version',
+        userId: 'filter-user',
+        sessionId: 'filter-session',
+        requestId: 'filter-request',
+        experimentId: 'filter-experiment',
+        environment: 'test',
+        serviceName: 'filter-service',
+        executionSource: 'integration-test',
+        tags: ['tag-a', 'tag-b'],
+        region: 'west',
+        nested: { active: true },
+      },
     });
-    await observability.createScore({ score: target });
-    await observability.createScore({
-      score: observabilityScore({
-        scoreId: 'filter-decoy',
-        scorerId: 'other-scorer',
-        scoreSource: 'automated',
-        traceId: 'other-trace',
-        entityType: EntityType.WORKFLOW_RUN,
-        metadata: { region: 'east' },
-      }),
+    await saveLegacyScore({
+      id: 'filter-decoy',
+      scorerId: 'other-scorer',
+      source: 'LIVE',
+      traceId: 'other-trace',
+      entityType: 'WORKFLOW',
+      metadata: { region: 'east' },
     });
 
     const filters: Array<[string, ScoresFilter]> = [
@@ -389,8 +389,8 @@ describe('PostgresStore observability scores bridge', () => {
       ['environment', { environment: 'test' }],
       ['serviceName', { serviceName: 'filter-service' }],
       ['executionSource', { executionSource: 'integration-test' }],
-      ['scoreSource', { scoreSource: 'manual' }],
-      ['source alias', { source: 'manual' }],
+      ['scoreSource', { scoreSource: 'TEST' }],
+      ['source alias', { source: 'TEST' }],
       ['tags', { tags: ['tag-a', 'tag-b'] }],
       ['metadata string', { metadata: { region: 'west' } }],
       ['metadata object', { metadata: { nested: { active: true } } }],
@@ -404,94 +404,62 @@ describe('PostgresStore observability scores bridge', () => {
       ).toEqual(['filter-target']);
     }
 
-    await expect(observability.getScoreById('filter-target')).resolves.toMatchObject(target);
+    await expect(observability.getScoreById('filter-target')).resolves.toMatchObject({
+      scoreId: 'filter-target', scorerId: 'filter-scorer', scoreSource: 'TEST', entityType: EntityType.AGENT,
+    });
   });
 
-  it('creates and batch-creates scores in the shared scorer table without clobbering metadata', async () => {
-    await observability.createScore({
-      score: observabilityScore({
-        scoreId: 'created-single',
-        entityName: undefined,
-        userId: null,
-        tags: null,
-        metadata: {
-          entityName: 'metadata-only-name',
-          userId: 'metadata-user',
-          tags: ['metadata-tag'],
-          customField: 'kept',
-          nullable: null,
-        },
-      }),
+  it('keeps observability writes unsupported so one scorer result remains one legacy row', async () => {
+    const scorerId = 'single-result-scorer';
+    const emission = {
+      timestamp: new Date(),
+      scorerId,
+      scoreSource: 'experiment',
+      traceId: 'target-trace',
+      entityType: EntityType.AGENT,
+      score: 0.75,
+    };
+    await expect(observability.createScore({ score: emission })).rejects.toMatchObject({
+      id: 'OBSERVABILITY_STORAGE_CREATE_SCORE_NOT_IMPLEMENTED',
     });
-    await observability.batchCreateScores({
-      scores: [
-        observabilityScore({
-          scoreId: 'created-batch-a',
-          entityName: 'top-level-name',
-          metadata: { entityName: 'stale-name', customField: 'kept' },
-        }),
-        observabilityScore({ scoreId: 'created-batch-b' }),
-      ],
+    await expect(observability.batchCreateScores({ scores: [emission] })).rejects.toMatchObject({
+      id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_SCORES_NOT_IMPLEMENTED',
     });
-
-    await expect(observability.getScoreById('created-single')).resolves.toMatchObject({
-      scoreId: 'created-single',
-      entityName: 'metadata-only-name',
-      userId: 'metadata-user',
-      tags: ['metadata-tag'],
-      metadata: {
-        entityName: 'metadata-only-name',
-        userId: 'metadata-user',
-        tags: ['metadata-tag'],
-        customField: 'kept',
-        nullable: null,
-      },
-    });
-    await expect(observability.getScoreById('created-batch-a')).resolves.toMatchObject({
-      scoreId: 'created-batch-a',
-      entityName: 'top-level-name',
-      metadata: { entityName: 'top-level-name', customField: 'kept' },
-    });
+    const saved = await saveLegacyScore({ scorerId, traceId: 'target-trace', runId: 'real-run', source: 'TEST' });
+    const result = await observability.listScores({ filters: { scorerId } });
+    expect(result.pagination!.total).toBe(1);
+    expect(result.scores).toMatchObject([{ scoreId: saved.id, runId: 'real-run', scoreSource: 'TEST' }]);
     await expect(observability.getScoreById('missing-score')).resolves.toBeNull();
-    await expect(scores.getScoreById({ id: 'created-single' })).resolves.toMatchObject({ id: 'created-single' });
-
-    const listed = await observability.listScores({});
-    expect(listed.pagination.total).toBe(3);
   });
 
-  it.each(Object.values(EntityType))('round-trips the %s entity type', async entityType => {
-    const score = observabilityScore({ entityType, parentEntityType: entityType, rootEntityType: entityType });
-    await observability.createScore({ score });
-    const result = await observability.listScores({
-      filters: { entityType, parentEntityType: entityType, rootEntityType: entityType },
+  it('reflects legacy score updates without introducing a second identity', async () => {
+    await saveLegacyScore({ id: 'retried-score', scorerId: 'retry-scorer', score: 0.5 });
+    await saveLegacyScore({ id: 'retried-score', scorerId: 'retry-scorer', score: 0.9 });
+    const result = await observability.listScores({ filters: { scorerId: 'retry-scorer' } });
+    expect(result.pagination!.total).toBe(1);
+    expect(result.scores).toMatchObject([{ scoreId: 'retried-score', score: 0.9 }]);
+    await expect(observability.getScoreById('retried-score')).resolves.toMatchObject({ score: 0.9 });
+  });
+
+  it.each([
+    ['AGENT', EntityType.AGENT],
+    ['WORKFLOW', EntityType.WORKFLOW_RUN],
+    ['TRAJECTORY', EntityType.TRAJECTORY],
+    ['STEP', EntityType.WORKFLOW_STEP],
+    ['tool', EntityType.TOOL],
+    ['agent_run', EntityType.AGENT],
+  ])('maps legacy %s entity types consistently for reads and filters', async (legacyType, entityType) => {
+    const saved = await saveLegacyScore({
+      entityType: legacyType,
+      metadata: { parentEntityType: legacyType, rootEntityType: legacyType },
     });
+    const result = await observability.listScores({ filters: { entityType, parentEntityType: entityType, rootEntityType: entityType } });
     expect(result.scores).toHaveLength(1);
-    expect(result.scores[0]).toMatchObject(score);
-  });
-
-  it('generates IDs for scores without IDs and treats empty batches as a no-op', async () => {
-    await observability.batchCreateScores({ scores: [] });
-    expect((await observability.listScores({})).scores).toEqual([]);
-    await observability.createScore({ score: observabilityScore({ scoreId: undefined }) });
-    const result = await observability.listScores({});
-    expect(result.scores).toHaveLength(1);
-    expect(result.scores[0]!.scoreId).toEqual(expect.any(String));
-    await expect(scores.getScoreById({ id: result.scores[0]!.scoreId! })).resolves.toMatchObject({ score: 0.5 });
-  });
-
-  it('rolls back an entire batch on a database error', async () => {
-    await observability.createScore({ score: observabilityScore({ scoreId: 'existing-id' }) });
-    await expect(
-      observability.batchCreateScores({
-        scores: [observabilityScore({ scoreId: 'rolled-back' }), observabilityScore({ scoreId: 'existing-id' })],
-      }),
-    ).rejects.toMatchObject({ id: expect.stringContaining('BATCH_CREATE_SCORES_FAILED') });
-    await expect(observability.getScoreById('rolled-back')).resolves.toBeNull();
-    expect((await observability.listScores({})).pagination!.total).toBe(1);
+    expect(result.scores[0]).toMatchObject({ scoreId: saved.id, entityType, parentEntityType: entityType, rootEntityType: entityType });
   });
 
   it('surfaces invalid serialized JSON as a storage error', async () => {
-    await observability.createScore({ score: observabilityScore({ scoreId: 'invalid-json' }) });
+    await saveLegacyScore({ id: 'invalid-json' });
     await store.db.none(`UPDATE ${getSchemaName(schemaName)}."mastra_scorers" SET metadata = $1::jsonb WHERE id = $2`, [
       JSON.stringify('{invalid'),
       'invalid-json',

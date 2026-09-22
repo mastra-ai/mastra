@@ -9,7 +9,6 @@ import {
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
-  BatchCreateScoresArgs,
   SpanRecord,
   TracingStorageStrategy,
   ListTracesArgs,
@@ -33,7 +32,6 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
   TABLE_NAMES,
-  CreateScoreArgs,
   ListScoresArgs,
   ListScoresResponse,
   ScoreRecord,
@@ -300,14 +298,6 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     return scoresOps.listScores(this.#db, this.#schema, args);
-  }
-
-  async createScore(args: CreateScoreArgs): Promise<void> {
-    return scoresOps.createScore(this.#db, this.#schema, args);
-  }
-
-  async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
-    return scoresOps.batchCreateScores(this.#db, this.#schema, args);
   }
 
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
