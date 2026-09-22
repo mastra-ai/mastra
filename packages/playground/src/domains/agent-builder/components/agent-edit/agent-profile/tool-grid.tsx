@@ -58,7 +58,7 @@ export const ToolGrid = ({
         <label
           data-testid="tools-only-selected-filter"
           className={cn(
-            'inline-flex items-center gap-2 text-meta text-muted-foreground select-none cursor-pointer',
+            'inline-flex cursor-pointer items-center gap-2 text-meta text-muted-foreground select-none',
             !editable && 'cursor-not-allowed opacity-60',
           )}
         >
@@ -77,7 +77,7 @@ export const ToolGrid = ({
       {tools.length === 0 ? (
         <ToolListEmptyState details={emptyStateDetails} />
       ) : (
-        <div className="grid min-h-0 grid-cols-1 content-start gap-2 overflow-y-auto sm:grid-cols-2 lg:gap-4 2xl:grid-cols-3">
+        <div className="grid min-h-0 grid-cols-1 content-start gap-2 overflow-y-auto 2xl:grid-cols-3 sm:grid-cols-2 lg:gap-4">
           {tools.map(item => (
             <ToolCard key={`${item.type}__${item.id}`} item={item} editable={editable} onToggle={onToggle} />
           ))}

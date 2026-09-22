@@ -1,5 +1,44 @@
 # @mastra/factory
 
+## 0.17.0-alpha.1
+
+### Minor Changes
+
+- **Added a `platform.github` config key to `MastraFactory`** for overriding the GitHub integration the factory installs itself. ([#24665](https://github.com/mastra-ai/mastra/pull/24665))
+
+  When Platform credentials are present, `MastraFactory` installs a `PlatformGithubIntegration` automatically. You can now change its event handlers and app slug from the factory config, instead of constructing the integration and re-declaring the auto-install guard yourself:
+
+  ```ts
+  // Before
+  import { PlatformGithubIntegration } from '@mastra/factory/integrations/platform/github/integration';
+
+  new MastraFactory({
+    storage,
+    integrations: [new PlatformGithubIntegration({ rules: { issueOpened }, slug: 'factory-app' })],
+  });
+
+  // After
+  new MastraFactory({
+    storage,
+    platform: { github: { rules: { issueOpened }, slug: 'factory-app' } },
+  });
+  ```
+
+  For example, replacing `issueOpened` lets a newly created GitHub-issue work item land on the board its existing labels select instead of defaulting to Work. `slug` falls back to `platform.githubAppSlug` when omitted.
+
+  An explicit integration with id `github` in `integrations` still takes precedence, which makes `platform.github` a no-op; the factory logs a warning rather than ignoring it silently, and warns the same way when no Platform credentials and no explicit GitHub integration are present.
+
+### Patch Changes
+
+- Fixed GitHub sessions not being subscribed to pull requests they opened through the shared `source_control_create_change_request` tool. Comments and closes on those pull requests now reach the session, and the transcript shows the pull request link. ([#24571](https://github.com/mastra-ai/mastra/pull/24571))
+
+- Fixed review sessions that resumed after a Factory restart reading repository instruction files from the untrusted pull request checkout before their security state was restored. ([#24576](https://github.com/mastra-ai/mastra/pull/24576))
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`ac05f2d`](https://github.com/mastra-ai/mastra/commit/ac05f2d7fca4da0a68d4faa433f0b8b993e59d40), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed)]:
+  - @mastra/core@1.69.0-alpha.0
+  - @mastra/auth-studio@1.3.7-alpha.0
+  - @mastra/code-sdk@1.8.1-alpha.0
+
 ## 0.16.1-alpha.0
 
 ### Patch Changes

@@ -7,7 +7,7 @@ description: "Browse Kilo Gateway model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/kilo.svg" alt="Kilo Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kilo Gateway
 
-Access 382 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
+Access 383 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
 
 Learn more in the [Kilo Gateway documentation](https://kilo.ai).
 
@@ -78,8 +78,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 5,
-    "outputCost": 25
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "kilo/~anthropic/claude-sonnet-latest",
@@ -112,10 +112,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 943718,
-    "inputCost": 0.624,
-    "outputCost": 2.88
+    "contextWindow": 1024000,
+    "maxOutput": 384000,
+    "inputCost": 0.55572,
+    "outputCost": 1.66716
   },
   {
     "model": "kilo/~deepseek/deepseek-v4-flash-latest",
@@ -257,9 +257,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943718,
-    "inputCost": 0.6545,
-    "outputCost": 2.057
+    "maxOutput": 131072,
+    "inputCost": 0.6538,
+    "outputCost": 2.0548
   },
   {
     "model": "kilo/aion-labs/aion-2.0",
@@ -268,7 +268,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
+    "contextWindow": 1048576,
     "maxOutput": 32768,
     "inputCost": 0.8,
     "outputCost": 1.6
@@ -280,7 +280,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
+    "contextWindow": 1048576,
     "maxOutput": 32768,
     "inputCost": 3,
     "outputCost": 6
@@ -292,7 +292,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
+    "contextWindow": 1048576,
     "maxOutput": 32768,
     "inputCost": 0.7,
     "outputCost": 1.4
@@ -500,6 +500,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 5,
     "outputCost": 25
+  },
+  {
+    "model": "kilo/anthropic/claude-opus-5.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "kilo/anthropic/claude-sonnet-4",
@@ -2933,7 +2945,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 117964,
+    "maxOutput": 32768,
     "inputCost": 0.018,
     "outputCost": 0.09
   },
@@ -3701,7 +3713,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 65536,
+    "maxOutput": 262140,
     "inputCost": 0.45,
     "outputCost": 2.7
   },
@@ -4134,8 +4146,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 128000,
-    "inputCost": 0.13,
-    "outputCost": 0.53
+    "inputCost": 0.0825,
+    "outputCost": 0.33
   },
   {
     "model": "kilo/tencent/hy3-preview",

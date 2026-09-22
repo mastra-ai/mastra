@@ -15,8 +15,8 @@
    * boundary ladder takes its alphas from the same tint, `--border` sitting a
    * notch above `--fill` so its rim survives on a filled control.
    *
-   * fill         rest of a filled control (input, button, trigger, chip) and of
-   *              a raised container; also press on a transparent base
+   * fill         press on a raised control, its open rung, and press on a transparent
+   *              base; also the rest fill of a raised container
    * fill-hover   hover on a rest fill; rest of a selection control (checkbox,
    *              switch, radio), which sits one rung up from field-sized surfaces
    * fill-active  press / open / selected; selection-control hover

@@ -4,7 +4,7 @@ import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { format, isThisYear, isToday } from 'date-fns';
-import { CircleSlashIcon, ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
+import { ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
 
 export type DatasetItemsSortKey = 'createdAt';
 
@@ -184,7 +184,7 @@ export function DatasetItemsList({
                   )}
                 </DataList.Cell>
                 <DataList.Cell className="min-w-0">
-                  <span className="text-body-sm text-placeholder block truncate">{formatDate(createdAtDate)}</span>
+                  <span className="block truncate text-body-sm text-placeholder">{formatDate(createdAtDate)}</span>
                 </DataList.Cell>
               </>
             );
@@ -241,44 +241,42 @@ interface EmptyDatasetItemListProps {
 
 function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <EmptyState
-        iconSlot={<CircleSlashIcon />}
-        titleSlot="No items yet"
-        descriptionSlot={
-          <>
-            Add items to this dataset to use them <br />
-            in experiment runs.
-          </>
-        }
-        actionSlot={
-          <div className="flex flex-col items-center gap-2">
-            <div className="flex items-center gap-2">
-              <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
-                New item
-              </CreateButton>
-              {onImportClick && (
-                <Button onClick={onImportClick} icon={<Upload />}>
-                  Import CSV
-                </Button>
-              )}
-              {onImportJsonClick && (
-                <Button onClick={onImportJsonClick} icon={<FileJson />}>
-                  Import JSON
-                </Button>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
-
-              icon={<ExternalLinkIcon />}
-            >
-              Datasets Documentation
-            </Button>
+    <EmptyState
+      titleSlot="No items yet"
+      descriptionSlot={
+        <>
+          Add items to this dataset to use them <br />
+          in experiment runs.
+        </>
+      }
+      actionSlot={
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2">
+            <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
+              New item
+            </CreateButton>
+            {onImportClick && (
+              <Button onClick={onImportClick} icon={<Upload />}>
+                Import CSV
+              </Button>
+            )}
+            {onImportJsonClick && (
+              <Button onClick={onImportJsonClick} icon={<FileJson />}>
+                Import JSON
+              </Button>
+            )}
           </div>
-        }
-      />
-    </div>
+          <Button
+            variant="ghost"
+            render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
+
+            icon={<ExternalLinkIcon />}
+          >
+            Datasets Documentation
+          </Button>
+        </div>
+      }
+      variant="fill"
+    />
   );
 }

@@ -1,10 +1,15 @@
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { SchedulesPage as SchedulesPageContent } from '@/domains/schedules/components/schedules-page';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
+import { schedulesCrumb } from '@/domains/workflows/schedules-crumb';
+
+const crumbs = [navCrumb('/workflows'), schedulesCrumb];
 
 export default function SchedulesPage() {
   const [searchParams] = useSearchParams();
@@ -13,22 +18,25 @@ export default function SchedulesPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Schedules</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="schedules" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Schedules</h1>
+        <PermissionDenied variant="fill" resource="schedules" />
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout>
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Schedules</h1>
       <div className="h-full">
         <SchedulesPageContent workflowId={workflowId} />
       </div>

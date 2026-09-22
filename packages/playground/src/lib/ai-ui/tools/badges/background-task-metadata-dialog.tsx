@@ -62,19 +62,19 @@ const BackgroundTaskMetadata = ({
     const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
     argSlot = <CodeEditor data={formattedArgs} />;
   } catch {
-    argSlot = <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{args as unknown as string}</pre>;
+    argSlot = <pre className="overflow-x-auto rounded-md bg-muted p-4 whitespace-pre">{args as unknown as string}</pre>;
   }
 
   const resultSlot =
     typeof result === 'string' ? (
-      <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{result}</pre>
+      <pre className="overflow-x-auto rounded-md bg-muted p-4 whitespace-pre">{result}</pre>
     ) : (
       <CodeEditor data={result} />
     );
 
   const suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <pre className="overflow-x-auto rounded-md bg-muted p-4 whitespace-pre">{suspendPayload}</pre>
     ) : (
       <CodeEditor data={suspendPayload as Record<string, unknown> | Record<string, unknown>[] | undefined} />
     );
@@ -139,9 +139,9 @@ export const BackgroundTaskMetadataDialogTrigger = ({ backgroundTask }: Backgrou
         onClick={() => setIsOpen(s => !s)}
       >
         {backgroundTask.completedAt || backgroundTask.suspendedAt ? (
-          <Share2 className="text-muted-foreground size-5" />
+          <Share2 className="size-5 text-muted-foreground" />
         ) : (
-          <Loader2Icon className="text-muted-foreground size-5 animate-spin" />
+          <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
         )}
       </Button>
 

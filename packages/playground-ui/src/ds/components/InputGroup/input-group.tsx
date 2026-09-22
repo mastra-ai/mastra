@@ -4,14 +4,14 @@ import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { controlHeight } from '@/ds/primitives/control-size';
+import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
-// No React context: size flows via `data-size` on the named group root
-// (`group/input-group`) and is read by the control through `group-data-[size=…]`
-// variants — mirrors shadcn's data-slot/data-* convention and removes prop drilling.
+// Size flows down as `data-size` on the named group root (`group/input-group`), read by the
+// control through `group-data-[size=…]` variants — no prop drilling. The one context read is
+// upward: a wrapper that owns the rung (ButtonsGroup) hands it to the field.
 
 const inputGroupBaseClassName = cn(
   // `flex-1` (not `min-w-0`) lets the root fill a flex row while keeping its content-floor
@@ -63,14 +63,19 @@ export type InputGroupProps = React.ComponentPropsWithoutRef<'div'> & {
   size?: ControlSize;
 };
 
-const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(({ className, size = 'md', ...props }, ref) => {
+const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(({ className, size, ...props }, ref) => {
+  // A wrapper's rung wins over the field's own: inside a ButtonsGroup the group owns the
+  // height of every segment, so a field that kept its own type scale would sit at one rung
+  // and read at another.
+  const groupSize = React.useContext(ControlSizeContext);
+  const resolved = groupSize ?? size ?? 'md';
   return (
     <div
       ref={ref}
       role="group"
       data-slot="input-group"
-      data-size={size}
-      className={cn(inputGroupClassName, controlHeight[size], className)}
+      data-size={resolved}
+      className={cn(inputGroupClassName, controlHeight[resolved], className)}
       {...props}
     />
   );

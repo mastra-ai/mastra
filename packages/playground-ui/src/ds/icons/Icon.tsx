@@ -24,7 +24,7 @@ export const iconSizeClasses: Record<IconSize, string> = {
 
 export const Icon = ({ children, className, size = 'md', ...props }: IconProps) => {
   return (
-    <span className={cn('block', iconSizeClasses[size], className)} {...props}>
+    <span data-slot="icon" className={cn('block', iconSizeClasses[size], className)} {...props}>
       {children}
     </span>
   );

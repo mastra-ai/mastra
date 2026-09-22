@@ -1,5 +1,125 @@
 # @mastra/playground-ui
 
+## 57.0.0-alpha.0
+
+### Minor Changes
+
+- Aligned the Ask User card with the other AI surfaces in the chat stream. It now sits on a raised card with the same radius and a labelled header, uses design-system typography, and — most visibly — renders option pickers with the design-system `Checkbox` and `RadioGroup` instead of native browser controls, so selecting an option animates and matches every other control in Studio. ([#24677](https://github.com/mastra-ai/mastra/pull/24677))
+
+  Fixed along the way: option descriptions used the 10px `meta` role (reserved for badges and micro labels) and now use `caption`; the card was hand-built from the frame fill plus a manual border instead of the card primitive, so it read as a recessed panel rather than a card.
+
+  **Removed exports**
+
+  `AskUserOptionControl` and `AskUserOptionDescription` are gone — they wrapped the native `<input>` that no longer exists. Compose a row with `AskUserOptionRow` instead, passing the control you want:
+
+  ```tsx
+  // Before
+  <AskUserOptionControl type="radio" label="Staging" description="Validate first." />
+
+  // After
+  <AskUserOptionRow
+    label="Staging"
+    description="Validate first."
+    control={<RadioGroupItem value="Staging" />}
+  />
+  ```
+
+  `AskUserQuestion` is now typed against `Txt` rather than `<legend>`, so it takes `variant`, `tone`, and `as`.
+
+- Added a Linear-style **Advanced filter** to `FilterBar`, so filters can be combined with `and` / `or` instead of only being ANDed together. ([#24654](https://github.com/mastra-ai/mastra/pull/24654))
+
+  Pass a `FilterBarExpression` as `value` to opt in. Top-level chips stay flat and implicitly ANDed; each top-level group renders as a single **Advanced filter · N** chip that opens a popover with a recursive rule builder: one editable chip per condition laid out as `where` / `and` / `or` rows, nested groups as cards with their own `and` | `or` switch, and `+ Condition` / `+ Group` / `Clear all` footers. From the bar input, pick **Advanced filter…** at the end of the field list to create a group and start adding conditions into it. Empty groups are pruned when the popover closes. Nesting depth is bounded by the new `maxDepth` prop (default `3`).
+
+  A flat `FilterBarItem[]` value keeps working unchanged and never shows the option.
+
+  ```tsx
+  import { FilterBar, type FilterBarExpression } from '@mastra/playground-ui';
+
+  const [value, setValue] = useState<FilterBarExpression>({
+    logic: 'and',
+    nodes: [
+      { id: '1', fieldId: 'status', operatorId: 'is', value: 'error' },
+      {
+        id: 'g1',
+        kind: 'group',
+        logic: 'or',
+        nodes: [
+          { id: '2', fieldId: 'env', operatorId: 'is', value: 'prod' },
+          { id: '3', fieldId: 'env', operatorId: 'is', value: 'staging' },
+        ],
+      },
+    ],
+  });
+
+  <FilterBar fields={fields} operators={operators} value={value} onValueChange={setValue}>
+    <FilterBar.Chips />
+    <FilterBar.Input />
+  </FilterBar>;
+  ```
+
+- Pages now own their header. `PageLayout` accepts `breadcrumbs` and `actions` props and renders the header row (breadcrumbs left, actions right) above a plain scrollable `<main>`. ([#24643](https://github.com/mastra-ai/mastra/pull/24643))
+
+  Breaking:
+
+  - `PageLayout` no longer takes `width`, `height` or `heading`; apply `max-w-*` / grid classes via `className` instead. `PageLayoutRoot` is gone — import `PageLayout` directly.
+  - `MainContentLayout` and `MainContentContent` are removed; use `PageLayout`.
+  - `AppShell` drops `routeHeader`, `renderFrame`, `mainLabel` and `AppShellFrameProps`, along with `PageHeadingContext` / `usePageHeading`. `AppShell` only lays out `sidebar`, `mobileHeader` and `children`; the framed card styling moved to the consumer.
+
+- **FilterBar: a field that takes plain typed text** ([#24659](https://github.com/mastra-ai/mastra/pull/24659))
+
+  A field marked `search` stays pinned at the top of the field list whatever is typed, so text that names no field still commits as a filter instead of forcing a field pick first. Options also take a `start` node rendered before their label, for an avatar or an icon.
+
+  ```tsx
+  <FilterBar
+    fields={[
+      { id: 'text', label: 'Text', search: true, operators: ['contains'] },
+      {
+        id: 'teammate',
+        label: 'Teammate',
+        operators: ['is'],
+        suggestions: [{ value: 'github:alice', label: 'Alice', start: <Avatar name="Alice" /> }],
+      },
+    ]}
+    operators={DEFAULT_FILTER_OPERATORS}
+    value={items}
+    onValueChange={setItems}
+  >
+    <FilterBar.Chips />
+    <FilterBar.Input />
+  </FilterBar>
+  ```
+
+  Typing `flaky login` and pressing Enter now commits `Text contains flaky login`; `Teammate` is one arrow below.
+
+  Fixed: the option list opens on its first row again after a field is picked or a chip is committed with the keyboard. It used to keep the highlight index of the list it replaced, so a field reached with ArrowDown opened the value list on its second option.
+
+### Patch Changes
+
+- Add `ActionRow` (`ActionRow.Start`, `ActionRow.End`) — a toolbar line that pushes a start group and an end group apart and wraps on narrow viewports. `PageLayout`'s `actionRow` slot now stacks multiple rows with a consistent gap. ([#24643](https://github.com/mastra-ai/mastra/pull/24643))
+
+- `AppShell` now insets its body (`p-1.5 lg:p-2`, dropping the left inset at `lg` when a `sidebar` is passed) so the frame rendered inside it no longer needs its own margins. Consumers that put `m-*` classes on their own frame should remove them. `PageShell` body padding is now `p-4` (was `p-4 px-6`) to match the rest of the page layouts. ([#24643](https://github.com/mastra-ai/mastra/pull/24643))
+
+- `AppShell` accepts a `sidebar` slot and owns the sidebar/content grid, so consumers no longer wrap the sidebar and shell in a hand-rolled grid. ([#24643](https://github.com/mastra-ai/mastra/pull/24643))
+
+- `EmptyState` now renders a default `CircleSlashIcon` when `iconSlot` is omitted; `iconSlot` is optional (pass `null` for no icon). All playground callsites drop their explicit `iconSlot`. ([#24643](https://github.com/mastra-ai/mastra/pull/24643))
+
+- Add a `variant="fill"` option to `EmptyState` that centers the block in the full height of its parent, replacing the `flex h-full items-center justify-center` wrapper every empty-state call site used to hand-roll. ([#24643](https://github.com/mastra-ai/mastra/pull/24643))
+
+- `PageLayout` is now a minimal shell: `breadcrumbs`, `headerActions` (renamed from `actions`), a new `actionRow` slot pinned above the scrolling body, and `children`. The `<main>` body carries `p-4` by default and no longer accepts `className`. The `PageLayout.TopArea` / `MainArea` / `Row` / `Column` slots, `NoDataPageLayout`, and `PageShell` are removed — pass toolbars via `actionRow` and compose the body with plain elements. ([#24643](https://github.com/mastra-ai/mastra/pull/24643))
+
+- Page status states now own their centering. `SessionExpired`, `PermissionDenied` and `ErrorState` accept `variant="fill"`, and `Spinner` accepts `fill` plus a new `size="lg"`, so call sites no longer hand-roll a `flex h-full items-center justify-center` wrapper around them. `ErrorState` is rebuilt on `EmptyState` and drops its fixed `h-[30vh]` height, which used to push the block above center inside a full-height parent. ([#24643](https://github.com/mastra-ai/mastra/pull/24643))
+
+- Fixed the `SideDialog` code section header, where the copy button and the multiline toggle rendered at two different heights (28px next to 30px) inside their joined `ButtonsGroup`, so one segment poked out of the pill. `CopyButton` defaults to `sm` while `Button` defaults to `md`, and this header passed neither — both are now `sm`, matching the same header in `DataDetailsPanel` and `DataCodeSection`. The multiline toggle is icon-only and now carries an accessible name. ([#24691](https://github.com/mastra-ai/mastra/pull/24691))
+
+  A `ButtonsGroup` imposes no height of its own: every segment must sit on the same rung of the control size ladder (`sm` 28px, `md` 30px, `lg` 32px), or it will poke out.
+
+- Traces filter bar (on `/traces` and agent traces) now supports advanced AND/OR filter groups. Groups are persisted in the URL as `filterGroup` params, restored from saved filters, and sent to `queryTraces` as nested `or` / `and` predicates. `FilterBar`'s `createItemId` now only applies to root-level items so a group can hold several conditions on the same field. ([#24675](https://github.com/mastra-ai/mastra/pull/24675))
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`4053bf2`](https://github.com/mastra-ai/mastra/commit/4053bf25b2d74385471789f5ccf859b321f9d677), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed)]:
+  - @mastra/core@1.69.0-alpha.0
+  - @mastra/client-js@1.48.0-alpha.0
+  - @mastra/react@1.6.1-alpha.0
+
 ## 56.0.0
 
 ### Minor Changes

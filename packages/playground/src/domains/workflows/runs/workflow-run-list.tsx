@@ -54,7 +54,7 @@ function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resour
   if (timestamp === undefined && !resourceId) return null;
 
   return (
-    <span className="text-muted-foreground text-meta flex w-full min-w-0 items-center gap-1.5">
+    <span className="flex w-full min-w-0 items-center gap-1.5 text-meta text-muted-foreground">
       {timestamp !== undefined && (
         <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
           {formatDate(timestamp, 'MMM d, yyyy · h:mm a')}
@@ -102,8 +102,8 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="flex min-h-0 flex-col">
-        <CollapsibleTrigger className="text-caption text-muted-foreground flex shrink-0 items-center gap-2 px-4 py-3 text-left">
-          <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0 motion-reduce:transition-none" />
+        <CollapsibleTrigger className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-caption text-muted-foreground">
+          <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
           <span>Recent runs</span>
           {!isLoading && !error && (
             <span className="text-meta text-muted-foreground">
@@ -150,8 +150,8 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                              <span className="text-caption flex w-full min-w-0 items-center gap-2">
-                                <span className="text-foreground min-w-0 flex-1 truncate font-medium" title={run.runId}>
+                              <span className="flex w-full min-w-0 items-center gap-2 text-caption">
+                                <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={run.runId}>
                                   {run.runId}
                                 </span>
                               </span>
@@ -160,7 +160,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                                 resourceId={getRunResourceId(run)}
                               />
                               {runInput && (
-                                <span className="text-muted-foreground text-caption block w-full min-w-0 truncate">
+                                <span className="block w-full min-w-0 truncate text-caption text-muted-foreground">
                                   {runInput}
                                 </span>
                               )}

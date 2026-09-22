@@ -288,8 +288,8 @@ async function warmFirstRepositoryAndWorkItems(client: ReturnType<typeof createQ
 }
 
 async function openFromSidebar() {
-  const navigation = await screen.findByRole('navigation', { name: /Settings sections|Main/ }, { timeout: 5_000 });
-  const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
+  const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' }, { timeout: 5_000 });
+  const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
   await userEvent.click(trigger);
   return screen.findByRole('dialog', { name: 'Global search' }, { timeout: 5_000 });
 }
@@ -317,8 +317,9 @@ describe('Global search', () => {
     renderSearchRoute();
 
     await screen.findByRole('heading', { name: 'Preferences' });
-    const navigation = await screen.findByRole('navigation', { name: /Settings sections|Main/ });
-    const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
+    await screen.findByRole('navigation', { name: 'Settings sections' });
+    const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
+    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
     await user.click(trigger);
     await screen.findByRole('dialog', { name: 'Global search' });
 
@@ -580,6 +581,7 @@ describe('Global search', () => {
     expect(requests.created).toEqual([
       expect.objectContaining({
         title: 'Search GitLab MR',
+        board: 'review',
         stages: ['intake'],
         externalSource: expect.objectContaining({ integrationId: 'gitlab', type: 'pull-request' }),
       }),
@@ -693,7 +695,7 @@ describe('Global search', () => {
     await waitFor(() => expect(requests.transitions).toHaveLength(1));
     await waitForMutationsIdle(client);
     expect(requests.created).toEqual([
-      expect.objectContaining({ title: 'Harden the review board drop target', stages: ['intake'] }),
+      expect.objectContaining({ title: 'Harden the review board drop target', board: 'review', stages: ['intake'] }),
     ]);
     expect(requests.transitions[0]).toMatchObject({ itemId: 'work-item-filed', body: { stage: 'review' } });
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
@@ -830,8 +832,8 @@ describe('Global search', () => {
     // route has stopped swapping its frame — and a trigger captured mid-swap can never take focus.
     await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
 
-    const navigation = screen.getByRole('navigation', { name: 'Main' });
-    const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
+    const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
+    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
     await user.click(trigger);
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
 
