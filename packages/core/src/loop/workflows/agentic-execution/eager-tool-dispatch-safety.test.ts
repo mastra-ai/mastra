@@ -1439,6 +1439,23 @@ describe('eager tool dispatch — unsafe terminations', () => {
     const slowReleased = new Promise<void>(resolve => {
       releaseSlow = resolve;
     });
+    // Bound the wait: if the barrier is ever keyed to a call that stops happening, the
+    // tool would park forever, `drain` would never return, and the cleanup below would
+    // never run — stranding a spy on a shared prototype for the rest of the file. The
+    // bound turns that into an ordinary failing assertion instead of a runner timeout.
+    let barrierTimedOut = false;
+    const barrier = async () => {
+      let bound: ReturnType<typeof setTimeout>;
+      await Promise.race([
+        slowReleased.then(() => clearTimeout(bound)),
+        new Promise<void>(resolve => {
+          bound = setTimeout(() => {
+            barrierTimedOut = true;
+            resolve();
+          }, 2000);
+        }),
+      ]);
+    };
     let stopCalls = 0;
     const originalStop = EagerToolExecutionCoordinator.prototype.stop;
     const stopSpy = vi.spyOn(EagerToolExecutionCoordinator.prototype, 'stop').mockImplementation(function (
@@ -1458,8 +1475,8 @@ describe('eager tool dispatch — unsafe terminations', () => {
     );
 
     const agent = new Agent({
-      id: 'eager-inflight-at-finish-agent',
-      name: 'Eager in-flight at finish agent',
+      id: 'eager-inflight-at-backstop-agent',
+      name: 'Eager in-flight at backstop agent',
       instructions: 'Call the tool.',
       model,
       tools: {
@@ -1470,7 +1487,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
           outputSchema: z.object({ value: z.string() }),
           execute: async ({ value }) => {
             record('enter-slow');
-            await slowReleased;
+            await barrier();
             record('finish-slow');
             return { value };
           },
@@ -1487,9 +1504,15 @@ describe('eager tool dispatch — unsafe terminations', () => {
 
     // The barrier only lifts once `stop()` has been reached twice, so the tool was
     // provably still running when the backstop made its cancellation decision — and the
-    // decision must have been to leave it alone. A reorder that changes which call is
-    // the backstop surfaces here as a hang rather than a silent pass.
-    expect(stopCalls).toBeGreaterThanOrEqual(2);
+    // decision must have been to leave it alone.
+    //
+    // `toBe(2)` rather than `>= 2` on purpose. The counter identifies the second call,
+    // not its call site, so an added earlier `stop()` would release the tool ahead of
+    // the backstop and restore the silent pass this barrier exists to remove. Pinning
+    // the count means a removed call fails as a timed-out barrier and an added one
+    // fails here, instead of either quietly re-keying the test.
+    expect(barrierTimedOut).toBe(false);
+    expect(stopCalls).toBe(2);
     expect(events.indexOf('enter-slow')).toBeLessThan(events.indexOf('finish'));
     expect(events.indexOf('finish-slow')).toBeGreaterThan(events.indexOf('finish'));
     expect(events.filter(event => event === 'enter-slow')).toHaveLength(1);
