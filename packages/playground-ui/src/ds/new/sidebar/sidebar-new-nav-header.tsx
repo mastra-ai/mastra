@@ -28,7 +28,7 @@ export function SidebarNewNavHeader({
   const Link = LinkProp ?? context?.LinkComponent ?? 'a';
 
   return (
-    <div className={cn('mt-1 flex min-h-7 min-w-0 items-center', className)}>
+    <div className={cn('mt-3 flex min-h-7 min-w-0 items-center', className)}>
       {showTitle ? (
         <header
           {...props}
