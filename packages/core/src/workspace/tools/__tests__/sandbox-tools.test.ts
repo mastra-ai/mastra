@@ -406,6 +406,46 @@ describe('execute_command tool', () => {
         process.off('unhandledRejection', onUnhandled);
       }
     });
+
+    it('logs and swallows a rejected async onExit callback', async () => {
+      const onExit = vi.fn(async () => {
+        throw new Error('async callback boom');
+      });
+      const handle = createMockHandle({ pid: '42' });
+      const sandbox = createMockSandbox({
+        processes: {
+          spawn: vi.fn().mockResolvedValue(handle),
+        },
+      });
+      const workspace = new Workspace({
+        sandbox,
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            backgroundProcesses: { onExit },
+          },
+        },
+      });
+      const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any;
+      workspace.__setLogger(logger);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        await executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace });
+        await vi.waitFor(() =>
+          expect(logger.error).toHaveBeenCalledWith(
+            'Background process onExit callback threw',
+            expect.objectContaining({ pid: '42' }),
+          ),
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        expect(onExit).toHaveBeenCalledTimes(1);
+        expect(unhandled).toHaveLength(0);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
   });
 });
 

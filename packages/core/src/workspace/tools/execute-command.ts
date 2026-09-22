@@ -200,16 +200,17 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
     // Wire exit callback (fire-and-forget). The observer runs after this tool has
     // already returned the PID, so any failure here has no live call frame to catch
-    // it. Own the detached promise: guard the callback against synchronous throws and
-    // attach a terminal .catch() for a rejected wait(), routing both to the logger so
+    // it. Own the detached promise: await the callback so both synchronous throws and
+    // rejected async callbacks land in the try/catch, and attach a terminal .catch()
+    // for a rejected wait(), routing all failures to the logger so
     // neither escapes as a process-terminating unhandled rejection. Observation
     // failures are logged distinctly and never synthesize a successful exit.
     if (bgConfig?.onExit) {
       void handle
         .wait()
-        .then(result => {
+        .then(async result => {
           try {
-            bgConfig.onExit!({
+            await bgConfig.onExit!({
               pid: handle.pid,
               exitCode: result.exitCode,
               stdout: result.stdout,
