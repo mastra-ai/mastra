@@ -37,6 +37,15 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('ClickHouse advanced trace query', () => {
+  it('compiles root duration predicates from root timestamps', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),
+    );
+
+    expect(compiled.query).toMatch(/dateDiff\('millisecond', r\.startedAt, r\.endedAt\) > \{trace_query_\d+:Float64\}/);
+    expect(Object.values(compiled.query_params)).toContain(5000);
+  });
+
   it('bootstraps delta polling and hands numbered pages a query-bound cursor', async () => {
     coreFeatures.add('observability-delta-polling');
     try {

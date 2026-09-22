@@ -140,6 +140,7 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   organizationId: 'filterOrganizationId',
   serviceName: 'filterServiceName',
   environment: 'filterEnvironment',
+  durationMs: 'filterDurationMs',
   experimentId: 'filterExperimentId',
   'spans.name': 'filterSpanName',
   'spans.spanType': 'filterSpanType',
@@ -289,6 +290,7 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   tags: 'Tags',
   serviceName: 'Service Name',
   environment: 'Environment',
+  durationMs: 'Trace duration (ms)',
   traceId: 'Trace ID',
   runId: 'Run ID',
   threadId: 'Thread ID',
@@ -322,6 +324,7 @@ const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; hue: numbe
   tags: { icon: TagsIcon, hue: 340 },
   serviceName: { icon: ServerIcon, hue: 175 },
   environment: { icon: GlobeIcon, hue: 145 },
+  durationMs: { icon: TimerIcon, hue: 65 },
   traceId: { icon: WaypointsIcon, hue: 215 },
   runId: { icon: PlayIcon, hue: 195 },
   threadId: { icon: MessageSquareIcon, hue: 235 },
@@ -371,6 +374,8 @@ const TRACE_FILTER_BAR_TEXT_FIELD_IDS = [
   'organizationId',
   'experimentId',
 ] as const;
+
+const TRACE_FILTER_BAR_NUMBER_FIELD_IDS = ['durationMs'] as const;
 
 const TRACE_FILTER_BAR_RELATED_FIELD_IDS = [
   'spans.name',
@@ -463,6 +468,7 @@ export function createTraceFilterBarFields({
     ),
   ];
   const textFields = TRACE_FILTER_BAR_TEXT_FIELD_IDS.map(text);
+  const numberFields = TRACE_FILTER_BAR_NUMBER_FIELD_IDS.map(number);
   const relatedFields = (['spans', 'scores', 'feedback'] as const).flatMap(scope =>
     TRACE_FILTER_BAR_RELATED_FIELD_IDS.filter(id => id.startsWith(`${scope}.`))
       .map(id => {
@@ -487,6 +493,7 @@ export function createTraceFilterBarFields({
   return [
     ...pickFields.sort(byLabel),
     ...textFields.sort(byLabel),
+    ...numberFields.sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
   ]

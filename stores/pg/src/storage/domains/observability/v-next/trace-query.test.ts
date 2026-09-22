@@ -47,6 +47,18 @@ describe('Postgres advanced trace query', () => {
     ).toThrow('traceQueryTimeoutMs must be an integer between');
   });
 
+  it('compiles root duration predicates from root timestamps', () => {
+    const compiled = compilePostgresTraceQuery(
+      'custom',
+      plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),
+    );
+
+    expect(compiled.text).toContain(
+      `EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt")) * 1000 IS NOT NULL AND EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt")) * 1000 > $3`,
+    );
+    expect(compiled.values).toContain(5000);
+  });
+
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
     const compiled = compilePostgresTraceQuery(
       'custom',

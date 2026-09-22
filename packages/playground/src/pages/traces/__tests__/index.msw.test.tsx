@@ -722,6 +722,19 @@ describe('Traces page filter bar', () => {
     });
   });
 
+  describe('when the URL carries filterDurationMs=5000 with the gt operator', () => {
+    it('sends a top-level numeric gt predicate', async () => {
+      const onQuery = await renderCapturingQuery('/traces?filterDurationMs=5000&filterDurationMs.op=gt');
+
+      expect(onQuery.mock.calls.at(-1)?.[0]).toMatchObject({
+        where: {
+          op: 'and',
+          args: [{ op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } }],
+        },
+      });
+    });
+  });
+
   describe('when the URL carries filterSpanDurationMs=1000 with the gt operator', () => {
     it('sends a numeric gt predicate inside spans.some', async () => {
       const onQuery = vi.fn<(body: unknown) => void>();

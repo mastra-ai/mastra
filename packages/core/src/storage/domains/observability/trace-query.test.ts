@@ -320,6 +320,52 @@ describe('planTraceQuery', () => {
     expect(tooLarge.issues[0]).toMatchObject({ code: 'time_range_too_large', path: ['timeRange'] });
   });
 
+  it('plans numeric root duration predicates', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+            { op: 'in', value: { path: 'durationMs' }, set: [6000, 7000] },
+            { op: 'exists', path: 'durationMs' },
+          ],
+        },
+      }),
+    );
+
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'comparison', field: 'durationMs', operator: 'gt', value: 5000 },
+        { type: 'membership', field: 'durationMs', operator: 'in', values: [6000, 7000] },
+        { type: 'presence', field: 'durationMs', operator: 'exists' },
+      ],
+    });
+  });
+
+  it('rejects invalid root duration literals', () => {
+    const stringLiteral = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: '5000' } },
+        }),
+      ),
+    );
+    expect(stringLiteral.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_literal', path: ['where', 'right', 'literal'] }),
+    );
+    expect(
+      traceQueryRequestSchema.safeParse({
+        ...baseRequest,
+        where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: Number.POSITIVE_INFINITY } },
+      }).success,
+    ).toBe(false);
+  });
+
   it('plans recursive trace and same-record collection predicates', () => {
     const plan = planTraceQuery(
       parsed({
@@ -1508,6 +1554,14 @@ describe('trace-query discovery contract', () => {
     expect(getTraceQueryCanonicalFieldDescriptors('spans', 'DEL')).toEqual([
       expect.objectContaining({ path: 'model', valueKind: 'string', valueSuggestions: true }),
     ]);
+    expect(getTraceQueryCanonicalFieldDescriptors('trace', 'duration')).toEqual([
+      {
+        path: 'durationMs',
+        valueKind: 'number',
+        operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists', 'lt', 'lte', 'gt', 'gte'],
+        valueSuggestions: false,
+      },
+    ]);
   });
 
   it('accepts only eligible scope and path pairs for value discovery', () => {
@@ -1521,7 +1575,7 @@ describe('trace-query discovery contract', () => {
     expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: '${metadata.region }' })).toMatchObject({
       path: 'metadata.region ',
     });
-    for (const path of ['traceId', 'startedAt', 'metadata', 'metadata.customer.plan']) {
+    for (const path of ['traceId', 'startedAt', 'durationMs', 'metadata', 'metadata.customer.plan']) {
       expect(getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path }).success, path).toBe(false);
     }
     expect(

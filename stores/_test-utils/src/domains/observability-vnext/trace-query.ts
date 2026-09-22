@@ -711,7 +711,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       threadId: 'thread-1',
       resourceId: 'resource-2',
       startedAt: '2026-08-05T10:00:00.000Z',
-      endedAt: '2026-08-05T10:00:03.000Z',
+      endedAt: '2026-08-05T10:00:06.000Z',
       environment: 'staging',
     }),
     span(21, 'trace-b', 'span-b-tool', {
@@ -1396,6 +1396,30 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     name: 'returns one current completed root per trace in default order',
     request: { timeRange: fullRange },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'filters by the current root duration without matching long child spans',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'uses exact millisecond boundaries for root duration',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'gte', left: { path: 'durationMs' }, right: { literal: 6000 } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'does not expose incomplete roots through missing duration predicates',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'notExists', path: 'durationMs' },
+    },
+    expected: [],
   },
   {
     name: 'evaluates recursive trace predicates',
@@ -2437,6 +2461,7 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     resourceId: root.resourceId,
     startedAt: root.startedAt,
     endedAt: root.endedAt,
+    durationMs: root.endedAt === null ? null : new Date(root.endedAt).getTime() - new Date(root.startedAt).getTime(),
     entityName: root.entityName,
     entityType: root.entityType,
     environment: root.environment,

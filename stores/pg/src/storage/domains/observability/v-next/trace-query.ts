@@ -46,6 +46,7 @@ const TRACE_FIELDS = {
   resourceId: 'r."resourceId"',
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
+  durationMs: 'EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt")) * 1000',
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
   environment: 'r."environment"',

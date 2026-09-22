@@ -46,6 +46,7 @@ const TRACE_FIELDS = {
   resourceId: { sql: 'r.resourceId', parameterType: 'String' },
   startedAt: { sql: 'r.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
+  durationMs: { sql: "dateDiff('millisecond', r.startedAt, r.endedAt)", parameterType: 'Float64' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },

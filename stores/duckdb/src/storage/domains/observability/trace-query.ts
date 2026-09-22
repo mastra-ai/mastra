@@ -37,6 +37,7 @@ const TRACE_FIELDS = {
   resourceId: { sql: 'r.resourceId', parameterType: 'scalar' },
   startedAt: { sql: 'r.startedAt', parameterType: 'timestamp' },
   endedAt: { sql: 'r.endedAt', parameterType: 'timestamp' },
+  durationMs: { sql: "date_diff('millisecond', r.startedAt, r.endedAt)", parameterType: 'scalar' },
   entityName: { sql: 'r.entityName', parameterType: 'scalar' },
   entityType: { sql: 'r.entityType', parameterType: 'scalar' },
   environment: { sql: 'r.environment', parameterType: 'scalar' },

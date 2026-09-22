@@ -31,6 +31,17 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('DuckDB advanced trace query', () => {
+  it('compiles root duration predicates from root timestamps', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),
+    );
+
+    expect(compiled.sql).toContain(
+      `date_diff('millisecond', r.startedAt, r.endedAt) IS NOT NULL AND date_diff('millisecond', r.startedAt, r.endedAt) > ?`,
+    );
+    expect(compiled.values).toContain(5000);
+  });
+
   it('normalizes discovery resource exhaustion without exposing driver details', async () => {
     const query = vi.fn().mockRejectedValue(new Error('Out of Memory Error: failed to allocate secret query'));
     const discoveryPlan = planTraceQueryObservedFields(
