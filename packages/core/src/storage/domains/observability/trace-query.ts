@@ -15,7 +15,9 @@ export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
-const PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
+/** @internal Shared with the trace-aggregate request schema so both report identical complexity issues. */
+export const TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
+const PREDICATE_COMPLEXITY_MESSAGE = TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE;
 
 export function compareTraceQueryStrings(left: string, right: string): number {
   if (left < right) return -1;
@@ -667,7 +669,8 @@ function addPredicateComplexityIssue(path: Array<string | number>, message: stri
   }
 }
 
-function findPredicateComplexityIssue(
+/** @internal Pre-parse complexity guard shared by the trace-query and trace-aggregate request schemas. */
+export function findPredicateComplexityIssue(
   input: unknown,
   rootPaths: Array<Array<string | number>>,
 ): Array<string | number> | undefined {
