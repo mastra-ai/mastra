@@ -11,7 +11,7 @@ const RAIL_LINE =
 
 /** `-fg` is the on-surface tone: it flips light on dark, which a bare glyph needs and the badge fills do not. */
 export const RAIL_MARK_TONE: Record<BadgeVariant, string> = {
-  neutral: 'text-icon3',
+  neutral: 'text-muted-foreground',
   green: 'text-badge-green-fg',
   red: 'text-badge-red-fg',
   blue: 'text-badge-blue-fg',
@@ -26,7 +26,7 @@ export function DayHeading({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-3">
       <span aria-hidden className="bg-border h-px flex-1" />
-      <Txt as="h3" variant="meta" className="text-icon3 m-0 tracking-wider uppercase">
+      <Txt as="h3" variant="meta" className="text-muted-foreground m-0 tracking-wider uppercase">
         {children}
       </Txt>
       <span aria-hidden className="bg-border h-px flex-1" />

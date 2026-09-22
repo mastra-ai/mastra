@@ -135,7 +135,7 @@ export function OMSection({
           <Badge size="md" variant="yellow">
             Model credentials required
           </Badge>
-          <Txt as="p" variant="meta" className="text-icon3">
+          <Txt as="p" variant="meta" className="text-muted-foreground">
             Observational-memory model calls may fail until credentials are configured.
           </Txt>
         </div>

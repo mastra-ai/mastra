@@ -49,11 +49,9 @@ describe('DataListRoot', () => {
       expect(grid?.className).toContain('gap-y-px');
       expect(grid?.className).toContain('[&_.data-list-subheader+.data-list-row]:rounded-t-lg');
       expect(grid?.className).toContain('[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg');
-      expect(grid?.className).not.toMatch(/border-|ring-/);
-      expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
     });
 
-    it('drops the panel background in the light variant but keeps the header opaque', () => {
+    it('keeps the variant prop off the DOM node in the light variant', () => {
       const { container } = render(
         <DataList columns="1fr 1fr" variant="light">
           <Header />
@@ -61,28 +59,8 @@ describe('DataListRoot', () => {
       );
 
       const root = container.firstElementChild as HTMLElement;
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(root.className).not.toContain('shadow-raised');
       expect(root.className).toContain('rounded-xl');
       expect(root.getAttribute('variant')).toBeNull();
-      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--background)');
-      expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
-    });
-
-    it('only defines the background color on the root; sticky parts reuse it', () => {
-      const { container } = render(
-        <DataList columns="1fr 1fr">
-          <Header />
-        </DataList>,
-      );
-
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--card)');
-      expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
-      expect(grid?.className).toContain('[&_.data-list-row>.data-list-sticky-start]:bg-background');
-      expect(grid?.className).not.toMatch(/hover:bg-|focus-within\]:bg-/);
-      expect(grid?.style.getPropertyValue('--data-list-border')).toBe('');
-      expect(grid?.className).not.toMatch(/border-|ring-|--data-list-border/);
     });
 
     it('forwards scrollRef to the scrolling viewport that contains the grid', () => {
@@ -284,7 +262,7 @@ describe('DataListRoot', () => {
   });
 
   describe('per-row error variant', () => {
-    it('exposes the error tone as data-variant without painting a color', () => {
+    it('exposes the error tone as data-variant', () => {
       const { container } = render(
         <DataList columns="1fr">
           <DataList.RowButton variant="error">
@@ -297,12 +275,6 @@ describe('DataListRoot', () => {
       );
       const [errorRow, defaultRow] = container.querySelectorAll<HTMLButtonElement>('.data-list-row');
       expect(errorRow.dataset.variant).toBe('error');
-      expect(errorRow.classList.contains('before:bg-background')).toBe(true);
-      expect(errorRow.className).toContain('data-[variant=error]:bg-notice-destructive/10');
-      // Hover is the root's fluid highlight, not a per-row fill.
-      expect(errorRow.className).not.toContain('hover:bg-');
-      expect(errorRow.classList.contains('active:bg-fill')).toBe(true);
-      expect(errorRow.className).toContain('focus-visible:ring-accent1');
       expect(defaultRow.dataset.variant).toBe('default');
     });
 

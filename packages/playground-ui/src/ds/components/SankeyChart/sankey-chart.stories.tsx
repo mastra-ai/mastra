@@ -92,7 +92,7 @@ function UserLandControls() {
                       <button
                         type="button"
                         {...dragProvided.dragHandleProps}
-                        className="text-muted-foreground focus-visible:ring-neutral5 rounded-sm outline-hidden focus-visible:ring-1"
+                        className="text-muted-foreground focus-visible:ring-border-focus rounded-sm outline-hidden focus-visible:ring-1"
                         aria-label={`Reorder ${column.label}`}
                       >
                         <GripVertical className="size-3.5" aria-hidden="true" />

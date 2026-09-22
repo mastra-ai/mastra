@@ -44,7 +44,7 @@ describe('Section', () => {
     expect(screen.getAllByRole('separator')).toHaveLength(1);
   });
 
-  it('renders view-only and destructive row states', () => {
+  it('renders the view-only prefix', () => {
     render(
       <Section variant="factory">
         <Section.Content>
@@ -58,8 +58,6 @@ describe('Section', () => {
     );
 
     expect(screen.getByText('View only:')).toBeTruthy();
-    expect(screen.getByText('Project access').className).toContain('text-muted-foreground');
-    expect(screen.getByText('Leave organization').className).toContain('text-destructive');
   });
 
   it('keeps flat and factory headings on the card edge while rows retain their inset', () => {

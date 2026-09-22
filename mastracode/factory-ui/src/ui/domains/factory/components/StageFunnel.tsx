@@ -21,7 +21,7 @@ import { AGENT_COLOR, HUMAN_COLOR } from '../overviewTheme';
 import { boardStage, isTerminalStage, stageLabel } from '../stages';
 import { BoardStageIcon } from './BoardIcons';
 
-const EMPTY = 'text-icon3 m-0';
+const EMPTY = 'text-muted-foreground m-0';
 
 /** Narrow, the chart turns a quarter: authored once left to right, transposed on the way out. */
 const TRANSPOSE = 'matrix(0 1 1 0 0 0)';
@@ -49,11 +49,11 @@ function rungLabel(stage: string): string {
 function Row({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <>
-      <span className="text-meta text-icon3 flex items-center gap-1.5">
-        <Icon aria-hidden className="text-icon2 size-3.5 shrink-0" />
+      <span className="text-meta text-muted-foreground flex items-center gap-1.5">
+        <Icon aria-hidden className="text-placeholder size-3.5 shrink-0" />
         {label}
       </span>
-      <span className="text-meta text-icon5 text-right tabular-nums">{value}</span>
+      <span className="text-meta text-foreground text-right tabular-nums">{value}</span>
     </>
   );
 }
@@ -61,7 +61,7 @@ function Row({ icon: Icon, label, value }: { icon: LucideIcon; label: string; va
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
     <span className="flex flex-col gap-2">
-      <span className="text-icon6">{title}</span>
+      <span className="text-foreground">{title}</span>
       <span className="grid grid-cols-[auto_auto] items-baseline gap-x-4 gap-y-1">{children}</span>
     </span>
   );
@@ -136,7 +136,7 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
   return (
     <div
       role="tooltip"
-      className="bg-card shadow-overlay text-caption text-neutral5 animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
+      className="bg-card shadow-overlay text-caption text-foreground animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
       style={{
         left: cursor.x,
         top: cursor.y,
@@ -152,7 +152,7 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
 
 function Key({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <span className="text-meta text-icon3 flex items-center gap-1.5">
+    <span className="text-meta text-muted-foreground flex items-center gap-1.5">
       {children}
       {label}
     </span>
@@ -236,7 +236,7 @@ export function StageFunnel({
             <div key={step.stage} className={`flex min-w-0 flex-col gap-1 ${down ? 'justify-center' : ''}`}>
               <span className="flex min-w-0 items-center gap-1.5">
                 {stage ? <BoardStageIcon stage={stage} /> : null}
-                <Txt as="span" variant="meta" className="text-icon5 truncate font-semibold">
+                <Txt as="span" variant="meta" className="text-foreground truncate font-semibold">
                   {rungLabel(step.stage)}
                 </Txt>
               </span>
@@ -245,7 +245,7 @@ export function StageFunnel({
               >
                 {step.reached}
               </span>
-              <Txt as="span" variant="meta" className="text-icon3 truncate tabular-nums">
+              <Txt as="span" variant="meta" className="text-muted-foreground truncate tabular-nums">
                 {step.medianHoldMs === undefined ? ' ' : `${formatDuration(step.medianHoldMs)} typical`}
               </Txt>
             </div>
@@ -387,13 +387,13 @@ export function StageFunnel({
         </Key>
         <span className="ml-auto flex flex-col items-end gap-0.5">
           {pullRequests > 0 ? (
-            <Txt as="span" variant="meta" className="text-icon3 tabular-nums">
+            <Txt as="span" variant="meta" className="text-muted-foreground tabular-nums">
               {[`${pullRequests} opened a pull request`, merged > 0 ? `${merged} merged` : null]
                 .filter(Boolean)
                 .join(' · ')}
             </Txt>
           ) : null}
-          <Txt as="span" variant="meta" className="text-icon3">
+          <Txt as="span" variant="meta" className="text-muted-foreground">
             created in this window, by furthest stage reached
           </Txt>
         </span>

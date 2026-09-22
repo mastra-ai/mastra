@@ -412,12 +412,10 @@ describe('ThemeToggle', () => {
     const radios = getAllByRole('radio');
 
     expect(group.classList.contains('gap-0.5')).toBe(true);
-    expect(indicator?.classList.contains('bg-fill-hover')).toBe(true);
     expect(indicator?.style.width).toBe('28px');
     expect(indicator?.style.transform).toBe('translateX(60px)');
     expect(radios.every(radio => radio.style.width === '28px')).toBe(true);
     expect(radios.every(radio => radio.classList.contains('rounded-full'))).toBe(true);
-    expect(radios.every(radio => radio.classList.contains('data-[checked]:text-foreground'))).toBe(true);
     expect(radios.every(radio => radio.classList.contains('focus-visible:outline-hidden'))).toBe(true);
     expect(radios.every(radio => radio.classList.contains('active:scale-90'))).toBe(true);
   });

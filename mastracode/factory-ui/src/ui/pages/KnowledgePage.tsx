@@ -46,12 +46,12 @@ function Breadcrumb({
   onTrailClick: (index: number) => void;
 }) {
   return (
-    <nav aria-label="Knowledge scope" className="text-icon3 mt-1 flex flex-wrap items-center gap-1 text-xs">
-      <button type="button" className="hover:text-icon5" onClick={onProjectClick}>
+    <nav aria-label="Knowledge scope" className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1 text-xs">
+      <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
         org
       </button>
       <ChevronRight size={11} />
-      <button type="button" className="hover:text-icon5" onClick={onProjectClick}>
+      <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
         project
       </button>
       {threadId ? (
@@ -66,13 +66,13 @@ function Breadcrumb({
         <span key={`${entry.nodeId}-${index}`} className="flex items-center gap-1">
           <ChevronRight size={11} />
           {index === trail.length - 1 ? (
-            <span className="text-icon5 max-w-44 truncate" title={entry.name}>
+            <span className="text-foreground max-w-44 truncate" title={entry.name}>
               {entry.name}
             </span>
           ) : (
             <button
               type="button"
-              className="hover:text-icon5 max-w-44 truncate"
+              className="hover:text-foreground max-w-44 truncate"
               title={entry.name}
               onClick={() => onTrailClick(index)}
             >
@@ -146,7 +146,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       // calm state with a way back, never an error toast.
       body = (
         <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2 py-8">
-          <Txt as="p" variant="body" className="text-icon4">
+          <Txt as="p" variant="body" className="text-muted-foreground">
             This session's knowledge is no longer available.
           </Txt>
           <button type="button" className="text-sm text-purple-300 hover:underline" onClick={backToProject}>
@@ -163,7 +163,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     body = <SkeletonRows label="Loading knowledge graph" rows={6} />;
   } else if (graphQuery.data.nodes.length === 0) {
     body = (
-      <Txt as="p" variant="body" className="text-icon3">
+      <Txt as="p" variant="body" className="text-muted-foreground">
         No knowledge captured yet — the graph fills in as factory sessions work.
       </Txt>
     );
@@ -227,10 +227,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
       <header className="shrink-0">
-        <Txt as="h1" variant="heading" className="text-icon6 font-semibold">
+        <Txt as="h1" variant="heading" className="text-foreground font-semibold">
           Knowledge Graph
         </Txt>
-        <Txt as="p" variant="body" className="text-icon3 mt-1">
+        <Txt as="p" variant="body" className="text-muted-foreground mt-1">
           Explore nodes and the relationships captured by the agent over time.
         </Txt>
         <Breadcrumb

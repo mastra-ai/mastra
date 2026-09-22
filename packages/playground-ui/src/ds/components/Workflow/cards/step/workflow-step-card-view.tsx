@@ -32,8 +32,8 @@ const statusLineClasses: Partial<Record<ReportedStatus, string>> = {
   failed: 'after:bg-negative1',
   tripwire: 'after:bg-warning1',
   waiting: 'after:bg-accent5',
-  paused: 'after:bg-neutral3',
-  skipped: 'after:bg-neutral3',
+  paused: 'after:bg-muted-foreground',
+  skipped: 'after:bg-muted-foreground',
 };
 
 const footerStatusClasses: Partial<Record<ReportedStatus, string>> = {
@@ -96,8 +96,8 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
           'after:pointer-events-none after:absolute after:inset-x-4 after:-top-px after:h-px after:mask-x-from-76%',
           displayStatus && statusLineClasses[displayStatus],
           'has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-accent3',
-          isSelected && 'outline-1 outline-offset-4 outline-neutral3',
-          isBodyExpanded && 'border-dashed border-neutral3/40 shadow-none',
+          isSelected && 'outline-1 outline-offset-4 outline-border-focus',
+          isBodyExpanded && 'border-dashed border-muted-foreground/40 shadow-none',
           isWaiting && 'border-accent3',
           isHovered && !isSelected && 'bg-muted',
         )}

@@ -5,7 +5,7 @@ import { Colors } from '@mastra/playground-ui/tokens';
 import { useMemo } from 'react';
 
 const STATUS_COLORS = {
-  completed: Colors.neutral3,
+  completed: Colors['muted-foreground'],
   running: '#facc15',
   pending: '#fb923c',
   failed: '#f87171',

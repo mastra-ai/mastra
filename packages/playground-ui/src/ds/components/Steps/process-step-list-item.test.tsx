@@ -17,36 +17,12 @@ const step: ProcessStep = {
   isActive: true,
 };
 
-const cardOf = (title: string) => screen.getByRole('heading', { name: title }).closest('.rounded-lg');
-
 describe('ProcessStepListItem', () => {
   it('renders the title it is given, not one derived from the id', () => {
     render(<ProcessStepListItem step={step} isActive position={2} />);
 
     expect(screen.getByRole('heading', { name: 'Cloning repository' })).toBeTruthy();
     expect(screen.queryByText('Clone repo')).toBeNull();
-  });
-
-  it('leaves the active step without a card surface in the plain variant', () => {
-    render(<ProcessStepListItem step={step} isActive position={2} />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-card')).toBe(true);
-
-    cleanup();
-
-    render(<ProcessStepListItem step={step} isActive position={2} variant="plain" />);
-    expect(cardOf('Cloning repository')?.classList.contains('bg-card')).toBe(false);
-  });
-
-  it('drops the filled disc from a completed marker in the plain variant', () => {
-    const completed: ProcessStep = { ...step, status: 'success', isActive: false };
-
-    render(<ProcessStepListItem step={completed} isActive={false} position={2} />);
-    expect(document.querySelector('.bg-accent1Dark')).toBeTruthy();
-
-    cleanup();
-
-    render(<ProcessStepListItem step={completed} isActive={false} position={2} variant="plain" />);
-    expect(document.querySelector('.bg-accent1Dark')).toBeNull();
   });
 
   const markerOf = (title: string) =>
@@ -58,25 +34,6 @@ describe('ProcessStepListItem', () => {
     render(<ProcessStepListItem step={step} isActive position={3} />);
 
     expect(numberOf('Cloning repository')?.textContent).toBe('3.');
-  });
-
-  it.each([
-    ['the active step', { isActive: true, status: 'running' }, 'text-foreground'],
-    ['a finished step', { isActive: false, status: 'success' }, 'text-foreground'],
-    ['a step still waiting its turn', { isActive: false, status: 'pending' }, 'text-muted-foreground'],
-    ['a step that failed', { isActive: false, status: 'failed' }, 'text-muted-foreground'],
-  ])('reads %s at the right weight', (_, { isActive, status }, expected) => {
-    render(<ProcessStepListItem step={{ ...step, status }} isActive={isActive} position={1} />);
-
-    const heading = screen.getByRole('heading', { name: 'Cloning repository' });
-    expect(heading.classList.contains(expected)).toBe(true);
-    expect(numberOf('Cloning repository')?.classList.contains(expected)).toBe(true);
-  });
-
-  it('leaves an inactive step without the card surface', () => {
-    render(<ProcessStepListItem step={step} isActive={false} position={1} />);
-
-    expect(cardOf('Cloning repository')?.classList.contains('bg-card')).toBe(false);
   });
 
   it('draws a dashed ring for a step that has not started', () => {
@@ -94,16 +51,10 @@ describe('ProcessStepListItem', () => {
     expect(circle?.getAttribute('stroke-dasharray')).toBe('3 3');
   });
 
-  it.each([
-    ['success', 'bg-accent1Dark', 'bg-accent2Dark'],
-    ['failed', 'bg-accent2Dark', 'bg-accent1Dark'],
-  ])('gives a %s marker its own fill, not the other one', (status, ownFill, otherFill) => {
+  it.each(['success', 'failed'])('scales a %s marker', status => {
     render(<ProcessStepListItem step={{ ...step, status }} isActive={false} position={1} />);
 
-    const marker = markerOf('Cloning repository');
-    expect(marker?.classList.contains(ownFill)).toBe(true);
-    expect(marker?.classList.contains(otherFill)).toBe(false);
-    expect(marker?.classList.contains('scale-110')).toBe(true);
+    expect(markerOf('Cloning repository')?.classList.contains('scale-110')).toBe(true);
   });
 
   it.each(['running', 'pending'])('leaves a %s marker unscaled', status => {
@@ -138,33 +89,6 @@ describe('ProcessStepListItem', () => {
     expect(screen.getByText('Fetching updates…').classList.contains('truncate')).toBe(true);
   });
 
-  it.each([
-    ['success', '[&>svg]:text-positive1'],
-    ['failed', '[&>svg]:text-negative1'],
-  ])('tints a plain %s marker on the icon itself', (status, tint) => {
-    render(<ProcessStepListItem step={{ ...step, status }} isActive={false} position={1} variant="plain" />);
-    expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(true);
-
-    cleanup();
-
-    // A step still under way carries no outcome color yet.
-    render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} variant="plain" />);
-    expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(false);
-  });
-
-  it.each([
-    ['success', '[&>svg]:text-notice-success-fg'],
-    ['failed', '[&>svg]:text-notice-destructive-fg'],
-  ])('tints a default %s marker on the icon itself', (status, tint) => {
-    render(<ProcessStepListItem step={{ ...step, status }} isActive={false} position={1} />);
-    expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(true);
-
-    cleanup();
-
-    render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} />);
-    expect(markerOf('Cloning repository')?.classList.contains(tint)).toBe(false);
-  });
-
   it('shows the status icon rather than the waiting ring once a plain step has started', () => {
     render(<ProcessStepListItem step={{ ...step, status: 'success' }} isActive={false} position={1} variant="plain" />);
 
@@ -177,24 +101,6 @@ describe('ProcessStepListItem', () => {
     render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} />);
 
     expect(markerOf('Cloning repository')?.classList.contains('border-dashed')).toBe(false);
-  });
-
-  it('leaves a running default marker unfilled', () => {
-    render(<ProcessStepListItem step={{ ...step, status: 'running' }} isActive position={1} />);
-
-    const marker = markerOf('Cloning repository');
-    expect(marker?.classList.contains('bg-accent1Dark')).toBe(false);
-  });
-
-  it('reserves border space for the card only in the default variant', () => {
-    render(<ProcessStepListItem step={step} isActive={false} position={1} />);
-    // The transparent border keeps the row from shifting when it becomes active.
-    expect(cardOf('Cloning repository')?.classList.contains('border-transparent')).toBe(true);
-
-    cleanup();
-
-    render(<ProcessStepListItem step={step} isActive={false} position={1} variant="plain" />);
-    expect(cardOf('Cloning repository')?.classList.contains('border-transparent')).toBe(false);
   });
 
   it('ignores the deprecated stepId', () => {

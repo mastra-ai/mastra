@@ -18,7 +18,7 @@
 
 .composer-ring {
   --composer-ring-color: var(--composer-tone-color);
-  --composer-ring-edge: color-mix(in oklab, var(--neutral1) 40%, transparent);
+  --composer-ring-edge: color-mix(in oklab, var(--placeholder) 40%, transparent);
   --composer-spotlight-x: 50%;
   --composer-spotlight-y: 50%;
   --composer-spotlight-strength: 0;

@@ -27,7 +27,7 @@ const EDGE_LABELS_FIT_ABOVE = 8;
 const LABEL_CLEARANCE = 6;
 const LABEL_INSET = '1.5rem';
 const EDGE_FADE = '[mask-image:linear-gradient(to_right,transparent,black_3%,black_97%,transparent)]';
-const LENS_SHADOW = 'shadow-[0_2px_16px_-6px_oklch(0%_0_0deg/25%)]';
+const LENS_SHADOW = 'shadow-[var(--elevation-overlay)]';
 
 interface AuditDrag {
   mode: AuditBoundary | 'pan';
@@ -157,7 +157,7 @@ export function AuditRangePicker({
               className={cn(
                 'absolute top-1/2 w-px -translate-1/2 rounded-full',
                 isMajor.has(at) ? 'h-5' : 'h-2.5',
-                at >= selection.from && at <= selection.to ? 'bg-neutral3' : 'bg-neutral1/35',
+                at >= selection.from && at <= selection.to ? 'bg-muted-foreground' : 'bg-placeholder/35',
               )}
               style={{ left: `${positionOf(at)}%` }}
             />
@@ -206,14 +206,14 @@ export function AuditRangePicker({
               aria-valuemax={bounds.to}
               aria-valuenow={selection[boundary]}
               aria-valuetext={`${dayLabel(selection[boundary])} ${timeLabel(selection[boundary])}`}
-              className="focus-visible:ring-neutral3 group flex w-3.5 shrink-0 cursor-ew-resize items-center justify-center rounded-lg outline-none focus-visible:ring-2"
+              className="focus-visible:ring-border-focus group flex w-3.5 shrink-0 cursor-ew-resize items-center justify-center rounded-lg outline-none focus-visible:ring-2"
               onPointerDown={startDrag(boundary)}
               onKeyDown={nudge(boundary)}
             >
               <span
                 className={cn(
-                  'group-hover:bg-neutral4 group-focus-visible:bg-neutral4 h-4 w-0.5 rounded-full transition-[background-color,scale] duration-150 ease-out group-hover:scale-110 motion-reduce:transition-none',
-                  drag?.mode === boundary ? 'bg-neutral5 scale-110' : 'bg-neutral2',
+                  'group-hover:bg-muted-foreground group-focus-visible:bg-muted-foreground h-4 w-0.5 rounded-full transition-[background-color,scale] duration-150 ease-out group-hover:scale-110 motion-reduce:transition-none',
+                  drag?.mode === boundary ? 'bg-foreground scale-110' : 'bg-placeholder',
                 )}
                 aria-hidden
               />

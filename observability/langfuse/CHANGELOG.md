@@ -1,5 +1,13 @@
 # @mastra/langfuse
 
+## 1.5.8-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`f9e386f`](https://github.com/mastra-ai/mastra/commit/f9e386f308c448761ab9ed0281ae4ab54c99cbd6)]:
+  - @mastra/observability@1.17.9-alpha.2
+  - @mastra/otel-exporter@1.4.0-alpha.4
+
 ## 1.5.8-alpha.3
 
 ### Patch Changes

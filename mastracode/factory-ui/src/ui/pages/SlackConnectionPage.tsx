@@ -103,7 +103,7 @@ export function SlackConnectionSettings() {
       description="Start and continue Factory sessions from Slack."
     >
       {accountsQuery.isPending ? (
-        <Txt as="p" variant="caption" role="status" className="text-icon3">
+        <Txt as="p" variant="caption" role="status" className="text-muted-foreground">
           Loading Slack connection…
         </Txt>
       ) : accountsQuery.error ? (
@@ -127,7 +127,7 @@ export function SlackConnectionSettings() {
                 label="Slack"
                 description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
               >
-                <span className="text-caption text-icon4 group-hover:text-icon5 flex items-center gap-2">
+                <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
                   Connect Slack
                   <ChevronRight aria-hidden="true" />
                 </span>
@@ -158,7 +158,7 @@ export function SlackConnectionSettings() {
                       </span>
                     }
                     description={
-                      <Txt as="span" variant="meta" className="text-icon2">
+                      <Txt as="span" variant="meta" className="text-placeholder">
                         Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
                       </Txt>
                     }

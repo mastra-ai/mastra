@@ -22,7 +22,7 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
     <span
       aria-label={`${count} of ${total} visible board tasks in ${label}`}
       title={`${count} of ${total} visible board tasks`}
-      className="bg-fill text-meta text-icon4 flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 tabular-nums"
+      className="bg-fill text-meta text-muted-foreground flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 tabular-nums"
     >
       <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" aria-hidden>
         <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border" />
@@ -35,7 +35,7 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
-          className="stroke-icon5 transition-[stroke-dashoffset] motion-reduce:transition-none"
+          className="stroke-foreground transition-[stroke-dashoffset] motion-reduce:transition-none"
         />
       </svg>
       <span aria-hidden>{count}</span>
@@ -99,7 +99,7 @@ export function BoardColumnHeader({
         <span
           aria-hidden
           className={cn(
-            'text-meta text-icon3 flex h-8 items-center tabular-nums',
+            'text-meta text-muted-foreground flex h-8 items-center tabular-nums',
             headerAction &&
               'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
           )}
@@ -119,7 +119,7 @@ export function BoardColumnHeader({
         <Txt
           as="h2"
           variant="label"
-          className="text-icon3 pointer-events-none absolute top-full right-0 m-0 py-1 font-semibold [writing-mode:horizontal-tb] lg:right-auto lg:left-1/2 lg:-translate-x-1/2 lg:[writing-mode:vertical-rl]"
+          className="text-muted-foreground pointer-events-none absolute top-full right-0 m-0 py-1 font-semibold [writing-mode:horizontal-tb] lg:right-auto lg:left-1/2 lg:-translate-x-1/2 lg:[writing-mode:vertical-rl]"
         >
           {label}
         </Txt>
@@ -131,7 +131,7 @@ export function BoardColumnHeader({
     <div className={cn(columnWidthClass(false), 'group/column flex min-h-8 items-start justify-between gap-2')}>
       <div className="flex h-8 min-w-0 items-center gap-2">
         <BoardStageIcon stage={stage} kind={phaseKind} />
-        <Txt as="h2" variant="label" className="text-icon3 m-0 truncate font-semibold">
+        <Txt as="h2" variant="label" className="text-muted-foreground m-0 truncate font-semibold">
           {label}
         </Txt>
         {loading ? (
@@ -204,7 +204,7 @@ export function BoardColumn({
           aria-hidden
           style={{ top: dropLineTop }}
           className={cn(
-            'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
+            'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-placeholder transition-opacity motion-reduce:transition-none',
             dragOver ? 'opacity-100' : 'opacity-0',
           )}
         />

@@ -130,7 +130,7 @@ export function OverviewContent({
 
 function ViewAll({ to }: { to: string }) {
   return (
-    <Link to={to} className="text-icon3 hover:text-icon5 text-meta">
+    <Link to={to} className="text-muted-foreground hover:text-foreground text-meta">
       View all
     </Link>
   );
@@ -142,7 +142,7 @@ function ViewOnGithub({ slug }: { slug: string }) {
       href={`https://github.com/${slug}/commits`}
       target="_blank"
       rel="noreferrer"
-      className="text-icon3 hover:text-icon5 text-meta"
+      className="text-muted-foreground hover:text-foreground text-meta"
     >
       {slug}
     </a>
@@ -151,7 +151,7 @@ function ViewOnGithub({ slug }: { slug: string }) {
 
 function Count({ value }: { value: string }) {
   return (
-    <Txt as="span" variant="meta" className="text-icon3">
+    <Txt as="span" variant="meta" className="text-muted-foreground">
       {value}
     </Txt>
   );

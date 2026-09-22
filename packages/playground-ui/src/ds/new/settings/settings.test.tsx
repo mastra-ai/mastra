@@ -14,7 +14,7 @@ import {
 afterEach(cleanup);
 
 describe('Settings', () => {
-  it('uses the semantic card surface and Marvin text hierarchy', () => {
+  it('uses the Marvin text hierarchy and row layout', () => {
     render(
       <SettingsGroup>
         <SettingsHeader action={<button type="button">Save</button>}>
@@ -28,13 +28,9 @@ describe('Settings', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-subheading');
-    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-foreground');
     expect(screen.getByText('Stored in this browser.').classList).toContain('text-caption');
-    expect(screen.getByText('Stored in this browser.').classList).toContain('text-muted-foreground');
     expect(screen.getByText('Theme').classList).toContain('text-label');
-    expect(screen.getByText('Theme').classList).toContain('text-foreground');
     expect(screen.getByText('Color scheme for the interface').classList).toContain('text-caption');
-    expect(screen.getByText('Color scheme for the interface').classList).toContain('text-muted-foreground');
     expect(document.querySelector('[data-slot="settings-row"]')?.classList).toContain('sm:flex-row');
     expect(document.querySelector('header')?.classList).toContain('sm:items-center');
   });

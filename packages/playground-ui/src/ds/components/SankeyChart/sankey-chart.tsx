@@ -311,13 +311,13 @@ function SankeyNode({
           x={labelX}
           y={y - 24}
           textAnchor={textAnchor}
-          fill={Colors.neutral5}
+          fill={Colors.foreground}
           fontSize={NODE_LABEL_FONT_SIZE}
           fontFamily="var(--font-mono)"
         >
           {visibleLabel}
         </text>
-        <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={9.5}>
+        <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors['muted-foreground']} fontSize={9.5}>
           {value} ({percentage}%)
         </text>
       </g>

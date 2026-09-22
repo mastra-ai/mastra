@@ -59,7 +59,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
   return (
     <form onSubmit={handleSubmit} className="flex w-full flex-col gap-5">
       {mode === 'sign-up' ? (
-        <label className="text-neutral5 flex flex-col gap-2 text-sm font-medium">
+        <label className="text-foreground flex flex-col gap-2 text-sm font-medium">
           Name
           <Input
             type="text"
@@ -72,7 +72,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           />
         </label>
       ) : null}
-      <label className="text-neutral5 flex flex-col gap-2 text-sm font-medium">
+      <label className="text-foreground flex flex-col gap-2 text-sm font-medium">
         Email
         <Input
           type="email"
@@ -84,7 +84,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           onChange={e => setEmail(e.target.value)}
         />
       </label>
-      <label className="text-neutral5 flex flex-col gap-2 text-sm font-medium">
+      <label className="text-foreground flex flex-col gap-2 text-sm font-medium">
         Password
         <Input
           type="password"

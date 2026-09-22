@@ -46,7 +46,7 @@ export function ExperimentTraceTimelineTimingCol({
         <div className={cn('bg-muted w-full min-w-40 rounded-lg p-2.5', surfaceGroupStateLayerStyle)}>
           <div className="relative h-1.5 w-full rounded-sm">
             <div
-              className={cn('bg-neutral1 absolute rounded-sm h-1.5 top-0')}
+              className={cn('bg-placeholder absolute rounded-sm h-1.5 top-0')}
               style={{
                 width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime || 0}%`,

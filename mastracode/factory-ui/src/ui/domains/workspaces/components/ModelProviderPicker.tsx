@@ -49,7 +49,7 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
 
           <div className="flex items-center gap-3" aria-hidden="true">
             <div className="bg-border h-px flex-1" />
-            <Txt as="span" variant="caption" className="text-icon3">
+            <Txt as="span" variant="caption" className="text-muted-foreground">
               OR
             </Txt>
             <div className="bg-border h-px flex-1" />
@@ -59,7 +59,10 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
 
       <div className="flex flex-col gap-3">
         <div className="relative">
-          <Search size={14} className="text-icon3 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" />
+          <Search
+            size={14}
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+          />
           <Input
             type="search"
             placeholder="Search providers to connect with an API key…"
@@ -85,7 +88,7 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
           </div>
         )}
         {search.trim() && visibleKeyProviders.length === 0 && (
-          <Txt as="p" variant="caption" className="text-icon3 m-0">
+          <Txt as="p" variant="caption" className="text-muted-foreground m-0">
             {`No providers match “${search.trim()}”.`}
           </Txt>
         )}

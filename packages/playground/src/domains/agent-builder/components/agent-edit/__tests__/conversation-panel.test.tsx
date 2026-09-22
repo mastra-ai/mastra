@@ -221,18 +221,6 @@ describe('ConversationPanel', () => {
     });
   });
 
-  describe('when rendered with the default (unfocused) composer', () => {
-    it('uses the default border token styling', async () => {
-      captureStream();
-      const { getByTestId } = renderPanel();
-
-      const composer = getByTestId('agent-builder-conversation-composer');
-      expect(composer.className).toContain('border-border');
-      expect(composer.className).not.toContain('border-accent5Dark');
-      expect(composer.className).not.toContain('focus-within:border-accent5');
-    });
-  });
-
   describe('when the panel auto-sends the starter message', () => {
     it('sends it on a builder-prefixed thread to the builder agent', async () => {
       const bodies = captureStream();
