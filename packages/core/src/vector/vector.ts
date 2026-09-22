@@ -73,6 +73,15 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
   id: string;
   disableInit: boolean = false;
 
+  /**
+   * Whether this store generates embeddings itself from text, so callers do not have to supply
+   * vectors. Stores that set this accept text on write and on query, and the backend produces
+   * the embeddings. Defaults to false: every store expects the caller to embed.
+   *
+   * Semantic recall reads this to decide whether an embedder is required.
+   */
+  readonly embedsServerSide: boolean = false;
+
   constructor({ id, disableInit }: { id: string; disableInit?: boolean }) {
     if (!id || typeof id !== 'string' || id.trim() === '') {
       throw new MastraError({

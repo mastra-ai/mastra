@@ -186,7 +186,8 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
       }
       this.vector = config.vector;
 
-      if (!config.embedder) {
+      // An embedder is required only when the application supplies the vectors.
+      if (!config.embedder && !config.vector.embedsServerSide) {
         throw new Error(
           `Semantic recall requires an embedder to be configured.
 
@@ -340,11 +341,24 @@ https://mastra.ai/en/docs/memory/overview`,
    * Get the index name for semantic recall embeddings.
    * This is used to ensure consistency between the Memory class and SemanticRecall processor.
    */
+  /**
+   * True when the attached vector store produces the embeddings itself, so this Memory sends it
+   * text. False whenever an embedder is configured, which keeps the client-side path intact.
+   */
+  protected get embedsServerSide(): boolean {
+    return !this.embedder && this.vector?.embedsServerSide === true;
+  }
+
   protected getEmbeddingIndexName(dimensions?: number): string {
+    const separator = this.vector?.indexSeparator ?? '_';
+    // A server-embedding store picks its own dimension, so this name is keyed on the mode.
+    // The names below belong to indexes of client-supplied vectors.
+    if (this.embedsServerSide) {
+      return `memory${separator}messages${separator}server`;
+    }
     const defaultDimensions = 1536;
     const usedDimensions = dimensions ?? defaultDimensions;
     const isDefault = usedDimensions === defaultDimensions;
-    const separator = this.vector?.indexSeparator ?? '_';
     return isDefault ? `memory${separator}messages` : `memory${separator}messages${separator}${usedDimensions}`;
   }
 
@@ -364,12 +378,15 @@ https://mastra.ai/en/docs/memory/overview`,
     const semanticConfig = typeof config?.semanticRecall === 'object' ? config.semanticRecall : undefined;
     const indexConfig = semanticConfig?.indexConfig;
 
-    // Base parameters that all vector stores support
-    const createParams: any = {
-      indexName,
-      dimension: usedDimensions,
-      ...(indexConfig?.metric && { metric: indexConfig.metric }),
-    };
+    // Base parameters that all vector stores support. A server-embedding store derives the
+    // dimension and the metric from its own model configuration.
+    const createParams: any = this.embedsServerSide
+      ? { indexName }
+      : {
+          indexName,
+          dimension: usedDimensions,
+          ...(indexConfig?.metric && { metric: indexConfig.metric }),
+        };
 
     // Add PG-specific configuration if provided
     // Only PG vector store will use these parameters
@@ -380,9 +397,11 @@ https://mastra.ai/en/docs/memory/overview`,
       if (indexConfig.hnsw) createParams.indexConfig.hnsw = indexConfig.hnsw;
     }
 
-    // Request btree indexes on metadata fields used for filtering
-    // This avoids sequential scans on large tables when querying by thread_id or resource_id
-    createParams.metadataIndexes = ['thread_id', 'resource_id'];
+    if (!this.embedsServerSide) {
+      // Request btree indexes on metadata fields used for filtering
+      // This avoids sequential scans on large tables when querying by thread_id or resource_id
+      createParams.metadataIndexes = ['thread_id', 'resource_id'];
+    }
 
     await this.vector.createIndex(createParams);
     return { indexName };
@@ -891,7 +910,9 @@ https://mastra.ai/en/docs/memory/overview`,
           text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
         });
 
-      if (!this.embedder)
+      // A store that embeds server-side needs no embedder: it takes the text and produces the
+      // vectors itself.
+      if (!this.embedder && !this.vector.embedsServerSide)
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.MASTRA_VECTOR,
@@ -1015,7 +1036,9 @@ https://mastra.ai/en/docs/memory/overview`,
           text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
         });
 
-      if (!this.embedder)
+      // A store that embeds server-side needs no embedder: it takes the text and produces the
+      // vectors itself.
+      if (!this.embedder && !this.vector.embedsServerSide)
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.MASTRA_VECTOR,
