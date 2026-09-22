@@ -42,10 +42,16 @@ export async function processWorkflowWaitForEvent(
       prevResult,
       activeStepsPath: {},
       requestContext: currentState?.requestContext,
-      // Known gap: the actor signal is not persisted in the workflow snapshot,
-      // so a run continued from a waitForEvent timer only keeps the actor if
-      // the incoming user event carried one. requestContext survives via the
-      // snapshot; actor intentionally does not (it is a per-call credential).
+      // Known gap (deliberately deferred — PR #24569 review, Superagent P2):
+      // the actor signal is not persisted in the workflow snapshot, so a run
+      // continued from a waitForEvent only keeps the actor if the resuming
+      // event carried one. requestContext survives via the snapshot; actor
+      // does not. Consequence: an FGA-gated tool with `requireActor` fails
+      // closed after the wait even though the originating caller was
+      // authorized, and permissive paths run unattributed. Intended fix:
+      // persist the ActorSignal (a plain identity claim, no secret material)
+      // in the snapshot alongside requestContext and restore it here with an
+      // event-carried actor taking precedence: `workflowData.actor ?? snapshot`.
       actor: workflowData.actor,
       perStep: workflowData.perStep,
     },
