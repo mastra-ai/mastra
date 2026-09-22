@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -86,35 +87,37 @@ export default function SchedulePage() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
-        <div className="flex justify-end gap-2">
-          <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
-            Back to schedules
-          </Button>
-          {workflowId ? (
-            <Button icon={<WorkflowIcon />} render={<Link to={paths.workflowLink(workflowId)} />} variant="ghost">
-              Open workflow
+        <ActionRow>
+          <ActionRow.End>
+            <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
+              Back to schedules
             </Button>
-          ) : null}
-          {schedule ? (
-            <Button
-              onClick={() => toggle.mutate(schedule.status === 'active' ? 'pause' : 'resume')}
-              disabled={toggle.isPending}
-              data-testid="schedule-toggle-button"
-            >
-              {schedule.status === 'active' ? (
-                <>
-                  <PauseIcon />
-                  Pause
-                </>
-              ) : (
-                <>
-                  <PlayIcon />
-                  Resume
-                </>
-              )}
-            </Button>
-          ) : null}
-        </div>
+            {workflowId ? (
+              <Button icon={<WorkflowIcon />} render={<Link to={paths.workflowLink(workflowId)} />} variant="ghost">
+                Open workflow
+              </Button>
+            ) : null}
+            {schedule ? (
+              <Button
+                onClick={() => toggle.mutate(schedule.status === 'active' ? 'pause' : 'resume')}
+                disabled={toggle.isPending}
+                data-testid="schedule-toggle-button"
+              >
+                {schedule.status === 'active' ? (
+                  <>
+                    <PauseIcon />
+                    Pause
+                  </>
+                ) : (
+                  <>
+                    <PlayIcon />
+                    Resume
+                  </>
+                )}
+              </Button>
+            ) : null}
+          </ActionRow.End>
+        </ActionRow>
       }
     >
       {schedule ? (

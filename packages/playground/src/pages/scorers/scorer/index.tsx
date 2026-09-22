@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
@@ -221,7 +222,9 @@ export default function Scorer() {
         breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
         actionRow={
           !hasError && scorerActionsMenu ? (
-            <div className="ml-auto flex items-center gap-2">{scorerActionsMenu}</div>
+            <ActionRow>
+              <ActionRow.End>{scorerActionsMenu}</ActionRow.End>
+            </ActionRow>
           ) : undefined
         }
       >
@@ -245,28 +248,30 @@ export default function Scorer() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
-        <div className="flex items-center justify-between gap-3">
-          <ScoresTools
-            selectedEntity={selectedEntityOption}
-            entityOptions={entityOptions}
-            onEntityChange={handleSelectedEntityChange}
-            onReset={() => {
-              setSearchParams(prev => {
-                const next = new URLSearchParams(prev);
-                next.set('entity', 'all');
-                return next;
-              });
-            }}
-            isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
-          />
-          <div className="flex items-center gap-2">
+        <ActionRow>
+          <ActionRow.Start>
+            <ScoresTools
+              selectedEntity={selectedEntityOption}
+              entityOptions={entityOptions}
+              onEntityChange={handleSelectedEntityChange}
+              onReset={() => {
+                setSearchParams(prev => {
+                  const next = new URLSearchParams(prev);
+                  next.set('entity', 'all');
+                  return next;
+                });
+              }}
+              isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
+            />
+          </ActionRow.Start>
+          <ActionRow.End>
             <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
             <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Play />}>
               Run Experiment
             </Button>
             {scorerActionsMenu}
-          </div>
-        </div>
+          </ActionRow.End>
+        </ActionRow>
       }
     >
       <ScoresList

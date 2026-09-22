@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -64,9 +65,13 @@ export const AgentBuilderInfrastructure = () => {
   return (
     <PageLayout
       actionRow={
-        <PageHeader>
-          <PageHeader.Title>Infrastructure</PageHeader.Title>
-        </PageHeader>
+        <ActionRow>
+          <ActionRow.Start>
+            <PageHeader>
+              <PageHeader.Title>Infrastructure</PageHeader.Title>
+            </PageHeader>
+          </ActionRow.Start>
+        </ActionRow>
       }
     >
       <div className="mt-6 flex flex-col gap-5">

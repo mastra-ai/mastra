@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
@@ -66,20 +67,18 @@ function Workflows() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
-        <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
-          <div className="max-w-120 flex-1">
-            <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
-          </div>
-          <Button
-            render={<Link to="/workflows/schedules" />}
-
-            variant="primary"
-            className="shrink-0"
-            icon={<CalendarClockIcon />}
-          >
-            Schedules
-          </Button>
-        </div>
+        <ActionRow>
+          <ActionRow.Start>
+            <div className="max-w-120 flex-1">
+              <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
+            </div>
+          </ActionRow.Start>
+          <ActionRow.End>
+            <Button render={<Link to="/workflows/schedules" />} variant="primary" icon={<CalendarClockIcon />}>
+              Schedules
+            </Button>
+          </ActionRow.End>
+        </ActionRow>
       }
     >
       <WorkflowsList

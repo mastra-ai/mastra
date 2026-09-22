@@ -1,4 +1,5 @@
 import type { ListStoredAgentsParams, StoredSkillResponse } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
@@ -121,47 +122,55 @@ export default function AgentBuilderFavoritePage() {
       <PageLayout
         actionRow={
           <>
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
-              <PageHeader>
-                <PageHeader.Title>
-                  <StarIcon /> Favorites
-                </PageHeader.Title>
-                <PageHeader.Description>
-                  {tab === 'agents'
-                    ? "Agents you've starred in Agent Builder."
-                    : "Skills you've starred in Agent Builder."}
-                </PageHeader.Description>
-              </PageHeader>
-            </div>
-            <div className="flex items-center gap-4">
-              {features.skills && (
-                <div className="border-border flex overflow-hidden rounded-lg border">
-                  <button
-                    onClick={() => setTab('agents')}
-                    className={cn(
-                      'text-column px-3 py-1.5',
-                      controlStateColorTransition,
-                      tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
-                    )}
-                  >
-                    Agents
-                  </button>
-                  <button
-                    onClick={() => setTab('skills')}
-                    className={cn(
-                      'text-column px-3 py-1.5',
-                      controlStateColorTransition,
-                      tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
-                    )}
-                  >
-                    Skills
-                  </button>
+            <ActionRow className="items-start">
+              <ActionRow.Start>
+                <PageHeader>
+                  <PageHeader.Title>
+                    <StarIcon /> Favorites
+                  </PageHeader.Title>
+                  <PageHeader.Description>
+                    {tab === 'agents'
+                      ? "Agents you've starred in Agent Builder."
+                      : "Skills you've starred in Agent Builder."}
+                  </PageHeader.Description>
+                </PageHeader>
+              </ActionRow.Start>
+            </ActionRow>
+            <ActionRow>
+              <ActionRow.Start>
+                {features.skills && (
+                  <div className="border-border flex overflow-hidden rounded-lg border">
+                    <button
+                      onClick={() => setTab('agents')}
+                      className={cn(
+                        'text-column px-3 py-1.5',
+                        controlStateColorTransition,
+                        tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                      )}
+                    >
+                      Agents
+                    </button>
+                    <button
+                      onClick={() => setTab('skills')}
+                      className={cn(
+                        'text-column px-3 py-1.5',
+                        controlStateColorTransition,
+                        tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                      )}
+                    >
+                      Skills
+                    </button>
+                  </div>
+                )}
+                <div className="max-w-120 flex-1">
+                  <ListSearch
+                    onSearch={setSearch}
+                    label="Filter favorites"
+                    placeholder="Filter by name or description"
+                  />
                 </div>
-              )}
-              <div className="max-w-120 flex-1">
-                <ListSearch onSearch={setSearch} label="Filter favorites" placeholder="Filter by name or description" />
-              </div>
-            </div>
+              </ActionRow.Start>
+            </ActionRow>
           </>
         }
       >

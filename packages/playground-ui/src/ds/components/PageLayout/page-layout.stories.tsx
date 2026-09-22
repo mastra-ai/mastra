@@ -1,9 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PlusIcon, CircleSlashIcon } from 'lucide-react';
 
+import { ActionRow } from '../ActionRow';
 import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
+import { Input } from '../Input';
 import { PageLayout } from './index';
 
 const meta: Meta<typeof PageLayout> = {
@@ -27,7 +29,7 @@ const crumbs = (
 
 export const FullPage: Story = {
   render: () => (
-    <div className="bg-sidebar h-152">
+    <div className="h-152 bg-sidebar">
       <PageLayout
         breadcrumbs={crumbs}
         headerActions={
@@ -36,11 +38,20 @@ export const FullPage: Story = {
             Create resource
           </Button>
         }
-        actionRow={<input className="border-border w-80 rounded border px-2 py-1" placeholder="Filter resources" />}
+        actionRow={
+          <ActionRow>
+            <ActionRow.Start>
+              <Input placeholder="Filter resources" className="max-w-120" />
+            </ActionRow.Start>
+            <ActionRow.End>
+              <Button variant="outline">Sort</Button>
+            </ActionRow.End>
+          </ActionRow>
+        }
       >
         <ul className="grid gap-2">
           {resources.map(resource => (
-            <li key={resource} className="border-border rounded border px-3 py-2">
+            <li key={resource} className="rounded border border-border px-3 py-2">
               {resource}
             </li>
           ))}
@@ -52,7 +63,7 @@ export const FullPage: Story = {
 
 export const Empty: Story = {
   render: () => (
-    <div className="bg-sidebar h-152">
+    <div className="h-152 bg-sidebar">
       <PageLayout breadcrumbs={crumbs}>
         <div className="flex h-full items-center justify-center">
           <EmptyState

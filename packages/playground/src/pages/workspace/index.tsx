@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -391,11 +392,17 @@ export default function Workspace() {
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         hasSearchCapability ? (
-          <div className="flex justify-end">
-            <Button onClick={() => setShowSearch(!showSearch)} tooltip="Search workspace" aria-label="Search workspace">
-              <Search />
-            </Button>
-          </div>
+          <ActionRow>
+            <ActionRow.End>
+              <Button
+                onClick={() => setShowSearch(!showSearch)}
+                tooltip="Search workspace"
+                aria-label="Search workspace"
+              >
+                <Search />
+              </Button>
+            </ActionRow.End>
+          </ActionRow>
         ) : undefined
       }
     >

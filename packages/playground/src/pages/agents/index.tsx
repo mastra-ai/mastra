@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -91,14 +92,16 @@ function Agents() {
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<AgentHeaderCreateAction />}
       actionRow={
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="max-w-120 flex-1">
-            <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
-          </div>
-          <div className="flex items-center justify-end sm:ml-auto">
+        <ActionRow>
+          <ActionRow.Start>
+            <div className="max-w-120 flex-1">
+              <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+            </div>
+          </ActionRow.Start>
+          <ActionRow.End>
             <AgentsViewToggle view={view} onViewChange={setView} />
-          </div>
-        </div>
+          </ActionRow.End>
+        </ActionRow>
       }
     >
       {agentsView}

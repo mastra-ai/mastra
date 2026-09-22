@@ -1,4 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
@@ -147,24 +148,26 @@ export default function LogsPage() {
 
   const actionRow = (
     <>
-      <div className="grid flex-wrap content-start items-start justify-start gap-2">
-        <DateTimeRangePicker
-          preset={url.datePreset}
-          onPresetChange={url.handleDatePresetChange}
-          dateFrom={url.selectedDateFrom}
-          dateTo={url.selectedDateTo}
-          onDateChange={url.handleDateChange}
-          disabled={isLoadingLogs}
-          presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-        />
-        <PropertyFilterCreator
-          fields={filterFields}
-          tokens={url.filterTokens}
-          onTokensChange={url.handleFilterTokensChange}
-          disabled={isLoadingLogs}
-          onStartTextFilter={setAutoFocusFilterFieldId}
-        />
-      </div>
+      <ActionRow>
+        <ActionRow.Start>
+          <DateTimeRangePicker
+            preset={url.datePreset}
+            onPresetChange={url.handleDatePresetChange}
+            dateFrom={url.selectedDateFrom}
+            dateTo={url.selectedDateTo}
+            onDateChange={url.handleDateChange}
+            disabled={isLoadingLogs}
+            presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+          />
+          <PropertyFilterCreator
+            fields={filterFields}
+            tokens={url.filterTokens}
+            onTokensChange={url.handleFilterTokensChange}
+            disabled={isLoadingLogs}
+            onStartTextFilter={setAutoFocusFilterFieldId}
+          />
+        </ActionRow.Start>
+      </ActionRow>
 
       <LogsToolbar
         isLoading={isLoadingLogs}

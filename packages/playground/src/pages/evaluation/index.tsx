@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
@@ -82,17 +83,19 @@ export default function Evaluation() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
-        <div className="grid content-start">
-          <DateTimeRangePicker
-            preset={datePreset}
-            onPresetChange={setDatePreset}
-            dateFrom={dateRange.start}
-            dateTo={dateRange.end}
-            onDateChange={(value, type) =>
-              setDateRange(current => (type === 'from' ? { ...current, start: value } : { ...current, end: value }))
-            }
-          />
-        </div>
+        <ActionRow>
+          <ActionRow.Start>
+            <DateTimeRangePicker
+              preset={datePreset}
+              onPresetChange={setDatePreset}
+              dateFrom={dateRange.start}
+              dateTo={dateRange.end}
+              onDateChange={(value, type) =>
+                setDateRange(current => (type === 'from' ? { ...current, start: value } : { ...current, end: value }))
+              }
+            />
+          </ActionRow.Start>
+        </ActionRow>
       }
     >
       <div className="flex flex-col gap-4">

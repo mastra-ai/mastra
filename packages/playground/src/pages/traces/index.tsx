@@ -1,4 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
@@ -299,40 +300,42 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     url.datePreset !== 'last-7d' ||
     !!url.selectedDateTo;
 
-  const toolbarControls = (
-    <>
-      <FilterBar
-        fields={filterBarFields}
-        operators={TRACE_FILTER_BAR_OPERATORS}
-        value={filterBarValue}
-        onValueChange={handleFilterBarChange}
-        // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
-        // draft that id so the chip survives the round trip without remounting.
-        createItemId={fieldId => fieldId}
-        aria-label="Trace filters"
-        className="min-w-64 flex-1"
-      >
-        <FilterBar.Chips
-          renderChip={item =>
-            item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
-              <TraceTimeRangeChip
-                preset={url.datePreset}
-                onPresetChange={url.handleDatePresetChange}
-                dateFrom={url.selectedDateFrom}
-                dateTo={url.selectedDateTo}
-                onDateChange={url.handleDateChange}
-                onDateRangeChange={url.handleDateRangeChange}
-                disabled={isTracesLoading}
-                presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-              />
-            ) : (
-              <FilterBar.Chip item={item} />
-            )
-          }
-        />
-        <FilterBar.Input placeholder="Filter traces…" />
-      </FilterBar>
-      <div className="min-h-control-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+  const actionRow = (
+    <ActionRow>
+      <ActionRow.Start>
+        <FilterBar
+          fields={filterBarFields}
+          operators={TRACE_FILTER_BAR_OPERATORS}
+          value={filterBarValue}
+          onValueChange={handleFilterBarChange}
+          // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
+          // draft that id so the chip survives the round trip without remounting.
+          createItemId={fieldId => fieldId}
+          aria-label="Trace filters"
+          className="min-w-64 flex-1"
+        >
+          <FilterBar.Chips
+            renderChip={item =>
+              item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
+                <TraceTimeRangeChip
+                  preset={url.datePreset}
+                  onPresetChange={url.handleDatePresetChange}
+                  dateFrom={url.selectedDateFrom}
+                  dateTo={url.selectedDateTo}
+                  onDateChange={url.handleDateChange}
+                  onDateRangeChange={url.handleDateRangeChange}
+                  disabled={isTracesLoading}
+                  presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+                />
+              ) : (
+                <FilterBar.Chip item={item} />
+              )
+            }
+          />
+          <FilterBar.Input placeholder="Filter traces…" />
+        </FilterBar>
+      </ActionRow.Start>
+      <ActionRow.End>
         <TraceColumnsMenu
           preferences={traceColumns.preferences}
           usageDisabledReason={usageDisabledReason}
@@ -350,14 +353,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           />
           <Label htmlFor="auto-refetch">Auto refresh</Label>
         </div>
-      </div>
-    </>
-  );
-
-  const actionRow = (
-    <>
-      <div className="grid w-full flex-wrap content-start items-start justify-start gap-2">{toolbarControls}</div>
-    </>
+      </ActionRow.End>
+    </ActionRow>
   );
 
   // Hold the whole toolbar + list behind one skeleton until field discovery has settled, so the

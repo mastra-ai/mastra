@@ -1,4 +1,5 @@
 import type { DatasetExperiment, ExperimentTargetType } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
@@ -432,51 +433,53 @@ export function DatasetReview({
   };
 
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2">
-      {renderFilters ? (
-        <>
-          {toolbarStart}
-          {renderFilters({
-            status,
-            onStatusChange,
-            tag: activeTagFilter,
-            onTagChange: setActiveTagFilter,
-            tagOptions: tagOptions.filter(option => option.value !== ALL_TAGS),
-          })}
-        </>
-      ) : (
-        <div className="flex items-center gap-2">
-          {toolbarStart}
-          <SelectFieldBlock
-            label="Status"
-            labelIsHidden
-            name="filter-status"
-            options={STATUS_OPTIONS}
-            value={status}
-            onValueChange={value => onStatusChange(value === 'completed' ? 'completed' : 'review')}
-            className="whitespace-nowrap"
-          />
-          {tagOptions.length > 1 && (
+    <ActionRow>
+      <ActionRow.Start>
+        {renderFilters ? (
+          <>
+            {toolbarStart}
+            {renderFilters({
+              status,
+              onStatusChange,
+              tag: activeTagFilter,
+              onTagChange: setActiveTagFilter,
+              tagOptions: tagOptions.filter(option => option.value !== ALL_TAGS),
+            })}
+          </>
+        ) : (
+          <>
+            {toolbarStart}
             <SelectFieldBlock
-              label="Tags"
+              label="Status"
               labelIsHidden
-              name="filter-tags"
-              options={tagOptions}
-              value={activeTagFilter ?? ALL_TAGS}
-              onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+              name="filter-status"
+              options={STATUS_OPTIONS}
+              value={status}
+              onValueChange={value => onStatusChange(value === 'completed' ? 'completed' : 'review')}
               className="whitespace-nowrap"
             />
-          )}
-          {hasActiveFilters && (
-            <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
-              Reset
-            </Button>
-          )}
-        </div>
-      )}
+            {tagOptions.length > 1 && (
+              <SelectFieldBlock
+                label="Tags"
+                labelIsHidden
+                name="filter-tags"
+                options={tagOptions}
+                value={activeTagFilter ?? ALL_TAGS}
+                onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+                className="whitespace-nowrap"
+              />
+            )}
+            {hasActiveFilters && (
+              <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+                Reset
+              </Button>
+            )}
+          </>
+        )}
+      </ActionRow.Start>
 
       {(hasSelection || toolbarEnd || showCreateScorer) && (
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <ActionRow.End>
           {toolbarEnd}
           {showCreateScorer && (
             <Button
@@ -527,9 +530,9 @@ export function DatasetReview({
               </DropdownMenu>
             </>
           )}
-        </div>
+        </ActionRow.End>
       )}
-    </div>
+    </ActionRow>
   );
 
   if (isLoadingReview) {

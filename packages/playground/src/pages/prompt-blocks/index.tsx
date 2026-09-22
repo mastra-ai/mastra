@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -105,15 +106,17 @@ export default function PromptBlocks() {
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<PromptBlocksHeaderCreateAction />}
       actionRow={
-        <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
-          <div className="max-w-120 flex-1">
-            <ListSearch
-              onSearch={handleSearchChange}
-              label="Filter prompts"
-              placeholder="Filter by name or description"
-            />
-          </div>
-        </div>
+        <ActionRow>
+          <ActionRow.Start>
+            <div className="max-w-120 flex-1">
+              <ListSearch
+                onSearch={handleSearchChange}
+                label="Filter prompts"
+                placeholder="Filter by name or description"
+              />
+            </div>
+          </ActionRow.Start>
+        </ActionRow>
       }
     >
       <PromptsList

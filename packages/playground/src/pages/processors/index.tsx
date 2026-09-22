@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -63,9 +64,13 @@ export function Processors() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
-        <div className="max-w-120">
-          <ListSearch onSearch={setSearch} label="Filter processors" placeholder="Filter by name" />
-        </div>
+        <ActionRow>
+          <ActionRow.Start>
+            <div className="max-w-120 flex-1">
+              <ListSearch onSearch={setSearch} label="Filter processors" placeholder="Filter by name" />
+            </div>
+          </ActionRow.Start>
+        </ActionRow>
       }
     >
       <ProcessorsList

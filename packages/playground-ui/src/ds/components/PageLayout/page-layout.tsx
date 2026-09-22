@@ -23,7 +23,7 @@ export function PageLayout({ children, breadcrumbs, headerActions, actionRow }: 
         </Header>
       )}
       {actionRow && (
-        <div data-slot="page-layout-action-row" className="shrink-0 px-4 pt-4">
+        <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
           {actionRow}
         </div>
       )}

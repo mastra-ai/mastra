@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import type { PropertyFilterField, PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
@@ -60,16 +61,18 @@ export function MetricsPageLayout({ children, filterFields, isLoading = false }:
       breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}
       actionRow={
         <>
-          <div className="grid flex-wrap content-start items-start justify-start gap-2">
-            <DateRangeSelector />
-            <PropertyFilterCreator
-              fields={filterFields}
-              tokens={filterTokens}
-              onTokensChange={setFilterTokens}
-              disabled={isLoading}
-              onStartTextFilter={setAutoFocusFilterFieldId}
-            />
-          </div>
+          <ActionRow>
+            <ActionRow.Start>
+              <DateRangeSelector />
+              <PropertyFilterCreator
+                fields={filterFields}
+                tokens={filterTokens}
+                onTokensChange={setFilterTokens}
+                disabled={isLoading}
+                onStartTextFilter={setAutoFocusFilterFieldId}
+              />
+            </ActionRow.Start>
+          </ActionRow>
 
           <MetricsToolbar
             isLoading={isLoading}

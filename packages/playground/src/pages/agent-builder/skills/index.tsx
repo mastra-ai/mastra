@@ -1,4 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
@@ -114,39 +115,39 @@ export default function AgentBuilderSkillsPage() {
       <PageLayout
         actionRow={
           <>
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
-              <PageHeader>
-                <PageHeader.Title>
-                  <SparklesIcon /> My skills
-                </PageHeader.Title>
-                <PageHeader.Description>Skills you've created.</PageHeader.Description>
-              </PageHeader>
+            <ActionRow className="items-start">
+              <ActionRow.Start>
+                <PageHeader>
+                  <PageHeader.Title>
+                    <SparklesIcon /> My skills
+                  </PageHeader.Title>
+                  <PageHeader.Description>Skills you've created.</PageHeader.Description>
+                </PageHeader>
+              </ActionRow.Start>
               {skills.length > 0 && canWriteSkills && (
-                <div className="flex w-full shrink-0 flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
+                <ActionRow.End>
                   {enabledRegistry && (
                     <Button
                       variant="default"
-                      className="w-full justify-center md:w-auto"
                       onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
                       icon={<DownloadIcon />}
                     >
                       Browse registry
                     </Button>
                   )}
-                  <Button
-                    variant="primary"
-                    className="w-full justify-center md:w-auto"
-                    onClick={goToCreate}
-                    icon={<PlusIcon />}
-                  >
+                  <Button variant="primary" onClick={goToCreate} icon={<PlusIcon />}>
                     New skill
                   </Button>
-                </div>
+                </ActionRow.End>
               )}
-            </div>
-            <div className="max-w-120">
-              <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
-            </div>
+            </ActionRow>
+            <ActionRow>
+              <ActionRow.Start>
+                <div className="max-w-120 flex-1">
+                  <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
+                </div>
+              </ActionRow.Start>
+            </ActionRow>
           </>
         }
       >
