@@ -1449,12 +1449,13 @@ describe('eager tool dispatch — unsafe terminations', () => {
       await Promise.race([
         slowReleased.then(() => clearTimeout(bound)),
         new Promise<void>(resolve => {
+          // Generous scheduling headroom, while still landing below the runner timeout
+          // so a release that never arrives fails as an assertion rather than a dead run.
+          // Expiry does not prove the release was unreachable, only that it did not
+          // arrive in time — which is all the assertion below claims.
           bound = setTimeout(() => {
             barrierTimedOut = true;
             resolve();
-            // Ten seconds is ~100x the fixture's only real delay (the mock's 100ms wait
-            // before `finish`) and well inside the 120s test timeout, so this expires
-            // only when the release is genuinely unreachable, never on a slow box.
           }, 10_000);
         }),
       ]);
@@ -1514,7 +1515,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
     // the backstop and restore the silent pass this barrier exists to remove. Pinning
     // the count means a removed call fails as a timed-out barrier and an added one
     // fails here, instead of either quietly re-keying the test.
-    expect(barrierTimedOut, "barrier expired: the backstop's stop() was never reached").toBe(false);
+    expect(barrierTimedOut, 'barrier expired before the second stop() released the tool').toBe(false);
     expect(stopCalls).toBe(2);
     expect(events.indexOf('enter-slow')).toBeLessThan(events.indexOf('finish'));
     expect(events.indexOf('finish-slow')).toBeGreaterThan(events.indexOf('finish'));
