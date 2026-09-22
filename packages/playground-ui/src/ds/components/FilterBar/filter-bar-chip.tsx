@@ -5,7 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AnimationEvent, CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
-import { FilterBarOptionList } from './filter-bar-option-list';
+import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
 import type {
   DraftStage,
@@ -592,7 +592,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           aria-label="Values"
           aria-multiselectable={step.isMany || undefined}
           getKey={o => o.value}
-          renderOption={o => o.label ?? o.value}
+          renderOption={option => <FilterBarOptionLabel option={option} />}
           isSelected={o => (step.isMany ? step.selected.includes(o.value) : String(chip.item.value) === o.value)}
           isLoading={step.isLoading}
           error={step.error}
