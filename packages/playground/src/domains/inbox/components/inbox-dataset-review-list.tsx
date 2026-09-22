@@ -46,7 +46,7 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
   if (items.length === 0) {
     return (
       <EmptyState
-        iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
+        iconSlot={<CircleSlashIcon className="h-8 w-8 text-muted-foreground" />}
         titleSlot="Nothing to review"
         descriptionSlot="Experiment results that need review will show up here."
       />

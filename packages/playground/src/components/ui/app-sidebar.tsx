@@ -211,7 +211,7 @@ export function AppSidebar() {
           <span className="flex h-7 items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-display text-subheading truncate tracking-tight whitespace-nowrap">
+              <span className="truncate font-display text-subheading tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -221,7 +221,7 @@ export function AppSidebar() {
         ) : (
           <span className="flex h-7 items-center gap-2 pr-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-display text-subheading truncate tracking-tight whitespace-nowrap">
+            <span className="truncate font-display text-subheading tracking-tight whitespace-nowrap">
               Mastra Studio
             </span>
             {!isMobile && <MainSidebar.Trigger />}
@@ -245,14 +245,14 @@ export function AppSidebar() {
                 type="button"
                 onClick={openNavigationCommand}
                 aria-label="Search and navigate"
-                className="bg-card shadow-raised text-foreground state-layer [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground"
+                className="state-layer bg-card text-foreground shadow-raised [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground"
               >
                 <Search />
                 <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
                 {state !== 'collapsed' && (
                   <kbd
                     aria-hidden="true"
-                    className="border-border bg-muted text-muted-foreground text-meta ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                    className="ml-auto rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-meta leading-none text-muted-foreground"
                   >
                     {commandShortcutLabel}
                   </kbd>
@@ -336,7 +336,7 @@ export function AppSidebar() {
         )}
         {state !== 'collapsed' && (
           <>
-            <hr className="bg-border mx-3 my-2 h-px border-0" />
+            <hr className="mx-3 my-2 h-px border-0 bg-border" />
             <MastraVersionFooter collapsed={false} />
           </>
         )}

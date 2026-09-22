@@ -14,7 +14,7 @@ export function ErrorState({ title, message, action }: ErrorStateProps) {
           <CircleXIcon className="size-8 text-red-900" />
         </div>
         <h3 className="text-subheading text-muted-foreground">{title}</h3>
-        <p className="text-body text-placeholder mt-1.5 max-w-md">{message}</p>
+        <p className="mt-1.5 max-w-md text-body text-placeholder">{message}</p>
         {action && <div className="flex items-center justify-center pt-4">{action}</div>}
       </div>
     </div>

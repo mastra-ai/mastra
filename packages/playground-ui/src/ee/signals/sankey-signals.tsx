@@ -387,7 +387,7 @@ export function SankeySignals({
           </div>
           {dateRangePicker}
         </div>
-        <p className="text-muted-foreground text-caption">{viewDescription}</p>
+        <p className="text-caption text-muted-foreground">{viewDescription}</p>
         <PendingSignalProgress progress={progressQuery.data} signalCatalog={effectiveSignalCatalog} />
         {viewMode === 'compare' ? (
           <ThemeCompare
@@ -442,12 +442,12 @@ export function SankeySignals({
               />
             ) : null}
             {isDrilledEmpty ? (
-              <section className="border-border bg-background text-muted-foreground text-body rounded-lg border p-6">
+              <section className="rounded-lg border border-border bg-background p-6 text-body text-muted-foreground">
                 This theme is not present in the selected snapshot. Use the clear filter action above to return to the
                 full flow.
               </section>
             ) : graphSummary.records.length === 0 ? (
-              <section className="border-border bg-background text-muted-foreground text-body rounded-lg border p-6">
+              <section className="rounded-lg border border-border bg-background p-6 text-body text-muted-foreground">
                 No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
                 Pick another snapshot from the timeline below.
               </section>
@@ -466,7 +466,7 @@ export function SankeySignals({
               />
             )}
             {perspectiveMutation.isPending ? (
-              <p className="text-muted-foreground text-caption font-mono" role="status">
+              <p className="font-mono text-caption text-muted-foreground" role="status">
                 Reloading snapshots for new trace signal perspective…
               </p>
             ) : null}

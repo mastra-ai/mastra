@@ -65,7 +65,7 @@ export function ExperimentsToolbar({
   const canCompare = selection?.selectedCount === 2 && !selection.compareDisabledReason;
 
   return (
-    <div className="min-h-control-md flex flex-wrap items-center gap-2">
+    <div className="flex min-h-control-md flex-wrap items-center gap-2">
       <div className="max-w-120 min-w-48 flex-1">
         <ListSearch
           label="Search experiments"

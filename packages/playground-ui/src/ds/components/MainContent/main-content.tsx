@@ -71,10 +71,10 @@ export const getMainContentContentClassName = ({
   className,
 }: GetMainContentContentClassNameArgs) => {
   return cn(
-    `grid h-full overflow-y-auto `,
+    `grid h-full overflow-y-auto`,
     `min-w-min overflow-x-auto`,
     {
-      'items-start content-start': !isCentered && !isDivided && !hasLeftServiceColumn,
+      'content-start items-start': !isCentered && !isDivided && !hasLeftServiceColumn,
       'grid place-items-center': isCentered,
       'grid-cols-[1fr_1fr]': isDivided && !hasLeftServiceColumn,
       'grid-cols-[12rem_1fr_1fr]': isDivided && hasLeftServiceColumn,

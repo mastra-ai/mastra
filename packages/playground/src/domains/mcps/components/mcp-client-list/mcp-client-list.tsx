@@ -142,11 +142,11 @@ export function MCPClientList() {
         </Section.Header>
 
         {mcpClients.length === 0 && (
-          <div className="border-border-strong rounded-xl border border-dashed py-5 text-center">
+          <div className="rounded-xl border border-dashed border-border-strong py-5 text-center">
             <EmptyState
               className="py-4!"
               iconSlot={
-                <div className="text-muted-foreground bg-card flex size-6 items-center justify-center rounded-full p-2">
+                <div className="flex size-6 items-center justify-center rounded-full bg-card p-2 text-muted-foreground">
                   <LaptopMinimal className="size-6" />
                 </div>
               }
@@ -171,7 +171,7 @@ export function MCPClientList() {
               return (
                 <Entity
                   key={mcpClient.id ?? `pending-${index}`}
-                  className="bg-background items-center"
+                  className="items-center bg-background"
                   onClick={() => setViewIndex(index)}
                 >
                   <div

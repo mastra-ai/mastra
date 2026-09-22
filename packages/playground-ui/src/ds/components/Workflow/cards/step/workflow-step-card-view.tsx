@@ -122,24 +122,24 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
             aria-pressed={onSelect ? Boolean(isSelected) : undefined}
             onClick={onSelect}
           >
-            <span className="group-hover:bg-fill-subtle flex items-start justify-between gap-2.5 rounded-(--card-radius) px-3.5 py-3">
-              <span className="text-column text-foreground min-w-0 wrap-anywhere" title={label}>
+            <span className="flex items-start justify-between gap-2.5 rounded-(--card-radius) px-3.5 py-3 group-hover:bg-fill-subtle">
+              <span className="min-w-0 text-column wrap-anywhere text-foreground" title={label}>
                 <Shimmer active={isRunning}>{label}</Shimmer>
               </span>
               <WorkflowTypeBadge {...props} />
             </span>
-            <span className="bg-card flex flex-col gap-2 rounded-t-(--card-radius) px-3.5 py-3 empty:py-1.5">
-              {description && <span className="text-caption text-muted-foreground wrap-anywhere">{description}</span>}
+            <span className="flex flex-col gap-2 rounded-t-(--card-radius) bg-card px-3.5 py-3 empty:py-1.5">
+              {description && <span className="text-caption wrap-anywhere text-muted-foreground">{description}</span>}
               <WorkflowTiming duration={props.duration} date={props.date} />
               {isWaiting && <span className="text-meta text-accent3">Next step in debug</span>}
               {isForEach && foreachProgress && (
-                <span className="text-meta flex flex-col gap-2 py-1">
+                <span className="flex flex-col gap-2 py-1 text-meta">
                   <span>
                     <strong>{foreachProgress.completedCount}</strong> of {foreachProgress.totalCount} items complete
                   </span>
                   {foreachProgress.totalCount > 0 ? (
                     <progress
-                      className="bg-muted accent-positive1 [&::-moz-progress-bar]:bg-positive1 [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-positive1 h-1 w-full appearance-none border-0"
+                      className="h-1 w-full appearance-none border-0 bg-muted accent-positive1 [&::-moz-progress-bar]:bg-positive1 [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-positive1"
                       aria-label={`${label} completed items`}
                       value={foreachProgress.completedCount}
                       max={foreachProgress.totalCount}
@@ -181,7 +181,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
               <CollapsibleTrigger
                 className={cn(
                   surfaceStateLayerStyle,
-                  'nodrag nopan border-border bg-card text-caption flex min-h-11 w-full items-center justify-between border-t px-3.5 py-2.5 focus-visible:shadow-none focus-visible:ring-0',
+                  'nodrag nopan flex min-h-11 w-full items-center justify-between border-t border-border bg-card px-3.5 py-2.5 text-caption focus-visible:shadow-none focus-visible:ring-0',
                 )}
               >
                 <span>
@@ -189,7 +189,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                 </span>
                 <ChevronRight aria-hidden size={14} />
               </CollapsibleTrigger>
-              <CollapsibleContent className="border-border h-[620px] overflow-hidden border-t border-dashed">
+              <CollapsibleContent className="h-[620px] overflow-hidden border-t border-dashed border-border">
                 {body}
               </CollapsibleContent>
             </>

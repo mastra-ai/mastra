@@ -63,9 +63,9 @@ function CompareExperimentsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-muted-foreground py-5 text-center">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Select two experiments to compare.</p>
-            <p className="text-body mt-2">
+            <p className="mt-2 text-body">
               Use the URL format: /experiments/compare?dataset={'{datasetId}'}&baseline={'{experimentIdA}'}&contender=
               {'{experimentIdB}'}
             </p>
@@ -92,9 +92,9 @@ function CompareExperimentsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-muted-foreground py-5 text-center">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
-            <p className="text-body mt-2 flex items-center justify-center gap-2">
+            <p className="mt-2 flex items-center justify-center gap-2 text-body">
               One of
               <ExperimentIdLink experimentId={experimentIdA} />
               and
@@ -118,7 +118,7 @@ function CompareExperimentsPage() {
                 Experiments comparison
               </Txt>
 
-              <p className="text-caption text-muted-foreground flex items-center gap-2">
+              <p className="flex items-center gap-2 text-caption text-muted-foreground">
                 <ExperimentIdLink experimentId={experimentIdA} />
                 and
                 <ExperimentIdLink experimentId={experimentIdB} />

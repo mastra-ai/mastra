@@ -54,7 +54,7 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <div className="p-4 max-w-3xl space-y-6 text-body">
+    <div className="max-w-3xl space-y-6 p-4 text-body">
       <h1 className="text-heading">Integrations</h1>
       <p className="text-muted-foreground">
         Minimal page to verify the ToolProvider backend. Pick a provider and toolkit, then connect.

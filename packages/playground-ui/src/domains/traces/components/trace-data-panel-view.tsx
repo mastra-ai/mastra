@@ -325,7 +325,7 @@ export function TraceDataPanelView({
       <div data-trace-side-column className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         {/* Same chrome as the trace column's Spans/Timeline header, so the two tab rows line up. */}
         <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
-          <DataPanel.Header className="border-border border-b">
+          <DataPanel.Header className="border-b border-border">
             <TabList variant="pill-ghost" size="sm">
               {sideViews.map(view => (
                 <Tab key={view.value} value={view.value}>
@@ -413,7 +413,7 @@ export function TraceDataPanelView({
                 // filtered `hierarchicalSpans`, so one query drives both.
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
-                  <DataPanel.Header className="border-border gap-2 border-b">
+                  <DataPanel.Header className="gap-2 border-b border-border">
                     <SearchFieldBlock
                       name={searchFieldName}
                       label="Search spans"

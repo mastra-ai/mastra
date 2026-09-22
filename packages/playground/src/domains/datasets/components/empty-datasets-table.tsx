@@ -10,7 +10,7 @@ export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
   return (
     <div className="flex h-full items-center justify-center">
       <EmptyState
-        iconSlot={<CircleSlashIcon className="text-muted-foreground size-10" />}
+        iconSlot={<CircleSlashIcon className="size-10 text-muted-foreground" />}
         titleSlot="No Datasets Yet"
         descriptionSlot="Create your first dataset to start evaluating your agents and workflows."
         actionSlot={

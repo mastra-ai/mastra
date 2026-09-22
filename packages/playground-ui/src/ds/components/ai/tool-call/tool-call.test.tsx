@@ -170,7 +170,7 @@ describe('ToolCall', () => {
     expect(screen.getByTestId('spacer').className).toContain('min-w-2 flex-1');
     expect(screen.getByTestId('custom-disclosure').className).toContain('justify-center');
     expect(screen.getByText('Toggle').className).toContain(
-      'flex shrink-0 items-center opacity-0 transition duration-150',
+      'flex shrink-0 items-center text-muted-foreground opacity-0 transition duration-150',
     );
     expect(screen.getByText('Toggle').textContent).toBe('Toggle');
   });

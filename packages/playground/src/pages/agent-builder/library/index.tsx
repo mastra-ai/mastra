@@ -77,7 +77,7 @@ export default function AgentBuilderLibraryPage() {
         return (
           <div className="flex items-center-safe justify-center-safe">
             <EmptyState
-              iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
+              iconSlot={<CircleSlashIcon className="h-8 w-8 text-muted-foreground" />}
               titleSlot="No public agents yet"
               descriptionSlot="Mark an agent as Public to share it with the team library."
             />
@@ -101,7 +101,7 @@ export default function AgentBuilderLibraryPage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
+            iconSlot={<CircleSlashIcon className="h-8 w-8 text-muted-foreground" />}
             titleSlot="No public skills yet"
             descriptionSlot="Mark a skill as Public to share it with the team library."
           />
@@ -134,11 +134,11 @@ export default function AgentBuilderLibraryPage() {
           </div>
           <div className="flex items-center gap-4">
             {features.skills && (
-              <div className="border-border flex overflow-hidden rounded-lg border">
+              <div className="flex overflow-hidden rounded-lg border border-border">
                 <button
                   onClick={() => setTab('agents')}
                   className={cn(
-                    'text-column px-3 py-1.5',
+                    'px-3 py-1.5 text-column',
                     controlStateColorTransition,
                     tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                   )}
@@ -148,7 +148,7 @@ export default function AgentBuilderLibraryPage() {
                 <button
                   onClick={() => setTab('skills')}
                   className={cn(
-                    'text-column px-3 py-1.5',
+                    'px-3 py-1.5 text-column',
                     controlStateColorTransition,
                     tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                   )}

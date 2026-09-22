@@ -53,7 +53,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
             data-testid={TOGGLE_ID}
             style={switchStyle}
           />
-          <label htmlFor={TOGGLE_ID} className="text-column text-foreground cursor-pointer">
+          <label htmlFor={TOGGLE_ID} className="cursor-pointer text-column text-foreground">
             Enable browser
           </label>
           <Badge variant={browserEnabled ? 'green' : 'neutral'} size="sm" indicator="dot">

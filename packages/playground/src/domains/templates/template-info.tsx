@@ -21,11 +21,11 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
 
   return (
     <>
-      <div className={cn('grid mt-5 items-center')}>
+      <div className={cn('mt-5 grid items-center')}>
         <div
           className={cn(
-            'text-title flex items-center gap-3',
-            '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-50',
+            'flex items-center gap-3 text-title',
+            '[&>svg]:h-[1.2em] [&>svg]:w-[1.2em] [&>svg]:opacity-50',
             {
               '[&>svg]:opacity-20': isLoading,
             },
@@ -34,7 +34,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
           <PackageIcon />
           <h2
             className={cn({
-              'bg-muted flex rounded-lg min-w-[50%]': isLoading,
+              'flex min-w-[50%] rounded-lg bg-muted': isLoading,
             })}
           >
             {isLoading ? <>&nbsp;</> : title}
@@ -44,8 +44,8 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
       <div className="grid gap-x-24 lg:grid-cols-[1fr_1fr]">
         <div className="grid">
           <p
-            className={cn('mb-4 text-body text-muted-foreground mt-2', {
-              'bg-muted rounded-lg ': isLoading,
+            className={cn('mt-2 mb-4 text-body text-muted-foreground', {
+              'rounded-lg bg-muted': isLoading,
             })}
           >
             {isLoading ? <>&nbsp;</> : description}
@@ -53,19 +53,19 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
 
           {/* Git Branch Notice */}
           {!isLoading && templateSlug && (
-            <div className={cn('bg-background border border-border rounded-lg p-4 mb-4', 'flex items-start gap-3')}>
+            <div className={cn('mb-4 rounded-lg border border-border bg-background p-4', 'flex items-start gap-3')}>
               <div className="mt-0.5 shrink-0">
                 <InfoIcon className="h-[1.1em] w-[1.1em] text-blue-500" />
               </div>
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
-                  <GitBranchIcon className="text-muted-foreground h-[1em] w-[1em]" />
+                  <GitBranchIcon className="h-[1em] w-[1em] text-muted-foreground" />
                   <span className="text-subheading text-foreground">A new Git branch will be created</span>
                 </div>
-                <div className="text-caption text-muted-foreground space-y-1">
+                <div className="space-y-1 text-caption text-muted-foreground">
                   <div>
                     <span className="font-medium">Branch name:</span>{' '}
-                    <code className="bg-card text-caption rounded px-1.5 py-0.5 font-mono">{branchName}</code>
+                    <code className="rounded bg-card px-1.5 py-0.5 font-mono text-caption">{branchName}</code>
                   </div>
                   <div>
                     This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.
@@ -80,7 +80,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={cn(quietTextHover, 'text-body mt-auto flex items-center gap-2')}
+              className={cn(quietTextHover, 'mt-auto flex items-center gap-2 text-body')}
             >
               <GithubIcon />
               {githubUrl?.split('/')?.pop()}

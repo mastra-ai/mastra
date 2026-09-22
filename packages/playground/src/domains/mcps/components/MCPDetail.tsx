@@ -92,7 +92,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         <div className="flex flex-col gap-4">
           {/* HTTP Stream */}
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">HTTP</span>}>
+            <Badge icon={<span className="mr-1 w-6 font-mono font-medium text-accent1">HTTP</span>}>
               Regular HTTP Endpoint
             </Badge>
 
@@ -101,7 +101,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             </Txt>
 
             <div className="flex items-start gap-2">
-              <Txt className="bg-muted rounded-lg px-2 py-1">{httpStreamUrl}</Txt>
+              <Txt className="rounded-lg bg-muted px-2 py-1">{httpStreamUrl}</Txt>
               <div className="pt-1">
                 <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} />
               </div>
@@ -110,7 +110,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
           {/* SSE */}
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">SSE</span>}>
+            <Badge icon={<span className="mr-1 w-6 font-mono font-medium text-accent1">SSE</span>}>
               Server-Sent Events
             </Badge>
 
@@ -119,7 +119,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             </Txt>
 
             <div className="flex items-start gap-2">
-              <Txt className="bg-muted rounded-lg px-2 py-1">{sseUrl}</Txt>
+              <Txt className="rounded-lg bg-muted px-2 py-1">{sseUrl}</Txt>
               <div className="pt-1">
                 <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
               </div>
@@ -128,14 +128,14 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
           {/* Command Line */}
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">CLI</span>}>Command Line</Badge>
+            <Badge icon={<span className="mr-1 w-6 font-mono font-medium text-accent1">CLI</span>}>Command Line</Badge>
 
             <Txt tone="muted" className="pt-1 pb-2">
               Use for local command-line access via npx and mcp-remote.
             </Txt>
 
             <div className="flex items-start gap-2">
-              <Txt className="bg-muted rounded-lg px-2 py-1">{commandLineConfig}</Txt>
+              <Txt className="rounded-lg bg-muted px-2 py-1">{commandLineConfig}</Txt>
               <div className="pt-1">
                 <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} />
               </div>
@@ -144,7 +144,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </div>
       </div>
 
-      <div className="border-border h-full overflow-y-scroll border-l">
+      <div className="h-full overflow-y-scroll border-l border-border">
         <McpToolList server={server} />
       </div>
     </MainContentContent>
@@ -160,8 +160,8 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
 
   return (
     <div className="overflow-y-scroll p-5">
-      <div className="text-foreground flex items-center gap-2">
-        <Icon size="lg" className="bg-muted rounded-md p-1">
+      <div className="flex items-center gap-2 text-foreground">
+        <Icon size="lg" className="rounded-md bg-muted p-1">
           <McpServerIcon />
         </Icon>
 

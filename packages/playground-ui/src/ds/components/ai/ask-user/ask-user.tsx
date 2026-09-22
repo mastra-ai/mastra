@@ -47,7 +47,7 @@ interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'
 export const AskUserOptionControl = ({ type, label, description, className, ...props }: AskUserOptionControlProps) => (
   <label
     className={cn(
-      'state-layer bg-card shadow-raised flex cursor-pointer items-start gap-2 rounded-md px-3 py-2 text-foreground transition-colors has-[:checked]:[--surface-tint:var(--fill-hover)] has-[:checked]:[--surface-rim:var(--border-strong)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
+      'state-layer flex cursor-pointer items-start gap-2 rounded-md bg-card px-3 py-2 text-foreground shadow-raised transition-colors has-[:checked]:[--surface-rim:var(--border-strong)] has-[:checked]:[--surface-tint:var(--fill-hover)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
       className,
     )}
   >
@@ -123,7 +123,7 @@ const AskUserInput = ({
   if (result || isAnswered) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <p className="text-foreground text-subheading mb-2">{payload.question}</p>
+        <p className="mb-2 text-subheading text-foreground">{payload.question}</p>
         {result ? <AskUserOutput result={result} /> : <Badge variant="green">Answered</Badge>}
       </AskUserContainer>
     );

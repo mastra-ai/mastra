@@ -80,7 +80,7 @@ export default function WorkspaceSkillDetailPage() {
       <MainContentLayout>
         {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
         <div className="grid h-full place-items-center">
-          <div className="border-accent1 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent1 border-t-transparent" />
         </div>
       </MainContentLayout>
     );
@@ -117,7 +117,7 @@ export default function WorkspaceSkillDetailPage() {
         <div className="grid h-full place-items-center">
           <div className="text-center">
             <p className="mb-2 text-red-400">Failed to load skill</p>
-            <p className="text-muted-foreground text-body">
+            <p className="text-body text-muted-foreground">
               {error instanceof Error ? error.message : 'Skill not found'}
             </p>
           </div>

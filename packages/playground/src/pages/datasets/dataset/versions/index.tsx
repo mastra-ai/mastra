@@ -70,7 +70,7 @@ function DatasetCompareVersionsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-muted-foreground py-5 text-center">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Select at least two versions to compare.</p>
           </div>
         </MainContentContent>

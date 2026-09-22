@@ -20,7 +20,7 @@ export function PageLayoutRoot({
       className={cn(
         'grid w-full grid-rows-[auto_auto] content-start p-4',
         {
-          'max-w-screen-lg mx-auto pt-6': width === 'narrow',
+          'mx-auto max-w-screen-lg pt-6': width === 'narrow',
           'h-full grid-rows-[auto_minmax(0,1fr)] overflow-y-auto': height === 'full',
         },
         className,

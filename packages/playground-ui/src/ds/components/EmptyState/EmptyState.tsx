@@ -22,13 +22,13 @@ export function EmptyState({
     <div
       className={cn(
         'flex flex-col items-center justify-center px-4 py-6 text-center',
-        'duration-normal transition-opacity ease-out-custom',
+        'transition-opacity duration-normal ease-out-custom',
         className,
       )}
     >
       {iconSlot && <div className="mb-3">{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
-      {descriptionSlot && <p className="text-caption text-muted-foreground mt-1.5 max-w-md">{descriptionSlot}</p>}
+      {descriptionSlot && <p className="mt-1.5 max-w-md text-caption text-muted-foreground">{descriptionSlot}</p>}
       {actionSlot && <div className="mt-4">{actionSlot}</div>}
     </div>
   );

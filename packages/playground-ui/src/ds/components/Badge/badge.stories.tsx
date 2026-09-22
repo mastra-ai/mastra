@@ -162,21 +162,21 @@ export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <span className="text-caption text-muted-foreground w-8">md</span>
+        <span className="w-8 text-caption text-muted-foreground">md</span>
         <Badge size="md">Neutral</Badge>
         <Badge size="md" icon={<Tag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-caption text-muted-foreground w-8">sm</span>
+        <span className="w-8 text-caption text-muted-foreground">sm</span>
         <Badge size="sm">Neutral</Badge>
         <Badge size="sm" icon={<Tag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-caption text-muted-foreground w-8">xs</span>
+        <span className="w-8 text-caption text-muted-foreground">xs</span>
         <Badge size="xs">Neutral</Badge>
         <Badge size="xs" icon={<Tag />}>
           With icon

@@ -89,7 +89,7 @@ export default function AgentBuilderFavoritePage() {
         return (
           <div className="flex items-center-safe justify-center-safe">
             <EmptyState
-              iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
+              iconSlot={<CircleSlashIcon className="h-8 w-8 text-muted-foreground" />}
               titleSlot="No favorite agents yet"
               descriptionSlot="Star agents to keep them here for quick access."
             />
@@ -106,7 +106,7 @@ export default function AgentBuilderFavoritePage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
+            iconSlot={<CircleSlashIcon className="h-8 w-8 text-muted-foreground" />}
             titleSlot="No favorite skills yet"
             descriptionSlot="Star skills to keep them here for quick access."
           />
@@ -134,11 +134,11 @@ export default function AgentBuilderFavoritePage() {
           </div>
           <div className="flex items-center gap-4">
             {features.skills && (
-              <div className="border-border flex overflow-hidden rounded-lg border">
+              <div className="flex overflow-hidden rounded-lg border border-border">
                 <button
                   onClick={() => setTab('agents')}
                   className={cn(
-                    'text-column px-3 py-1.5',
+                    'px-3 py-1.5 text-column',
                     controlStateColorTransition,
                     tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                   )}
@@ -148,7 +148,7 @@ export default function AgentBuilderFavoritePage() {
                 <button
                   onClick={() => setTab('skills')}
                   className={cn(
-                    'text-column px-3 py-1.5',
+                    'px-3 py-1.5 text-column',
                     controlStateColorTransition,
                     tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                   )}

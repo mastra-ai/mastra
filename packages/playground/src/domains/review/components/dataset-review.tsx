@@ -603,7 +603,7 @@ export function DatasetReview({
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-caption mt-1"
+                className="mt-1 text-caption"
               />
             </div>
           </div>
@@ -632,7 +632,7 @@ export function DatasetReview({
             {proposedAssignments.map((proposal, idx) => {
               const item = items.find(i => i.id === proposal.itemId);
               return (
-                <div key={proposal.itemId} className={cn('p-3 border rounded-lg', !proposal.accepted && 'opacity-50')}>
+                <div key={proposal.itemId} className={cn('rounded-lg border p-3', !proposal.accepted && 'opacity-50')}>
                   <div className="flex items-start gap-2">
                     <Checkbox
                       checked={proposal.accepted}
@@ -706,7 +706,7 @@ export function DatasetReview({
           ) : displayItems.length === 0 ? (
             <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
               <EmptyState
-                iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
+                iconSlot={<CircleSlashIcon className="h-8 w-8 text-muted-foreground" />}
                 titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
                 descriptionSlot={
                   showCompleted

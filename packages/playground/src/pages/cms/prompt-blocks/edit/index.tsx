@@ -267,10 +267,10 @@ function CmsPromptBlocksEditPage() {
       <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={
-            <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
+            <div className="flex h-full items-center justify-center text-muted-foreground">Prompt block not found</div>
           }
         >
-          <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
+          <div className="flex h-full items-center justify-center text-muted-foreground">Prompt block not found</div>
         </AgentEditLayout>
       </MainContentLayout>
     );

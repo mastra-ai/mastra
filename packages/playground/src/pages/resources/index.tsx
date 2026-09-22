@@ -59,18 +59,18 @@ export default function Resources() {
               key={resource.href}
               href={resource.href}
               {...(resource.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-              className="group border-border bg-background state-layer hover:border-accent1 flex flex-col gap-3 rounded-lg border p-5"
+              className="group state-layer flex flex-col gap-3 rounded-lg border border-border bg-background p-5 hover:border-accent1"
             >
               <div className="flex items-center gap-2.5">
                 <resource.icon
-                  className={cn('text-muted-foreground group-hover:text-accent1 h-5 w-5', controlStateColorTransition)}
+                  className={cn('h-5 w-5 text-muted-foreground group-hover:text-accent1', controlStateColorTransition)}
                 />
                 <span className="text-subheading text-foreground">{resource.title}</span>
                 {resource.external && (
-                  <ExternalLinkIcon className="text-muted-foreground ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                  <ExternalLinkIcon className="ml-auto h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
-              <p className="text-caption text-text3">{resource.description}</p>
+              <p className="text-text3 text-caption">{resource.description}</p>
             </a>
           ))}
         </div>

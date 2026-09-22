@@ -14,7 +14,7 @@ function ExampleContent() {
       {Array.from({ length: 8 }, (_, index) => (
         <article key={index} className={cn(raisedSurfaceStyle, 'rounded-studio-panel p-4')}>
           <p className="text-column text-foreground">Activity {index + 1}</p>
-          <p className="text-meta text-muted-foreground mt-1">
+          <p className="mt-1 text-meta text-muted-foreground">
             A representative row that makes the content area scroll.
           </p>
         </article>
@@ -28,7 +28,7 @@ function SkeletonContent() {
   return (
     <div className="grid gap-4">
       {Array.from({ length: 4 }, (_, index) => (
-        <div key={index} className={cn(raisedSurfaceStyle, 'rounded-studio-panel h-16 animate-pulse')} />
+        <div key={index} className={cn(raisedSurfaceStyle, 'h-16 animate-pulse rounded-studio-panel')} />
       ))}
     </div>
   );
