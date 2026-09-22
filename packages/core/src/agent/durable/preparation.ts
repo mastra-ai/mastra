@@ -459,7 +459,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     outputProcessors = execOptions?.outputProcessors
       ? execOptions.outputProcessors
       : await typedAgent.listOutputProcessors(requestContext);
-    errorProcessors = await typedAgent.listErrorProcessors(requestContext);
+    // Call-time errorProcessors replace the resolved list, including the
+    // defaults (parity with Agent's overrides-first `#resolveErrorProcessors`,
+    // which returns a call-time `overrides` list verbatim).
+    errorProcessors = execOptions?.errorProcessors
+      ? execOptions.errorProcessors
+      : await typedAgent.listErrorProcessors(requestContext);
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
   }

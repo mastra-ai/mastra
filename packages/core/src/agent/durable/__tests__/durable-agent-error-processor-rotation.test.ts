@@ -91,6 +91,46 @@ describe('durable agent API-error retry', () => {
     const { messages } = await memory.recall({ threadId, resourceId });
     expect(messages.flatMap(message => message.content.parts ?? []).some(part => part.type === 'error')).toBe(false);
   });
+  it('honors a call-time errorProcessors override in place of the resolved list', async () => {
+    // Parity with the agentic engine: a call-time list replaces the resolved list,
+    // including the shared stability defaults. The default stack never retries an
+    // unmatched 500, so only the caller's processor can recover the call.
+    const overrideRuns: string[] = [];
+    const agent = new Agent({
+      id: 'durable-api-error-override',
+      name: 'durable-api-error-override',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+      maxProcessorRetries: 1,
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { fullStream, cleanup } = await durableAgent.stream('hello', {
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'call-time-retry',
+          processAPIError: async () => {
+            overrideRuns.push('call-time-retry');
+            return { retry: true };
+          },
+        },
+      ],
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of fullStream) {
+      chunks.push(chunk);
+    }
+    await cleanup?.();
+
+    const text = chunks
+      .filter(chunk => chunk.type === 'text-delta')
+      .map(chunk => chunk.payload?.text ?? '')
+      .join('');
+    expect(text).toBe('the retried answer');
+    expect(overrideRuns).toEqual(['call-time-retry']);
+  });
   it('carries a rotated id into the next retry instead of falling back', async () => {
     const rotations: Array<{ before: string | undefined; after: string | undefined }> = [];
     const agent = new Agent({
