@@ -537,6 +537,7 @@ type InputShared_Type_15 =
   | 'tool_result_processor'
   | 'workflow_step'
   | 'tool'
+  | 'mcp_server'
   | 'workflow_run'
   | 'memory';
 
@@ -3296,6 +3297,7 @@ type Shared_Type_58 =
   | 'tool_result_processor'
   | 'workflow_step'
   | 'tool'
+  | 'mcp_server'
   | 'workflow_run'
   | 'memory';
 
