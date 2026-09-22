@@ -71,6 +71,14 @@ export interface GitLabWebhookDispatchDependencies {
   onTargetError?: (subscription: GitLabSignalSubscriptionRow, error: unknown) => void;
   /** Called when a subscription names a thread this deployment does not hold. */
   onTargetSkipped?: (subscription: GitLabSignalSubscriptionRow) => void;
+  /**
+   * The connection the event arrived through. When set, only subscriptions
+   * created under that connection are delivered; a direct project webhook
+   * leaves it unset because GitLab does not say which connection it belongs to.
+   */
+  sourceConnectionId?: string;
+  /** Called when a subscription is skipped because it belongs to another connection. */
+  onConnectionMismatch?: (subscription: GitLabSignalSubscriptionRow) => void;
 }
 
 function getObject(value: unknown): Record<string, unknown> | undefined {
@@ -284,6 +292,17 @@ export async function dispatchGitLabWebhook(
 
   for (const subscription of subscriptions) {
     try {
+      // Two connections can reach the same project. Each polled event names
+      // its connection, so a subscription is woken once, by its own connection,
+      // and never by a credential that did not create the link.
+      if (
+        dependencies.sourceConnectionId !== undefined &&
+        subscription.data.installationExternalId !== dependencies.sourceConnectionId
+      ) {
+        skipped += 1;
+        dependencies.onConnectionMismatch?.(subscription);
+        continue;
+      }
       if (!(await isAuthorizedSender(notification, subscription))) {
         rejected = true;
         continue;

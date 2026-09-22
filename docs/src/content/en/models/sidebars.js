@@ -951,6 +951,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tempr',
+          label: 'Tempr',
+        },
+        {
+          type: 'doc',
           id: 'providers/tencent-coding-plan',
           label: 'Tencent Coding Plan (China)',
         },

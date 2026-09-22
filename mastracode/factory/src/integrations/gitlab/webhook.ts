@@ -28,12 +28,33 @@ export type GitLabWebhookResult =
   | { status: 400; body: { error: 'bad_request'; message: string } }
   | { status: 401; body: { error: 'unauthorized'; message: string } };
 
-export interface GitLabWebhookHandlerOptions extends Partial<Omit<GitLabWebhookDispatchDependencies, 'controller'>> {
-  webhookSecret?: string;
+/**
+ * What processing an already-parsed delivery needs: the rules ingress and,
+ * when a controller is mounted, the subscription dispatch. Shared by the
+ * direct webhook route and the Platform event poller.
+ */
+export interface GitLabWebhookProcessOptions extends Partial<Omit<GitLabWebhookDispatchDependencies, 'controller'>> {
   ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;
   /** When present, merge-request activity is also delivered to subscribed sessions. */
   controller?: GitLabWebhookDispatchDependencies['controller'];
 }
+
+export interface GitLabWebhookHandlerOptions extends GitLabWebhookProcessOptions {
+  webhookSecret?: string;
+}
+
+/**
+ * `object_kind` values GitLab puts in every webhook body, mapped to the
+ * `X-Gitlab-Event` header the direct route keys on. A body reaching Factory
+ * without its headers (the Platform event log stores only the payload) is
+ * normalized through this table so both ingress paths see the same event name.
+ */
+const GITLAB_OBJECT_KIND_EVENTS: Record<string, string> = {
+  issue: 'Issue Hook',
+  note: 'Note Hook',
+  merge_request: 'Merge Request Hook',
+  push: 'Push Hook',
+};
 
 function normalizeHeader(value: string | undefined | null): string | null {
   if (!value) return null;
@@ -138,12 +159,35 @@ export function normalizeGitLabWebhookMetadata(parsed: ParsedGitLabWebhook): Git
   };
 }
 
-export async function handleGitLabWebhook(
-  c: Context,
-  options: GitLabWebhookHandlerOptions,
+/**
+ * Build the parsed form of a GitLab webhook from its raw body alone, for
+ * deliveries that arrive without HTTP headers. The event name comes from
+ * `object_kind`; the caller supplies a delivery id that is stable across
+ * replays so rules replay handling and session dedupe keys behave as they do
+ * for a direct delivery. Returns null when the body is not a webhook object or
+ * its kind is one Factory does not handle, which callers treat exactly like an
+ * unsupported event header: acknowledged and dropped.
+ */
+export function parseGitLabWebhookBody(body: unknown, deliveryId: string): ParsedGitLabWebhook | null {
+  const payload = getObject(body);
+  const objectKind = getString(payload?.object_kind);
+  const id = normalizeHeader(deliveryId);
+  if (!payload || !objectKind || !id) return null;
+  const event = GITLAB_OBJECT_KIND_EVENTS[objectKind];
+  if (!event) return null;
+  return { event, deliveryId: id, payload };
+}
+
+/**
+ * Process a parsed delivery: rules ingress first, then session dispatch when a
+ * controller is mounted. Ingestion failures propagate so the caller can retry
+ * the delivery (GitLab redelivers on a non-2xx; the poller leaves its cursor
+ * in place).
+ */
+export async function processGitLabWebhook(
+  parsed: ParsedGitLabWebhook,
+  options: GitLabWebhookProcessOptions,
 ): Promise<GitLabWebhookResult> {
-  const parsed = await parseGitLabWebhook(c, options.webhookSecret);
-  if ('status' in parsed) return parsed;
   if (!SUPPORTED_GITLAB_WEBHOOK_EVENTS.has(parsed.event)) {
     return { status: 202, body: { ok: true, ignored: true } };
   }
@@ -152,7 +196,7 @@ export async function handleGitLabWebhook(
   if (options.ingestFactoryEvent) await options.ingestFactoryEvent(parsed);
   if (!options.controller) return { status: 202, body: { ok: true } };
 
-  const { webhookSecret: _secret, ingestFactoryEvent: _ingest, controller, ...dispatch } = options;
+  const { ingestFactoryEvent: _ingest, controller, ...dispatch } = options;
   const result = await dispatchGitLabWebhook(parsed, {
     onSenderRejected: notification => {
       console.info('[GitLab Webhook] sender not authorized', {
@@ -172,4 +216,14 @@ export async function handleGitLabWebhook(
   // The rules ingress already acknowledged the event; an event no session
   // subscribes to is still a handled delivery, not an ignored one.
   return { status: 202, body: { ok: true } };
+}
+
+export async function handleGitLabWebhook(
+  c: Context,
+  options: GitLabWebhookHandlerOptions,
+): Promise<GitLabWebhookResult> {
+  const parsed = await parseGitLabWebhook(c, options.webhookSecret);
+  if ('status' in parsed) return parsed;
+  const { webhookSecret: _secret, ...process } = options;
+  return processGitLabWebhook(parsed, process);
 }
