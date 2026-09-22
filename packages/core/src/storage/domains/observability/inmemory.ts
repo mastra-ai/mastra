@@ -1196,17 +1196,32 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const traceIds = new Set<string>(args.traceIds);
     for (const traceId of args.traceIds) {
       const traceEntry = this.db.traces.get(traceId);
-      if (traceEntry) {
-        const scopeReference = traceEntry.rootSpan ?? Object.values(traceEntry.spans)[0];
-        if (!this.matchesDeleteScope(scopeReference, args)) {
-          continue;
-        }
-        this.db.traceCursorIds.delete(traceId);
-        for (const spanId of Object.keys(traceEntry.spans)) {
-          this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
-        }
+      if (!traceEntry) {
+        this.db.traces.delete(traceId);
+        continue;
       }
-      this.db.traces.delete(traceId);
+      // Tenant scope applies per row, matching the SQL adapters'
+      // DELETE ... WHERE "traceId" IN (...) AND "organizationId" = ... —
+      // spans outside the scope survive and keep the trace alive.
+      let removedAny = false;
+      for (const [spanId, span] of Object.entries(traceEntry.spans)) {
+        if (!this.matchesDeleteScope(span, args)) continue;
+        delete traceEntry.spans[spanId];
+        this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
+        removedAny = true;
+      }
+      if (!removedAny) continue;
+      if (Object.keys(traceEntry.spans).length === 0) {
+        this.db.traceCursorIds.delete(traceId);
+        this.db.traces.delete(traceId);
+        continue;
+      }
+      // The previous root span may have been deleted; re-anchor to a remaining
+      // root before recomputing derived trace properties.
+      if (traceEntry.rootSpan && traceEntry.spans[traceEntry.rootSpan.spanId] === undefined) {
+        traceEntry.rootSpan = Object.values(traceEntry.spans).find(span => span.parentSpanId == null) ?? null;
+      }
+      this.recomputeTraceProperties(traceEntry);
     }
 
     // Cascade: remove trace-linked signal events. Records without a traceId are untouched.

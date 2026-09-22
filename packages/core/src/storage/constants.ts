@@ -52,6 +52,7 @@ export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 export const TABLE_HARNESS_ATTACHMENTS = 'mastra_harness_attachments';
 export const TABLE_HARNESS_ATTACHMENT_REFERENCES = 'mastra_harness_attachment_references';
+export const TABLE_HARNESS_ATTACHMENT_OPERATIONS = 'mastra_harness_attachment_operations';
 export const TABLE_HARNESS_MESSAGE_RESULTS = 'mastra_harness_message_results';
 export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tombstones';
 export const TABLE_HARNESS_SESSION_EVENTS = 'mastra_harness_session_events';
@@ -124,6 +125,7 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_SESSIONS
   | typeof TABLE_HARNESS_ATTACHMENTS
   | typeof TABLE_HARNESS_ATTACHMENT_REFERENCES
+  | typeof TABLE_HARNESS_ATTACHMENT_OPERATIONS
   | typeof TABLE_HARNESS_MESSAGE_RESULTS
   | typeof TABLE_HARNESS_OPERATION_TOMBSTONES
   | typeof TABLE_HARNESS_SESSION_EVENTS
@@ -1009,11 +1011,9 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     pending_bytes: { type: 'bigint', nullable: false },
     updated_at: { type: 'bigint', nullable: false },
   },
-  // Harness attachments. Bytes are stored as base64 in `data_b64` because
-  // the shared `StorageColumn['type']` union does not yet include `blob`.
-  // For v1 attachment sizes (HarnessConfig.files.maxAttachmentBytes, default
-  // 100 MiB) the 33% base64 overhead is acceptable; switching to a true
-  // BLOB column is a lossless schema migration when we extend the union.
+  // Harness attachments. New rows retain only external byte identity in
+  // `blob_ref`; `data_b64` remains nullable for rows that require an explicit
+  // migration/import and is never used as an implicit native fallback.
   [TABLE_HARNESS_ATTACHMENTS]: {
     harness_name: { type: 'text', nullable: false },
     session_id: { type: 'text', nullable: false },
@@ -1031,7 +1031,10 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     metadata_json: { type: 'jsonb', nullable: true },
     object_json: { type: 'jsonb', nullable: true },
     created_at: { type: 'bigint', nullable: false },
-    data_b64: { type: 'text', nullable: false },
+    data_b64: { type: 'text', nullable: true },
+    session_incarnation: { type: 'text', nullable: true },
+    blob_ref: { type: 'text', nullable: true },
+    put_operation_id: { type: 'text', nullable: true },
   },
   [TABLE_HARNESS_ATTACHMENT_REFERENCES]: {
     harness_name: { type: 'text', nullable: false },
@@ -1039,8 +1042,33 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     attachment_id: { type: 'text', nullable: false },
     source: { type: 'text', nullable: false },
     source_id: { type: 'text', nullable: false },
+    session_incarnation: { type: 'text', nullable: true },
     retained_until: { type: 'bigint', nullable: true },
     created_at: { type: 'bigint', nullable: false },
+  },
+  [TABLE_HARNESS_ATTACHMENT_OPERATIONS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    attachment_id: { type: 'text', nullable: false },
+    session_incarnation: { type: 'text', nullable: false },
+    kind: { type: 'text', nullable: false },
+    status: { type: 'text', nullable: false },
+    name: { type: 'text', nullable: true },
+    mime_type: { type: 'text', nullable: true },
+    source: { type: 'text', nullable: true },
+    size_bytes: { type: 'bigint', nullable: false },
+    sha256: { type: 'text', nullable: false },
+    semantic_json: { type: 'jsonb', nullable: true },
+    blob_ref: { type: 'text', nullable: true },
+    attempts: { type: 'integer', nullable: false },
+    claim_id: { type: 'text', nullable: true },
+    claim_expires_at: { type: 'bigint', nullable: true },
+    next_attempt_at: { type: 'bigint', nullable: true },
+    last_error: { type: 'jsonb', nullable: true },
+    created_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+    completed_at: { type: 'bigint', nullable: true },
   },
   [TABLE_HARNESS_MESSAGE_RESULTS]: {
     id: { type: 'text', nullable: false, primaryKey: true },
@@ -1425,6 +1453,9 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_HARNESS_ATTACHMENT_REFERENCES]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_REFERENCES],
     compositePrimaryKey: ['harness_name', 'session_id', 'attachment_id', 'source', 'source_id'],
+  },
+  [TABLE_HARNESS_ATTACHMENT_OPERATIONS]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_ATTACHMENT_OPERATIONS],
   },
   [TABLE_HARNESS_MESSAGE_RESULTS]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_MESSAGE_RESULTS],

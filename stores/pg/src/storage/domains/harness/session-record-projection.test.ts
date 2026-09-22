@@ -4,6 +4,7 @@ import { createSampleSessionRecord } from '@internal/storage-test-utils';
 import {
   HarnessStorageSessionProjectionIdentityError,
   HarnessStorageThreadDeleteFenceConflictError,
+  InMemoryHarnessAttachmentByteOwner,
   TABLE_HARNESS_SESSION_PROJECTION_FENCES,
   TABLE_HARNESS_SESSION_PROJECTION_INTENTS,
   TABLE_HARNESS_SESSION_PROJECTION_PRESSURE,
@@ -27,6 +28,7 @@ describe('HarnessPG native session record projection', () => {
       maxAttempts: 1,
       maxPendingIntents: 20,
     },
+    attachmentByteOwner: new InMemoryHarnessAttachmentByteOwner({ providerId: 'projection-test' }),
   });
 
   beforeAll(async () => {
