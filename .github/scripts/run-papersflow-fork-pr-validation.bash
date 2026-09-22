@@ -4326,6 +4326,7 @@ run_validator_self_tests() {
     "$fixture_repo/pubsub/google-cloud-pubsub/src" \
     "$fixture_repo/pubsub/redis-streams/src" \
     "$fixture_repo/stores/clickhouse/src/storage/db" \
+    "$fixture_repo/stores/clickhouse/src/storage/domains/workflows" \
     "$fixture_repo/stores/cloudflare/src/kv/storage/db" \
     "$fixture_repo/stores/convex/src/cache" \
     "$fixture_repo/stores/convex/src/server" \
@@ -4569,6 +4570,8 @@ run_validator_self_tests() {
       > stores/clickhouse/src/storage/db/utils.ts
     printf '%s\n' "import { it } from 'vitest';" "it('clickhouse db ddl', () => {});" \
       > stores/clickhouse/src/storage/db/index.test.ts
+    printf '%s\n' 'export const clickhouseWorkflowInit = true;' \
+      > stores/clickhouse/src/storage/domains/workflows/index.ts
     printf '%s\n' '{}' > stores/cloudflare/package.json
     printf '%s\n' 'export type CloudflareRecordTypes = { base: true };' \
       > stores/cloudflare/src/kv/storage/types.ts
