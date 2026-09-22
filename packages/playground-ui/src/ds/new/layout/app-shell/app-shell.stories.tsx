@@ -88,7 +88,7 @@ const crumbs = (
 
 function Frame({ children }: { children: ReactNode }) {
   return (
-    <div className={cn('rounded-studio-frame relative m-1.5 ml-0 min-h-0 flex-1 overflow-hidden lg:m-2 lg:ml-0', frameSurfaceStyle)}>
+    <div className={cn('relative min-h-0 flex-1 overflow-hidden rounded-studio-frame', frameSurfaceStyle)}>
       {children}
     </div>
   );

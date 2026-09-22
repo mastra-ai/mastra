@@ -90,28 +90,14 @@ describe('LoginPage UI parity for /login and /signup', () => {
     expect(root).toBeTruthy();
   });
 
-  it('does not wrap content in a bordered card on either route', async () => {
+  it('does not render its own card or viewport wrapper (the auth shell owns those)', async () => {
     mockCapabilities(credentialsCapabilities);
-    const { unmount } = renderLogin();
+    renderLogin();
 
-    const loginRoot = await screen.findByTestId('login-page');
-    const loginInner = loginRoot.firstElementChild as HTMLElement;
-    expect(loginInner.className).not.toMatch(/rounded-lg/);
-    expect(loginInner.className).not.toMatch(/border-border/);
-    expect(loginInner.className).not.toMatch(/bg-background/);
-    expect(loginInner.className).not.toMatch(/\bp-8\b/);
-
-    unmount();
-    cleanup();
-
-    mockCapabilities(credentialsCapabilities);
-    renderSignUp();
-    const signUpRoot = await screen.findByTestId('login-page');
-    const signUpInner = signUpRoot.firstElementChild as HTMLElement;
-    expect(signUpInner.className).not.toMatch(/rounded-lg/);
-    expect(signUpInner.className).not.toMatch(/border-border/);
-    expect(signUpInner.className).not.toMatch(/bg-background/);
-    expect(signUpInner.className).not.toMatch(/\bp-8\b/);
+    const root = await screen.findByTestId('login-page');
+    expect(root.className).not.toMatch(/min-h-screen/);
+    expect(root.className).not.toMatch(/bg-sidebar/);
+    expect(root.closest('[data-slot="studio-card"]')).toBeNull();
   });
 
   it('shows the sign in heading on /login by default', async () => {

@@ -14,6 +14,10 @@ function renderShell({ mobileHeader = true, sidebar = false }: { mobileHeader?: 
   );
 }
 
+function bodyClassName(markup: string) {
+  return markup.match(/data-slot="app-shell-body" class="([^"]*)"/)?.[1] ?? '';
+}
+
 describe('AppShell', () => {
   describe('when every slot is provided', () => {
     it('composes the sidebar, mobile header, and content', () => {
@@ -42,11 +46,27 @@ describe('AppShell', () => {
     it('lays the sidebar and content out as a desktop grid', () => {
       expect(markup).toContain('data-slot="app-shell" class="h-full min-h-0 lg:grid lg:grid-cols-[auto_1fr]');
     });
+
+    it('drops the left inset at lg so the sidebar padding provides the gap', () => {
+      expect(bodyClassName(markup)).toContain('p-1.5 lg:p-2');
+      expect(bodyClassName(markup)).toContain('lg:pl-0');
+    });
+
+    it('keeps the mobile header outside the inset body', () => {
+      expect(markup.indexOf('Mobile header')).toBeLessThan(markup.indexOf('data-slot="app-shell-body"'));
+    });
   });
 
   describe('when the sidebar is omitted', () => {
+    const markup = renderShell();
+
     it('does not reserve a sidebar column', () => {
-      expect(renderShell()).not.toContain('lg:grid-cols-[auto_1fr]');
+      expect(markup).not.toContain('lg:grid-cols-[auto_1fr]');
+    });
+
+    it('insets the body on all sides', () => {
+      expect(bodyClassName(markup)).toContain('p-1.5 lg:p-2');
+      expect(bodyClassName(markup)).not.toContain('lg:pl-0');
     });
   });
 

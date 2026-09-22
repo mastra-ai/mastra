@@ -59,6 +59,13 @@ const renderPage = (initialEntry: string) => {
 };
 
 describe('DatasetItemVersionsComparePage', () => {
+  it('renders a single main landmark around the compare columns', async () => {
+    renderPage('/datasets/ds-1/items/item-a/versions');
+
+    expect(await screen.findByRole('combobox', { name: 'Version' })).toBeDefined();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+  });
+
   it('shows an empty compare column when no ?compare is provided', async () => {
     renderPage('/datasets/ds-1/items/item-a/versions');
 

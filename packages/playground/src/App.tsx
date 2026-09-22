@@ -89,6 +89,7 @@ import SchedulesPage from './pages/workflows/schedules';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
+import { AuthLayout } from '@/components/auth-layout';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
@@ -179,9 +180,13 @@ const agentCmsChildRoutes = [
 
 // eslint-disable-next-line react-refresh/only-export-components -- routes are consumed by the router and tests.
 export const routes: RouteObject[] = [
-  // Auth pages - no layout
-  { path: '/login', element: <Login /> },
-  { path: '/signup', element: <SignUp /> },
+  {
+    element: <AuthLayout />,
+    children: [
+      { path: '/login', element: <Login /> },
+      { path: '/signup', element: <SignUp /> },
+    ],
+  },
   {
     path: '/agent-builder',
     element: <AgentBuilderRootLayout paths={paths} />,

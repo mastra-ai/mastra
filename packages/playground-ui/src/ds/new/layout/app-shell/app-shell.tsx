@@ -19,7 +19,17 @@ export function AppShell({ children, className, mobileHeader, ref, sidebar, ...p
       {sidebar}
       <div data-slot="app-shell-content" className="flex h-full min-h-0 flex-col">
         {mobileHeader}
-        {children}
+        <div
+          data-slot="app-shell-body"
+          className={cn(
+            'flex min-h-0 flex-1 flex-col',
+            // Inset on every side; at lg with a sidebar column the sidebar's own padding provides the left gap.
+            'p-1.5 lg:p-2',
+            sidebar && 'lg:pl-0',
+          )}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

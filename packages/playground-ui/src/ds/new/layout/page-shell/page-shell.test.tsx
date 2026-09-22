@@ -103,25 +103,25 @@ describe('PageShell', () => {
   });
 
   describe('className', () => {
-    it('defaults to px-6 on the scrollable main', () => {
+    it('defaults to p-4 on the scrollable main', () => {
       const markup = renderToStaticMarkup(
         <PageShell title="Research agent">
           <main>Main content</main>
         </PageShell>,
       );
 
-      expect(mainClassName(markup)).toContain('px-6');
+      expect(mainClassName(markup)).toContain('p-4');
     });
 
     it('lets callers override the padding', () => {
       const markup = renderToStaticMarkup(
-        <PageShell title="Research agent" className="px-2">
+        <PageShell title="Research agent" className="p-2">
           <main>Main content</main>
         </PageShell>,
       );
 
-      expect(mainClassName(markup)).toContain('px-2');
-      expect(mainClassName(markup)).not.toContain('px-6');
+      expect(mainClassName(markup)).toContain('p-2');
+      expect(mainClassName(markup)).not.toContain('p-4');
     });
   });
 });

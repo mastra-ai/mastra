@@ -7,7 +7,6 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { AppShell } from '@mastra/playground-ui/new/layout/app-shell';
-import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
@@ -16,6 +15,7 @@ import { Search } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
+import { StudioCard } from './studio-card';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
@@ -109,7 +109,7 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               className="min-w-0"
               onResize={size => onPanelResize(size.inPixels)}
             >
-              <RouteSidePanelSlot className="h-full min-h-0 py-1.5 pr-1.5 lg:py-2 lg:pr-2" />
+              <RouteSidePanelSlot className="h-full min-h-0" />
             </CollapsiblePanel>
           </>
         )}
@@ -138,14 +138,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
       >
         <StudioFrame className="flex min-h-0 flex-1 flex-col">
-          <div
-            data-slot="studio-card"
-            className={cn('rounded-studio-frame relative m-1.5 ml-0 min-h-0 flex-1 overflow-hidden lg:m-2 lg:ml-0', frameSurfaceStyle)}
-          >
+          <StudioCard>
             <AuthRequired>
               <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
             </AuthRequired>
-          </div>
+          </StudioCard>
         </StudioFrame>
       </AppShell>
     </>

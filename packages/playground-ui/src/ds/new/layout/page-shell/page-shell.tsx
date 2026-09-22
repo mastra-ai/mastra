@@ -27,7 +27,7 @@ export interface PageShellProps {
  */
 export function PageShell({ title, children, icon, description, meta, action, isLoading, className }: PageShellProps) {
   return (
-    <PageLayout className={cn('grid grid-rows-[auto_minmax(0,1fr)] p-4 px-6', className)}>
+    <PageLayout className={cn('grid grid-rows-[auto_minmax(0,1fr)] p-4', className)}>
       <PageLayout.TopArea>
         <PageHeader>
           {icon != null && !isLoading ? <PageHeader.Icon>{icon}</PageHeader.Icon> : null}

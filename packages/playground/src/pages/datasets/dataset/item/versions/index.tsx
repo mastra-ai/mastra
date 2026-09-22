@@ -170,65 +170,63 @@ function DatasetItemVersionsComparePage() {
           </Button>
         )
       }
-      className="p-4"
+      className="grid grid-rows-[minmax(0,1fr)] p-4"
     >
-      <PageLayout className="grid grid-rows-[minmax(0,1fr)] p-4">
-        <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
-          <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
-            <CardHeader>
-              <VersionSelect
-                name="version"
-                value={leftNumber != null ? String(leftNumber) : ''}
-                options={versionOptions(allVersions ?? [], rightNumber != null ? new Set([rightNumber]) : undefined)}
-                onValueChange={val => setParam('version', Number(val))}
+      <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
+        <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+          <CardHeader>
+            <VersionSelect
+              name="version"
+              value={leftNumber != null ? String(leftNumber) : ''}
+              options={versionOptions(allVersions ?? [], rightNumber != null ? new Set([rightNumber]) : undefined)}
+              onValueChange={val => setParam('version', Number(val))}
+            />
+          </CardHeader>
+          <CardContent className="grid content-start gap-5 overflow-y-auto">
+            {isLoading ? (
+              <div className="text-muted-foreground text-body">Loading...</div>
+            ) : leftItem ? (
+              <DatasetItemDetails
+                item={leftItem}
+                diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
               />
-            </CardHeader>
-            <CardContent className="grid content-start gap-5 overflow-y-auto">
-              {isLoading ? (
-                <div className="text-muted-foreground text-body">Loading...</div>
-              ) : leftItem ? (
-                <DatasetItemDetails
-                  item={leftItem}
-                  diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
-                />
-              ) : (
-                <div className="text-muted-foreground text-body">Item data not available</div>
-              )}
-            </CardContent>
-          </Card>
+            ) : (
+              <div className="text-muted-foreground text-body">Item data not available</div>
+            )}
+          </CardContent>
+        </Card>
 
-          <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
-            <CardHeader>
-              <VersionSelect
-                name="compare"
-                value={rightNumber != null ? String(rightNumber) : ''}
-                placeholder="Select a version to compare"
-                options={versionOptions(allVersions ?? [], leftNumber != null ? new Set([leftNumber]) : undefined)}
-                onValueChange={val => setParam('compare', Number(val))}
+        <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+          <CardHeader>
+            <VersionSelect
+              name="compare"
+              value={rightNumber != null ? String(rightNumber) : ''}
+              placeholder="Select a version to compare"
+              options={versionOptions(allVersions ?? [], leftNumber != null ? new Set([leftNumber]) : undefined)}
+              onValueChange={val => setParam('compare', Number(val))}
+            />
+          </CardHeader>
+          <CardContent className="grid content-start gap-5 overflow-y-auto">
+            {rightNumber == null ? (
+              <EmptyState
+                className="h-full"
+                iconSlot={<GitCompareIcon className="text-muted-foreground size-8" />}
+                titleSlot="No version selected"
+                descriptionSlot="Pick a version above to compare it with the one on the left."
               />
-            </CardHeader>
-            <CardContent className="grid content-start gap-5 overflow-y-auto">
-              {rightNumber == null ? (
-                <EmptyState
-                  className="h-full"
-                  iconSlot={<GitCompareIcon className="text-muted-foreground size-8" />}
-                  titleSlot="No version selected"
-                  descriptionSlot="Pick a version above to compare it with the one on the left."
-                />
-              ) : isRightLoading ? (
-                <div className="text-muted-foreground text-body">Loading...</div>
-              ) : rightItem ? (
-                <DatasetItemDetails
-                  item={rightItem}
-                  diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
-                />
-              ) : (
-                <div className="text-muted-foreground text-body">Version {rightNumber} not found</div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </PageLayout>
+            ) : isRightLoading ? (
+              <div className="text-muted-foreground text-body">Loading...</div>
+            ) : rightItem ? (
+              <DatasetItemDetails
+                item={rightItem}
+                diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
+              />
+            ) : (
+              <div className="text-muted-foreground text-body">Version {rightNumber} not found</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </PageLayout>
   );
 }
