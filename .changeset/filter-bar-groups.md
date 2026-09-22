@@ -4,7 +4,7 @@
 
 Added a Linear-style **Advanced filter** to `FilterBar`, so filters can be combined with `and` / `or` instead of only being ANDed together.
 
-Pass a `FilterBarExpression` as `value` to opt in. Top-level chips stay flat and implicitly ANDed; each top-level group renders as a single **Advanced filter · N** chip that opens a popover with a recursive rule builder: one editable chip per condition, a clickable `and` / `or` connector per group, `+ Filter` / `+ Group` footers and per-row remove buttons. From the bar input, pick **Advanced filter…** at the end of the field list to create a group and start adding conditions into it. Empty groups are pruned when the popover closes. Nesting depth is bounded by the new `maxDepth` prop (default `3`).
+Pass a `FilterBarExpression` as `value` to opt in. Top-level chips stay flat and implicitly ANDed; each top-level group renders as a single **Advanced filter · N** chip that opens a popover with a recursive rule builder: one editable chip per condition laid out as `where` / `and` / `or` rows, nested groups as cards with their own `and` | `or` switch, and `+ Condition` / `+ Group` / `Clear all` footers. From the bar input, pick **Advanced filter…** at the end of the field list to create a group and start adding conditions into it. Empty groups are pruned when the popover closes. Nesting depth is bounded by the new `maxDepth` prop (default `3`).
 
 A flat `FilterBarItem[]` value keeps working unchanged and never shows the option.
 
