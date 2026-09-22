@@ -1,0 +1,26 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # Runs every day at midnight UTC (adjust CRON expression as needed)
+    - cron: '0 0 * * *'
+  # Allows you to manually trigger the workflow from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: main # Change to 'master' if your main branch is named master
+          fetch-depth: 0
+
+      - name: Sync with Upstream
+        uses: a2ren/pull-upstream-action@v1.1.0
+        with:
+          upstream_repository: 'ORIGINAL_OWNER/ORIGINAL_REPO' # e.g., facebook/react
+          upstream_branch: 'main'
+          target_branch: 'main'
+          git_pull_args: '--ff-only' # Ensures it only syncs if there are no merge conflicts
