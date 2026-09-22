@@ -623,6 +623,23 @@ const workflow = createWorkflow({
 })
 ```
 
+### Retries
+
+Set `retries` to let a run survive a failed request to your app, such as a process restart, redeploy, or out-of-memory crash. Inngest calls the function again, skips the steps that already finished, and continues from the step that was interrupted:
+
+```ts
+const workflow = createWorkflow({
+  id: 'long-running-workflow',
+  inputSchema: z.object({ jobId: z.string() }),
+  outputSchema: z.object({ done: z.boolean() }),
+  steps: [longRunningStep],
+  // Re-invoke up to 3 times after a failed request
+  retries: 3,
+})
+```
+
+`retries` defaults to `0`. Errors thrown by your step code are retried per step with `retryConfig` or the step's `retries` option, not at the function level. `createInngestAgent()` accepts the same `retries` option for the durable agent loop.
+
 ### Combining flow control options
 
 Multiple flow control options can be combined in a single workflow:

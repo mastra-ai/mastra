@@ -66,6 +66,7 @@ import {
   mergeResumeRequestContext,
 } from '../durable-event-payload';
 import { InngestPubSub } from '../pubsub';
+import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
@@ -138,6 +139,12 @@ export interface CreateInngestAgentOptions {
    * policy — Mastra snapshots exist purely for human-in-the-loop resume.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+  /**
+   * Inngest function-level retries for the durable agent loop function. Inngest
+   * re-invokes the function when an SDK request fails (e.g. the process restarts
+   * mid-run), replaying memoized steps. Defaults to 0.
+   */
+  retries?: InngestFlowControlConfig['retries'];
 }
 
 /**
@@ -558,6 +565,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     cache,
     mastra: mastraOption,
     shouldPersistSnapshot,
+    retries,
   } = options;
 
   if (shouldPersistSnapshot) {
@@ -583,7 +591,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   // Create the durable workflow for this agent
   // Mastra's addWorkflow handles deduplication, so creating multiple times is fine
-  const workflow = createInngestDurableAgenticWorkflow({ inngest });
+  const workflow = createInngestDurableAgenticWorkflow({ inngest, retries });
 
   // Track whether user provided a custom cache (if not, we'll inherit from mastra)
   let _customCache = cache;
