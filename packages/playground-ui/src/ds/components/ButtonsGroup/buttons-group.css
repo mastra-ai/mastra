@@ -1,5 +1,5 @@
 /* ButtonsGroup seam. Plain CSS rather than `[&>*]` class strings: every rule keys off the
- * same four negations, and Tailwind only emits a utility whose class string appears
+ * same three negations, and Tailwind only emits a utility whose class string appears
  * literally in the source — composing those selectors from constants silently emits
  * nothing at all.
  *
@@ -48,7 +48,7 @@
   /* An InputGroup wrapping a textarea or a stacked addon is deliberately auto-height and
      is not a rung — it would be the tallest thing in the group either way. */
   [data-slot='buttons-group']
-    > :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
       :has(textarea, [data-align='block-start'], [data-align='block-end'])
     ) {
     height: var(--segment-height);
@@ -97,7 +97,6 @@
      borderless, and take a shadow divider below instead. */
   [data-slot='buttons-group']
     > :not(
-      [data-slot='buttons-group-separator'],
       [aria-hidden='true'],
       [data-base-ui-focus-guard],
       [aria-owns],
@@ -132,9 +131,7 @@
      to double the alpha and out-read the ring around the group. The left segment owns the
      seam with its right border; the segment after it drops its left edge entirely. */
   [data-slot='buttons-group'][data-orientation='horizontal']
-    > :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
-      :first-child
-    ) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
     border-left-width: 0;
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
@@ -142,9 +139,7 @@
 
   /* `:has(~ …)` rather than `:not(:last-child)`, for the injected children above. */
   [data-slot='buttons-group'][data-orientation='horizontal']
-    > *:has(
-      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
-    ) {
+    > *:has(~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])) {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
   }
@@ -152,7 +147,7 @@
   /* A borderless filled segment cannot own its seam, so it draws one inside its own box. */
   [data-slot='buttons-group'][data-orientation='horizontal']
     > :is([data-variant='primary'], [data-variant='destructive']):has(
-      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+      ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
     ) {
     box-shadow: inset -1px 0 0 0 var(--border);
   }
@@ -160,18 +155,14 @@
   /* Vertical mirrors it: the top segment owns the seam. The children are capsules, so the
      outer ends are re-rounded to the container radius. */
   [data-slot='buttons-group'][data-orientation='vertical']
-    > :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
-      :first-child
-    ) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
     border-top-width: 0;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
   }
 
   [data-slot='buttons-group'][data-orientation='vertical']
-    > *:has(
-      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
-    ) {
+    > *:has(~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])) {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
   }
@@ -188,7 +179,7 @@
 
   [data-slot='buttons-group'][data-orientation='vertical']
     > :is([data-variant='primary'], [data-variant='destructive']):has(
-      ~ :not([data-slot='buttons-group-separator'], [aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+      ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
     ) {
     box-shadow: inset 0 -1px 0 0 var(--border);
   }

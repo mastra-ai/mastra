@@ -1,12 +1,11 @@
 import './buttons-group.css';
 import * as React from 'react';
 
+import { ControlSizeContext } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 
 type Orientation = 'horizontal' | 'vertical';
-
-const ButtonsGroupOrientationContext = React.createContext<Orientation>('horizontal');
 
 export type ButtonsGroupProps = React.ComponentPropsWithoutRef<'div'> & {
   orientation?: Orientation;
@@ -20,7 +19,7 @@ export type ButtonsGroupProps = React.ComponentPropsWithoutRef<'div'> & {
 export const ButtonsGroup = React.forwardRef<HTMLDivElement, ButtonsGroupProps>(
   ({ children, className, orientation = 'horizontal', size = 'md', ...props }, ref) => {
     return (
-      <ButtonsGroupOrientationContext.Provider value={orientation}>
+      <ControlSizeContext.Provider value={size}>
         <div
           ref={ref}
           role="group"
@@ -32,34 +31,11 @@ export const ButtonsGroup = React.forwardRef<HTMLDivElement, ButtonsGroupProps>(
         >
           {children}
         </div>
-      </ButtonsGroupOrientationContext.Provider>
+      </ControlSizeContext.Provider>
     );
   },
 );
 ButtonsGroup.displayName = 'ButtonsGroup';
-
-export type ButtonsGroupSeparatorProps = React.ComponentPropsWithoutRef<'div'> & {
-  orientation?: Orientation;
-};
-
-export const ButtonsGroupSeparator = React.forwardRef<HTMLDivElement, ButtonsGroupSeparatorProps>(
-  ({ className, orientation, ...props }, ref) => {
-    const parentOrientation = React.useContext(ButtonsGroupOrientationContext);
-    // Separator runs perpendicular to the group flow by default.
-    const resolved = orientation ?? (parentOrientation === 'vertical' ? 'horizontal' : 'vertical');
-    return (
-      <div
-        ref={ref}
-        role="separator"
-        aria-orientation={resolved}
-        data-slot="buttons-group-separator"
-        className={cn('self-stretch bg-border', resolved === 'vertical' ? 'w-px' : 'h-px', className)}
-        {...props}
-      />
-    );
-  },
-);
-ButtonsGroupSeparator.displayName = 'ButtonsGroupSeparator';
 
 // No size of its own: a text segment only exists inside a group, and the group sets the
 // height. `text-label` is the type role at every rung (see `controlSizeClasses`), so the

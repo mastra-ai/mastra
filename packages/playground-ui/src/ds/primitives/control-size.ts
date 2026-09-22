@@ -1,3 +1,5 @@
+import * as React from 'react';
+
 // Shared size rhythm for interactive controls (Button, Input, Select trigger,
 // InputGroup, and other form-shaped triggers). These height + text-size classes
 // are the single source of truth so controls line up pixel-for-pixel when placed
@@ -6,6 +8,12 @@
 // hugs its text), so it deliberately lives in each component, not here.
 
 export type ControlSize = 'sm' | 'md' | 'lg';
+
+// The rung a wrapper imposes on the controls inside it (ButtonsGroup). A control's box is
+// forced by the wrapper's stylesheet, which reaches segments a provider cannot name — Base
+// UI renders a trigger as its own child. This carries what a stylesheet cannot reach
+// instead: the type role and adornment scale a field keys off its own `data-size`.
+export const ControlSizeContext = React.createContext<ControlSize | undefined>(undefined);
 
 // Height only — for square/icon controls and wrappers that own height on the
 // border-box while their inner control inherits it.

@@ -6,7 +6,7 @@ import { Combobox } from '../Combobox';
 import { DropdownMenu } from '../DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
-import { ButtonsGroup, ButtonsGroupSeparator, ButtonsGroupText } from './buttons-group';
+import { ButtonsGroup, ButtonsGroupText } from './buttons-group';
 
 const meta: Meta<typeof ButtonsGroup> = {
   title: 'Composite/ButtonsGroup',
@@ -32,7 +32,8 @@ export const Default: Story = {
 /**
  * The rung lives on the group, not on the segments. Height, icon-mode width and glyph size all
  * come from `size`, and a segment cannot lift itself off it: every row below asks for an
- * `icon-lg` chevron and a `lg` trigger, and all three still come out flat.
+ * `icon-lg` chevron and a `lg` trigger, and all three still come out flat. The field's inner
+ * control follows too, inset by its own border.
  *
  * This is why a segment rarely needs a `size` of its own. `icon-*` stays on the button because
  * it also picks the square shape — the rung part of it is overridden here.
@@ -42,6 +43,12 @@ export const Sizes: Story = {
     <div className="flex flex-col items-start gap-4">
       {(['sm', 'md', 'lg'] as const).map(size => (
         <ButtonsGroup key={size} size={size} aria-label={`${size} group`}>
+          <InputGroup className="w-50">
+            <InputGroupAddon align="inline-start">
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput aria-label={`Search (${size})`} placeholder="Search..." />
+          </InputGroup>
           <Button icon={<CopyIcon />}>Copy</Button>
           <ButtonsGroupText>{size}</ButtonsGroupText>
           <Select defaultValue="recent">
@@ -136,48 +143,6 @@ export const VerticalOutline: Story = {
         Cut
       </Button>
       <Button variant="outline">
-        <ClipboardIcon />
-        Paste
-      </Button>
-    </ButtonsGroup>
-  ),
-};
-
-export const WithSeparator: Story = {
-  render: () => (
-    <ButtonsGroup>
-      <Button variant="ghost">
-        <CopyIcon />
-        Copy
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
-        <ScissorsIcon />
-        Cut
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
-        <ClipboardIcon />
-        Paste
-      </Button>
-    </ButtonsGroup>
-  ),
-};
-
-export const VerticalWithSeparator: Story = {
-  render: () => (
-    <ButtonsGroup orientation="vertical">
-      <Button variant="ghost">
-        <CopyIcon />
-        Copy
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
-        <ScissorsIcon />
-        Cut
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
         <ClipboardIcon />
         Paste
       </Button>
