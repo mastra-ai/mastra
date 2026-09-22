@@ -143,4 +143,31 @@ describe('fluid-menu primitive', () => {
       expect(ref.current?.textContent).toBe('solo');
     });
   });
+
+  describe('when a row holds an open submenu (data-popup-open)', () => {
+    it('keeps the highlight on that row after the pointer leaves for the submenu', async () => {
+      await setup();
+      fireEvent.mouseMove(screen.getByTestId('menu'), { clientX: 10, clientY: 5 });
+      await flushFrames();
+      await act(async () => {
+        screen.getByText('a').setAttribute('data-popup-open', '');
+      });
+
+      fireEvent.mouseLeave(screen.getByTestId('menu'));
+      await flushFrames();
+
+      expect(activeRow()).toBe('a');
+    });
+  });
+
+  describe('when a row takes focus (roving-focus lists)', () => {
+    it('moves the highlight to that row', async () => {
+      await setup();
+
+      act(() => screen.getByText('c').focus());
+      await flushFrames();
+
+      expect(activeRow()).toBe('c');
+    });
+  });
 });
