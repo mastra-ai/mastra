@@ -350,6 +350,73 @@ describe('GoalManager adapter', () => {
     );
   });
 
+  // New-API test: exercises `deleteFromThread`, which does not exist on the
+  // pre-fix code, so it is not red/green evidence for the defect.
+  it('deletes the durable objective and the legacy key on an explicit clear', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    manager.clear();
+    await manager.deleteFromThread(state);
+
+    expect(agent.clearObjective).toHaveBeenCalledWith({ threadId: 'parent-thread' });
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+  });
+
+  // New-API test.
+  it('deletes on an explicit clear even when the mirror is already empty', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    // Deletion is driven by the caller's intent, never by the mirror's state.
+    await manager.deleteFromThread(state);
+
+    expect(agent.clearObjective).toHaveBeenCalledWith({ threadId: 'parent-thread' });
+  });
+
+  // Both-sides guard: passes before and after the fix. Pins that the upsert
+  // path still writes, and never reaches deletion.
+  it('still upserts on a normal save, and never deletes', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    agent.updateObjectiveOptions.mockClear();
+
+    await manager.saveToThread(state);
+
+    expect(agent.updateObjectiveOptions).toHaveBeenCalled();
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+  });
+
+  // New-API test. Pins the deliberate asymmetry with `saveToThread`: the legacy
+  // key is reachable without an agent, so an explicit clear still wipes it.
+  it('wipes the legacy key on an explicit clear even with no agent', async () => {
+    const state = createState(undefined);
+    const manager = new GoalManager();
+
+    await manager.deleteFromThread(state);
+
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
+  });
+
+  // Discriminating: fails on the pre-fix code, which wipes the legacy key
+  // unconditionally. A pre-migration thread's only goal may live in that key.
+  it('leaves the legacy key alone when a save finds an empty mirror', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    await manager.saveToThread(state);
+
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
   it('does not delete the durable objective when a failed read left the mirror empty', async () => {
     const agent = createAgent();
     agent.getObjective.mockRejectedValue(new Error('storage unavailable'));
