@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import { composeInitialMessage, takeInitialPrompt } from '../../src/initial-prompt.js';
+import { expect } from './expect.js';
+import type { McE2eScenario } from './types.js';
+
+const PROMPT = 'Return the Mastra Code initial prompt phrase.';
+
+export const initialPromptScenario: McE2eScenario = {
+  name: 'initial-prompt',
+  description: 'Start the interactive TUI with --initial-prompt and assert the prompt is sent without typing.',
+  testName: 'sends the --initial-prompt text as the first message and stays interactive',
+  useOpenAIModel: true,
+  aimockFixture: 'initial-prompt.json',
+  async inProcessApp({ startMastraCodeApp }) {
+    // The same argv handling main.ts runs before starting the TUI.
+    const { prompt, argv } = takeInitialPrompt(['node', 'mastracode', '--initial-prompt', PROMPT], {});
+    assert.deepEqual(argv, ['node', 'mastracode']);
+    return startMastraCodeApp({ tui: { initialMessage: composeInitialMessage(prompt, null) } });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })).toBeVisible();
+
+    await runtime.waitForScreenText(/Return the Mastra Code initial prompt phrase\./, terminal);
+    await runtime.waitForScreenText(/MC initial prompt response/, terminal);
+    runtime.printScreen('after initial prompt', terminal);
+    await terminal.flushInput?.();
+    if (!terminal.serializeHistory) throw new Error('Render-count assertions require full terminal scrollback');
+    const transcript = terminal.serializeHistory().output;
+    assert.equal(transcript.split(PROMPT).length - 1, 1, `the initial prompt renders exactly once:\n${transcript}`);
+
+    // The session stays interactive after the initial prompt.
+    terminal.submit('/help');
+    await runtime.waitForScreenText(/Commands/i, terminal, 8_000);
+
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const chat = requests.filter(request => !JSON.stringify(request).includes('generate a short title'));
+    assert.equal(chat.length, 1, 'expected exactly one chat request');
+    const body = JSON.stringify(chat[0]);
+    assert.ok(body.includes(PROMPT), 'the chat request carries the initial prompt');
+    assert.ok(!body.includes('piped via stdin'), 'the initial prompt is sent without the piped-stdin preamble');
+  },
+};

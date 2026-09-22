@@ -18,6 +18,7 @@ import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
+import { composeInitialMessage, INITIAL_PROMPT_FLAG, takeInitialPrompt } from './initial-prompt.js';
 import {
   createOneShotFatalErrorHandler,
   createShutdownCoordinator,
@@ -68,7 +69,7 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain(pipedInput?: string | null) {
+async function tuiMain(initialMessage?: string) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
@@ -161,7 +162,7 @@ async function tuiMain(pipedInput?: string | null) {
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
     exit: exitCode => void shutdownAndExit(exitCode),
-    ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
+    ...(initialMessage ? { initialMessage } : {}),
   });
   tui.run().catch(error => {
     handleFatalError(error);
@@ -354,7 +355,19 @@ async function main() {
     return pluginMain(process.argv.slice(3));
   }
 
-  if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
+  const initialPrompt = takeInitialPrompt(process.argv, process.env);
+  if (initialPrompt.error) {
+    process.stderr.write(`${initialPrompt.error}\n`);
+    process.exit(1);
+  }
+  if (initialPrompt.fromFlag) process.argv = initialPrompt.argv;
+
+  const headless = hasHeadlessFlag(process.argv);
+  if (headless && initialPrompt.fromFlag) {
+    process.stderr.write(`${INITIAL_PROMPT_FLAG} starts the interactive TUI; use --prompt for headless runs\n`);
+    process.exit(1);
+  }
+  if (headless || process.argv.includes('--help') || process.argv.includes('-h')) {
     return runMCCli(undefined, { coAuthor: TUI_CO_AUTHOR });
   }
 
@@ -383,7 +396,7 @@ async function main() {
     }
   }
 
-  return tuiMain(pipedInput);
+  return tuiMain(composeInitialMessage(initialPrompt.prompt, pipedInput));
 }
 
 main().catch(error => {

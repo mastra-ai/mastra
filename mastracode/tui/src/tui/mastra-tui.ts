@@ -407,42 +407,21 @@ export class MastraTUI {
       hookMgr.runSessionStart().catch(() => {});
     }
 
-    // Process initial message if provided (e.g. piped stdin content).
-    // Runs the same validation as interactive input: model check, prompt hooks.
+    // Process initial message if provided (--initial-prompt and/or piped stdin).
+    // Goes through the same path as typed input: model check, prompt hooks, and
+    // one optimistic message that the sent signal takes over.
     if (this.state.options.initialMessage) {
       const msg = this.state.options.initialMessage;
 
       if (!this.state.session.model.hasSelection()) {
         showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
       } else {
-        const messageId = `user-${Date.now()}`;
-        addUserMessage(this.state, {
-          id: messageId,
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: msg }] },
-          createdAt: new Date(),
-        });
-        flushRender(this.state);
-
-        const allowed = await this.runUserPromptHook(msg);
-        if (!allowed) {
-          const comp = this.state.messageComponentsById.get(messageId);
-          if (comp) {
-            this.state.chatContainer.removeChild(comp as never);
-            this.state.messageComponentsById.delete(messageId);
-            flushRender(this.state);
-          }
+        const pendingNewThread = this.state.pendingNewThread;
+        const optimisticMessageId = this.renderOptimisticUserMessage(msg);
+        if (await this.runUserPromptHook(msg)) {
+          this.sendOptimisticSignal(msg, undefined, optimisticMessageId, pendingNewThread);
         } else {
-          try {
-            if (this.state.pendingNewThread) {
-              await this.state.session.thread.create();
-              this.state.pendingNewThread = false;
-            }
-            this.fireMessage(msg);
-          } catch (error) {
-            this.state.pendingNewThread = false;
-            showError(this.state, error instanceof Error ? error.message : 'Failed to start thread');
-          }
+          this.removeOptimisticUserMessage(optimisticMessageId);
         }
       }
     }

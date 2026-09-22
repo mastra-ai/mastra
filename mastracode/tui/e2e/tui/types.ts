@@ -76,6 +76,7 @@ export type ScenarioName =
   | 'goal-resume-single-render'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
+  | 'initial-prompt'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
