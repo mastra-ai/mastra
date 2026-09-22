@@ -290,7 +290,7 @@ export function SankeySignals({
 
   if (isFlowPending) {
     return (
-      <main className="min-w-0 space-y-5 p-4 lg:p-6">
+      <div className="min-w-0 space-y-5 p-4 lg:p-6">
         {dateRangePicker && <div className="flex justify-end">{dateRangePicker}</div>}
         <SnapshotTimeline
           snapshots={snapshots}
@@ -302,7 +302,7 @@ export function SankeySignals({
           onSnapshotChange={selectSnapshot}
         />
         <SignalsFrameLoadingSkeleton />
-      </main>
+      </div>
     );
   }
 
@@ -368,7 +368,7 @@ export function SankeySignals({
 
   return (
     <TraceIntelligenceContext.Provider value={traceIntelligenceContext}>
-      <main className="min-w-0 space-y-5 p-4 lg:p-6">
+      <div className="min-w-0 space-y-5 p-4 lg:p-6">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-4">
             <Tabs<SignalsViewMode>
@@ -498,7 +498,7 @@ export function SankeySignals({
           filteredStats={noiseStats}
           onClose={() => setNoiseSignalName(undefined)}
         />
-      </main>
+      </div>
     </TraceIntelligenceContext.Provider>
   );
 }

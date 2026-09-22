@@ -24,7 +24,7 @@ export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
       </CollapsibleTrigger>
 
       <CollapsibleContent className="border-border mt-1.5 min-w-0 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <MarkdownRenderer className="text-muted-foreground text-caption" streaming={streaming && !redacted}>
+        <MarkdownRenderer className="text-caption text-muted-foreground" streaming={streaming && !redacted}>
           {body}
         </MarkdownRenderer>
       </CollapsibleContent>
