@@ -5571,7 +5571,12 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
       const descriptor = Object.getOwnPropertyDescriptor(opts, key);
       if (!descriptor?.enumerable) continue;
-      stateOptions[key] = 'value' in descriptor ? descriptor.value : descriptor.get?.call(opts);
+      Object.defineProperty(stateOptions, key, {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: 'value' in descriptor ? descriptor.value : descriptor.get?.call(opts),
+      });
     }
     try {
       // Use a transaction with row-level locking to ensure atomicity

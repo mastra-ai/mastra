@@ -1538,4 +1538,24 @@ describe('workflow snapshot handoff', () => {
       status: 'suspended',
     });
   });
+
+  it('carries an own __proto__ payload field through the options copy', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'proto-payload';
+    const runId = 'proto-payload-run';
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, 'running') });
+    const opts = { status: 'suspended' as const };
+    Object.defineProperty(opts, '__proto__', {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: { sentinel: 'proto-slot' },
+    });
+    await workflows.updateWorkflowState({ workflowName, runId, opts });
+    const loaded = (await workflows.loadWorkflowSnapshot({ workflowName, runId })) as WorkflowRunState;
+    expect(loaded.status).toBe('suspended');
+    expect(Object.hasOwn(loaded, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(loaded, '__proto__')?.value).toEqual({ sentinel: 'proto-slot' });
+  });
 });

@@ -1134,6 +1134,24 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     });
   });
 
+  it('carries an own __proto__ payload field through the options copy', async () => {
+    const workflowName = `proto-payload-${randomUUID()}`;
+    const runId = randomUUID();
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, 'running') });
+    const opts = { status: 'suspended' as const };
+    Object.defineProperty(opts, '__proto__', {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value: { sentinel: 'proto-slot' },
+    });
+    await workflows.updateWorkflowState({ workflowName, runId, opts });
+    const loaded = (await workflows.loadWorkflowSnapshot({ workflowName, runId })) as WorkflowRunState;
+    expect(loaded.status).toBe('suspended');
+    expect(Object.hasOwn(loaded, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(loaded, '__proto__')?.value).toEqual({ sentinel: 'proto-slot' });
+  });
+
   it('keeps draining eligible rows when a candidate is skipped mid-batch', async () => {
     const prefix = `prune-race-${randomUUID()}`;
     const nameA = `${prefix}-a`;

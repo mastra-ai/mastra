@@ -2292,7 +2292,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       }
       const descriptor = Object.getOwnPropertyDescriptor(opts, key);
       if (!descriptor?.enumerable) continue;
-      stateOptions[key] = 'value' in descriptor ? descriptor.value : descriptor.get?.call(opts);
+      Object.defineProperty(stateOptions, key, {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: 'value' in descriptor ? descriptor.value : descriptor.get?.call(opts),
+      });
     }
     for (let attempt = 1; ; attempt++) {
       const run = this.db.workflows.get(key);
