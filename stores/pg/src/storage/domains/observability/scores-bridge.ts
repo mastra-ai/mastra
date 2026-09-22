@@ -1,10 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, EntityType, listScoresArgsSchema, TABLE_SCORERS } from '@mastra/core/storage';
-import type {
-  ListScoresArgs,
-  ListScoresResponse,
-  ScoreRecord,
-} from '@mastra/core/storage';
+import type { ListScoresArgs, ListScoresResponse, ScoreRecord } from '@mastra/core/storage';
 
 import { getSchemaName, getTableName } from '../../db';
 import type { PgDB } from '../../db';
@@ -64,6 +60,7 @@ const METADATA_TEXT_FILTER_FIELDS = [
   'experimentId',
 ] as const;
 
+/** List legacy evaluator scores with observability filters and deterministic page ordering. */
 export async function listScores(db: PgDB, schema: string, args: ListScoresArgs): Promise<ListScoresResponse> {
   const { mode, filters, pagination, orderBy } = listScoresArgsSchema.parse(args);
   if (mode === 'delta') {
@@ -120,6 +117,7 @@ export async function listScores(db: PgDB, schema: string, args: ListScoresArgs)
   }
 }
 
+/** Read a legacy score by its existing identity, returning null when it is absent. */
 export async function getScoreById(db: PgDB, schema: string, scoreId: string): Promise<ScoreRecord | null> {
   try {
     const row = await db.readClient.oneOrNone<ScoreRow>(
@@ -132,14 +130,17 @@ export async function getScoreById(db: PgDB, schema: string, scoreId: string): P
   }
 }
 
+/** Resolve the scorer table within the configured PostgreSQL schema. */
 function scoreTable(schema: string): string {
   return getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(schema) });
 }
 
+/** Normalize native JSONB objects and the JSONB strings emitted by the legacy writer. */
 function scoreFrom(schema: string): string {
-  // ScoresPG has written both JSONB objects and serialized JSON strings inside
-  // JSONB. Normalize both representations before applying JSON-backed filters.
-  // Invalid serialized JSON must surface as a storage error, not a missing match.
+  // ScoresPG.saveScore stringifies these records, then PgDB.prepareValuesForInsert
+  // stringifies every JSONB value again. Decode that extra layer for SQL filters;
+  // imported/native JSONB objects need no conversion. Malformed encoded JSON is
+  // reported as a storage error rather than silently dropping score context.
   const columns = ['metadata', 'requestContext', 'entity', 'scorer'].map(
     column => `CASE WHEN jsonb_typeof(s."${column}") = 'string'
       THEN (s."${column}" #>> '{}')::jsonb ELSE s."${column}" END AS "${column}"`,
@@ -147,6 +148,7 @@ function scoreFrom(schema: string): string {
   return `${scoreTable(schema)} s CROSS JOIN LATERAL (SELECT ${columns.join(', ')}) j`;
 }
 
+/** Map a legacy score and its context fallbacks into an observability record. */
 function transformScoreRow(row: ScoreRow): ScoreRecord {
   const metadata = parseObjectValue(row.metadata);
   const scorer = parseObjectValue(row.scorer);
@@ -198,6 +200,7 @@ function transformScoreRow(row: ScoreRow): ScoreRecord {
   };
 }
 
+/** Append parameterized predicates using the same fallback precedence as returned scores. */
 function addScoreFilters(conditions: string[], params: unknown[], filters: ParsedScoreFilters): void {
   if (!filters) return;
 
@@ -263,6 +266,7 @@ function addScoreFilters(conditions: string[], params: unknown[], filters: Parse
   }
 }
 
+/** Append an exact text match only when the caller supplied a filter. */
 function addTextFilter(conditions: string[], params: unknown[], expression: string, value: string | undefined): void {
   if (value === undefined) return;
   conditions.push(`${expression} = ${addParam(params, value)}`);
@@ -270,29 +274,35 @@ function addTextFilter(conditions: string[], params: unknown[], expression: stri
 
 // All expressions and JSON field names below come from fixed internal lists;
 // user-supplied values and metadata keys are always bound parameters.
+/** Select the first nonempty string from trusted SQL expressions. */
 function firstSqlString(...sources: string[]): string {
   return `COALESCE(${sources.map(source => `NULLIF(${source}, '')`).join(', ')})`;
 }
 
+/** Read a JSONB field only when it contains a string, matching optionalString. */
 function jsonText(column: 'metadata' | 'requestContext' | 'entity' | 'scorer', field: string): string {
   return `CASE WHEN jsonb_typeof(j."${column}"->'${field}') = 'string' THEN j."${column}"->>'${field}' END`;
 }
 
+/** Resolve a context field from dedicated columns, metadata, then request context. */
 function contextText(field: string, sources: string[] = []): string {
   return firstSqlString(...sources, jsonText('metadata', field), jsonText('requestContext', field));
 }
 
+/** Bind a query value and return its PostgreSQL positional placeholder. */
 function addParam(params: unknown[], value: unknown): string {
   params.push(value);
   return `$${params.length}`;
 }
 
+/** Decode legacy JSONB strings and accept record-shaped context only. */
 function parseObjectValue(value: unknown): Record<string, unknown> | undefined {
   const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
-  if (parsed === null || parsed === undefined || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
   return parsed as Record<string, unknown>;
 }
 
+/** Return the first record-shaped context value. */
 function firstObject(...values: unknown[]): Record<string, unknown> | undefined {
   for (const value of values) {
     const parsed = parseObjectValue(value);
@@ -301,6 +311,7 @@ function firstObject(...values: unknown[]): Record<string, unknown> | undefined 
   return undefined;
 }
 
+/** Return the first nonempty string from the legacy field fallbacks. */
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
     const parsed = optionalString(value);
@@ -309,6 +320,7 @@ function firstString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
+/** Read the first tag array, ignoring entries that are not strings. */
 function firstStringArray(...values: unknown[]): string[] | undefined {
   for (const value of values) {
     if (Array.isArray(value)) {
@@ -318,10 +330,12 @@ function firstStringArray(...values: unknown[]): string[] | undefined {
   return undefined;
 }
 
+/** Treat nonstrings and empty strings as absent legacy values. */
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+/** Normalize recognized legacy entity aliases to the observability vocabulary. */
 function optionalEntityType(value: unknown): ScoreRecord['entityType'] {
   const stringValue = optionalString(value);
   return stringValue !== undefined && Object.hasOwn(ENTITY_TYPE_ALIASES, stringValue)
@@ -329,6 +343,7 @@ function optionalEntityType(value: unknown): ScoreRecord['entityType'] {
     : undefined;
 }
 
+/** Validate the timezone-aware timestamp projected by the score query. */
 function toDate(value: unknown, fieldName: string): Date {
   if (value === null || value === undefined) {
     throw new Error(`Missing ${fieldName}`);
@@ -340,6 +355,7 @@ function toDate(value: unknown, fieldName: string): Date {
   return date;
 }
 
+/** Convert a database numeric value and reject nonfinite scores. */
 function toNumber(value: unknown, fieldName: string): number {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) {
@@ -348,6 +364,7 @@ function toNumber(value: unknown, fieldName: string): number {
   return numberValue;
 }
 
+/** Wrap a database or conversion failure with operation-specific storage details. */
 function storageError(
   operation: string,
   details: Record<string, string | number | boolean | null>,

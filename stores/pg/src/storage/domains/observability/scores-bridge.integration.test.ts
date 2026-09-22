@@ -46,7 +46,7 @@ describe('PostgresStore observability scores bridge', () => {
     if (timestamp) {
       await store.db.none(
         `UPDATE ${getSchemaName(schemaName)}."mastra_scorers"
-         SET "createdAt" = $1, "createdAtZ" = $1 WHERE id = $2`,
+         SET "createdAt" = $1::text::timestamp, "createdAtZ" = $1::text::timestamptz WHERE id = $2`,
         [timestamp.toISOString(), score.id],
       );
     }
@@ -147,7 +147,7 @@ describe('PostgresStore observability scores bridge', () => {
       filters: { scorerId: ['scorer-a', 'scorer-b'] },
       orderBy: { field: 'timestamp', direction: 'ASC' },
     });
-    expect(array.pagination.total).toBe(2);
+    expect(array.pagination!.total).toBe(2);
     expect(new Set(array.scores.map(score => score.scoreId))).toEqual(new Set([first.score.id, second.score.id]));
 
     await expect(observability.listScores({ filters: { scorerId: [] } })).resolves.toEqual({
@@ -237,7 +237,7 @@ describe('PostgresStore observability scores bridge', () => {
     }
   });
 
-  it('filters legacy JSON objects with the same fallback precedence as returned records', async () => {
+  it('filters serialized legacy JSON with the same fallback precedence as returned records', async () => {
     const { score: saved } = await scores.saveScore(
       legacyScore({
         organizationId: 'column-org',
@@ -436,7 +436,10 @@ describe('PostgresStore observability scores bridge', () => {
     }
 
     await expect(observability.getScoreById('filter-target')).resolves.toMatchObject({
-      scoreId: 'filter-target', scorerId: 'filter-scorer', scoreSource: 'TEST', entityType: EntityType.AGENT,
+      scoreId: 'filter-target',
+      scorerId: 'filter-scorer',
+      scoreSource: 'TEST',
+      entityType: EntityType.AGENT,
     });
   });
 
@@ -477,19 +480,70 @@ describe('PostgresStore observability scores bridge', () => {
     ['WORKFLOW', EntityType.WORKFLOW_RUN],
     ['TRAJECTORY', EntityType.TRAJECTORY],
     ['STEP', EntityType.WORKFLOW_STEP],
-    ['tool', EntityType.TOOL],
+    ['tool_call', EntityType.TOOL],
     ['agent_run', EntityType.AGENT],
   ])('maps legacy %s entity types consistently for reads and filters', async (legacyType, entityType) => {
     const saved = await saveLegacyScore({
       entityType: legacyType,
       metadata: { parentEntityType: legacyType, rootEntityType: legacyType },
     });
-    const result = await observability.listScores({ filters: { entityType, parentEntityType: entityType, rootEntityType: entityType } });
+    const result = await observability.listScores({
+      filters: { entityType, parentEntityType: entityType, rootEntityType: entityType },
+    });
     expect(result.scores).toHaveLength(1);
-    expect(result.scores[0]).toMatchObject({ scoreId: saved.id, entityType, parentEntityType: entityType, rootEntityType: entityType });
+    expect(result.scores[0]).toMatchObject({
+      scoreId: saved.id,
+      entityType,
+      parentEntityType: entityType,
+      rootEntityType: entityType,
+    });
   });
 
-  it('surfaces invalid serialized JSON as a storage error', async () => {
+  it.each(['serialized', 'object'])(
+    'reads and filters %s JSONB context from the legacy scorer table',
+    async representation => {
+      const saved = await saveLegacyScore({
+        metadata: { userId: 'context-user', tags: ['context-tag'] },
+        requestContext: { sessionId: 'context-session' },
+      });
+      const types = await store.db.one(
+        `SELECT jsonb_typeof(metadata) AS metadata, jsonb_typeof("requestContext") AS context,
+              jsonb_typeof(entity) AS entity, jsonb_typeof(scorer) AS scorer
+       FROM ${getSchemaName(schemaName)}."mastra_scorers" WHERE id = $1`,
+        [saved.id],
+      );
+      // Exercise the actual writer: saveScore and PgDB each serialize JSONB once.
+      expect(types).toEqual({ metadata: 'string', context: 'string', entity: 'string', scorer: 'string' });
+      if (representation === 'object') {
+        await store.db.none(
+          `UPDATE ${getSchemaName(schemaName)}."mastra_scorers"
+         SET metadata = (metadata #>> '{}')::jsonb, "requestContext" = ("requestContext" #>> '{}')::jsonb,
+             entity = (entity #>> '{}')::jsonb, scorer = (scorer #>> '{}')::jsonb WHERE id = $1`,
+          [saved.id],
+        );
+      }
+      const expected = {
+        scoreId: saved.id,
+        userId: 'context-user',
+        sessionId: 'context-session',
+        entityName: 'Legacy agent',
+        scorerName: 'Legacy quality scorer',
+      };
+      await expect(observability.getScoreById(saved.id)).resolves.toMatchObject(expected);
+      for (const filters of [
+        { metadata: { userId: 'context-user' } },
+        { userId: 'context-user' },
+        { tags: ['context-tag'] },
+        { sessionId: 'context-session' },
+      ]) {
+        const filtered = await observability.listScores({ filters });
+        expect(filtered.scores).toMatchObject([expected]);
+        expect(filtered.pagination!.total).toBe(1);
+      }
+    },
+  );
+
+  it('surfaces malformed encoded JSON as an operation-specific storage error', async () => {
     await saveLegacyScore({ id: 'invalid-json' });
     await store.db.none(`UPDATE ${getSchemaName(schemaName)}."mastra_scorers" SET metadata = $1::jsonb WHERE id = $2`, [
       JSON.stringify('{invalid'),

@@ -296,10 +296,12 @@ export class ObservabilityPG extends ObservabilityStorage {
     return runPrune({ db: this.#db, domain: 'observability', targets, options });
   }
 
+  /** List existing legacy scores without enabling a second score persistence path. */
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     return scoresOps.listScores(this.#db, this.#schema, args);
   }
 
+  /** Look up an existing legacy score through the observability API. */
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     return scoresOps.getScoreById(this.#db, this.#schema, scoreId);
   }
