@@ -23,6 +23,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@clack/prompts": "^1.7.0",
     "@mastra/auth-workos": "link:../../auth/workos",
     "@mastra/code-sdk": "link:../sdk",
     "@mastra/core": "link:../../packages/core",
@@ -41,6 +42,7 @@
     "@types/node": "22.20.1",
     "hono": "^4.13.7",
     "mastra": "link:../../packages/cli",
+    "tinyexec": "^1.2.4",
     "typescript": "^7.0.2",
     "varlock": "^1.9.0",
     "vitest": "4.1.11",

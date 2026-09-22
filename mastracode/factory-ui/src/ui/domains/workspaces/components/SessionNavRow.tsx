@@ -84,7 +84,7 @@ export function SessionNavRow({
     >
       <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
       {pinned && !loading ? (
-        <Pin aria-label={`${name} pinned`} className="text-icon3/70 size-2 shrink-0 rotate-45" />
+        <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
     </button>
   );
@@ -95,7 +95,9 @@ export function SessionNavRow({
     <>
       {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
-        {trailing === 'loading' ? <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" /> : null}
+        {trailing === 'loading' ? (
+          <Spinner size="sm" aria-label={`Opening ${name}`} className="text-muted-foreground" />
+        ) : null}
         {trailing === 'merged' ? (
           <span
             role="img"
@@ -143,7 +145,7 @@ export function SessionNavRow({
   );
 }
 
-const trailingSlot = 'size-form-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
+const trailingSlot = 'size-control-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
 
 // An empty slot claims no width, so the label runs the full row until there is something to show.
 const revealedSlot =

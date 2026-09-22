@@ -13,6 +13,7 @@ import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { Search } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
@@ -45,12 +46,12 @@ function MobileNavbar() {
   };
 
   return (
-    <header className="border-border1 bg-surface1 sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b px-3 lg:hidden">
+    <header className="border-border bg-sidebar sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b px-3 lg:hidden">
       <div className="flex min-w-0 items-center gap-3">
         <MainSidebar.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
           <LogoWithoutText className="size-[1.5rem] shrink-0" />
-          <span className="font-display text-ui-md whitespace-nowrap">Mastra Studio</span>
+          <span className="font-display text-body whitespace-nowrap">Mastra Studio</span>
         </span>
       </div>
       <Button
@@ -71,6 +72,10 @@ function MobileNavbar() {
 // First visit: the panel starts collapsed; `useDefaultLayout` persists later widths.
 const SIDE_PANEL_COLLAPSED_LAYOUT = { 'studio-frame': 100, 'route-side-panel': 0 };
 
+// `Group` and `Panel` hardcode `overflow: hidden`/`auto` inline, which would clip the
+// frame's rim and shadow. Only the `style` prop beats it; the frame clips its own content.
+const UNCLIPPED: CSSProperties = { overflow: 'visible' };
+
 /**
  * Hosts the page-registered side panel next to the Studio frame (outside the
  * rounded card). Desktop: resizable panel; mobile: edge drawer. The page always
@@ -88,11 +93,12 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
     <div className="relative flex min-h-0 flex-1">
       <PanelGroup
         className="min-h-0 flex-1"
+        style={UNCLIPPED}
         orientation="horizontal"
         defaultLayout={defaultLayout ?? SIDE_PANEL_COLLAPSED_LAYOUT}
         onLayoutChange={onLayoutChange}
       >
-        <Panel id="studio-frame" className={cn('min-w-0', className)}>
+        <Panel id="studio-frame" className={cn('min-w-0', className)} style={UNCLIPPED}>
           {children}
         </Panel>
         {hasPanel && !isMobile && (
@@ -163,7 +169,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { experimentalUIEnabled } = useExperimentalUIEnabled();
 
   return (
-    <div className="bg-surface1 h-screen font-sans">
+    <div className="bg-sidebar font-body h-screen">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>

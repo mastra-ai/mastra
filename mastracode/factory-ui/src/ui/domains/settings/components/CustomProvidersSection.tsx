@@ -91,7 +91,7 @@ export function CustomProvidersSection() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt as="p" variant="caption" className="text-muted-foreground">
           OpenAI-compatible endpoints.
         </Txt>
         {!draft && (
@@ -102,15 +102,15 @@ export function CustomProvidersSection() {
       </div>
 
       {error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
           {error}
         </Txt>
       )}
 
       {draft && (
-        <div className="border-border1 flex flex-col gap-3 rounded-lg border p-3">
+        <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
           <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
+            <Txt as="span" variant="caption" className="text-foreground">
               Name
             </Txt>
             <Input
@@ -122,7 +122,7 @@ export function CustomProvidersSection() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
+            <Txt as="span" variant="caption" className="text-foreground">
               Base URL
             </Txt>
             <Input
@@ -133,7 +133,7 @@ export function CustomProvidersSection() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
+            <Txt as="span" variant="caption" className="text-foreground">
               API key {draft.editingId ? '(leave blank to keep)' : '(optional)'}
             </Txt>
             <Input
@@ -145,7 +145,7 @@ export function CustomProvidersSection() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
+            <Txt as="span" variant="caption" className="text-foreground">
               Models (comma-separated)
             </Txt>
             <Input
@@ -169,12 +169,12 @@ export function CustomProvidersSection() {
       {loading ? (
         <SkeletonRows label="Loading custom providers" rows={3} rowClassName="h-9 w-full" />
       ) : providers.length === 0 ? null : (
-        <ul role="list" className="divide-border1 flex flex-col divide-y">
+        <ul role="list" className="divide-border flex flex-col divide-y">
           {providers.map(p => (
             <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <Txt as="span" variant="ui-md" className="text-icon6 truncate">
+                  <Txt as="span" variant="body" className="text-foreground truncate">
                     {p.name}
                   </Txt>
                   {p.hasApiKey && (
@@ -183,11 +183,11 @@ export function CustomProvidersSection() {
                     </Badge>
                   )}
                 </div>
-                <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
+                <Txt as="span" variant="meta" className="text-muted-foreground truncate">
                   {p.url}
                 </Txt>
                 {p.models.length > 0 && (
-                  <Txt as="span" variant="ui-xs" className="text-icon3">
+                  <Txt as="span" variant="meta" className="text-muted-foreground">
                     {p.models.length} model{p.models.length === 1 ? '' : 's'}
                   </Txt>
                 )}

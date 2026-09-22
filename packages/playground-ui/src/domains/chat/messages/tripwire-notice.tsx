@@ -26,14 +26,14 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
             <button
               type="button"
               onClick={() => setIsExpanded(!isExpanded)}
-              className="text-ui-sm flex w-fit items-center gap-1.5 opacity-70 transition-opacity hover:opacity-100"
+              className="text-caption flex w-fit items-center gap-1.5 opacity-70 transition-opacity hover:opacity-100"
             >
               {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
               <span>Details</span>
             </button>
 
             {isExpanded && (
-              <div className="text-ui-sm flex flex-col gap-2">
+              <div className="text-caption flex flex-col gap-2">
                 {tripwire.retry !== undefined && (
                   <div className="flex items-center gap-2">
                     <RefreshCw className="size-3.5 shrink-0 opacity-70" />

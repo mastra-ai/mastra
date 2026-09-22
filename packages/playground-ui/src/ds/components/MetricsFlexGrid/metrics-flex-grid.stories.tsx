@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { DashboardCard } from '../DashboardCard';
+import { Card } from '../Card';
 import { MetricsFlexGrid } from './metrics-flex-grid';
 
 const meta: Meta<typeof MetricsFlexGrid> = {
@@ -16,18 +16,18 @@ type Story = StoryObj<typeof MetricsFlexGrid>;
 export const Default: Story = {
   render: () => (
     <MetricsFlexGrid>
-      <DashboardCard className="min-w-60">
+      <Card className="min-w-60 px-4 py-3">
         <p className="text-muted-foreground">Card 1</p>
-      </DashboardCard>
-      <DashboardCard className="min-w-60">
+      </Card>
+      <Card className="min-w-60 px-4 py-3">
         <p className="text-muted-foreground">Card 2</p>
-      </DashboardCard>
-      <DashboardCard className="min-w-60">
+      </Card>
+      <Card className="min-w-60 px-4 py-3">
         <p className="text-muted-foreground">Card 3</p>
-      </DashboardCard>
-      <DashboardCard className="min-w-60">
+      </Card>
+      <Card className="min-w-60 px-4 py-3">
         <p className="text-muted-foreground">Card 4</p>
-      </DashboardCard>
+      </Card>
     </MetricsFlexGrid>
   ),
 };
@@ -35,12 +35,12 @@ export const Default: Story = {
 export const TwoItems: Story = {
   render: () => (
     <MetricsFlexGrid>
-      <DashboardCard className="min-w-60">
+      <Card className="min-w-60 px-4 py-3">
         <p className="text-muted-foreground">Card 1</p>
-      </DashboardCard>
-      <DashboardCard className="min-w-60">
+      </Card>
+      <Card className="min-w-60 px-4 py-3">
         <p className="text-muted-foreground">Card 2</p>
-      </DashboardCard>
+      </Card>
     </MetricsFlexGrid>
   ),
 };

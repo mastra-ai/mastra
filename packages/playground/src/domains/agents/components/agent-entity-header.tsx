@@ -36,7 +36,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
               {isLoading ? (
                 <Skeleton className="h-3 w-32" />
               ) : (
-                <Txt variant="header-md" as="h2" className="truncate font-medium">
+                <Txt variant="heading" as="h2" className="truncate">
                   {agentName}
                 </Txt>
               )}

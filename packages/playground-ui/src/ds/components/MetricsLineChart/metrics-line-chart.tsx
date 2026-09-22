@@ -1,8 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
-import { CHART_TICK_FONT_SIZE } from '@/ds/tokens';
-
-const LABEL_COLOR = '#a1a1aa';
+import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE } from '@/ds/tokens';
 
 export type MetricsLineChartSeries = {
   dataKey: string;
@@ -46,11 +44,11 @@ export function MetricsLineChart({
           return (
             <div key={s.dataKey} className="inline-flex items-baseline gap-2">
               <div className="size-2 shrink-0 -translate-y-px rounded-full" style={{ backgroundColor: s.color }} />
-              <span className="text-ui-sm text-muted-foreground max-w-24 truncate">{s.label}</span>
+              <span className="text-caption text-muted-foreground max-w-24 truncate">{s.label}</span>
               {aggregated && (
-                <span className="text-ui-sm text-muted-foreground">
+                <span className="text-caption text-muted-foreground">
                   {aggregated.value}
-                  {aggregated.suffix && <span className="text-ui-sm text-placeholder"> {aggregated.suffix}</span>}
+                  {aggregated.suffix && <span className="text-caption text-placeholder"> {aggregated.suffix}</span>}
                 </span>
               )}
             </div>
@@ -68,14 +66,14 @@ export function MetricsLineChart({
             />
             <XAxis
               dataKey="time"
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
               interval={xAxisInterval}
               minTickGap={xAxisMinTickGap}
             />
             <YAxis
-              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
               width={30}

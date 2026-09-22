@@ -46,7 +46,7 @@ export function ThemeCompareSparkline({
         {polylines.map(points => (
           <polyline
             key={points}
-            className="stroke-neutral3 fill-none"
+            className="stroke-muted-foreground fill-none"
             points={points}
             strokeWidth="1"
             vectorEffect="non-scaling-stroke"
