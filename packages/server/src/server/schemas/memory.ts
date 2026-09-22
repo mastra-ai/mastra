@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { paginationInfoSchema, createPagePaginationSchema, successResponseSchema } from './common';
+import { lastMessagesSchema, messageHistorySchema } from './message-history';
 
 // Path parameter schemas
 export const threadIdPathParams = z.object({
@@ -481,7 +482,8 @@ export const memoryConfigResponseSchema = z.object({
   memoryType: z.enum(['local', 'gateway']).optional(),
   config: z
     .object({
-      lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+      lastMessages: lastMessagesSchema.optional(),
+      messageHistory: messageHistorySchema.optional(),
       semanticRecall: z.union([z.boolean(), z.unknown()]).optional(),
       workingMemory: z
         .object({
@@ -516,6 +518,11 @@ export const getThreadByIdResponseSchema = threadSchema;
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
   uiMessages: z.array(z.unknown()).nullable(), // Converted messages in UI format
+  // Absent on the gateway path, which has no page metadata to report.
+  total: z.number().optional(),
+  page: z.number().optional(),
+  perPage: z.union([z.number(), z.literal(false)]).optional(),
+  hasMore: z.boolean().optional(),
 });
 
 /**

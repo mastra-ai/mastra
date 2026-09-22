@@ -4,7 +4,8 @@ import type { OracleCreateIndexOptions } from './db';
 
 // Public store config extends the shared Oracle connection contract and adds
 // storage-only controls for initialization, batching, migrations, and indexes.
-export interface OracleStoreConfig extends OracleConnectionConfig, Pick<MastraCompositeStoreConfig, 'disableInit'> {
+export interface OracleStoreConfig
+  extends OracleConnectionConfig, Pick<MastraCompositeStoreConfig, 'disableInit' | 'retention'> {
   id: string;
   schemaName?: string;
   poolManager?: OraclePoolManager;

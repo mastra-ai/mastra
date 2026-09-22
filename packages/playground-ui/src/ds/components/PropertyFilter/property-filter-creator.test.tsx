@@ -413,7 +413,8 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
 
     const item = screen.getByRole('menuitem', { name: /Primitive Type/i });
     // Closed, the chevron trails the label as an invitation to open it.
-    expect(item.lastElementChild?.tagName).toBe('svg');
+    expect(item.lastElementChild?.querySelector('svg')).toBeTruthy();
+    expect(item.firstElementChild?.tagName).toBe('SPAN');
 
     fireEvent.click(item);
     await screen.findByRole('radio', { name: /Agent/i });
@@ -543,19 +544,19 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
     if (!(panel instanceof HTMLElement)) throw new Error('pick-multi panel not rendered');
 
     fireEvent.keyDown(panel, { key: 'End' });
-    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Any');
+    expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Any');
 
     fireEvent.keyDown(panel, { key: 'Home' });
-    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Agent');
+    expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Agent');
 
     fireEvent.keyDown(panel, { key: 'ArrowDown' });
-    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Workflow');
+    expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Workflow');
 
     fireEvent.keyDown(panel, { key: 'ArrowUp' });
-    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Agent');
+    expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Agent');
 
     fireEvent.keyDown(panel, { key: 'ArrowUp' });
-    expect((document.activeElement as HTMLElement | null)?.closest('label')?.textContent).toContain('Any');
+    expect((document.activeElement as HTMLElement | null)?.textContent).toContain('Any');
   });
 
   it('leaves other keys in the panel alone', async () => {

@@ -2,7 +2,6 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
@@ -22,8 +21,9 @@ import {
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
-import type { MessageFactoryPart } from '@mastra/react';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
+import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -122,6 +122,8 @@ export interface ThreadProps {
    * only replaces the welcome screen; live messages that arrive earlier take precedence.
    */
   isHistoryLoading?: boolean;
+  onLoadPrevious?: () => void | Promise<void>;
+  isLoadingPrevious?: boolean;
 }
 
 export const Thread = ({
@@ -134,6 +136,8 @@ export const Thread = ({
   runOptionsSlot,
   refreshThreadList,
   isHistoryLoading,
+  onLoadPrevious,
+  isLoadingPrevious,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -161,11 +165,29 @@ export const Thread = ({
 
   return (
     <ComposerAttachmentsProvider>
-      <ChatShell className="h-full" scroller={{ defaultScrollPosition: 'last-anchor' }} data-testid="thread-wrapper">
+      <ChatShell
+        className="h-full"
+        scroller={{
+          defaultScrollPosition: 'last-anchor',
+          onReachStart: onLoadPrevious,
+          preserveScrollOnPrepend: Boolean(onLoadPrevious),
+        }}
+        data-testid="thread-wrapper"
+      >
         <ChatShell.Stage>
           <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
             <ThreadRailLayer turns={threadRailTurns} />
             <ChatShell.Content>
+              {isLoadingPrevious && (
+                <ChatShell.Column
+                  data-testid="thread-history-older-skeleton"
+                  aria-busy="true"
+                  aria-label="Loading older messages"
+                  className="py-3"
+                >
+                  <ChatMessagesLoadingSkeleton />
+                </ChatShell.Column>
+              )}
               {isEmpty && isHistoryLoading ? (
                 <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
                   <ChatMessagesLoadingSkeleton />
@@ -369,13 +391,13 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
 
   return (
     <Button
-      variant="default"
+      variant="ghost"
       size="icon-md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
+      {isListening ? <CircleStopIcon /> : <Mic />}
     </Button>
   );
 };
@@ -411,9 +433,7 @@ const ComposerActionRow = ({
         <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
-                <ComposerModelSwitcher />
-              </div>
+              <ComposerModelSwitcher />
               <ComposerModelSettings agentId={agentId} />
             </>
           )}
@@ -422,11 +442,11 @@ const ComposerActionRow = ({
       )}
 
       <div className="flex shrink-0 items-center gap-1.5">
-        <ButtonsGroup spacing="close">
+        <div className="flex items-center gap-2">
           {canExecute && <AttachFilePopover />}
           {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
           {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
-        </ButtonsGroup>
+        </div>
         <ComposerSendButton
           canExecute={canExecute}
           isEmpty={isEmpty}
@@ -470,10 +490,9 @@ const ComposerSendButton = ({
         variant="default"
         size="icon-md"
         tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="border-border1 bg-surface5 rounded-full border"
         disabled={!canExecute || isEmpty}
       >
-        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
+        <ArrowUp />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
@@ -496,7 +515,7 @@ const CircleStopIcon = () => {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-neutral3 hover:text-neutral6"
+      className={quietTextHover}
     >
       <circle cx="12" cy="12" r="10" />
       <rect width="6" height="6" x="9" y="9" rx="1" />

@@ -1,0 +1,70 @@
+---
+title: 'Reference: notScorable() | Evals'
+description: 'Return notScorable() from a scorer step when a run has nothing to evaluate. Remaining steps are skipped and the run stays out of aggregates.'
+packages:
+  - '@mastra/core'
+---
+
+# notScorable()
+
+Declares that the current run has nothing for this scorer to evaluate. Return it from a scorer function step, typically `preprocess`. Remaining steps are skipped, so the judge is never called and averages, gates, and thresholds only include runs this scorer actually evaluated.
+
+Use `notScorable()` when whether a run qualifies depends on the run's own input or output, such as whether a specific tool was called. Use an [eligibility filter](/docs/evals/overview#how-live-evaluations-work) instead when the condition can be expressed from request context or entity metadata. See [Custom scorers: skipping runs](/docs/evals/custom-scorers#skipping-runs-that-cant-be-scored) for a walkthrough.
+
+## Usage example
+
+The following scorer judges refund handling with an LLM. Runs that never called `refundCustomer` are declared not scorable before the judge is asked anything:
+
+```typescript title="src/mastra/scorers/refund-judge.ts"
+import { createScorer, notScorable } from '@mastra/core/evals'
+import { extractToolCalls } from '@mastra/evals/scorers/utils'
+
+export const refundJudge = createScorer({
+  id: 'refund-judge',
+  description: 'Judges how well refund requests were handled',
+  type: 'agent',
+  judge: {
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    instructions: 'You are a strict QA reviewer for customer-support refund handling.',
+  },
+})
+  .preprocess(({ run }) => {
+    const { tools } = extractToolCalls(run.output)
+    return tools.includes('refundCustomer')
+      ? { tools }
+      : notScorable('refundCustomer was not called')
+  })
+  .generateScore({
+    description: 'Score the refund handling from 0 to 1',
+    createPrompt: ({ run }) =>
+      `Rate this refund handling from 0 to 1:\n${JSON.stringify(run.output)}`,
+  })
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'reason',
+    type: 'string',
+    isOptional: true,
+    description: 'Why the run is not scorable. Surfaced on the run result and experiment results.',
+  },
+]}
+/>
+
+**Returns:** `NotScorable`. An opaque value recognized by the scorer pipeline. Return it directly from the step. Don't wrap it in another object.
+
+## Behavior
+
+- Accepted from any function step: `preprocess`, `analyze`, `generateScore`, or `generateReason`. Prompt-object steps can't return it because their output is produced by the model.
+- Steps that already completed keep their results.
+- `scorer.run()` resolves with `notScorable: { step, reason? }` and no `score` key. See [`MastraScorer`](/reference/evals/mastra-scorer).
+- Live scoring stores no score row. [`runEvals()`](/reference/evals/run-evals) leaves the run out of averages, gates, thresholds, and the verdict, and counts it in `summary.notScorable`. Experiments set `score: null`, `error: null`, and `notScorable`.
+
+## Related
+
+- [`createScorer()`](/reference/evals/create-scorer)
+- [`filterRun()`](/reference/evals/filter-run) trims what a scorer sees. It still produces a score.
+- [Custom scorers: skipping runs](/docs/evals/custom-scorers#skipping-runs-that-cant-be-scored)

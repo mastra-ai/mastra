@@ -1,0 +1,24 @@
+{
+  "providerId": "anthropic",
+  "localId": "anthropic",
+  "templateSha": "56c9369bd7c6878a7fce4fb05f7825a8a31a6d76",
+  "generatedAt": "2026-09-10T15:50:18.843Z",
+  "toolCount": 12,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "b04e437f5f2a6b398ff94a8d3ca002eb6f266e3d5148f5183c143534a9e16229",
+    "tools.ts": "e6ddb779d7c751905b6a180020f794554524234495d97cf1df505c7626eedd77",
+    "tools/cancel-message-batch.ts": "6586165889bcab6c23a27442aaf42bd241e6bedcc4527652bd103bbce823f4e8",
+    "tools/count-message-tokens.ts": "49b4ad8eeed9c1c69f69d037d15726c4ae03475486321b6c8b156222fa0c6a87",
+    "tools/create-message-batch.ts": "797998d6136ef71c146510b46a4dd580dfabcdb423a97dfe8859a3a4f24dc2fb",
+    "tools/create-message.ts": "19c340c7e64a52a29bf7e996139ba6c79da510f9104f2d852fc3e84a517a9123",
+    "tools/delete-file.ts": "eb0b3d465118658c955331fd202f2d88e3eb428674dbbcd63e2b0b5944edb633",
+    "tools/get-file.ts": "d359880f0ae3688288910b36c9d03902ea152b7d433aad012fae6aea199cd5de",
+    "tools/get-message-batch.ts": "10b86b95ed7877c75409cd6446c93e484d7c3336bafdf33f9eb9e809e8a48ace",
+    "tools/get-model.ts": "e784287963155edc4423a976e2965e478eae60e177de1476ac9715a10e2fb71d",
+    "tools/list-files.ts": "6588127db7857909912e5a1157678b579cede3df388acc17ed20004d759d6e85",
+    "tools/list-message-batch-results.ts": "e8d8a8baca25e593ccc32534f560bac16b8ea885b5253d2913dac407f4c47e4b",
+    "tools/list-message-batches.ts": "d6673f7dc3859d93ad55430ef4f05cdebd6cf55bab2757d4123b52fedac8f684",
+    "tools/list-models.ts": "319da84a042e2d0e8a112c15913a647b7e673f476aa82c0aa5e019b6dcd0af06"
+  }
+}

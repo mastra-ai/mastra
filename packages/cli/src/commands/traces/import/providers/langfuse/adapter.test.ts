@@ -432,7 +432,7 @@ describe('mapLangfuseSourceTrace', () => {
 });
 
 describe('LangfuseTraceImportProvider', () => {
-  it('identifies the Langfuse source with mapper and ID strategy versions', async () => {
+  it('identifies the Langfuse source and ID strategy', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       Response.json({
         data: [{ id: 'project-1', name: 'Demo' }],
@@ -445,7 +445,6 @@ describe('LangfuseTraceImportProvider', () => {
       provider: 'langfuse',
       baseUrl: 'https://cloud.langfuse.com',
       projectId: 'project-1',
-      mapperVersion: 'langfuse-api-v2@1',
       idAlgorithmVersion: 'langfuse-sha256-v1',
     });
   });
@@ -474,7 +473,6 @@ describe('LangfuseTraceImportProvider', () => {
           provider: 'langfuse',
           baseUrl: 'https://cloud.langfuse.com',
           projectId: 'project-1',
-          mapperVersion: 'langfuse-api-v2@1',
           idAlgorithmVersion: 'langfuse-sha256-v1',
         },
         onRetry: vi.fn(),
@@ -513,7 +511,6 @@ describe('LangfuseTraceImportProvider', () => {
           provider: 'langfuse',
           baseUrl: 'https://cloud.langfuse.com',
           projectId: 'project-1',
-          mapperVersion: 'langfuse-api-v2@1',
           idAlgorithmVersion: 'langfuse-sha256-v1',
         },
         onRetry,
@@ -537,7 +534,6 @@ describe('LangfuseTraceImportProvider', () => {
             provider: 'langfuse',
             baseUrl: 'https://cloud.langfuse.com',
             projectId: 'project-1',
-            mapperVersion: 'langfuse-api-v2@1',
             idAlgorithmVersion: 'langfuse-sha256-v1',
           },
           cutoffAt: '2026-09-02T00:00:00.000Z',

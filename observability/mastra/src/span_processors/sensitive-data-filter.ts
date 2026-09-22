@@ -114,9 +114,10 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
   /**
    * Process a span by filtering sensitive data across its key fields.
    * Fields processed: attributes, metadata, input, output, errorInfo, requestContext.
+   * The span is mutated in place, as the SpanOutputProcessor contract requires.
    *
    * @param span - The input span to filter
-   * @returns A new span with sensitive values redacted
+   * @returns The same span instance with sensitive values redacted
    */
   process(span: AnySpan): AnySpan {
     const indexedState = this.redactionStyle === 'indexed' ? this.getTraceState(span.traceId) : undefined;

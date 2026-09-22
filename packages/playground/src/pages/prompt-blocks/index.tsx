@@ -1,27 +1,38 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { Plus } from 'lucide-react';
-import { useCallback, useState } from 'react';
-import { Link } from 'react-router';
-import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { useCallback, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
+import { PromptBlocksHeaderCreateAction } from '@/domains/prompt-blocks/prompt-blocks-header-actions';
 
 const PROMPT_BLOCKS_PER_PAGE = 50;
+const PROMPT_BLOCKS_SORT_KEYS = ['updatedAt'] as const;
 
 export default function PromptBlocks() {
-  const { paths } = useLinkComponent();
-  const { isCmsAvailable } = useIsCmsAvailable();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { sort, onSortChange: changeUrlSort } = useUrlSort({
+    searchParams,
+    setSearchParams,
+    allowedKeys: PROMPT_BLOCKS_SORT_KEYS,
+  });
+  const orderBy = useMemo(
+    () =>
+      sort
+        ? { field: sort.key, direction: sort.direction === 'asc' ? ('ASC' as const) : ('DESC' as const) }
+        : undefined,
+    [sort],
+  );
   const { data, isLoading, error, isPlaceholderData } = useStoredPromptBlocks({
     page,
     perPage: PROMPT_BLOCKS_PER_PAGE,
+    orderBy,
   });
 
   const promptBlocks = data?.promptBlocks ?? [];
@@ -37,6 +48,13 @@ export default function PromptBlocks() {
     setSearch(value);
     setPage(0);
   }, []);
+  const handleSortChange = useCallback<typeof changeUrlSort>(
+    (direction, key) => {
+      changeUrlSort(direction, key);
+      setPage(0);
+    },
+    [changeUrlSort],
+  );
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -72,6 +90,7 @@ export default function PromptBlocks() {
 
   return (
     <PageLayout height="full">
+      <PromptBlocksHeaderCreateAction />
       <PageLayout.TopArea>
         <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">
@@ -81,17 +100,6 @@ export default function PromptBlocks() {
               placeholder="Filter by name or description"
             />
           </div>
-          {isCmsAvailable && (
-            <Button
-              as={Link}
-              to={paths.cmsPromptBlockCreateLink()}
-              variant="primary"
-              className="shrink-0"
-              icon={<Plus />}
-            >
-              Create Prompt
-            </Button>
-          )}
         </PageLayout.Row>
       </PageLayout.TopArea>
 
@@ -103,6 +111,8 @@ export default function PromptBlocks() {
         hasMore={hasMore}
         onNextPage={handleNextPage}
         onPrevPage={handlePrevPage}
+        updatedSort={sort?.direction}
+        onSortChange={handleSortChange}
       />
     </PageLayout>
   );

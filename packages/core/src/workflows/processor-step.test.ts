@@ -366,6 +366,53 @@ describe('createStep with Processor', () => {
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
     });
 
+    it('should provide sendSignal when phase is toolResult without stamping a response boundary', async () => {
+      const processToolResultMock = vi.fn(async ({ messageList, sendSignal }) => {
+        await sendSignal?.({
+          type: 'reactive',
+          contents: 'Inspect the delegation result before acting again.',
+        });
+        return messageList;
+      });
+
+      const processor: Processor = {
+        id: 'signal-tool-result-processor',
+        processToolResult: processToolResultMock,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+      const writer = vi.fn();
+      const inputData = {
+        phase: 'toolResult' as const,
+        messages: [{ id: '1', content: 'test' }],
+        messageList,
+        stepNumber: 1,
+        toolName: 'delegate',
+        toolCallId: 'call-1',
+        args: { task: 'task-1' },
+        toolResultValue: { delegated: 'task-1' },
+        providerExecuted: false,
+        systemMessages: [],
+        steps: [],
+        retryCount: 0,
+        // No rotateResponseMessageId — mirrors ProcessorRunner.runProcessToolResult,
+        // which never wires rotation for the toolResult phase (issue #21940).
+      };
+
+      await step.execute({ inputData, outputWriter: writer } as any);
+
+      expect(processToolResultMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
+      // The boundary stamp without a rotation blocks MessageMerger for the next
+      // same-id step add, which then destructively replaces the tool message.
+      expect(messageList.markResponseMessageBoundary).not.toHaveBeenCalled();
+      expect(messageList.addSignal).toHaveBeenCalled();
+      expect(writer).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'data-signal' }),
+        expect.objectContaining({ messageId: undefined }),
+      );
+    });
+
     it('should preserve tagged system messages when processInput returns { messages, systemMessages }', async () => {
       const processor: Processor = {
         id: 'system-appender',

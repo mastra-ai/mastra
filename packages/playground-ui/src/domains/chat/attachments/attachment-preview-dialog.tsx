@@ -48,7 +48,7 @@ interface PdfPreviewDialogProps {
 export const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-4xl motion-reduce:animate-none!" overlayClassName="motion-reduce:animate-none!">
         <DialogHeader>
           <DialogTitle>PDF preview</DialogTitle>
           <DialogDescription>Preview of the PDF document</DialogDescription>
@@ -60,15 +60,10 @@ export const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogP
 };
 
 interface FileChipEntryProps {
-  /** Display label (usually the filename or URL). */
   name: string;
-  /** A browser-fetchable URL (http/https) to link out to, when available. */
   url?: string;
-  /** MIME type used to pick a representative icon. */
   contentType?: string;
 }
-
-/** Picks an icon (and a11y label) representing the file's media type. */
 const iconForContentType = (contentType?: string) => {
   if (contentType?.startsWith('video/')) return { Icon: FileVideo, label: 'Video file' };
   if (contentType?.startsWith('audio/')) return { Icon: FileAudio, label: 'Audio file' };
@@ -76,13 +71,6 @@ const iconForContentType = (contentType?: string) => {
     return { Icon: FileText, label: 'Document file' };
   return { Icon: FileIcon, label: 'File' };
 };
-
-/**
- * Placeholder chip for media the browser cannot preview inline — e.g. video, or
- * any cloud-storage URI (`gs://`, `s3://`) that only the model provider can fetch
- * server-side. The icon reflects the file's media type. Links out when the URL is
- * browser-fetchable (http/https).
- */
 export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) => {
   const { Icon, label } = iconForContentType(contentType);
   const icon = <Icon className="text-accent2" aria-label={label} />;
@@ -104,15 +92,21 @@ export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) =>
 
 interface ImageEntryProps {
   src: string;
+  name?: string;
 }
 
-export const ImageEntry = ({ src }: ImageEntryProps) => {
+export const ImageEntry = ({ src, name }: ImageEntryProps) => {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <button onClick={() => setOpen(true)} type="button" className={ctaClassName}>
-        <img src={src} className="aspect-ratio max-h-35 max-w-80 object-cover" alt="Preview" />
+      <button
+        onClick={() => setOpen(true)}
+        type="button"
+        className={ctaClassName}
+        aria-label={name ? `Preview ${name}` : 'Preview image'}
+      >
+        <img src={src} className="aspect-ratio max-h-35 max-w-full object-cover" alt={name ?? 'Preview'} />
       </button>
       <ImagePreviewDialog src={src} open={open} onOpenChange={setOpen} />
     </>
@@ -128,7 +122,7 @@ interface ImagePreviewDialogProps {
 export const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-4xl motion-reduce:animate-none!" overlayClassName="motion-reduce:animate-none!">
         <DialogHeader>
           <DialogTitle>Image preview</DialogTitle>
           <DialogDescription>Preview of the image</DialogDescription>
@@ -147,7 +141,6 @@ interface TxtEntryProps {
 export const TxtEntry = ({ data, name }: TxtEntryProps) => {
   const [open, setOpen] = useState(false);
 
-  // Named files contain raw content; only unnamed chat text carries an envelope.
   const formattedContent =
     name === undefined ? (data.match(/^<attachment[^>]*>([\s\S]*)<\/attachment>$/)?.[1] ?? data) : data;
   const filename =
@@ -165,7 +158,7 @@ export const TxtEntry = ({ data, name }: TxtEntryProps) => {
         onClick={() => setOpen(true)}
         variant="outline"
         size="sm"
-        className="max-w-64 min-w-0"
+        className="max-w-64 min-w-0 pointer-coarse:min-h-11"
         type="button"
         aria-label={filename ? `Preview ${filename}` : 'Preview text attachment'}
         title={filename}
@@ -188,7 +181,10 @@ interface TxtPreviewDialogProps {
 export const TxtPreviewDialog = ({ data, title, open, onOpenChange }: TxtPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[80vh] max-w-4xl">
+      <DialogContent
+        className="h-[80vh] max-w-4xl motion-reduce:animate-none!"
+        overlayClassName="motion-reduce:animate-none!"
+      >
         <DialogHeader>
           <DialogTitle>{title ?? 'Text preview'}</DialogTitle>
           <DialogDescription>Preview of the text file</DialogDescription>

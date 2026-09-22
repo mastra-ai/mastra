@@ -4,7 +4,9 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { ClipboardCheck, MessageSquare } from 'lucide-react';
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { useFeedback, useUpdateFeedbackReviewStatus } from '@/domains/feedback/hooks/use-feedback';
@@ -16,6 +18,9 @@ import { useInboxDatasetReviewItems } from '@/domains/review/hooks/use-inbox-rev
 
 type InboxTab = 'dataset' | 'feedback';
 
+const FEEDBACK_SORT_KEYS = ['timestamp'] as const;
+const DEFAULT_FEEDBACK_SORT = { key: 'timestamp', direction: 'desc' } as const;
+
 function isInboxTab(value: string | null): value is InboxTab {
   return value === 'dataset' || value === 'feedback';
 }
@@ -24,8 +29,21 @@ export default function InboxPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const activeTab: InboxTab = isInboxTab(tabParam) ? tabParam : 'feedback';
+  const { sort, onSortChange } = useUrlSort({
+    searchParams,
+    setSearchParams,
+    allowedKeys: FEEDBACK_SORT_KEYS,
+    defaultSort: DEFAULT_FEEDBACK_SORT,
+  });
+  const orderBy = useMemo(
+    () => ({
+      field: 'timestamp' as const,
+      direction: sort?.direction === 'asc' ? ('ASC' as const) : ('DESC' as const),
+    }),
+    [sort?.direction],
+  );
   // The inbox only surfaces items that still need review.
-  const feedbackQuery = useFeedback({ reviewStatus: 'needs-review' });
+  const feedbackQuery = useFeedback({ reviewStatus: 'needs-review', orderBy });
   const updateReviewStatus = useUpdateFeedbackReviewStatus();
   const datasetReviewQuery = useInboxDatasetReviewItems();
 
@@ -79,7 +97,7 @@ export default function InboxPage() {
     selectedIndex >= 0 && selectedIndex < feedbackQuery.items.length - 1
       ? feedbackQuery.items[selectedIndex + 1]
       : undefined;
-  const showPanel = !!selectedTraceId && !!selectedFeedbackId;
+  const showPanel = !!selectedTraceId && !!selectedFeedbackId && !!selectedFeedback;
 
   const markReviewed = (feedbackId: string) => {
     updateReviewStatus.mutate(
@@ -113,11 +131,11 @@ export default function InboxPage() {
               className="grid h-full min-h-0 grid-rows-[auto_1fr]"
             >
               <TabList variant="pill-ghost">
-                <Tab value="feedback" className="px-3 py-2.5">
-                  <Icon size="sm">
+                <Tab value="feedback">
+                  <Icon size="xs">
                     <MessageSquare />
                   </Icon>
-                  <Txt variant="ui-sm" className="text-inherit">
+                  <Txt variant="caption" className="text-inherit">
                     Feedback
                   </Txt>
                   {feedbackCount > 0 && (
@@ -126,11 +144,11 @@ export default function InboxPage() {
                     </Badge>
                   )}
                 </Tab>
-                <Tab value="dataset" className="px-3 py-2.5">
-                  <Icon size="sm">
+                <Tab value="dataset">
+                  <Icon size="xs">
                     <ClipboardCheck />
                   </Icon>
-                  <Txt variant="ui-sm" className="text-inherit">
+                  <Txt variant="caption" className="text-inherit">
                     Dataset items
                   </Txt>
                   {datasetItems.length > 0 && (
@@ -155,6 +173,8 @@ export default function InboxPage() {
                   }
                   onSelect={selectFeedback}
                   selectedFeedbackId={selectedFeedbackId}
+                  timestampSort={sort?.direction}
+                  onSortChange={onSortChange}
                 />
               </TabContent>
 
@@ -170,19 +190,16 @@ export default function InboxPage() {
         </PageLayout.MainArea>
       </PageLayout>
 
-      {showPanel && selectedTraceId && selectedFeedback && (
-        <InboxTracePanel
-          key={`${selectedFeedbackId}:${selectedTraceId}`}
-          feedback={selectedFeedback}
-          traceId={selectedTraceId}
-          initialSpanId={selectedSpanId}
-          onClose={closePanel}
-          onPrevious={previousFeedback ? () => selectFeedback(previousFeedback) : undefined}
-          onNext={nextFeedback ? () => selectFeedback(nextFeedback) : undefined}
-          onMarkReviewed={() => selectedFeedbackId && markReviewed(selectedFeedbackId)}
-          isMarkingReviewed={updateReviewStatus.isPending}
-        />
-      )}
+      <InboxTracePanel
+        feedback={showPanel ? selectedFeedback : undefined}
+        traceId={showPanel ? selectedTraceId : undefined}
+        initialSpanId={selectedSpanId}
+        onClose={closePanel}
+        onPrevious={previousFeedback ? () => selectFeedback(previousFeedback) : undefined}
+        onNext={nextFeedback ? () => selectFeedback(nextFeedback) : undefined}
+        onMarkReviewed={() => selectedFeedbackId && markReviewed(selectedFeedbackId)}
+        isMarkingReviewed={updateReviewStatus.isPending}
+      />
     </div>
   );
 }

@@ -1,43 +1,47 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-import { Eye } from 'lucide-react';
+import { MessagesSquareIcon } from 'lucide-react';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
-import { Link } from '@/lib/link';
+import { useThreadHasOtherTraces } from '@/domains/traces/hooks/use-thread-has-other-traces';
 
 export interface TraceMessagesPanelProps {
   traceId: string;
+  /** Memory thread the trace belongs to; used to decide whether a full-thread action is worth showing. */
+  threadId?: string;
   className?: string;
-  /** Link to the advanced thread view showing every turn of the thread. */
-  fullThreadHref?: string;
+  /** Opens the full thread in place. */
+  onViewFullThread?: () => void;
   /** Called with the span ids behind a reconstructed message when the user asks to highlight them. */
   onHighlightSpans?: (spanIds: string[]) => void;
 }
 
-/** The "Messages" column: the trace rendered as one reconstructed agent turn. */
-export function TraceMessagesPanel({ traceId, className, fullThreadHref, onHighlightSpans }: TraceMessagesPanelProps) {
+/**
+ * The "Messages" view of the trace side column: the trace rendered as one
+ * reconstructed agent turn, with an "Open full thread" entry point at the top of
+ * the conversation when the thread has more turns than this one.
+ */
+export function TraceMessagesPanel({
+  traceId,
+  threadId,
+  className,
+  onViewFullThread,
+  onHighlightSpans,
+}: TraceMessagesPanelProps) {
+  // A single-trace thread would show exactly what the column already shows.
+  const hasOtherTraces = useThreadHasOtherTraces(threadId);
+  const showFullThreadAction = hasOtherTraces && !!onViewFullThread;
+
   return (
-    <DataPanel data-testid="messages-panel" className={cn('h-full rounded-none border-0 bg-transparent', className)}>
-      {/* min-h-16 keeps this header level with the two-line span panel header. */}
-      <DataPanel.Header className="min-h-16">
-        <DataPanel.Heading>Messages</DataPanel.Heading>
-      </DataPanel.Header>
-      <DataPanel.Content>
-        <div className="flex h-full min-h-0 flex-col">
-          {fullThreadHref && (
-            <div className="flex justify-center px-3 pt-2">
-              <Button icon={<Eye />} as={Link} href={fullThreadHref} variant="default" size="xs">
-                View full thread
-              </Button>
-            </div>
-          )}
-          <ScrollArea className="min-h-0 flex-1">
-            <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
-          </ScrollArea>
+    <div data-testid="messages-panel" className={cn('flex h-full min-h-0 flex-col', className)}>
+      {showFullThreadAction && (
+        <div className="flex justify-center px-4 pt-4">
+          <Button icon={<MessagesSquareIcon />} variant="ghost" size="sm" onClick={onViewFullThread}>
+            Open full thread
+          </Button>
         </div>
-      </DataPanel.Content>
-    </DataPanel>
+      )}
+      <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
+    </div>
   );
 }

@@ -3,7 +3,7 @@ import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { canonicalizeRequestJsonSchema, createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -17,7 +17,7 @@ import { CoreToolBuilder } from './builder';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai', 'openrouter']);
 
-const mock = createGatewayMock({ exactMatch: true });
+const mock = createGatewayMock({ exactMatch: true, transformRequest: canonicalizeRequestJsonSchema });
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 

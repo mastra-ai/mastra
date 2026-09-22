@@ -38,6 +38,7 @@
 
 import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
 import {
+  agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
   emitErrorEvent,
@@ -55,7 +56,7 @@ import { CachingPubSub } from '@mastra/core/events';
 import type { Event, PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
-import type { Workflow } from '@mastra/core/workflows';
+import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 
@@ -130,6 +131,13 @@ export interface CreateInngestAgentOptions {
   cache?: MastraServerCache;
   /** Mastra instance for observability (optional, set automatically when registered with Mastra) */
   mastra?: Mastra;
+  /**
+   * Accepted for API symmetry with `createDurableAgent`, but **ignored** by
+   * InngestAgent (a warning is logged if set). Inngest's step memoization and
+   * replay own durability, so InngestAgent pins a `suspended`-only snapshot
+   * policy — Mastra snapshots exist purely for human-in-the-loop resume.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 }
 
 /**
@@ -482,6 +490,19 @@ export interface InngestAgent<TOutput = undefined> {
   getConfiguredProcessorWorkflows(...args: any[]): any;
   /** Get raw agent configuration. Forwarded to the underlying Agent. */
   toRawConfig(...args: any[]): any;
+  /**
+   * Send a signal to a thread. Forwarded to the underlying Agent; a signal that
+   * wakes an idle thread starts the run through this agent's durable `stream()`.
+   */
+  sendSignal: Agent<any, any, TOutput>['sendSignal'];
+  /** Send a state signal to a thread. Forwarded to the underlying Agent. */
+  sendStateSignal: Agent<any, any, TOutput>['sendStateSignal'];
+  /** Send a notification signal to a thread. Forwarded to the underlying Agent. */
+  sendNotificationSignal: Agent<any, any, TOutput>['sendNotificationSignal'];
+  /** Subscribe to a thread's runs. Forwarded to the underlying Agent. */
+  subscribeToThread: Agent<any, any, TOutput>['subscribeToThread'];
+  /** Get the active run id for a thread. Forwarded to the underlying Agent. */
+  getActiveThreadRunId: Agent<any, any, TOutput>['getActiveThreadRunId'];
   /** Resume a streaming execution. Forwarded to the underlying Agent. */
   resumeStream(...args: any[]): any;
   /** Approve a pending tool call. Forwarded to the underlying Agent. */
@@ -536,7 +557,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     pubsub: customPubsub,
     cache,
     mastra: mastraOption,
+    shouldPersistSnapshot,
   } = options;
+
+  if (shouldPersistSnapshot) {
+    console.warn(
+      `InngestAgent '${idOverride ?? agent.id}': ignoring the shouldPersistSnapshot option. ` +
+        `Inngest's step memoization/replay owns durability, so InngestAgent always persists ` +
+        `'suspended' snapshots only (for human-in-the-loop resume).`,
+    );
+  }
 
   // Use provided id/name or fall back to agent.id/agent.name
   const agentId = idOverride ?? agent.id;
@@ -645,10 +675,22 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   /**
-   * Emit an error event to pubsub
+   * Emit an error event to pubsub.
+   *
+   * Best-effort: callers fire-and-forget this on paths that are already
+   * failing, so an unreachable pubsub must not turn error reporting into an
+   * unhandled rejection.
    */
   async function emitError(runId: string, error: Error): Promise<void> {
-    await emitErrorEvent(getPubsub(), runId, error);
+    try {
+      await emitErrorEvent(getPubsub(), runId, error);
+    } catch (publishError) {
+      mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent error event', {
+        agentId,
+        runId,
+        error: publishError instanceof Error ? publishError.message : String(publishError),
+      });
+    }
   }
 
   /**
@@ -859,6 +901,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (trackedEntry) {
         trackedEntry.workflowExecution = workflowExecution;
       }
+
+      // 3b. Register with the thread-stream runtime under the durable wrapper's
+      // identity, mirroring DurableAgent. This lets subscribeToThread /
+      // sendSignal find the run, and releases the thread reservation held by a
+      // signal-woken run once the durable stream finishes. Uses the Mastra-level
+      // pubsub (agent.getPubSub()) — not the CachingPubSub carrying workflow chunks.
+      await agentThreadStreamRuntime.registerRun(
+        proxyRef as unknown as Agent<any, any, any, any>,
+        output,
+        (streamOptions ?? {}) as AgentExecutionOptions<TOutput>,
+        agent.getPubSub(),
+      );
 
       // 4. Return stream result - attach extra properties to output for compatibility
       // This allows both destructuring { output, runId, cleanup } AND direct access to fullStream
@@ -1321,6 +1375,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   // Assign the late-bound reference so stream()'s untilIdle path can use it
   proxyRef = result;
+  // Signal, message, and subscription APIs are forwarded to the wrapped agent
+  // by the Proxy above, and the thread-stream runtime wakes idle threads with
+  // `agent.stream()`. Point the runtime at the proxy so those wakes take the
+  // durable path instead of the wrapped agent's in-process stream().
+  agent.__setThreadRuntimeAgent(result as unknown as Agent<any, any, any, any>);
   return result;
 }
 

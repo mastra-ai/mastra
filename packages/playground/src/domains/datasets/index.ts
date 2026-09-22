@@ -88,6 +88,3 @@ export {
 export { DatasetVersionsPanel } from './components/items/dataset-versions-panel';
 export { DatasetCompareVersionToolbar } from './components/versions';
 export { DatasetCompareVersionsList } from './components/versions';
-
-// Generation context
-export { GenerationProvider, useGenerationTasks } from './context/generation-context';

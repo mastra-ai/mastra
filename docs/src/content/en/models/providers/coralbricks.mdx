@@ -7,7 +7,7 @@ description: "Browse CoralBricks model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/coralbricks.svg" alt="CoralBricks logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CoralBricks
 
-Access 3 CoralBricks models through Mastra's model router. Authentication is handled automatically using the `CORAL_API_KEY` environment variable.
+Access 4 CoralBricks models through Mastra's model router. Authentication is handled automatically using the `CORAL_API_KEY` environment variable.
 
 Learn more in the [CoralBricks documentation](https://www.coralbricks.ai/docs).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "coralbricks/glm-5.3-fp4"
+  model: "coralbricks/deepseek-v4.1-flash-fast-fp4"
 });
 
 // Generate a response
@@ -46,6 +46,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
+    "model": "coralbricks/deepseek-v4.1-flash-fast-fp4",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "coralbricks/glm-5.3-flash-fp4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
     "model": "coralbricks/glm-5.3-fp4",
     "imageInput": false,
     "audioInput": false,
@@ -68,18 +92,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.12,
     "outputCost": 0.6
-  },
-  {
-    "model": "coralbricks/kimi-k3",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 3,
-    "outputCost": 15
   }
 ]}
 />
@@ -96,7 +108,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.coralbricks.ai/v1",
-    id: "coralbricks/glm-5.3-fp4",
+    id: "coralbricks/deepseek-v4.1-flash-fast-fp4",
     apiKey: process.env.CORAL_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -114,8 +126,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "coralbricks/kimi-k3"
-      : "coralbricks/glm-5.3-fp4";
+      ? "coralbricks/gpt-oss-120b"
+      : "coralbricks/deepseek-v4.1-flash-fast-fp4";
   }
 });
 ```

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
-import { expectBreadcrumbLink, expectCurrentBreadcrumb, expectRouteDocsLink } from '../../__utils__/route-header';
+import { expectBreadcrumbLink, expectCurrentBreadcrumb } from '../../__utils__/route-header';
 
 test.describe('Scorer detail page', () => {
   test.afterEach(async () => {
@@ -16,11 +16,10 @@ test.describe('Scorer detail page', () => {
       await expectBreadcrumbLink(page, 'Scorers', '/scorers');
     });
 
-    test('displays the scorer name and a documentation link', async ({ page }) => {
+    test('displays the scorer name', async ({ page }) => {
       await page.goto('/scorers/response-quality');
 
       await expectCurrentBreadcrumb(page, 'Response Quality Scorer');
-      await expectRouteDocsLink(page, 'Scorers documentation', 'https://mastra.ai/en/docs/evals/overview');
     });
 
     test('has a scorer combobox for navigation', async ({ page }) => {

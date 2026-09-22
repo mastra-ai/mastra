@@ -1,3 +1,6 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ProviderItem, ToolkitItem } from '../types';
 
 interface ProviderToolkitSelectorProps {
@@ -39,80 +42,59 @@ export function ProviderToolkitSelector({
 }: ProviderToolkitSelectorProps) {
   return (
     <div className="space-y-4 border rounded p-4">
-      <div className="space-y-1">
-        <label className="block font-medium" htmlFor="provider-select">
-          Provider
-        </label>
-        <select
-          id="provider-select"
-          className="border rounded px-2 py-1 w-full"
-          value={providerId}
-          onChange={event => onProviderChange(event.target.value)}
-          disabled={providersLoading}
-        >
-          <option value="">— select provider —</option>
-          {providers.map(provider => (
-            <option key={provider.id} value={provider.id}>
-              {provider.displayName ?? provider.name} ({provider.id})
-            </option>
-          ))}
-        </select>
-        {providersLoading && <span className="text-gray-500">Loading providers…</span>}
-        {providersError ? <span className="text-red-600">{String(providersError)}</span> : null}
-      </div>
+      <SelectFieldBlock
+        name="provider"
+        label="Provider"
+        value={providerId}
+        onValueChange={onProviderChange}
+        disabled={providersLoading}
+        placeholder={providersLoading ? 'Loading providers…' : 'Select provider'}
+        options={providers.map(provider => ({
+          value: provider.id,
+          label: `${provider.displayName ?? provider.name} (${provider.id})`,
+        }))}
+        errorMsg={providersError ? String(providersError) : undefined}
+      />
 
-      <div className="space-y-1">
-        <label className="block font-medium" htmlFor="toolkit-select">
-          Toolkit
-        </label>
-        <select
-          id="toolkit-select"
-          className="border rounded px-2 py-1 w-full"
-          value={toolkit}
-          onChange={event => onToolkitChange(event.target.value)}
-          disabled={!providerId || toolkitsLoading}
-        >
-          <option value="">— select toolkit —</option>
-          {toolkits.map(item => (
-            <option key={item.slug} value={item.slug}>
-              {item.name} ({item.slug})
-            </option>
-          ))}
-        </select>
-        {toolkitsLoading && <span className="text-gray-500">Loading toolkits…</span>}
-        {toolkitsError ? <span className="text-red-600">{String(toolkitsError)}</span> : null}
-      </div>
+      <SelectFieldBlock
+        name="toolkit"
+        label="Toolkit"
+        value={toolkit}
+        onValueChange={onToolkitChange}
+        disabled={!providerId || toolkitsLoading}
+        placeholder={toolkitsLoading ? 'Loading toolkits…' : 'Select toolkit'}
+        options={toolkits.map(item => ({ value: item.slug, label: `${item.name} (${item.slug})` }))}
+        errorMsg={toolkitsError ? String(toolkitsError) : undefined}
+      />
 
-      <div className="space-y-1">
-        <label className="block font-medium" htmlFor="label-input">
-          Label (optional)
-        </label>
-        <input
-          id="label-input"
-          type="text"
-          className="border rounded px-2 py-1 w-full"
-          placeholder="My personal Gmail"
-          value={label}
-          onChange={event => onLabelChange(event.target.value)}
-          disabled={!providerId || !toolkit}
-        />
-      </div>
+      <TextFieldBlock
+        name="connection-label"
+        label="Label (optional)"
+        placeholder="My personal Gmail"
+        value={label}
+        onChange={event => onLabelChange(event.target.value)}
+        disabled={!providerId || !toolkit}
+      />
 
-      <button
+      <Button
         type="button"
-        className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
+        variant="primary"
         onClick={onConnect}
         disabled={!providerId || !toolkit || authorizePending}
       >
         {authorizePending ? 'Authorizing…' : 'Connect'}
-      </button>
+      </Button>
 
-      {authorizeError ? <p className="text-red-600">{String(authorizeError)}</p> : null}
-      {authorizedConnection && (
-        <p className="text-green-700">
+      {authorizeError ? (
+        <div role="alert">
+          <Notice variant="destructive">{String(authorizeError)}</Notice>
+        </div>
+      ) : null}
+      {authorizedConnection ? (
+        <Notice variant="success">
           Authorized: {authorizedConnection.connectionId} (status: {authorizedConnection.status})
-        </p>
-      )}
+        </Notice>
+      ) : null}
     </div>
   );
 }

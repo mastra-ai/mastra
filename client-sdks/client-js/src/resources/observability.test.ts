@@ -1,6 +1,13 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { describe, expect, beforeEach, it, vi } from 'vitest';
+import type {
+  GetTraceQueryFieldsArgs,
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesArgs,
+  GetTraceQueryValuesResponse,
+} from '@mastra/core/storage';
+import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
+import type { QueryTraceThreadsResult } from './observability';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -16,7 +23,7 @@ describe('Observability Methods', () => {
   };
 
   // Helper to mock successful API responses
-  const mockSuccessfulResponse = () => {
+  const mockSuccessfulResponse = (body: unknown = {}) => {
     const response = new Response(undefined, {
       status: 200,
       statusText: 'OK',
@@ -24,7 +31,7 @@ describe('Observability Methods', () => {
         'Content-Type': 'application/json',
       }),
     });
-    response.json = () => Promise.resolve({});
+    response.json = () => Promise.resolve(body);
     (global.fetch as any).mockResolvedValueOnce(response);
   };
 
@@ -479,7 +486,23 @@ describe('Observability Methods', () => {
   });
 
   describe('queryTraces()', () => {
-    it('should post the advanced query body unchanged', async () => {
+    it('posts delta cursor and limit unchanged and exposes delta metadata directly', async () => {
+      mockSuccessfulResponse({ traces: [], delta: { limit: 5, hasMore: false }, deltaCursor: 'next' });
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        mode: 'delta' as const,
+        after: 'previous',
+        limit: 5,
+      };
+      const result = await client.queryTraces(request);
+      expect(result.deltaCursor).toBe('next');
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({ method: 'POST', body: JSON.stringify(request) }),
+      );
+    });
+
+    it('should post the advanced query body unchanged with trace result types', async () => {
       mockSuccessfulResponse();
       const request = {
         timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
@@ -498,9 +521,127 @@ describe('Observability Methods', () => {
       };
 
       await client.queryTraces(request);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+
+    it('should expose paginated trace responses for page-mode queries', async () => {
+      mockSuccessfulResponse();
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        pagination: { page: 0, perPage: 25 },
+      };
+
+      await client.queryTraces(request);
 
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+  });
+
+  describe('trace-query discovery', () => {
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+
+    it('should post field discovery requests unchanged and propagate a per-call abort signal', async () => {
+      mockSuccessfulResponse();
+      const controller = new AbortController();
+      const request: GetTraceQueryFieldsArgs = { timeRange, predicateScope: 'trace', search: 'region', limit: 10 };
+
+      const result = await client.getTraceQueryFields(request, { signal: controller.signal });
+
+      expectTypeOf(result).toEqualTypeOf<GetTraceQueryFieldsResponse>();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query/fields`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(request),
+          signal: controller.signal,
+        }),
+      );
+    });
+
+    it('should post value discovery requests unchanged and use the configured abort signal as a fallback', async () => {
+      mockSuccessfulResponse();
+      const controller = new AbortController();
+      const clientWithSignal = new MastraClient({ ...clientOptions, abortSignal: controller.signal });
+      const request: GetTraceQueryValuesArgs = {
+        timeRange,
+        predicateScope: 'spans',
+        path: 'model',
+        search: 'claude',
+      };
+
+      const result = await clientWithSignal.getTraceQueryValues(request);
+
+      expectTypeOf(result).toEqualTypeOf<GetTraceQueryValuesResponse>();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query/values`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(request),
+          signal: controller.signal,
+        }),
+      );
+    });
+
+    it('should not retry discovery requests', async () => {
+      const errorResponse = new Response('Unavailable', { status: 503, statusText: 'Unavailable' });
+      vi.mocked(global.fetch).mockResolvedValue(errorResponse);
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+
+      await expect(retryingClient.getTraceQueryFields({ timeRange, predicateScope: 'feedback' })).rejects.toThrow();
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('queryTraceThreads()', () => {
+    it('should post the thread query body unchanged with an identity-only result type', async () => {
+      mockSuccessfulResponse();
+      const request = {
+        traces: {
+          timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+          where: {
+            op: 'eq' as const,
+            left: { path: 'environment' },
+            right: { literal: 'production' },
+          },
+        },
+        where: {
+          traces: {
+            some: {
+              feedback: {
+                some: {
+                  op: 'eq' as const,
+                  left: { path: 'feedbackType' },
+                  right: { literal: 'clinician-correction' },
+                },
+              },
+            },
+          },
+        },
+        page: { limit: 25 },
+      };
+
+      const result = await client.queryTraceThreads(request);
+
+      expectTypeOf(result).toEqualTypeOf<QueryTraceThreadsResult>();
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().toEqualTypeOf<{ threadId: string }>();
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().not.toHaveProperty('traceId');
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/threads/query`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),

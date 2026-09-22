@@ -3,10 +3,8 @@ import {
   ArrowUpFromLineIcon,
   CalendarClockIcon,
   CircleDollarSignIcon,
-  ExternalLinkIcon,
   TimerIcon,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import {
   formatSpanDuration,
@@ -15,10 +13,9 @@ import {
   formatSpanTimestampExact,
 } from '../utils/span-utils';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { DataPanel } from '@/ds/components/DataPanel';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
 import type { LinkComponent } from '@/ds/types/link-component';
-import { cn } from '@/lib/utils';
 
 function formatEntityType(entityType: string): string {
   return entityType
@@ -42,34 +39,10 @@ export interface TraceSummaryDescriptionProps {
   /** When provided (with `LinkComponent`), the entity name links to the entity's page. */
   entityHref?: string;
   LinkComponent?: LinkComponent;
-  className?: string;
-}
-
-function SummaryItem({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          tabIndex={0}
-          className="flex shrink-0 cursor-help items-center gap-1 whitespace-nowrap"
-          aria-label={label}
-        >
-          {children}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
 }
 
 /** Compact trace metadata shown under the trace side-panel heading. */
-export function TraceSummaryDescription({
-  rootSpan,
-  usage,
-  entityHref,
-  LinkComponent,
-  className,
-}: TraceSummaryDescriptionProps) {
+export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkComponent }: TraceSummaryDescriptionProps) {
   const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
   const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
   const duration = formatSpanDuration(startedAt, endedAt);
@@ -81,65 +54,47 @@ export function TraceSummaryDescription({
   const entityType = rootSpan.entityType;
   const formattedEntityType = entityType ? formatEntityType(entityType) : 'Entity';
   const EntityIcon = entityType?.includes('workflow') ? WorkflowIcon : AgentIcon;
-  const Link = LinkComponent ?? 'a';
 
   return (
-    <div
-      className={cn(
-        'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-ui-xs leading-ui-xs text-neutral3',
-        className,
-      )}
-    >
-      {entityName && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {entityHref ? (
-              <Link
-                href={entityHref}
-                className="text-neutral4 hover:text-neutral5 flex shrink-0 items-center gap-1 whitespace-nowrap hover:underline"
-              >
-                <EntityIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                <span>{entityName}</span>
-                <ExternalLinkIcon className="size-3 shrink-0" aria-hidden="true" />
-              </Link>
-            ) : (
-              <span tabIndex={0} className="flex shrink-0 cursor-help items-center gap-1 whitespace-nowrap">
-                <EntityIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                <span>{entityName}</span>
-              </span>
-            )}
-          </TooltipTrigger>
-          <TooltipContent>{formattedEntityType}</TooltipContent>
-        </Tooltip>
-      )}
+    <DataPanel.Metadata>
+      {entityName &&
+        (entityHref ? (
+          <DataPanel.Meta
+            as={LinkComponent ?? 'a'}
+            href={entityHref}
+            icon={<EntityIcon />}
+            tooltip={`See ${formattedEntityType.toLowerCase()}`}
+          >
+            {entityName}
+          </DataPanel.Meta>
+        ) : (
+          <DataPanel.Meta icon={<EntityIcon />} tooltip={formattedEntityType}>
+            {entityName}
+          </DataPanel.Meta>
+        ))}
       {startedAtTimestamp && exactStartedAtTimestamp && (
-        <SummaryItem label={`Started at ${exactStartedAtTimestamp}`}>
-          <CalendarClockIcon className="size-3.5 shrink-0" aria-hidden="true" />
-          <span>{startedAtTimestamp}</span>
-        </SummaryItem>
+        <DataPanel.Meta icon={<CalendarClockIcon />} tooltip={`Started at ${exactStartedAtTimestamp}`}>
+          {startedAtTimestamp}
+        </DataPanel.Meta>
       )}
       {duration && exactDuration && (
-        <SummaryItem label={`Duration ${exactDuration}`}>
-          <TimerIcon className="size-3.5 shrink-0" aria-hidden="true" />
-          <span>{duration}</span>
-        </SummaryItem>
+        <DataPanel.Meta icon={<TimerIcon />} tooltip={`Duration ${exactDuration}`}>
+          {duration}
+        </DataPanel.Meta>
       )}
       {usage && (
         <>
-          <SummaryItem label="Input tokens">
-            <ArrowDownToLineIcon className="size-3.5 shrink-0" aria-hidden="true" />
-            <span>{usage.inputTokens === undefined ? '—' : formatCompact(usage.inputTokens)}</span>
-          </SummaryItem>
-          <SummaryItem label="Output tokens">
-            <ArrowUpFromLineIcon className="size-3.5 shrink-0" aria-hidden="true" />
-            <span>{usage.outputTokens === undefined ? '—' : formatCompact(usage.outputTokens)}</span>
-          </SummaryItem>
-          <SummaryItem label="Estimated cost">
-            <CircleDollarSignIcon className="size-3.5 shrink-0" aria-hidden="true" />
-            <span>{usage.estimatedCost === undefined ? '—' : formatCost(usage.estimatedCost, usage.costUnit)}</span>
-          </SummaryItem>
+          <DataPanel.Meta icon={<ArrowDownToLineIcon />} tooltip="Input tokens">
+            {usage.inputTokens === undefined ? '—' : formatCompact(usage.inputTokens)}
+          </DataPanel.Meta>
+          <DataPanel.Meta icon={<ArrowUpFromLineIcon />} tooltip="Output tokens">
+            {usage.outputTokens === undefined ? '—' : formatCompact(usage.outputTokens)}
+          </DataPanel.Meta>
+          <DataPanel.Meta icon={<CircleDollarSignIcon />} tooltip="Estimated cost">
+            {usage.estimatedCost === undefined ? '—' : formatCost(usage.estimatedCost, usage.costUnit)}
+          </DataPanel.Meta>
         </>
       )}
-    </div>
+    </DataPanel.Metadata>
   );
 }

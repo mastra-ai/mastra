@@ -10,6 +10,7 @@ import { WorkspaceFilesToggle } from '../../workspace-viewer/components/Workspac
 import { useWorkspacePanel } from '../../workspace-viewer/context/useWorkspacePanel';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
+import { isPullRequestSource } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
@@ -23,6 +24,7 @@ function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): Work
 function sessionTitle(item: WorkItem): string {
   const number = workItemNumber(item);
   if (item.source === 'github-pr' && number) return `PR #${number}: ${item.title}`;
+  if (item.source === 'gitlab-pr' && number) return `MR !${number}: ${item.title}`;
   if (item.source === 'github-issue' && number) return `Issue #${number}: ${item.title}`;
   return item.title;
 }
@@ -30,6 +32,7 @@ function sessionTitle(item: WorkItem): string {
 function externalWorkItemLabel(item: WorkItem): string {
   const number = workItemNumber(item);
   if (item.source === 'github-pr') return number ? `PR #${number}` : 'Pull request';
+  if (item.source === 'gitlab-pr') return number ? `MR !${number}` : 'Merge request';
   if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
   if (item.source === 'linear-issue') {
     return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : (number ?? 'Linear issue');
@@ -63,7 +66,7 @@ export function FactorySessionHeader() {
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
 
   return (
-    <ChatHeader className={cn(hasSession && 'border-border1 border-b md:px-5')}>
+    <ChatHeader className={cn(hasSession && 'border-border border-b md:px-5')}>
       {hasSession ? (
         <div role="region" aria-label="Factory session" className="flex min-w-0 flex-1 items-center gap-2">
           {currentItem ? <WorkItemBreadcrumb item={currentItem} factoryId={factoryId} /> : null}
@@ -87,20 +90,20 @@ export function FactorySessionHeader() {
 }
 
 function WorkItemBreadcrumb({ item, factoryId }: { item: WorkItem; factoryId?: string }) {
-  const isReview = item.source === 'github-pr';
+  const isReview = isPullRequestSource(item.source);
 
   return (
-    <nav className="text-ui-sm flex min-w-0 items-center gap-2" aria-label="Factory session breadcrumb">
+    <nav className="text-caption flex min-w-0 items-center gap-2" aria-label="Factory session breadcrumb">
       <Link
         to={isReview ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`}
-        className="text-icon4 hover:text-icon6 shrink-0 font-medium hover:underline"
+        className="text-muted-foreground hover:text-foreground shrink-0 font-medium hover:underline"
       >
         {isReview ? 'Review' : 'Work'}
       </Link>
-      <span className="text-icon3" aria-hidden>
+      <span className="text-muted-foreground" aria-hidden>
         /
       </span>
-      <span className="text-icon6 truncate">{sessionTitle(item)}</span>
+      <span className="text-foreground truncate">{sessionTitle(item)}</span>
     </nav>
   );
 }
@@ -153,7 +156,7 @@ function WorkItemActions({
             <Link
               key={related.id}
               to={relationshipPath(related, factoryId)}
-              className="text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6 flex items-center gap-1.5 rounded-md px-2 py-1"
+              className="text-caption text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
               aria-label={`Open ${label}: ${related.title}`}
             >
               <Link2 size={13} aria-hidden />
@@ -176,7 +179,7 @@ function WorkItemActions({
           </Button>
         );
       })}
-      {item.source === 'github-pr' ? (
+      {isPullRequestSource(item.source) ? (
         <FactoryReviewPullRequestLinks
           factoryId={factoryId}
           projectRepositoryId={projectRepositoryId}

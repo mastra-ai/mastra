@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MCPServerBase, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
@@ -505,6 +506,83 @@ describe('MCP Registry Handlers', () => {
         undefined,
         expect.objectContaining({ requestContext: expect.any(RequestContext) }),
       );
+    });
+
+    it('unwraps completed output and reports suspension for a 2026-07-28 server', async () => {
+      const executeTool = vi
+        .fn()
+        .mockResolvedValueOnce({ status: 'completed', output: { charged: 1 } })
+        .mockResolvedValueOnce({
+          status: 'suspended',
+          suspendPayload: { phase: 'confirm' },
+          resumeSchema: { type: 'object', properties: { confirmed: { type: 'boolean' } } },
+        });
+      const v2Server = { ...mockMCPServer, mcpVersion: 2, executeTool };
+      const mastra = { getMCPServerById: vi.fn(() => v2Server) } as unknown as Mastra;
+
+      const completed = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        toolId: 'confirm',
+        data: {},
+      });
+      expect(completed).toEqual({ result: { charged: 1 } });
+
+      const suspended = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        toolId: 'confirm',
+        data: {},
+      });
+      expect(suspended).toEqual({
+        status: 'suspended',
+        suspendPayload: { phase: 'confirm' },
+        resumeSchema: { type: 'object', properties: { confirmed: { type: 'boolean' } } },
+      });
+    });
+
+    it('forwards resumeData and suspendPayload so a REST caller can answer a suspension', async () => {
+      const executeTool = vi.fn().mockResolvedValue({ status: 'completed', output: { charged: 990 } });
+      const v2Server = { ...mockMCPServer, mcpVersion: 2, executeTool };
+      const mastra = { getMCPServerById: vi.fn(() => v2Server) } as unknown as Mastra;
+
+      const resumed = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        toolId: 'confirm',
+        data: { amount: 990 },
+        resumeData: { confirmed: true },
+        suspendPayload: { phase: 'confirm', amount: 990 },
+      });
+
+      expect(resumed).toEqual({ result: { charged: 990 } });
+      expect(executeTool).toHaveBeenCalledWith(
+        'confirm',
+        { amount: 990 },
+        expect.objectContaining({ resumeData: { confirmed: true }, suspendPayload: { phase: 'confirm', amount: 990 } }),
+      );
+    });
+
+    it('reports invalid input to a 2026-07-28 tool as a 400, not a server failure', async () => {
+      const executeTool = vi.fn().mockRejectedValue(
+        new MastraError({
+          id: 'MCP_SERVER_TOOL_INVALID_INPUT',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          text: 'Tool input validation failed for confirm',
+        }),
+      );
+      const v2Server = { ...mockMCPServer, mcpVersion: 2, executeTool };
+      const mastra = { getMCPServerById: vi.fn(() => v2Server) } as unknown as Mastra;
+
+      await expect(
+        EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          serverId: 'server1',
+          toolId: 'confirm',
+          data: {},
+        }),
+      ).rejects.toMatchObject({ status: 400, message: 'Tool input validation failed for confirm' });
     });
 
     it('should handle tool execution errors', async () => {

@@ -387,7 +387,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: "'off'",
             description:
-              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
+              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. This also controls the default snapshot-persistence policy for durable agents: `running` checkpoints are only written when set to `'auto'` (or when an agent sets a custom `shouldPersistSnapshot` that includes `running`). Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
           },
         ],
       },

@@ -52,9 +52,9 @@ export class LangfuseObservationsReader {
   }
 
   /**
-   * Finds each unique trace with at least one observation starting inside the
-   * selected window. Rows without a trace ID remain visible to the adapter so
-   * it can report them instead of silently dropping them.
+   * Finds each unique trace whose root starts inside the selected window. Rows
+   * without a trace ID remain visible to the adapter so it can report them
+   * instead of silently dropping them.
    */
   async *discoverTraces(window: LangfuseReadWindow): AsyncGenerator<LangfuseTraceDiscovery> {
     const seenTraceIds = new Set<string>();
@@ -62,6 +62,7 @@ export class LangfuseObservationsReader {
     for await (const page of this.pages({
       fields: 'core',
       limit: PAGE_SIZE,
+      isRootObservation: true,
       fromStartTime: window.cutoffAt,
       toStartTime: window.snapshotAt,
       signal: window.signal,

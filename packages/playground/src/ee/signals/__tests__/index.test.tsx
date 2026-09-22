@@ -221,13 +221,6 @@ describe('Trace Intelligence page', () => {
       expect(snapshotSignalNames[0]).toBe('goal,sentiment,behavior,outcome');
     });
 
-    it('keeps exactly one Trace intelligence documentation action across the shell and page', async () => {
-      renderSignalsPageWithShell();
-      await screen.findByRole('region', { name: 'Trace signal theme flow' });
-
-      expect(screen.getAllByRole('link', { name: 'Trace intelligence documentation' })).toHaveLength(1);
-    });
-
     it('keeps the single agent visible in the header selector', async () => {
       renderSignalsPageWithShell();
 

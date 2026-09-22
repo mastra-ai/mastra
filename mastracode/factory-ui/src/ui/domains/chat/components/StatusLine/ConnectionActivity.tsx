@@ -6,7 +6,7 @@ import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { usePreparingThreadId } from '../../hooks/usePreparingThreadId';
 
-const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
+const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
 
 export function ConnectionActivity() {
   const { status } = useChatConnection();

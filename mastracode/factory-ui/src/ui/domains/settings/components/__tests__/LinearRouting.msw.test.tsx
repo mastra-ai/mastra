@@ -11,10 +11,11 @@ import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/boar
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { IntakeSourceBinding } from '../../../factory/services/intake';
-import type { LinearProject } from '../../../factory/services/linear';
+import type { LinearProject, LinearTeam } from '../../../factory/services/linear';
 import { LinearRouting } from '../LinearRouting';
 
 const projects: LinearProject[] = [{ id: 'proj-1', name: 'Releases', state: 'started', teams: [] }];
+const teams: LinearTeam[] = [{ id: 'team-1', key: 'ENG', name: 'Engineering', sourceId: 'linear-team:opaque-team-1' }];
 const factories = [
   { id: 'fp-1', name: 'Acme' },
   { id: 'fp-2', name: 'Globex' },
@@ -39,7 +40,7 @@ function stub(initial: IntakeSourceBinding[]) {
 }
 
 const renderRouting = () =>
-  renderWithProviders(<LinearRouting sourceIds={['proj-1']} projects={projects} factories={factories} />);
+  renderWithProviders(<LinearRouting sourceIds={['proj-1']} projects={projects} teams={teams} factories={factories} />);
 
 describe('LinearRouting board target', () => {
   it('hides the board picker until the project is routed to a Factory', async () => {
@@ -102,5 +103,20 @@ describe('LinearRouting board target', () => {
     // to a board the new Factory never installed.
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0]).toMatchObject({ factoryProjectId: 'fp-2', board: null });
+  });
+
+  it('renders a team source with its friendly team label', async () => {
+    stub([]);
+    renderWithProviders(
+      <LinearRouting
+        sourceIds={['linear-team:opaque-team-1']}
+        projects={projects}
+        teams={teams}
+        factories={factories}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Factory for All issues in Engineering' })).toBeInTheDocument(),
+    );
   });
 });

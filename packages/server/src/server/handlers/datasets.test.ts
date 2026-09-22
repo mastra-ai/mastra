@@ -7,8 +7,10 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
+  listDatasetsQuerySchema,
   listExperimentResultsQuerySchema,
   listExperimentsQuerySchema,
+  listItemsQuerySchema,
   triggerExperimentBodySchema,
 } from '../schemas/datasets';
 import {
@@ -24,6 +26,7 @@ import {
   LIST_ALL_EXPERIMENTS_ROUTE,
   LIST_DATASETS_ROUTE,
   LIST_EXPERIMENTS_ROUTE,
+  LIST_ITEMS_ROUTE,
   LIST_ITEM_VERSIONS_ROUTE,
   PURGE_ITEM_ROUTE,
   TRIGGER_EXPERIMENT_ROUTE,
@@ -233,12 +236,117 @@ describe('Datasets Handlers', () => {
     });
   });
 
+  describe('Ordering', () => {
+    it('parses bracket-notation orderBy (JSON string from normalizeQueryParams) for datasets', () => {
+      const parsed = listDatasetsQuerySchema.parse({ orderBy: JSON.stringify({ field: 'name', direction: 'ASC' }) });
+      expect(parsed.orderBy).toEqual({ field: 'name', direction: 'ASC' });
+    });
+
+    it('rejects unknown orderBy fields for datasets', () => {
+      expect(() =>
+        listDatasetsQuerySchema.parse({ orderBy: JSON.stringify({ field: 'metadata', direction: 'ASC' }) }),
+      ).toThrow();
+    });
+
+    it('rejects malformed orderBy JSON instead of silently dropping it', () => {
+      expect(() => listDatasetsQuerySchema.parse({ orderBy: '{not json' })).toThrow();
+    });
+
+    it('accepts orderBy fields per list', () => {
+      expect(listItemsQuerySchema.parse({ orderBy: { field: 'updatedAt', direction: 'ASC' } }).orderBy).toEqual({
+        field: 'updatedAt',
+        direction: 'ASC',
+      });
+      expect(listExperimentsQuerySchema.parse({ orderBy: { field: 'status', direction: 'DESC' } }).orderBy).toEqual({
+        field: 'status',
+        direction: 'DESC',
+      });
+      expect(
+        listExperimentResultsQuerySchema.parse({ orderBy: { field: 'startedAt', direction: 'DESC' } }).orderBy,
+      ).toEqual({ field: 'startedAt', direction: 'DESC' });
+      expect(() => listItemsQuerySchema.parse({ orderBy: { field: 'name' } })).toThrow();
+    });
+
+    it('forwards orderBy when listing datasets', async () => {
+      const list = vi.spyOn(mastra.datasets, 'list').mockResolvedValue({
+        datasets: [],
+        pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+      } as any);
+
+      await LIST_DATASETS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        orderBy: { field: 'name', direction: 'ASC' },
+      } as any);
+
+      expect(list).toHaveBeenCalledWith({
+        page: 0,
+        perPage: 10,
+        filters: undefined,
+        orderBy: { field: 'name', direction: 'ASC' },
+      });
+    });
+
+    it('forwards orderBy when listing items, experiments and results', async () => {
+      const listItems = vi.fn().mockResolvedValue({ items: [], pagination: {} });
+      const listExperiments = vi.fn().mockResolvedValue({ experiments: [], pagination: {} });
+      const listExperimentResults = vi.fn().mockResolvedValue({ results: [], pagination: {} });
+      const getExperiment = vi.fn().mockResolvedValue({ id: 'exp-1', datasetId: 'dataset-1' });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({
+        listItems,
+        listExperiments,
+        listExperimentResults,
+        getExperiment,
+      } as any);
+      const ctx = createTestServerContext({ mastra });
+
+      await LIST_ITEMS_ROUTE.handler({
+        ...ctx,
+        datasetId: 'dataset-1',
+        orderBy: { field: 'updatedAt', direction: 'ASC' },
+      } as any);
+      expect(listItems).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { field: 'updatedAt', direction: 'ASC' } }),
+      );
+
+      await LIST_EXPERIMENTS_ROUTE.handler({
+        ...ctx,
+        datasetId: 'dataset-1',
+        orderBy: { field: 'status', direction: 'DESC' },
+      } as any);
+      expect(listExperiments).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { field: 'status', direction: 'DESC' } }),
+      );
+
+      await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...ctx,
+        datasetId: 'dataset-1',
+        experimentId: 'exp-1',
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      } as any);
+      expect(listExperimentResults).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { field: 'startedAt', direction: 'DESC' } }),
+      );
+
+      const experimentsStore = await mockStorage.getStore('experiments');
+      const storeList = vi.spyOn(experimentsStore!, 'listExperiments');
+      await LIST_ALL_EXPERIMENTS_ROUTE.handler({
+        ...ctx,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      } as any);
+      expect(storeList).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { field: 'createdAt', direction: 'ASC' } }),
+      );
+    });
+  });
+
   describe('Experiment routes', () => {
     const grouping = {
       experimentSetId: 'set-1',
       comparisonId: 'comparison-1',
       variantId: 'variant-1',
       trialIndex: 0,
+      targetType: 'agent',
+      targetId: 'agent-1',
     };
 
     it('forwards grouping filters when listing all experiments', async () => {
@@ -663,6 +771,38 @@ describe('Datasets Handlers', () => {
   });
 
   describe('LIST_DATASETS_ROUTE', () => {
+    it('filters datasets by targetType and targetIds', async () => {
+      await mastra.datasets.create({ name: 'Agent A', targetType: 'agent', targetIds: ['agent-a'] });
+      await mastra.datasets.create({ name: 'Agent B', targetType: 'agent', targetIds: ['agent-b'] });
+      await mastra.datasets.create({ name: 'Workflow A', targetType: 'workflow', targetIds: ['agent-a'] });
+      await mastra.datasets.create({ name: 'Untyped' });
+
+      const byType = await LIST_DATASETS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        targetType: 'agent',
+      } as any);
+      expect(byType.datasets.map((d: any) => d.name).sort()).toEqual(['Agent A', 'Agent B']);
+
+      const byTypeAndId = await LIST_DATASETS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        targetType: 'agent',
+        targetIds: ['agent-a'],
+      } as any);
+      expect(byTypeAndId.datasets.map((d: any) => d.name)).toEqual(['Agent A']);
+    });
+
+    it('does not pass filters when no target params are given', async () => {
+      const list = vi.spyOn(mastra.datasets, 'list');
+
+      await LIST_DATASETS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(list).toHaveBeenCalledWith({ page: 0, perPage: 10, filters: undefined });
+    });
+
     it('should respect explicit perPage parameter larger than the default', async () => {
       for (let i = 0; i < 15; i++) {
         await mastra.datasets.create({ name: `Dataset ${i + 1}` });

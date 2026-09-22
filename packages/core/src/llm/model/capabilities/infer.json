@@ -1,0 +1,4 @@
+{
+  "attachment": ["infer/gpt-5.6-sol:official", "infer/gpt-6-astra:official"],
+  "structuredOutput": ["infer/gpt-5.6-sol:official", "infer/gpt-6-astra:official"]
+}

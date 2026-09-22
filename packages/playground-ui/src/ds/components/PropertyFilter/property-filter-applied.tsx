@@ -8,6 +8,7 @@ import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 
 export type PropertyFilterAppliedProps = {
   fields: PropertyFilterField[];
@@ -63,7 +64,6 @@ function LockedTokenPill({ field, value, tooltipContent }: LockedTokenPillProps)
       <Tooltip>
         <TooltipTrigger asChild>
           <ButtonsGroup
-            spacing="close"
             data-locked-field-id={field.id}
             data-property-filter-pill="locked"
             tabIndex={0}
@@ -109,7 +109,7 @@ function TextTokenPill({ field, value, onChange, onRemove, disabled, autoFocus }
   }, [autoFocus]);
 
   return (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
       <ButtonsGroupText size="md">is</ButtonsGroupText>
       <Input
@@ -164,7 +164,7 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
   const [open, setOpen] = useState(false);
 
   return (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
       <ButtonsGroupText size="md">is</ButtonsGroupText>
       <Popover open={open} onOpenChange={setOpen}>
@@ -173,7 +173,7 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
             {stringifyTokenValue(token.value)}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={8} className="w-64 p-2" data-pick-multi-panel>
+        <PopoverContent align="start" sideOffset={MENU_SIDE_OFFSET} className="w-64 p-0" data-pick-multi-panel>
           <PickMultiPanel field={field} tokens={tokens} onChange={onChange} />
         </PopoverContent>
       </Popover>
@@ -270,7 +270,7 @@ export function PropertyFilterApplied({
         }
 
         return (
-          <ButtonsGroup spacing="close" key={`${token.fieldId}-${index}`}>
+          <ButtonsGroup key={`${token.fieldId}-${index}`}>
             <ButtonsGroupText size="md">{field.label}</ButtonsGroupText>
             <ButtonsGroupText size="md">is</ButtonsGroupText>
             <ButtonsGroupText size="md">{stringifyTokenValue(token.value)}</ButtonsGroupText>

@@ -1,0 +1,178 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Txt } from '../components/Txt/Txt';
+import { BorderRadius } from './borders';
+import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
+import { Sizes } from './sizes';
+
+const meta: Meta = {
+  title: 'Foundations/Shape',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Radius, spacing and the control sizes. Spacing is one multiplier rather than an enumeration, so every rung exists and a component never has to reach for an arbitrary value.',
+      },
+    },
+  },
+};
+
+export default meta;
+type Story = StoryObj;
+
+type RadiusToken = keyof typeof BorderRadius;
+type SizeToken = keyof typeof Sizes;
+
+const radiusNotes: Record<RadiusToken, string> = {
+  none: 'Flush edge, table cell',
+  sm: 'Chip, tag, small marker',
+  md: 'Control: input, button, menu item',
+  lg: 'Card, container',
+  xl: 'Popover, dialog, floating panel',
+};
+
+// A representative ladder, not the whole multiplier — `--spacing` generates
+// every step between and beyond these.
+const spacingRungs = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32] as const;
+
+const breakpoints = [
+  { token: '--breakpoint-2xl', width: '1536px', use: 'A laptop on an external display — Tailwind stops here' },
+  { token: '--breakpoint-3xl', width: '1700px', use: 'Where the container stops growing and gets capped' },
+  { token: '--breakpoint-4xl', width: '2000px', use: 'Ultrawide and 5K, where two panes can become three' },
+];
+
+const sizeKeys = Object.keys(Sizes) as SizeToken[];
+const iconKeys = sizeKeys.filter(key => key.startsWith('icon-'));
+const controlKeys = sizeKeys.filter(key => key.startsWith('control-'));
+// `dropdown` caps a popup rather than sizing a control, so it sits in the note.
+const elementKeys = sizeKeys.filter(
+  key => !key.startsWith('icon-') && !key.startsWith('control-') && key !== 'dropdown',
+);
+
+const SizeRow = ({ token }: { token: SizeToken }) => (
+  <div className="border-border grid grid-cols-[minmax(0,13rem)_minmax(0,1fr)] items-center gap-4 border-b py-2 last:border-b-0">
+    <Txt variant="meta" font="mono" tone="muted" className="truncate">
+      --spacing-{token}
+    </Txt>
+    <div
+      role="img"
+      aria-label={`${token} height`}
+      className="border-border bg-fill w-40 rounded-md border"
+      style={{ height: `var(--spacing-${token})` }}
+    />
+  </div>
+);
+
+export const ShapeFoundations: Story = {
+  name: 'Shape foundations',
+  render: () => (
+    <FoundationPage
+      eyebrow={`Shape / ${Object.keys(BorderRadius).length + 1 + sizeKeys.length + breakpoints.length} tokens`}
+      title="Shape foundations"
+      description="Radius carries how solid a surface is meant to feel, spacing is a single multiplier, and the control sizes are named so a button, a field and a row agree on one height."
+      note="Spacing rungs are multipliers of --spacing, so p-13 and max-w-140 resolve like any other step."
+      noteAside="Utilities: rounded-*, p-/m-/gap-*, h-*, w-*."
+    >
+      <FoundationSection
+        label="Radius"
+        description="Five steps, chosen by how large the surface is — a chip is not rounded like a dialog."
+      >
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+          {(Object.keys(BorderRadius) as RadiusToken[]).map(token => (
+            <Specimen key={token} name={`--radius-${token}`} note={radiusNotes[token]}>
+              <div
+                role="img"
+                aria-label={`radius ${token}`}
+                className="border-border-strong bg-fill h-20 border"
+                style={{ borderRadius: `var(--radius-${token})` }}
+              />
+            </Specimen>
+          ))}
+        </div>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Spacing"
+        description="One multiplier. The rung is the number in the utility, so gap-4 and p-4 are the same distance."
+      >
+        <div className="flex min-w-0 flex-col gap-2">
+          {spacingRungs.map(rung => (
+            <div key={rung} className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-4">
+              <Txt variant="meta" font="mono" tone="muted">
+                × {rung}
+              </Txt>
+              <div
+                role="img"
+                aria-label={`spacing ${rung}`}
+                className="bg-fill-strong h-3 rounded-sm"
+                style={{ width: `calc(var(--spacing) * ${rung})` }}
+              />
+            </div>
+          ))}
+        </div>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Sizes"
+        description="Named rungs, so every control in a row lands on the same baseline instead of a guessed pixel value. Each is declared once as a named spacing, which is what lets one token drive h-*, w-* and size-* alike. `dropdown` (300px) is the one cap rather than a height: it bounds how far a popup may grow."
+      >
+        <SpecimenGroup label="Icons">
+          <div className="flex flex-wrap items-end gap-6">
+            {iconKeys.map(token => (
+              <div key={token} className="w-32">
+                <Specimen name={`--spacing-${token}`} note={`${Sizes[token]} glyph box`}>
+                  <div
+                    role="img"
+                    aria-label={`${token} icon box`}
+                    className="bg-fill-strong rounded-sm"
+                    style={{ height: `var(--spacing-${token})`, width: `var(--spacing-${token})` }}
+                  />
+                </Specimen>
+              </div>
+            ))}
+          </div>
+        </SpecimenGroup>
+
+        <SpecimenGroup label="Controls">
+          <div className="min-w-0">
+            {controlKeys.map(token => (
+              <SizeRow key={token} token={token} />
+            ))}
+          </div>
+        </SpecimenGroup>
+
+        <SpecimenGroup label="Elements">
+          <div className="min-w-0">
+            {elementKeys.map(token => (
+              <SizeRow key={token} token={token} />
+            ))}
+          </div>
+        </SpecimenGroup>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Breakpoints"
+        description="Tailwind's ladder ends at 2xl, which assumes the widest reader is on a laptop. A studio is left open on a desk monitor all day, so two rungs are added above it — and they are the only non-standard ones, so a sm: or lg: in this codebase means exactly what it means anywhere else."
+      >
+        <div className="min-w-0">
+          {breakpoints.map(breakpoint => (
+            <div
+              key={breakpoint.token}
+              className="border-border grid grid-cols-[minmax(0,10rem)_5rem_minmax(0,1fr)] items-baseline gap-4 border-b py-2 last:border-b-0"
+            >
+              <Txt variant="meta" font="mono" tone="muted">
+                {breakpoint.token}
+              </Txt>
+              <Txt variant="meta" font="mono" tone="faint">
+                {breakpoint.width}
+              </Txt>
+              <Txt variant="caption" tone="muted" className="min-w-0">
+                {breakpoint.use}
+              </Txt>
+            </div>
+          ))}
+        </div>
+      </FoundationSection>
+    </FoundationPage>
+  ),
+};

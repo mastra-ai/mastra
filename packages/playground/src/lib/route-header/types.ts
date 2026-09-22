@@ -18,6 +18,11 @@ interface CrumbBase {
   heading?: string;
   to?: string;
   icon?: RouteHeaderIcon;
+  /**
+   * Hook-driven control rendered next to the crumb label (e.g. an icon-only
+   * entity switcher or a copy button). Mounted in the Crumb `action` slot.
+   */
+  Action?: ComponentType;
 }
 
 export type CrumbDef = CrumbBase &
@@ -47,13 +52,7 @@ export type CrumbDef = CrumbBase &
       }
   );
 
-export interface DocsLink {
-  href: string;
-  label?: string;
-}
-
 export type CrumbsResolver = CrumbDef[] | ((ctx: CrumbCtx) => CrumbDef[]);
-export type DocsResolver = DocsLink | ((ctx: CrumbCtx) => DocsLink | undefined);
 
 export interface RouteHeaderHandle {
   /**
@@ -62,6 +61,4 @@ export interface RouteHeaderHandle {
    * match's params/pathname so dynamic crumbs can pull from URL params.
    */
   crumbs?: CrumbsResolver;
-  /** Docs link rendered on the right of the bar. Deepest match wins. */
-  docs?: DocsResolver;
 }

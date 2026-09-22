@@ -10,7 +10,11 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../../observability';
+import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
@@ -35,11 +39,13 @@ describe('DurableAgent observability tracing', () => {
   let pubsub: EventEmitterPubSub;
   let spanIdCounter = 0;
   let createdSpans: any[] = [];
+  let endGenerationCalls: any[] = [];
 
   beforeEach(() => {
     pubsub = new EventEmitterPubSub();
     spanIdCounter = 0;
     createdSpans = [];
+    endGenerationCalls = [];
   });
 
   afterEach(async () => {
@@ -62,7 +68,7 @@ describe('DurableAgent observability tracing', () => {
       end: vi.fn(),
       error: vi.fn(),
       update: vi.fn(),
-      exportSpan: vi.fn(),
+      exportSpan: vi.fn(() => ({ id: span.id, type })),
       getParentSpanId: vi.fn(() => parentSpan?.id),
       findParent: vi.fn(function (this: any, spanType: string) {
         let current: any = this.parent;
@@ -80,7 +86,9 @@ describe('DurableAgent observability tracing', () => {
       createTracker: vi.fn(() => ({
         getTracingContext: vi.fn(() => ({ currentSpan: span })),
         reportGenerationError: vi.fn(),
-        endGeneration: vi.fn(),
+        endGeneration: vi.fn((args: any) => {
+          endGenerationCalls.push({ spanId: span.id, ...args });
+        }),
         updateGeneration: vi.fn(),
         wrapStream: vi.fn(<T>(stream: T) => stream),
         startStep: vi.fn(),
@@ -117,6 +125,143 @@ describe('DurableAgent observability tracing', () => {
     });
     return { spy, agentSpans, agentSpanOpts };
   }
+
+  /**
+   * The durable finalization step ends MODEL_GENERATION via
+   * `mastra.observability.getSelectedInstance().rebuildSpan(exportedSpan)`, so give the
+   * agent a Mastra whose observability resolves exported span data back to our mock spans.
+   */
+  function registerWithMockObservability(agent: Agent) {
+    const instance = {
+      rebuildSpan: vi.fn((data: any) => createdSpans.find(s => s.id === data?.id)),
+      getConfig: vi.fn().mockReturnValue({ serviceName: 'test' }),
+      getExporters: vi.fn().mockReturnValue([]),
+      getSpanOutputProcessors: vi.fn().mockReturnValue([]),
+      getLogger: vi.fn().mockReturnValue(undefined),
+      getBridge: vi.fn().mockReturnValue(undefined),
+      startSpan: vi.fn(),
+      flush: vi.fn().mockResolvedValue(undefined),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      __setLogger: vi.fn(),
+      __setMastraEnvironment: vi.fn(),
+    } as unknown as ObservabilityInstance;
+    const observability: ObservabilityEntrypoint = {
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      setMastraContext: vi.fn(),
+      setLogger: vi.fn(),
+      getSelectedInstance: vi.fn(() => instance),
+      registerInstance: vi.fn(),
+      getInstance: vi.fn(() => instance),
+      getDefaultInstance: vi.fn(() => instance),
+      listInstances: vi.fn(() => new Map([['default', instance]])),
+      unregisterInstance: vi.fn().mockReturnValue(false),
+      hasInstance: vi.fn().mockReturnValue(true),
+      setConfigSelector: vi.fn(),
+      clear: vi.fn(),
+    };
+    new Mastra({ logger: false, observability, agents: { [agent.id]: agent } });
+  }
+
+  function createToolCallThenTextModel() {
+    let callCount = 0;
+    return new MockLanguageModelV2({
+      doStream: async () => {
+        callCount += 1;
+        const chunks =
+          callCount === 1
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call_1',
+                  toolName: 'get_weather',
+                  input: JSON.stringify({ city: 'Paris' }),
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'It is sunny in Paris.' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } },
+              ];
+        return {
+          stream: convertArrayToReadableStream(chunks as any),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    });
+  }
+
+  it('includes flattened tool calls in the MODEL_GENERATION endGeneration output (#24291)', async () => {
+    const { spy } = await spyOnSpans();
+
+    try {
+      const baseAgent = new Agent({
+        id: 'trace-agent-tool-calls',
+        name: 'Trace Agent (tool calls)',
+        instructions: 'You are a test assistant',
+        model: createToolCallThenTextModel() as LanguageModelV2,
+        tools: {
+          get_weather: createTool({
+            id: 'get_weather',
+            description: 'Get the weather',
+            inputSchema: z.object({ city: z.string() }),
+            execute: async ({ city }) => ({ forecast: `Sunny in ${city}` }),
+          }),
+        },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      registerWithMockObservability(durableAgent as unknown as Agent);
+
+      const { output, cleanup } = await durableAgent.stream('What is the weather in Paris?');
+      await output.consumeStream();
+
+      const finalCall = endGenerationCalls.find(call => call.output?.text === 'It is sunny in Paris.');
+      expect(finalCall).toBeDefined();
+      expect(finalCall.output.toolCalls).toEqual([
+        { toolCallId: 'call_1', toolName: 'get_weather', args: { city: 'Paris' } },
+      ]);
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('omits toolCalls from the MODEL_GENERATION endGeneration output for a text-only durable run', async () => {
+    const { spy } = await spyOnSpans();
+
+    try {
+      const baseAgent = new Agent({
+        id: 'trace-agent-text-only',
+        name: 'Trace Agent (text only)',
+        instructions: 'You are a test assistant',
+        model: createTextStreamModel('Hello') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      registerWithMockObservability(durableAgent as unknown as Agent);
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      const finalCall = endGenerationCalls.find(call => call.output?.text === 'Hello');
+      expect(finalCall).toBeDefined();
+      expect(finalCall.output.toolCalls).toBeUndefined();
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
 
   it('opens an AGENT_RUN root span with a MODEL_GENERATION child for a durable run', async () => {
     const { spy, agentSpans } = await spyOnSpans();

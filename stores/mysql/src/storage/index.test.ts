@@ -1,4 +1,4 @@
-import { createTestSuite } from '@internal/storage-test-utils';
+import { createSpan, createTestSuite } from '@internal/storage-test-utils';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { MySQLStore } from './index';
@@ -32,4 +32,39 @@ createTestSuite(store, { toolMocks: false });
 
 afterAll(async () => {
   await store.close();
+});
+
+describe('retention', () => {
+  it('prunes expired observability spans in bounded batches', async () => {
+    const retentionStore = new MySQLStore({
+      ...TEST_CONFIG,
+      id: 'mysql-retention-test',
+      retention: { observability: { spans: { maxAge: '30d', batchSize: 1 } } },
+    });
+
+    try {
+      await retentionStore.init();
+      const observability = await retentionStore.getStore('observability');
+      expect(observability).toBeDefined();
+      await observability!.dangerouslyClearAll();
+      await observability!.createSpan({
+        span: createSpan({ traceId: 'expired', spanId: 'expired', startedAt: new Date(Date.now() - 31 * 86_400_000) }),
+      });
+      await observability!.createSpan({
+        span: createSpan({
+          traceId: 'retained',
+          spanId: 'retained',
+          startedAt: new Date(Date.now() - 29 * 86_400_000),
+        }),
+      });
+
+      await expect(retentionStore.prune()).resolves.toEqual([
+        { domain: 'observability', table: 'mastra_ai_spans', deleted: 1, done: true },
+      ]);
+      await expect(observability!.getTrace({ traceId: 'expired' })).resolves.toBeNull();
+      await expect(observability!.getTrace({ traceId: 'retained' })).resolves.not.toBeNull();
+    } finally {
+      await retentionStore.close();
+    }
+  });
 });

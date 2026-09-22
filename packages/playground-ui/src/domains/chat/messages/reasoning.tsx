@@ -1,37 +1,33 @@
-import { BrainIcon, ChevronUpIcon } from 'lucide-react';
-import { useState } from 'react';
-import { Badge } from '@/ds/components/Badge';
-import { Icon } from '@/ds/icons/Icon';
-import { cn } from '@/lib/utils';
+import { ChevronRightIcon } from 'lucide-react';
+import { ReasoningStreamingLine } from './reasoning-streaming-line';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 export interface ReasoningProps {
   text: string;
   redacted?: boolean;
+  streaming?: boolean;
 }
 
-export const Reasoning = ({ text, redacted }: ReasoningProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
+export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
   const body = redacted ? 'Reasoning was redacted by the provider.' : text;
 
-  if (!body) {
-    return null;
+  if (!body.trim()) {
+    return streaming ? <ReasoningStreamingLine text="Reasoning..." /> : null;
   }
 
   return (
-    <div className="mb-2 space-y-2">
-      <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2">
-        <Icon>
-          <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
-        </Icon>
-        <Badge icon={<BrainIcon />}>{isCollapsed ? 'Show' : 'Hide'} reasoning</Badge>
-      </button>
+    <Collapsible defaultOpen className="my-1.5 min-w-0">
+      <CollapsibleTrigger className="text-caption text-muted-foreground flex cursor-pointer items-center gap-1.5 pointer-coarse:min-h-11">
+        <ChevronRightIcon className="size-3.5 shrink-0" />
+        Reasoning
+      </CollapsibleTrigger>
 
-      {!isCollapsed ? (
-        <div className="border-border-1 bg-surface4 rounded-lg border p-2">
-          <pre className="text-ui-sm leading-ui-sm text-neutral6 whitespace-pre-wrap">{body}</pre>
-        </div>
-      ) : null}
-    </div>
+      <CollapsibleContent className="border-border mt-1.5 min-w-0 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+        <MarkdownRenderer className="text-muted-foreground text-caption" streaming={streaming && !redacted}>
+          {body}
+        </MarkdownRenderer>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };

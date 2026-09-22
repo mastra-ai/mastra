@@ -7,7 +7,6 @@ import { RouteHeaderActions, RouteHeaderActionsProvider, RouteHeaderActionsSlot 
 import { RouteHeaderCrumbs, RouteHeaderCrumbsProvider } from '../route-header-crumbs';
 import { getRouteHeaderHeading } from '../route-heading';
 import type { CrumbDef, RouteHeaderHandle } from '../types';
-import { useRouteHeader } from '../use-route-header';
 import { routes } from '@/App';
 import { ExperimentCrumb } from '@/domains/experiments/experiment-crumb';
 
@@ -107,11 +106,6 @@ function hasRenderableNode(crumb: CrumbDef) {
   if ('label' in crumb) return crumb.label !== '';
   if ('node' in crumb) return crumb.node !== null && crumb.node !== undefined && crumb.node !== '';
   return Boolean(crumb.Component);
-}
-
-function RouteHeaderProbe() {
-  const { docs } = useRouteHeader();
-  return <div data-testid="route-docs">{docs?.href ?? 'none'}</div>;
 }
 
 function RouteHeaderOverrideProbe() {
@@ -246,30 +240,6 @@ describe('route header handles', () => {
       });
       expect(crumbs.at(-1)).toMatchObject({ label: '%E0%A4%A' });
     }).not.toThrow();
-  });
-
-  it('allows deeper route handles to clear inherited docs links', async () => {
-    const router = createMemoryRouter(
-      [
-        {
-          path: '/',
-          element: <Outlet />,
-          handle: { docs: { href: 'https://example.com/docs' } },
-          children: [
-            {
-              path: 'child',
-              element: <RouteHeaderProbe />,
-              handle: { crumbs: [{ id: 'child', label: 'Child' }], docs: () => undefined },
-            },
-          ],
-        },
-      ],
-      { initialEntries: ['/child'] },
-    );
-
-    render(<RouterProvider router={router} />);
-
-    await waitFor(() => expect(screen.getByTestId('route-docs').textContent).toBe('none'));
   });
 
   it('renders only the active route header action owner', async () => {

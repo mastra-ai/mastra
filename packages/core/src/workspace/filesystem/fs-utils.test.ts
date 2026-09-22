@@ -25,6 +25,7 @@ import {
   isEexistError,
   isEnoentError,
   isTextFile,
+  normalizeTextExtension,
   resolveToBasePath,
 } from './fs-utils';
 
@@ -149,6 +150,9 @@ describe('getMimeType', () => {
   it('returns application/typescript for .tsx', () =>
     expect(getMimeType('Component.tsx')).toBe('application/typescript'));
   it('returns application/json for .json', () => expect(getMimeType('package.json')).toBe('application/json'));
+  it('returns text/plain for .sas', () => expect(getMimeType('report.sas')).toBe('text/plain'));
+  it('returns text/plain for .log', () => expect(getMimeType('app.log')).toBe('text/plain'));
+  it('returns application/jsonl for .jsonl', () => expect(getMimeType('data.jsonl')).toBe('application/jsonl'));
 
   // Images
   it('returns image/png for .png', () => expect(getMimeType('logo.png')).toBe('image/png'));
@@ -173,6 +177,14 @@ describe('getMimeType', () => {
 
   it('returns application/octet-stream for a file with no extension', () =>
     expect(getMimeType('Makefile')).toBe('application/octet-stream'));
+
+  it('returns application/octet-stream for extensions matching Object.prototype members', () => {
+    expect(getMimeType('file.constructor')).toBe('application/octet-stream');
+    expect(getMimeType('file.__proto__')).toBe('application/octet-stream');
+    expect(getMimeType('file.hasOwnProperty')).toBe('application/octet-stream');
+    expect(getMimeType('file.toString')).toBe('application/octet-stream');
+    expect(getMimeType('file.valueOf')).toBe('application/octet-stream');
+  });
 
   it('is case-insensitive for extensions', () => expect(getMimeType('IMAGE.PNG')).toBe('image/png'));
 
@@ -217,6 +229,21 @@ describe('isTextFile', () => {
   it('returns true for .kt', () => expect(isTextFile('Main.kt')).toBe(true));
   it('returns true for .tf', () => expect(isTextFile('main.tf')).toBe(true));
   it('returns true for .dart', () => expect(isTextFile('main.dart')).toBe(true));
+  it('returns true for .sas', () => expect(isTextFile('report.sas')).toBe(true));
+  it('returns true for .log', () => expect(isTextFile('app.log')).toBe(true));
+  it('returns true for .jsonl', () => expect(isTextFile('data.jsonl')).toBe(true));
+
+  // Configurable extra extensions
+  it('returns false for an unknown extension without extras', () => expect(isTextFile('data.foo')).toBe(false));
+  it('returns true for an extension supplied via extraExtensions', () =>
+    expect(isTextFile('data.foo', new Set(['.foo']))).toBe(true));
+  it('is case-insensitive for extraExtensions', () => expect(isTextFile('DATA.FOO', new Set(['.foo']))).toBe(true));
+});
+
+describe('normalizeTextExtension', () => {
+  it('lowercases and adds a leading dot', () => expect(normalizeTextExtension('SAS')).toBe('.sas'));
+  it('keeps an existing leading dot', () => expect(normalizeTextExtension('.LOG')).toBe('.log'));
+  it('trims surrounding whitespace', () => expect(normalizeTextExtension('  .jsonl  ')).toBe('.jsonl'));
 });
 
 // ---------------------------------------------------------------------------

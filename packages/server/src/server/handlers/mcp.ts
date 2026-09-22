@@ -1,4 +1,9 @@
-import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo } from '@mastra/core/mcp';
+import { MastraError } from '@mastra/core/error';
+import type {
+  MCPServerBase as MastraMCPServerImplementation,
+  MCPToolExecutionResultV2,
+  ServerInfo,
+} from '@mastra/core/mcp';
 import { HTTPException } from '../http-exception';
 import {
   mcpServerDetailPathParams,
@@ -24,6 +29,14 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 // ============================================================================
 // Route Definitions (createRoute pattern for server adapters)
 // ============================================================================
+
+/**
+ * Only `@mastra/mcp` 1.x servers implement the standalone HTTP+SSE transport; on a
+ * 2026-07-28 server the inherited `startSSE`/`startHonoSSE` throw.
+ */
+function hasSSETransport(server: MastraMCPServerImplementation): boolean {
+  return server.mcpVersion !== 2;
+}
 
 export const LIST_MCP_SERVERS_ROUTE = createRoute({
   method: 'GET',
@@ -218,8 +231,16 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
     serverId,
     toolId,
     data,
+    resumeData,
+    suspendPayload,
     requestContext,
-  }: ServerContext & { serverId: string; toolId: string; data?: unknown }) => {
+  }: ServerContext & {
+    serverId: string;
+    toolId: string;
+    data?: unknown;
+    resumeData?: unknown;
+    suspendPayload?: unknown;
+  }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -232,6 +253,29 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
 
     if (typeof server.executeTool !== 'function') {
       throw new HTTPException(501, { message: `Server '${serverId}' cannot execute tools in this way.` });
+    }
+
+    if (server.mcpVersion === 2) {
+      // A 2026-07-28 server runs the tool with no protocol client attached: a tool
+      // that suspends for input is reported as such instead of pretending it finished, and
+      // the caller answers by sending the same args with `resumeData` and `suspendPayload`.
+      let execution: MCPToolExecutionResultV2;
+      try {
+        execution = await server.executeTool(toolId, data, { requestContext, resumeData, suspendPayload });
+      } catch (error) {
+        if (error instanceof MastraError && error.id === 'MCP_SERVER_TOOL_INVALID_INPUT') {
+          throw new HTTPException(400, { message: error.message, cause: error });
+        }
+        throw error;
+      }
+      if (execution.status === 'suspended') {
+        return {
+          status: 'suspended' as const,
+          suspendPayload: execution.suspendPayload,
+          resumeSchema: execution.resumeSchema,
+        };
+      }
+      return { result: execution.output };
     }
 
     const result = await server.executeTool(toolId, data, { requestContext });
@@ -356,6 +400,7 @@ export interface MCPHttpTransportResult {
  * Note: SSE transport is inherently stateful and doesn't support serverless mode.
  */
 export interface MCPSseTransportResult {
+  /** A 1.x server: the SSE route only resolves servers that still implement the transport. */
   server: MastraMCPServerImplementation;
   ssePath: string;
   messagePath: string;
@@ -406,6 +451,10 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });
+    }
+
+    if (!hasSSETransport(server)) {
+      throw new HTTPException(404, { message: 'Legacy SSE transport is unavailable for MCP v2 servers' });
     }
 
     return {

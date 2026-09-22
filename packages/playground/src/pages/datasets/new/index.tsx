@@ -21,6 +21,10 @@ function CreateDatasetPage() {
           .filter(Boolean)
       : undefined;
 
+  const handleSuccess = (datasetId: string) => {
+    void navigate(`/datasets/${datasetId}`);
+  };
+
   return (
     <PageLayout height="full">
       <div />
@@ -40,7 +44,7 @@ function CreateDatasetPage() {
             <CreateDatasetForm
               targetType={targetType}
               targetIds={targetIds}
-              onSuccess={datasetId => void navigate(`/datasets/${datasetId}`)}
+              onSuccess={handleSuccess}
               onCancel={() => void navigate(-1)}
             />
           </Card>

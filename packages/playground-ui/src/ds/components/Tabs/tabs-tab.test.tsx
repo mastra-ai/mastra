@@ -2,10 +2,12 @@
 import { cleanup, act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { buttonVariants } from '../Button/Button';
 import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
+import { cn } from '@/lib/utils';
 
 beforeEach(() => {
   vi.stubGlobal('PointerEvent', window.MouseEvent);
@@ -477,18 +479,18 @@ describe('Tab', () => {
         </Tabs>,
       );
 
-      const isTooltipTrigger = (name: string) =>
-        screen.getByRole('tab', { name }).hasAttribute('data-base-ui-tooltip-trigger');
+      const tooltipTrigger = (name: string) => screen.getByRole('tab', { name }).parentElement;
 
       // Only a tab that is both disabled and has something to say gets one.
-      expect(isTooltipTrigger('Explained')).toBe(true);
-      expect(isTooltipTrigger('Silent')).toBe(false);
-      expect(isTooltipTrigger('Enabled with text')).toBe(false);
-      expect(isTooltipTrigger('Enabled')).toBe(false);
+      expect(tooltipTrigger('Explained')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(true);
+      expect(tooltipTrigger('Explained')?.tabIndex).toBe(0);
+      expect(tooltipTrigger('Silent')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
+      expect(tooltipTrigger('Enabled with text')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
+      expect(tooltipTrigger('Enabled')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
     });
   });
 
-  it('keeps a caller class alongside its own', () => {
+  it('keeps a caller class', () => {
     render(
       <Tabs defaultTab="first">
         <TabList>
@@ -502,6 +504,93 @@ describe('Tab', () => {
 
     const tab = screen.getByRole('tab', { name: 'First' });
     expect(tab.className).toContain('my-own-class');
-    expect(tab.className).toContain('text-neutral3');
+  });
+
+  describe('pill-ghost variant', () => {
+    it('renders tabs from the shared ghost buttonVariants recipe', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill-ghost">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      const tabClasses = tab.className.split(/\s+/);
+      // `cn` merges the raw recipe the same way <Button> does (e.g. tailwind-merge drops `leading-0`
+      // in favour of the size's `text-*`), so compare against the merged form.
+      for (const token of cn(buttonVariants({ variant: 'ghost', size: 'md' })).split(/\s+/)) {
+        expect(tabClasses).toContain(token);
+      }
+      // The list owns no padding of its own — the button recipe is the only source of spacing.
+      const list = screen.getByRole('tablist');
+      expect(list.className).not.toMatch(/\bp-1\b/);
+      expect(list.className).toContain('gap-0.5');
+    });
+
+    it('does not apply the button recipe to pill tabs', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      expect(tab.className).not.toContain('h-control-md');
+    });
+  });
+
+  describe('size', () => {
+    it('when size="sm" on pill-ghost, then tabs use the sm button recipe', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill-ghost" size="sm">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tabClasses = screen.getByRole('tab', { name: 'First' }).className.split(/\s+/);
+      for (const token of cn(buttonVariants({ variant: 'ghost', size: 'sm' })).split(/\s+/)) {
+        expect(tabClasses).toContain(token);
+      }
+    });
+
+    it('when size="sm" on pill, then tabs take the sm control height and the list is tagged with the size', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill" size="sm">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      expect(tab.className).toContain('h-control-sm');
+      expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('sm');
+    });
+
+    it('when size is omitted, then tabs keep the md box', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      expect(tab.className).toContain('text-label');
+      expect(tab.className).not.toContain('h-control-sm');
+      expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('md');
+    });
   });
 });

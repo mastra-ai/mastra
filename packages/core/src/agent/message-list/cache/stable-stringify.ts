@@ -13,7 +13,11 @@
 export function stableStringify(value: unknown): string {
   return JSON.stringify(value, (_key, val) => {
     if (val && typeof val === 'object' && !Array.isArray(val)) {
-      const sorted: Record<string, unknown> = {};
+      // Use a null-prototype object so an own `__proto__` key is written as a
+      // real own property instead of triggering the inherited Object.prototype
+      // setter (which would silently drop it and collapse distinct values onto
+      // one cache key).
+      const sorted: Record<string, unknown> = Object.create(null);
       for (const k of Object.keys(val as Record<string, unknown>).sort()) {
         sorted[k] = (val as Record<string, unknown>)[k];
       }

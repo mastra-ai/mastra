@@ -70,7 +70,7 @@ function DatasetCompareVersionsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 py-5 text-center">
+          <div className="text-muted-foreground py-5 text-center">
             <p>Select at least two versions to compare.</p>
           </div>
         </MainContentContent>
@@ -101,7 +101,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`} icon={<ArrowLeft />}>
+              <Button render={<Link to={`/datasets/${datasetId}`} />} icon={<ArrowLeft />}>
                 Back to Dataset
               </Button>
             </MainHeader.Column>

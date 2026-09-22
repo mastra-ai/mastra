@@ -846,7 +846,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         const formattedResult = await this.fmtReturnValue<any>(
           params.pubsub,
           stepResults,
-          { status: 'canceled' } as any,
+          { status: 'canceled' },
           undefined,
           stepExecutionPath,
         );

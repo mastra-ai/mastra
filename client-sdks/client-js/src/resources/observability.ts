@@ -1,5 +1,8 @@
-import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { SpanType } from '@mastra/core/observability';
+import type { QueryThreadsInput, QueryThreadsResult, TraceQueryPredicate } from '@mastra/core/storage';
+import type { ClientOptions, ListFeedbackResponse } from '../types';
+import { toQueryParams } from '../utils';
+import { BaseResource } from './base';
 import type {
   TraceRecord,
   GetTraceLightResponse,
@@ -9,6 +12,10 @@ import type {
   ListTracesLightResponse,
   TraceQueryRequest,
   TraceQueryResponse,
+  GetTraceQueryFieldsArgs,
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesArgs,
+  GetTraceQueryValuesResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -19,12 +26,14 @@ import type {
   PaginationInfo,
   ScoreTracesRequest,
   ScoreTracesResponse,
-  // Logs
+  DeleteTracesRequest,
+  DeleteTracesResponse,
+  ListScoresResponse,
+  Trajectory,
   ListLogsArgs,
   ListLogsResponse,
-  // Scores (observability)
   ListScoresArgs,
-  ListScoresResponse as ListScoresResponseNew,
+  ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
   DeleteScoresArgs,
@@ -37,7 +46,6 @@ import type {
   GetScoreTimeSeriesResponse,
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
-  // Feedback
   ListFeedbackArgs,
   CreateFeedbackBody,
   CreateFeedbackResponse,
@@ -53,7 +61,6 @@ import type {
   GetFeedbackTimeSeriesResponse,
   GetFeedbackPercentilesArgs,
   GetFeedbackPercentilesResponse,
-  // Metrics OLAP
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
   GetMetricBreakdownArgs,
@@ -62,7 +69,6 @@ import type {
   GetMetricTimeSeriesResponse,
   GetMetricPercentilesArgs,
   GetMetricPercentilesResponse,
-  // Discovery
   GetMetricNamesArgs,
   GetMetricNamesResponse,
   GetMetricLabelKeysArgs,
@@ -76,10 +82,7 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
-} from '@mastra/core/storage';
-import type { ClientOptions, ListFeedbackResponse } from '../types';
-import { toQueryParams } from '../utils';
-import { BaseResource } from './base';
+} from './observability-route-types.js';
 
 // ============================================================================
 // Legacy Types (for backward compatibility with main branch API)
@@ -122,6 +125,42 @@ export interface LegacyGetTracesResponse {
 }
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
+
+type QueryTracesBaseInput = Omit<
+  TraceQueryRequest,
+  'group' | 'where' | 'page' | 'pagination' | 'mode' | 'after' | 'limit'
+> & {
+  where?: TraceQueryPredicate;
+  group?: never;
+};
+
+export type QueryTracesKeysetInput = QueryTracesBaseInput & {
+  page?: TraceQueryRequest['page'];
+  pagination?: never;
+  mode?: never;
+  after?: never;
+  limit?: never;
+};
+
+export type QueryTracesPaginatedInput = QueryTracesBaseInput & {
+  page?: never;
+  pagination: NonNullable<TraceQueryRequest['pagination']>;
+  mode?: never;
+  after?: never;
+  limit?: never;
+};
+
+export type QueryTracesDeltaInput = Omit<QueryTracesBaseInput, 'orderBy'> & {
+  mode: 'delta';
+  after?: string;
+  limit?: number;
+  page?: never;
+  pagination?: never;
+  orderBy?: never;
+};
+export type QueryTracesInput = QueryTracesKeysetInput | QueryTracesPaginatedInput | QueryTracesDeltaInput;
+export type QueryTraceThreadsInput = QueryThreadsInput;
+export type QueryTraceThreadsResult = QueryThreadsResult;
 
 // ============================================================================
 // Observability Resource
@@ -238,10 +277,50 @@ export class Observability extends BaseResource {
    * Queries completed logical traces using recursive trace and related-record predicates.
    *
    * @param params - Advanced trace query, including its required time range
-   * @returns Matching lightweight traces or distinct thread groups
+   * @returns Matching lightweight traces
    */
-  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+  queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
+  queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
+  queryTraces(params: QueryTracesKeysetInput): Promise<Extract<TraceQueryResponse, { page: unknown }>>;
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });
+  }
+
+  /** Returns canonical and observed fields available to the advanced trace-query grammar. */
+  getTraceQueryFields(
+    params: GetTraceQueryFieldsArgs,
+    options?: { signal?: AbortSignal },
+  ): Promise<GetTraceQueryFieldsResponse> {
+    return this.request('/observability/traces/query/fields', {
+      method: 'POST',
+      body: params,
+      retries: 0,
+      signal: options?.signal,
+    });
+  }
+
+  /** Returns bounded string suggestions for one eligible trace-query field. */
+  getTraceQueryValues(
+    params: GetTraceQueryValuesArgs,
+    options?: { signal?: AbortSignal },
+  ): Promise<GetTraceQueryValuesResponse> {
+    return this.request('/observability/traces/query/values', {
+      method: 'POST',
+      body: params,
+      retries: 0,
+      signal: options?.signal,
+    });
+  }
+
+  /**
+   * Queries thread identities using eligible-trace and cross-trace predicates.
+   *
+   * @param params - Thread query with its eligible trace selection
+   * @returns Matching thread identities
+   */
+  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+    return this.request('/observability/threads/query', { method: 'POST', body: params });
   }
 
   /**
@@ -326,10 +405,10 @@ export class Observability extends BaseResource {
    * @param params - IDs of the traces to delete
    * @returns Promise resolving to `{ success: true }` once the delete is issued
    */
-  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+  deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
     return this.request(`/observability/traces/delete`, {
       method: 'POST',
-      body: { traceIds: params.traceIds },
+      body: params,
     });
   }
 

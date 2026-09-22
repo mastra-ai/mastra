@@ -28,6 +28,7 @@ import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
+  const { entries } = transcript;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -57,7 +58,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   return (
     <ArrivalScope>
       <TranscriptEntries
-        entries={transcript.entries}
+        entries={entries}
         restoredHistory
         isSubmitting={approving || responding}
         onApprove={onApprove}

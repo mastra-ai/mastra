@@ -1,5 +1,5 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
-import Ajv from 'ajv';
+import { Ajv } from 'ajv';
 import Ajv2020 from 'ajv/dist/2020.js';
 import type { JSONSchema7 } from 'json-schema';
 import traverse from 'json-schema-traverse';

@@ -185,7 +185,9 @@ describe('resumeStream + toAISdkStream', () => {
 
     const [rawResumeStream, aiInputStream] = resumedStream.fullStream.tee();
     const rawChunks = await collectChunks(rawResumeStream);
-    const aiChunks = await collectChunks(toAISdkStream(aiInputStream as any, { from: 'agent' }));
+    const aiChunks = await collectChunks(
+      toAISdkStream(aiInputStream as any, { from: 'agent', includeSubAgentMetadata: true }),
+    );
 
     expect(rawChunks[0]?.type).toBe('tool-output');
     expect(rawChunks[0]?.payload?.output?.type).toBe('tool-result');

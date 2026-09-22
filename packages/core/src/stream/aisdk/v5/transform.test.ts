@@ -745,6 +745,42 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
+    it('should unwrap usage and finish reason re-nested by the AI SDK v2 compatibility shim', () => {
+      // Shape produced when ai@7 `wrapLanguageModel` wraps a model that advertises
+      // 'v2' but already emits V3/V4 chunks (e.g. Mastra's model router).
+      const chunk = {
+        type: 'finish',
+        finishReason: { unified: { unified: 'stop', raw: 'STOP' }, raw: undefined },
+        usage: {
+          inputTokens: {
+            total: { total: 17754, noCache: 5950, cacheRead: 12088, cacheWrite: 3 },
+            noCache: undefined,
+            cacheRead: undefined,
+            cacheWrite: undefined,
+          },
+          outputTokens: { total: { total: 20, text: 15, reasoning: 5 }, text: undefined, reasoning: undefined },
+        },
+        providerMetadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      } as unknown as StreamPart;
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.stepResult.rawReason).toBe('STOP');
+        expect(result.payload.output.usage).toMatchObject({
+          inputTokens: 17754,
+          outputTokens: 20,
+          totalTokens: 17774,
+          reasoningTokens: 5,
+          cachedInputTokens: 12088,
+          cacheCreationInputTokens: 3,
+        });
+      }
+    });
+
     it('should preserve Google/Gemini providerMetadata for finish chunks', () => {
       const providerMetadata = {
         google: {

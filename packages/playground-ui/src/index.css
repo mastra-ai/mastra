@@ -1,18 +1,11 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-/* Tokens (:root/html.light + @theme) live in ../theme.css so they also ship raw
-   as @mastra/playground-ui/theme.css. Edit tokens there, not here. */
 @import '../theme.css';
 
 @plugin '@tailwindcss/typography';
 
 @custom-variant dark (&:is(.dark *));
-
-/*
- * This package ships no font files. Declare your own `@font-face` rules and
- * override --font-display / --font-body / --font-mono in :root to apply them.
- */
 
 @utility container {
   margin-inline: auto;
@@ -25,12 +18,90 @@
   }
 }
 
-@utility shadow-main-frame {
-  box-shadow: var(--shadow-main-frame);
+/* Assembled here, not in `theme.css`, so `--surface-rim` resolves against the
+ * element wearing the utility: a custom property that referenced it would be
+ * substituted once on the root and inherited as a finished string.
+ *
+ * `--surface-tint` is the state layer of a surface that cannot carry a
+ * pseudo-element — an `<input>`. An inset shadow paints over the element's own
+ * fill and under its content, so a wash there behaves like `state-layer`'s
+ * `::before` without needing a child, and it sits below the rim layer so the
+ * boundary keeps its resting weight while the fill moves. Each utility resets
+ * it, because a custom property would otherwise inherit into every raised
+ * surface nested inside a hovered one. */
+@utility shadow-raised {
+  --surface-tint: transparent;
+
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
+    var(--elevation-raised);
 }
 
-@utility shadow-dialog {
-  box-shadow: var(--shadow-dialog);
+@utility shadow-overlay {
+  --surface-tint: transparent;
+
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
+    var(--elevation-overlay);
+}
+
+/* Interaction states for a surface that already has an opaque fill.
+ *
+ * A `hover:bg-fill-subtle` on such a surface *replaces* its `background-color`,
+ * so the rung composites over the parent instead of over the surface. Measured
+ * on `bg-muted`, that lands 3 levels darker in dark and 5 lighter in light — the
+ * hover inverts across themes. Layered, the same rung is +9/-9 from whatever it
+ * sits on, in both themes, whatever the resting rung.
+ *
+ * The layer is a pseudo-element rather than a `background-image` so it can still
+ * transition, and it stops a pixel short of the edge to leave the inset rim of
+ * `shadow-raised` visible. `isolation` is what keeps a negative z-index from
+ * escaping to an ancestor's stacking context.
+ *
+ * It does not touch the rim: `--surface-rim` inherits, so brightening it here
+ * would repaint the rim of every raised surface nested inside the hovered one.
+ *
+ * This and `--surface-tint` are the same rung by two mechanisms, and both stay:
+ * the pseudo-element transitions its colour and stops a pixel short of the rim,
+ * which is what a surface with content inside it wants; the tint paints edge to
+ * edge, cannot transition (a box-shadow list transitions as a whole, so the rim
+ * and the drops would animate with it), and is the only option for an element
+ * that cannot own a child — an `<input>`. Reach for this one unless the element
+ * is a bare control. */
+@utility state-layer {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    transition: background-color var(--duration-fast) var(--ease-out-custom);
+  }
+
+  &:not(:disabled, [aria-disabled='true']) {
+    &:hover::before,
+    &:focus-visible::before {
+      background-color: var(--fill-subtle);
+    }
+
+    &:active::before {
+      background-color: var(--fill);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::before {
+      transition: none;
+    }
+  }
 }
 
 @utility rounded-studio-frame {
@@ -45,42 +116,32 @@
   border-top-right-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
 }
 
-@utility bg-sidebar-nav-hover {
-  background-color: var(--sidebar-nav-hover);
-}
-
-@utility bg-sidebar-nav-active {
-  background-color: var(--sidebar-nav-active);
-}
-
 @layer utilities {
   .shiki-token {
-    color: var(--shiki-light, var(--neutral6));
+    color: var(--shiki-light, var(--foreground));
     background-color: var(--shiki-light-bg, transparent);
   }
 
   .dark .shiki-token {
-    color: var(--shiki-dark, var(--neutral6));
+    color: var(--shiki-dark, var(--foreground));
     background-color: var(--shiki-dark-bg, transparent);
   }
 }
 
 @layer base {
   * {
-    border-color: var(--border1);
+    border-color: var(--border);
   }
   body {
-    background-color: var(--surface1);
-    color: var(--neutral6);
+    background-color: var(--sidebar);
+    color: var(--foreground);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Design-system scrollbars — thin, themed thumb on a transparent track.
-     Applies app-wide so native OS scrollbars no longer clash with DS surfaces. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklab, var(--neutral4) 30%, transparent) transparent;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 30%, transparent) transparent;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -90,20 +151,18 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: color-mix(in oklab, var(--neutral4) 30%, transparent);
+    background-color: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
     border-radius: 9999px;
     border: 3px solid transparent;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in oklab, var(--neutral4) 55%, transparent);
+    background-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
   }
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
 }
-
-/* your custom layer goes AFTER Tailwind imports */
 
 @utility wrap-break-word {
   overflow-wrap: break-word;
@@ -131,12 +190,13 @@
 }
 
 .react-flow__controls-button {
-  color: #e6e6e6 !important;
-  background-color: #121212 !important;
-  border: none !important;
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-color-hover: var(--foreground);
+  --xy-controls-button-background-color: var(--surface-panel);
+  --xy-controls-button-background-color-hover: var(--gray-2);
+  --xy-controls-button-border-color: transparent;
 }
 
-/* Click ripple animation for browser view */
 @keyframes click-ripple {
   0% {
     transform: scale(0);
@@ -153,12 +213,9 @@
   animation: click-ripple 300ms ease-out forwards;
 }
 
-/* Temporary highlight for delta-arrived list rows.
-   Same color as the featured / hover state (var(--surface5)), starts fully
-   visible and immediately fades out to transparent over 2s. */
 @keyframes fade-row-highlight {
   0% {
-    background-color: var(--surface5);
+    background-color: var(--fill-hover);
   }
 
   100% {
@@ -168,4 +225,45 @@
 
 .animate-row-highlight {
   animation: fade-row-highlight 2000ms ease-out forwards;
+}
+
+/* Sort arrows are "drawn" in their pointing direction: asc reveals from the
+   bottom up, desc from the top down. */
+@keyframes sort-arrow-reveal-up {
+  0% {
+    clip-path: inset(100% 0 0 0);
+    transform: translateY(20%);
+  }
+
+  100% {
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes sort-arrow-reveal-down {
+  0% {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-20%);
+  }
+
+  100% {
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
+
+.animate-sort-arrow-up {
+  animation: sort-arrow-reveal-up 200ms var(--ease-out-custom) both;
+}
+
+.animate-sort-arrow-down {
+  animation: sort-arrow-reveal-down 200ms var(--ease-out-custom) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sort-arrow-up,
+  .animate-sort-arrow-down {
+    animation: none;
+  }
 }

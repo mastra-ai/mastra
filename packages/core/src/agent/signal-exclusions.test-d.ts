@@ -51,11 +51,13 @@ describe('signal visibility API ownership', () => {
     void durable.stream('hello', { excludeSignals: ['reactive'] });
     // @ts-expect-error the unshipped spelling is not a generation option
     void agent.generate('hello', { excludeSignals: ['reactive'] });
-    // @ts-expect-error abort accepts identity only
+    void agent.abortThreadStream({ ...target, expectedRunId: 'run-id' });
+    void durable.abortThreadStream({ ...target, expectedRunId: 'run-id' });
+    // @ts-expect-error abort does not accept subscription signal filters
     void agent.abortThreadStream({ ...target, hideSignals: ['reactive'] });
     // @ts-expect-error lookup accepts identity only
-    void agent.getActiveThreadRunId({ ...target, hideSignals: ['reactive'] });
-    // @ts-expect-error durable abort accepts identity only
+    void agent.getActiveThreadRunId({ ...target, expectedRunId: 'run-id' });
+    // @ts-expect-error durable abort does not accept subscription signal filters
     void durable.abortThreadStream({ ...target, hideSignals: ['reactive'] });
     // @ts-expect-error invalid signal literal
     void agent.stream('hello', { hideSignals: ['unknown'] });

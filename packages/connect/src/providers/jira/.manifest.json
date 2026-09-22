@@ -1,0 +1,63 @@
+{
+  "providerId": "jira",
+  "localId": "jira",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-09-15T21:35:21.386Z",
+  "toolCount": 37,
+  "skippedActions": [
+    {
+      "action": "add-attachment",
+      "reason": "exec uses unsupported template SDK helpers: getToken, uncontrolledFetch"
+    },
+    {
+      "action": "add-watcher",
+      "reason": "exec uses unsupported template SDK helpers: proxy"
+    },
+    {
+      "action": "get-field",
+      "reason": "exec uses unsupported template SDK helpers: zodValidateInput"
+    }
+  ],
+  "files": {
+    "index.ts": "1e1ca2fa820b5dc32cbbcff64e4b254adb8b9a6ea4f37be51d08c0bf7f69fec4",
+    "tools.ts": "41a545fc275c14358b353a5f39280f00b2372ca10dd91915d65316a7c89ed729",
+    "tools/add-comment.ts": "21cd03314a512e7b964d86374f84fdbd55e43d4e4b10808a879181c339fead5d",
+    "tools/add-worklog.ts": "78aeac8d6e5ae07a181140181bf39a01ec809bdd572cf956ab978418cec0d289",
+    "tools/create-issue-link.ts": "8ac751b89f8eedfb2c00705583e211a9b9413db29993c6bf766cbd52c0fc8d47",
+    "tools/create-issue.ts": "2feb4184389d904d7d39277cf05b254c1cc675f6f35927949a811e9cf5790c8c",
+    "tools/delete-attachment.ts": "b40050bb20f3fdb2f6a5acdfce6b138f92af7f2cf6d2be4ccb6db24e4ba225b2",
+    "tools/delete-comment.ts": "3e22dcb9ed2f3c8550fb81745c79e6c2ee26c77be3492b9dc85c347fcaf65231",
+    "tools/delete-issue-link.ts": "e6d09352a124238030fca6c34836f7583b216696b839f46b2d99a00b5db2177a",
+    "tools/delete-issue.ts": "66b331ddeb62bc1f687cb07ea8805d54a41b5684228548de61d8ec03e3fa24a7",
+    "tools/delete-worklog.ts": "29627a94958d25116e5452bb1323fe0f35ac4bfdd2578803a8a54104390c84cf",
+    "tools/get-create-issue-metadata.ts": "3d304d8864c87ae0157eda67564addb3f932228e3fac06f1312ddb08da25c23d",
+    "tools/get-edit-issue-metadata.ts": "3e87be270c7a35c82917e8034b37b176cc0ae58f09a322b110bf46fd12a1df7a",
+    "tools/get-issue-changelog.ts": "a76deeaf26220c53cfc76bb16502cb13a18ea0084defbbcbfcae71d50cdeb404",
+    "tools/get-issue-type.ts": "7b81c92f003b5fdff704c76d8a3fb73612ac82fb4718730496b46d3bcb0ea33f",
+    "tools/get-issue.ts": "288bf88e69eb3e16718b2fdd32f397bedcb7d32dffe35f74591e15166bd217ce",
+    "tools/get-myself.ts": "83178bc6ab255166c29fc888d973aae78b3c2b497285e08b761d09bfa7dde25a",
+    "tools/get-priority.ts": "50f2e5a53d2e6a3df50f7bfb363730a074095f116f13d369478f75d2c5d1d8f4",
+    "tools/get-project.ts": "cce344064e7df85d2b959a6f8b70da4b338e97e5e6953b5876eddd6b4e755c9d",
+    "tools/get-status.ts": "5b1ec051efdf97ad60ca9f62362859cac62a1572368167044ed06dad2d9768a1",
+    "tools/get-user.ts": "f4e3f7d6be2172419221d9ecde4db902e6a7587398a9dcdef9ea85b01311cefb",
+    "tools/list-fields.ts": "cdd39b1571a6060ffc39a5bdce537d47e720125a1039a1e6571eaf47a22c46b4",
+    "tools/list-issue-comments.ts": "e75899259d628b0b82c8322ee3d6b328a578920c18f78367b148ed5f7d631389",
+    "tools/list-issue-types.ts": "fab0642be030da3f85fd26aa4a317e1899570da49b2fd1bf89eba9f016d26eff",
+    "tools/list-priorities.ts": "7417fb957c3122500571694751bdbc5c2c5fe49a251be51dac1372e9fad30cbd",
+    "tools/list-project-components.ts": "b50eaf7f5ff63b9a4447d8473b5f2f512ee72c2b4a1f6ca0cad2a699c125921b",
+    "tools/list-project-versions.ts": "cdeb41e4a4e26bdfec7bf287ce45ff90620c84d3ea588807af22f05515e69b6a",
+    "tools/list-projects.ts": "9dee3ee5a3cf945544694eb036a46b1cb69fa1edd30099f143d870091d2ba52d",
+    "tools/list-statuses.ts": "3b966cc5097b0e1f8baea359944c920f54c0a44fe64f3707085fc318ca8316d9",
+    "tools/list-transitions.ts": "6f7a2455188aed7741cf2a9c56fa5167eae4f89b26279333e8d604b14ea938e7",
+    "tools/list-users.ts": "cfe35ea0234b1d8be2b5b0d3d6a6660c458da5d37cfb8b939ff0e2e7ab73f63f",
+    "tools/list-watchers.ts": "4b8fe037258be496b70b4dc5ef9c372aa435fd1e5158d6e13a0a13113d81d6ca",
+    "tools/list-worklogs.ts": "832725a75148eb7b427ca391ef66810225b7e28be63d46caca9345055795c728",
+    "tools/remove-watcher.ts": "282152c2fa402a8f71369dcf4ff890c6db83eda3ded21e74cea86318581c9899",
+    "tools/search-issues.ts": "55f6fbba552fed8f3ec06465808d2f569d0064d72b521ea11e88090f4b77f7e3",
+    "tools/transition-issue.ts": "f8b8a1a9d2c4c2d43e3276b44971d23f6e97d9c87370afdb65867b8043c4f329",
+    "tools/update-comment.ts": "c7d9f28a043ab151cdad29a4ef5ea4fb01df64a8343adff7624f5ae83a9b8e33",
+    "tools/update-issue.ts": "d0672edd798d24c1aaac5d880775bcffe2d6a286473810795277f875b54e0ab2",
+    "tools/update-worklog.ts": "b3f830b4e9c661baa75d573149c23439d03785301a64c952e293e7d20abcb924"
+  }
+}

@@ -16,10 +16,10 @@ export const NoToolsInfo = () => (
       actionSlot={
         <Button
           variant="ghost"
-          as="a"
-          href="https://mastra.ai/docs/agents/using-tools-and-mcp"
-          target="_blank"
-          rel="noopener noreferrer"
+          render={
+            <a href="https://mastra.ai/docs/agents/using-tools-and-mcp" target="_blank" rel="noopener noreferrer" />
+          }
+
           icon={<ExternalLinkIcon />}
         >
           Tools Documentation

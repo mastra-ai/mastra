@@ -1,8 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  executeRetentionPrune,
   listTracesArgsSchema,
   ObservabilityStorage,
+  resolveRetentionTargets,
+  retentionCutoffMs,
   SPAN_SCHEMA,
   TABLE_SCHEMAS,
   TABLE_SPANS,
@@ -21,6 +24,10 @@ import type {
   CreateSpanArgs,
   CreateIndexOptions,
   GetSpanArgs,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   GetSpanResponse,
   GetRootSpanArgs,
   GetRootSpanResponse,
@@ -46,6 +53,10 @@ function serializeJsonFields(source: Record<string, any>): Record<string, any> {
 }
 
 export class ObservabilityMySQL extends ObservabilityStorage {
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAt', indexed: true },
+  };
+
   private operations: StoreOperationsMySQL;
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
@@ -67,6 +78,27 @@ export class ObservabilityMySQL extends ObservabilityStorage {
     this.#indexes = indexes?.filter(idx =>
       (ObservabilityMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table),
     );
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: ObservabilityMySQL.retentionTables,
+      order: ['spans'],
+    });
+    return executeRetentionPrune({
+      domain: 'observability',
+      targets,
+      options,
+      cutoffFor: (target, now) => new Date(retentionCutoffMs(target.policy, now)),
+      deleteBatch: (target, cutoff, limit) =>
+        this.operations.pruneBatch({
+          tableName: target.table as typeof TABLE_SPANS,
+          column: target.column,
+          cutoff,
+          limit,
+        }),
+    });
   }
 
   async init(): Promise<void> {

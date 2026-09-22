@@ -52,6 +52,8 @@ export enum SpanType {
   MODEL_CHUNK = 'model_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
+  /** A request served by a Mastra MCPServer (the server side of an MCP edge) */
+  MCP_SERVER_REQUEST = 'mcp_server_request',
   /** Input or Output Processor execution */
   PROCESSOR_RUN = 'processor_run',
   /** Function/tool execution with inputs, outputs, errors */
@@ -464,6 +466,26 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
 }
 
 /**
+ * MCP Server Request attributes
+ */
+export interface MCPServerRequestAttributes extends AIBaseAttributes {
+  /** MCP method served, e.g. 'tools/call', 'resources/list', 'prompts/get' */
+  mcpMethod: string;
+  /** Name or URI of the tool, prompt, or resource requested. Absent on list-style calls. */
+  targetName?: string;
+  /** Configured MCPServer name */
+  mcpServer: string;
+  /** Configured MCPServer version */
+  serverVersion?: string;
+  /** Negotiated MCP protocol revision for this request */
+  mcpProtocolVersion?: string;
+  /** Client implementation name, when the client reported one */
+  clientName?: string;
+  /** Client implementation version, when the client reported one */
+  clientVersion?: string;
+}
+
+/**
  * Mapping attributes — for inline data transforms between pipeline stages
  * (e.g. a tool's `toModelOutput` reshaping the tool result before the model sees it).
  */
@@ -548,6 +570,13 @@ export interface ProcessorPipelineAttributes {
   processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
+  /**
+   * Milliseconds spent inside `processOutputStream`, summed across every
+   * chunk of the stream. Only set on output stream processor spans. The
+   * span's own duration covers the whole stream, model latency included, so
+   * this is what separates a slow processor from a slow model.
+   */
+  hookDurationMs?: number;
   /** MessageList mutations performed by this processor */
   messageListMutations?: Array<{
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
@@ -898,6 +927,7 @@ export interface SpanTypeMap {
   [SpanType.CLIENT_TOOL_CALL]: ClientToolCallAttributes;
   [SpanType.PROVIDER_TOOL_CALL]: ProviderToolCallAttributes;
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
+  [SpanType.MCP_SERVER_REQUEST]: MCPServerRequestAttributes;
   [SpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
   [SpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
   [SpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;
@@ -1865,7 +1895,14 @@ export type TracingEvent =
 export interface SpanOutputProcessor {
   /** Processor name */
   name: string;
-  /** Process span before export */
+  /**
+   * Process span before export.
+   *
+   * Mutate the span you receive and return the same instance, or return
+   * `undefined` to drop it. Do not return a copy: `exportSpan` and `isValid`
+   * are instance members of the live span, so a copy cannot be exported and
+   * is dropped with a logged processor error.
+   */
   process(span?: AnySpan): AnySpan | undefined;
   /** Shutdown processor */
   shutdown(): Promise<void>;

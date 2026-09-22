@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { agentExecutionBodySchema, agentExecutionLegacyBodySchema, resumeStreamBodySchema } from './agents';
+import {
+  agentExecutionBodySchema,
+  agentExecutionLegacyBodySchema,
+  resumeStreamBodySchema,
+  serializedAgentSchema,
+  serializedToolSchema,
+} from './agents';
 
 describe('agent execution providerOptions', () => {
   const providerOptions = {
@@ -43,5 +49,48 @@ describe('agent execution providerOptions', () => {
     expect(
       agentExecutionBodySchema.safeParse({ messages: 'hello', providerOptions: { openai: { value } } }).success,
     ).toBe(false);
+  });
+});
+
+describe('serialized agent route contracts', () => {
+  it('represents agent details returned by the handler', () => {
+    expect(
+      serializedAgentSchema.parse({
+        name: 'agent',
+        tools: {},
+        agents: {},
+        workflows: {},
+        skills: [{ name: 'skill', description: 'A skill', path: 'skills/skill' }],
+        workspaceTools: ['workspace-tool'],
+        browserTools: ['browser-tool'],
+        hasBrowser: true,
+        inputProcessors: [],
+        outputProcessors: [],
+        modelList: [
+          {
+            id: 'model-config',
+            enabled: true,
+            maxRetries: 3,
+            model: { modelId: 'gpt-5', provider: 'openai', modelVersion: 'v2' },
+          },
+        ],
+        requestContextSchema: '{"type":"object"}',
+      }),
+    ).toMatchObject({
+      skills: [{ name: 'skill' }],
+      workspaceTools: ['workspace-tool'],
+      browserTools: ['browser-tool'],
+      hasBrowser: true,
+      requestContextSchema: '{"type":"object"}',
+    });
+  });
+
+  it('includes serialized tool request-context schemas', () => {
+    expect(
+      serializedToolSchema.parse({
+        id: 'tool',
+        requestContextSchema: '{"type":"object"}',
+      }).requestContextSchema,
+    ).toBe('{"type":"object"}');
   });
 });

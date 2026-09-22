@@ -67,7 +67,7 @@ export function Sidebar() {
     <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         <div className="mt-1 mb-2 flex items-center gap-2 pt-1 pl-3">
-          <LogoWithoutText aria-label="Mastra" role="img" className="text-icon6 h-4 w-auto" />
+          <LogoWithoutText aria-label="Mastra" role="img" className="text-foreground h-4 w-auto" />
           <BetaBadge />
           <SidebarGlobalSearchButton />
         </div>

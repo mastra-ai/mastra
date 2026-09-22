@@ -1,4 +1,4 @@
-import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react';
+import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react/ui';
 import { describe, expect, it } from 'vitest';
 
 import { collectToolGroups } from '../tool-groups';
@@ -52,6 +52,21 @@ describe('collectToolGroups', () => {
       expect(groupKeys([call('a'), call('b', 'app'), call('c'), call('d')], { mcpAppTools: { app: {} } })).toEqual({
         firsts: [],
         members: [],
+      });
+    });
+  });
+
+  describe('when a network approval belongs to one of several same-named calls', () => {
+    it('keeps only the pending call out of the fold', () => {
+      const context = {
+        metadata: {
+          mode: 'network',
+          requireApprovalMetadata: { view: { toolCallId: 'd', toolName: 'view', args: {} } },
+        },
+      };
+      expect(groupKeys([call('a'), call('b'), call('c'), call('d')], context)).toEqual({
+        firsts: ['a'],
+        members: ['b', 'c'],
       });
     });
   });

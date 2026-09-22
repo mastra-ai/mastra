@@ -955,3 +955,65 @@ describe('CoreToolBuilder execution failures', () => {
     }
   });
 });
+
+describe('CoreToolBuilder skipToolSpan', () => {
+  it('creates no tool span and passes the caller span to the tool context', async () => {
+    let receivedSpan: unknown;
+    const testTool = createTool({
+      id: 'skip-span-tool',
+      description: 'A tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async (input, context) => {
+        receivedSpan = context?.tracingContext?.currentSpan;
+        return { value: input.value };
+      },
+    });
+
+    const mockRequestSpan = {
+      createChildSpan: vi.fn(),
+    } as unknown as AnySpan;
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: testTool,
+      options: { name: 'skip-span-tool', requestContext: new RequestContext() },
+    }).build();
+
+    const result = await builtTool.execute!(
+      { value: 'x' },
+      { toolCallId: 'call-1', messages: [], tracingContext: { currentSpan: mockRequestSpan }, skipToolSpan: true },
+    );
+
+    expect(result).toEqual({ value: 'x' });
+    expect(mockRequestSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(receivedSpan).toBe(mockRequestSpan);
+  });
+});
+
+describe('CoreToolBuilder execute without options', () => {
+  it('runs a Vercel tool when execute is called with arguments only', async () => {
+    // The Vercel branch only casts the options through, so a bare call has
+    // always been allowed there; the span lookup must not assume they exist.
+    const vercelTool = {
+      description: 'Doubles a number',
+      parameters: z.object({ n: z.number() }),
+      execute: async (args: any) => args.n * 2,
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: vercelTool as any,
+      options: {
+        name: 'double',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Doubles a number',
+      },
+    });
+
+    const builtTool = builder.build();
+    await expect(builtTool.execute!({ n: 2 })).resolves.toBe(4);
+  });
+});

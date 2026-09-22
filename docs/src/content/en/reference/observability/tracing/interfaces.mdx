@@ -72,6 +72,7 @@ interface SpanTypeMap {
   CLIENT_TOOL_CALL: ClientToolCallAttributes
   PROVIDER_TOOL_CALL: ProviderToolCallAttributes
   MCP_TOOL_CALL: MCPToolCallAttributes
+  MCP_SERVER_REQUEST: MCPServerRequestAttributes
   PROCESSOR_RUN: ProcessorRunAttributes
   WORKFLOW_STEP: WorkflowStepAttributes
   WORKFLOW_CONDITIONAL: WorkflowConditionalAttributes
@@ -481,12 +482,14 @@ Use `onDroppedEvent` on a custom exporter or bridge to forward these events to e
 
 Interface for span output processors.
 
+`process()` must mutate the span it receives and return the same instance, or return `undefined` to drop the span. A copy of the span (for example `{ ...span }`) can't be exported because `exportSpan()` and `isValid` are instance members of the live span; if a processor returns one, Mastra logs a processor error and drops the span.
+
 ```typescript
 interface SpanOutputProcessor {
   /** Processor name */
   name: string
 
-  /** Process span before export */
+  /** Process span before export. Mutate in place and return the same span, or return undefined to drop it. */
   process(span?: AnySpan): AnySpan | undefined
 
   /** Shutdown processor */
@@ -522,6 +525,9 @@ enum SpanType {
 
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
+
+  /** A request served by a Mastra MCPServer (the server side of an MCP edge) */
+  MCP_SERVER_REQUEST = 'mcp_server_request',
 
   /**
    * Processor execution. This is the default; a processor can declare a
@@ -785,20 +791,71 @@ interface MCPToolCallAttributes {
 }
 ```
 
+### `MCPServerRequestAttributes`
+
+Attributes of a request served by a Mastra `MCPServer`.
+
+```typescript
+interface MCPServerRequestAttributes {
+  /** MCP method served, e.g. 'tools/call', 'resources/list', 'prompts/get' */
+  mcpMethod: string
+
+  /** Name or URI of the tool, prompt, or resource requested. Absent on list-style calls. */
+  targetName?: string
+
+  /** Configured MCPServer name */
+  mcpServer: string
+
+  /** Configured MCPServer version */
+  serverVersion?: string
+
+  /** Negotiated MCP protocol revision for this request */
+  mcpProtocolVersion?: string
+
+  /** Client implementation name, when the client reported one */
+  clientName?: string
+
+  /** Client implementation version, when the client reported one */
+  clientVersion?: string
+}
+```
+
 ### `ProcessorRunAttributes`
 
 Processor attributes.
 
 ```typescript
 interface ProcessorRunAttributes {
-  /** Name of the Processor */
-  processorName: string
-
-  /** Processor type (input or output) */
-  processorType: 'input' | 'output'
+  /** Processor executor type (workflow or legacy) */
+  processorExecutor?: 'workflow' | 'legacy'
 
   /** Processor index in the agent */
   processorIndex?: number
+
+  /**
+   * Milliseconds spent inside `processOutputStream`, summed across every
+   * chunk. Only set on output stream processor spans. The span's own duration
+   * covers the whole stream, model latency included, so this is what
+   * separates a slow processor from a slow model.
+   */
+  hookDurationMs?: number
+
+  /** MessageList mutations performed by this processor */
+  messageListMutations?: Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear'
+    source?: string
+    count?: number
+    ids?: string[]
+    text?: string
+    tag?: string
+  }>
+
+  /** Tripwire abort details when a processor triggered a tripwire */
+  tripwireAbort?: {
+    reason?: string
+    retry?: boolean
+    metadata?: unknown
+  }
 }
 ```
 

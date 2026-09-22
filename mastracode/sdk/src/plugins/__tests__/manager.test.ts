@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const execaMock = vi.hoisted(() => vi.fn());
@@ -178,17 +179,22 @@ describe('PluginManager', () => {
         id: 'acme.runtime',
         tools: context => ({
           runtime_tool: {
-            tool: { id: 'runtime_tool', description: context.getController?.()?.id ?? 'no-controller' }
+            tool: { id: 'runtime_tool', description: context.getController?.()?.id ?? 'no-controller',
+              execute: () => context.getStorage?.() }
           }
         })
       };`,
     );
 
     let controller: { id: string } | undefined;
+    const sharedStorage = {
+      storage: new MastraCompositeStore({ id: 'host-storage' }),
+      storageBackend: 'libsql' as const,
+    };
     const manager = new PluginManager({
       projectRoot,
       homeDir,
-      runtime: { getController: () => controller as never },
+      runtime: { getController: () => controller as never, getStorage: () => sharedStorage },
     });
 
     await manager.installLocal(pluginDir, 'project');
@@ -198,6 +204,9 @@ describe('PluginManager', () => {
     await manager.reload();
 
     expect(manager.getPluginTools().runtime_tool?.description).toBe('mastra-code');
+    expect(await manager.getPluginTools().runtime_tool?.execute?.({}, undefined)).toBe(sharedStorage);
+    await manager.reload();
+    expect(await manager.getPluginTools().runtime_tool?.execute?.({}, undefined)).toBe(sharedStorage);
   });
 
   it('publishes runtime accessors to a manager constructed without one', async () => {

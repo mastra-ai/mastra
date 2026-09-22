@@ -1,9 +1,15 @@
-import type { DatasetExperiment, DatasetExperimentResult, DatasetRecord } from '@mastra/client-js';
-import { render, screen } from '@testing-library/react';
+import type {
+  DatasetExperiment,
+  DatasetExperimentResult,
+  DatasetRecord,
+  UpdateExperimentResultParams,
+} from '@mastra/client-js';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse, delay } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DatasetReview } from '../dataset-review';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { server } from '@/test/msw-server';
 import { makeWrapper, renderWithProviders } from '@/test/render';
 
@@ -87,6 +93,93 @@ const setupHandlers = () => {
   );
 };
 
+function SendToReview() {
+  const { updateExperimentResult } = useDatasetMutations();
+  return (
+    <button
+      onClick={() =>
+        updateExperimentResult.mutate({
+          datasetId: 'ds-1',
+          experimentId: 'exp-1',
+          resultId: 'r-1',
+          status: 'needs-review',
+        })
+      }
+    >
+      Send to Review
+    </button>
+  );
+}
+
+describe('DatasetReview with a parent experiment source', () => {
+  describe('when a result is sent to review and completed', () => {
+    it('persists the transition through invalidation and a fresh mount', async () => {
+      let persisted: DatasetExperimentResult = { ...makeResult('r-1', 'exp-1', 'persisted input'), status: null };
+      server.use(
+        http.get('*/api/datasets/:datasetId/experiments/:experimentId/results', () =>
+          HttpResponse.json({ results: [persisted], pagination: { total: 1, page: 0, perPage: 100, hasMore: false } }),
+        ),
+        http.patch<never, UpdateExperimentResultParams>(
+          '*/api/datasets/ds-1/experiments/exp-1/results/r-1',
+          async ({ request }) => {
+            const body = await request.json();
+            persisted = { ...persisted, status: body.status ?? null };
+            return HttpResponse.json(persisted);
+          },
+        ),
+      );
+      const first = renderWithProviders(
+        <>
+          <SendToReview />
+          <DatasetReview experiments={[makeExperiment('exp-1')]} />
+        </>,
+      );
+      expect(await screen.findByText('No items to review')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Send to Review' }));
+      expect(await screen.findByText(/persisted input/)).toBeTruthy();
+      fireEvent.click(screen.getAllByRole('checkbox')[0]);
+      fireEvent.click(screen.getByRole('button', { name: 'Mark as reviewed' }));
+      expect(await screen.findByText('No items to review')).toBeTruthy();
+      await waitFor(() => expect(persisted.status).toBe('complete'));
+      fireEvent.click(screen.getByRole('combobox'));
+      fireEvent.pointerDown(screen.getByRole('option', { name: 'Completed' }), { pointerType: 'mouse' });
+      fireEvent.click(screen.getByRole('option', { name: 'Completed' }), { detail: 1 });
+      expect(await screen.findByText(/persisted input/)).toBeTruthy();
+      first.unmount();
+      renderWithProviders(<DatasetReview experiments={[makeExperiment('exp-1')]} />);
+      expect(await screen.findByText('No items to review')).toBeTruthy();
+      fireEvent.click(screen.getByRole('combobox'));
+      fireEvent.pointerDown(screen.getByRole('option', { name: 'Completed' }), { pointerType: 'mouse' });
+      fireEvent.click(screen.getByRole('option', { name: 'Completed' }), { detail: 1 });
+      expect(await screen.findByText(/persisted input/)).toBeTruthy();
+    });
+  });
+
+  describe('when the parent is loading experiments', () => {
+    it('waits for the parent instead of showing an empty queue', async () => {
+      setupHandlers();
+      const { rerender } = renderWithProviders(<DatasetReview experiments={[]} isLoadingExperiments />);
+      expect(screen.queryByText('No items to review')).toBeNull();
+      rerender(<DatasetReview experiments={[]} isLoadingExperiments={false} />);
+      expect(await screen.findByText('No items to review')).toBeTruthy();
+    });
+  });
+
+  describe('when the parent supplies a restricted list', () => {
+    it('shows only results from that list without discovering experiments', async () => {
+      setupHandlers();
+      const discover = vi.fn(() =>
+        HttpResponse.json({ experiments: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } }),
+      );
+      server.use(http.get('*/api/experiments', discover));
+      renderWithProviders(<DatasetReview experiments={[makeExperiment('exp-2')]} />);
+      expect(await screen.findByText(/exp two input/)).toBeTruthy();
+      expect(screen.queryByText(/exp one input/)).toBeNull();
+      expect(discover).not.toHaveBeenCalled();
+    });
+  });
+});
+
 describe('DatasetReview scoped to an experiment', () => {
   describe('when mounted before the review queue has loaded', () => {
     it('shows that experiment’s review items once they arrive', async () => {
@@ -143,5 +236,37 @@ describe('DatasetReview without a scope', () => {
 
     render(<DatasetReview />, { wrapper });
     expect(await screen.findByText(/freshly flagged input/)).toBeTruthy();
+  });
+});
+
+describe('DatasetReview scoped to an agent', () => {
+  describe('when onCreateScorer is provided and review items are loaded', () => {
+    it('calls onCreateScorer with the visible items input/output', async () => {
+      setupHandlers();
+      const onCreateScorer = vi.fn();
+      renderWithProviders(<DatasetReview targetType="agent" targetId="chef-agent" onCreateScorer={onCreateScorer} />);
+
+      await screen.findByText(/exp one input/);
+      await screen.findByText(/exp two input/);
+      fireEvent.click(screen.getByRole('button', { name: 'Create Scorer' }));
+
+      expect(onCreateScorer).toHaveBeenCalledTimes(1);
+      expect(onCreateScorer.mock.calls[0]?.[0]).toEqual(
+        expect.arrayContaining([
+          { input: 'exp one input', output: 'output for exp one input' },
+          { input: 'exp two input', output: 'output for exp two input' },
+        ]),
+      );
+    });
+  });
+
+  describe('when onCreateScorer is not provided', () => {
+    it('does not render the Create Scorer action', async () => {
+      setupHandlers();
+      renderWithProviders(<DatasetReview targetType="agent" targetId="chef-agent" />);
+
+      await screen.findByText(/exp one input/);
+      expect(screen.queryByRole('button', { name: 'Create Scorer' })).toBeNull();
+    });
   });
 });

@@ -19,10 +19,10 @@ import { useLinkComponent } from '@/lib/framework';
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <Txt variant="ui-xs" className="text-neutral4 tracking-wide uppercase">
+      <Txt variant="meta" tone="muted" className="tracking-wide uppercase">
         {label}
       </Txt>
-      <div className="text-ui-md">{children}</div>
+      <div className="text-body">{children}</div>
     </div>
   );
 }
@@ -73,11 +73,11 @@ export default function SchedulePage() {
       <PageLayout.TopArea>
         <PageLayout.Row className="justify-end">
           <PageLayout.Column className="flex justify-end gap-2">
-            <Button as={Link} to={paths.schedulesLink()} variant="ghost" icon={<ArrowLeftIcon />}>
+            <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
               Back to schedules
             </Button>
             {workflowId ? (
-              <Button icon={<WorkflowIcon />} as={Link} to={paths.workflowLink(workflowId)} variant="ghost">
+              <Button icon={<WorkflowIcon />} render={<Link to={paths.workflowLink(workflowId)} />} variant="ghost">
                 Open workflow
               </Button>
             ) : null}
@@ -106,7 +106,7 @@ export default function SchedulePage() {
 
       {schedule ? (
         <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-4 overflow-hidden">
-          <div className="border-border1 flex h-fit flex-col gap-4 rounded-md border p-4">
+          <div className="border-border flex h-fit flex-col gap-4 rounded-md border p-4">
             <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (
                 <Link to={paths.workflowLink(workflowId)} className="text-accent1 hover:underline">
@@ -121,8 +121,10 @@ export default function SchedulePage() {
               )}
             </MetaItem>
             <MetaItem label="Cron">
-              <code className="text-ui-md font-mono">{schedule.cron}</code>
-              {schedule.timezone ? <span className="text-neutral4 text-ui-sm ml-2">{schedule.timezone}</span> : null}
+              <code className="text-body font-mono">{schedule.cron}</code>
+              {schedule.timezone ? (
+                <span className="text-muted-foreground text-caption ml-2">{schedule.timezone}</span>
+              ) : null}
             </MetaItem>
             <MetaItem label="Status">
               <ScheduleStatusText status={schedule.status} />
@@ -135,7 +137,7 @@ export default function SchedulePage() {
           </div>
 
           <div className="overflow-y-auto" data-testid="schedule-triggers-panel">
-            <Txt variant="ui-md" className="mb-3">
+            <Txt variant="body" className="mb-3">
               Trigger history
             </Txt>
             {triggersError ? (

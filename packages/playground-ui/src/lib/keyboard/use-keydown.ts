@@ -1,58 +1,18 @@
-import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 
-export type UseKeydownArgs = {
-  [keySet: string]: () => void;
-};
+import {
+  createKeyboardDispatcher,
+  isKeyboardConsumer,
+  matchesCombo,
+  parseKeyCombo,
+  type KeyboardLayer,
+  type ParsedKeyCombo,
+  type UseKeydownArgs,
+} from './keyboard-dispatcher';
+import { useKeyboardScopeDepth, useKeyboardShortcutsContext } from './keyboard-shortcuts-context';
 
-type ParsedKeyCombo = {
-  meta: boolean;
-  ctrl: boolean;
-  shift: boolean;
-  alt: boolean;
-  key: string;
-};
-
-const isMacPlatform = () =>
-  typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent || '');
-
-export const parseKeyCombo = (combo: string): ParsedKeyCombo => {
-  const parsed: ParsedKeyCombo = { meta: false, ctrl: false, shift: false, alt: false, key: '' };
-
-  for (const token of combo.split('+')) {
-    switch (token.toLowerCase()) {
-      case 'cmd':
-      case 'meta':
-        parsed.meta = true;
-        break;
-      case 'ctrl':
-      case 'control':
-        parsed.ctrl = true;
-        break;
-      case 'shift':
-        parsed.shift = true;
-        break;
-      case 'alt':
-      case 'option':
-        parsed.alt = true;
-        break;
-      case 'mod':
-        if (isMacPlatform()) parsed.meta = true;
-        else parsed.ctrl = true;
-        break;
-      default:
-        parsed.key = token.toLowerCase();
-    }
-  }
-
-  return parsed;
-};
-
-export const matchesCombo = (event: KeyboardEvent, combo: ParsedKeyCombo): boolean =>
-  event.metaKey === combo.meta &&
-  event.ctrlKey === combo.ctrl &&
-  event.shiftKey === combo.shift &&
-  event.altKey === combo.alt &&
-  event.key.toLowerCase() === combo.key;
+export { parseKeyCombo, parseKeyBinding, matchesCombo } from './keyboard-dispatcher';
+export type { UseKeydownArgs, KeyStep, ParsedKeyBinding } from './keyboard-dispatcher';
 
 export type UseKeydownOptions = {
   /** Attach the listener to this element instead of `window`. */
@@ -61,41 +21,55 @@ export type UseKeydownOptions = {
   enabled?: boolean;
   /**
    * Called before any combo is matched. Return `false` to leave the event
-   * untouched (no `preventDefault`, no handler).
+   * untouched (no `preventDefault`, no handler). Runs on top of the built-in
+   * rule that leaves unmodified keys to editable fields and keyboard widgets,
+   * unless the listener targets that field directly.
    */
   shouldHandle?: (event: KeyboardEvent) => boolean;
 };
 
+/**
+ * Binds keyboard shortcuts (see `UseKeydownArgs` for the syntax).
+ *
+ * Inside a `KeyboardShortcutsProvider`, bindings join a shared registry: the
+ * nearest `KeyboardScope` decides which declaration wins when several bind the
+ * same keys, and bindings are dropped as soon as the component unmounts.
+ * Without a provider, or with a `target`, the hook listens on its own and no
+ * shadowing takes place.
+ */
 export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}) => {
-  const { enabled = true } = options;
+  const { enabled = true, target } = options;
+  const shortcuts = useKeyboardShortcutsContext();
+  const depth = useKeyboardScopeDepth();
 
-  const handlers = useEffectEvent((event: KeyboardEvent) => {
-    if (options.shouldHandle && !options.shouldHandle(event)) return;
-    for (const [combo, handler] of Object.entries(opts)) {
-      if (matchesCombo(event, parseKeyCombo(combo))) {
-        event.preventDefault();
-        handler();
-        return;
-      }
-    }
-  });
+  // Kept fresh on every render so the dispatcher always calls the latest handlers.
+  const layerRef = useRef<KeyboardLayer>({ depth, bindings: opts, shouldHandle: options.shouldHandle });
+  layerRef.current.bindings = opts;
+  layerRef.current.shouldHandle = options.shouldHandle;
+  layerRef.current.depth = depth;
 
-  const targetRef = useRef(options.target);
-  targetRef.current = options.target;
+  const shared = !target && shortcuts.status === 'ready' ? shortcuts.dispatcher : undefined;
 
   useEffect(() => {
     if (!enabled) return;
-    const target = targetRef.current;
+    if (shared) return shared.register(layerRef.current);
+
     const element: HTMLElement | Window | null = target ? (target.current ?? null) : window;
     if (!element) return;
 
+    const dispatcher = createKeyboardDispatcher();
+    const unregister = dispatcher.register(layerRef.current);
     const handleKeyDown = (event: Event) => {
-      handlers(event as KeyboardEvent);
+      if (event instanceof KeyboardEvent) dispatcher.handleKeydown(event);
     };
 
     element.addEventListener('keydown', handleKeyDown);
-    return () => element.removeEventListener('keydown', handleKeyDown);
-  }, [enabled]);
+    return () => {
+      element.removeEventListener('keydown', handleKeyDown);
+      unregister();
+      dispatcher.reset();
+    };
+  }, [enabled, target, shared]);
 };
 
 export type UseTableKeydownArgs = {
@@ -119,24 +93,6 @@ export type UseTableKeydownArgs = {
    */
   global?: boolean;
 };
-
-const KEYBOARD_CONSUMER_SELECTOR = [
-  'input',
-  'textarea',
-  'select',
-  '[contenteditable="true"]',
-  '[role="combobox"]',
-  '[role="listbox"]',
-  '[role="menu"]',
-  '[role="menuitem"]',
-  '[role="option"]',
-  '[role="dialog"]',
-  '[role="alertdialog"]',
-  '[data-radix-popper-content-wrapper]',
-].join(', ');
-
-const isKeyboardConsumer = (target: EventTarget | null): boolean =>
-  target instanceof Element && target.closest(KEYBOARD_CONSUMER_SELECTOR) !== null;
 
 export const useTableKeydown = ({
   count,

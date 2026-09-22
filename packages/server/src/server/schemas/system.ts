@@ -15,6 +15,7 @@ export const observabilityRuntimeStrategySchema = z.enum([
 export const observabilityStorageCapabilitiesSchema = z.object({
   metrics: z.boolean(),
   logs: z.boolean(),
+  traceQueryDiscovery: z.boolean(),
 });
 
 export const editorSourceSchema = z.enum(['code', 'db']);

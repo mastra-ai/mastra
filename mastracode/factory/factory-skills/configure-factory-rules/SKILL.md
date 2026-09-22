@@ -31,6 +31,8 @@ new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 new PlatformLinearIntegration({ rules: { issueClosed: null } });
 ```
 
+When Platform credentials are present the factory installs `PlatformGithubIntegration` itself, so forward the same options with `new MastraFactory({ platform: { github: { rules, slug } } })` rather than constructing the integration; an explicit `integrations` entry with id `github` still takes precedence and makes that key a no-op, and the factory warns instead of ignoring it silently.
+
 GitHub and Linear integrations exclusively own their event handlers; configure them through constructor `rules[event]`, not the global Factory rules tree. Move former `rules.linear[event].onEvent` values to the Linear constructor's `rules[event]`. Every built-in handler is enabled automatically; never import or spread defaults just to install an integration. A function replaces the default, `null` disables that event's handler, and omitted or `undefined` values retain defaults. Constructors validate names and handler values, then copy and freeze the effective map per instance. Disabling a handler does not disable authentication, ingestion, or reconciliation bookkeeping. Linear fetch, platform polling, and reconciliation all use the owning instance's handlers.
 
 Do not create an `actions` config or execute authoritative policy in React. Each handler returns one typed `FactoryRuleDecision` or `undefined`.

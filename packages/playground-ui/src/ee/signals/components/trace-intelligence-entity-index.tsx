@@ -86,7 +86,7 @@ function EntityIndexControls({
       <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">
         <TraceIntelligenceExplainer signalCatalog={signalCatalog} />
         <Select<TraceIntelligenceEntitySort> value={sort} onValueChange={onSortChange}>
-          <SelectTrigger aria-label="Sort entities" size="md" variant="ghost" className="w-auto min-w-36">
+          <SelectTrigger aria-label="Sort entities" size="md" variant="ghost" className="w-auto">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
@@ -96,7 +96,7 @@ function EntityIndexControls({
           </SelectContent>
         </Select>
         {headerAction}
-        <ButtonsGroup spacing="close" aria-label="Entities view">
+        <ButtonsGroup aria-label="Entities view">
           <Button
             type="button"
             variant={view === 'list' ? 'primary' : 'outline'}

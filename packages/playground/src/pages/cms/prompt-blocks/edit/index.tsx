@@ -11,6 +11,7 @@ import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
 import {
   useStoredPromptBlock,
@@ -21,6 +22,7 @@ import {
   PromptBlockEditSidebar,
   PromptBlockVersionCombobox,
   usePromptBlockEditForm,
+  DeletePromptBlockAction,
 } from '@/domains/prompt-blocks';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
@@ -216,6 +218,7 @@ function CmsPromptBlocksEditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
+  const { isCmsAvailable } = useIsCmsAvailable();
   const { data: block, isLoading } = useStoredPromptBlock(blockId, { status: 'draft' });
   const { data: versionsData } = usePromptBlockVersions({
     blockId: blockId ?? '',
@@ -263,9 +266,11 @@ function CmsPromptBlocksEditPage() {
     return (
       <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
-          leftSlot={<div className="text-neutral3 flex h-full items-center justify-center">Prompt block not found</div>}
+          leftSlot={
+            <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
+          }
         >
-          <div className="text-neutral3 flex h-full items-center justify-center">Prompt block not found</div>
+          <div className="text-muted-foreground flex h-full items-center justify-center">Prompt block not found</div>
         </AgentEditLayout>
       </MainContentLayout>
     );
@@ -283,6 +288,7 @@ function CmsPromptBlocksEditPage() {
             variant="ghost"
             activeVersionId={activeVersionId}
           />
+          {isCmsAvailable && <DeletePromptBlockAction blockId={blockId} blockName={block.name} />}
         </div>
       </RouteHeaderActions>
       <CmsPromptBlocksEditForm

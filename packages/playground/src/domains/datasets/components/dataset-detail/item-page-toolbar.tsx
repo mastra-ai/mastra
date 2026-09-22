@@ -38,7 +38,7 @@ export function ItemPageToolbar({ onBack, onEdit, onDelete, isEditing = false }:
                 </Button>
               </PopoverTrigger>
 
-              <PopoverContent align="end" className="bg-surface4 w-48 p-1">
+              <PopoverContent align="end" className="bg-muted w-48 p-1">
                 <div className="flex flex-col gap-2">
                   <Button
                     variant="ghost"

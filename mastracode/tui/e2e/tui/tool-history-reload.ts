@@ -110,7 +110,6 @@ values
     await runtime.waitForScreenText(/E2E loaded tool history fixture/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Switched to: E2E loaded tool history fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/Loaded tool history answer begins/i, terminal, 8_000);
     await runtime.waitForScreenText(/view\s+src\/history-tool\.ts.*✓/i, terminal, 8_000);
     await runtime.waitForScreenText(/HISTORY_TOOL_RELOAD\s+=\s+true/i, terminal, 8_000);

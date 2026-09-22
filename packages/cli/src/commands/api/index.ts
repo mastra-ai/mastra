@@ -258,6 +258,20 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Get a trace span',
     examples: [{ description: 'Get a specific trace span', command: 'mastra api trace span trace_123 span_456' }],
   });
+  addAction(trace, 'query', 'POST /observability/traces/query', {
+    description: 'Query observability traces with advanced predicates',
+    input: 'required',
+    examples: [
+      {
+        description: 'Query traces in a time range',
+        command: `mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'`,
+      },
+      {
+        description: 'Query traces containing failed tool calls',
+        command: `mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"spans":{"some":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},{"op":"exists","path":"error"}]}}}}'`,
+      },
+    ],
+  });
 
   const log = api.command('log').description('Inspect runtime logs');
   addAction(log, 'list', 'GET /observability/logs', {
@@ -506,6 +520,17 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Explicitly start a Factory work-item run',
     input: 'required',
     routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'automation-run', FACTORY_API_ROUTE_CATALOG.workItemAutomationRun, {
+    description: 'Enqueue an idempotent deferred skill dispatch for a trusted external orchestrator',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Dispatch a skill run with optimistic concurrency and an idempotent request id',
+        command: `mastra api factory work-item automation-run <project-id> <work-item-id> '{"requestId":"00000000-0000-4000-8000-000000000000","expectedRevision":1,"role":"work","skillName":"factory-plan"}'`,
+      },
+    ],
   });
 
   addAction(factory, 'boards', FACTORY_API_ROUTE_CATALOG.boardCatalog, {

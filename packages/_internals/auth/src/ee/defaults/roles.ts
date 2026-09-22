@@ -119,6 +119,7 @@ const RESOURCE_EXPANSIONS: Record<string, readonly string[]> = {
     'stored-prompt-blocks',
     'stored-scorers',
     'stored-skills',
+    'stored-workflows',
     'stored-workspaces',
   ],
 };

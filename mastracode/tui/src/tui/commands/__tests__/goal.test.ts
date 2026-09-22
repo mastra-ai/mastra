@@ -1,5 +1,3 @@
-import { describe, expect, it, vi } from 'vitest';
-
 const settingsMock = vi.hoisted(() => ({
   loadSettings: vi.fn(() => ({
     models: {
@@ -137,26 +135,32 @@ vi.mock('../../prompt-api-key.js', () => ({
   promptForApiKeyIfNeeded: vi.fn().mockResolvedValue(undefined),
 }));
 
+import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
+import { createSignal } from '@mastra/core/signals';
+import { describe, expect, it, vi } from 'vitest';
+
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { getReminderView } from '../../db-message-parts.js';
 import { DEFAULT_MAX_TURNS, GoalManager } from '../../goal-manager.js';
-import { createGoalReminderMessage, handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal.js';
+import { handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal.js';
 
-describe('createGoalReminderMessage', () => {
-  it('creates a canonical goal system reminder as a DB-native signal message', () => {
-    const message = createGoalReminderMessage(
-      'goal-1',
-      'Finish <the> task & verify it',
-      DEFAULT_MAX_TURNS,
-      '__GATEWAY_OPENAI_MODEL__',
-    );
+describe('goal reminder metadata', () => {
+  // The goal box is rendered from the echoed reminder signal, so the signal's
+  // metadata keys must match what `getReminderView` reads. They previously did
+  // not (`maxTurns` vs `goalMaxTurns`), which dropped "500 max attempts" from
+  // the box.
+  it('carries the attempt budget and judge model through to the reminder view', () => {
+    const message = createSignal(
+      createGoalReminderSignal({
+        id: 'goal-1',
+        objective: 'Finish <the> task & verify it',
+        maxTurns: DEFAULT_MAX_TURNS,
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+      } as any) as Parameters<typeof createSignal>[0],
+    ).toDBMessage();
 
-    expect(message.id).toBe('goal-goal-1');
     expect(message.role).toBe('signal');
-    expect(message.content.format).toBe(2);
-
-    const view = getReminderView(message);
-    expect(view).toMatchObject({
+    expect(getReminderView(message)).toMatchObject({
       reminderType: 'goal',
       message: 'Finish <the> task & verify it',
       goalMaxTurns: DEFAULT_MAX_TURNS,
@@ -217,14 +221,9 @@ describe('handleGoalCommand', () => {
 
     expect(goalManager.resume).toHaveBeenCalledTimes(1);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
-    expect(ctx.addUserMessage).toHaveBeenCalledTimes(1);
-    expect(getReminderView(ctx.addUserMessage.mock.calls[0][0])).toMatchObject({
-      reminderType: 'goal',
-      message: goal.objective,
-      goalMaxTurns: goal.maxTurns,
-      judgeModelId: goal.judgeModelId,
-    });
-    expect(ctx.addUserMessage.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
+    // The goal box is rendered from the echoed reminder signal; rendering it
+    // locally as well would show the goal twice.
+    expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(showInfo).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledWith({
       type: 'system-reminder',
@@ -232,7 +231,7 @@ describe('handleGoalCommand', () => {
       attributes: { type: 'goal' },
       metadata: {
         goalId: 'goal-1',
-        maxTurns: DEFAULT_MAX_TURNS,
+        goalMaxTurns: DEFAULT_MAX_TURNS,
         judgeModelId: '__GATEWAY_OPENAI_MODEL__',
       },
     });
@@ -312,7 +311,7 @@ describe('handleGoalCommand', () => {
       type: 'system-reminder',
       contents: 'finish the task',
       attributes: { type: 'goal' },
-      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
+      metadata: { goalId: 'goal-1', goalMaxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
     });
   });
 
@@ -550,21 +549,14 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
     expect(goalManager.isActive()).toBe(true);
-    expect(ctx.addUserMessage).toHaveBeenCalledTimes(1);
-    expect(getReminderView(ctx.addUserMessage.mock.calls[0][0])).toMatchObject({
-      reminderType: 'goal',
-      message: objective,
-      goalMaxTurns: 50,
-      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-    });
-    expect(ctx.addUserMessage.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
+    expect(ctx.addUserMessage).not.toHaveBeenCalled();
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
     expect(sendSignal).toHaveBeenCalledWith({
       type: 'system-reminder',
       contents: '# Ship it\n\n1. Build\n2. Test',
       attributes: { type: 'goal' },
-      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
+      metadata: { goalId: 'goal-1', goalMaxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
     });
   });
 
@@ -630,39 +622,6 @@ describe('handleGoalCommand', () => {
     expect(isActiveAtSendSignal).toBe(true);
     expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
     expect(sendSignal).toHaveBeenCalledTimes(1);
-  });
-
-  it('can activate goal mode without sending a trigger so plan approval can inject through the TUI', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
-    const goalManager = new GoalManager();
-    const sendMessage = vi.fn().mockResolvedValue(undefined);
-
-    const ctx = {
-      state: createMockState({
-        threadId: 'thread-1',
-        session: { sendMessage },
-        extra: { pendingNewThread: false, goalManager },
-      }),
-      addUserMessage: vi.fn(),
-      showError: vi.fn(),
-      updateStatusLine: vi.fn(),
-    } as any;
-
-    await startGoalWithDefaults(ctx, '# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', { trigger: 'none' });
-    vi.setSystemTime(new Date('2026-05-15T15:00:00.000Z'));
-
-    expect(goalManager.isActive()).toBe(true);
-    expect(goalManager.getGoal()).toMatchObject({ activeDurationMs: 0 });
-    expect(ctx.addUserMessage).toHaveBeenCalledTimes(1);
-    expect(getReminderView(ctx.addUserMessage.mock.calls[0][0])).toMatchObject({
-      reminderType: 'goal',
-      message: '# Ship it\n\n1. Build\n2. Test',
-      goalMaxTurns: 50,
-      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-    });
-    expect(sendMessage).not.toHaveBeenCalled();
-    vi.useRealTimers();
   });
 
   it('updates the current goal when judge defaults change', async () => {

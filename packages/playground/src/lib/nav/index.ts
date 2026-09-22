@@ -19,7 +19,6 @@ export function navHandle(url: string): RouteHeaderHandle {
   if (!item) throw new Error(`navHandle: unknown nav url "${url}"`);
   return {
     crumbs: [{ id: `nav:${url}`, label: item.name, icon: item.Icon }],
-    docs: item.docs,
   };
 }
 
@@ -29,7 +28,6 @@ export function navHandleWithChildren(parentUrl: string, leaves: CrumbDef[]): Ro
   if (!parent) throw new Error(`navHandleWithChildren: unknown nav url "${parentUrl}"`);
   return {
     crumbs: [{ id: `nav:${parentUrl}`, label: parent.name, icon: parent.Icon, to: parentUrl }, ...leaves],
-    docs: parent.docs,
   };
 }
 

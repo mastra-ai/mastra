@@ -19,7 +19,7 @@
     "ai": "^6.0.1",
     "@hono/node-server": "^1.19.15",
     "@hono/node-ws": "^1.1.1",
-    "hono": "^4.12.34",
+    "hono": "^4.13.5",
     "@mastra/client-js": "beta",
     "@mastra/core": "beta",
     "@mastra/evals": "beta",

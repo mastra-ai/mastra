@@ -328,23 +328,27 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           let finalText = lastStep?.text;
 
-          const finishResult = await params.engine.step.run(`agent.${state.runId}.finish-side-effects`, () =>
-            runDurableFinishSideEffects({
-              runId: state.runId,
-              initData,
-              messageListState: state.messageListState,
-              mastra,
-              requestContext,
-              tracingContext,
-              logger: mastra?.getLogger?.(),
-              outputResult: {
-                text: finalText ?? '',
-                usage: state.accumulatedUsage,
-                finishReason: state.lastStepResult?.reason ?? 'unknown',
-                steps: state.accumulatedSteps,
-              },
-            }),
-          );
+          // Run finish side effects directly. This mapping already executes inside the
+          // engine's durable boundary (`wrapDurableOperation` -> `inngestStep.run`), so
+          // wrapping this call in `params.engine.step.run(...)` would create a nested
+          // Inngest step, which the Inngest protocol does not support: the nested step's
+          // callback never executes and its promise never settles, hanging the run and
+          // silently skipping output processors, memory persistence, and title generation.
+          const finishResult = await runDurableFinishSideEffects({
+            runId: state.runId,
+            initData,
+            messageListState: state.messageListState,
+            mastra,
+            requestContext,
+            tracingContext,
+            logger: mastra?.getLogger?.(),
+            outputResult: {
+              text: finalText ?? '',
+              usage: state.accumulatedUsage,
+              finishReason: state.lastStepResult?.reason ?? 'unknown',
+              steps: state.accumulatedSteps,
+            },
+          });
           if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;

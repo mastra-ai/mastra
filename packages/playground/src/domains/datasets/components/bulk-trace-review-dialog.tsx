@@ -1,5 +1,6 @@
 'use client';
 
+import type { BatchInsertDatasetItemsParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -90,7 +91,7 @@ export function BulkTraceReviewDialog({
         }
       }
 
-      let parsedTrajectory: unknown | undefined;
+      let parsedTrajectory: BatchInsertDatasetItemsParams['items'][number]['expectedTrajectory'];
       if (item.expectedTrajectory.trim()) {
         try {
           parsedTrajectory = JSON.parse(item.expectedTrajectory);
@@ -144,7 +145,7 @@ export function BulkTraceReviewDialog({
             >
               <ChevronLeftIcon />
             </Button>
-            <Txt variant="ui-sm" className="text-icon3 tabular-nums">
+            <Txt variant="caption" tone="muted" className="tabular-nums">
               {currentIndex + 1} / {total}
             </Txt>
             <Button

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "source": "security-monitor",
+  "sourceEventId": "reference-event-1",
+  "kind": "unauthorized_privilege_change",
+  "occurredAt": "2026-08-27T12:00:00.000Z",
+  "tenantId": "acme-corp",
+  "subjectId": "user-1042",
+  "actor": { "id": "admin-17", "type": "user" },
+  "target": { "id": "user-1042", "type": "user" },
+  "changes": { "previousRole": "member", "nextRole": "admin" }
+}

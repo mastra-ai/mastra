@@ -3,6 +3,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { FieldBlock, TextareaFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { MainContentContent } from '@mastra/playground-ui/components/MainContent';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -33,6 +34,7 @@ const PHASE_LABELS: Record<ProcessorPhase, string> = {
   outputStream: 'Output Stream - Process streaming chunks',
   outputResult: 'Output Result - Process complete output after streaming',
   outputStep: 'Output Step - Process after each LLM response (before tools)',
+  toolResult: 'Tool Result - Process tool output before it is added to the message list',
 };
 
 export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
@@ -59,7 +61,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
   if (!processor)
     return (
       <div className="px-4 py-8 text-center">
-        <Txt variant="header-md" className="text-neutral3">
+        <Txt variant="heading" tone="muted">
           Processor not found
         </Txt>
       </div>
@@ -71,6 +73,8 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
   const theme = useCodemirrorTheme();
   const formId = useId();
+  const phaseId = useId();
+  const agentConfigurationId = useId();
 
   const [selectedPhase, setSelectedPhase] = useState<ProcessorPhase>(processor.phases[0] || 'input');
   const [selectedAgentId, setSelectedAgentId] = useState<string>(processor.configurations[0]?.agentId || '');
@@ -122,16 +126,16 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">
-      <div className="bg-surface2 border-border1 w-[22rem] overflow-y-auto border-r">
+      <div className="bg-background border-border w-[22rem] overflow-y-auto border-r">
         <ProcessorInformation processor={processor} />
 
         <div className="space-y-5 p-5">
           <div className="space-y-2">
-            <Txt as="label" variant="ui-sm" className="text-neutral3">
+            <FieldBlock.Label name={phaseId} htmlFor={phaseId}>
               Phase
-            </Txt>
+            </FieldBlock.Label>
             <Select value={selectedPhase} onValueChange={v => setSelectedPhase(v as ProcessorPhase)}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger id={phaseId} className="w-full">
                 <SelectValue placeholder="Select phase" />
               </SelectTrigger>
               <SelectContent>
@@ -142,18 +146,18 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 ))}
               </SelectContent>
             </Select>
-            <Txt variant="ui-xs" className="text-neutral4">
+            <Txt variant="meta" tone="muted">
               {PHASE_LABELS[selectedPhase]}
             </Txt>
           </div>
 
           {processor.configurations.length > 1 && (
             <div className="space-y-2">
-              <Txt as="label" variant="ui-sm" className="text-neutral3">
+              <FieldBlock.Label name={agentConfigurationId} htmlFor={agentConfigurationId}>
                 Agent Configuration
-              </Txt>
+              </FieldBlock.Label>
               <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger id={agentConfigurationId} className="w-full">
                   <SelectValue placeholder="Select agent" />
                 </SelectTrigger>
                 <SelectContent>
@@ -167,19 +171,14 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
             </div>
           )}
 
-          <div className="space-y-2">
-            <Txt as="label" htmlFor={formId} variant="ui-sm" className="text-neutral3">
-              Test Message
-            </Txt>
-            <textarea
-              id={formId}
-              value={testMessage}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
-              placeholder="Enter a test message..."
-              rows={4}
-              className="border-border1 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden"
-            />
-          </div>
+          <TextareaFieldBlock
+            name={formId}
+            label="Test Message"
+            value={testMessage}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
+            placeholder="Enter a test message..."
+            rows={4}
+          />
 
           <Button
             icon={<Play />}
@@ -191,14 +190,14 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </Button>
 
           {selectedPhase === 'outputStream' && (
-            <Txt variant="ui-xs" className="text-accent6">
+            <Txt variant="meta" className="text-accent6">
               Output Stream phase cannot be executed directly. Use streaming instead.
             </Txt>
           )}
 
           {result && (
-            <div className="border-border1 space-y-2 border-t pt-4">
-              <Txt variant="ui-sm" className="text-neutral3">
+            <div className="border-border space-y-2 border-t pt-4">
+              <Txt variant="caption" tone="muted">
                 Status
               </Txt>
               <div className="flex items-center gap-2">
@@ -207,10 +206,10 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
                 <div className="bg-accent6Dark border-accent6/20 mt-2 rounded-md border p-3">
-                  <Txt variant="ui-sm" className="text-accent6 font-medium">
+                  <Txt variant="column" className="text-accent6">
                     Tripwire Reason
                   </Txt>
-                  <Txt variant="ui-sm" className="text-neutral3 mt-1">
+                  <Txt variant="caption" tone="muted" className="mt-1">
                     {result.tripwire.reason}
                   </Txt>
                 </div>
@@ -237,12 +236,12 @@ interface ProcessorInformationProps {
 
 function ProcessorInformation({ processor }: ProcessorInformationProps) {
   return (
-    <div className="border-border1 border-b px-5 pt-5 pb-4">
-      <Txt variant="header-md" className="text-neutral1 mb-2">
+    <div className="border-border border-b px-5 pt-5 pb-4">
+      <Txt variant="heading" tone="faint" className="mb-2">
         {processor.name || processor.id}
       </Txt>
       {processor.name && processor.name !== processor.id && (
-        <Txt variant="ui-sm" className="text-neutral4 mb-3">
+        <Txt variant="caption" tone="muted" className="mb-3">
           {processor.id}
         </Txt>
       )}
@@ -252,7 +251,7 @@ function ProcessorInformation({ processor }: ProcessorInformationProps) {
         ))}
       </div>
       <div className="mt-3">
-        <Txt variant="ui-xs" className="text-neutral4">
+        <Txt variant="meta" tone="muted">
           Attached to {processor.configurations.length} agent{processor.configurations.length !== 1 ? 's' : ''}
         </Txt>
       </div>

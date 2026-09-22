@@ -17,6 +17,14 @@ export const mcpServerToolPathParams = z.object({
 
 export const executeToolBodySchema = z.object({
   data: z.unknown().optional(),
+  resumeData: z
+    .unknown()
+    .optional()
+    .describe('Answer for a tool that reported `status: "suspended"`; 2026-07-28 servers only'),
+  suspendPayload: z
+    .unknown()
+    .optional()
+    .describe('The `suspendPayload` from the suspended response, echoed back with `resumeData`'),
 });
 
 // Query parameters
@@ -70,9 +78,16 @@ export const listMcpServerToolsResponseSchema = z.object({
   tools: z.array(mcpToolInfoSchema),
 });
 
-export const executeToolResponseSchema = z.object({
-  result: z.unknown(),
-});
+export const executeToolResponseSchema = z.union([
+  z.object({
+    result: z.unknown(),
+  }),
+  z.object({
+    status: z.literal('suspended').describe('The tool paused and asked for input; it did not complete'),
+    suspendPayload: z.unknown().describe('What the tool suspended with'),
+    resumeSchema: z.unknown().optional().describe('JSON Schema of the input the tool needs to resume'),
+  }),
+]);
 
 // Resource schemas
 export const mcpServerResourcePathParams = z.object({
