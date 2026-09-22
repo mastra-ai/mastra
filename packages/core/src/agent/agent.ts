@@ -1247,8 +1247,10 @@ export class Agent<
       ...(options.pausedReason !== undefined ? { pausedReason: options.pausedReason } : {}),
     };
     // A pause cause only describes a paused goal; any other resulting status
-    // retires it so a later pause can't inherit a stale reason.
-    if (updated.status !== 'paused') {
+    // retires it so a later pause can't inherit a stale reason. An explicit
+    // pause is authoritative about its own cause for the same reason: pausing
+    // again without one replaces the earlier cause rather than inheriting it.
+    if (updated.status !== 'paused' || (options.status === 'paused' && options.pausedReason === undefined)) {
       delete updated.pausedReason;
     }
     await writeObjective(store, options.threadId, updated);

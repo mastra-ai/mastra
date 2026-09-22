@@ -269,6 +269,25 @@ describe('Agent objective methods', () => {
     expect(done?.pausedReason).toBeUndefined();
   });
 
+  it('updateObjectiveOptions does not let a reasonless pause inherit the previous pause cause', async () => {
+    const agent = makeAgent();
+    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+
+    // Pausing again without a cause — what Esc during judge evaluation does —
+    // must replace the earlier cause, not inherit it. Otherwise the next reload
+    // explains this pause with the reason for the last one.
+    const repaused = await agent.updateObjectiveOptions({ threadId: THREAD, status: 'paused' });
+    expect(repaused?.status).toBe('paused');
+    expect(repaused?.pausedReason).toBeUndefined();
+    expect((await agent.getObjective({ threadId: THREAD }))?.pausedReason).toBeUndefined();
+  });
+
   it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
     'normalizes invalid initial active duration %s to zero',
     async invalidDuration => {
