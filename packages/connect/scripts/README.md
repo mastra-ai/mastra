@@ -40,7 +40,7 @@ Catalog entries show the number of action templates available; installed entries
 
 ```bash
 pnpm --filter @mastra/connect add-provider linear
-pnpm --filter @mastra/connect add-provider gitlab --as gitlab-group-token
+pnpm --filter @mastra/connect add-provider gitlab --as gitlab-self-managed
 ```
 
 `--as` changes the local integration ID, generated directory name, tool prefix, registry ID, and connection environment variable. It must not collide with another installed provider — collisions are a hard error.
