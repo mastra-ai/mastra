@@ -82,6 +82,16 @@ Mastra Code requires Node.js 22.19.0 or later. To enable `@` filename suggestion
   </StepItem>
 </Steps>
 
+## Start with a prompt
+
+Pass `--initial-prompt` to open Mastra Code with a first message already sent. The session stays open, so you can follow up as usual:
+
+```sh
+mastracode --initial-prompt "Review the changes on this branch"
+```
+
+Launchers that can only pass environment variables through, such as an editor pane or a terminal multiplexer, can set `MASTRACODE_INITIAL_PROMPT` instead. Mastra Code removes the variable at startup, so shells and nested sessions it starts don't send the prompt again. The flag takes precedence when both are set. To run a task without the interactive UI and exit, use [headless mode](/headless).
+
 ## Slash commands
 
 Mastra Code provides built-in slash commands for managing sessions and settings:
