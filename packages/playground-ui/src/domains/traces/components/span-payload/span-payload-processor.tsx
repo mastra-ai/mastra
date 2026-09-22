@@ -46,6 +46,9 @@ const SCALAR_FIELDS = [
   { key: 'providerExecuted', label: 'Provider executed' },
 ] as const;
 
+/** Identifiers a reader copies into a search, as the tool-call renderers already allow. */
+const COPYABLE_KEYS: ReadonlySet<string> = new Set(['toolCallId', 'messageId']);
+
 /** Large secondary context, collapsed because it is rarely why someone opened the span. */
 const CONTEXT_FIELDS = [
   { key: 'prompt', label: 'Prompt' },
@@ -74,7 +77,13 @@ function ScalarRows({
       {fields.map(field => (
         <Fragment key={field.key}>
           <DataKeysAndValues.Key>{field.label}</DataKeysAndValues.Key>
-          <DataKeysAndValues.Value>{formatScalar(payload[field.key])}</DataKeysAndValues.Value>
+          {COPYABLE_KEYS.has(field.key) ? (
+            <DataKeysAndValues.ValueWithCopyBtn copyValue={String(payload[field.key])}>
+              {formatScalar(payload[field.key])}
+            </DataKeysAndValues.ValueWithCopyBtn>
+          ) : (
+            <DataKeysAndValues.Value>{formatScalar(payload[field.key])}</DataKeysAndValues.Value>
+          )}
         </Fragment>
       ))}
     </DataKeysAndValues>
@@ -149,7 +158,10 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
     if (payload[key] === undefined) continue;
     laidOut.add(key);
     sections.push(
-      <SpanPayloadCollapsible key={key} label={label}>
+      <SpanPayloadCollapsible
+        key={key}
+        label={Array.isArray(payload[key]) ? `${label} (${(payload[key] as unknown[]).length})` : label}
+      >
         <SpanPayloadJson value={payload[key]} />
       </SpanPayloadCollapsible>,
     );

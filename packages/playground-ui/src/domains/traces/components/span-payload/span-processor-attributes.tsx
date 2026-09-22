@@ -6,8 +6,8 @@ import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
 import { SpanPayloadCollapsible, SpanPayloadField } from './span-payload-primitives';
 import { asCoreSpan } from './span-payload-registry';
-import { Badge } from '@/ds/components/Badge';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { Notice } from '@/ds/components/Notice';
 import { formatDuration } from '@/utils/duration';
 
 /** Mutation kinds as actions a reader recognises. */
@@ -40,7 +40,7 @@ function Mutations({ mutations }: { mutations: NonNullable<ProcessorPipelineDesc
             {mutation.message !== undefined && <SpanPayloadMessages value={[mutation.message]} />}
             {mutation.text !== undefined && <SpanPayloadMessages value={[mutation.text]} />}
             {mutation.ids && mutation.ids.length > 0 && (
-              <SpanPayloadCollapsible label="Removed message IDs">
+              <SpanPayloadCollapsible label={`Removed message IDs (${mutation.ids.length})`}>
                 <SpanPayloadJson value={mutation.ids} />
               </SpanPayloadCollapsible>
             )}
@@ -104,24 +104,20 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
       </DataKeysAndValues>
 
       {tripwireAbort && (
-        <SpanPayloadField label="Tripwire">
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="red">Run blocked</Badge>
-              {tripwireAbort.retry !== undefined && (
-                <span className="text-meta text-placeholder">
-                  {tripwireAbort.retry ? 'Retry requested' : 'No retry'}
-                </span>
-              )}
-            </div>
-            {tripwireAbort.reason && <span className="text-body text-foreground">{tripwireAbort.reason}</span>}
-            {tripwireAbort.metadata !== undefined && (
-              <SpanPayloadCollapsible label="Tripwire metadata">
-                <SpanPayloadJson value={tripwireAbort.metadata} />
-              </SpanPayloadCollapsible>
-            )}
-          </div>
-        </SpanPayloadField>
+        <Notice variant="destructive" title="Tripwire">
+          {tripwireAbort.reason && <Notice.Message>{tripwireAbort.reason}</Notice.Message>}
+          {tripwireAbort.retry !== undefined && (
+            <DataKeysAndValues>
+              <DataKeysAndValues.Key>Retry</DataKeysAndValues.Key>
+              <DataKeysAndValues.Value>{tripwireAbort.retry ? 'Requested' : 'No'}</DataKeysAndValues.Value>
+            </DataKeysAndValues>
+          )}
+          {tripwireAbort.metadata !== undefined && (
+            <SpanPayloadCollapsible label="Metadata">
+              <SpanPayloadJson value={tripwireAbort.metadata} />
+            </SpanPayloadCollapsible>
+          )}
+        </Notice>
       )}
 
       {messageListMutations && messageListMutations.length > 0 && (

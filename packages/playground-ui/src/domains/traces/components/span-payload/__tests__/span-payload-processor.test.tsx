@@ -33,6 +33,7 @@ describe('processor span payloads', () => {
     );
     expect(screen.getByText('search')).toBeTruthy();
     expect(screen.getByText('call_17')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy to clipboard' })).toBeTruthy();
   });
 
   it('renders processor input messages with the shared message components', () => {
@@ -99,12 +100,13 @@ describe('processor span attributes', () => {
     expect(screen.getByText('context-note · 1 message')).toBeTruthy();
   });
 
-  it('surfaces a tripwire as a blocked run with its reason', () => {
+  it('surfaces a tripwire with its reason and retry state', () => {
     render(<SpanProcessorAttributes span={processorTripwireSpan} />);
 
-    expect(screen.getByText('Run blocked')).toBeTruthy();
+    expect(screen.getByText('Tripwire')).toBeTruthy();
     expect(screen.getByText('Prompt injection detected')).toBeTruthy();
-    expect(screen.getByText('No retry')).toBeTruthy();
+    expect(screen.getByText('Retry')).toBeTruthy();
+    expect(screen.getByText('No')).toBeTruthy();
   });
 
   it('renders nothing for a span with no recorded phase', () => {
