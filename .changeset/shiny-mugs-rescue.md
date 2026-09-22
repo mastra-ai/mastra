@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Fixed the minimum @mastra/core version to include the A2A Protocol v1 export used by @mastra/server.
+Fixed @mastra/server compatibility by requiring @mastra/core 1.58.0 or newer. Older versions of @mastra/core are missing functionality that @mastra/server depends on, so installing them together resulted in a broken setup rather than a clear version conflict.
