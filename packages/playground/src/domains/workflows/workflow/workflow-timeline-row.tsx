@@ -18,8 +18,8 @@ import type { Step } from '../context/use-current-run';
 import type { TimelineRow } from './workflow-timeline-utils';
 
 const statusPresentation = {
-  success: { label: 'Completed', icon: Check, color: 'text-positive1', bar: 'bg-muted-foreground/60' },
-  failed: { label: 'Failed', icon: CircleX, color: 'text-negative1', bar: 'bg-negative1/60' },
+  success: { label: 'Completed', icon: Check, color: 'text-positive', bar: 'bg-muted-foreground/60' },
+  failed: { label: 'Failed', icon: CircleX, color: 'text-negative', bar: 'bg-negative/60' },
   suspended: { label: 'Needs input', icon: Pause, color: 'text-accent3', bar: 'bg-accent3/60' },
   waiting: { label: 'Waiting', icon: Timer, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
   paused: { label: 'Paused', icon: Pause, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },

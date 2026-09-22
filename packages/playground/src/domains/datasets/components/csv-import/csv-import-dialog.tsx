@@ -372,8 +372,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* Prominent validation summary banner */}
             {schemaValidation.invalidCount > 0 ? (
-              <div className="bg-warning/10 border-warning/30 rounded-md border p-3">
-                <div className="text-warning flex items-center gap-2 font-medium">
+              <div className="bg-notice-warning/20 border-notice-warning/20 rounded-md border p-3">
+                <div className="text-notice-warning-fg flex items-center gap-2 font-medium">
                   <span className="text-heading">⚠</span>
                   {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
                 </div>
@@ -382,8 +382,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
                 </p>
               </div>
             ) : (
-              <div className="bg-success/10 border-success/30 rounded-md border p-3">
-                <div className="text-success flex items-center gap-2 font-medium">
+              <div className="bg-notice-success/20 border-notice-success/20 rounded-md border p-3">
+                <div className="text-notice-success-fg flex items-center gap-2 font-medium">
                   <span className="text-heading">✓</span>
                   All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
                 </div>

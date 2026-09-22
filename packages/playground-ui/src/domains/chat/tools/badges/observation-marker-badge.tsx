@@ -232,7 +232,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const expandedBorderColor = 'border-green-500/10';
   const labelColor = 'text-green-600';
   const bufferExpandedBgColor = 'bg-background';
-  const bufferExpandedBorderColor = 'border-border-1';
+  const bufferExpandedBorderColor = 'border-border-strong';
   const actionLabel = isReflection ? 'Reflecting' : 'Observing';
   const completedLabel = isReflection ? 'Reflected' : 'Observed';
 

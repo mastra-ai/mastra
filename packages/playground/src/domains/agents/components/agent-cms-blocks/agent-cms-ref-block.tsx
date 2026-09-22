@@ -231,8 +231,8 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <div className="text-warning text-meta flex items-start gap-1.5 px-1 pb-1">
-                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <div className="text-muted-foreground text-meta flex items-start gap-1.5 px-1 pb-1">
+                <TriangleAlert className="text-warning mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {isDraft
                     ? 'This block is skipped at runtime until it is published.'
@@ -257,7 +257,7 @@ const RefBlockContent = ({
             />
           </>
         ) : (
-          <div className="text-warning flex items-center gap-2 py-3">
+          <div className="text-error flex items-center gap-2 py-3">
             <Txt variant="caption">Prompt block not found (ID: {block.promptBlockId})</Txt>
           </div>
         )}

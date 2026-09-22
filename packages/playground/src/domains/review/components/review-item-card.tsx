@@ -96,7 +96,7 @@ export function ReviewItemCard({
       {/* Header row */}
       <div className="flex items-center gap-2">
         {isCompleted ? (
-          <Icon size="xs" className="text-positive1 shrink-0">
+          <Icon size="xs" className="text-positive shrink-0">
             <CheckCircle />
           </Icon>
         ) : (
@@ -116,7 +116,7 @@ export function ReviewItemCard({
 
       {/* Error indicator */}
       {Boolean(item.error) && (
-        <Txt variant="meta" className="text-negative1 mt-1 block truncate">
+        <Txt variant="meta" className="text-negative mt-1 block truncate">
           Error: {typeof item.error === 'string' ? item.error : String(item.error)}
         </Txt>
       )}
@@ -133,7 +133,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'positive' ? undefined : 'positive')}
               disabled={isCompleted}
             >
-              <Icon size="xs" className={item.rating === 'positive' ? 'text-positive1' : ''}>
+              <Icon size="xs" className={item.rating === 'positive' ? 'text-positive' : ''}>
                 <ThumbsUp />
               </Icon>
             </Button>
@@ -145,7 +145,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
               disabled={isCompleted}
             >
-              <Icon size="xs" className={item.rating === 'negative' ? 'text-negative1' : ''}>
+              <Icon size="xs" className={item.rating === 'negative' ? 'text-negative' : ''}>
                 <ThumbsDown />
               </Icon>
             </Button>
@@ -188,13 +188,13 @@ export function ReviewItemCard({
             <div className="flex items-center gap-0.5">
               {onComplete && (
                 <Button tooltip="Mark as complete" variant="ghost" size="sm" onClick={onComplete}>
-                  <Icon size="xs" className="text-positive1">
+                  <Icon size="xs" className="text-positive">
                     <CheckCircle />
                   </Icon>
                 </Button>
               )}
               <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
-                <Icon size="xs" className="text-placeholder hover:text-negative1">
+                <Icon size="xs" className="text-placeholder hover:text-negative">
                   <Trash2 />
                 </Icon>
               </Button>
@@ -239,7 +239,7 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <pre className="text-negative1 bg-background text-caption max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="text-negative bg-background text-caption max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.error)}
               </pre>
             </div>
@@ -268,7 +268,7 @@ export function ReviewItemCard({
                 className="text-caption"
               />
               {commentSaved && (
-                <Txt variant="meta" className="text-positive1 mt-0.5">
+                <Txt variant="meta" className="text-positive mt-0.5">
                   Saved
                 </Txt>
               )}

@@ -51,7 +51,7 @@ export type FluidHoverHighlightProps = (HighlightFromHook | HighlightFromRect) &
    *  a nav menu its active route. Defaults to the rect itself. */
   from?: ItemRect | null;
   /** Radius, z-index, anything else. Merged onto
-   *  `absolute bg-hover pointer-events-none`. */
+   *  `absolute bg-fill-hover pointer-events-none`. */
   className?: string;
   /** The positional spring. Defaults to `spring.fast`. Pass `false` to snap
    *  to the new rect with no travel (a layout reflow that moved the rows
@@ -110,7 +110,7 @@ export function FluidHoverHighlight(props: FluidHoverHighlightProps) {
           // re-laying out every frame. Width and height are real layout
           // values, but they only change when the target rect's size does,
           // which in most lists is never.
-          className={cn('bg-hover pointer-events-none absolute top-0 left-0', className)}
+          className={cn('bg-fill-hover pointer-events-none absolute top-0 left-0', className)}
           initial={{ opacity: 0, ...toTarget(from ?? rect) }}
           animate={{ opacity: 1, ...toTarget(rect) }}
           exit={{ opacity: 0, transition: spring.fast.exit }}

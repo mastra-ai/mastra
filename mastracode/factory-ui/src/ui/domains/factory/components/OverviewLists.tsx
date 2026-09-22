@@ -81,7 +81,7 @@ function ItemRow({
       <span className={`${TIMESTAMP} relative shrink-0 text-right`}>
         {unread ? (
           <span
-            className="bg-warning1 absolute top-1/2 -left-3 size-1.5 -translate-y-1/2 rounded-full"
+            className="bg-warning absolute top-1/2 -left-3 size-1.5 -translate-y-1/2 rounded-full"
             aria-label="Unread"
           />
         ) : null}
@@ -224,10 +224,10 @@ export function ActivityFeed({
 const ATTENTION_GLYPHS: Record<FactoryAttentionItem['kind'], { Glyph: LucideIcon; tone: string; label: string }> = {
   mention: { Glyph: MessageSquare, tone: 'text-badge-blue-fg', label: 'Mention' },
   'automation-failed': { Glyph: CircleAlert, tone: 'text-badge-red-fg', label: 'Failed run' },
-  'automation-proposed': { Glyph: Sparkles, tone: 'text-warning1', label: 'Suggested run' },
+  'automation-proposed': { Glyph: Sparkles, tone: 'text-warning', label: 'Suggested run' },
   'supervisor-finding': { Glyph: Brain, tone: 'text-accent1', label: 'Supervisor finding' },
   activity: { Glyph: MessageSquare, tone: 'text-muted-foreground', label: 'Comment' },
-  'agent-waiting': { Glyph: Hourglass, tone: 'text-warning1', label: 'Agent waiting' },
+  'agent-waiting': { Glyph: Hourglass, tone: 'text-warning', label: 'Agent waiting' },
 };
 
 /** What landed. Unread lives at the row's edge instead, so the titles stay aligned. */

@@ -49,7 +49,7 @@ function notificationPresentation(entry: NotificationEntry): { state: string; ic
   if (action === 'opened' || action === 'reopened') {
     return { state: 'open', icon: <CircleDot size={13} />, className: 'text-accent1' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning1' };
+  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning' };
 }
 
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {
