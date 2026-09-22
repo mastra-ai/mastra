@@ -28,6 +28,7 @@ export function ModelCostKpiCard() {
       value={data?.cost != null ? formatCost(data.cost, data.costUnit) : null}
       prevValue={data?.previousCost != null ? formatCost(data.previousCost, data.costUnit) : undefined}
       changePct={data?.costChangePercent ?? null}
+      lowerIsBetter
       isLoading={isLoading}
       isError={isError}
     />
