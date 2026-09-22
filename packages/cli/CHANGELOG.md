@@ -1,5 +1,51 @@
 # mastra
 
+## 1.31.0-alpha.12
+
+### Patch Changes
+
+- Added advanced trace-query delta fields to API command metadata and preserved polling cursors in numbered-page output. ([#24329](https://github.com/mastra-ai/mastra/pull/24329))
+
+  ```bash
+  mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"pagination":{"page":0,"perPage":100}}'
+  mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"mode":"delta","after":"CURSOR_FROM_NUMBERED_RESPONSE","limit":100}'
+  ```
+
+  Preserve `data.deltaCursor` from the first response and use it as `CURSOR_FROM_NUMBERED_RESPONSE` in the second request. If the cursor is unavailable, delta polling isn't supported by the installed server and storage combination.
+
+- Improved CLI browser sign-in so onboarding has time to finish and timed-out sessions can be retried or cancelled. Run `mastra auth login`, then select Retry or Cancel if the browser flow times out. ([#24598](https://github.com/mastra-ai/mastra/pull/24598))
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b)]:
+  - @mastra/core@1.68.0-alpha.11
+  - @mastra/deployer@1.68.0-alpha.11
+
+## 1.31.0-alpha.11
+
+### Minor Changes
+
+- Show the resource a workflow run belongs to in Studio: recent run rows and the run header now display the run's `resourceId` when the stored run has one. ([#24534](https://github.com/mastra-ai/mastra/pull/24534))
+
+- Added a Resource ID field to the workflow Run Options dialog in Studio. Runs started from Studio are now attributed to that resource and show up in resource-filtered run lists (`GET /api/workflows/:workflowId/runs?resourceId=...`). The value is remembered per workflow, and leaving it empty keeps the previous behavior. When server auth derives the resource ID from the authenticated user, that value still wins. Fixes #24135. ([#24519](https://github.com/mastra-ai/mastra/pull/24519))
+
+  Open a workflow in Studio, click **Run Options**, type a Resource ID such as `tenant-42`, then run the workflow. The run is stored under that resource:
+
+  ```bash
+  curl "http://localhost:4111/api/workflows/my-workflow/runs?resourceId=tenant-42"
+  # { "runs": [ { "runId": "...", "resourceId": "tenant-42", ... } ], "total": 1 }
+  ```
+
+### Patch Changes
+
+- Studio: a workflow run suspended on human input no longer counts that wait as run time. The run duration stops at the moment it suspended and a separate clock, next to the Suspended badge, shows how long the run has been waiting for input. Suspended steps show the time they actually ran before suspending instead of a dash, and a nested workflow waiting on its child now reads "Needs input" rather than showing a running spinner. Once resumed, the run duration is wall clock again and says so on hover: the engine drops the suspension timestamp on resume, so the time spent waiting cannot be subtracted after the fact. ([#24537](https://github.com/mastra-ai/mastra/pull/24537))
+
+- Removed managed Redis from CLI hints and docs until the feature is released. `mastra env db create` help and errors now list `turso` and `neon` only, and deploy preflight messages no longer suggest provisioning a managed Redis. Organizations with the feature enabled can still attach one — the interactive deploy prompt is unchanged. ([#24570](https://github.com/mastra-ai/mastra/pull/24570))
+
+- Fixed Studio chat showing only the most recent messages of a conversation. Scrolling to the top of a thread now loads the previous messages, keeping the reading position where it was. ([#23669](https://github.com/mastra-ai/mastra/pull/23669))
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0), [`361f142`](https://github.com/mastra-ai/mastra/commit/361f142de0a50916b662e2a8fde4772a91f0566a)]:
+  - @mastra/core@1.68.0-alpha.10
+  - @mastra/deployer@1.68.0-alpha.10
+
 ## 1.31.0-alpha.10
 
 ## 1.31.0-alpha.9

@@ -374,6 +374,10 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     expect(events.filter(event => event.type === 'error')).toEqual([]);
     expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-2' && event.denied)).toBe(true);
 
+    expect(events.find(event => event.type === 'tool_end' && event.toolCallId === 'call-2')).toMatchObject({
+      threadId: threadA,
+    });
+
     // The invocation persisted under thread A is settled in place.
     await vi.waitFor(async () => {
       const messagesA = await session.thread.listMessages({ threadId: threadA });

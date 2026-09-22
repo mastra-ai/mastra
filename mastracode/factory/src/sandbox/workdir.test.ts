@@ -27,6 +27,7 @@ describe('repoDirUnder', () => {
   it('nests the sanitized repo name under the probed home', () => {
     expect(repoDirUnder('/home/user', 'acme/api')).toBe('/home/user/api');
     expect(repoDirUnder('/home/daytona', 'acme/api')).toBe('/home/daytona/api');
+    expect(repoDirUnder('/home/user', 'group/subgroup/api')).toBe('/home/user/api');
   });
 
   it('tolerates a trailing slash on the probed home', () => {
@@ -46,6 +47,7 @@ describe('deriveLocalWorkdir', () => {
   it('nests the repo under a local sandbox workingDirectory so the marker sits beside the clone', () => {
     const sandbox = { provider: 'local', workingDirectory: path.join(root, 'sess-1') };
     expect(deriveLocalWorkdir(sandbox, 'acme/api')).toBe(path.join(root, 'sess-1', 'api'));
+    expect(deriveLocalWorkdir(sandbox, 'group/subgroup/api')).toBe(path.join(root, 'sess-1', 'api'));
   });
 
   it('keeps same-name repos apart when callbacks use per-session directories', () => {

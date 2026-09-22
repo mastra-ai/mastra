@@ -54,14 +54,14 @@ describe('useTraceColumnPreferences', () => {
 
       const returnVisit = renderHook(() => useTraceColumnPreferences(), { wrapper: projectA });
       expect(returnVisit.result.current.preferences).toEqual({
-        visibleColumns: ['input', 'entity', 'duration'],
+        visibleColumns: ['type', 'input', 'estimatedCost'],
         metadataKeys: ['tenantId'],
       });
 
       const projectB = makeWrapper('http://project-b.test');
       const otherProject = renderHook(() => useTraceColumnPreferences(), { wrapper: projectB });
       expect(otherProject.result.current.preferences).toEqual({
-        visibleColumns: ['input', 'entity'],
+        visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
         metadataKeys: [],
       });
     });
@@ -77,7 +77,7 @@ describe('useTraceColumnPreferences', () => {
       });
 
       expect(result.current.preferences).toEqual({
-        visibleColumns: ['input', 'entity', 'duration'],
+        visibleColumns: ['type', 'input', 'estimatedCost'],
         metadataKeys: ['tenantId'],
       });
     });
@@ -133,19 +133,25 @@ describe('useTraceColumnPreferences', () => {
       const { result } = renderPreferences();
 
       act(() => {
-        result.current.toggleColumn('duration');
+        result.current.toggleColumn('inputTokens');
       });
-      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'duration']);
+      expect(result.current.preferences.visibleColumns).toEqual([
+        'type',
+        'input',
+        'duration',
+        'estimatedCost',
+        'inputTokens',
+      ]);
 
       act(() => {
-        result.current.toggleColumn('duration');
+        result.current.toggleColumn('inputTokens');
       });
-      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity']);
+      expect(result.current.preferences.visibleColumns).toEqual(['type', 'input', 'duration', 'estimatedCost']);
 
       act(() => {
         result.current.toggleColumn('input');
       });
-      expect(result.current.preferences.visibleColumns).toEqual(['entity']);
+      expect(result.current.preferences.visibleColumns).toEqual(['type', 'duration', 'estimatedCost']);
     });
 
     it('removes a metadata column without touching the others', () => {
@@ -241,7 +247,13 @@ describe('useTraceColumnPreferences', () => {
         result.current.toggleColumn('inputTokens');
       });
 
-      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'inputTokens']);
+      expect(result.current.preferences.visibleColumns).toEqual([
+        'type',
+        'input',
+        'duration',
+        'estimatedCost',
+        'inputTokens',
+      ]);
     });
 
     it('falls back to the default columns when storage cannot be read', () => {
@@ -269,7 +281,7 @@ describe('useTraceColumnPreferences', () => {
         result.current.toggleColumn('duration');
       });
 
-      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'duration']);
+      expect(result.current.preferences.visibleColumns).toEqual(['type', 'input', 'estimatedCost']);
     });
   });
 });

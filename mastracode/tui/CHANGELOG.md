@@ -1,5 +1,33 @@
 # mastracode
 
+## 0.41.0-alpha.11
+
+### Patch Changes
+
+- Fixed detached background tool rows being overwritten when an assistant turn is interrupted or fails. Their eventual results now update the original rows. Cancelled background tools also display cancellation text when reopening a conversation, including with background tools disabled. ([#24313](https://github.com/mastra-ai/mastra/pull/24313))
+
+- Fixed the status bar animation not stopping when starting a new conversation with `/new`. The run animation could keep pulsing over an empty conversation when the thread being left was owned by another instance. ([#24510](https://github.com/mastra-ai/mastra/pull/24510))
+
+- Fixed delayed tool events appearing in another conversation after switching threads or starting a new conversation. Fixed completed shell and process rows losing their background task badge, including failed and cancelled results. Shell and process tools remain ineligible for native background execution. ([#24313](https://github.com/mastra-ai/mastra/pull/24313))
+
+- Fixed ordinary tool output being mistaken for background work when experimental background tools are enabled. Background rendering now uses task metadata instead of matching output text, and correctly recognizes resumed tasks and completed history. ([#24313](https://github.com/mastra-ai/mastra/pull/24313))
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`fa08939`](https://github.com/mastra-ai/mastra/commit/fa08939df788c81feb3f0afe70e10a3c40072f93), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442)]:
+  - @mastra/core@1.68.0-alpha.11
+  - @mastra/pg@1.26.0-alpha.5
+  - @mastra/mcp@2.0.0-alpha.5
+  - @mastra/code-sdk@1.8.0-alpha.11
+  - @mastra/libsql@1.23.1-alpha.3
+  - @mastra/duckdb@1.10.0-alpha.3
+
+## 0.41.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0)]:
+  - @mastra/core@1.68.0-alpha.10
+  - @mastra/code-sdk@1.8.0-alpha.10
+
 ## 0.41.0-alpha.9
 
 ### Patch Changes

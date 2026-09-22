@@ -1,29 +1,46 @@
 import type { ScheduleResponse } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { sortBy } from '@mastra/playground-ui/sort/sort-by';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useMemo } from 'react';
 import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { ScheduleStatusText } from './schedule-status-badge';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
 import { useLinkComponent } from '@/lib/framework';
 
+export type SchedulesSortKey = 'target' | 'status' | 'nextFireAt' | 'lastFireAt';
+export type SchedulesSort = ListSort<SchedulesSortKey>;
+
 export interface SchedulesListProps {
   schedules: ScheduleResponse[];
   isLoading: boolean;
   search?: string;
+  sort?: SchedulesSort;
+  onSortChange?: (direction: DataListSort, key: SchedulesSortKey) => void;
 }
+
+const sortAccessors = {
+  target: (s: ScheduleResponse) => s.workflowId ?? s.agentId ?? '',
+  status: (s: ScheduleResponse) => s.status,
+  nextFireAt: (s: ScheduleResponse) => s.nextFireAt,
+  lastFireAt: (s: ScheduleResponse) => s.lastFireAt,
+};
 
 const COLUMNS = 'minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr) auto auto auto';
 
-export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesListProps) {
+export function SchedulesList({ schedules, isLoading, search = '', sort, onSortChange }: SchedulesListProps) {
   const { paths, Link } = useLinkComponent();
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
-    if (!term) return schedules;
-    return schedules.filter(
-      s => s.id.toLowerCase().includes(term) || (s.workflowId ?? s.agentId ?? '').toLowerCase().includes(term),
-    );
-  }, [schedules, search]);
+    const matching = term
+      ? schedules.filter(
+          s => s.id.toLowerCase().includes(term) || (s.workflowId ?? s.agentId ?? '').toLowerCase().includes(term),
+        )
+      : schedules;
+    return sortBy(matching, sort, sortAccessors);
+  }, [schedules, search, sort]);
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length, global: true });
 
@@ -31,15 +48,28 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
     return <DataListSkeleton columns={COLUMNS} />;
   }
 
+  const header = (key: SchedulesSortKey, label: string) =>
+    onSortChange ? (
+      <DataList.SortableTopCell
+        sortKey={key}
+        sort={sort?.key === key ? sort.direction : undefined}
+        onSortChange={onSortChange}
+      >
+        {label}
+      </DataList.SortableTopCell>
+    ) : (
+      <DataList.TopCell>{label}</DataList.TopCell>
+    );
+
   return (
     <DataList columns={COLUMNS} className="min-w-0" scrollRef={containerRef}>
       <DataList.Top>
-        <DataList.TopCell>Target</DataList.TopCell>
+        {header('target', 'Target')}
         <DataList.TopCell>Schedule ID</DataList.TopCell>
         <DataList.TopCell>Cron</DataList.TopCell>
-        <DataList.TopCell>Status</DataList.TopCell>
-        <DataList.TopCell>Next fire</DataList.TopCell>
-        <DataList.TopCell>Last run</DataList.TopCell>
+        {header('status', 'Status')}
+        {header('nextFireAt', 'Next fire')}
+        {header('lastFireAt', 'Last run')}
       </DataList.Top>
 
       {filtered.length === 0 && search ? <DataList.NoMatch message="No schedules match your search" /> : null}

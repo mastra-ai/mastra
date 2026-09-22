@@ -2,6 +2,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
 import { useDataListKeyboard } from '@/ds/components/DataList';
+import type { DataListSort } from '@/ds/components/DataList';
 import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
@@ -23,6 +24,9 @@ export interface LogsListViewProps {
   featuredLogId?: string | null;
   /** Called when a row is clicked. The current toggle + trace-sync logic is the consumer's call. */
   onLogClick: (log: LogRecord) => void;
+  /** Current timestamp sort direction. When `onSortChange` is provided the Date/Time headers become sortable. */
+  timestampSort?: DataListSort;
+  onSortChange?: (direction: DataListSort, key: 'timestamp') => void;
 }
 
 /**
@@ -39,6 +43,8 @@ export function LogsListView({
   logIdMap,
   featuredLogId,
   onLogClick,
+  timestampSort,
+  onSortChange,
 }: LogsListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -87,7 +93,13 @@ export function LogsListView({
   return (
     <LogsDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
       <LogsDataList.Top>
-        <LogsDataList.TopCell>Date</LogsDataList.TopCell>
+        {onSortChange ? (
+          <LogsDataList.SortableTopCell sortKey="timestamp" sort={timestampSort} onSortChange={onSortChange}>
+            Date
+          </LogsDataList.SortableTopCell>
+        ) : (
+          <LogsDataList.TopCell>Date</LogsDataList.TopCell>
+        )}
         <LogsDataList.TopCell>Time</LogsDataList.TopCell>
         <LogsDataList.TopCell>Level</LogsDataList.TopCell>
         <LogsDataList.TopCell>Entity</LogsDataList.TopCell>

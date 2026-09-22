@@ -48,6 +48,10 @@ function linkedSourceName(source: FactoryDecisionSummary['source']): string {
       return 'GitHub issue';
     case 'github-pr':
       return 'GitHub pull request';
+    case 'gitlab-issue':
+      return 'GitLab issue';
+    case 'gitlab-pr':
+      return 'GitLab merge request';
     case 'linear-issue':
       return 'Linear issue';
     default:

@@ -1,5 +1,17 @@
 # @mastra/codemod
 
+## 1.1.3-alpha.3
+
+### Patch Changes
+
+- Fixed codemod previews and result summaries so they appear in the terminal. ([#24530](https://github.com/mastra-ai/mastra/pull/24530))
+
+## 1.1.3-alpha.2
+
+### Patch Changes
+
+- Fixed codemods so projects under hidden parent directories are processed while hidden directories inside the target remain excluded. ([#24528](https://github.com/mastra-ai/mastra/pull/24528))
+
 ## 1.1.3-alpha.1
 
 ### Patch Changes

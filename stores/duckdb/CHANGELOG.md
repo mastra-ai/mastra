@@ -1,5 +1,25 @@
 # @mastra/duckdb
 
+## 1.10.0-alpha.3
+
+### Minor Changes
+
+- Added DuckDB support for handing numbered trace-query pages to delta polling. The initial page and polling watermark share a snapshot, and polls detect completed root writes. ([#24329](https://github.com/mastra-ai/mastra/pull/24329))
+
+  Numbered pages remain available without a polling cursor when the installed core version lacks trace-query delta support.
+
+  ```ts
+  // Start with a numbered page.
+  const page = await client.queryTraces({ timeRange, pagination: { page: 0, perPage: 100 } });
+  // Continue with delta polling.
+  const delta = await client.queryTraces({ timeRange, mode: 'delta', after: page.deltaCursor });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b)]:
+  - @mastra/core@1.68.0-alpha.11
+
 ## 1.10.0-alpha.2
 
 ### Minor Changes

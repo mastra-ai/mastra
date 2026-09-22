@@ -53,6 +53,11 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'GITHUB_APP_CLIENT_SECRET',
       'GITHUB_APP_SLUG',
       'GITHUB_APP_WEBHOOK_SECRET',
+      'GITLAB_ACCESS_TOKEN',
+      'GITLAB_ACCESS_TOKEN_TYPE',
+      'GITLAB_BASE_URL',
+      'GITLAB_WEBHOOK_SECRET',
+      'MASTRA_GITLAB_CONNECTION_ID',
       'LINEAR_CLIENT_ID',
       'LINEAR_CLIENT_SECRET',
       'SLACK_APP_SIGNING_SECRET',
@@ -185,6 +190,11 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'GITHUB_APP_CLIENT_SECRET',
         'GITHUB_APP_SLUG',
         'GITHUB_APP_WEBHOOK_SECRET',
+        'GITLAB_ACCESS_TOKEN',
+        'GITLAB_ACCESS_TOKEN_TYPE',
+        'GITLAB_BASE_URL',
+        'GITLAB_WEBHOOK_SECRET',
+        'MASTRA_GITLAB_CONNECTION_ID',
         'LINEAR_CLIENT_ID',
         'LINEAR_CLIENT_SECRET',
         'JIRA_BASE_URL',
@@ -238,6 +248,28 @@ describe('platform entry (src/mastra/index.ts)', () => {
         // The connect route is registered only by the GithubIntegration, so its
         // presence proves the direct fallback wired the integration onto the factory.
         expect(paths).toContain('/auth/github/connect');
+      },
+    );
+
+    it.each(['personal', 'group'] as const)(
+      'registers direct GitLab with a %s access token',
+      { timeout: 60_000 },
+      async accessTokenType => {
+        vi.resetModules();
+        vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+        vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+        vi.stubEnv('GITLAB_ACCESS_TOKEN', `glpat-${accessTokenType}-secret`);
+        vi.stubEnv('GITLAB_ACCESS_TOKEN_TYPE', accessTokenType);
+        vi.stubEnv('GITLAB_BASE_URL', 'https://gitlab.acme.test');
+        await import('./index.js');
+
+        const integration = factoryConfigs[0]?.integrations?.find(candidate => candidate.id === 'gitlab');
+        expect(integration?.diagnostics()).toMatchObject({
+          mode: 'direct',
+          accessTokenType,
+          endpointHost: 'gitlab.acme.test',
+        });
+        expect(JSON.stringify(integration?.diagnostics())).not.toContain(`glpat-${accessTokenType}-secret`);
       },
     );
 

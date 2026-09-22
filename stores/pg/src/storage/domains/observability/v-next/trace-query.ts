@@ -21,6 +21,13 @@ import type {
 
 import type { DbClient, TxClient } from '../../../client';
 import { qualifiedTable, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import {
+  assertDeltaPollingEnabled,
+  decodeDeltaCursor,
+  deltaPollingFeatureEnabled,
+  encodeDeltaCursor,
+  readSafeXactHorizon,
+} from './polling';
 import { latestScorePredicate } from './scores';
 
 type SqlFragment = { sql: string; values: unknown[] };
@@ -93,7 +100,7 @@ const TRACE_SELECT = `
   r."name" AS "name",
   r."entityId" AS "entityId",
   r."parentSpanId" AS "parentSpanId",
-  r."metadata" AS "metadata",
+  r."metadataRaw" AS "metadata",
   r."input" AS "input",
   r."threadId" AS "threadId",
   r."resourceId" AS "resourceId",
@@ -355,6 +362,7 @@ function compilePostgresTraceScope(
   schema: string,
   selection: TraceSelection,
   relationCollections: Set<RelatedCollection>,
+  deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
 ): { ctes: string[]; values: unknown[] } {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
@@ -368,6 +376,12 @@ function compilePostgresTraceScope(
     `r."startedAt" >= $1`,
     `r."startedAt" < $2`,
   ];
+  if (deltaWindow) {
+    values.push(deltaWindow.xactId, deltaWindow.cursorId, deltaWindow.safeHorizon);
+    // Restrict candidates before materializing roots and their related records.
+    // latestRootPredicate must still see replacements outside this interval.
+    rootConditions.push(`(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)`, `r."xactId" < $5::xid8`);
+  }
   const ctes = [
     `root_scope AS MATERIALIZED (
     SELECT *
@@ -452,9 +466,17 @@ export function compilePostgresTraceQuery(
   schema: string,
   plan: TrustedTraceQueryPlan,
   mode: 'data' | 'count' = 'data',
+  safeHorizon?: string,
 ): CompiledPostgresTraceQuery {
   const relationCollections = collectRelationCollections(plan.where);
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections);
+  let deltaWindow: { xactId: string; cursorId: string; safeHorizon: string } | undefined;
+  if (plan.paginationMode === 'delta') {
+    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
+    if (watermark === undefined || safeHorizon === undefined)
+      throw new Error('Delta query requires a cursor and safe horizon');
+    deltaWindow = { ...decodeTraceDeltaWatermark(watermark), safeHorizon };
+  }
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, deltaWindow);
 
   let predicateSql = 'TRUE';
   if (plan.where) {
@@ -463,7 +485,7 @@ export function compilePostgresTraceQuery(
     values.push(...predicate.values);
   }
   ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}
+    SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}
     FROM root_scope r
     WHERE ${predicateSql}
   )`);
@@ -474,6 +496,17 @@ export function compilePostgresTraceQuery(
       text: `${candidates}
 SELECT COUNT(*)::text AS count
 FROM candidates`,
+      values,
+    };
+  }
+
+  if (plan.paginationMode === 'delta') {
+    values.push(plan.limit + 1);
+    return {
+      text: `${candidates}
+SELECT * FROM candidates
+ORDER BY "xactId" ASC, "cursorId" ASC
+LIMIT $${values.length}`,
       values,
     };
   }
@@ -735,50 +768,117 @@ export async function getTraceQueryValues(
   });
 }
 
+function decodeTraceDeltaWatermark(watermark: string) {
+  try {
+    return decodeDeltaCursor(watermark);
+  } catch {
+    throw new coreStorage.TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
+}
+
+function emptyDeltaWatermark(horizon: string, watermark?: string): string {
+  // Preserve monotonicity if a query envelope contains a future native watermark.
+  if (watermark !== undefined && BigInt(decodeTraceDeltaWatermark(watermark).xactId) >= BigInt(horizon))
+    return watermark;
+  return encodeDeltaCursor(horizon, 0);
+}
+
+async function setRemainingTimeout(transaction: TxClient, deadline: number): Promise<void> {
+  const remainingTimeoutMs = Math.floor(deadline - performance.now());
+  if (remainingTimeoutMs <= 0) throw new coreStorage.TraceQueryExecutionError();
+  await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
+}
+
+function traceRowToResult(row: Record<string, unknown>) {
+  return {
+    traceId: String(row.traceId),
+    rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: row.metadata ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+  };
+}
+
 export async function queryTraces(
   client: DbClient,
   schema: string,
   plan: TrustedTraceQueryPlan,
   timeoutMs: number,
 ): Promise<TraceQueryResponse> {
+  if (plan.paginationMode === 'delta') {
+    assertDeltaPollingEnabled();
+    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
+    if (watermark !== undefined) decodeTraceDeltaWatermark(watermark);
+    const resolvedTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
+    const deadline = performance.now() + resolvedTimeoutMs;
+    return runWithPostgresTraceQueryTimeout(
+      client,
+      resolvedTimeoutMs,
+      async transaction => {
+        await setRemainingTimeout(transaction, deadline);
+        const horizon = await readSafeXactHorizon(transaction);
+        let rows: Record<string, unknown>[] = [];
+        if (watermark !== undefined) {
+          await setRemainingTimeout(transaction, deadline);
+          const query = compilePostgresTraceQuery(schema, plan, 'data', horizon);
+          rows = await transaction.any<Record<string, unknown>>(query.text, query.values);
+        }
+        const visible = rows.slice(0, plan.limit);
+        const last = visible.at(-1);
+        return coreStorage.traceQueryResponseSchema.parse({
+          traces: visible.map(traceRowToResult),
+          delta: { limit: plan.limit, hasMore: rows.length > plan.limit },
+          deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(
+            plan,
+            'pg',
+            last ? encodeDeltaCursor(last.xactId, last.cursorId) : emptyDeltaWatermark(horizon, watermark),
+          ),
+        });
+      },
+      { repeatableRead: true },
+    );
+  }
   if (plan.paginationMode === 'page') {
     const resolvedTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
     const deadline = performance.now() + resolvedTimeoutMs;
     const countQuery = compilePostgresTraceQuery(schema, plan, 'count');
     const dataQuery = compilePostgresTraceQuery(schema, plan);
-    const { total, rows } = await runWithPostgresTraceQueryTimeout(
+    const { total, rows, deltaCursor } = await runWithPostgresTraceQueryTimeout(
       client,
       resolvedTimeoutMs,
       async transaction => {
+        // The list-polling feature predates the trace-query cursor encoder.
+        let deltaCursor: string | undefined;
+        if (deltaPollingFeatureEnabled() && typeof coreStorage.encodeTraceQueryDeltaCursor === 'function') {
+          await setRemainingTimeout(transaction, deadline);
+          const horizon = await readSafeXactHorizon(transaction);
+          deltaCursor = coreStorage.encodeTraceQueryDeltaCursor(plan, 'pg', encodeDeltaCursor(horizon, 0));
+        }
+        if (deltaCursor !== undefined) await setRemainingTimeout(transaction, deadline);
         const countRows = await transaction.any<{ count: string }>(countQuery.text, countQuery.values);
         const remainingTimeoutMs = Math.floor(deadline - performance.now());
         if (remainingTimeoutMs <= 0) throw new coreStorage.TraceQueryExecutionError();
         await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
         const rows = await transaction.any<Record<string, unknown>>(dataQuery.text, dataQuery.values);
-        return { total: Number(countRows[0]?.count ?? 0), rows };
+        return { total: Number(countRows[0]?.count ?? 0), rows, deltaCursor };
       },
       { repeatableRead: true },
     );
-    const traces = rows.map(row => ({
-      traceId: String(row.traceId),
-      rootSpanId: String(row.rootSpanId),
-      name: row.name,
-      entityId: row.entityId ?? null,
-      parentSpanId: row.parentSpanId ?? null,
-      createdAt: asIsoTimestamp(row.startedAt),
-      metadata: row.metadata ?? null,
-      inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-      threadId: row.threadId == null ? null : String(row.threadId),
-      resourceId: row.resourceId == null ? null : String(row.resourceId),
-      startedAt: asIsoTimestamp(row.startedAt),
-      endedAt: asIsoTimestamp(row.endedAt),
-      entityName: row.entityName == null ? null : String(row.entityName),
-      entityType: row.entityType == null ? null : String(row.entityType),
-      environment: row.environment == null ? null : String(row.environment),
-      status: row.status,
-    }));
+    const traces = rows.map(traceRowToResult);
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
+      ...(deltaCursor === undefined ? {} : { deltaCursor }),
       pagination: {
         total,
         page: plan.page,
@@ -808,24 +908,7 @@ export async function queryTraces(
     });
   }
 
-  const traces = visibleRows.map(row => ({
-    traceId: String(row.traceId),
-    rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
-    createdAt: asIsoTimestamp(row.startedAt),
-    metadata: row.metadata ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-    threadId: row.threadId == null ? null : String(row.threadId),
-    resourceId: row.resourceId == null ? null : String(row.resourceId),
-    startedAt: asIsoTimestamp(row.startedAt),
-    endedAt: asIsoTimestamp(row.endedAt),
-    entityName: row.entityName == null ? null : String(row.entityName),
-    entityType: row.entityType == null ? null : String(row.entityType),
-    environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
-  }));
+  const traces = visibleRows.map(traceRowToResult);
   const last = traces.at(-1);
   return coreStorage.traceQueryResponseSchema.parse({
     traces,

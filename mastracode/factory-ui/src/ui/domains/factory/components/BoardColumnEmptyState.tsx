@@ -15,13 +15,13 @@ function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSou
       if (!hasIntakeSource) {
         return {
           title: 'No intake sources',
-          description: 'Choose GitHub, Linear, or Jira in Settings to feed this column.',
+          description: 'Choose GitHub, GitLab, Linear, or Jira in Settings to feed this column.',
         };
       }
       return kind === 'review'
         ? {
-            title: 'No pull requests waiting',
-            description: 'Open pull requests from this repository appear here.',
+            title: 'No change requests waiting',
+            description: 'Open change requests from connected repositories appear here.',
           }
         : {
             title: 'Intake is clear',
@@ -46,7 +46,7 @@ function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSou
       return kind === 'review'
         ? {
             title: 'No active reviews',
-            description: 'Drag a pull request here when review starts.',
+            description: 'Drag a change request here when review starts.',
           }
         : {
             title: 'Nothing awaiting review',
@@ -91,7 +91,7 @@ export function BoardColumnEmptyState({
 }) {
   const copy = filtersExcludeAll
     ? {
-        title: kind === 'review' ? 'No pull requests match filters' : 'No work items match filters',
+        title: kind === 'review' ? 'No change requests match filters' : 'No work items match filters',
         description: 'Try another teammate or relevance type.',
       }
     : alreadyMaterialized > 0

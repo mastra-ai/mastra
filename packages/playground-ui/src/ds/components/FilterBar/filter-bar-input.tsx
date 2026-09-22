@@ -149,7 +149,8 @@ export function FilterBarInput({
         event.preventBaseUIHandler();
         if (step !== 'field') stepBack();
         else {
-          const last = ctx.items[ctx.items.length - 1];
+          // Chips still animating out are already gone from the value: skip them.
+          const last = ctx.items.findLast(item => !ctx.leaving.has(item.id));
           if (last) ctx.removeItem(last.id);
         }
         return;

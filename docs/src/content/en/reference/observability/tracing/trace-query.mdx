@@ -1,6 +1,6 @@
 ---
 title: 'Advanced trace queries'
-description: 'Query completed traces and thread identities with recursive predicates, related records, ordering, and cursor pagination.'
+description: 'Query completed traces and thread identities with recursive predicates, numbered pages, keyset cursors, and delta polling.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
@@ -244,8 +244,12 @@ Both routes require `observability:read` and use the configured observability st
 | - | - | - |
 | `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, `from` must be earlier than `to`, and the range can't exceed 31 days. |
 | `where` | No | Recursive trace predicate. Supports scalar conditions and `spans`, `scores`, and `feedback` `some` or `none` clauses. |
-| `orderBy` | No | One item ordering results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. |
+| `orderBy` | No | One item ordering results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted in delta mode. |
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
+| `pagination` | No | Numbered pages: `{ page, perPage }`. Defaults to page 0 and 10 results. `perPage` has a maximum of 100. |
+| `mode` | No | Set to `'delta'` to poll using a delta cursor instead of `page` or `pagination`. |
+| `after` | No | Delta mode only. Opaque `deltaCursor` from a numbered page or previous poll. Omit to establish the current watermark. |
+| `limit` | No | Delta mode only. Maximum results per batch. Defaults to 10 and has a maximum of 100. |
 
 ### Thread queries
 
@@ -529,9 +533,75 @@ Related evidence isn't embedded in either response. Use the trace-detail and bra
 
 ## Pagination and errors
 
+### Choose a pagination mode
+
+Trace queries support three mutually exclusive modes:
+
+| Mode | Request fields | Response metadata |
+| - | - | - |
+| Keyset, the default | `page: { limit, after }` | `page: { next }` |
+| Numbered pages | `pagination: { page, perPage }` | `pagination: { total, page, perPage, hasMore }` and, when delta polling is supported, `deltaCursor` |
+| Delta polling | `mode: 'delta'`, optional top-level `after` and `limit` | `delta: { limit, hasMore }` and `deltaCursor` |
+
+Numbered pages are zero-based. Their total and rows are read consistently within each request. Don't combine `page`, `pagination`, or delta mode. Top-level `after` and `limit` are accepted only in delta mode. Thread queries and grouped compatibility queries remain keyset-only.
+
+### Poll after loading a numbered page
+
+Use the numbered response's `deltaCursor` to replace the numbered-page-to-delta-polling workflow of `listTracesLight()`. Results use `traces` instead of `spans` and contain completed traces only. The configured store must support delta polling.
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+const initial = await mastraClient.queryTraces({
+  timeRange,
+  pagination: { page: 0, perPage: 100 },
+})
+if (!initial.deltaCursor) throw new Error('Delta polling is unavailable')
+
+const traces = new Map(initial.traces.map(trace => [trace.traceId, trace]))
+let after = initial.deltaCursor
+
+async function poll() {
+  let hasMore: boolean
+  do {
+    const result = await mastraClient.queryTraces({
+      timeRange,
+      mode: 'delta',
+      after,
+      limit: 100,
+    })
+    for (const trace of result.traces) traces.set(trace.traceId, trace)
+    after = result.deltaCursor
+    hasMore = result.delta.hasMore
+  } while (hasMore)
+}
+
+await poll()
+```
+
+Retain `after` and call `poll()` again at your application's polling interval. A trace can appear in the initial page and a later batch, or in multiple batches, so merge results by `traceId`. To load historical traces omitted from the initial page, request the remaining numbered pages.
+
+A delta request without `after` returns an empty array and establishes the current cursor. It doesn't return historical matches. Always retain the returned cursor, including for empty batches. `hasMore` means another matching trace exists beyond the batch limit. Continue immediately while it's `true`.
+
+Delta ordering uses the storage ingestion watermark and adapter-specific tie-breakers, so matching timestamps don't make the cursor ambiguous. Don't pass `orderBy` in delta mode. Keyset and delta cursors aren't interchangeable, and delta cursors can't move between storage adapters.
+
+Keep the same normalized `where` predicate and exact `timeRange` bounds for every poll. The range continues to select root `startedAt`, even when a trace completes later. Changing `timeRange.to` to the current time invalidates the cursor. Reload a numbered page and use its cursor whenever the selection or authorization scope changes. You can change the batch limit without restarting.
+
+New completed roots and roots completing after the cursor can be returned. Related spans, scores, and feedback are evaluated when a root is selected, but later related-record writes don't guarantee that the trace is emitted again. Deleted traces and traces that stop matching aren't returned as removals or tombstones. Refresh numbered pages when you need to reconcile those changes.
+
+ClickHouse polling is best effort. Its delta index and trace records use separate materialized-view tables. Concurrent queries can observe an insert in one table before another, as described in [ClickHouse's materialized-view visibility rules](https://github.com/ClickHouse/clickhouse-docs/blob/main/knowledgebase/are_materialized_views_inserted_asynchronously.mdx). A poll can advance past an index entry before the matching trace becomes visible and miss that trace in later polls. Reload numbered pages periodically to reconcile these gaps.
+
+ClickHouse's delta index retains two days of events and doesn't backfill historical rows. Reload numbered pages after a polling interruption longer than this retention window. Delta polling isn't a durable change feed and doesn't guarantee delivery of every matching trace.
+
+### Keyset ordering and errors
+
 Ordering is deterministic. Trace ordering appends `traceId` ascending as a tie-breaker. Thread queries always use raw ordinal `threadId` ascending order. Callers can't override it.
 
-Cursors are bound to the operation, accepted normalized query, authorization state, and ordering. Reusing a cursor after changing the trace selection, predicates, or ordering returns `409`. Trace and thread cursors aren't interchangeable. A malformed cursor returns `400`.
+Keyset cursors are bound to the operation, accepted normalized query, and ordering. Reusing a keyset cursor after changing the trace selection, predicates, or ordering returns `409`. Trace and thread cursors aren't interchangeable.
+
+Numbered-page handoff cursors and delta cursors also bind the authorization state. Changes to the caller's roles or permissions invalidate these cursors and return `409`. If a delta poll returns `409`, reload the numbered pages and resume polling with the new `deltaCursor`. A malformed cursor returns `400`.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
@@ -549,7 +619,7 @@ PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 second
 
 ## Limitations
 
-Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, counts, measures, or custom grouping.
+Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, measures, or custom grouping. Numbered trace pages include a total count.
 
 ## Related
 

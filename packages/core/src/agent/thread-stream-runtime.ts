@@ -1016,6 +1016,7 @@ export class AgentThreadStreamRuntime {
   async discoverThreadPeers(
     options: DiscoverAgentThreadPeersOptions = {},
     pubsub?: PubSub,
+    callerAgent?: Agent<any, any, any, any>,
   ): Promise<AgentThreadPeerAdvertisement[]> {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const state = this.#getState(resolvedPubSub);
@@ -1055,6 +1056,18 @@ export class AgentThreadStreamRuntime {
         )
         .catch(() => finish());
     });
+
+    // The mark is applied after every pass that can produce an entry: a reply can
+    // describe a thread this caller already owns — a second live instance with the
+    // same thread loaded answers discovery too, and its reply replaces the local
+    // entry. The runtime is shared by every agent in the process, so the mark is
+    // scoped to the claiming agent: a sibling agent's claim stays a real peer.
+    if (callerAgent !== undefined) {
+      for (const [id, peer] of peers) {
+        const owner = state.claimedThreadOwners.get(this.#threadKey(peer.resourceId, peer.threadId));
+        if (owner?.agent === callerAgent) peers.set(id, { ...peer, selfAdvertised: true });
+      }
+    }
 
     return [...peers.values()].sort((a, b) => a.id.localeCompare(b.id));
   }
@@ -1728,6 +1741,10 @@ export class AgentThreadStreamRuntime {
     if (state.remoteThreadKeysByRunId.get(runId) !== key) return false;
     const streamId = state.activeThreadStreamIds.get(key);
     if (!streamId) return false;
+    // A remote owner's run is only stopped when the abort is meant for it. Thread
+    // lifecycle transitions abort locally on the way out and must not reach across
+    // processes: a follower running `/new` would otherwise kill the owner's run.
+    if (options.localOnly) return false;
     this.#publish(resolvedPubSub, key, { type: 'run-abort-requested', runId, streamId });
     return true;
   }
@@ -3475,7 +3492,8 @@ export class AgentThreadStreamRuntime {
         const record = activeReaderStreamId ? state.threadRunsByStreamId.get(activeReaderStreamId) : undefined;
         return record ? record.streamOptions.requestContext : currentRunRequestContext;
       },
-      abort: () => this.abortThread(options, resolvedPubSub),
+      abort: (abortOptions?: { localOnly?: boolean }) =>
+        this.abortThread(abortOptions?.localOnly ? { ...options, localOnly: true } : options, resolvedPubSub),
       unsubscribe,
       stream: (async function* () {
         try {
