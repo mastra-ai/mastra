@@ -109,7 +109,7 @@ describe('processor span payload types', () => {
     if (output?.type === 'processor') {
       expectTypeOf(output.value.data).toEqualTypeOf<ProcessorRunOutput>();
       if (output.value.phase === 'outputStream') {
-        expectTypeOf(output.value.data.accumulatedText).toEqualTypeOf<string>();
+        expectTypeOf(output.value.data.accumulatedText).toEqualTypeOf<string | undefined>();
         expectTypeOf(output.value.data).toEqualTypeOf<ProcessorRunOutputByPhase['outputStream']>();
       }
     }

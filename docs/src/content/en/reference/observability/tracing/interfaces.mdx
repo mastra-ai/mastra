@@ -164,16 +164,16 @@ than the one a processor declares: `outputStream` and `outputResult` are separat
 here, because they record different payloads.
 
 ```typescript
-import { describeProcessorPipeline, describeSpanInput } from '@mastra/core/observability'
+import { describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability'
 
-const input = describeSpanInput(span)
+const output = describeSpanOutput(span)
 
-if (input?.type === 'processor') {
-  input.value.phase // 'input' | 'inputStep' | 'llmRequest' | 'llmResponse'
+if (output?.type === 'processor') {
+  output.value.phase // 'input' | 'inputStep' | 'llmRequest' | 'llmResponse'
   // | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'requestError'
-  input.value.phaseLabel // 'Tool result'
-  if (input.value.phase === 'outputStream') {
-    input.value.data.totalChunks // number
+  output.value.phaseLabel // 'Tool result'
+  if (output.value.phase === 'outputStream') {
+    output.value.data.totalChunks // number
   }
 }
 ```

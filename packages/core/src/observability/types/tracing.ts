@@ -1216,12 +1216,13 @@ export interface ProcessorRunInputByPhase {
  *
  * Most phases record only what the processor changed, so an absent key means
  * unchanged. The output-stream hook is the exception: it has no message list to
- * diff, so it records the chunk totals and text it produced.
+ * diff, so it records the chunk totals it produced.
  */
 export interface ProcessorRunOutputByPhase {
   input: ProcessorMessageChanges;
   inputStep: { messageId?: string; retryCount?: number } & ProcessorMessageChanges & ProcessorStepConfig;
-  outputStream: { totalChunks: number; accumulatedText: string };
+  /** The processor workflow records only `totalChunks`; the legacy runner also records the text. */
+  outputStream: { totalChunks: number; accumulatedText?: string };
   outputResult: ProcessorMessageChanges;
   outputStep: ProcessorMessageChanges;
   toolResult: ProcessorMessageChanges;

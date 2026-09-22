@@ -5,11 +5,11 @@
 Added typed descriptions for processor span payloads and pipeline attributes. Processor spans now record their exact pipeline phase, so consumers can narrow supported payloads without guessing their shape.
 
 ```ts
-import { describeSpanInput } from '@mastra/core/observability';
+import { describeSpanOutput } from '@mastra/core/observability';
 
-const input = describeSpanInput(span);
-if (input?.type === 'processor' && input.value.phase === 'outputStream') {
-  input.value.data.totalChunks; // number
+const output = describeSpanOutput(span);
+if (output?.type === 'processor' && output.value.phase === 'outputStream') {
+  output.value.data.totalChunks; // number
 }
 ```
 
