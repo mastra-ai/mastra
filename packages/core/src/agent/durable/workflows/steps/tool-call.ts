@@ -243,12 +243,14 @@ async function processChunkThroughOutputProcessors(
         await emitChunkEvent(pubsub, runId, c);
       }
     },
-    onProcessorError: (error, original) => {
+    onProcessorError: error => {
       logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
-      // Fall through: emit the original chunk if a processor fails. (Ledger:
-      // this leaks the unprocessed value past a throwing redaction processor —
-      // to be fixed deliberately with its own test.)
-      return original;
+      // Fail closed: drop the chunk instead of emitting the unprocessed
+      // original — a throwing redaction processor must not leak the raw
+      // value. The regular loop registers no fallback at all (processor
+      // failures propagate and fail the request); this engine keeps the
+      // run alive but suppresses the chunk.
+      return null;
     },
     // The finish chunk that normally ends stream-processor spans never reaches
     // this pipeline, so end the spans opened for this chunk here.
@@ -1659,9 +1661,15 @@ export function createDurableToolCallStep() {
               };
             }
             // A non-tripwire processor failure must not kill the run in this
-            // engine (run and stream lifecycles are decoupled) — warn and
-            // continue with the raw result.
+            // engine (run and stream lifecycles are decoupled) — but it must
+            // fail closed: continuing with the raw result would leak the
+            // unprocessed value past a throwing redaction processor. The
+            // regular loop rethrows here (runToolResultProcessors), so no
+            // engine emits or persists the raw value; this engine substitutes
+            // an error placeholder for both emission and persistence and
+            // keeps the run alive.
             logger?.warn?.(`[DurableAgent] processToolResult failed for tool "${toolName}": ${processorError}`);
+            result = { error: 'Tool result processing failed' };
           }
         }
 

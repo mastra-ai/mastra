@@ -29,10 +29,10 @@ export interface ProcessChunkDeps<OUTPUT = undefined> {
    * Processor-failure policy (deliberate engine difference, not drift). When
    * omitted, processor errors propagate and fail the step — in main the run
    * and stream share a request lifecycle, so the client sees the failure.
-   * Durable supplies warn-and-return-original: a streaming-side problem must
-   * not kill a potentially long-lived workflow run. (Ledger: returning the
-   * original chunk leaks the unprocessed value past a throwing redaction
-   * processor — to be fixed deliberately with its own test.)
+   * Durable supplies warn-and-drop (returns `null`): a streaming-side problem
+   * must not kill a potentially long-lived workflow run, but the unprocessed
+   * chunk must not leak past a throwing redaction processor either, so the
+   * chunk is suppressed instead of emitted raw.
    *
    * The returned chunk (if any) is emitted in place of the processed one,
    * unless the processed chunk already reached the stream — then it is

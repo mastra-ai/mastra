@@ -15,7 +15,13 @@
  *   2. A tripwire replaces the tool-result chunk with a tripwire chunk and the
  *      step returns `resultBlocked: true` with no result; llm-mapping leaves
  *      the invocation in 'call' state (commit and emission both skipped).
- *   3. A non-tripwire processor failure is non-fatal: the raw result survives.
+ *   3. A non-tripwire processor failure is non-fatal but fail-closed: the run
+ *      continues with an error placeholder — the raw result never reaches the
+ *      stream or the step output (the regular loop rethrows here, so no
+ *      engine emits or persists the raw value).
+ *   4. A throwing chunk-pipeline processor (processOutputStream) suppresses
+ *      the chunk instead of emitting the unprocessed original (fail-closed
+ *      counterpart in the emission path).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChunkFrom } from '../../../../stream/types';
@@ -214,7 +220,7 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     expect(invocation?.toolInvocation?.state).toBe('call');
   });
 
-  it('keeps the raw result when a processor fails with a non-tripwire error', async () => {
+  it('fails closed with an error placeholder when a processor fails with a non-tripwire error', async () => {
     const messageList = seedMessageList();
     setupRegistry(
       {
@@ -229,12 +235,43 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
 
     const output = await runToolCallStep();
 
-    // Non-fatal: the raw result survives and the chunk is still emitted.
+    // Non-fatal: the run continues — but the raw result must not survive a
+    // throwing processor. Both the step output (persistence channel) and the
+    // emitted chunk (stream channel) carry the placeholder instead.
+    expect(output.error).toBeUndefined();
+    expect(output.resultBlocked).toBeUndefined();
+    expect(output.result).toEqual({ error: 'Tool result processing failed' });
+    const toolResultChunks = emittedChunksOfType('tool-result');
+    expect(toolResultChunks).toHaveLength(1);
+    expect(toolResultChunks[0].payload.result).toEqual({ error: 'Tool result processing failed' });
+    expect(JSON.stringify(toolResultChunks)).not.toContain('raw-value');
+  });
+
+  it('suppresses the chunk when a chunk-pipeline processor throws (no raw emission)', async () => {
+    const messageList = seedMessageList();
+    setupRegistry(
+      {
+        id: 'stream-crasher',
+        name: 'stream-crasher',
+        processOutputStream: async ({ part }: any) => {
+          if (part.type === 'tool-result') {
+            throw new Error('stream processor exploded');
+          }
+          return part;
+        },
+      },
+      messageList,
+    );
+
+    const output = await runToolCallStep();
+
+    // The run continues and the result still travels to llm-mapping via the
+    // step output (processToolResult was not involved), but the stream never
+    // sees the unprocessed chunk: it is dropped, not emitted raw.
     expect(output.error).toBeUndefined();
     expect(output.resultBlocked).toBeUndefined();
     expect(output.result).toEqual(RAW_RESULT);
-    const toolResultChunks = emittedChunksOfType('tool-result');
-    expect(toolResultChunks).toHaveLength(1);
-    expect(toolResultChunks[0].payload.result).toEqual(RAW_RESULT);
+    expect(emittedChunksOfType('tool-result')).toHaveLength(0);
+    expect(emittedChunksOfType('tripwire')).toHaveLength(0);
   });
 });
