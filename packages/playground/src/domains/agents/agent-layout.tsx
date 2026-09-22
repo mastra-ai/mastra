@@ -52,32 +52,6 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         ? 'traces'
         : 'none';
 
-  const content = (
-    <KeyboardScope>
-      <AgentShortcuts agentId={agentId!} />
-      <OverviewPanelShortcuts />
-      <RouteSidePanel owner="agent-detail">
-        <ActivatedSkillsProvider key={agentId}>
-          <AgentOverviewPanel agentId={agentId!} />
-        </ActivatedSkillsProvider>
-      </RouteSidePanel>
-      <PageLayout variant="fit"
-        breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-        headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
-      >
-        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-          <AgentPageTabs
-            agentId={agentId!}
-            activeTab={activeTab}
-            showPlayground={showPlayground}
-            showObservability={showObservability}
-          />
-          {children}
-        </div>
-      </PageLayout>
-    </KeyboardScope>
-  );
-
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <SchemaRequestContextProvider>
@@ -86,7 +60,32 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           defaultProvider={defaultProvider}
           defaultModel={defaultModel}
         >
-          {content}
+          <KeyboardScope>
+            <AgentShortcuts agentId={agentId!} />
+            <OverviewPanelShortcuts />
+
+            <PageLayout
+              variant="fit"
+              breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+              headerActions={<AgentDetailHeaderActions agentId={agentId!} />}
+            >
+              <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+                <AgentPageTabs
+                  agentId={agentId!}
+                  activeTab={activeTab}
+                  showPlayground={showPlayground}
+                  showObservability={showObservability}
+                />
+                {children}
+              </div>
+            </PageLayout>
+
+            <RouteSidePanel owner="agent-detail">
+              <ActivatedSkillsProvider key={agentId}>
+                <AgentOverviewPanel agentId={agentId!} />
+              </ActivatedSkillsProvider>
+            </RouteSidePanel>
+          </KeyboardScope>
         </PlaygroundModelProvider>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>
