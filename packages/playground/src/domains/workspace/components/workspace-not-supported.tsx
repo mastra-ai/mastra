@@ -1,10 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleAlertIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 
 export const WorkspaceNotSupported = () => (
   <EmptyState
-    iconSlot={<CircleAlertIcon />}
     titleSlot="Workspace Not Supported"
     descriptionSlot={
       <>

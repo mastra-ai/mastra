@@ -3,7 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { createMetricsPropertyFilterFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { metricsCrumbs } from '../metrics-crumbs';
 import { MetricsCapabilityError } from './metrics-capability-error';
@@ -46,7 +46,6 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
   return (
     <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery}>
       <EmptyState
-        iconSlot={<CircleSlashIcon />}
         titleSlot="Metrics are not available with your current storage"
         descriptionSlot="Metrics require ClickHouse, DuckDB, Postgres v-next, Spanner, or in-memory storage for observability. Other relational databases (LibSQL, MSSQL) and document stores (MongoDB) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
         actionSlot={

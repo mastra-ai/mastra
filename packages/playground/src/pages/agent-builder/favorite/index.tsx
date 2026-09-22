@@ -11,7 +11,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { CircleSlashIcon, StarIcon } from 'lucide-react';
+import { StarIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -90,7 +90,6 @@ export default function AgentBuilderFavoritePage() {
         return (
           <div className="flex items-center-safe justify-center-safe">
             <EmptyState
-              iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
               titleSlot="No favorite agents yet"
               descriptionSlot="Star agents to keep them here for quick access."
             />
@@ -107,7 +106,6 @@ export default function AgentBuilderFavoritePage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
             titleSlot="No favorite skills yet"
             descriptionSlot="Star skills to keep them here for quick access."
           />

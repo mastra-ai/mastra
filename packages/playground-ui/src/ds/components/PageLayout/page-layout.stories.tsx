@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PlusIcon, CircleSlashIcon } from 'lucide-react';
+import { PlusIcon } from 'lucide-react';
 
 import { ActionRow } from '../ActionRow';
 import { Breadcrumb, Crumb } from '../Breadcrumb';
@@ -66,11 +66,7 @@ export const Empty: Story = {
     <div className="h-152 bg-sidebar">
       <PageLayout breadcrumbs={crumbs}>
         <div className="flex h-full items-center justify-center">
-          <EmptyState
-            iconSlot={<CircleSlashIcon />}
-            titleSlot="No resources yet"
-            descriptionSlot="Create a resource to get started."
-          />
+          <EmptyState titleSlot="No resources yet" descriptionSlot="Create a resource to get started." />
         </div>
       </PageLayout>
     </div>

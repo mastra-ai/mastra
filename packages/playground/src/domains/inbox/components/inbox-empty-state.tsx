@@ -2,14 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { CircleSlashIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
 /** Shown instead of the tabs when neither list has anything waiting for review. */
 export function InboxEmptyState() {
   return (
     <EmptyState
-      iconSlot={<CircleSlashIcon />}
       titleSlot="Your inbox is empty"
       descriptionSlot={
         <>

@@ -21,7 +21,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, CircleSlashIcon, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
+import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
@@ -707,7 +707,6 @@ export function DatasetReview({
             </div>
           ) : displayItems.length === 0 ? (
             <EmptyState
-              iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
               titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
               descriptionSlot={
                 showCompleted

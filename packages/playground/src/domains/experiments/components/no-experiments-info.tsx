@@ -1,10 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon, Play } from 'lucide-react';
+import { ExternalLinkIcon, Play } from 'lucide-react';
 
 export const NoExperimentsInfo = ({ onRunExperiment }: { onRunExperiment?: () => void }) => (
   <EmptyState
-    iconSlot={<CircleSlashIcon />}
     titleSlot="No Experiments yet"
     descriptionSlot={
       <>

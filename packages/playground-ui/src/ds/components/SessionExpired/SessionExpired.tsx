@@ -45,11 +45,6 @@ export function SessionExpired({ title, description, className }: SessionExpired
   return (
     <EmptyState
       className={className}
-      iconSlot={
-        <Icon size="lg" className="text-muted-foreground">
-          <LogIn />
-        </Icon>
-      }
       titleSlot={title ?? 'Session Expired'}
       descriptionSlot={description ?? 'Your session has expired. Please log in again to continue.'}
       actionSlot={

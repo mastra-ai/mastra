@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 import type { LogsDatePreset } from '../log-filters';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
@@ -51,7 +51,6 @@ export const NoLogsInfo = ({ datePreset, dateFrom, dateTo }: NoLogsInfoProps = {
   const { title, description } = describeRange({ datePreset, dateFrom, dateTo });
   return (
     <EmptyState
-      iconSlot={<CircleSlashIcon />}
       titleSlot={title}
       descriptionSlot={description}
       actionSlot={

@@ -1,10 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 
 export const NoProcessorsInfo = () => (
   <EmptyState
-    iconSlot={<CircleSlashIcon />}
     titleSlot="No Processors yet"
     descriptionSlot="Configure processors. Add input or output processors to your agents to transform messages."
     actionSlot={

@@ -8,7 +8,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns/format';
-import { ArrowLeft, Copy, DatabaseIcon, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
@@ -96,7 +96,6 @@ function DatasetPage() {
     return (
       <DatasetPageShell crumbs={crumbs}>
         <EmptyState
-          iconSlot={<DatabaseIcon />}
           titleSlot="Dataset not found"
           descriptionSlot={`No dataset with id "${datasetId}".`}
           actionSlot={

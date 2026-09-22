@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon, Plus } from 'lucide-react';
+import { ExternalLinkIcon, Plus } from 'lucide-react';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -11,7 +11,6 @@ export const NoPromptBlocksInfo = () => {
 
   return (
     <EmptyState
-      iconSlot={<CircleSlashIcon />}
       titleSlot="No Prompts yet"
       descriptionSlot={
         canCreate ? (

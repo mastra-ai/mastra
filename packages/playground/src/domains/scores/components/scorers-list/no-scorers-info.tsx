@@ -1,10 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 
 export const NoScorersInfo = () => (
   <EmptyState
-    iconSlot={<CircleSlashIcon />}
     titleSlot="No Scorers yet"
     descriptionSlot="Configure scorers in code to get started. More info in the documentation."
     actionSlot={

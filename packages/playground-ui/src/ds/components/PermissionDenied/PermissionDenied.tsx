@@ -25,11 +25,6 @@ export function PermissionDenied({ resource, title, description, actionSlot, cla
   return (
     <EmptyState
       className={className}
-      iconSlot={
-        <Icon size="lg" className="text-muted-foreground">
-          <ShieldX />
-        </Icon>
-      }
       titleSlot={title ?? defaultTitle}
       descriptionSlot={description ?? defaultDescription}
       actionSlot={actionSlot}

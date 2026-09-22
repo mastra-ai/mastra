@@ -1,10 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CogIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 
 export const WorkspaceNotConfigured = () => (
   <EmptyState
-    iconSlot={<CogIcon />}
     titleSlot="Workspace Not Configured"
     descriptionSlot={
       <>

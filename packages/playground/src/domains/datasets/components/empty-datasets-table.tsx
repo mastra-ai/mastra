@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Plus, CircleSlashIcon, BookOpen } from 'lucide-react';
+import { Plus, BookOpen } from 'lucide-react';
 
 export interface EmptyDatasetsTableProps {
   onCreateClick?: () => void;
@@ -9,7 +9,6 @@ export interface EmptyDatasetsTableProps {
 export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
   return (
     <EmptyState
-      iconSlot={<CircleSlashIcon className="text-muted-foreground size-10" />}
       titleSlot="No Datasets Yet"
       descriptionSlot="Create your first dataset to start evaluating your agents and workflows."
       actionSlot={

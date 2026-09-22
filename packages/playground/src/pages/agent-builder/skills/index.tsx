@@ -9,7 +9,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { CircleSlashIcon, DownloadIcon, PlusIcon, SparklesIcon } from 'lucide-react';
+import { DownloadIcon, PlusIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -81,7 +81,6 @@ export default function AgentBuilderSkillsPage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
             titleSlot="No skills yet"
             descriptionSlot="Create your first skill to give agents new capabilities."
             actionSlot={

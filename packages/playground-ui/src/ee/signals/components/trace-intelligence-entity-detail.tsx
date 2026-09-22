@@ -1,4 +1,3 @@
-import { Radar } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { useEntityLearningProgress, useThemeEntities, useThemeSnapshots } from '../hooks';
@@ -58,7 +57,6 @@ export function TraceIntelligenceEntityDetail({
   if (!entity) {
     return (
       <EmptyState
-        iconSlot={<Radar aria-hidden="true" />}
         titleSlot="Trace Intelligence entity not found"
         descriptionSlot="The requested entity is unavailable in this project."
         variant="fill"

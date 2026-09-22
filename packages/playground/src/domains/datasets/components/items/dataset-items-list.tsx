@@ -4,7 +4,7 @@ import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { format, isThisYear, isToday } from 'date-fns';
-import { CircleSlashIcon, ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
+import { ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
 
 export type DatasetItemsSortKey = 'createdAt';
 
@@ -242,7 +242,6 @@ interface EmptyDatasetItemListProps {
 function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
   return (
     <EmptyState
-      iconSlot={<CircleSlashIcon />}
       titleSlot="No items yet"
       descriptionSlot={
         <>

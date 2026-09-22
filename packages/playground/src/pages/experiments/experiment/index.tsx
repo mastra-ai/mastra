@@ -6,7 +6,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeft, PlayCircle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -123,7 +123,6 @@ function ExperimentPage() {
   const notFound = (
     <ExperimentPageShell crumbs={crumbs}>
       <EmptyState
-        iconSlot={<PlayCircle />}
         titleSlot="Experiment not found"
         descriptionSlot={`No experiment with id "${experimentId}".`}
         actionSlot={

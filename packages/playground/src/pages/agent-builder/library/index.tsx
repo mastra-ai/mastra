@@ -11,7 +11,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { CircleSlashIcon, LibraryIcon } from 'lucide-react';
+import { LibraryIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -78,7 +78,6 @@ export default function AgentBuilderLibraryPage() {
         return (
           <div className="flex items-center-safe justify-center-safe">
             <EmptyState
-              iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
               titleSlot="No public agents yet"
               descriptionSlot="Mark an agent as Public to share it with the team library."
             />
@@ -102,7 +101,6 @@ export default function AgentBuilderLibraryPage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
             titleSlot="No public skills yet"
             descriptionSlot="Mark a skill as Public to share it with the team library."
           />

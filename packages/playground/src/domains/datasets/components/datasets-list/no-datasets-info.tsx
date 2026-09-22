@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon, Plus } from 'lucide-react';
+import { ExternalLinkIcon, Plus } from 'lucide-react';
 
 export interface NoDatasetsInfoProps {
   onCreateClick?: () => void;
@@ -8,7 +8,6 @@ export interface NoDatasetsInfoProps {
 
 export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
   <EmptyState
-    iconSlot={<CircleSlashIcon />}
     titleSlot="No Datasets yet"
     descriptionSlot={
       <>

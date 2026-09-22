@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns';
-import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon, GitCompareIcon } from 'lucide-react';
+import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
@@ -153,7 +153,8 @@ function DatasetItemVersionsComparePage() {
   const leftIsOlder = (leftVersion?.datasetVersion ?? 0) < (rightVersion?.datasetVersion ?? 0);
 
   return (
-    <PageLayout variant="fit"
+    <PageLayout
+      variant="fit"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         canDiff && (
@@ -209,7 +210,6 @@ function DatasetItemVersionsComparePage() {
             {rightNumber == null ? (
               <EmptyState
                 className="h-full"
-                iconSlot={<GitCompareIcon className="text-muted-foreground size-8" />}
                 titleSlot="No version selected"
                 descriptionSlot="Pick a version above to compare it with the one on the left."
               />
