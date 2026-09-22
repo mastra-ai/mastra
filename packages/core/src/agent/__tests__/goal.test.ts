@@ -279,9 +279,10 @@ describe('Agent objective methods', () => {
       pausedReason: 'The goal judge failed to evaluate the objective.',
     });
 
-    // Pausing again without a cause — what `/goal pause` does — must replace the
-    // earlier cause, not inherit it. Otherwise the next reload explains this
-    // pause with the reason for the last one.
+    // Pausing again without a cause — what the agent goal route does, since it
+    // forwards a status and never a reason — must replace the earlier cause
+    // rather than inherit it. Otherwise the next reload explains this pause
+    // with the reason for the last one.
     const repaused = await agent.updateObjectiveOptions({ threadId: THREAD, status: 'paused' });
     expect(repaused?.status).toBe('paused');
     expect(repaused?.pausedReason).toBeUndefined();
@@ -300,8 +301,12 @@ describe('Agent objective methods', () => {
     // Only an explicit pause is authoritative about its own cause. A settings
     // update that says nothing about status must not silently retire it.
     const updated = await agent.updateObjectiveOptions({ threadId: THREAD, maxRuns: 9 });
+    expect(updated?.maxRuns).toBe(9);
     expect(updated?.status).toBe('paused');
     expect(updated?.pausedReason).toBe('The goal judge failed to evaluate the objective.');
+
+    const reloaded = await agent.getObjective({ threadId: THREAD });
+    expect(reloaded?.pausedReason).toBe('The goal judge failed to evaluate the objective.');
   });
 
   it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(

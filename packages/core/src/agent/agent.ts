@@ -1224,6 +1224,10 @@ export class Agent<
    * Partially update the options of the active objective. Only provided fields
    * are persisted into the record (so the precedence over agent config is
    * remembered in thread state). No-ops when no objective is set.
+   *
+   * One field departs from that rule: `pausedReason` describes a single pause,
+   * so an explicit `status: 'paused'` is authoritative about its own cause and
+   * clears a stored one when no replacement is supplied.
    */
   async updateObjectiveOptions(options: {
     threadId: string;
