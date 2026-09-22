@@ -1,10 +1,14 @@
-import { Check } from 'lucide-react';
+import { Check, MessageCircleQuestion } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
-import { FieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { Input } from '@/ds/components/Input';
+import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 export type AskUserSelectionMode = 'single_select' | 'multi_select';
@@ -27,48 +31,83 @@ export interface AskUserResult {
 }
 
 export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>) => (
-  <div className={cn('rounded-lg border border-border bg-background p-3 text-body', className)} {...props} />
+  <div
+    data-slot="ask-user"
+    className={cn(raisedSurfaceStyle, 'w-full overflow-hidden rounded-xl', className)}
+    {...props}
+  />
 );
 
-export const AskUserQuestion = ({ className, ...props }: ComponentProps<'legend'>) => (
-  <legend className={cn('mb-3 text-subheading text-foreground', className)} {...props} />
+export const AskUserLabel = ({ children = 'Question', className, ...props }: ComponentProps<'div'>) => (
+  <div data-slot="ask-user-label" className={cn('flex min-h-10 items-center gap-2 px-4 pt-3', className)} {...props}>
+    <Icon size="xs" className="text-muted-foreground">
+      <MessageCircleQuestion />
+    </Icon>
+    <Txt as="span" variant="caption" tone="muted">
+      {children}
+    </Txt>
+  </div>
 );
 
-export const AskUserOptionDescription = ({ className, ...props }: ComponentProps<'span'>) => (
-  <span className={cn('block text-meta text-muted-foreground', className)} {...props} />
+export const AskUserBody = ({ className, ...props }: ComponentProps<'div'>) => (
+  <div data-slot="ask-user-body" className={cn('px-4 pt-1 pb-4', className)} {...props} />
 );
 
-interface AskUserOptionControlProps extends Omit<ComponentProps<'input'>, 'type'> {
-  type: 'radio' | 'checkbox';
+export const AskUserQuestion = ({ className, ...props }: ComponentProps<typeof Txt>) => (
+  <Txt as="p" variant="subheading" tone="ink" {...props} className={cn('mb-3', className)} />
+);
+
+export interface AskUserOptionRowProps extends Omit<ComponentProps<'label'>, 'children'> {
+  control: ReactNode;
   label: string;
   description?: string;
+  disabled?: boolean;
 }
 
-export const AskUserOptionControl = ({ type, label, description, className, ...props }: AskUserOptionControlProps) => (
+export const AskUserOptionRow = ({
+  control,
+  label,
+  description,
+  disabled = false,
+  className,
+  ...props
+}: AskUserOptionRowProps) => (
   <label
+    // state-layer's wash only stops at :disabled/aria-disabled, and a <label> is neither
+    aria-disabled={disabled || undefined}
     className={cn(
-      'state-layer bg-card shadow-raised flex cursor-pointer items-start gap-2 rounded-md px-3 py-2 text-foreground transition-colors has-[:checked]:[--surface-tint:var(--fill-hover)] has-[:checked]:[--surface-rim:var(--border-strong)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
+      'state-layer flex items-start gap-2.5 rounded-lg bg-fill px-3 py-2',
+      disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
       className,
     )}
+    {...props}
   >
-    <input type={type} className="mt-0.5 accent-current" {...props} />
-    <span>
-      <span className="block">{label}</span>
-      {description ? <AskUserOptionDescription>{description}</AskUserOptionDescription> : null}
+    {control}
+    <span className="grid gap-0.5">
+      <Txt as="span" variant="body" tone="ink">
+        {label}
+      </Txt>
+      {description ? (
+        <Txt as="span" variant="caption" tone="muted">
+          {description}
+        </Txt>
+      ) : null}
     </span>
   </label>
 );
 
-export const AskUserSubmit = ({ children = 'Submit answer', ...props }: ComponentProps<typeof Button>) => (
+export type AskUserSubmitProps = Omit<ComponentProps<typeof Button>, 'children'> & { children?: ReactNode };
+
+export const AskUserSubmit = ({ children = 'Submit answer', ...props }: AskUserSubmitProps) => (
   <Button icon={<Check />} type="button" size="sm" variant="primary" {...props}>
     {children}
   </Button>
 );
 
-export const AskUserPending = ({ children = 'Submitting…', className, ...props }: ComponentProps<'span'>) => (
-  <span role="status" className={cn('text-meta text-muted-foreground', className)} {...props}>
+export const AskUserPending = ({ children = 'Submitting…', ...props }: ComponentProps<typeof Txt>) => (
+  <Txt as="span" role="status" variant="caption" tone="muted" {...props}>
     {children}
-  </span>
+  </Txt>
 );
 
 export interface AskUserOutputProps extends ComponentProps<'div'> {
@@ -77,14 +116,17 @@ export interface AskUserOutputProps extends ComponentProps<'div'> {
 
 export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProps) => (
   <div
+    data-slot="ask-user-output"
     role={result.isError ? 'alert' : 'status'}
-    className={cn('space-y-2 rounded-md bg-card p-3 text-foreground', result.isError && 'text-error', className)}
+    className={cn('grid gap-2 rounded-lg bg-fill p-3', className)}
     {...props}
   >
-    <Badge size="xs" variant={result.isError ? 'red' : 'green'}>
+    <Badge size="xs" variant={result.isError ? 'red' : 'green'} className="justify-self-start">
       {result.isError ? 'Error' : 'Answered'}
     </Badge>
-    <p>{result.content}</p>
+    <Txt as="p" variant="body" tone="ink" className={cn(result.isError && 'text-error')}>
+      {result.content}
+    </Txt>
   </div>
 );
 
@@ -116,15 +158,18 @@ const AskUserInput = ({
   footer,
   ...props
 }: AskUserInputProps) => {
-  const inputId = useId();
+  const fieldId = useId();
   const [text, setText] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
 
   if (result || isAnswered) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <p className="text-foreground text-subheading mb-2">{payload.question}</p>
-        {result ? <AskUserOutput result={result} /> : <Badge variant="green">Answered</Badge>}
+        <AskUserLabel />
+        <AskUserBody>
+          <AskUserQuestion>{payload.question}</AskUserQuestion>
+          {result ? <AskUserOutput result={result} /> : <Badge variant="green">Answered</Badge>}
+        </AskUserBody>
       </AskUserContainer>
     );
   }
@@ -144,69 +189,98 @@ const AskUserInput = ({
   if (options.length === 0) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <FieldBlock.Label name={inputId} htmlFor={inputId} className="mb-2">
-          {payload.question}
-        </FieldBlock.Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id={inputId}
-            value={text}
-            onChange={event => setText(event.target.value)}
-            onKeyDown={handleTextKeyDown}
-            placeholder="Type your answer..."
-            disabled={isSubmitting}
-            size="sm"
-          />
-          <AskUserSubmit aria-label="Submit answer" disabled={isSubmitting || !text.trim()} onClick={submitText}>
-            Submit
-          </AskUserSubmit>
-        </div>
-        {isSubmitting ? <AskUserPending className="mt-2 block" /> : null}
-        {footer}
+        <AskUserLabel />
+        <AskUserBody>
+          <AskUserQuestion as="label" htmlFor={fieldId} className="mb-2 block">
+            {payload.question}
+          </AskUserQuestion>
+          <div className="flex items-center gap-2">
+            <Input
+              id={fieldId}
+              value={text}
+              onChange={event => setText(event.target.value)}
+              onKeyDown={handleTextKeyDown}
+              placeholder="Type your answer..."
+              disabled={isSubmitting}
+              size="sm"
+            />
+            <AskUserSubmit
+              className="shrink-0 whitespace-nowrap"
+              disabled={isSubmitting || !text.trim()}
+              onClick={submitText}
+            />
+          </div>
+          {isSubmitting ? <AskUserPending className="mt-2 block" /> : null}
+          {footer}
+        </AskUserBody>
       </AskUserContainer>
     );
   }
 
   const isMulti = payload.selectionMode === 'multi_select';
+
   return (
     <AskUserContainer data-testid="ask-user" {...props}>
-      <fieldset disabled={isSubmitting} className="space-y-2">
-        <AskUserQuestion>{payload.question}</AskUserQuestion>
-        {options.map(option => {
-          const checked = selected.includes(option.label);
-          return (
-            <AskUserOptionControl
-              key={option.label}
-              type={isMulti ? 'checkbox' : 'radio'}
-              name={inputId}
-              label={option.label}
-              description={option.description}
-              disabled={isSubmitting}
-              checked={checked}
-              onChange={() => {
-                if (isSubmitting) return;
-                if (!isMulti) {
-                  setSelected([option.label]);
-                  onSubmit(option.label);
-                  return;
-                }
-                setSelected(current =>
-                  current.includes(option.label)
-                    ? current.filter(selectedLabel => selectedLabel !== option.label)
-                    : [...current, option.label],
-                );
-              }}
-            />
-          );
-        })}
+      <AskUserLabel />
+      <AskUserBody>
+        <AskUserQuestion id={fieldId}>{payload.question}</AskUserQuestion>
         {isMulti ? (
-          <AskUserSubmit disabled={isSubmitting || selected.length === 0} onClick={() => onSubmit(selected)}>
-            Submit answer
-          </AskUserSubmit>
-        ) : null}
-        {isSubmitting ? <AskUserPending /> : null}
+          <div role="group" aria-labelledby={fieldId} className="grid gap-2">
+            {options.map(option => (
+              <AskUserOptionRow
+                key={option.label}
+                label={option.label}
+                description={option.description}
+                disabled={isSubmitting}
+                control={
+                  <Checkbox
+                    className="mt-0.5"
+                    disabled={isSubmitting}
+                    checked={selected.includes(option.label)}
+                    onCheckedChange={() =>
+                      setSelected(current =>
+                        current.includes(option.label)
+                          ? current.filter(selectedLabel => selectedLabel !== option.label)
+                          : [...current, option.label],
+                      )
+                    }
+                  />
+                }
+              />
+            ))}
+            <AskUserSubmit
+              className="mt-1 justify-self-start"
+              disabled={isSubmitting || selected.length === 0}
+              onClick={() => onSubmit(selected)}
+            >
+              Submit answer
+            </AskUserSubmit>
+          </div>
+        ) : (
+          <RadioGroup
+            aria-labelledby={fieldId}
+            disabled={isSubmitting}
+            value={selected[0] ?? null}
+            onValueChange={value => {
+              const label = String(value);
+              setSelected([label]);
+              onSubmit(label);
+            }}
+          >
+            {options.map(option => (
+              <AskUserOptionRow
+                key={option.label}
+                label={option.label}
+                description={option.description}
+                disabled={isSubmitting}
+                control={<RadioGroupItem className="mt-0.5" value={option.label} />}
+              />
+            ))}
+          </RadioGroup>
+        )}
+        {isSubmitting ? <AskUserPending className="mt-3 block" /> : null}
         {footer}
-      </fieldset>
+      </AskUserBody>
     </AskUserContainer>
   );
 };
