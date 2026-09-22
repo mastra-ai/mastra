@@ -4,6 +4,7 @@ import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
+import { executeWithContext } from '../observability/utils';
 import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
@@ -101,6 +102,111 @@ describe.each([
         attributes: expect.objectContaining({ processorPhase: 'input', processorExecutor: 'workflow' }),
       }),
     );
+  });
+
+  it.each([false, true])('isolates overlapping mutations when the second processor aborts: %s', async abortSecond => {
+    const messageList = new MessageList();
+    const first = createMockTracingContext();
+    const second = createMockTracingContext();
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const started = new Promise<void>(resolve => {
+      firstStarted = resolve;
+    });
+    const released = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    const firstStep = makeStep({
+      id: 'first',
+      processInput: async ({ messageList }) => {
+        messageList.addSystem('First before overlap');
+        firstStarted();
+        await released;
+        messageList.addSystem('First after overlap');
+        return messageList;
+      },
+    });
+    const secondStep = makeStep({
+      id: 'second',
+      processInput: async ({ messageList, abort }) => {
+        messageList.addSystem('Second during overlap');
+        if (abortSecond) abort('Blocked');
+        return messageList;
+      },
+    });
+    const firstRun = firstStep.execute({
+      inputData: { phase: 'input', messages: [], messageList },
+      tracingContext: first.tracingContext,
+    } as any);
+    await started;
+    try {
+      const secondRun = secondStep.execute({
+        inputData: { phase: 'input', messages: [], messageList },
+        tracingContext: second.tracingContext,
+      } as any);
+      if (abortSecond) await expect(secondRun).rejects.toThrow(TripWire);
+      else await secondRun;
+    } finally {
+      releaseFirst();
+      await firstRun;
+    }
+    const mutation = (content: string) => ({ type: 'addSystem', message: { role: 'system', content } });
+    expect(first.mockSpan.end).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: { messageListMutations: [mutation('First before overlap'), mutation('First after overlap')] },
+      }),
+    );
+    expect(abortSecond ? second.mockSpan.error : second.mockSpan.end).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: expect.objectContaining({ messageListMutations: [mutation('Second during overlap')] }),
+      }),
+    );
+  });
+
+  it('attributes child-span mutations to the processor and preserves unscoped recording', async () => {
+    const messageList = new MessageList();
+    const { mockSpan, tracingContext } = createMockTracingContext();
+    messageList.startRecording();
+    messageList.addSystem('Outside before');
+    const step = makeStep({
+      id: 'nested-span',
+      processInput: async ({ messageList }) => {
+        await executeWithContext({
+          span: { ...mockSpan, parent: mockSpan } as any,
+          fn: async () => {
+            messageList.addSystem('Nested instruction');
+            messageList.add({ role: 'user', content: 'First' }, 'input');
+            const ids = messageList.get.all.db().map(message => message.id);
+            messageList.removeByIds(ids);
+            messageList.add({ role: 'user', content: 'Second' }, 'input');
+            messageList.clear.all.db();
+          },
+        });
+        return messageList;
+      },
+    });
+    await step.execute({
+      inputData: { phase: 'input', messages: [], messageList },
+      tracingContext,
+    } as any);
+    expect(mockSpan.end).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: {
+          messageListMutations: [
+            { type: 'addSystem', message: { role: 'system', content: 'Nested instruction' } },
+            { type: 'add', source: 'input', count: 1 },
+            { type: 'removeByIds', ids: [expect.any(String)], count: 1 },
+            { type: 'add', source: 'input', count: 1 },
+            { type: 'clear', count: 1 },
+          ],
+        },
+      }),
+    );
+    messageList.addSystem('Outside after');
+    expect(messageList.stopRecording()).toEqual([
+      { type: 'addSystem', message: { role: 'system', content: 'Outside before' } },
+      { type: 'addSystem', message: { role: 'system', content: 'Outside after' } },
+    ]);
   });
 
   it('preserves mutations when a processor aborts and stops recording afterward', async () => {

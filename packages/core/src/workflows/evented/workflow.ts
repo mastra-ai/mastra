@@ -26,6 +26,7 @@ import {
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
+import { initContextStorage } from '../../observability/context-storage';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
 import {
@@ -1168,9 +1169,10 @@ function createStepFromProcessor<TProcessorId extends string>(
         // would otherwise show or hide a processor's edits depending only on which
         // executor ran it.
         const recordingList = processorSpan ? processorMessageList : undefined;
-        recordingList?.startRecording();
+        if (recordingList) initContextStorage();
+        recordingList?.startRecording(processorSpan);
         const takeMutations = () => {
-          const mutations = recordingList?.stopRecording() ?? [];
+          const mutations = recordingList?.stopRecording(processorSpan) ?? [];
           return mutations.length > 0 ? { messageListMutations: mutations } : undefined;
         };
         try {
