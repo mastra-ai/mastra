@@ -10,7 +10,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'Two ladders cover everything that sits above a surface: a fill for the body of a control and a 1px boundary for its edge. Both are alphas of the foreground, so a rung is a relative step and reads the same on the sidebar, the canvas and a card.',
+          'Three ladders cover everything that sits above a surface: a fill for the body of a control, a 1px boundary for its edge, and an opaque set for a control that is a colour of its own. The first two are alphas of the foreground, so a rung is a relative step and reads the same on the sidebar, the canvas and a card; the third cannot be, because a filled control has to cover what it sits on.',
       },
     },
   },
@@ -28,6 +28,20 @@ const fillLadder: { token: FillToken; use: string }[] = [
   { token: 'fill-hover', use: 'Hover; rest of a selection control' },
   { token: 'fill-active', use: 'Press, open, selected' },
   { token: 'fill-strong', use: 'Selection-control press' },
+];
+
+const filledInverseLadder: { token: FillToken; use: string }[] = [
+  { token: 'fill-inverse', use: 'Rest of a primary button' },
+  { token: 'fill-inverse-hover', use: 'Hover' },
+  { token: 'fill-inverse-active', use: 'Press' },
+  { token: 'fill-inverse-disabled', use: 'Disabled' },
+];
+
+const filledDestructiveLadder: { token: FillToken; use: string }[] = [
+  { token: 'fill-destructive', use: 'Rest of a destructive button' },
+  { token: 'fill-destructive-hover', use: 'Hover' },
+  { token: 'fill-destructive-active', use: 'Press' },
+  { token: 'fill-destructive-disabled', use: 'Disabled' },
 ];
 
 const boundaryLadder: { token: BoundaryToken; use: string }[] = [
@@ -60,6 +74,28 @@ const FillLadderRow = () => (
   </div>
 );
 
+// Each rung is drawn over a word: a filled control that stays filled is the whole
+// point of this ladder, so anything legible through a swatch is a bug in the token.
+const FilledLadderRow = ({ ladder }: { ladder: { token: FillToken; use: string }[] }) => (
+  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    {ladder.map(rung => (
+      <Specimen key={rung.token} name={`--${rung.token}`} note={rung.use}>
+        <div className="relative h-16 overflow-hidden rounded-md">
+          <Txt variant="body-sm" className="absolute inset-0 flex items-center justify-center">
+            Behind
+          </Txt>
+          <div
+            role="img"
+            aria-label={`${rung.token} fill`}
+            className="absolute inset-0"
+            style={{ background: Colors[rung.token] }}
+          />
+        </div>
+      </Specimen>
+    ))}
+  </div>
+);
+
 const BoundaryLadderRow = ({ filled }: { filled: boolean }) => (
   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
     {boundaryLadder.map(rung => (
@@ -79,9 +115,9 @@ export const SurfaceFoundations: Story = {
   name: 'Surface foundations',
   render: (_args, context) => (
     <FoundationPage
-      eyebrow={`Surface / ${fillLadder.length + boundaryLadder.length + overlayWashes.length + rimTokens.length + tintTokens.length + 3} tokens`}
+      eyebrow={`Surface / ${fillLadder.length + filledInverseLadder.length + filledDestructiveLadder.length + boundaryLadder.length + overlayWashes.length + rimTokens.length + tintTokens.length + 3} tokens`}
       title="Surface foundations"
-      description="A fill is the body of anything raised above its parent surface; a boundary is its 1px edge. Rungs are alphas, so the same rung holds on any surface — read each ladder twice below, once on the canvas and once on the sidebar."
+      description="A fill is the body of anything raised above its parent surface; a boundary is its 1px edge. Those rungs are alphas, so the same rung holds on any surface — read both ladders twice below, once on the canvas and once on the sidebar. The opaque ladder is the exception, and is shown once: a control that carries its own colour must read the same everywhere by covering what is under it."
       aside={
         <Txt variant="meta" font="mono" tone="muted" className="uppercase">
           Mode / {context.globals.theme === 'light' ? 'Light' : 'Dark'}
@@ -102,6 +138,22 @@ export const SurfaceFoundations: Story = {
             <FillLadderRow />
           </div>
         </SpecimenGroup>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Opaque ladder"
+        description="The states of a control that is a colour rather than a rung on the surface — the primary and destructive buttons. An alpha here would open a window onto the card text, row or image the control covers, widening with every louder state, so each rung is the opaque twin of the alpha it replaces: the same colour mixed toward --background by the same amount."
+      >
+        <SpecimenGroup label="Inverse — primary">
+          <FilledLadderRow ladder={filledInverseLadder} />
+        </SpecimenGroup>
+        <SpecimenGroup label="Destructive">
+          <FilledLadderRow ladder={filledDestructiveLadder} />
+        </SpecimenGroup>
+        <Txt variant="caption" tone="muted">
+          The word behind each swatch never shows. Mixing happens in sRGB, the space a browser composites alpha in, so a
+          rung lands on the exact colour its translucent predecessor painted over the canvas — same paint, no window.
+        </Txt>
       </FoundationSection>
 
       <FoundationSection

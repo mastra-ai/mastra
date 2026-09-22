@@ -54,13 +54,16 @@ export const buttonVariants = cva(
           disabledFilledSurfaceStyle,
           'aria-disabled:border-border aria-disabled:bg-fill-subtle',
         ),
+        // Filled variants take the opaque ladder: their rest fill is a colour, not a rung
+        // layered on the surface, so a state that thinned it would let whatever the button
+        // covers read through the hover it is meant to answer.
         primary: cn(
-          'border border-transparent bg-foreground text-background not-disabled:hover:bg-foreground/75 not-disabled:active:bg-foreground/60',
-          'disabled:bg-foreground/45 disabled:text-background/75 aria-disabled:bg-foreground/45 aria-disabled:text-background/75',
+          'border border-transparent bg-fill-inverse text-background not-disabled:hover:bg-fill-inverse-hover not-disabled:active:bg-fill-inverse-active',
+          'disabled:bg-fill-inverse-disabled disabled:text-background/75 aria-disabled:bg-fill-inverse-disabled aria-disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-destructive text-destructive-foreground not-disabled:hover:bg-destructive/80 not-disabled:active:bg-destructive/70',
-          'disabled:bg-destructive/45 disabled:text-destructive-foreground/75 aria-disabled:bg-destructive/45 aria-disabled:text-destructive-foreground/75',
+          'border border-transparent bg-fill-destructive text-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
+          'disabled:bg-fill-destructive-disabled disabled:text-destructive-foreground/75 aria-disabled:bg-fill-destructive-disabled aria-disabled:text-destructive-foreground/75',
         ),
         'destructive-ghost': cn(
           'border border-transparent bg-transparent text-destructive not-disabled:hover:bg-destructive/20 not-disabled:hover:text-destructive not-disabled:active:bg-destructive/30',
