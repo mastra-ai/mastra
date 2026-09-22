@@ -15,8 +15,8 @@ import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import type { FilterBarField, FilterBarItem } from './types';
-import { Txt } from '@/ds/components/Txt';
 import { Avatar } from '@/ds/components/Avatar/Avatar';
+import { Txt } from '@/ds/components/Txt';
 import { themedHueColor } from '@/lib/colors';
 
 const FIELDS: FilterBarField[] = [
