@@ -1,11 +1,13 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
-import { liveKitConnectionRoute } from '@mastra/livekit';
+import { liveKitConnectionRoute, liveKitRecordingRoute } from '@mastra/livekit';
 import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
 import { callCenterAgent } from './agents/call-center-agent';
 import { superRegulatedAgent } from './agents/super-regulated-agent';
 import { triageAgent } from './agents/triage-agent';
 import { voiceAgentDbUrl } from './db';
+import { getRecordingOptions, liveKitAgentName } from './livekit';
+import { resolveCallRecording } from './recording-playback';
 import { phoneConversationWorkflow } from './workflows/phone-conversation';
 
 export const mastra = new Mastra({
@@ -36,8 +38,17 @@ export const mastra = new Mastra({
     port: Number.parseInt(process.env.PORT ?? '', 10) || 4111,
     apiRoutes: [
       liveKitConnectionRoute({
-        agentName: 'mastra-voice',
+        agentName: liveKitAgentName,
+        // Auto recording starts before joining, so it cannot wait for in-call consent.
+        // Enable it only for the Meridian agent, never the regulated consent demo.
+        recording: ({ body }) =>
+          body.agentId === 'callCenter' || body.agentId === 'call-center' ? getRecordingOptions() : undefined,
         // Local demo only — protect this route in production.
+        requiresAuth: false,
+      }),
+      liveKitRecordingRoute({
+        resolveRecording: resolveCallRecording,
+        // Local demo only. Use the default authentication and an authorize callback in production.
         requiresAuth: false,
       }),
     ],

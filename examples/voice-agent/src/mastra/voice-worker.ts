@@ -1,10 +1,11 @@
 // Agent entrypoint: every turn is answered by the `callCenter` agent's own loop (model, tools,
 // memory). This is the default, lowest-friction path. For the workflow-driven entrypoint, see
-// voice-worker-workflow.ts. Run one worker at a time — both register as `mastra-voice`.
+// voice-worker-workflow.ts. Run one worker at a time — both use LIVEKIT_AGENT_NAME.
 import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
 import { recordContact } from './backend';
 import { mastra } from './index';
+import { liveKitAgentName } from './livekit';
 import { summarizeCall } from './memory';
 
 export default createLiveKitWorker({
@@ -79,5 +80,5 @@ export default createLiveKitWorker({
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' });
+  runLiveKitWorker({ entry: import.meta.url, agentName: liveKitAgentName });
 }

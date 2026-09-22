@@ -2,12 +2,13 @@
 // on EVERY @mastra/livekit compliance control at once, to show what a fully-configured regulatory
 // setup looks like. Answers each turn with the `superRegulated` agent.
 //
-// Run this INSTEAD of `pnpm worker` (one worker at a time — all three register as `mastra-voice`),
+// Run this INSTEAD of `pnpm worker` (one worker at a time — all use LIVEKIT_AGENT_NAME),
 // then open the "Super Regulated Business" agent in Studio and start a voice call.
 import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
 import { getConsentLedger, hasSummaryConsent, recordContact, summaryStorageRequired } from './backend';
 import { mastra } from './index';
+import { liveKitAgentName } from './livekit';
 import { summarizeCall } from './memory';
 
 export default createLiveKitWorker({
@@ -21,8 +22,8 @@ export default createLiveKitWorker({
     greeting: {
       // The opening AI disclosure. Spoken by the worker at call start.
       text:
-        "You've reached Northwind Financial. I'm an AI virtual assistant, and this call may be recorded " +
-        'for quality and compliance. I have a few quick permission questions before we begin.',
+        "You've reached Northwind Financial. I'm an AI virtual assistant. " +
+        'I have a few quick permission questions before we begin.',
       // EU AI Act Art. 50: the caller must be told they're interacting with an AI. Make the
       // disclosure non-interruptible so it can't be talked over, and hold all post-greeting work
       // (persistence, session start) until it has fully played.
@@ -34,7 +35,7 @@ export default createLiveKitWorker({
       // fires within a short demo call (spoken at the next turn boundary, never mid-sentence);
       // production would use minutes.
       repeatEvery: 45_000,
-      repeatText: "A quick reminder: you're speaking with an AI assistant and this call is recorded.",
+      repeatText: "A quick reminder: you're speaking with an AI assistant.",
     },
     // Declares that storing a call summary needs consent — the one consent wired to a consequence
     // (the OM flush gate in onCallEnd below). The object form carries the audit-friendly metadata.
@@ -47,8 +48,7 @@ export default createLiveKitWorker({
     // and its own words finish, the worker speaks this line non-interruptibly, then drops the line
     // (running onCallEnd on the way out, exactly as a caller hang-up does).
     endCall: {
-      message:
-        'This call has been recorded and logged for compliance. Thank you for calling Northwind Financial. Goodbye.',
+      message: 'Thank you for calling Northwind Financial. Goodbye.',
       reason: 'regulated agent closed call',
     },
   },
@@ -96,5 +96,5 @@ export default createLiveKitWorker({
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' });
+  runLiveKitWorker({ entry: import.meta.url, agentName: liveKitAgentName });
 }
