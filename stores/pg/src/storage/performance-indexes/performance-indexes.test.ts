@@ -4,6 +4,8 @@ import {
   TABLE_HARNESS_CHANNEL_INBOX,
   TABLE_HARNESS_SESSIONS,
   TABLE_HARNESS_SESSION_EVENTS,
+  TABLE_HARNESS_TERMINAL_ADMISSIONS,
+  TABLE_HARNESS_TERMINAL_INTENTS,
   TABLE_HARNESS_WORKSPACE_ACTIONS,
   TABLE_MESSAGES,
   TABLE_SCORERS,
@@ -147,7 +149,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
 
       const indexes = harness.getDefaultIndexDefinitions();
 
-      expect(indexes.length).toBe(39);
+      expect(indexes.length).toBe(43);
       expect(indexes).toContainEqual({
         name: 'test_schema_idx_harness_sessions_active_key',
         table: TABLE_HARNESS_SESSIONS,
@@ -195,6 +197,30 @@ describe('PostgresStore Domain Performance Indexes', () => {
         columns: ['blob_ref'],
         where: '"blob_ref" IS NOT NULL',
         method: 'hash',
+      });
+      // Native terminal handoff: grant generation binding, pending-admission
+      // probes, intent claim scanning, and per-incarnation ordering.
+      expect(indexes).toContainEqual({
+        name: 'test_schema_idx_harness_terminal_admissions_grant',
+        table: TABLE_HARNESS_TERMINAL_ADMISSIONS,
+        columns: ['harness_name', 'grant_key', 'grant_generation'],
+        unique: true,
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_idx_harness_terminal_admissions_session',
+        table: TABLE_HARNESS_TERMINAL_ADMISSIONS,
+        columns: ['harness_name', 'session_id', 'run_id'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_idx_harness_terminal_intents_claim',
+        table: TABLE_HARNESS_TERMINAL_INTENTS,
+        columns: ['harness_name', 'status', 'next_attempt_at'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_idx_harness_terminal_intents_order',
+        table: TABLE_HARNESS_TERMINAL_INTENTS,
+        columns: ['harness_name', 'session_id', 'session_incarnation', 'revision'],
+        unique: true,
       });
     });
   });
@@ -271,7 +297,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
         observability.getDefaultIndexDefinitions().length +
         harness.getDefaultIndexDefinitions().length;
 
-      expect(totalIndexes).toBe(52);
+      expect(totalIndexes).toBe(56);
     });
   });
 });
