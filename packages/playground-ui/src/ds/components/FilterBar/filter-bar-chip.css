@@ -148,7 +148,34 @@
   }
 }
 
+/* Group actions (+ filter, + group, clear) stay out of the way on fine pointers:
+ * only the innermost hovered (or focused) group reveals its row, so nested groups
+ * don't stack identical action rows. Empty or targeted groups keep theirs pinned. */
+@media (pointer: fine) {
+  .filter-bar-editor-actions {
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+  }
+
+  .filter-bar-group-editor:hover > .filter-bar-editor-actions,
+  .filter-bar-group-editor:focus-within > .filter-bar-editor-actions {
+    opacity: 1;
+  }
+
+  .filter-bar-group-editor:has(.filter-bar-group-editor:hover) > .filter-bar-editor-actions {
+    opacity: 0;
+  }
+
+  .filter-bar-editor-actions[data-pinned] {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .filter-bar-editor-actions {
+    transition: none;
+  }
+
   .filter-bar-segment,
   .filter-bar-chip[data-leaving],
   .filter-bar-editor-nested[data-leaving],

@@ -1,4 +1,4 @@
-import { PlusIcon, Trash2Icon } from 'lucide-react';
+import { FolderPlusIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { FilterBarChip } from './filter-bar-chip';
@@ -107,7 +107,7 @@ export function FilterBarGroupEditor({
       data-depth={depth}
       role="group"
       aria-label={`Conditions joined with ${group.logic}`}
-      className={cn('flex min-w-0 flex-col items-start gap-1.5', className)}
+      className={cn('filter-bar-group-editor flex min-w-0 flex-col items-start gap-1.5', className)}
     >
       {rows}
       {targeted && (
@@ -120,37 +120,42 @@ export function FilterBarGroupEditor({
           className={rows.length > 0 ? 'mt-1' : undefined}
         />
       )}
-      <div className={cn('flex w-full items-center gap-1', (rows.length > 0 || targeted) && 'mt-1')}>
+      <div
+        data-slot="filter-bar-editor-actions"
+        // Pinned (always visible) while the group is empty or its input is open; otherwise
+        // revealed on hover / focus by `.filter-bar-editor-actions` rules in filter-bar-chip.css.
+        data-pinned={rows.length === 0 || targeted || undefined}
+        className="filter-bar-editor-actions flex w-full items-center gap-0.5"
+      >
         <Button
           ref={addFilterRef}
           variant="ghost"
-          size="sm"
-          icon={<PlusIcon />}
+          size="icon-sm"
+          tooltip="Filter"
           disabled={targeted}
           onClick={() => ctx.openGroupInput(group.id)}
         >
-          Filter
+          <PlusIcon />
         </Button>
         <Button
           variant="ghost"
-          size="sm"
-          icon={<PlusIcon />}
+          size="icon-sm"
+          aria-label="Group"
+          tooltip={canNest ? 'Group' : `Groups can nest ${ctx.maxDepth} levels deep`}
           disabled={!canNest}
-          tooltip={canNest ? undefined : `Groups can nest ${ctx.maxDepth} levels deep`}
           onClick={() => ctx.addGroup(group.id, group.logic === 'and' ? 'or' : 'and')}
         >
-          Group
+          <FolderPlusIcon />
         </Button>
         {onRemove && (
           <Button
             variant="ghost"
-            size="sm"
-            icon={<Trash2Icon />}
+            size="icon-sm"
             className="text-muted-foreground ml-auto"
-            aria-label={removeLabel}
+            tooltip={removeLabel}
             onClick={onRemove}
           >
-            Clear
+            <Trash2Icon />
           </Button>
         )}
       </div>
@@ -171,7 +176,7 @@ function NestedGroupRow({ group, depth }: { group: FilterBarGroup; depth: number
       data-leaving={leaving || undefined}
       aria-hidden={leaving || undefined}
       className={cn(
-        'filter-bar-editor-nested my-1 w-full rounded-lg border border-border bg-fill-subtle/40 p-2',
+        'filter-bar-editor-nested my-1 w-full rounded-lg border border-border p-2',
         leaving && 'pointer-events-none',
       )}
     >
