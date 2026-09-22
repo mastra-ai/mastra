@@ -126,7 +126,7 @@ export const CollapsiblePanel = ({
               className={cn(
                 panelIconButtonClass,
                 'absolute top-2 z-10',
-                'transition-[color,background-color,opacity] duration-300 starting:opacity-0',
+                'transition-[color,opacity] duration-300 starting:opacity-0',
                 direction === 'left' ? 'left-2' : 'right-2',
               )}
             >

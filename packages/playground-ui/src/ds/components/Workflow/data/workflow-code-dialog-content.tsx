@@ -42,10 +42,10 @@ export const WorkflowCodeContent = ({
     const content = JSON.stringify(data, null, 2);
     return (
       <div className="relative overflow-auto" style={{ maxHeight: 500 }}>
-        <div className="bg-surface4 absolute top-2 right-2 z-10 rounded-full">
+        <div className="bg-muted absolute top-2 right-2 z-10 rounded-full">
           <CopyButton content={content} />
         </div>
-        <div className="bg-surface4 rounded-lg p-4">
+        <div className="bg-muted rounded-lg p-4">
           <CodeMirror value={content} theme={theme} extensions={[jsonLanguage, EditorView.lineWrapping]} />
         </div>
       </div>
@@ -62,10 +62,10 @@ export const WorkflowCodeContent = ({
 
   return (
     <div className="relative overflow-auto" style={{ maxHeight: 500 }}>
-      <div className="bg-surface4 absolute top-2 right-2 z-10 rounded-full">
+      <div className="bg-muted absolute top-2 right-2 z-10 rounded-full">
         <CopyButton content={data} />
       </div>
-      <div className="bg-surface4 rounded-lg p-4">
+      <div className="bg-muted rounded-lg p-4">
         <CodeMirror value={displayContent} theme={theme} extensions={extensions} />
       </div>
     </div>

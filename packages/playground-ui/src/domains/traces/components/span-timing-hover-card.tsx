@@ -12,7 +12,7 @@ type SpanTimingHoverCardProps = {
 export function SpanTimingHoverCard({ span, startShiftMs }: SpanTimingHoverCardProps) {
   return (
     <HoverCardContent className="pr-6">
-      <div className={cn('mt-1 mb-2 flex items-center gap-2 text-ui-sm')}>Span Timing</div>
+      <div className={cn('mt-1 mb-2 flex items-center gap-2 text-caption')}>Span Timing</div>
       <DataKeysAndValues>
         <DataKeysAndValues.Key>Latency</DataKeysAndValues.Key>
         <DataKeysAndValues.Value>{span.latency} ms</DataKeysAndValues.Value>

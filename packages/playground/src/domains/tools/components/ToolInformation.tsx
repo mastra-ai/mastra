@@ -15,15 +15,15 @@ export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInfor
 
   return (
     <div className="text-foreground flex gap-2">
-      <Icon size="lg" className="bg-surface4 shrink-0 self-start rounded-md p-1">
+      <Icon size="lg" className="bg-muted shrink-0 self-start rounded-md p-1">
         <ToolIconComponent />
       </Icon>
 
       <div className="flex min-w-0 flex-col">
-        <Txt variant="header-md" as="h2" className="truncate font-medium">
+        <Txt variant="heading" as="h2" className="truncate">
           {toolId}
         </Txt>
-        <ClampedText variant="ui-sm" className="text-muted-foreground">
+        <ClampedText variant="caption" className="text-muted-foreground">
           {toolDescription}
         </ClampedText>
       </div>

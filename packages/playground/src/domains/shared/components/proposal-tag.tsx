@@ -1,3 +1,5 @@
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, Pencil, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
@@ -31,7 +33,7 @@ export function ProposalTag({
 
   if (isEditing) {
     return (
-      <span className="bg-surface3 border-border1 inline-flex items-center gap-0.5 rounded-md border px-1">
+      <span className="bg-card border-border inline-flex items-center gap-0.5 rounded-md border px-1">
         <input
           ref={inputRef}
           value={editValue}
@@ -47,7 +49,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="text-muted-foreground text-ui-sm w-20 bg-transparent py-0.5 outline-hidden"
+          className="text-muted-foreground text-caption w-20 bg-transparent py-0.5 outline-hidden"
         />
         <button
           type="button"
@@ -64,7 +66,7 @@ export function ProposalTag({
   }
 
   return (
-    <span className="bg-surface3 border-border1 text-muted-foreground group text-ui-sm inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5">
+    <span className="bg-card border-border text-muted-foreground group text-caption inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5">
       {tag}
       <button
         type="button"
@@ -72,7 +74,7 @@ export function ProposalTag({
           setEditValue(tag);
           setIsEditing(true);
         }}
-        className="text-placeholder hover:text-muted-foreground p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+        className={cn(quietTextHover, 'p-0.5 opacity-0 transition-opacity group-hover:opacity-100')}
         title="Edit tag"
       >
         <Pencil className="h-3 w-3" />

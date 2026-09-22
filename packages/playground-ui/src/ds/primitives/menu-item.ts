@@ -1,4 +1,5 @@
 import { buttonVariants } from '@/ds/components/Button/Button';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // Shared recipe for items rendered inside floating menus (DropdownMenu, ContextMenu,
@@ -11,6 +12,10 @@ import { cn } from '@/lib/utils';
 // to the full available width instead of the widest item.
 const MENU_ITEM_OVERRIDES = cn(
   'flex w-full justify-start rounded-lg text-left select-none',
+  // An item may carry a second line (a name over its description). The Button
+  // height becomes the floor so single-line rows keep the control rhythm and a
+  // taller item grows instead of overflowing into its neighbour.
+  'h-auto min-h-control-md py-1',
   // Button brightens its border on focus-visible; inside a menu the highlight is the focus cue.
   'focus-visible:border-transparent',
   // No row background: the popup's FluidMenuItems highlight travels between rows;
@@ -47,30 +52,31 @@ export const menuPositionerClass = 'z-50 outline-none data-[anchor-hidden]:hidde
 // Width: at least the anchor (or 11rem), otherwise as wide as the widest item, never
 // wider than the space Floating UI reports. Shared by every menu-like popup.
 export const menuPopupClass = cn(
-  'z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))]',
+  'z-50 max-h-[min(var(--spacing-dropdown),var(--available-height))]',
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
-  'new-theme rounded-xl border border-border bg-popover p-1 text-foreground/90 shadow-dialog outline-none',
+  cn('rounded-xl p-1 text-foreground/90 outline-none', overlaySurfaceStyle),
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
 
-export const menuLabelClass =
-  'px-[.9em] pt-1.5 pb-1 text-ui-xs font-medium tracking-wider text-muted-foreground uppercase';
+export const menuLabelClass = 'px-[.9em] pt-1.5 pb-1 text-meta tracking-wider text-muted-foreground uppercase';
 
 export const menuSeparatorClass = '-mx-1 my-1 h-px bg-border';
 
-export const menuShortcutClass = 'ml-auto text-ui-xs tracking-wider text-muted-foreground tabular-nums';
+export const menuShortcutClass = 'ml-auto text-meta tracking-wider text-muted-foreground tabular-nums';
 
 /** Non-interactive row (empty / loading) on the same size grid as an item. */
 export const menuEmptyClass =
-  'flex h-form-md items-center gap-[.75em] px-[.9em] py-0.5 text-ui-smd text-muted-foreground box-content';
+  'flex h-control-md items-center gap-[.75em] px-[.9em] py-0.5 text-body-sm text-muted-foreground box-content';
 
 export const menuSearchClasses = {
-  // Row = h-form-md input + py-0.5 → 32px, one notch above the 28px items so the
-  // divider does not crowd the first option while the text stays on the item grid.
+  // The input is a full control rung and the row adds `py-0.5` on top, so the search
+  // row sits one notch taller than an item: the divider does not crowd the first
+  // option while the text stays on the item grid.
   container:
-    'flex items-center gap-[.75em] border-b border-border px-[.9em] py-0.5 text-ui-smd focus-within:bg-foreground/4',
+    'flex items-center gap-[.75em] border-b border-border px-[.9em] py-0.5 text-body-sm focus-within:bg-fill-subtle',
   icon: 'size-[1.1em] shrink-0 text-muted-foreground',
-  input: 'h-form-md w-full bg-transparent text-ui-smd text-foreground outline-hidden placeholder:text-muted-foreground',
+  input:
+    'h-control-md w-full bg-transparent text-body-sm text-foreground outline-hidden placeholder:text-muted-foreground',
 };

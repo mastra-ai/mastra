@@ -41,12 +41,12 @@ export function EntityAccordionItem({
   const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
 
   return (
-    <div className="border-border1 overflow-hidden rounded-md border">
-      <div className="bg-surface2 flex flex-col gap-2 p-3">
+    <div className="border-border overflow-hidden rounded-md border">
+      <div className="bg-background flex flex-col gap-2 p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Icon size="sm">{icon}</Icon>
-            <span className="text-foreground text-ui-sm font-medium">{name}</span>
+            <Icon size="xs">{icon}</Icon>
+            <span className="text-foreground text-column">{name}</span>
           </div>
           {onRemove && (
             <Button tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -60,14 +60,14 @@ export function EntityAccordionItem({
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
           placeholder="Custom description for this entity..."
-          className="bg-surface3 text-ui-sm min-h-[40px] border-dashed px-2 py-1"
+          className="bg-card text-caption min-h-[40px] border-dashed px-2 py-1"
           size="sm"
           disabled={isReadOnly}
         />
       </div>
 
       {showRulesSection && (
-        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-border1 bg-surface2 border-t">
+        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-border bg-background border-t">
           <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2">
             <Icon>
               <ChevronRight
@@ -79,9 +79,9 @@ export function EntityAccordionItem({
             <Icon>
               <Ruler className="text-accent6" />
             </Icon>
-            <span className="text-foreground text-ui-sm">Display Conditions</span>
+            <span className="text-foreground text-caption">Display Conditions</span>
             {ruleCount > 0 && (
-              <span className="text-muted-foreground text-ui-sm">
+              <span className="text-muted-foreground text-caption">
                 ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
               </span>
             )}

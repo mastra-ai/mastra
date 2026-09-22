@@ -9,9 +9,25 @@ import { parseSkillActivation } from './SkillMessage';
 import { isRecord } from './transcript-shared';
 import { signalPartsText } from './TranscriptSignals';
 
-function notificationUrl(entry: NotificationEntry): string | undefined {
+/** Where a notification's "Open on …" link points; GitHub and GitLab name the provider. */
+export function notificationLinkLabel(entry: Pick<NotificationEntry, 'source'>): string {
+  if (entry.source === 'gitlab') return 'Open on GitLab';
+  if (entry.source === 'github') return 'Open on GitHub';
+  return 'Open notification target';
+}
+
+export function notificationUrl(entry: Pick<NotificationEntry, 'source' | 'metadata'>): string | undefined {
   const targetUrl = entry.metadata?.targetUrl;
   if (typeof targetUrl === 'string' && /^https:\/\/github\.com\//.test(targetUrl)) return targetUrl;
+  // GitLab instances live on any host, so the server-supplied target is trusted
+  // only when it is an https merge-request or issue page.
+  if (
+    entry.source === 'gitlab' &&
+    typeof targetUrl === 'string' &&
+    /^https:\/\/[^/\s]+\/.+\/-\/(merge_requests|issues)\/\d+/.test(targetUrl)
+  ) {
+    return targetUrl;
+  }
 
   const repository = entry.metadata?.repository;
   if (typeof repository !== 'string' || !/^[^/]+\/[^/]+$/.test(repository)) return undefined;
@@ -45,7 +61,7 @@ export function NotificationCard({ entry }: { entry: NotificationEntry }) {
       label={entry.source ?? 'notification'}
       message={entry.message}
       icon={<span className={cn('flex items-center', presentation.className)}>{presentation.icon}</span>}
-      link={url ? { href: url, label: 'Open on GitHub' } : undefined}
+      link={url ? { href: url, label: notificationLinkLabel(entry) } : undefined}
     />
   );
 }

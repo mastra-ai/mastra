@@ -72,9 +72,9 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
     <Container className="text-muted-foreground mb-5 content-center space-y-6">
       {/* Header */}
       <div className="text-center">
-        <h3 className="text-foreground text-header-sm font-semibold">{getPhaseMessage()}</h3>
+        <h3 className="text-foreground text-heading">{getPhaseMessage()}</h3>
         {(streamResult?.runId || runId) && (
-          <div className="text-ui-sm text-muted-foreground mt-2">Run ID: {streamResult?.runId ?? runId}</div>
+          <div className="text-caption text-muted-foreground mt-2">Run ID: {streamResult?.runId ?? runId}</div>
         )}
       </div>
 
@@ -89,7 +89,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'rounded-lg text-foreground p-4 flex items-center gap-3 text-ui-md bg-red-500/10',
+            'rounded-lg text-foreground p-4 flex items-center gap-3 text-body bg-red-500/10',
             '[&>svg]:w-6 [&>svg]:h-6 [&>svg]:opacity-70 [&>svg]:text-red-500',
           )}
         >
@@ -103,7 +103,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="text-muted-foreground text-ui-md grid justify-items-center gap-4 text-center">
+        <div className="text-muted-foreground text-body grid justify-items-center gap-4 text-center">
           <Spinner />
           <p>This may take some time...</p>
         </div>

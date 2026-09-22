@@ -8527,7 +8527,7 @@ export class Agent<
    * @experimental Agent signals are experimental and may change in a future release.
    */
   async discoverThreadPeers(options?: DiscoverAgentThreadPeersOptions): Promise<AgentThreadPeerAdvertisement[]> {
-    return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub());
+    return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub(), this.#getThreadRuntimeAgent());
   }
 
   getActiveThreadRunId(options: AgentThreadIdentityOptions): string | undefined {

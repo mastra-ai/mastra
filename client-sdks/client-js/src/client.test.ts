@@ -1051,6 +1051,30 @@ describe('MastraClient', () => {
       );
     });
 
+    it('serializes orderBy as bracket-notation params for dataset and experiment listings', async () => {
+      mockSuccess();
+      await client.listDatasets({ orderBy: { field: 'name', direction: 'ASC' } });
+      mockSuccess();
+      await client.listDatasetItems('dataset-1', { orderBy: { field: 'updatedAt', direction: 'DESC' } });
+      mockSuccess();
+      await client.listExperiments({ orderBy: { field: 'status', direction: 'ASC' } });
+      mockSuccess();
+      await client.listDatasetExperiments('dataset-1', { orderBy: { field: 'createdAt', direction: 'ASC' } });
+      mockSuccess();
+      await client.listDatasetExperimentResults('dataset-1', 'experiment-1', {
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      });
+
+      const urls = (global.fetch as any).mock.calls.map((call: [string]) => decodeURIComponent(call[0]));
+      expect(urls).toEqual([
+        'http://localhost:4111/api/datasets?orderBy[field]=name&orderBy[direction]=ASC',
+        'http://localhost:4111/api/datasets/dataset-1/items?orderBy[field]=updatedAt&orderBy[direction]=DESC',
+        'http://localhost:4111/api/experiments?orderBy[field]=status&orderBy[direction]=ASC',
+        'http://localhost:4111/api/datasets/dataset-1/experiments?orderBy[field]=createdAt&orderBy[direction]=ASC',
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1/results?orderBy[field]=startedAt&orderBy[direction]=DESC',
+      ]);
+    });
+
     it('serializes tags as repeated query params for experiment result listings', async () => {
       mockSuccess();
 

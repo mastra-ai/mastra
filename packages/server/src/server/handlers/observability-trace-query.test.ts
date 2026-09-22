@@ -7,6 +7,8 @@ import {
 import type { Mastra } from '@mastra/core';
 import {
   encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  TraceQueryCursorError,
   getTraceQueryFieldsArgsSchema,
   getTraceQueryValuesArgsSchema,
   TraceQueryExecutionError,
@@ -18,6 +20,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { generateOpenAPIDocument } from '../server-adapter/openapi-utils';
 import { GET_TRACE_QUERY_FIELDS, GET_TRACE_QUERY_VALUES, QUERY_TRACES } from './observability-new-endpoints';
@@ -64,6 +67,56 @@ function getDeclaredErrorSchema(status: 400 | 409 | 413 | 422 | 501 | 504): z.Zo
 
 describe('QUERY_TRACES', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('passes delta plans and preserves the numbered handoff across the same authorization scope', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'delta-polling']);
+    observabilityStore.queryTraces.mockImplementation(async plan => ({
+      traces: [],
+      ...(plan.paginationMode === 'page'
+        ? { pagination: { total: 0, page: plan.page, perPage: plan.perPage, hasMore: false } }
+        : { delta: { limit: 5, hasMore: false } }),
+      deltaCursor: encodeTraceQueryDeltaCursor(plan, 'pg', '100:0'),
+    }));
+    const first = params(mastra, { timeRange: TIME_RANGE, pagination: {} });
+    first.requestContext.set(MASTRA_USER_KEY, { id: 'alice', token: 'first' });
+    const page = await QUERY_TRACES.handler(first);
+    if (!('deltaCursor' in page)) throw new Error('Expected cursor');
+    const next = params(mastra, { timeRange: TIME_RANGE, mode: 'delta', after: page.deltaCursor, limit: 5 });
+    next.requestContext.set(MASTRA_USER_KEY, { id: 'alice', token: 'rotated' });
+    await QUERY_TRACES.handler(next);
+    expect(observabilityStore.queryTraces).toHaveBeenLastCalledWith(
+      expect.objectContaining({ paginationMode: 'delta', limit: 5 }),
+    );
+    next.requestContext.set('organizationId', 'other-tenant');
+    expect((await captureHttpException(QUERY_TRACES.handler(next))).status).toBe(409);
+    next.requestContext.delete('organizationId');
+    next.requestContext.set(MASTRA_USER_KEY, { id: 'bob' });
+    const error = await captureHttpException(QUERY_TRACES.handler(next));
+    expect(error.status).toBe(409);
+    expect(observabilityStore.queryTraces).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects unsupported delta and maps adapter watermark errors', async () => {
+    const unsupported = createHarness();
+    expect(
+      (
+        await captureHttpException(
+          QUERY_TRACES.handler(params(unsupported.mastra, { timeRange: TIME_RANGE, mode: 'delta' })),
+        )
+      ).status,
+    ).toBe(501);
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'delta-polling']);
+    for (const [code, status] of [
+      ['TRACE_QUERY_CURSOR_MALFORMED', 400],
+      ['TRACE_QUERY_CURSOR_CONFLICT', 409],
+    ] as const) {
+      observabilityStore.queryTraces.mockRejectedValueOnce(new TraceQueryCursorError(code));
+      expect(
+        (await captureHttpException(QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, mode: 'delta' }))))
+          .status,
+      ).toBe(status);
+    }
+  });
 
   it('plans the complete request before using the request-available store', async () => {
     const { mastra, observabilityStore, getStore } = createHarness();
@@ -485,6 +538,7 @@ describe('QUERY_TRACES', () => {
     expect(operationSchema).toContain('pagination');
     expect(operationSchema).toContain('perPage');
     expect(operationSchema).toContain('hasMore');
+    for (const field of ['mode', 'after', 'limit', 'delta', 'deltaCursor']) expect(operationSchema).toContain(field);
     for (const status of ['400', '409', '413', '422', '501', '504']) {
       expect(responses[status].content['application/json'].schema).toBeDefined();
     }

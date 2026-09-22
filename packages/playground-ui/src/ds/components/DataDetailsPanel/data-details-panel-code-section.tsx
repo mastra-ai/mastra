@@ -11,13 +11,14 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-ui-sm)',
+      fontSize: 'var(--text-caption)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -31,20 +32,20 @@ function buildLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
-      fontSize: 'var(--text-ui-sm)',
+      color: 'var(--foreground)',
+      fontSize: 'var(--text-caption)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--foreground)',
+      caretColor: 'var(--foreground)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -53,12 +54,12 @@ function buildLightTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--foreground)',
     },
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
+    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
     { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
     { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
@@ -118,7 +119,7 @@ export function DataDetailsPanelCodeSection({
       <div className="flex items-center justify-between">
         <div
           className={cn(
-            'flex items-center gap-1.5 text-ui-xs tracking-widest text-placeholder uppercase',
+            'flex items-center gap-1.5 text-meta tracking-widest text-placeholder uppercase',
             '[&>svg]:size-3.5',
           )}
         >
@@ -141,7 +142,12 @@ export function DataDetailsPanelCodeSection({
           </ButtonsGroup>
         </div>
       </div>
-      <div className="border-border1 bg-surface3 text-ui-sm text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div
+        className={cn(
+          raisedSurfaceStyle,
+          'text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+        )}
+      >
         {usePlainTextView ? (
           <div className="text-muted-foreground font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>

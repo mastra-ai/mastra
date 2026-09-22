@@ -21,7 +21,7 @@ export const EntityHeader = ({ icon, title, isLoading, children }: EntityHeaderP
           {isLoading ? (
             <Skeleton className="h-3 w-32" />
           ) : (
-            <Txt variant="header-md" as="h2" className="truncate font-medium">
+            <Txt variant="heading" as="h2" className="truncate">
               {title}
             </Txt>
           )}

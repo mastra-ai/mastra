@@ -5,7 +5,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useCreateFactoryMutation, useFactoriesQuery, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { connectLinear } from '../../factory/services/linear';
-import type { FactoryProject, FactoryProjectPayload, GithubRepo } from '../services/github';
+import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
   clearOnboardingFlow,
@@ -31,7 +31,7 @@ const STEP_META: Record<Step, { title: string; description?: string }> = {
   },
   vcs: {
     title: 'Choose your codebase.',
-    description: 'Connect GitHub, then select the repository that will become your first factory.',
+    description: 'Connect GitHub or GitLab, then select the repository that will become your first Factory.',
   },
   'project-management': {
     title: 'Connect the work behind the code.',
@@ -56,7 +56,7 @@ export function EmptyFactoryState() {
   const [pendingFactory, setPendingFactory] = useState<FactoryProject | FactoryProjectPayload | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
-  const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | null>(null);
+  const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | string | null>(null);
   const [githubRedirecting, setGithubRedirecting] = useState(false);
   const navigate = useNavigate();
 
@@ -87,7 +87,7 @@ export function EmptyFactoryState() {
     if (pendingFactory) persistOnboardingFactory(pendingFactory.id);
   };
 
-  const chooseRepository = async (repo: GithubRepo) => {
+  const chooseRepository = async (repo: SourceControlRepository) => {
     if (createFactory.isPending || linkRepository.isPending) return;
     setMutationError(null);
     setConnectingRepositoryId(repo.id);
@@ -132,7 +132,7 @@ export function EmptyFactoryState() {
   const stepIndex = steps.indexOf(step);
 
   return (
-    <main className="factory-signin-theme bg-surface1 text-neutral6 min-h-dvh">
+    <main className="bg-sidebar text-foreground min-h-dvh">
       <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
@@ -141,7 +141,7 @@ export function EmptyFactoryState() {
                 <li
                   key={item}
                   aria-current={step === item ? 'step' : undefined}
-                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-surface4'}`}
+                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-fill'}`}
                 >
                   <span className="sr-only">Step {index + 1}</span>
                 </li>
@@ -154,8 +154,9 @@ export function EmptyFactoryState() {
             {STEP_META[step].description && (
               <Txt
                 as="p"
-                variant="ui-lg"
-                className="text-neutral3 mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em]"
+                variant="body"
+                tone="muted"
+                className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em]"
               >
                 {STEP_META[step].description}
               </Txt>

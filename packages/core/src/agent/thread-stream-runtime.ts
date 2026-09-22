@@ -102,14 +102,26 @@ export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
  * local caller via `output.request`/`output.steps` — and broadcasting them
  * multiplies the largest object in the system ≥5× per step, persists it in
  * durable pubsub backends, and exposes prompt contents to every subscriber.
- * Only the broadcast copy is rewritten; the caller's MastraModelOutput is
- * untouched.
+ * Delegated agent chunks are wrapped in `tool-output.payload.output`, so known
+ * agent-stream wrappers are sanitized recursively. Only broadcast copies are
+ * rewritten; the caller's MastraModelOutput is untouched.
  */
 function sanitizeBroadcastPart(part: unknown): unknown {
   if (!part || typeof part !== 'object' || !('type' in part)) return part;
   const typed = part as { type?: string; payload?: Record<string, unknown> };
   const payload = typed.payload;
   if (!payload || typeof payload !== 'object') return part;
+
+  if (typed.type === 'tool-output') {
+    const output = payload.output;
+    if (output && typeof output === 'object' && 'type' in output && 'from' in output && output.from === 'AGENT') {
+      const sanitizedOutput = sanitizeBroadcastPart(output);
+      if (sanitizedOutput !== output) {
+        return { ...typed, payload: { ...payload, output: sanitizedOutput } };
+      }
+    }
+    return part;
+  }
 
   if (typed.type === 'step-start') {
     if (!('request' in payload) && !('inputMessages' in payload)) return part;
@@ -1152,6 +1164,7 @@ export class AgentThreadStreamRuntime {
   async discoverThreadPeers(
     options: DiscoverAgentThreadPeersOptions = {},
     pubsub?: PubSub,
+    callerAgent?: Agent<any, any, any, any>,
   ): Promise<AgentThreadPeerAdvertisement[]> {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const state = this.#getState(resolvedPubSub);
@@ -1191,6 +1204,18 @@ export class AgentThreadStreamRuntime {
         )
         .catch(() => finish());
     });
+
+    // The mark is applied after every pass that can produce an entry: a reply can
+    // describe a thread this caller already owns — a second live instance with the
+    // same thread loaded answers discovery too, and its reply replaces the local
+    // entry. The runtime is shared by every agent in the process, so the mark is
+    // scoped to the claiming agent: a sibling agent's claim stays a real peer.
+    if (callerAgent !== undefined) {
+      for (const [id, peer] of peers) {
+        const owner = state.claimedThreadOwners.get(this.#threadKey(peer.resourceId, peer.threadId));
+        if (owner?.agent === callerAgent) peers.set(id, { ...peer, selfAdvertised: true });
+      }
+    }
 
     return [...peers.values()].sort((a, b) => a.id.localeCompare(b.id));
   }
@@ -1880,6 +1905,10 @@ export class AgentThreadStreamRuntime {
       if (state.remoteThreadKeysByRunId.get(runId) !== key) return false;
       const streamId = state.activeThreadStreamIds.get(key);
       if (!streamId) return false;
+      // A remote owner's run is only stopped when the abort is meant for it. Thread
+      // lifecycle transitions abort locally on the way out and must not reach across
+      // processes: a follower running `/new` would otherwise kill the owner's run.
+      if (options.localOnly) return false;
       this.#publish(resolvedPubSub, key, {
         type: 'run-abort-requested',
         runId,
