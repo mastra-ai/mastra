@@ -524,25 +524,33 @@ async function queryNamesByTable(
  * Drops a score delta MV created before per-scoreId deduplication so init()'s
  * `CREATE MATERIALIZED VIEW IF NOT EXISTS` recreates it with the current
  * definition. Only the view is dropped; the delta table and its rows stay.
+ *
+ * With a cluster configured the definition is read from every replica via
+ * `clusterAllReplicas`, since each host stores its own copy of the view; a
+ * single legacy copy is enough to drop `ON CLUSTER` and recreate everywhere.
  */
-async function dropStaleScoreDeltaMv(
+export async function dropStaleScoreDeltaMv(
   client: ClickHouseClient,
   replication: ClickhouseReplicationConfig | undefined,
 ): Promise<void> {
-  let createQuery: string | undefined;
+  const cluster = replication?.cluster?.trim();
+  let createQueries: string[];
   try {
     const result = await client.query({
-      query: `SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
-      query_params: { name: MV_SCORE_EVENTS_DELTA },
+      query: cluster
+        ? `SELECT create_table_query FROM clusterAllReplicas({cluster:String}, system.tables) WHERE database = currentDatabase() AND name = {name:String}`
+        : `SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+      query_params: cluster ? { cluster, name: MV_SCORE_EVENTS_DELTA } : { name: MV_SCORE_EVENTS_DELTA },
       format: 'JSONEachRow',
     });
-    createQuery =
-      ((await result.json()) as Array<{ create_table_query?: string | null }>)[0]?.create_table_query ?? undefined;
+    createQueries = ((await result.json()) as Array<{ create_table_query?: string | null }>).map(
+      row => row.create_table_query ?? '',
+    );
   } catch {
     return;
   }
 
-  if (createQuery && !/NOT IN/i.test(createQuery)) {
+  if (createQueries.some(createQuery => createQuery.length > 0 && !/NOT IN/i.test(createQuery))) {
     await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${MV_SCORE_EVENTS_DELTA}`, replication) });
   }
 }
