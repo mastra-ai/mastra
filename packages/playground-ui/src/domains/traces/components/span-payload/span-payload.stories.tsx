@@ -251,7 +251,7 @@ export const ProcessorSpanAtPanelWidths: StoryObj<FixtureArgs> = {
       <div className="flex flex-wrap items-start gap-4">
         {PANEL_WIDTHS.map(width => (
           <div key={width.label} className={`flex h-[80vh] flex-col gap-2 ${width.className}`}>
-            <div className="text-meta text-placeholder tracking-widest uppercase">{width.label}</div>
+            <div className="text-meta tracking-widest text-placeholder uppercase">{width.label}</div>
             <SpanDataPanelView traceId={span.traceId} spanId={span.spanId} span={span} />
           </div>
         ))}
