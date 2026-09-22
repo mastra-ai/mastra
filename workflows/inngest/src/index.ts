@@ -964,7 +964,13 @@ export function init<TRequestContext = unknown>(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+      TParsedInput = TInput,
+    >(
+      params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext> & {
+        inputSchema: PublicSchema<TParsedInput, TInput>;
+      },
+    ) {
+      // The first step receives parsed input, while run and cron inputs retain TInput.
       return new InngestWorkflow<
         InngestEngineType,
         TSteps,
@@ -972,7 +978,7 @@ export function init<TRequestContext = unknown>(inngest: Inngest) {
         TState,
         TInput,
         TOutput,
-        TInput,
+        TParsedInput,
         TRequestContext
       >(params, inngest);
     },
