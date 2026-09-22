@@ -3,7 +3,7 @@
   "localId": "google-mail",
   "templateSha": "c3091db1e8a623113d581197a8ee0d5b1aa87136",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-21T18:02:30.946Z",
+  "generatedAt": "2026-09-22T15:56:19.741Z",
   "toolCount": 52,
   "skippedActions": [
     {
@@ -21,7 +21,7 @@
     "tools/batch-delete-messages.ts": "a63499d49c5cb7604c48e56be223b8d1e3566638796f641dd22a0a7d80e6224c",
     "tools/batch-modify-messages.ts": "7e2526beafee825fe5213b4d433fc20fd697c2c90d5b8a7931136e39ef5cfe27",
     "tools/create-draft.ts": "cf536c5ba591c9824228bfa2185033336a820b6c9ea702040b67df36409bf5fd",
-    "tools/create-filter.ts": "35852bf1234178ea6a5654fd16baa854ae6546dd007ac6c173ee9f724d686348",
+    "tools/create-filter.ts": "75b5a303574e6afda9987bf12a01061c0ee02f6f27397ef12aae97b02b087ff7",
     "tools/create-label.ts": "52ef16d513445caae71f766ad68649d275d6ad9f8e214e58e7f177bf8c2709aa",
     "tools/create-send-as-alias.ts": "6a4d2e59f58e478f04fe4bb1701e2f818edec021699b97f6652d49583c16194a",
     "tools/delete-draft.ts": "3609eb5cfd4e9b73741e34c6aef1c474497bbe26c007622e7c89c626aeb3b86e",

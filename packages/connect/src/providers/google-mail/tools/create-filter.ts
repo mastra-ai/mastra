@@ -32,6 +32,35 @@ const FilterCriteriaSchema = z.object({
     .describe('How the message size in bytes should be in relation to the size field.'),
 });
 
+const FilterCriteriaSchemaWidened = z.object({
+  from: z.string().optional().describe("The sender's display name or email address."),
+  to: z
+    .string()
+    .optional()
+    .describe(
+      "The recipient's display name or email address. Includes recipients in the 'to', 'cc', and 'bcc' header fields.",
+    ),
+  subject: z.string().optional().describe("Case-insensitive phrase found in the message's subject."),
+  query: z
+    .string()
+    .optional()
+    .describe(
+      'Only return messages matching the specified query. Supports the same query format as the Gmail search box.',
+    ),
+  negatedQuery: z.string().optional().describe('Only return messages not matching the specified query.'),
+  hasAttachment: z.boolean().optional().describe('Whether the message has any attachment.'),
+  excludeChats: z.boolean().optional().describe('Whether the response should exclude chats.'),
+  size: z
+    .number()
+    .optional()
+    .describe('The size of the entire RFC822 message in bytes, including all headers and attachments.'),
+  sizeComparison: z
+    .enum(['smaller', 'larger', 'unspecified'])
+    .or(z.string())
+    .optional()
+    .describe('How the message size in bytes should be in relation to the size field.'),
+});
+
 const FilterActionSchema = z.object({
   addLabelIds: z.array(z.string()).optional().describe('List of labels to add to the message.'),
   removeLabelIds: z.array(z.string()).optional().describe('List of labels to remove from the message.'),
@@ -45,13 +74,13 @@ export const createFilterInputSchema = z.object({
 
 const ProviderFilterSchema = z.object({
   id: z.string(),
-  criteria: FilterCriteriaSchema.nullable().optional(),
+  criteria: FilterCriteriaSchemaWidened.nullable().optional(),
   action: FilterActionSchema.nullable().optional(),
 });
 
 export const createFilterOutputSchema = z.object({
   id: z.string(),
-  criteria: FilterCriteriaSchema.optional(),
+  criteria: FilterCriteriaSchemaWidened.optional(),
   action: FilterActionSchema.optional(),
 });
 

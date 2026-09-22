@@ -13,6 +13,10 @@ const PrivacyEnum = z.enum([
   'teammates',
 ]);
 
+const PrivacyEnumWidened = z
+  .enum(['link', 'owner', 'participants', 'participatingteammates', 'teammatesandparticipants', 'teammates'])
+  .or(z.string());
+
 export const updateMeetingPrivacyInputSchema = z.object({
   id: z.string().describe('Transcript ID. Example: "abc123"'),
   privacy: PrivacyEnum.describe('Privacy setting. Example: "teammates"'),
@@ -25,7 +29,7 @@ const GraphQLResponseSchema = z.object({
     .object({
       updateMeetingPrivacy: z.object({
         id: z.string(),
-        privacy: PrivacyEnum,
+        privacy: PrivacyEnumWidened,
       }),
     })
     .nullable()

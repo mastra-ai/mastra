@@ -19,6 +19,7 @@ import { getCalendarTool } from './tools/get-calendar.js';
 import { getColorsTool } from './tools/get-colors.js';
 import { getEventTool } from './tools/get-event.js';
 import { getSettingTool } from './tools/get-setting.js';
+import { importEventTool } from './tools/import-event.js';
 import { insertCalendarToListTool } from './tools/insert-calendar-to-list.js';
 import { listAclRulesTool } from './tools/list-acl-rules.js';
 import { listCalendarListTool } from './tools/list-calendar-list.js';
@@ -65,6 +66,7 @@ export function createGoogleCalendarTools(options?: ProviderToolsOptions) {
     google_calendar_get_colors: getColorsTool(platformProxy),
     google_calendar_get_event: getEventTool(platformProxy),
     google_calendar_get_setting: getSettingTool(platformProxy),
+    google_calendar_import_event: importEventTool(platformProxy),
     google_calendar_insert_calendar_to_list: insertCalendarToListTool(platformProxy),
     google_calendar_list_acl_rules: listAclRulesTool(platformProxy),
     google_calendar_list_calendar_list: listCalendarListTool(platformProxy),

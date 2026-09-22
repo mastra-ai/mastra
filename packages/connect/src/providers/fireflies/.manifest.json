@@ -3,7 +3,7 @@
   "localId": "fireflies",
   "templateSha": "c3091db1e8a623113d581197a8ee0d5b1aa87136",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-21T18:02:26.644Z",
+  "generatedAt": "2026-09-22T15:56:14.006Z",
   "toolCount": 27,
   "skippedActions": [
     {
@@ -42,7 +42,7 @@
     "tools/revoke-shared-meeting-access.ts": "f732dea7c9b556dc6798e27a0da8233b465c88f900b85bddca56a4abe2d61fa3",
     "tools/share-meeting.ts": "2a6a7ad84144f29116ff30f8cbaac70219ba2cd8b58899b6631ea4ce75108dcf",
     "tools/update-meeting-channel.ts": "1e98e74c9a2cd3baef036ba2290ceae1756673d3ec280f647e87dfe422f0fa95",
-    "tools/update-meeting-privacy.ts": "5a24cfe4cffeea3cf9924db99807c754b0cd45c1ce367b022cfeb5d4ba3d3fcf",
+    "tools/update-meeting-privacy.ts": "4c497d68c05198cf11c88a98c209b2eeaba6c4c8fec61fe100ed3c9b28cef2d4",
     "tools/update-meeting-state.ts": "41da9694f33e42841d8acb33f7ddf0af42a96bc36cb649d61541e8428e126e56",
     "tools/upload-audio.ts": "68d24949e6f3430bbc80eb3f9fd5c33919d091020fc5b6e0d32f8b8310cc11d8"
   }

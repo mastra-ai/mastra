@@ -3,17 +3,12 @@
   "localId": "google-calendar",
   "templateSha": "c3091db1e8a623113d581197a8ee0d5b1aa87136",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-21T18:09:58.440Z",
-  "toolCount": 42,
-  "skippedActions": [
-    {
-      "action": "import-event",
-      "reason": "excluded: upstream type bug: provider response schema widens attendee responseStatus to string while the output schema keeps the strict enum, so the generated module does not compile"
-    }
-  ],
+  "generatedAt": "2026-09-22T15:55:11.053Z",
+  "toolCount": 43,
+  "skippedActions": [],
   "files": {
     "index.ts": "e63f2b36794d1901ddca6b276263d46b87ca7d7ba7ab369780b42e12a500e231",
-    "tools.ts": "5e30b267898d8311c296ec5f4ebc2b0eeeac640e102d25fe0eeb492feb786525",
+    "tools.ts": "a3fdbbbd8b800f3bbf2474be93daf44b0057dd4d544151b406441f02e52d71c3",
     "tools/add-attendee.ts": "a641a828482af891df21f55d81ecb8e728a9230cb71b0cec9a04d1f5bb8d5f31",
     "tools/clear-calendar.ts": "c67e89fcdb17329974466708236b3a74d1c51010f5e479e64eca1eec54fd5754",
     "tools/create-acl-rule.ts": "71f002f4caea2cbabbd9fda1ae2dd8158f79d50357638b40c090d30970b69054",
@@ -31,6 +26,7 @@
     "tools/get-colors.ts": "7b963f1bac2a8a4f2a78976323b84d287e6d51f0af756ce6a43d50400e784bf0",
     "tools/get-event.ts": "836b16f49839c81588fd89fcba61304015e7d67dd023a07d80fc4ad052f12599",
     "tools/get-setting.ts": "144b3a3f1f92ac6cbca57ae08efc16fec57ff13fc19871942a9cfe2afb477749",
+    "tools/import-event.ts": "70800540cabc6be294bfe63712d6a7ea08192b42b953a0bb28d404679a8129d0",
     "tools/insert-calendar-to-list.ts": "7fc6b992b77c6f2205a647bdc3062bbf6eb5c6b0019934acdf8080247ef06602",
     "tools/list-acl-rules.ts": "b0d81629c26540bacdab34ced5ad1f68f594c4ee27c37eb32f70e0f618e86b7a",
     "tools/list-calendar-list.ts": "09c4c872da759c6db03c41a1027a9c03da1612fb0a61d3408a1e3d35567aa6c0",
