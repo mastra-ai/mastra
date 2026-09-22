@@ -59,6 +59,23 @@ export const goalSaveDoesNotDeleteScenario: McE2eScenario = {
     terminal.submit('/goal status');
     await runtime.waitForScreenText(/Keep the mid-goal thread switch e2e objective alive\./i, terminal, 10_000);
 
+    // Record which thread owns the goal *before* the switch, so the assertion
+    // below is "this exact record survived" rather than the much weaker "some
+    // thread has a goal" — which a delete-then-recreate would also satisfy.
+    const beforeDb = new DatabaseSync(dbPath, { readOnly: true });
+    let originalThreadId: string;
+    try {
+      const before = beforeDb.prepare(`select threadId from mastra_thread_state where type = 'goal'`).all() as Array<{
+        threadId: string;
+      }>;
+      if (before.length !== 1) {
+        throw new Error(`Expected one goal record before the thread switch, found ${before.length}`);
+      }
+      originalThreadId = before[0]!.threadId;
+    } finally {
+      beforeDb.close();
+    }
+
     // Create a second thread while the goal is still live. This is the
     // `thread_created` path that empties the in-memory goal mirror.
     terminal.submit('/new');
@@ -90,8 +107,10 @@ export const goalSaveDoesNotDeleteScenario: McE2eScenario = {
       if (threadRows.length < 2) {
         throw new Error(`Expected a second thread to have been created mid-goal, found ${threadRows.length}`);
       }
-      if (!threadRows.some(row => row.id === rows[0]!.threadId)) {
-        throw new Error(`Persisted goal points at unknown thread ${rows[0]!.threadId}`);
+      if (rows[0]!.threadId !== originalThreadId) {
+        throw new Error(
+          `Expected the goal to stay on the original thread ${originalThreadId}, found it on ${rows[0]!.threadId}`,
+        );
       }
     } finally {
       db.close();

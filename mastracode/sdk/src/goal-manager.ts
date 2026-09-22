@@ -295,9 +295,12 @@ export class GoalManager {
    * and the caller — not the state of the in-memory mirror — expresses that
    * intent, so it works just as well when the mirror is already empty.
    *
-   * An explicit clear removes every place a goal can live. The legacy
-   * thread-metadata key is reachable without an agent, so it is wiped
-   * unconditionally while the durable record needs an agent and a thread. That
+   * An explicit clear reaches for every place a goal can live. The legacy
+   * thread-metadata key is reachable without an agent, so it is wiped whenever
+   * the durable delete did not throw, while the durable record itself needs an
+   * agent and a thread. (Persistence is non-critical here as it is in
+   * {@link saveToThread}: if the durable delete fails the legacy wipe is
+   * skipped with it, which is the pre-existing behaviour, not a guarantee.) That
    * asymmetry with {@link saveToThread} (which now writes nothing at all when
    * its mirror is empty) is deliberate — it mirrors where this wipe sat before
    * deletion was split out, and stops a pre-migration goal resurfacing as a

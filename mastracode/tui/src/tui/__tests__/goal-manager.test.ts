@@ -375,6 +375,7 @@ describe('GoalManager adapter', () => {
     await manager.deleteFromThread(state);
 
     expect(agent.clearObjective).toHaveBeenCalledWith({ threadId: 'parent-thread' });
+    expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
   });
 
   // Both-sides guard: passes before and after the fix. Pins that the upsert
@@ -391,6 +392,20 @@ describe('GoalManager adapter', () => {
     expect(agent.updateObjectiveOptions).toHaveBeenCalled();
     expect(state.session.thread.setSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
     expect(agent.clearObjective).not.toHaveBeenCalled();
+  });
+
+  // Pins the third behavior change: with no agent a save writes nothing at all,
+  // where it used to wipe the legacy key. Consistent with "the wipe only
+  // happens on the path that actually wrote", and unreachable in practice
+  // (the TUI and headless always have an agent by the time a save can fire).
+  it('writes nothing on a save with no agent, even with a goal in the mirror', async () => {
+    const state = createState(undefined);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+
+    await manager.saveToThread(state);
+
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   // New-API test. Pins the deliberate asymmetry with `saveToThread`: the legacy
@@ -413,8 +428,12 @@ describe('GoalManager adapter', () => {
 
     await manager.saveToThread(state);
 
+    // The whole no-op contract: neither storage location is touched, and the
+    // upsert path is not entered either.
     expect(agent.clearObjective).not.toHaveBeenCalled();
     expect(state.session.thread.setSetting).not.toHaveBeenCalled();
+    expect(agent.setObjective).not.toHaveBeenCalled();
+    expect(agent.updateObjectiveOptions).not.toHaveBeenCalled();
   });
 
   it('does not delete the durable objective when a failed read left the mirror empty', async () => {
@@ -429,7 +448,7 @@ describe('GoalManager adapter', () => {
     await manager.saveToThread(state);
 
     expect(agent.clearObjective).not.toHaveBeenCalled();
-    expect(state.session.thread.setSetting).not.toHaveBeenCalledWith({ key: 'goal', value: undefined });
+    expect(state.session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('does not delete the objective when a save races the setGoal await window', async () => {
