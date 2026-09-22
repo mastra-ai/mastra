@@ -11,6 +11,7 @@ import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import type { ObservabilityContext } from '../../observability';
 import { EntityType, resolveObservabilityContext } from '../../observability';
+import { MASTRA_AUTH_TOKEN_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import type { MastraCompositeStore } from '../../storage';
 import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../workflows/types';
@@ -1596,6 +1597,26 @@ async function saveScoresToStorage({
 }
 
 /**
+ * Serialize an item's request context into a JSON-safe snapshot for the score row.
+ *
+ * `toJSON()` drops non-serializable values (functions, RPC proxies, cycles) that
+ * would otherwise fail storage the same way as #12301. The framework-managed
+ * bearer token is omitted rather than redacted: score rows are one-way storage
+ * that is never merged back into a live context, and a `[REDACTED]` placeholder
+ * could be mistaken for a real token if it were ever read back. This mirrors
+ * `serializeRequestContext` in `workflows/default.ts` and completes the
+ * persistence-boundary coverage started in #21996.
+ */
+function serializePersistedRequestContext(requestContext: RequestContext): Record<string, any> {
+  const obj =
+    typeof requestContext.toJSON === 'function'
+      ? requestContext.toJSON()
+      : Object.fromEntries(requestContext.entries());
+  delete obj[MASTRA_AUTH_TOKEN_KEY];
+  return obj;
+}
+
+/**
  * Saves a single scorer result to storage
  */
 async function saveSingleScore({
@@ -1672,8 +1693,9 @@ async function saveSingleScore({
         id: target.id,
         name: (target as any).name || target.id,
       },
-      // Include requestContext from item
-      requestContext: item.requestContext ? Object.fromEntries(item.requestContext.entries()) : undefined,
+      // Include requestContext from item as a JSON-safe snapshot that excludes
+      // the framework-managed bearer token (see serializePersistedRequestContext).
+      requestContext: item.requestContext ? serializePersistedRequestContext(item.requestContext) : undefined,
       // Include additionalContext with groundTruth
       additionalContext: Object.keys(additionalContext).length > 0 ? additionalContext : undefined,
       // Per-turn scores carry their turn index in metadata for UI grouping/labeling.
