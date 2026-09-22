@@ -10053,19 +10053,25 @@ export class Session {
           },
           cancelledAt: Date.now(),
         });
-        const cancelledError = new HarnessTerminalHandoffCancelledError(admission.executionGrant.key);
-        try {
-          options.onFailure?.(cancelledError);
-        } catch {
-          // Failure observers are diagnostics only.
-        }
         if (receipt.status === 'cancelled' || receipt.status === 'duplicate') {
+          const cancelledError = new HarnessTerminalHandoffCancelledError(admission.executionGrant.key);
+          try {
+            options.onFailure?.(cancelledError);
+          } catch {
+            // Failure observers are diagnostics only.
+          }
           this._drainTerminalObservers(identity.runId, cancelledError);
         } else if (receipt.status === 'fenced') {
-          this._drainTerminalObservers(identity.runId, new HarnessTerminalHandoffFencedError(identity.sessionId));
+          const fencedError = new HarnessTerminalHandoffFencedError(identity.sessionId);
+          try {
+            options.onFailure?.(fencedError);
+          } catch {
+            // Failure observers are diagnostics only.
+          }
+          this._drainTerminalObservers(identity.runId, fencedError);
         }
         // 'committed' — a concurrent commit already drained observers with its
-        // receipt and owns the durable winner.
+        // receipt and owns the durable winner. Do not report that winner as cancelled.
       } catch (error) {
         return reportFailure(error);
       }

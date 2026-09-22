@@ -4878,13 +4878,10 @@ export class HarnessPG extends HarnessStorage {
               WHERE harness_name = ? AND id = ? LIMIT 1 FOR UPDATE`,
         args: [harnessName, admissionInput.sessionId],
       });
-      if (
-        !session.rows[0] ||
-        session.rows[0].session_incarnation == null ||
-        String(session.rows[0].session_incarnation) !== admissionInput.sessionIncarnation
-      ) {
-        throw new HarnessTerminalHandoffFencedError(admissionInput.sessionId);
-      }
+      const sessionIncarnationMatches =
+        !!session.rows[0] &&
+        session.rows[0].session_incarnation != null &&
+        String(session.rows[0].session_incarnation) === admissionInput.sessionIncarnation;
 
       const admissionRow = await tx.execute({
         sql: `SELECT * FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS} WHERE id = ? LIMIT 1 FOR UPDATE`,
@@ -4897,6 +4894,11 @@ export class HarnessPG extends HarnessStorage {
       }
       if (stored.status === 'fenced') {
         throw new HarnessTerminalHandoffFencedError(stored.sessionId);
+      }
+      // A committed winner stays a duplicate replay after the session
+      // incarnation moves. Fencing it would rewrite the durable outcome.
+      if (stored.status !== 'committed' && !sessionIncarnationMatches) {
+        throw new HarnessTerminalHandoffFencedError(admissionInput.sessionId);
       }
 
       const evidenceRow = await tx.execute({

@@ -1582,7 +1582,10 @@ export class InMemoryHarness extends HarnessStorage {
       return { status: 'cancelled', admission: cloneHarnessTerminal({ ...stored, status: 'cancelled' }) };
     }
     const currentSession = this.db.harnessSessions.get(sessionKey(namespace, stored.sessionId));
-    if (!currentSession || currentSession.sessionIncarnation !== stored.sessionIncarnation) {
+    if (
+      stored.status !== 'committed' &&
+      (!currentSession || currentSession.sessionIncarnation !== stored.sessionIncarnation)
+    ) {
       stored.status = 'fenced';
       stored.updatedAt = Date.now();
       throw new HarnessTerminalHandoffFencedError(stored.sessionId);
