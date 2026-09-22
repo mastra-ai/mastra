@@ -187,14 +187,16 @@ export const WithText: Story = {
  * `ButtonsGroup` merger; an interactive clear button would go in an `InputGroupAddon`
  * (`align="inline-end"`) with an `InputGroupButton`.
  *
- * No layout classes on the children (`flex-1`/`min-w-0`/`shrink-0`): the group owns sizing in
- * `spacing="close"` — the InputGroup fills the row and the Select trigger sizes to its content.
- * The group collapses the touching borders into a divider and flattens the inner corners,
- * leaving the outer pill rounded.
+ * No layout classes on the children (`flex-1`/`min-w-0`/`shrink-0`): the group owns sizing — the
+ * InputGroup fills the row and the Select trigger sizes to its content. The group collapses the
+ * touching borders into a divider and flattens the inner corners, leaving the outer pill rounded.
+ *
+ * Both segments sit on the same rung of the size ladder (`md`, the default on both): the group
+ * imposes no height of its own, so a segment on a different rung pokes out of the pill.
  *
  * Only one class is passed: `rounded-full` on the `SelectTrigger`, an intentional shape choice
  * so its outer corner matches the InputGroup pill (the trigger's standalone default is
- * `rounded-lg`). The `w-[420px]` on the group is just the demo container width.
+ * `rounded-lg`). The `w-105` on the group is just the demo container width.
  */
 export const SearchWithDropdown: Story = {
   render: () => {
@@ -215,7 +217,7 @@ export const SearchWithDropdown: Story = {
           />
         </InputGroup>
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger aria-label="Sort by" size="lg" className="rounded-full">
+          <SelectTrigger aria-label="Sort by" className="rounded-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
