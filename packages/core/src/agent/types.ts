@@ -1014,6 +1014,14 @@ interface AgentConfigBase<
    */
   errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   /**
+   * Set to `false` to run only the error processors you configure, with no shared
+   * stability defaults added. Without this, `errorProcessors` is a base that the
+   * three defaults are merged into, so there is no other way to run a custom list
+   * with none of the framework's processors. Defaults to `true` (defaults on).
+   * `errorProcessors: []` still opts out of error processors entirely.
+   */
+  errorProcessorDefaults?: boolean;
+  /**
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
