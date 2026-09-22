@@ -60,6 +60,11 @@ describe('Inngest function-level retries', () => {
   it('forwards retries to the durable agentic loop function', () => {
     const loop = createInngestDurableAgenticWorkflow({ inngest, retries: 2 }) as InngestWorkflow;
     expect(optsOf(loop.getFunction()).retries).toBe(2);
+    const functions = loop.getFunctions();
+    expect(functions.length).toBeGreaterThan(1);
+    for (const fn of functions) {
+      expect(optsOf(fn).retries).toBe(2);
+    }
     const defaultLoop = createInngestDurableAgenticWorkflow({ inngest }) as InngestWorkflow;
     expect(optsOf(defaultLoop.getFunction()).retries).toBe(0);
   });

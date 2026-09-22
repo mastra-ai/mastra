@@ -65,7 +65,7 @@ export interface InngestDurableAgenticWorkflowOptions {
   inngest: Inngest;
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
-  /** Inngest function-level retries for the agentic loop function (defaults to 0) */
+  /** Inngest function-level retries for the agentic loop and iteration functions (defaults to 0) */
   retries?: InngestFlowControlConfig['retries'];
 }
 
@@ -131,6 +131,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   const singleIterationWorkflow = createWorkflow({
     id: InngestDurableStepIds.AGENTIC_EXECUTION,
+    retries,
     inputSchema: iterationStateSchema,
     outputSchema: iterationStateSchema,
     options: {
