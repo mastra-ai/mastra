@@ -1,0 +1,217 @@
+---
+title: "Boat | Sandbox"
+description: "Run Mastra workspace commands in Boat cloud sandboxes with background processes, public preview URLs, named snapshots, forks, and reconnection."
+packages:
+  - "@mastra/boat"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Boat
+
+Executes commands in [Boat](https://docs.boat.dev) cloud sandboxes. Each sandbox is an isolated Linux VM — 4 vCPU and 8 GB by default, with Docker, Node, Python, Go and Rust preinstalled — provisioned on demand through the Boat Public API. Supports command execution with streaming output, background processes, timeouts and abort, public HTTPS preview URLs, named snapshots as checkpoints, forking a sandbox, and reattaching to an existing sandbox by ID. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/boat
+```
+
+Set your Boat API key, from the dashboard's API keys tab, in one of three ways.
+
+<Tabs>
+  <TabItem value="shell-export" label="Shell export">
+    ```bash
+    export BOAT_API_KEY=your-api-key
+    ```
+  </TabItem>
+
+  <TabItem value="env-file" label=".env file">
+    ```bash
+    BOAT_API_KEY=your-api-key
+    ```
+  </TabItem>
+
+  <TabItem value="constructor" label="Constructor">
+    ```typescript
+    new BoatSandbox({
+      apiKey: 'your-api-key',
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+## Usage
+
+Add a `BoatSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { BoatSandbox } from '@mastra/boat'
+
+const workspace = new Workspace({
+  sandbox: new BoatSandbox({
+    // apiKey read from BOAT_API_KEY
+    machineType: 'large',
+  }),
+})
+
+const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You are a coding assistant working in this workspace.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace,
+})
+
+const response = await agent.generate(
+  'Print "Hello, world!" and show the current working directory.',
+)
+
+console.log(response.text)
+```
+
+### Machine size
+
+`small` consumes machine time at half the default rate and `large` at twice it. `xlarge` costs more again and requires a higher plan plus an explicit bare-metal allocation.
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new BoatSandbox({ machineType: 'small' }),
+})
+```
+
+### Auto-stop
+
+Boat archives a sandbox one hour after it starts, counting from creation rather than from the last activity — so a sandbox stops mid-work unless you say otherwise. Pass `ttlSeconds` to widen the window, or `null` to disable auto-stop entirely.
+
+```typescript
+const sandbox = new BoatSandbox({ ttlSeconds: 4 * 60 * 60 })
+```
+
+Disabling auto-stop requires a payment method on the account, and is refused on the free trial with `trial_auto_stop_required`.
+
+When Boat archives a sandbox out from under a running session, the next command re-acquires it — resuming the archived sandbox with its filesystem intact — and runs again, so the archive is invisible to the caller.
+
+### Preview URLs
+
+Boat gives every sandbox port a stable public HTTPS URL at `https://<subdomain>-<port>.on.boat.dev`. Asking for the same port again returns the same URL, and a sandbox can host up to 50 ports.
+
+```typescript
+await sandbox.processes.spawn('npm run dev -- --host 0.0.0.0 --port 3000')
+
+const url = await sandbox.networking.getPortUrl(3000)
+```
+
+:::warning
+The service must bind `0.0.0.0`. Boat terminates TLS outside the sandbox and connects to it over the network, so a server listening only on `localhost` is unreachable from the hosted URL.
+:::
+
+By default the URL carries an `_token` query parameter and should be treated as a secret. Construct the sandbox with `publicPorts: true` for ungated URLs.
+
+### Sandboxes for your own users
+
+`noEnv` creates a sandbox with none of your account's secrets attached — no environment variables, secret files, credentials, or SSH identity. SSH, snapshots, public URLs and forks still work, and `env` still gives the sandbox secrets of its own. A fork of a no-env sandbox is always no-env.
+
+```typescript
+const sandbox = new BoatSandbox({
+  noEnv: true,
+  env: { DATABASE_URL: tenantDatabaseUrl },
+})
+```
+
+### Execute commands
+
+Commands run in `/home/user`, Boat's work directory. Writes are limited to that directory and `/tmp`.
+
+```typescript
+const result = await sandbox.executeCommand('npm', ['test'], {
+  cwd: '/home/user/my-repo',
+  timeout: 60_000,
+})
+
+console.log(result.exitCode, result.stdout)
+```
+
+Every command runs as a background process on Boat and is polled to completion, so output streams as it appears, a timeout fires while the command is still running, and long jobs are not capped at Boat's ten-minute synchronous limit.
+
+```typescript
+const handle = await sandbox.processes.spawn('npm run build', {
+  onStdout: chunk => process.stdout.write(chunk),
+})
+
+const result = await handle.wait()
+```
+
+Boat's command API has no stdin transport, so `sendStdin()` and `closeStdin()` are not supported.
+
+### Write files
+
+```typescript
+await sandbox.writeFiles([
+  { path: '/home/user/app.ts', content: 'export const x = 1' },
+  { path: '/home/user/.npmrc', content: token, mode: 0o600 },
+])
+```
+
+Paths must resolve under `/home/user` or `/tmp`. Boat has no permission field on its file API, so requested modes are applied with a `chmod` after the writes land.
+
+### Checkpoints
+
+Set `checkpointName` and `snapshot()` saves the sandbox filesystem to that named Boat snapshot. A later sandbox configured with the same name boots from it.
+
+```typescript
+const sandbox = new BoatSandbox({ checkpointName: 'project-session-42' })
+
+await sandbox.snapshot()
+```
+
+Without a `checkpointName`, `snapshot()` does nothing: Boat's automatic stop-time snapshots have no name to boot from later.
+
+Set `seedCheckpointName` for a boot-only fallback used before the checkpoint has been saved for the first time. `checkpointName` wins when both exist, and `snapshot()` only ever writes to `checkpointName`, so each sandbox keeps an independent history.
+
+```typescript
+const sandbox = new BoatSandbox({
+  checkpointName: 'project-session-42',
+  seedCheckpointName: 'project-base',
+})
+```
+
+### Forking a running sandbox
+
+Clone a sandbox's latest snapshot into a new, independent sandbox: a fresh boot, not live processes. The returned `BoatSandbox` is already started, and the source is never modified.
+
+```typescript
+const child = await sandbox.fork()
+
+const result = await child.executeCommand('cat', ['/home/user/state.json'])
+console.log(result.stdout)
+```
+
+A fork does not inherit the source's auto-stop, so the sandbox's configured `ttlSeconds` is passed through rather than letting the copy silently fall back to one hour.
+
+:::note
+Boat forks from the latest snapshot and refuses when there isn't one. It takes snapshots on its own schedule rather than on request, so a sandbox forked soon after creation waits out its first one — around 75 seconds. `fork()` blocks for that rather than surfacing a `fork_failed` you can only retry. Pass `snapshotTimeoutMs` to change how long it waits.
+:::
+
+### Reattaching to an existing sandbox
+
+Pass a Boat sandbox ID to reuse a sandbox instead of provisioning one. An archived sandbox is resumed first; one Boat no longer has is replaced with a fresh sandbox.
+
+```typescript
+const sandbox = new BoatSandbox({ sandboxId: 'bx_f7k2q9hd' })
+```
+
+### Stopping versus destroying
+
+`stop()` archives the sandbox, snapshotting its disk first, and keeps the Boat ID so the next `start()` resumes it with its filesystem intact. `destroy()` permanently deletes the sandbox and every snapshot only it uses, and cannot be undone.
+
+### Direct API access
+
+The underlying Boat client is available for calls this provider doesn't wrap — prompts to Boat's built-in coding agents, event streams, desktop streaming, webhooks:
+
+```typescript
+const events = await sandbox.boat.events({ sandboxId: sandbox.boatSandboxId, limit: 50 })
+```
