@@ -10,6 +10,7 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
 import { ToolsList } from '@/domains/tools/components/tools-list/tools-list';
+import type { ToolsSort } from '@/domains/tools/components/tools-list/tools-list';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 const crumbs = [navCrumb('/tools')];
@@ -18,6 +19,7 @@ export default function Tools() {
   const { data: agentsRecord = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
   const { data: tools = {}, isLoading: isLoadingTools, error: toolsError } = useTools();
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<ToolsSort>();
 
   const isLoading = isLoadingAgents || isLoadingTools;
   const error = toolsError || agentsError;
@@ -62,7 +64,14 @@ export default function Tools() {
         </div>
       </PageLayout.TopArea>
 
-      <ToolsList tools={tools} agents={agentsRecord} isLoading={isLoading} search={search} />
+      <ToolsList
+        tools={tools}
+        agents={agentsRecord}
+        isLoading={isLoading}
+        search={search}
+        sort={sort}
+        onSortChange={(direction, key) => setSort({ key, direction })}
+      />
     </PageLayout>
   );
 }

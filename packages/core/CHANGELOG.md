@@ -1,5 +1,58 @@
 # @mastra/core
 
+## 1.68.0-alpha.11
+
+### Minor Changes
+
+- Added \`orderBy\` support when listing datasets, dataset items, experiments and experiment results so Studio and API consumers can sort server-side instead of receiving a fixed newest-first order. ([#24567](https://github.com/mastra-ai/mastra/pull/24567))
+
+  \`\`\`ts
+  const { datasets } = await mastra.datasets.listDatasets({ orderBy: { field: "name", direction: "ASC" } });
+  const { items } = await dataset.listItems({ orderBy: { field: "createdAt", direction: "ASC" } });
+  \`\`\`
+
+  Allowed fields: datasets (\`createdAt\`, \`updatedAt\`, \`name\`), items (\`createdAt\`, \`updatedAt\`), experiments (\`createdAt\`, \`status\`), experiment results (\`startedAt\`, \`createdAt\`). Unknown fields are rejected. Also exports a \`resolveListOrderBy\` helper for storage adapters.
+
+- Added delta polling to advanced trace queries, including a cursor on numbered pages for the initial-load-to-poll handoff. Delta cursors bind the predicate and time range; keyset pagination remains unchanged. ([#24329](https://github.com/mastra-ai/mastra/pull/24329))
+
+  ```ts
+  // Before: load a numbered page.
+  const page = await client.queryTraces({ timeRange, pagination: { page: 0, perPage: 100 } });
+  // After: continue polling from that page without rescanning it.
+  const updates = await client.queryTraces({ timeRange, mode: 'delta', after: page.deltaCursor, limit: 100 });
+  ```
+
+  Polling returns newly completed roots and root completions. It does not provide deletion notifications or guarantee re-emission after related-record changes.
+
+- Added the `MCP_SERVER_REQUEST` span type, `MCPServerRequestAttributes`, and `EntityType.MCP_SERVER` for requests served by a Mastra `MCPServer`. Added a `skipToolSpan` tool execution option so a caller that already owns a span can run a tool without an extra `TOOL_CALL` span: ([#24150](https://github.com/mastra-ai/mastra/pull/24150))
+
+  ```ts
+  await tool.execute(args, {
+    tracingContext: { currentSpan: requestSpan },
+    skipToolSpan: true,
+  });
+  ```
+
+  See https://github.com/mastra-ai/mastra/issues/23921
+
+### Patch Changes
+
+- Fixed streamed tool events and assistant messages to retain their originating thread when a session switches threads. Consumers can use tool-event threadId to ignore delayed output from a previous conversation. ([#24313](https://github.com/mastra-ai/mastra/pull/24313))
+
+- Lowered the implicit error-processor retry cap from 10 to 3 and made it visible. Configuring `errorProcessors` without an explicit `maxProcessorRetries` previously allowed a processor that always requests a retry to drive 11 model calls for a single turn, silently and regardless of `maxRetries: 0`. The cap is now 3 (4 model calls worst case) and a one-time warning is logged naming the setting to configure. Every built-in error processor self-limits to at most one retry, so only a processor that never stops asking is affected; callers who need a larger budget can set `maxProcessorRetries` explicitly. ([#24503](https://github.com/mastra-ai/mastra/pull/24503))
+
+  Also aligned the durable execution path with the standard loop: `processAPIError` now runs on the final attempt too, so a processor can observe and report a terminal failure instead of being skipped once the retry budget is spent.
+
+- Fixed unbinding a thread so it no longer aborts the run a different agent instance is executing. Detaching from a thread, switching threads, or tearing down a session now stops only run work owned by the local process; explicit cancellation still stops the run wherever it is executing. Thread peer discovery now marks advertisements published by the agent that asked, so a caller can tell its own threads apart from an in-process peer agent's. ([#24510](https://github.com/mastra-ai/mastra/pull/24510))
+
+- Fixed background tool results to carry task identity and lifecycle status in metadata, including resumed tasks and streamed completions. Consumers can identify background work without interpreting tool output text. ([#24313](https://github.com/mastra-ai/mastra/pull/24313))
+
+## 1.68.0-alpha.10
+
+### Patch Changes
+
+- Improved runtime portability by using Web Crypto for cryptographic operations that do not require changes to existing synchronous APIs. ([#24369](https://github.com/mastra-ai/mastra/pull/24369))
+
 ## 1.68.0-alpha.9
 
 ### Patch Changes

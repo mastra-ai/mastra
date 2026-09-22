@@ -12,6 +12,7 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
+import type { WorkflowsSort } from '@/domains/workflows/components/workflows-list/workflows-sort';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 const crumbs = [navCrumb('/workflows')];
@@ -19,6 +20,7 @@ const crumbs = [navCrumb('/workflows')];
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<WorkflowsSort>();
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -71,7 +73,13 @@ function Workflows() {
         </PageLayout.Row>
       </PageLayout.TopArea>
 
-      <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />
+      <WorkflowsList
+        workflows={workflows || {}}
+        isLoading={isLoading}
+        search={search}
+        sort={sort}
+        onSortChange={(direction, key) => setSort({ key, direction })}
+      />
     </PageLayout>
   );
 }

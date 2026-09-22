@@ -1,4 +1,5 @@
 import type { StreamParams } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -178,7 +179,48 @@ afterEach(() => {
   cleanup();
 });
 
+const storedUserMessage = (index: number): MastraDBMessage => ({
+  id: `stored-${index}`,
+  role: 'user',
+  createdAt: new Date(1700000000000 + index * 1000),
+  content: { format: 2, parts: [{ type: 'text', text: `stored message ${index}` }] },
+});
+
 describe('ConversationPanel', () => {
+  describe('when the stored conversation has older pages', () => {
+    it('loads the older page above the thread when the reader scrolls to the top', async () => {
+      const newestPage = [storedUserMessage(2), storedUserMessage(3)];
+      const olderPage = [storedUserMessage(0), storedUserMessage(1)];
+      captureStreamWith([
+        ...mountHandlers().filter(handler => !handler.info.path.toString().includes('/messages')),
+        http.get(`${BASE_URL}/api/memory/threads/${BUILDER_THREAD_ID}/messages`, ({ request }) =>
+          new URL(request.url).searchParams.has('filter')
+            ? HttpResponse.json({ messages: olderPage, hasMore: false })
+            : HttpResponse.json({ messages: newestPage, hasMore: true }),
+        ),
+      ]);
+
+      const panel = renderPanel();
+
+      await waitFor(() => expect(panel.getByText('stored message 3')).toBeTruthy());
+      expect(panel.queryByText('stored message 0')).toBeNull();
+
+      const list = panel.getByTestId('agent-builder-message-list');
+      await act(async () => {
+        list.scrollTop = 300;
+        fireEvent.scroll(list);
+        list.scrollTop = 0;
+        fireEvent.scroll(list);
+      });
+
+      await waitFor(() => expect(panel.getByText('stored message 0')).toBeTruthy());
+      const rendered = Array.from(list.querySelectorAll('[data-message-id]')).map(el =>
+        el.getAttribute('data-message-id'),
+      );
+      expect(rendered.slice(0, 4)).toEqual(['stored-0', 'stored-1', 'stored-2', 'stored-3']);
+    });
+  });
+
   describe('when rendered with the default (unfocused) composer', () => {
     it('uses the default border token styling', async () => {
       captureStream();

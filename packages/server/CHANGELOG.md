@@ -1,5 +1,69 @@
 # @mastra/server
 
+## 1.68.0-alpha.11
+
+### Minor Changes
+
+- Added advanced trace-query delta request validation and responses, including numbered-page polling cursors and cursor error handling. ([#24329](https://github.com/mastra-ai/mastra/pull/24329))
+
+  ```ts
+  // Start with a numbered page.
+  const page = await client.queryTraces({ timeRange, pagination: { page: 0, perPage: 100 } });
+  if (!page.deltaCursor) throw new Error('Delta polling is unavailable');
+  // Continue with delta polling.
+  const delta = await client.queryTraces({ timeRange, mode: 'delta', after: page.deltaCursor });
+  ```
+
+### Patch Changes
+
+- Fixed `POST /auth/logout` reporting success when it could not log anything out. The route previously returned `200 { success: true }` unconditionally — even with no auth provider configured — while `POST /auth/refresh` returned 404 for the equivalent missing capability. Clients had no way to tell a real logout from a no-op. ([#24504](https://github.com/mastra-ai/mastra/pull/24504))
+
+  Logout now returns `404 "Logout not configured"` when the provider can neither destroy a session, clear session cookies, nor supply an SSO logout URL.
+
+  **What still returns 200**
+
+  - Providers supporting any one of those capabilities, including SSO-only providers that implement just `getLogoutUrl`
+  - Logout with no active session, since the desired end state is already met
+
+  **Before / after**
+
+  Clients that assumed logout always succeeded need to handle the 404:
+
+  ```ts
+  // Before: always resolved, even when logout was impossible
+  await fetch('/api/auth/logout', { method: 'POST' });
+
+  // After: 404 means the server has no way to log the user out
+  const res = await fetch('/api/auth/logout', { method: 'POST' });
+
+  if (res.status === 404) {
+    // No logout capability configured — clear local state yourself
+    clearLocalSession();
+  } else if (!res.ok) {
+    throw new Error(`Logout failed: ${res.status}`);
+  }
+  ```
+
+  If you see a 404 unexpectedly, add `destroySession`, `getClearSessionHeaders`, or `getLogoutUrl` to your auth provider.
+
+- Added \`orderBy\` query parameter to the dataset, dataset items, experiments and experiment results list routes (for example \`GET /api/datasets?orderBy[field]=name&orderBy[direction]=ASC\`). ([#24567](https://github.com/mastra-ai/mastra/pull/24567))
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b)]:
+  - @mastra/core@1.68.0-alpha.11
+
+## 1.68.0-alpha.10
+
+### Patch Changes
+
+- Exposed the existing authorization provider selector so adapters can skip unnecessary request body parsing. ([#24563](https://github.com/mastra-ai/mastra/pull/24563))
+
+- Fixed workspace and skills query flags parsing the string `"false"` as `true`. The `recursive` flag on list/write/mkdir/delete, the `force` flag on delete, and the `includeReferences` flag on skills search now parse `"false"` as `false`, so a client that explicitly disables a flag no longer has it silently turned on. ([#24568](https://github.com/mastra-ai/mastra/pull/24568))
+
+  Fixes #24511.
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0)]:
+  - @mastra/core@1.68.0-alpha.10
+
 ## 1.68.0-alpha.9
 
 ### Patch Changes

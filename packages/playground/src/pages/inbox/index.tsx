@@ -4,7 +4,9 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { ClipboardCheck, MessageSquare } from 'lucide-react';
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -20,6 +22,9 @@ const crumbs = [navCrumb('/inbox')];
 
 type InboxTab = 'dataset' | 'feedback';
 
+const FEEDBACK_SORT_KEYS = ['timestamp'] as const;
+const DEFAULT_FEEDBACK_SORT = { key: 'timestamp', direction: 'desc' } as const;
+
 function isInboxTab(value: string | null): value is InboxTab {
   return value === 'dataset' || value === 'feedback';
 }
@@ -28,8 +33,21 @@ export default function InboxPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const activeTab: InboxTab = isInboxTab(tabParam) ? tabParam : 'feedback';
+  const { sort, onSortChange } = useUrlSort({
+    searchParams,
+    setSearchParams,
+    allowedKeys: FEEDBACK_SORT_KEYS,
+    defaultSort: DEFAULT_FEEDBACK_SORT,
+  });
+  const orderBy = useMemo(
+    () => ({
+      field: 'timestamp' as const,
+      direction: sort?.direction === 'asc' ? ('ASC' as const) : ('DESC' as const),
+    }),
+    [sort?.direction],
+  );
   // The inbox only surfaces items that still need review.
-  const feedbackQuery = useFeedback({ reviewStatus: 'needs-review' });
+  const feedbackQuery = useFeedback({ reviewStatus: 'needs-review', orderBy });
   const updateReviewStatus = useUpdateFeedbackReviewStatus();
   const datasetReviewQuery = useInboxDatasetReviewItems();
 
@@ -159,6 +177,8 @@ export default function InboxPage() {
                   }
                   onSelect={selectFeedback}
                   selectedFeedbackId={selectedFeedbackId}
+                  timestampSort={sort?.direction}
+                  onSortChange={onSortChange}
                 />
               </TabContent>
 

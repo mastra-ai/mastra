@@ -7,6 +7,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
+import type { McpServersSort } from '@/domains/mcps/components/mcps-list/mcps-list';
 import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';
 import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
 import { navCrumb } from '@/domains/navigation/crumbs';
@@ -16,6 +17,7 @@ const crumbs = [navCrumb('/mcps')];
 const MCPs = () => {
   const { data: mcpServers = [], isLoading, error } = useMCPServers();
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<McpServersSort>();
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -57,7 +59,13 @@ const MCPs = () => {
         </div>
       </PageLayout.TopArea>
 
-      <McpServersList mcpServers={mcpServers} isLoading={isLoading} search={search} />
+      <McpServersList
+        mcpServers={mcpServers}
+        isLoading={isLoading}
+        search={search}
+        sort={sort}
+        onSortChange={(direction, key) => setSort({ key, direction })}
+      />
     </PageLayout>
   );
 };

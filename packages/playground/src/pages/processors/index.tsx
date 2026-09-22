@@ -9,6 +9,7 @@ import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoProcessorsInfo } from '@/domains/processors/components/processors-list/no-processors-info';
 import { ProcessorsList } from '@/domains/processors/components/processors-list/processors-list';
+import type { ProcessorsSort } from '@/domains/processors/components/processors-list/processors-list';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 
 const crumbs = [navCrumb('/processors')];
@@ -16,6 +17,7 @@ const crumbs = [navCrumb('/processors')];
 export function Processors() {
   const { data: processors = {}, isLoading, error } = useProcessors();
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<ProcessorsSort>();
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -57,7 +59,13 @@ export function Processors() {
         </div>
       </PageLayout.TopArea>
 
-      <ProcessorsList processors={processors} isLoading={isLoading} search={search} />
+      <ProcessorsList
+        processors={processors}
+        isLoading={isLoading}
+        search={search}
+        sort={sort}
+        onSortChange={(direction, key) => setSort({ key, direction })}
+      />
     </PageLayout>
   );
 }

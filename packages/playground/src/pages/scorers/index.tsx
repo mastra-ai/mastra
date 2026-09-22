@@ -9,6 +9,7 @@ import { navCrumb } from '@/domains/navigation/crumbs';
 import { ScorersToolbar, useScorers } from '@/domains/scores';
 import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';
 import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-list';
+import type { ScorersSort } from '@/domains/scores/components/scorers-list/scorers-list';
 import { ScorersHeaderCreateAction } from '@/domains/scores/scorers-header-actions';
 
 const crumbs = [navCrumb('/scorers')];
@@ -17,6 +18,7 @@ export default function Scorers() {
   const { data: scorers = {}, isLoading, error } = useScorers();
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [sort, setSort] = useState<ScorersSort>();
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -74,7 +76,14 @@ export default function Scorers() {
         />
       </PageLayout.TopArea>
 
-      <ScorersList scorers={scorers} isLoading={isLoading} search={search} sourceFilter={sourceFilter} />
+      <ScorersList
+        scorers={scorers}
+        isLoading={isLoading}
+        search={search}
+        sourceFilter={sourceFilter}
+        sort={sort}
+        onSortChange={(direction, key) => setSort({ key, direction })}
+      />
     </PageLayout>
   );
 }

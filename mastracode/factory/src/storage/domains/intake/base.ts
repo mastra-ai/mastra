@@ -373,6 +373,94 @@ export class IntakeStorage extends FactoryStorageDomain {
       await this.#db.updateMany('intake_source_bindings', where, patch);
     }
   }
+  /** Atomically replace legacy provider source ids in both selection and routing state. */
+  async migrateSourceIds({
+    orgId,
+    integrationId,
+    migrations,
+  }: {
+    orgId: string;
+    integrationId: string;
+    migrations: Array<{ from: string; to: string }>;
+  }): Promise<{ migrations: Array<{ from: string; to: string }>; conflicts: Array<{ from: string; to: string }> }> {
+    if (migrations.length === 0) return { migrations: [], conflicts: [] };
+    return this.storage.withTransaction(
+      async ops => {
+        const bindings = await ops.findMany<IntakeSourceBindingRow>('intake_source_bindings', {
+          org_id: orgId,
+          integration_id: integrationId,
+        });
+        const bindingBySource = new Map(bindings.map(binding => [binding.source_id, binding] as const));
+        const grouped = new Map<string, Array<{ from: string; to: string }>>();
+        for (const migration of migrations) {
+          grouped.set(migration.to, [...(grouped.get(migration.to) ?? []), migration]);
+        }
+        const conflicts: Array<{ from: string; to: string }> = [];
+        for (const [to, group] of grouped) {
+          const candidates = [bindingBySource.get(to), ...group.map(({ from }) => bindingBySource.get(from))].filter(
+            (binding): binding is IntakeSourceBindingRow => binding !== undefined,
+          );
+          const destinations = new Set(
+            candidates.map(binding => `${binding.factory_project_id}\0${binding.board ?? ''}`),
+          );
+          if (destinations.size > 1) conflicts.push(...group);
+        }
+        if (conflicts.length > 0) return { migrations: [], conflicts };
+
+        const now = new Date();
+        for (const [to, group] of grouped) {
+          const canonical = bindingBySource.get(to);
+          const legacy = group.flatMap(({ from }) => {
+            const binding = bindingBySource.get(from);
+            return binding ? [{ from, binding }] : [];
+          });
+          if (!canonical && legacy.length > 0) {
+            const [first, ...duplicates] = legacy;
+            await ops.updateMany(
+              'intake_source_bindings',
+              { org_id: orgId, integration_id: integrationId, source_id: first!.from },
+              { source_id: to, updated_at: now },
+            );
+            for (const duplicate of duplicates) {
+              await ops.deleteMany('intake_source_bindings', {
+                org_id: orgId,
+                integration_id: integrationId,
+                source_id: duplicate.from,
+              });
+            }
+          } else if (canonical) {
+            for (const entry of legacy) {
+              await ops.deleteMany('intake_source_bindings', {
+                org_id: orgId,
+                integration_id: integrationId,
+                source_id: entry.from,
+              });
+            }
+          }
+        }
+
+        const configRow = await ops.findOne<{ config: IntakeConfig }>('intake_org_settings', { org_id: orgId });
+        if (configRow) {
+          const replacements = new Map(migrations.map(({ from, to }) => [from, to] as const));
+          const selected = configRow.config[integrationId]?.sourceIds ?? [];
+          const nextSelected = [...new Set(selected.map(sourceId => replacements.get(sourceId) ?? sourceId))];
+          if (
+            nextSelected.length !== selected.length ||
+            nextSelected.some((sourceId, index) => sourceId !== selected[index])
+          ) {
+            const config = structuredClone(configRow.config);
+            config[integrationId] = {
+              ...(config[integrationId] ?? { enabled: true }),
+              sourceIds: nextSelected.length > 0 ? nextSelected : null,
+            };
+            await ops.updateMany('intake_org_settings', { org_id: orgId }, { config, updated_at: now });
+          }
+        }
+        return { migrations, conflicts: [] };
+      },
+      { isolationLevel: 'serializable' },
+    );
+  }
 
   /** Label routes in the org, optionally narrowed to one project and/or integration. Sorted by label. */
   async listLabelRoutes({

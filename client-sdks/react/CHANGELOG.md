@@ -1,5 +1,35 @@
 # @mastra/react
 
+## 1.6.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192)]:
+  - @mastra/core@1.68.0-alpha.11
+  - @mastra/client-js@1.47.0-alpha.11
+
+## 1.6.0-alpha.11
+
+### Minor Changes
+
+- Added an optional `resourceId` to `useCreateWorkflowRun` and `useStreamWorkflow`, so a manually started workflow run can be attributed to a resource. ([#24519](https://github.com/mastra-ai/mastra/pull/24519))
+
+  ```tsx
+  const createWorkflowRun = useCreateWorkflowRun();
+  const { streamWorkflow } = useStreamWorkflow();
+
+  const { runId } = await createWorkflowRun.mutateAsync({ workflowId, resourceId: 'tenant-42' });
+  await streamWorkflow.mutateAsync({ workflowId, runId, inputData, requestContext: {}, resourceId: 'tenant-42' });
+  ```
+
+### Patch Changes
+
+- Fix `useSpeechRecognition` (browser path) dropping earlier finalized phrases during continuous dictation. Each `onresult` event now appends its finalized results to the session transcript instead of replacing it, and the transcript resets when a new dictation session starts. Fixes #24330. ([#24579](https://github.com/mastra-ai/mastra/pull/24579))
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0), [`d77beee`](https://github.com/mastra-ai/mastra/commit/d77beeec3f4c17f1c47376730a90faccc06247cb)]:
+  - @mastra/core@1.68.0-alpha.10
+  - @mastra/client-js@1.47.0-alpha.10
+
 ## 1.6.0-alpha.10
 
 ### Patch Changes

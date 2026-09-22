@@ -3,8 +3,10 @@ import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
@@ -13,13 +15,28 @@ import { PromptBlocksHeaderCreateAction } from '@/domains/prompt-blocks/prompt-b
 const crumbs = [navCrumb('/prompts')];
 
 const PROMPT_BLOCKS_PER_PAGE = 50;
+const PROMPT_BLOCKS_SORT_KEYS = ['updatedAt'] as const;
 
 export default function PromptBlocks() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { sort, onSortChange: changeUrlSort } = useUrlSort({
+    searchParams,
+    setSearchParams,
+    allowedKeys: PROMPT_BLOCKS_SORT_KEYS,
+  });
+  const orderBy = useMemo(
+    () =>
+      sort
+        ? { field: sort.key, direction: sort.direction === 'asc' ? ('ASC' as const) : ('DESC' as const) }
+        : undefined,
+    [sort],
+  );
   const { data, isLoading, error, isPlaceholderData } = useStoredPromptBlocks({
     page,
     perPage: PROMPT_BLOCKS_PER_PAGE,
+    orderBy,
   });
 
   const promptBlocks = data?.promptBlocks ?? [];
@@ -35,6 +52,13 @@ export default function PromptBlocks() {
     setSearch(value);
     setPage(0);
   }, []);
+  const handleSortChange = useCallback<typeof changeUrlSort>(
+    (direction, key) => {
+      changeUrlSort(direction, key);
+      setPage(0);
+    },
+    [changeUrlSort],
+  );
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -62,7 +86,7 @@ export default function PromptBlocks() {
 
   if (promptBlocks.length === 0 && !isLoading && page === 0) {
     return (
-      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actions={<PromptBlocksHeaderCreateAction />}>
+      <NoDataPageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <NoPromptBlocksInfo />
       </NoDataPageLayout>
     );
@@ -94,6 +118,8 @@ export default function PromptBlocks() {
         hasMore={hasMore}
         onNextPage={handleNextPage}
         onPrevPage={handlePrevPage}
+        updatedSort={sort?.direction}
+        onSortChange={handleSortChange}
       />
     </PageLayout>
   );

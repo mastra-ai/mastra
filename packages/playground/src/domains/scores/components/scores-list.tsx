@@ -1,5 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { ScoresDataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ScoresColumnsState } from '@/domains/scores/hooks/use-scores-columns';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
@@ -14,7 +16,11 @@ type ScoresListProps = {
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   errorMsg?: string;
   columnsState: ScoresColumnsState;
+  sort?: ListSort<ScoresSortKey>;
+  onSortChange?: (sort: DataListSort, key: string) => void;
 };
+
+export type ScoresSortKey = 'date' | 'score';
 
 export function ScoresList({
   scores,
@@ -26,6 +32,8 @@ export function ScoresList({
   setEndOfListElement,
   selectedScoreId: controlledSelectedId,
   columnsState: { visibleColumns, columns },
+  sort,
+  onSortChange,
 }: ScoresListProps) {
   const [internalSelectedId, setInternalSelectedId] = useState<string | undefined>(controlledSelectedId);
   const selectedScoreId = controlledSelectedId ?? internalSelectedId;
@@ -86,9 +94,29 @@ export function ScoresList({
 
   const header = (
     <ScoresDataList.Top>
-      <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
+      {onSortChange ? (
+        <ScoresDataList.SortableTopCell
+          sortKey="date"
+          sort={sort?.key === 'date' ? sort.direction : undefined}
+          onSortChange={onSortChange}
+        >
+          Date
+        </ScoresDataList.SortableTopCell>
+      ) : (
+        <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
+      )}
       <ScoresDataList.TopCell>Time</ScoresDataList.TopCell>
-      <ScoresDataList.TopCell>Score</ScoresDataList.TopCell>
+      {onSortChange ? (
+        <ScoresDataList.SortableTopCell
+          sortKey="score"
+          sort={sort?.key === 'score' ? sort.direction : undefined}
+          onSortChange={onSortChange}
+        >
+          Score
+        </ScoresDataList.SortableTopCell>
+      ) : (
+        <ScoresDataList.TopCell>Score</ScoresDataList.TopCell>
+      )}
       {visibleColumns.has('entity') && <ScoresDataList.TopCell>Entity</ScoresDataList.TopCell>}
       {visibleColumns.has('input') && <ScoresDataList.TopCell>Input</ScoresDataList.TopCell>}
     </ScoresDataList.Top>

@@ -907,6 +907,83 @@ export function createExperimentsTests({
     // ---------------------------------------------------------------------------
     // Edge Cases
     // ---------------------------------------------------------------------------
+    describe('Ordering', () => {
+      beforeEach(async () => {
+        await experimentsStorage.dangerouslyClearAll();
+      });
+
+      const tick = () => new Promise(resolve => setTimeout(resolve, 5));
+      const makeExperiment = (name: string) =>
+        experimentsStorage.createExperiment({
+          name,
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+
+      it('listExperiments returns newest first by default', async () => {
+        await makeExperiment('older');
+        await tick();
+        await makeExperiment('newer');
+
+        const result = await experimentsStorage.listExperiments({ pagination: { page: 0, perPage: 10 } });
+        expect(result.experiments.map(e => e.name)).toEqual(['newer', 'older']);
+      });
+
+      it('listExperiments orders by createdAt ascending when requested', async () => {
+        await makeExperiment('older');
+        await tick();
+        await makeExperiment('newer');
+
+        const result = await experimentsStorage.listExperiments({
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+        expect(result.experiments.map(e => e.name)).toEqual(['older', 'newer']);
+      });
+
+      it('listExperimentResults orders by startedAt descending when requested', async () => {
+        const exp = await makeExperiment('exp');
+        const base = {
+          experimentId: exp.id,
+          itemDatasetVersion: null,
+          output: null,
+          groundTruth: null,
+          error: null,
+          retryCount: 0,
+        };
+        await experimentsStorage.addExperimentResult({
+          ...base,
+          itemId: 'item-1',
+          input: { q: 'first' },
+          startedAt: new Date('2026-01-01T00:00:00Z'),
+          completedAt: new Date('2026-01-01T00:00:01Z'),
+        });
+        await experimentsStorage.addExperimentResult({
+          ...base,
+          itemId: 'item-2',
+          input: { q: 'second' },
+          startedAt: new Date('2026-01-02T00:00:00Z'),
+          completedAt: new Date('2026-01-02T00:00:01Z'),
+        });
+
+        const asc = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(asc.results.map(r => (r.input as { q: string }).q)).toEqual(['first', 'second']);
+
+        const desc = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'startedAt', direction: 'DESC' },
+        });
+        expect(desc.results.map(r => (r.input as { q: string }).q)).toEqual(['second', 'first']);
+      });
+    });
+
     describe('Edge Cases', () => {
       beforeEach(async () => {
         await experimentsStorage.dangerouslyClearAll();

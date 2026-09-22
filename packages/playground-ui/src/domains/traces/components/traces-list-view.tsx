@@ -10,6 +10,7 @@ import type { TraceColumnPreferences, TraceUsageSummary } from '../trace-list-co
 import { formatSpanDuration, getInputPreview } from '../utils/span-utils';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
 import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
+import type { DataListSort } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
 
 export type TracesListViewTrace = {
@@ -62,6 +63,9 @@ export type TracesListViewProps = {
   usageByTraceId?: ReadonlyMap<string, TraceUsageSummary>;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
+  /** Current sort of the Created column. When `onSortChange` is provided the header becomes sortable. */
+  createdSort?: DataListSort;
+  onSortChange?: (direction: DataListSort, key: 'startedAt') => void;
 };
 
 /**
@@ -82,6 +86,8 @@ export function TracesListView({
   columnPreferences = DEFAULT_TRACE_COLUMN_PREFERENCES,
   usageByTraceId,
   onTraceClick,
+  createdSort,
+  onSortChange,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const columns = buildTraceListColumns(columnPreferences);
@@ -131,10 +137,16 @@ export function TracesListView({
   return (
     <TracesDataList columns={columns} fit="container" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>Created</TracesDataList.TopCell>
+        {onSortChange ? (
+          <TracesDataList.SortableTopCell sortKey="startedAt" sort={createdSort} onSortChange={onSortChange}>
+            Start
+          </TracesDataList.SortableTopCell>
+        ) : (
+          <TracesDataList.TopCell>Start</TracesDataList.TopCell>
+        )}
+        {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Type</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
-        {hasTraceColumn(columnPreferences, 'entity') && <TracesDataList.TopCell>Entity</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
@@ -171,7 +183,6 @@ export function TracesListView({
             const rowKey = `${trace.traceId}:${trace.spanId ?? ''}`;
             const isRecentlyAdded = recentlyAddedKeys?.has(rowKey) ?? false;
             const displayDate = trace.startedAt ?? trace.createdAt;
-            const entityName = trace.entityName || trace.entityId;
             const usage = usageByTraceId?.get(trace.traceId);
 
             return (
@@ -185,6 +196,7 @@ export function TracesListView({
                 className={cn(isRecentlyAdded && 'animate-row-highlight')}
               >
                 <TracesDataList.CreatedCell timestamp={displayDate} />
+                {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TypeCell entityType={trace.entityType} />}
                 <TracesDataList.NameCell
                   name={trace.name}
                   parentSpanId={trace.parentSpanId}
@@ -192,9 +204,6 @@ export function TracesListView({
                 />
                 {hasTraceColumn(columnPreferences, 'input') && (
                   <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
-                )}
-                {hasTraceColumn(columnPreferences, 'entity') && (
-                  <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
                 )}
                 <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (

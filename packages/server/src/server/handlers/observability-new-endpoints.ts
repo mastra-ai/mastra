@@ -70,12 +70,20 @@ import { generateSignalId } from '@mastra/core/observability';
 import type { ValidationErrorHook } from '@mastra/core/server';
 import * as coreStorage from '@mastra/core/storage';
 import { z } from 'zod/v4';
-import { MASTRA_USER_KEY, MASTRA_CLIENT_TYPE_HEADER, isStudioClientTypeHeader } from '../constants';
+import {
+  MASTRA_AUTH_MODE_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_ROLES_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_CLIENT_TYPE_HEADER,
+  isStudioClientTypeHeader,
+} from '../constants';
 import { HTTPException } from '../http-exception';
 import { listFeedbackResponseSchema } from '../schemas/feedback';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { prepareAuthorEnrichment } from './author-enrichment';
+import { getCallerPermissions } from './authorship';
 import { handleError } from './error';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
@@ -251,10 +259,41 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
   onValidationError: traceQueryValidationError,
   maxBodySize: 256 * 1024,
   preserveHttpExceptions: true,
-  handler: async ({ mastra, timeRange, where, group, orderBy, page, pagination }) => {
+  handler: async ({
+    mastra,
+    requestContext,
+    timeRange,
+    where,
+    group,
+    orderBy,
+    page,
+    pagination,
+    mode,
+    after,
+    limit,
+  }) => {
     let plan;
     try {
-      plan = coreStorage.planTraceQuery({ timeRange, where, group, orderBy, page, pagination });
+      const user = requestContext.get(MASTRA_USER_KEY);
+      const userId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
+      const roles = requestContext.get(MASTRA_USER_ROLES_KEY);
+      const authorizationBinding =
+        mode === 'delta' || pagination !== undefined
+          ? JSON.stringify({
+              userId: typeof userId === 'string' || typeof userId === 'number' ? userId : null,
+              resourceId: requestContext.get(MASTRA_RESOURCE_ID_KEY) ?? null,
+              organizationId: requestContext.get('organizationId') ?? null,
+              authMode: requestContext.get(MASTRA_AUTH_MODE_KEY) ?? null,
+              permissions: [...new Set(getCallerPermissions(requestContext))].sort(),
+              roles: Array.isArray(roles)
+                ? [...new Set(roles.filter((role): role is string => typeof role === 'string'))].sort()
+                : [],
+            })
+          : undefined;
+      plan = coreStorage.planTraceQuery(
+        { timeRange, where, group, orderBy, page, pagination, mode, after, limit },
+        { authorizationBinding },
+      );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
         throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
@@ -272,6 +311,9 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
+      if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
+        throw new HTTPException(501, { message: 'This storage provider does not support observability delta polling' });
+      }
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
         throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
@@ -282,6 +324,12 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       return await observabilityStore.queryTraces(plan);
     } catch (error) {
+      if (error instanceof coreStorage.TraceQueryCursorError) {
+        throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
+          code: error.code,
+          message: error.message,
+        });
+      }
       if (error instanceof coreStorage.TraceQueryExecutionError) {
         throwTraceQueryError(504, { code: error.code, message: error.message });
       }
