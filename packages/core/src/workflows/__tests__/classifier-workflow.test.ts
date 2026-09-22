@@ -153,6 +153,34 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
 });
 
 describe('classifier workflow construction', () => {
+  it('omits function state selectors from serialized classifier entries', () => {
+    const workflow = createWorkflow({
+      id: 'selector-builder',
+      inputSchema: z.object({ message: z.string() }),
+      outputSchema: z.any(),
+    })
+      .classifier('ticket-router', {
+        state: ({ inputData }) => inputData.message,
+        retries: 2,
+        maxRetries: 3,
+        providerOptions: { test: { mode: 'fast' } },
+        metadata: { source: 'test' },
+      })
+      .commit();
+
+    expect(workflow.serializedStepGraph[0]).toEqual({
+      type: 'classifier',
+      id: 'ticket-router',
+      classifierId: 'ticket-router',
+      options: {
+        retries: 2,
+        maxRetries: 3,
+        providerOptions: { test: { mode: 'fast' } },
+        metadata: { source: 'test' },
+      },
+    });
+  });
+
   it('supports live state selectors and preserves classifier entries from createStep()', async () => {
     const states: unknown[] = [];
     const classifier = createClassifier(async options => {
@@ -178,6 +206,11 @@ describe('classifier workflow construction', () => {
     bind(workflow, classifier);
 
     expect(workflow.stepGraph[0]).toMatchObject({ type: 'classifier', classifierId: 'ticket-router' });
+    expect(workflow.serializedStepGraph[0]).toEqual({
+      type: 'classifier',
+      id: 'ticket-router',
+      classifierId: 'ticket-router',
+    });
     const result = await (await workflow.createRun()).start({ inputData: { message: 'Need help' } });
     expect(result.status).toBe('success');
     expect(states).toEqual(['Need help']);

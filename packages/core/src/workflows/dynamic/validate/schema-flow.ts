@@ -207,6 +207,18 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
       issues.push(...analysis.issues);
       return analysis.outputSchema;
     }
+    if (entry.type === 'classifier' && entry.state?.path.startsWith('stepResults.')) {
+      const stepId = entry.state.path.split('.')[1];
+      if (!stepId || !stepOutputs.has(stepId)) {
+        issues.push({
+          code: 'invalid-map-reference',
+          path: `${path}.state.path`,
+          message: stepId
+            ? `Classifier state step result "${stepId}" must reference a preceding top-level step.`
+            : 'Classifier state stepResults paths must include a preceding top-level step id.',
+        });
+      }
+    }
     if (entry.type === 'step') return undefined;
     if (schemaCompatibility(incoming, inputSchemaOf(entry, index)) === 'incompatible') {
       issues.push({

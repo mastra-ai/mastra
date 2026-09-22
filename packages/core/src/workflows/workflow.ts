@@ -201,6 +201,40 @@ function serializeToolStepFields(options: any): { options?: { retries?: number; 
   return Object.keys(opts).length > 0 ? { options: opts } : {};
 }
 
+type SerializedClassifierStepFields = {
+  state?: { path: string };
+  options?: {
+    retries?: number;
+    metadata?: StepMetadata;
+    maxRetries?: number;
+    providerOptions?: Record<string, Record<string, unknown>>;
+  };
+};
+
+function serializeClassifierStepFields(
+  options: ClassifierStepOptions<any> | undefined,
+): SerializedClassifierStepFields {
+  const out: SerializedClassifierStepFields = {};
+  if (
+    options?.state &&
+    typeof options.state === 'object' &&
+    typeof (options.state as { path?: unknown }).path === 'string'
+  ) {
+    out.state = options.state as { path: string };
+  }
+
+  const opts: NonNullable<SerializedClassifierStepFields['options']> = {};
+  if (typeof options?.retries === 'number') opts.retries = options.retries;
+  if (options?.metadata && typeof options.metadata === 'object') opts.metadata = options.metadata;
+  if (typeof options?.maxRetries === 'number') opts.maxRetries = options.maxRetries;
+  if (options?.providerOptions && typeof options.providerOptions === 'object') {
+    opts.providerOptions = options.providerOptions;
+  }
+  if (Object.keys(opts).length > 0) out.options = opts;
+
+  return out;
+}
+
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
   path,
@@ -642,9 +676,8 @@ function toSerializedSingleStepEntry(step: StepWithRefMetadata): SerializedSingl
       type: 'classifier',
       id: step.id,
       classifierId: step.__classifierRef.id,
-      state: step.__classifierOptions?.state,
-      options: step.__classifierOptions,
-    } as SerializedSingleStepEntry;
+      ...serializeClassifierStepFields(step.__classifierOptions),
+    };
   }
   if ((step as any)?.component === 'WORKFLOW') {
     // Prefer the public getter; fall back to the protected field / legacy
@@ -2052,7 +2085,12 @@ export class Workflow<
       options,
     };
     this.stepFlow.push(entry as any);
-    this.serializedStepFlow.push({ type: 'classifier', id, classifierId, state: options?.state, options } as any);
+    this.serializedStepFlow.push({
+      type: 'classifier',
+      id,
+      classifierId,
+      ...serializeClassifierStepFields(options),
+    });
     this.steps[id] = isId
       ? ({ id, component: 'CLASSIFIER' } as any)
       : ({ ...createStepFromClassifier(classifierOrId, { ...options, id }), id } as any);
