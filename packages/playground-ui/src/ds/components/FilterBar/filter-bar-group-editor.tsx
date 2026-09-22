@@ -107,7 +107,7 @@ export function FilterBarGroupEditor({
       data-depth={depth}
       role="group"
       aria-label={`Conditions joined with ${group.logic}`}
-      className={cn('filter-bar-group-editor flex min-w-0 flex-col items-start gap-1.5', className)}
+      className={cn('flex min-w-0 flex-col items-start gap-1.5', className)}
     >
       {rows}
       {targeted && (
@@ -120,13 +120,7 @@ export function FilterBarGroupEditor({
           className={rows.length > 0 ? 'mt-1' : undefined}
         />
       )}
-      <div
-        data-slot="filter-bar-editor-actions"
-        // Pinned (always visible) while the group is empty or its input is open; otherwise
-        // revealed on hover / focus by `.filter-bar-editor-actions` rules in filter-bar-chip.css.
-        data-pinned={rows.length === 0 || targeted || undefined}
-        className="filter-bar-editor-actions flex w-full items-center gap-0.5"
-      >
+      <div data-slot="filter-bar-editor-actions" className="text-muted-foreground flex w-full items-center gap-0.5">
         {!targeted && (
           <Button
             ref={addFilterRef}
@@ -149,13 +143,7 @@ export function FilterBarGroupEditor({
           <FolderPlusIcon />
         </Button>
         {onRemove && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground ml-auto"
-            tooltip={removeLabel}
-            onClick={onRemove}
-          >
+          <Button variant="ghost" size="icon-sm" className="ml-auto" tooltip={removeLabel} onClick={onRemove}>
             <Trash2Icon />
           </Button>
         )}
