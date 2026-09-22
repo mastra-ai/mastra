@@ -164,13 +164,13 @@ export function CardActions({
   const [main] = actions;
   return (
     <div className="mt-auto flex items-center justify-between gap-2">
-      <div className="board-card-actions relative z-10 flex shrink-0">
+      <div className="board-card-actions relative z-10 flex min-w-0">
         {actions.map(action => (
           <CardActionButton key={action.label} action={action} main={action === main} beforeStart={beforeStart} />
         ))}
         {children}
       </div>
-      {trailing}
+      {trailing && <div className="shrink-0">{trailing}</div>}
     </div>
   );
 }
@@ -191,11 +191,21 @@ function CardActionButton({
   beforeStart?: () => void;
 }) {
   const variant = pillVariant(action, main);
+  // The lead action keeps its label whole; a narrow column eats into the ones behind it.
+  const width = main ? 'shrink-0' : 'min-w-0';
   // Both through Button, so the two pills can never differ by a class.
   if ('href' in action) {
     return (
-      <Button as={Link} to={action.href} draggable={false} variant={variant} size="sm" aria-label={action.ariaLabel}>
-        {action.label}
+      <Button
+        as={Link}
+        to={action.href}
+        draggable={false}
+        variant={variant}
+        size="sm"
+        aria-label={action.ariaLabel}
+        className={width}
+      >
+        <span className="truncate">{action.label}</span>
       </Button>
     );
   }
@@ -206,12 +216,13 @@ function CardActionButton({
       size="sm"
       aria-label={action.ariaLabel}
       disabled={action.disabled}
+      className={width}
       onClick={() => {
         beforeStart?.();
         action.start();
       }}
     >
-      {action.label}
+      <span className="truncate">{action.label}</span>
     </Button>
   );
 }
