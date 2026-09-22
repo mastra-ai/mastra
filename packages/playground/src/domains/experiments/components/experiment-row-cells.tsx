@@ -44,7 +44,7 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       <EntityList.TextCell className="text-center">{total}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">{succeeded}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">
-        <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
+        <span className={failed > 0 ? 'text-destructive-fg' : ''}>{failed}</span>
       </EntityList.TextCell>
       <EntityList.Cell className="text-center">
         <ExperimentReviewCell review={review} />
@@ -78,13 +78,13 @@ function ExperimentReviewCell({ review }: { review?: ExperimentReviewSummary }) 
   if (inPipeline === 0) return <span className="text-placeholder">—</span>;
   if (review.needsReview > 0) {
     return (
-      <Badge size="xs" variant="yellow">
+      <Badge size="xs" variant="warning">
         {review.needsReview} pending
       </Badge>
     );
   }
   return (
-    <Badge size="xs" variant="green">
+    <Badge size="xs" variant="success">
       {review.complete}/{inPipeline} reviewed
     </Badge>
   );

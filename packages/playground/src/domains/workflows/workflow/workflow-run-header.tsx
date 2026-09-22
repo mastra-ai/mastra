@@ -19,7 +19,7 @@ export function WorkflowRunStatusBadge({ status }: { status?: WorkflowRunStatus 
   return (
     <Badge
       size="md"
-      variant={status === 'paused' ? 'yellow' : 'neutral'}
+      variant={status === 'paused' ? 'warning' : 'neutral'}
       emphasis="muted"
       icon={status && <WorkflowRunStatusIcon status={status} />}
     >
@@ -46,7 +46,7 @@ function RunWaiting({ since }: { since: number }) {
   const waiting = formatDuration(useTimeDiff({ startedAt: since }));
 
   return (
-    <span className="text-meta text-accent3 flex items-center gap-1.5 tabular-nums" title="Waiting for input">
+    <span className="text-meta text-info-fg flex items-center gap-1.5 tabular-nums" title="Waiting for input">
       <Pause aria-hidden className="size-3.5" />
       {waiting}
     </span>

@@ -44,7 +44,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
         <CollapsibleTrigger className="bg-card flex w-full items-center gap-1 p-3">
           <ChevronRight className="text-muted-foreground h-4 w-4" />
           <SectionTitle icon={<MemoryIcon className="text-muted-foreground" />}>
-            Memory{isEnabled && <span className="text-accent1">(enabled)</span>}
+            Memory{isEnabled && <span className="text-success-fg">(enabled)</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>

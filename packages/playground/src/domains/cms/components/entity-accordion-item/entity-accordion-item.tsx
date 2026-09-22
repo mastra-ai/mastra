@@ -77,7 +77,7 @@ export function EntityAccordionItem({
               />
             </Icon>
             <Icon>
-              <Ruler className="text-accent6" />
+              <Ruler className="text-warning-fg" />
             </Icon>
             <span className="text-foreground text-caption">Display Conditions</span>
             {ruleCount > 0 && (

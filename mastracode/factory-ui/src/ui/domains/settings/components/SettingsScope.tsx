@@ -20,9 +20,9 @@ export type ScopeControl = {
 
 const SCOPE_BADGE: Record<SettingsScope, { label: string; variant: BadgeVariant; icon: LucideIcon }> = {
   personal: { label: 'Personal', variant: 'neutral', icon: CircleUserRound },
-  factory: { label: 'Factory-wide', variant: 'blue', icon: Building2 },
-  org: { label: 'Org-wide', variant: 'blue', icon: Users },
-  deployment: { label: 'Deployment-wide', variant: 'blue', icon: Server },
+  factory: { label: 'Factory-wide', variant: 'info', icon: Building2 },
+  org: { label: 'Org-wide', variant: 'info', icon: Users },
+  deployment: { label: 'Deployment-wide', variant: 'info', icon: Server },
 };
 
 export function ScopeBadge({ scope }: { scope: SettingsScope }) {

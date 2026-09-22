@@ -302,7 +302,7 @@ export function AppSidebar() {
                     <SidebarNavItem key={item.name} item={item} siblings={filtered}>
                       {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
                         <Badge
-                          variant="yellow"
+                          variant="warning"
                           size="sm"
                           indicator="dot"
                           className="ml-auto"

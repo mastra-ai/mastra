@@ -290,7 +290,7 @@ export const SurfaceFoundations: Story = {
           </div>
           <div className="w-44">
             <Specimen name="--shadow-focus-ring" note="focusRing.visible — row, link, tab">
-              <div className="bg-fill shadow-focus-ring ring-accent1 h-14 rounded-md ring-1" />
+              <div className="bg-fill shadow-focus-ring ring-success-indicator h-14 rounded-md ring-1" />
             </Specimen>
           </div>
         </div>

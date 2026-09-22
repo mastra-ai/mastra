@@ -13,15 +13,15 @@ export type StatusPresentation = {
 export type StatusPresentationFn<T> = (status: T | null) => StatusPresentation;
 
 const TONE_FILL: Record<StatusTone, string> = {
-  success: 'bg-notice-success',
-  progress: 'bg-notice-warning',
-  error: 'bg-notice-destructive',
-  idle: 'bg-notice-info',
+  success: 'bg-success-indicator',
+  progress: 'bg-warning-indicator',
+  error: 'bg-destructive-indicator',
+  idle: 'bg-info-indicator',
   neutral: 'bg-muted-foreground',
 };
 
 const PROGRESS_DECORATION =
-  "relative motion-safe:animate-pulse before:absolute before:-inset-1 before:rounded-full before:border before:border-notice-warning/20 before:border-t-notice-warning before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
+  "relative motion-safe:animate-pulse before:absolute before:-inset-1 before:rounded-full before:border before:border-warning-indicator/20 before:border-t-warning-indicator before:content-[''] motion-safe:before:animate-spin motion-reduce:before:animate-none";
 
 const GLYPH_CLASS: Record<StatusDotGlyph, string> = {
   circle: 'rounded-full',

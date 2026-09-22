@@ -205,7 +205,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 onClick={() => onStarterPromptSelect(starterPrompt.prompt)}
                 data-testid={`agent-builder-agent-chat-starter-${starterPrompt.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + index * 40}ms` }}
-                className="starter-chip group border-border bg-background state-layer hover:border-border-strong focus-visible:ring-accent1 flex gap-3 rounded-3xl border p-4 text-left focus-visible:ring-2 focus-visible:outline-none"
+                className="starter-chip group border-border bg-background state-layer hover:border-border-strong focus-visible:ring-border-focus flex gap-3 rounded-3xl border p-4 text-left focus-visible:ring-2 focus-visible:outline-none"
               >
                 <span
                   className={cn(

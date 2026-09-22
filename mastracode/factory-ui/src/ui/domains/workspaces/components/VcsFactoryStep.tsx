@@ -203,7 +203,7 @@ function ProviderHeading({ children }: { children: string }) {
 
 function RepositoryError({ message }: { message: string }) {
   return (
-    <p role="alert" className="text-caption text-notice-destructive-fg m-0">
+    <p role="alert" className="text-caption text-destructive-fg m-0">
       {message}
     </p>
   );
@@ -262,7 +262,7 @@ function RepositoryRows({
               </span>
             </span>
             {isConnecting ? (
-              <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="text-accent1 shrink-0" />
+              <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="text-success-fg shrink-0" />
             ) : (
               <span className="text-meta text-placeholder opacity-0 transition-opacity group-hover:opacity-100">
                 Select

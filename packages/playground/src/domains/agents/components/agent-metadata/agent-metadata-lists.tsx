@@ -152,7 +152,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
       renderItem={skill => {
         const isActivated = isSkillActivated(skill.name);
         const badge = (
-          <Badge variant={isActivated ? 'green' : 'neutral'}>
+          <Badge variant={isActivated ? 'success' : 'neutral'}>
             {skill.name}
             {isActivated && <span className="sr-only">Active</span>}
           </Badge>

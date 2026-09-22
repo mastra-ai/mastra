@@ -29,7 +29,7 @@ export function SenderAvatar({ author }: { author: MessageAuthor }) {
         render={
           <span
             aria-label={`Sent by ${author.name}`}
-            className="focus-visible:ring-accent1 mt-1 shrink-0 rounded-full outline-hidden focus-visible:ring-2"
+            className="focus-visible:ring-border-focus mt-1 shrink-0 rounded-full outline-hidden focus-visible:ring-2"
             tabIndex={0}
           >
             <Avatar name={author.name} src={author.avatarUrl} size="sm" />

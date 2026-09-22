@@ -23,16 +23,16 @@ const FALLOFF_RAMP = [0, 0.08, 0.16, 0.25, 0.34, 0.44, 0.55, 0.66, 0.78, 0.89, 1
 const TONES = {
   neutral: { colorVar: '--foreground', peak: 0.08, grain: true, text: 'text-muted-foreground' },
   warning: {
-    colorVar: '--notice-warning',
+    colorVar: '--warning-indicator',
     peak: 0.16,
     grain: false,
-    text: 'text-notice-warning-fg',
+    text: 'text-warning-fg',
   },
   danger: {
-    colorVar: '--notice-destructive',
+    colorVar: '--destructive-indicator',
     peak: 0.16,
     grain: false,
-    text: 'text-notice-destructive-fg',
+    text: 'text-destructive-fg',
   },
 };
 

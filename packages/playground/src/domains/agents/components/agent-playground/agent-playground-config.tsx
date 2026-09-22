@@ -47,7 +47,7 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
-        <code className="text-accent1 text-caption">{name}</code>
+        <code className="text-foreground text-caption">{name}</code>
         <span className="text-muted-foreground text-caption">{typeLabel}</span>
         {prop.description && (
           <span className="text-muted-foreground text-caption truncate italic">— {prop.description}</span>
@@ -401,12 +401,12 @@ function ToolsDiffView({
               {tool}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="red" className="ml-auto">
+              <Badge variant="destructive" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="green" className="ml-auto">
+              <Badge variant="success" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -500,12 +500,12 @@ function VariablesDiffView({
               {`{{${name}}}`}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="red" className="ml-auto">
+              <Badge variant="destructive" className="ml-auto">
                 removed in latest
               </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="green" className="ml-auto">
+              <Badge variant="success" className="ml-auto">
                 added in latest
               </Badge>
             )}
@@ -584,19 +584,19 @@ function ReadOnlyConfigWithDiff({
   const variablesDiff = diffMap.get('requestContextSchema');
 
   const instructionsBadge = instructionsDiff ? (
-    <Badge variant="yellow" size="sm">
+    <Badge variant="warning" size="sm">
       modified
     </Badge>
   ) : null;
   const toolsBadge = toolsDiff ? (
-    <Badge variant="yellow" size="sm">
+    <Badge variant="warning" size="sm">
       modified
     </Badge>
   ) : toolCount > 0 ? (
     <Badge size="sm">{`${toolCount}`}</Badge>
   ) : null;
   const variablesBadge = variablesDiff ? (
-    <Badge variant="yellow" size="sm">
+    <Badge variant="warning" size="sm">
       modified
     </Badge>
   ) : null;
@@ -743,7 +743,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="start" className="max-w-72">
                       <span>
-                        Use <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax to insert
+                        Use <code className="text-foreground font-medium">{'{{variableName}}'}</code> syntax to insert
                         dynamic values into your instruction blocks.
                       </span>
                     </TooltipContent>

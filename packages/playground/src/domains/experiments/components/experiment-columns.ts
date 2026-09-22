@@ -23,8 +23,8 @@ export const experimentColumnLabels = {
 // A completed run is neutral, not a success: it says the run finished, not that the scores are good.
 export const STATUS_VARIANT: Record<string, BadgeVariant> = {
   completed: 'neutral',
-  running: 'yellow',
-  failed: 'red',
+  running: 'warning',
+  failed: 'destructive',
   pending: 'neutral',
 };
 

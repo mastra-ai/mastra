@@ -72,7 +72,7 @@ export function AgentVersionPanel({
                       'w-full text-left px-3 py-2.5 text-body border-l-2',
                       controlStateColorTransition,
                       isSelected
-                        ? 'bg-fill-hover text-foreground border-accent1'
+                        ? 'bg-fill-hover text-foreground border-border-strong'
                         : `hover:bg-fill-subtle border-transparent ${quietTextHover}`,
                     )}
                   >
@@ -80,8 +80,8 @@ export function AgentVersionPanel({
                       <Txt variant="caption" className="text-inherit">
                         v{version.versionNumber}
                       </Txt>
-                      {isPublished && <Badge variant="green">Published</Badge>}
-                      {isDraft && <Badge variant="blue">Draft</Badge>}
+                      {isPublished && <Badge variant="success">Published</Badge>}
+                      {isDraft && <Badge variant="info">Draft</Badge>}
                     </div>
                     <Txt variant="meta" tone="faint" className="mt-0.5">
                       {formatTimestamp(version.createdAt)}

@@ -105,11 +105,11 @@ export function AgentPlaygroundVersionBar({
           label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatTimestamp(v.createdAt)}`,
           description: v.changeMessage || undefined,
           end: isCodeSourceAgent ? (
-            <Badge variant={isPublished ? 'green' : 'blue'}>{isPublished ? 'Current' : 'Saved'}</Badge>
+            <Badge variant={isPublished ? 'success' : 'info'}>{isPublished ? 'Current' : 'Saved'}</Badge>
           ) : isPublished ? (
-            <Badge variant="green">Published</Badge>
+            <Badge variant="success">Published</Badge>
           ) : isDraftVersion ? (
-            <Badge variant="blue">Draft</Badge>
+            <Badge variant="info">Draft</Badge>
           ) : undefined,
         };
       }),
@@ -170,8 +170,8 @@ export function AgentPlaygroundVersionBar({
         </Tooltip>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {readOnly && <Badge variant="yellow">Read-only</Badge>}
-          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="blue">Unpublished</Badge>}
+          {readOnly && <Badge variant="warning">Read-only</Badge>}
+          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="info">Unpublished</Badge>}
         </div>
       </div>
     ),

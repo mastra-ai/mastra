@@ -29,12 +29,12 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
       header={
         <div className="flex items-center gap-3">
           <Icon>
-            {status === 'success' && <CheckIcon className="text-accent1" />}
-            {status === 'failed' && <CrossIcon className="text-accent2" />}
-            {status === 'tripwire' && <ShieldAlert className="text-notice-warning-fg" />}
-            {status === 'suspended' && <CirclePause className="text-accent3" />}
-            {status === 'waiting' && <HourglassIcon className="text-accent5" />}
-            {status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
+            {status === 'success' && <CheckIcon className="text-success-fg" />}
+            {status === 'failed' && <CrossIcon className="text-destructive-fg" />}
+            {status === 'tripwire' && <ShieldAlert className="text-warning-fg" />}
+            {status === 'suspended' && <CirclePause className="text-info-fg" />}
+            {status === 'waiting' && <HourglassIcon className="text-info-fg" />}
+            {status === 'running' && <Loader2 className="text-warning-fg animate-spin" />}
           </Icon>
           <Txt as="span" variant="heading" tone="ink">
             {stepId.charAt(0).toUpperCase() + stepId.slice(1)}

@@ -53,11 +53,7 @@ const idleSurface = cn('rounded-lg text-muted-foreground hover:text-foreground',
 
 const activeSurface = 'bg-fill text-foreground';
 
-const featuredSurface = cn(
-  'my-2 border border-accent1/30 bg-accent1Dark text-accent1 hover:bg-accent1Darker hover:text-accent1',
-  'dark:border-transparent dark:bg-accent1 dark:text-black dark:hover:bg-accent1/90 dark:hover:text-black',
-  '[&_svg]:text-accent1 dark:[&_svg]:text-black/75 [&:hover_svg]:text-accent1 dark:[&:hover_svg]:text-black',
-);
+const featuredSurface = cn('my-2 border border-transparent bg-ds-green text-black hover:brightness-95');
 
 export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) =>
   cn(idleSurface, isActive && activeSurface, isFeatured && featuredSurface);

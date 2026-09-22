@@ -115,7 +115,7 @@ function SupervisorMain({
     </ChatHeader>
   );
   const healthError = health.isError ? (
-    <Txt variant="caption" className="text-accent2 px-3 py-2">
+    <Txt variant="caption" className="text-destructive-fg px-3 py-2">
       Couldn't run the health check: {health.error.message}
     </Txt>
   ) : undefined;

@@ -6,10 +6,10 @@ import { InfoIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 
 const sectionAccentClasses = {
-  amber: '[--section-accent:var(--badge-yellow-fg)]',
-  blue: '[--section-accent:var(--badge-blue-fg)]',
+  amber: '[--section-accent:var(--warning-fg)]',
+  blue: '[--section-accent:var(--info-fg)]',
   cyan: '[--section-accent:var(--badge-cyan-fg)]',
-  green: '[--section-accent:var(--badge-green-fg)]',
+  green: '[--section-accent:var(--success-fg)]',
   orange: '[--section-accent:var(--badge-orange-fg)]',
   pink: '[--section-accent:var(--badge-pink-fg)]',
   purple: '[--section-accent:var(--badge-purple-fg)]',

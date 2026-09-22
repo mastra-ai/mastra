@@ -56,7 +56,7 @@ export const CodeModeBadge = ({
   return (
     <BadgeWrapper
       data-testid="code-mode-badge"
-      icon={<ToolCoinIcon className="text-accent6" />}
+      icon={<ToolCoinIcon className="text-(--span-tool)" />}
       title={toolName}
       initialCollapsed={!toolApprovalMetadata}
     >

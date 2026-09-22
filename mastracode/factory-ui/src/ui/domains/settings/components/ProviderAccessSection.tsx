@@ -68,21 +68,21 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
   const own = credentialAt(provider, rowScope.scope);
   if (own) {
     return (
-      <Badge size="sm" variant="green">
+      <Badge size="sm" variant="success">
         {CREDENTIAL_LABEL[own]}
       </Badge>
     );
   }
   if (orgCoverage(provider, rowScope)) {
     return (
-      <Badge size="sm" variant="blue">
+      <Badge size="sm" variant="info">
         Covered by org
       </Badge>
     );
   }
   if (provider.source === 'env') {
     return (
-      <Badge size="sm" variant="blue">
+      <Badge size="sm" variant="info">
         From env
       </Badge>
     );
@@ -193,7 +193,7 @@ export function ProviderAccessSection({ description }: { description?: string })
       >
         <div className="flex flex-col gap-3">
           {error && (
-            <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+            <Txt as="p" variant="caption" className="text-destructive-fg">
               {error}
             </Txt>
           )}

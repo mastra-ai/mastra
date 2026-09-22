@@ -9,7 +9,7 @@ export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, error, f
     <Input
       id={id}
       type="number"
-      className={error ? 'border-accent2' : ''}
+      className={error ? 'border-destructive-border' : ''}
       {...props}
       defaultValue={field.default !== undefined ? Number(field.default) : undefined}
       onChange={e => {

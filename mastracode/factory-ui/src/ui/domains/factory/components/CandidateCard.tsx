@@ -84,7 +84,7 @@ export function CandidateCard({
           draggable={false}
           aria-label={`Details for ${candidate.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="focus-visible:outline-border-focus rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           onClick={morph.openDetails}
         />
         <CandidateCardRows

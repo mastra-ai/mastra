@@ -139,7 +139,7 @@ export default function InboxPage() {
                     Feedback
                   </Txt>
                   {feedbackCount > 0 && (
-                    <Badge variant="yellow" size="sm">
+                    <Badge variant="warning" size="sm">
                       {feedbackCount}
                     </Badge>
                   )}
@@ -152,7 +152,7 @@ export default function InboxPage() {
                     Dataset items
                   </Txt>
                   {datasetItems.length > 0 && (
-                    <Badge variant="yellow" size="sm">
+                    <Badge variant="warning" size="sm">
                       {datasetItems.length}
                     </Badge>
                   )}

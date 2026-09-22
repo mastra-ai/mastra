@@ -190,7 +190,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </Button>
 
           {selectedPhase === 'outputStream' && (
-            <Txt variant="meta" className="text-accent6">
+            <Txt variant="meta" className="text-warning-fg">
               Output Stream phase cannot be executed directly. Use streaming instead.
             </Txt>
           )}
@@ -201,12 +201,12 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 Status
               </Txt>
               <div className="flex items-center gap-2">
-                <Badge variant={result.success ? 'green' : 'red'}>{result.success ? 'Success' : 'Failed'}</Badge>
-                {result.tripwire?.triggered && <Badge variant="blue">Tripwire Triggered</Badge>}
+                <Badge variant={result.success ? 'success' : 'destructive'}>{result.success ? 'Success' : 'Failed'}</Badge>
+                {result.tripwire?.triggered && <Badge variant="info">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
-                <div className="bg-accent6Dark border-accent6/20 mt-2 rounded-md border p-3">
-                  <Txt variant="column" className="text-accent6">
+                <div className="bg-warning-bg border-warning-border mt-2 rounded-md border p-3">
+                  <Txt variant="column" className="text-warning-fg">
                     Tripwire Reason
                   </Txt>
                   <Txt variant="caption" tone="muted" className="mt-1">

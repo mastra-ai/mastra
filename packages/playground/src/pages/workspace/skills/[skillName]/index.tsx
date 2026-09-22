@@ -80,7 +80,7 @@ export default function WorkspaceSkillDetailPage() {
       <MainContentLayout>
         {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
         <div className="grid h-full place-items-center">
-          <div className="border-accent1 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
+          <div className="border-success-border h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
         </div>
       </MainContentLayout>
     );

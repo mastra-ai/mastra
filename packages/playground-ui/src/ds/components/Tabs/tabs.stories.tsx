@@ -23,7 +23,7 @@ type TabIndicatorStyle = CSSProperties & {
 };
 
 const accentIndicatorStyle: TabIndicatorStyle = {
-  '--tab-indicator-color': 'var(--accent5)',
+  '--tab-indicator-color': 'var(--info-indicator)',
 };
 
 export const Recommended: Story = {

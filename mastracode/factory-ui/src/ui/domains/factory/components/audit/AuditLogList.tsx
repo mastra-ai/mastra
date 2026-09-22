@@ -53,7 +53,7 @@ function AuditEventRow({
         {relativeTime(event.occurredAt)}
       </AuditCell>
       <AuditCell
-        className={cn('hidden lg:block', event.actorType === 'agent' ? 'text-accent6' : 'text-muted-foreground')}
+        className={cn('hidden lg:block', event.actorType === 'agent' ? 'text-warning-fg' : 'text-muted-foreground')}
       >
         {actor}
       </AuditCell>

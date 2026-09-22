@@ -83,7 +83,7 @@ export function ReferenceViewerDialog({
         <div className="flex-1 overflow-auto p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="border-accent1 h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
+              <div className="border-success-border h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">

@@ -33,7 +33,7 @@
   --belt-sway: 0;
   --wick-fill: 0;
   --wick-drift: 1;
-  --belt-hue: var(--positive1);
+  --belt-hue: var(--success-indicator);
 }
 
 .session-initializing {
@@ -41,7 +41,7 @@
   --belt-sway: 0;
   --wick-fill: 0;
   --wick-drift: 1;
-  --belt-hue: var(--warning1);
+  --belt-hue: var(--warning-indicator);
 }
 
 .session-ready {
@@ -49,7 +49,7 @@
   --belt-sway: 1;
   --wick-fill: 1;
   --wick-drift: 0;
-  --belt-hue: var(--accent3);
+  --belt-hue: var(--color-ds-blue);
 }
 
 .session-belt {

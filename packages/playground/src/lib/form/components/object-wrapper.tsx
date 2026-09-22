@@ -27,7 +27,7 @@ function ObjectGroup({ label, children }: Pick<ObjectWrapperProps, 'label' | 'ch
           <Braces aria-hidden className="size-3.5" />
           {label}
         </span>
-        {invalid && <span className="text-meta text-accent2 ml-auto shrink-0">Needs input</span>}
+        {invalid && <span className="text-meta text-destructive-fg ml-auto shrink-0">Needs input</span>}
       </CollapsibleTrigger>
       <CollapsibleContent keepMounted className="border-border border-l pt-2 pl-4">
         {children}

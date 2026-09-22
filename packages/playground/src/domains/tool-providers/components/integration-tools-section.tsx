@@ -74,7 +74,7 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
                       {count} {count === 1 ? 'tool' : 'tools'}
                     </Badge>
                   )}
-                  <Badge variant="green">Available</Badge>
+                  <Badge variant="success">Available</Badge>
                 </div>
               </Entity>
             );

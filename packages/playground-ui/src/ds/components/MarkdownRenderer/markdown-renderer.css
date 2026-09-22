@@ -69,9 +69,9 @@
   }
 
   .mastra-markdown a {
-    color: var(--accent1);
+    color: var(--foreground);
     text-decoration: underline;
-    text-decoration-color: color-mix(in oklab, var(--accent1) 30%, transparent);
+    text-decoration-color: color-mix(in oklab, var(--foreground) 30%, transparent);
     text-underline-offset: 0.15em;
   }
 
@@ -125,7 +125,7 @@
 
   .mastra-markdown .task-list-item input {
     margin-right: 0.5em;
-    accent-color: var(--accent1);
+    accent-color: var(--foreground);
   }
 
   .mastra-markdown blockquote {

@@ -3,7 +3,7 @@
    and text-shadow are honoured by `::highlight()` — border, padding and border-radius are
    ignored by the spec, so the highlight cannot have rounded corners. */
 ::highlight(search-result) {
-  background-color: var(--color-accent6);
+  background-color: var(--color-warning-indicator);
   color: var(--color-sidebar);
 }
 
@@ -11,6 +11,6 @@
    background with `accent6` text, as `StatusBadge` uses for warnings) so it reads as related
    to the direct highlight without competing with it. Both themes define the pair. */
 ::highlight(search-result-indirect) {
-  background-color: var(--color-accent6Dark);
-  color: var(--color-accent6);
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-indicator);
 }

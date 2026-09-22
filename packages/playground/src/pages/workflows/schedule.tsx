@@ -109,11 +109,11 @@ export default function SchedulePage() {
           <div className="border-border flex h-fit flex-col gap-4 rounded-md border p-4">
             <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (
-                <Link to={paths.workflowLink(workflowId)} className="text-accent1 hover:underline">
+                <Link to={paths.workflowLink(workflowId)} className="text-success-fg hover:underline">
                   {workflowId}
                 </Link>
               ) : agentId ? (
-                <Link to={paths.agentLink(agentId)} className="text-accent1 hover:underline">
+                <Link to={paths.agentLink(agentId)} className="text-success-fg hover:underline">
                   {agentId}
                 </Link>
               ) : (

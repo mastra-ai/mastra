@@ -7,10 +7,10 @@ import type { BadgeSize, BadgeVariant } from './Badge';
 
 const variants = [
   'neutral',
-  'green',
-  'red',
-  'blue',
-  'yellow',
+  'success',
+  'destructive',
+  'info',
+  'warning',
   'purple',
   'orange',
   'cyan',
@@ -58,7 +58,7 @@ describe('Badge', () => {
 
     it('only animates pulse indicators', () => {
       const { container, rerender } = render(
-        <Badge variant="blue" indicator="pulse">
+        <Badge variant="info" indicator="pulse">
           Live
         </Badge>,
       );
@@ -67,7 +67,7 @@ describe('Badge', () => {
       expect(pulse?.classList.contains('motion-safe:animate-pulse')).toBe(true);
 
       rerender(
-        <Badge variant="blue" indicator="dot">
+        <Badge variant="info" indicator="dot">
           Connected
         </Badge>,
       );

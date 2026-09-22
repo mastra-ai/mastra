@@ -9,7 +9,7 @@ export function MetricsCardError({
 }) {
   return (
     <div className={cn('flex flex-col items-center justify-center gap-3', className)}>
-      <p className="text-caption text-accent2">{message}</p>
+      <p className="text-caption text-destructive-fg">{message}</p>
     </div>
   );
 }

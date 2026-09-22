@@ -71,7 +71,7 @@ export function EmptyThreadState() {
       </div>
 
       <details className="group text-caption text-muted-foreground mt-8 w-full max-w-lg min-w-0">
-        <summary className="hover:text-foreground focus-visible:outline-accent1 flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+        <summary className="hover:text-foreground focus-visible:outline-border-focus flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
           <span>
             Working in <span className="text-foreground font-medium">{activeFactory.name}</span>
           </span>

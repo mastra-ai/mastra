@@ -114,7 +114,7 @@ export const ComposerModelWarning = () => {
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {(modelWarning || stale) && (
         <div
-          className="text-accent6 text-caption flex max-w-full min-w-0 items-start gap-1"
+          className="text-warning-fg text-caption flex max-w-full min-w-0 items-start gap-1"
           data-testid="composer-model-stale-warning"
           role="alert"
         >
@@ -122,7 +122,7 @@ export const ComposerModelWarning = () => {
           <span className="min-w-0 break-words">
             {modelWarning || (
               <>
-                <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">
+                <code className="bg-warning-bg text-warning-fg rounded px-1 py-0.5 break-all">
                   {provider}/{selectedModel}
                 </code>{' '}
                 is no longer allowed by admin policy. Pick a different model.
@@ -132,11 +132,11 @@ export const ComposerModelWarning = () => {
         </div>
       )}
       {showProviderWarning && (
-        <div className="text-accent6 text-caption flex max-w-full min-w-0 items-start gap-1">
+        <div className="text-warning-fg text-caption flex max-w-full min-w-0 items-start gap-1">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words">
-            Set <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{envVar}</code> to use this
-            provider
+            Set <code className="bg-warning-bg text-warning-fg rounded px-1 py-0.5 break-all">{envVar}</code> to use
+            this provider
           </span>
         </div>
       )}

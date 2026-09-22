@@ -3,14 +3,14 @@
    so the single :root declaration computes correctly under `html.light` too. Only the shadow
    needs an explicit per-theme override (light gets a gloss highlight, dark stays elevation-only). */
 :root {
-  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--sidebar));
-  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--sidebar));
-  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--sidebar));
-  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--sidebar));
-  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--sidebar));
-  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--sidebar));
-  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--sidebar));
-  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--sidebar));
+  --toast-success-bg: var(--success-bg);
+  --toast-success-border: var(--success-border);
+  --toast-destructive-bg: var(--destructive-bg);
+  --toast-destructive-border: var(--destructive-border);
+  --toast-warning-bg: var(--warning-bg);
+  --toast-warning-border: var(--warning-border);
+  --toast-info-bg: var(--info-bg);
+  --toast-info-border: var(--info-border);
   --toast-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -12px oklch(0 0 0 / 0.55);
 }
 html.light {
@@ -27,16 +27,16 @@ html.light {
   --normal-text: var(--foreground);
   --normal-border: var(--border);
   --success-bg: var(--toast-success-bg);
-  --success-text: var(--notice-success-fg);
+  --success-text: var(--success-fg);
   --success-border: var(--toast-success-border);
   --error-bg: var(--toast-destructive-bg);
-  --error-text: var(--notice-destructive-fg);
+  --error-text: var(--destructive-fg);
   --error-border: var(--toast-destructive-border);
   --warning-bg: var(--toast-warning-bg);
-  --warning-text: var(--notice-warning-fg);
+  --warning-text: var(--warning-fg);
   --warning-border: var(--toast-warning-border);
   --info-bg: var(--toast-info-bg);
-  --info-text: var(--notice-info-fg);
+  --info-text: var(--info-fg);
   --info-border: var(--toast-info-border);
   --border-radius: var(--radius-xl);
 
@@ -74,22 +74,22 @@ html.light {
   --close-border: var(--normal-border);
 }
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='success'] {
-  --close-tint: var(--notice-success-fg);
+  --close-tint: var(--success-fg);
   --close-bg: var(--success-bg);
   --close-border: var(--success-border);
 }
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='error'] {
-  --close-tint: var(--notice-destructive-fg);
+  --close-tint: var(--destructive-fg);
   --close-bg: var(--error-bg);
   --close-border: var(--error-border);
 }
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='warning'] {
-  --close-tint: var(--notice-warning-fg);
+  --close-tint: var(--warning-fg);
   --close-bg: var(--warning-bg);
   --close-border: var(--warning-border);
 }
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='info'] {
-  --close-tint: var(--notice-info-fg);
+  --close-tint: var(--info-fg);
   --close-bg: var(--info-bg);
   --close-border: var(--info-border);
 }

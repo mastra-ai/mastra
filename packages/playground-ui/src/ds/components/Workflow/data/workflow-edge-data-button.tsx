@@ -43,7 +43,7 @@ export const WorkflowEdgeDataButton = ({
           surfaceStateLayerStyle,
           'text-foreground aria-pressed:before:bg-fill h-7 rounded-lg px-2',
         )}
-        icon={<Database className="text-accent1" />}
+        icon={<Database className="text-muted-foreground" />}
       >
         Data
       </Button>

@@ -81,7 +81,7 @@ function TokenRow({
             <Txt variant="body" className="text-foreground">
               {title}
             </Txt>
-            <Badge size="sm" variant={configured ? 'green' : 'neutral'}>
+            <Badge size="sm" variant={configured ? 'success' : 'neutral'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>
@@ -145,7 +145,7 @@ function TokenRow({
       )}
 
       {error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-fg">
           {error}
         </Txt>
       )}

@@ -81,7 +81,7 @@ export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProp
     className={cn('space-y-2 rounded-md bg-card p-3 text-foreground', result.isError && 'text-error', className)}
     {...props}
   >
-    <Badge size="xs" variant={result.isError ? 'red' : 'green'}>
+    <Badge size="xs" variant={result.isError ? 'destructive' : 'success'}>
       {result.isError ? 'Error' : 'Answered'}
     </Badge>
     <p>{result.content}</p>
@@ -124,7 +124,7 @@ const AskUserInput = ({
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
         <p className="text-foreground text-subheading mb-2">{payload.question}</p>
-        {result ? <AskUserOutput result={result} /> : <Badge variant="green">Answered</Badge>}
+        {result ? <AskUserOutput result={result} /> : <Badge variant="success">Answered</Badge>}
       </AskUserContainer>
     );
   }

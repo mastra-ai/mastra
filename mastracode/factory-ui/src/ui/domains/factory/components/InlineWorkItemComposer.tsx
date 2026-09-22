@@ -102,7 +102,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
         </Button>
       </div>
       {error ? (
-        <p className="text-meta text-notice-destructive-fg m-0" role="alert">
+        <p className="text-meta text-destructive-fg m-0" role="alert">
           {error}
         </p>
       ) : null}

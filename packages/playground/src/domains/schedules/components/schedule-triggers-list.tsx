@@ -94,7 +94,7 @@ export function ScheduleTriggersList({
           <span
             className={
               isLinked
-                ? 'text-accent1 text-caption font-mono whitespace-nowrap'
+                ? 'text-success-fg text-caption font-mono whitespace-nowrap'
                 : 'text-muted-foreground text-caption font-mono whitespace-nowrap'
             }
           >
@@ -109,7 +109,7 @@ export function ScheduleTriggersList({
             <DataList.Cell>
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="text-caption text-accent2 inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="text-caption text-destructive-fg inline-flex items-center gap-1.5 whitespace-nowrap">
                     <AlertTriangleIcon size={14} />
                     publish failed
                   </span>
@@ -123,7 +123,7 @@ export function ScheduleTriggersList({
                 {errorMessage ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-accent2 inline-flex">
+                      <span className="text-destructive-fg inline-flex">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>
@@ -139,7 +139,7 @@ export function ScheduleTriggersList({
                 {showDriftWarning ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-accent3 inline-flex">
+                      <span className="text-info-fg inline-flex">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>

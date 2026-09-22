@@ -180,3 +180,24 @@ export const Empty: Story = {
     </div>
   ),
 };
+
+const semanticNodeColors = new Map([
+  ['Search', 'var(--chart-1)'],
+  ['Referral', 'var(--chart-5)'],
+  ['Partner', 'var(--chart-6)'],
+  ['Europe', 'var(--chart-3)'],
+  ['North America', 'var(--chart-4)'],
+  ['Asia Pacific', 'var(--chart-7)'],
+  ['Won', 'var(--chart-1)'],
+  ['Lost', 'var(--chart-8)'],
+]);
+
+export const SemanticColors: Story = {
+  render: () => (
+    <div className="w-full p-8">
+      <Sankey data={data} columns={columns}>
+        <SankeyChart getNodeColor={({ value }) => semanticNodeColors.get(String(value)) ?? 'var(--span-other)'} />
+      </Sankey>
+    </div>
+  ),
+};

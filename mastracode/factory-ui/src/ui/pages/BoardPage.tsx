@@ -456,7 +456,7 @@ function IntakeSourceSwitch({
           className={cn(
             'rounded-full border px-2.5 py-0.5 text-meta transition',
             active === source.id
-              ? 'border-accent1 bg-fill text-foreground'
+              ? 'border-success-border bg-fill text-foreground'
               : 'border-border bg-transparent text-muted-foreground hover:text-foreground',
           )}
         >

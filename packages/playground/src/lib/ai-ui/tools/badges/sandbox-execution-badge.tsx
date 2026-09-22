@@ -47,7 +47,7 @@ const getStatusColor = (status?: string) => {
     case 'failed':
       return 'bg-red-500';
     default:
-      return 'bg-accent6';
+      return 'bg-warning-indicator';
   }
 };
 
@@ -259,7 +259,7 @@ export const SandboxExecutionBadge = ({
           <Icon>
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
-          <Badge icon={<TerminalSquare className="text-accent6" size={16} />}>{displayName}</Badge>
+          <Badge icon={<TerminalSquare className="text-warning-fg" size={16} />}>{displayName}</Badge>
           {execMeta?.sandbox && (
             <Link
               href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
@@ -276,8 +276,8 @@ export const SandboxExecutionBadge = ({
         <div className="flex items-center gap-2">
           {isRunning ? (
             <>
-              <span className="text-accent6 text-caption flex items-center gap-1.5">
-                <span className="bg-accent6 h-1.5 w-1.5 animate-pulse rounded-full" />
+              <span className="text-warning-fg text-caption flex items-center gap-1.5">
+                <span className="bg-warning-indicator h-1.5 w-1.5 animate-pulse rounded-full" />
                 <span className="animate-pulse">running</span>
               </span>
               <span className="text-foreground text-caption tabular-nums">{elapsedTime}ms</span>

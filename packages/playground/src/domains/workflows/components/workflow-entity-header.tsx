@@ -50,7 +50,7 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
                 aria-label="Dynamic workflow"
                 className="focus-visible:outline-border-focus rounded-[7px] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-solid"
               >
-                <Badge icon={<Database />} variant="blue">
+                <Badge icon={<Database />} variant="info">
                   Dynamic
                 </Badge>
               </TooltipTrigger>

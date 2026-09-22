@@ -95,7 +95,7 @@ export function TagPicker({
               <button
                 type="button"
                 onClick={() => addTag(search.trim())}
-                className="hover:bg-fill-subtle text-accent1 text-caption w-full rounded px-2 py-1 text-left"
+                className="hover:bg-fill-subtle text-info-fg text-caption w-full rounded px-2 py-1 text-left"
               >
                 Create &quot;{search.trim()}&quot;
               </button>

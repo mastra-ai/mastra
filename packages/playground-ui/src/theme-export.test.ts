@@ -184,9 +184,34 @@ describe('theme.css export', () => {
     expect(themeCss).not.toMatch(/\.bg-sidebar\b/);
   });
 
+  it('ships the exact Mastra brand palette independently of theme modes', () => {
+    const brand = parseVariables(blocksOf(themeCss, '@theme static'));
+    expect(brand.get('color-ds-green')).toBe('#7aff78');
+    expect(brand.get('color-ds-orange')).toBe('#fdac53');
+    expect(brand.get('color-ds-pink')).toBe('#ff69cc');
+    expect(brand.get('color-ds-purple')).toBe('#b588fe');
+    expect(brand.get('color-ds-blue')).toBe('#6ccdfb');
+    expect(brand.get('color-ds-red')).toBe('#ff4758');
+    expect(brand.get('color-ds-yellow')).toBe('#e7e67b');
+    expect(lightTheme).not.toMatch(/--color-ds-/);
+  });
+
+  it('removes legacy accent and duplicated status aliases from the theme', () => {
+    const declarations = [...themeCss.matchAll(/(--[\w-]+)\s*:/g)].map(([, name]) => name);
+    expect(
+      declarations.filter(
+        name =>
+          name &&
+          /(?:accent[1-6]|brand-green-|positive1|negative1|warning1|notice-(?:success|warning|info|destructive)|badge-(?:green|red|blue|yellow))/.test(
+            name,
+          ),
+      ),
+    ).toEqual([]);
+  });
+
   it('overrides the green palette the native v4 way (initial + remap)', () => {
     expect(themeCss).toContain('--color-green-*: initial;');
-    expect(themeCss).toContain('--color-green-500: var(--brand-green-500);');
+    expect(themeCss).toContain('--color-green-500: var(--green-500);');
   });
 
   it('exposes the background and gray foundation scales', () => {
@@ -521,6 +546,23 @@ describe('theme.css export', () => {
         expect(wcagContrast(placeholderLightness, backgroundLightness)).toBeGreaterThanOrEqual(3);
       }
     }
+  });
+
+  it('resolves chromatic roles to opaque ramp values in both themes', () => {
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
+    const roles = /^(?:destructive|warning|success|info)-(?:bg|border|indicator|fg)$|^(?:product-|chart-|span-)/;
+
+    for (const variables of [darkVariables, lightVariables]) {
+      const tokens = [...variables.keys()].filter(name => roles.test(name));
+      expect(tokens.length).toBe(52);
+      for (const token of tokens) {
+        const value = resolveToken(token, variables);
+        expect(value).toMatch(/^oklch\(/);
+        expect(oklchAlpha(value)).toBe(1);
+      }
+    }
+    expect(resolveToken('success-bg', darkVariables)).not.toBe(resolveToken('success-bg', lightVariables));
+    expect(resolveToken('chart-1', darkVariables)).not.toBe(resolveToken('chart-1', lightVariables));
   });
 
   it('registers every @theme color with tailwind-merge, so cn() can resolve a conflict between two of them', () => {

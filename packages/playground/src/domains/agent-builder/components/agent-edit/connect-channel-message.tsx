@@ -43,11 +43,11 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           {platform.name}
         </Txt>
         {!platform.isConfigured ? (
-          <Badge variant="yellow" size="sm" indicator="dot">
+          <Badge variant="warning" size="sm" indicator="dot">
             Not configured
           </Badge>
         ) : installation ? (
-          <Badge variant="green" size="sm" indicator="dot">
+          <Badge variant="success" size="sm" indicator="dot">
             Connected
           </Badge>
         ) : null}

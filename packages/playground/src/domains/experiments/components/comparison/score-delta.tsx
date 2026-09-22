@@ -11,7 +11,7 @@ interface ScoreDeltaProps {
  * plus the absolute difference, both in the system positive/negative hue.
  */
 export function ScoreDelta({ delta }: ScoreDeltaProps) {
-  const tone = delta > 0 ? 'text-positive1' : delta < 0 ? 'text-negative1' : 'text-muted-foreground';
+  const tone = delta > 0 ? 'text-success-fg' : delta < 0 ? 'text-destructive-fg' : 'text-muted-foreground';
 
   return (
     <span className={cn('inline-flex min-w-20 items-center gap-1 font-mono text-body', tone)}>

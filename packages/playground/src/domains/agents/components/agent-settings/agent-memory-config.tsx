@@ -109,7 +109,7 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
         ),
         value: (
           <Badge
-            variant={item.value === true ? 'green' : 'neutral'}
+            variant={item.value === true ? 'success' : 'neutral'}
             indicator={typeof item.value === 'boolean' ? 'dot' : undefined}
             className="h-auto min-h-5 min-w-0 break-words whitespace-normal"
           >

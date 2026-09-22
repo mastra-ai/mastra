@@ -452,7 +452,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
-        <MarkerPill icon={<Loader2 className="text-accent6 animate-spin" />}>
+        <MarkerPill icon={<Loader2 className="text-(--span-memory) animate-spin" />}>
           {bufferingLabel}
           {tokensToBuffer ? ` ~${formatTokens(tokensToBuffer)} tokens` : '...'}
         </MarkerPill>
@@ -485,7 +485,11 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
         <div>
-          <MarkerPill expanded={isExpanded} onClick={handleToggle} icon={<ObservationIcon className="text-accent6" />}>
+          <MarkerPill
+            expanded={isExpanded}
+            onClick={handleToggle}
+            icon={<ObservationIcon className="text-(--span-memory)" />}
+          >
             {bufferedLabel} {tokensBuffered ? formatTokens(tokensBuffered) : '?'}→
             {bufferedTokens ? formatTokens(bufferedTokens) : '?'} tokens
             {compressionRatio ? ` (-${compressionRatio}x)` : ''}

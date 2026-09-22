@@ -122,7 +122,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
                     <span className="text-meta text-muted-foreground text-right">
                       {index === 1 ? '91ms' : `${220 + index * 56}ms`}
                     </span>
-                    <span className="text-meta text-accent1 text-right">ok</span>
+                    <span className="text-meta text-success-fg text-right">ok</span>
                   </div>
                 ))}
               </div>

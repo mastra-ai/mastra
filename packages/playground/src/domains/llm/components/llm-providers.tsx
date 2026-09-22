@@ -62,7 +62,7 @@ export const LLMProviders = ({
           <ProviderLogo providerId={provider.id} size={16} />
           <div
             className={`absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ${
-              provider.connected ? 'bg-accent1' : 'bg-accent2'
+              provider.connected ? 'bg-success-indicator' : 'bg-destructive-indicator'
             }`}
             title={provider.connected ? 'Connected' : 'Not connected'}
           />

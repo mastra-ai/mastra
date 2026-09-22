@@ -29,7 +29,7 @@ export function FactoryDefaultModelForm({
   if (choice.isPending) return <SkeletonRows label="Loading models" rows={2} rowClassName="h-9 w-full" />;
   if (choice.catalogError) {
     return (
-      <Txt as="p" variant="caption" className="text-notice-destructive-fg m-0" role="alert">
+      <Txt as="p" variant="caption" className="text-destructive-fg m-0" role="alert">
         {choice.catalogError.message}
       </Txt>
     );
@@ -62,7 +62,7 @@ export function FactoryDefaultModelForm({
       </label>
       <SharedCredentialNotice modelId={choice.modelId || undefined} />
       {choice.error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg m-0" role="alert">
+        <Txt as="p" variant="caption" className="text-destructive-fg m-0" role="alert">
           {choice.error}
         </Txt>
       )}

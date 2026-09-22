@@ -426,7 +426,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
               <div className="text-muted-foreground text-body mt-1">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
-                  <span className="text-accent2">
+                  <span className="text-destructive-fg">
                     {' '}
                     ({importResult.errors} error{importResult.errors !== 1 ? 's' : ''})
                   </span>

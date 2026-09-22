@@ -26,7 +26,7 @@ function EntityIndexCompactCard({
   const detailsId = useId();
   const metadata = entityIndexMetadata(entity);
   const statusLabel = entityStatusLabel(metadata.status);
-  const statusVariant = metadata.status === 'ready' ? 'green' : metadata.status === 'processing' ? 'blue' : 'neutral';
+  const statusVariant = metadata.status === 'ready' ? 'success' : metadata.status === 'processing' ? 'info' : 'neutral';
   return (
     <div className="group/entity relative h-full min-w-0" data-entity-card>
       <CardLink

@@ -141,7 +141,7 @@ export function EmptyFactoryState() {
                 <li
                   key={item}
                   aria-current={step === item ? 'step' : undefined}
-                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-fill'}`}
+                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-success-indicator' : 'bg-fill'}`}
                 >
                   <span className="sr-only">Step {index + 1}</span>
                 </li>

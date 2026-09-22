@@ -73,7 +73,7 @@ export function WorkflowPanelResizeHandle() {
       onPointerMove={followPointer}
       onKeyDown={nudgeWithArrows}
     >
-      <ResizeHandleIndicator className="group-focus-visible/resize:via-accent1 group-active/resize:via-foreground/45 group-hover/resize:opacity-100 group-focus-visible/resize:opacity-100 group-active/resize:opacity-100" />
+      <ResizeHandleIndicator className="group-focus-visible/resize:via-border-focus group-active/resize:via-foreground/45 group-hover/resize:opacity-100 group-focus-visible/resize:opacity-100 group-active/resize:opacity-100" />
     </div>
   );
 }

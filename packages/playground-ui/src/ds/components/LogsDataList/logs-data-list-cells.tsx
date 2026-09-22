@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils';
 
 const LEVEL_CONFIG: Record<LogLevel, { label: string; color: string }> = {
   debug: { label: 'DEBUG', color: 'var(--muted-foreground)' },
-  info: { label: 'INFO', color: 'var(--notice-info)' },
-  warn: { label: 'WARN', color: 'var(--notice-warning)' },
-  error: { label: 'ERROR', color: 'var(--notice-destructive)' },
+  info: { label: 'INFO', color: 'var(--info-indicator)' },
+  warn: { label: 'WARN', color: 'var(--warning-indicator)' },
+  error: { label: 'ERROR', color: 'var(--destructive-indicator)' },
   fatal: { label: 'FATAL', color: 'var(--destructive)' },
 };
 

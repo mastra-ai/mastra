@@ -9,7 +9,6 @@ import {
   getScatterPlotClickedPoint,
   getScatterPlotPointColor,
 } from './scatter-plot-chart-utils';
-import { Colors } from '@/ds/tokens';
 
 afterEach(() => {
   cleanup();
@@ -43,12 +42,12 @@ describe('ScatterPlotChart', () => {
   });
 
   it('uses design tokens as the default point color', () => {
-    expect(getScatterPlotPointColor({ id: 'trace-a' })).toBe(Colors.accent3);
+    expect(getScatterPlotPointColor({ id: 'trace-a' })).toBe('var(--chart-1)');
   });
 
   it('supports render-only color overrides from each datum', () => {
-    expect(getScatterPlotPointColor({ id: 'trace-a', color: Colors.accent5 }, 'color')).toBe(Colors.accent5);
-    expect(getScatterPlotPointColor({ id: 'trace-a', color: 12 }, 'color')).toBe(Colors.accent3);
+    expect(getScatterPlotPointColor({ id: 'trace-a', color: 'var(--chart-2)' }, 'color')).toBe('var(--chart-2)');
+    expect(getScatterPlotPointColor({ id: 'trace-a', color: 12 }, 'color')).toBe('var(--chart-1)');
   });
 
   it('extracts clicked point payloads from Recharts event payloads', () => {

@@ -11,11 +11,17 @@ const RAIL_LINE =
 
 /** `-fg` is the on-surface tone: it flips light on dark, which a bare glyph needs and the badge fills do not. */
 export const RAIL_MARK_TONE: Record<BadgeVariant, string> = {
+  studio: 'text-product-studio-fg',
+  server: 'text-product-server-fg',
+  observability: 'text-product-observability-fg',
+  factory: 'text-product-factory-fg',
+  workers: 'text-product-workers-fg',
+  'persistent-server': 'text-product-persistent-server-fg',
   neutral: 'text-muted-foreground',
-  green: 'text-badge-green-fg',
-  red: 'text-badge-red-fg',
-  blue: 'text-badge-blue-fg',
-  yellow: 'text-badge-yellow-fg',
+  success: 'text-success-fg',
+  destructive: 'text-destructive-fg',
+  info: 'text-info-fg',
+  warning: 'text-warning-fg',
   purple: 'text-badge-purple-fg',
   orange: 'text-badge-orange-fg',
   cyan: 'text-badge-cyan-fg',

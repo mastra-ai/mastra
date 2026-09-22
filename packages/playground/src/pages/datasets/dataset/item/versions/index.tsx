@@ -46,7 +46,7 @@ function versionOptions(allVersions: DatasetItemVersion[], disabled?: Set<number
             <b>v. {v.datasetVersion}</b> · {format(date, 'MMM d, HH:mm')}
           </span>
           {v.isLatest ? (
-            <Badge variant="blue" size="xs" className="ml-auto">
+            <Badge variant="info" size="xs" className="ml-auto">
               Latest
             </Badge>
           ) : null}

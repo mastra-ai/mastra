@@ -22,8 +22,8 @@ type SpanTokenUsageProps = {
   className?: string;
 };
 
-const INPUT_COLOR = 'var(--chart-soft-3)';
-const OUTPUT_COLOR = 'var(--chart-soft-1)';
+const INPUT_COLOR = 'var(--chart-sequential-3)';
+const OUTPUT_COLOR = 'var(--chart-sequential-1)';
 
 export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
   const view = getTokenUsageView(usage);

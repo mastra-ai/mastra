@@ -92,7 +92,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         <div className="flex flex-col gap-4">
           {/* HTTP Stream */}
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">HTTP</span>}>
+            <Badge icon={<span className="text-success-fg mr-1 w-6 font-mono font-medium">HTTP</span>}>
               Regular HTTP Endpoint
             </Badge>
 
@@ -110,7 +110,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
           {/* SSE */}
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">SSE</span>}>
+            <Badge icon={<span className="text-success-fg mr-1 w-6 font-mono font-medium">SSE</span>}>
               Server-Sent Events
             </Badge>
 
@@ -128,7 +128,9 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
           {/* Command Line */}
           <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">CLI</span>}>Command Line</Badge>
+            <Badge icon={<span className="text-success-fg mr-1 w-6 font-mono font-medium">CLI</span>}>
+              Command Line
+            </Badge>
 
             <Txt tone="muted" className="pt-1 pb-2">
               Use for local command-line access via npx and mcp-remote.
@@ -205,7 +207,7 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
   return (
     <Entity onClick={() => linkRef.current?.click()}>
       <EntityIcon>
-        <ToolIconComponent className="group-hover/entity:text-accent6" />
+        <ToolIconComponent className="group-hover/entity:text-warning-fg" />
       </EntityIcon>
 
       <EntityContent>

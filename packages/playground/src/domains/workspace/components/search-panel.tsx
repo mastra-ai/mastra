@@ -189,7 +189,7 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
             <span className="text-foreground text-body truncate font-mono">{fileId}</span>
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="bg-background h-1 w-12 overflow-hidden rounded-full">
-                <div className="bg-accent1 h-full rounded-full" style={{ width: `${scorePercent}%` }} />
+                <div className="bg-success-indicator h-full rounded-full" style={{ width: `${scorePercent}%` }} />
               </div>
               <span className="text-meta text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
             </div>
@@ -242,7 +242,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
               placeholder="Search across skills..."
               className={cn(
                 raisedSurfaceStyle,
-                'text-foreground placeholder:text-muted-foreground focus:ring-accent1 text-body w-full rounded-lg py-2 pr-4 pl-10 focus:ring-2 focus:outline-hidden',
+                'text-foreground placeholder:text-muted-foreground focus:ring-border-focus text-body w-full rounded-lg py-2 pr-4 pl-10 focus:ring-2 focus:outline-hidden',
               )}
             />
           </div>

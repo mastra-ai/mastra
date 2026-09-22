@@ -131,7 +131,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
       ref={containerRef}
       className={cn(
         'relative w-full aspect-video bg-background rounded-md overflow-hidden',
-        isInteractive && !isAgentBusy && 'ring-2 ring-accent1',
+        isInteractive && !isAgentBusy && 'ring-2 ring-success-indicator',
         isInteractive && isAgentBusy && 'ring-2 ring-amber-400',
         className,
       )}

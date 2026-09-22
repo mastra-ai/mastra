@@ -62,7 +62,7 @@ export function ChatNotification({
     <ChatEvent
       label={label}
       detail={chatEventPreview(message)}
-      icon={icon ?? <Bell size={13} className="text-warning1" aria-hidden />}
+      icon={icon ?? <Bell size={13} className="text-warning-fg" aria-hidden />}
       defaultOpen={defaultOpen}
       data-notification-state={state}
       aria-label={`Notification: ${label}`}

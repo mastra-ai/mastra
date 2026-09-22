@@ -108,7 +108,7 @@ export const AgentBadge = ({
   return (
     <BadgeWrapper
       data-testid="agent-badge"
-      icon={<AgentIcon className="text-accent1" />}
+      icon={<AgentIcon className="text-(--span-agent)" />}
       title={agentId}
       status={status}
       initialCollapsed={shouldCollapseContent}

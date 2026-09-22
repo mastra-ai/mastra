@@ -59,7 +59,7 @@ function PageShellStory({
       title={title}
       icon={showIcon ? <BotIcon strokeWidth={2.5} /> : undefined}
       description={showDescription ? description : undefined}
-      meta={showMeta ? <Badge variant="green">Read only</Badge> : undefined}
+      meta={showMeta ? <Badge variant="success">Read only</Badge> : undefined}
       action={showAction ? <Button size="sm">Edit agent</Button> : undefined}
       isLoading={isLoading}
     >

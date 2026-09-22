@@ -156,7 +156,7 @@ export function ScorersList({
             </EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.Cell>
-              <Badge size="xs" variant={scorer.source === 'code' ? 'blue' : 'neutral'}>
+              <Badge size="xs" variant={scorer.source === 'code' ? 'info' : 'neutral'}>
                 {scorer.source}
               </Badge>
             </EntityList.Cell>

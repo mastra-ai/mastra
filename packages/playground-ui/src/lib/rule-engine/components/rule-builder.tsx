@@ -78,8 +78,8 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
                 className={cn(
                   'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5 text-meta',
                   group.operator === 'OR'
-                    ? 'bg-accent6Dark text-accent6 hover:bg-accent6Dark/70'
-                    : 'bg-accent3Dark text-accent3 hover:bg-accent3Dark/70',
+                    ? 'bg-warning-bg text-warning-fg hover:bg-warning-bg'
+                    : 'bg-info-bg text-info-fg hover:bg-info-bg',
                 )}
               >
                 {group.operator.toLowerCase()}

@@ -78,7 +78,7 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
 function outcomeClass(outcome: ReportRow['outcome']): string {
   switch (outcome) {
     case 'served':
-      return 'bg-accent1/10 text-accent1';
+      return 'bg-success-bg text-success-fg';
     case 'live':
       return 'bg-orange-500/10 text-orange-400';
     case 'unconsumed':
