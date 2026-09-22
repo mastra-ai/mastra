@@ -10,7 +10,7 @@ describe('WorkflowEdgeDataButton', () => {
   it('opens a data dialog with only the previous step output payload', () => {
     render(<WorkflowEdgeDataButton previousStepId="extract" output={{ customerId: 'cus_123' }} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Data' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View extract output' }));
 
     expect(screen.getByText('Step output')).not.toBeNull();
     expect(screen.getByText('extract output')).not.toBeNull();
@@ -20,7 +20,7 @@ describe('WorkflowEdgeDataButton', () => {
   it('uses a custom label for workflow boundary payloads', () => {
     render(<WorkflowEdgeDataButton label="Workflow input" output={{ text: 'hello' }} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Data' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View Workflow input' }));
 
     expect(screen.getByText('Workflow input')).not.toBeNull();
     expect(screen.getAllByText(/hello/).length).toBeGreaterThan(0);
@@ -36,10 +36,11 @@ describe('WorkflowEdgeDataButton', () => {
     it.each([false, 0, '', null])('keeps %j available for inspection', output => {
       render(<WorkflowEdgeDataButton previousStepId="check-order" output={output} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Data' }));
+      fireEvent.click(screen.getByRole('button', { name: 'View check-order output' }));
 
-      expect(screen.getByRole('dialog')).not.toBeNull();
-      expect(screen.getByText('check-order output')).not.toBeNull();
+      expect(screen.getByRole('textbox').textContent).toBe(
+        typeof output === 'string' ? output : JSON.stringify(output),
+      );
     });
   });
 });

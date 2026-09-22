@@ -107,6 +107,7 @@ export const workflowScheduleSchema = z.object({
   inputData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
+  resourceId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
@@ -159,7 +160,7 @@ export const listSchedulesQuerySchema = z.object({
   status: scheduleStatusSchema.optional(),
   /** Agent-schedule only: match the target threadId. */
   threadId: z.string().optional(),
-  /** Agent-schedule only: match the target resourceId. */
+  /** Match the schedule's resourceId (agent thread identity or workflow run attribution). */
   resourceId: z.string().optional(),
   /** Agent-schedule only: match the free-form target name. */
   name: z.string().optional(),
@@ -210,6 +211,7 @@ const createWorkflowScheduleBodySchema = z.strictObject({
   inputData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
+  resourceId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -224,9 +226,10 @@ export const createScheduleBodySchema = z.union([createAgentScheduleBodySchema, 
 /**
  * Body for PATCH /schedules/:scheduleId — partial update. Fields apply to
  * the matching target type; agent-only fields on a workflow schedule are
- * rejected by the service. `threadId` / `resourceId` are intentionally not
- * editable; they are part of an agent schedule's identity. To re-target,
- * delete and recreate.
+ * rejected by the service. An agent schedule's `threadId` / `resourceId` are
+ * intentionally not editable; they are part of its identity — to re-target,
+ * delete and recreate. A workflow schedule's `resourceId` is only run-attribution
+ * metadata (not identity) and may be updated.
  */
 export const updateScheduleBodySchema = z.object({
   cron: z.string().optional(),
@@ -246,6 +249,7 @@ export const updateScheduleBodySchema = z.object({
   inputData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
+  resourceId: z.string().optional(),
 });
 
 export const deleteScheduleResponseSchema = z.object({

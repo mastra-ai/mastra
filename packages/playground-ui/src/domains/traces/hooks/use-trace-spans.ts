@@ -2,8 +2,7 @@ import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { queryOptions, useQueries, useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { SearchableSpan } from '../types';
-import { selectSearchableSpans } from '../utils';
+import { toSearchableSpans } from '../utils';
 
 /**
  * Key, fetcher and stale policy of the `trace-spans` query. Every observer of this key must
@@ -34,10 +33,18 @@ export const traceSpansQueryOptions = (client: MastraClient, traceId: string | n
  * these spans -- `input`, `output` and `attributes` included -- so the
  * projection would only hide content the reader is looking at.
  */
+export type TraceSpansData = Awaited<ReturnType<MastraClient['getTrace']>>;
+type SearchableTraceSpansData = Omit<NonNullable<TraceSpansData>, 'spans'> & {
+  spans: Array<NonNullable<TraceSpansData>['spans'][number] & { searchText: string }>;
+};
+
+const selectSearchableTraceSpans = (data: TraceSpansData): SearchableTraceSpansData | null =>
+  data ? { ...data, spans: toSearchableSpans(data.spans) } : null;
+
 export function useTraceSpans(
   traceId: string | null | undefined,
   { passive = false }: { passive?: boolean } = {},
-): UseQueryResult<{ traceId: string; spans: SearchableSpan[] } | null> {
+): UseQueryResult<SearchableTraceSpansData | null> {
   const client = useMastraClient();
 
   return useQuery({
@@ -47,11 +54,9 @@ export function useTraceSpans(
     refetchOnWindowFocus: !passive,
     refetchOnReconnect: !passive,
     // Builds each span's search haystack once per fetch, cached with the query.
-    select: selectSearchableSpans,
+    select: selectSearchableTraceSpans,
   });
 }
-
-export type TraceSpansData = Awaited<ReturnType<MastraClient['getTrace']>>;
 
 /**
  * Observes the `trace-spans` query of several traces at once and projects each one with `select`.

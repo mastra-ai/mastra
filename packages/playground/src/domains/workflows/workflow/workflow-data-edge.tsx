@@ -1,41 +1,24 @@
 import { WorkflowDataEdgeView } from '@mastra/playground-ui/components/Workflow';
 import type { WorkflowDataEdgeModel } from '@mastra/playground-ui/components/Workflow';
 import type { EdgeProps } from '@xyflow/react';
-import { memo, useContext } from 'react';
-
-import { useCurrentRun } from '../context/use-current-run';
-import { WorkflowRunContext } from '../context/workflow-run-context';
+import { memo } from 'react';
+import type { WorkflowDataSelection } from '../context/workflow-step-detail-context';
+import { WorkflowDataButton } from './data/workflow-data-button';
 
 export interface WorkflowDataEdgeProps extends EdgeProps<WorkflowDataEdgeModel> {
   parentWorkflowName?: string;
 }
 
-const getScopedStepId = (stepId: string | undefined, workflowName?: string) =>
-  stepId && workflowName ? `${workflowName}.${stepId}` : stepId;
+function getEdgeDataSelection({ data, parentWorkflowName }: WorkflowDataEdgeProps): WorkflowDataSelection | undefined {
+  if (data?.boundaryPayload) return { type: data.boundaryPayload, workflowName: parentWorkflowName };
+  if (!data?.previousStepId) return undefined;
+  const stepId = parentWorkflowName ? `${parentWorkflowName}.${data.previousStepId}` : data.previousStepId;
+  return { type: 'step-output', stepId };
+}
 
 const WorkflowDataEdgeComponent = (props: WorkflowDataEdgeProps) => {
-  const { steps } = useCurrentRun();
-  const workflowRun = useContext(WorkflowRunContext);
-  const data = props.data;
-  const previousStepKey = getScopedStepId(data?.previousStepId, props.parentWorkflowName);
-  const previousStep = previousStepKey ? steps[previousStepKey] : undefined;
-  const workflowInput = workflowRun.payload ?? workflowRun.result?.input;
-  const workflowOutput = workflowRun.result?.status === 'success' ? workflowRun.result.result : undefined;
-  const output =
-    data?.boundaryPayload === 'workflow-input'
-      ? workflowInput === null
-        ? undefined
-        : workflowInput
-      : data?.boundaryPayload === 'workflow-output'
-        ? workflowOutput
-        : (previousStep?.output ?? previousStep?.suspendOutput);
-  const outputLabel =
-    data?.boundaryPayload === 'workflow-input'
-      ? 'Workflow input'
-      : data?.boundaryPayload === 'workflow-output'
-        ? 'Workflow output'
-        : undefined;
-  return <WorkflowDataEdgeView {...props} output={output} label={outputLabel} />;
+  const selection = getEdgeDataSelection(props);
+  return <WorkflowDataEdgeView {...props} dataControl={selection && <WorkflowDataButton selection={selection} />} />;
 };
 
 export const WorkflowDataEdge = memo(WorkflowDataEdgeComponent);

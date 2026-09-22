@@ -19,9 +19,9 @@ export interface CreateButtonProps extends Omit<ButtonProps, 'icon' | 'tooltip'>
  * its click. Mount at most one per view — several instances would compete for
  * the same shortcut.
  */
-export const CreateButton = React.forwardRef<HTMLButtonElement, CreateButtonProps>(
+export const CreateButton = React.forwardRef<HTMLElement, CreateButtonProps>(
   ({ tooltip, shortcutEnabled = true, disabled, children, ...props }, forwardedRef) => {
-    const buttonRef = useRef<HTMLButtonElement>(null);
+    const buttonRef = useRef<HTMLElement>(null);
 
     useKeydown(
       { [CREATE_BUTTON_SHORTCUT]: () => buttonRef.current?.click() },

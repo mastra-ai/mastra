@@ -1,6 +1,6 @@
-import type { ExperimentTargetType } from '@mastra/client-js';
+import type { DatasetExperiment, ExperimentTargetType } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
   Dialog,
@@ -21,12 +21,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, CircleSlashIcon, EllipsisIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
+import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
-import { RouteItemOverlay } from '@/components/route-item-overlay';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -51,11 +50,28 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Completed' },
 ];
 
+export type ReviewListStatus = 'review' | 'completed';
+/** Sentinel tag value matching items without any tag. */
+export const UNTAGGED_TAG = UNTAGGED;
+
+export interface ReviewListFilters {
+  status: ReviewListStatus;
+  onStatusChange: (status: ReviewListStatus) => void;
+  /** `null` → every tag. */
+  tag: string | null;
+  onTagChange: (tag: string | null) => void;
+  /** Tags present on the review items (most used first), plus `UNTAGGED_TAG` when relevant. */
+  tagOptions: Array<{ value: string; label: string }>;
+}
+
 export interface DatasetReviewProps {
   /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
   datasetId?: string;
   /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
   experimentId?: string;
+  /** Overrides target-based discovery for both lists, including when empty. */
+  experiments?: DatasetExperiment[];
+  isLoadingExperiments?: boolean;
   /** When set, scopes the lists to experiments run against this target type (server-side). */
   targetType?: ExperimentTargetType | '';
   /** When set, scopes the lists to experiments run against this target ID (server-side). */
@@ -67,33 +83,50 @@ export interface DatasetReviewProps {
    * to `null` when navigating away so a re-open of the same id retriggers selection).
    */
   featuredItemId?: string | null;
-  detailPanelVariant?: 'inline' | 'overlay';
   /** Rendered before the status/tag filters in the toolbar (e.g. an experiment picker). */
   toolbarStart?: ReactNode;
+  /**
+   * Takes over the status/tag filters: when set, the built-in selects and reset button are not
+   * rendered and the caller draws them from the given state (e.g. inside a shared filter bar).
+   */
+  renderFilters?: (filters: ReviewListFilters) => ReactNode;
   /** Rendered at the end of the toolbar, after the bulk actions. */
   toolbarEnd?: ReactNode;
+  breadcrumbs?: ReactNode;
+  /** When set, shows a "Create Scorer" action fed with the visible review items (input/output). */
+  onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }
 
 export function DatasetReview({
   datasetId,
   experimentId,
+  experiments,
+  isLoadingExperiments,
   targetType,
   targetId,
   featuredItemId: featuredItemIdRequest,
-  detailPanelVariant = 'inline',
   toolbarStart,
+  renderFilters,
   toolbarEnd,
+  onCreateScorer,
+  breadcrumbs,
 }: DatasetReviewProps) {
   const client = useMastraClient();
   const { paths } = useLinkComponent();
   const { data: dataset } = useDataset(datasetId ?? '');
-  // Keep `undefined` while loading: the hydration effect below treats a defined
-  // value as "server data arrived", so coercing to [] here would lock in an empty queue.
-  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({ experimentId, targetType, targetId });
+  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({
+    experimentId,
+    targetType,
+    targetId,
+    experiments,
+    isLoadingExperiments,
+  });
   const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({
     experimentId,
     targetType,
     targetId,
+    experiments,
+    isLoadingExperiments,
   });
   const { updateExperimentResult } = useDatasetMutations();
 
@@ -391,44 +424,75 @@ export function DatasetReview({
       : undefined;
 
   const hasSelection = !showCompleted && selectedItemIds.size > 0;
+  const showCreateScorer = !!onCreateScorer && !showCompleted && filteredItems.length > 0;
+
+  const status: ReviewListStatus = showCompleted ? 'completed' : 'review';
+  const onStatusChange = (next: ReviewListStatus) => {
+    setShowCompleted(next === 'completed');
+    setFeaturedItemId(null);
+  };
 
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2">
-      <ButtonsGroup>
-        {toolbarStart}
-        <SelectFieldBlock
-          label="Status"
-          labelIsHidden
-          name="filter-status"
-          options={STATUS_OPTIONS}
-          value={showCompleted ? 'completed' : 'review'}
-          onValueChange={value => {
-            setShowCompleted(value === 'completed');
-            setFeaturedItemId(null);
-          }}
-          className="whitespace-nowrap"
-        />
-        {tagOptions.length > 1 && (
-          <SelectFieldBlock
-            label="Tags"
-            labelIsHidden
-            name="filter-tags"
-            options={tagOptions}
-            value={activeTagFilter ?? ALL_TAGS}
-            onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
-            className="whitespace-nowrap"
-          />
+    <ActionRow>
+      <ActionRow.Start>
+        {renderFilters ? (
+          <>
+            {toolbarStart}
+            {renderFilters({
+              status,
+              onStatusChange,
+              tag: activeTagFilter,
+              onTagChange: setActiveTagFilter,
+              tagOptions: tagOptions.filter(option => option.value !== ALL_TAGS),
+            })}
+          </>
+        ) : (
+          <>
+            {toolbarStart}
+            <SelectFieldBlock
+              label="Status"
+              labelIsHidden
+              name="filter-status"
+              options={STATUS_OPTIONS}
+              value={status}
+              onValueChange={value => onStatusChange(value === 'completed' ? 'completed' : 'review')}
+              className="whitespace-nowrap"
+            />
+            {tagOptions.length > 1 && (
+              <SelectFieldBlock
+                label="Tags"
+                labelIsHidden
+                name="filter-tags"
+                options={tagOptions}
+                value={activeTagFilter ?? ALL_TAGS}
+                onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+                className="whitespace-nowrap"
+              />
+            )}
+            {hasActiveFilters && (
+              <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+                Reset
+              </Button>
+            )}
+          </>
         )}
-        {hasActiveFilters && (
-          <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
-            Reset
-          </Button>
-        )}
-      </ButtonsGroup>
+      </ActionRow.Start>
 
-      {(hasSelection || toolbarEnd) && (
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+      {(hasSelection || toolbarEnd || showCreateScorer) && (
+        <ActionRow.End>
           {toolbarEnd}
+          {showCreateScorer && (
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
+            >
+              <Icon size="xs">
+                <GaugeIcon />
+              </Icon>
+              Create Scorer
+            </Button>
+          )}
           {hasSelection && (
             <>
               <BulkTagPicker
@@ -450,14 +514,14 @@ export function DatasetReview({
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={openAnalyzeDialog}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Sparkles />
                     </Icon>
                     Analyze
                   </DropdownMenu.Item>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item onSelect={handleBulkRemove}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Trash2 />
                     </Icon>
                     Remove from queue
@@ -466,33 +530,33 @@ export function DatasetReview({
               </DropdownMenu>
             </>
           )}
-        </div>
+        </ActionRow.End>
       )}
-    </div>
+    </ActionRow>
   );
 
   if (isLoadingReview) {
     return (
-      <>
-        <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
-        <PageLayout.MainArea isCentered>
-          <Spinner className="h-6 w-6" />
-        </PageLayout.MainArea>
-      </>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+        <h1 className="sr-only">Review Queue</h1>
+        <Spinner fill />
+      </PageLayout>
     );
   }
 
-  const detailPanel = featuredItem ? (
+  const detailPanel = (
     <ExperimentResultDetail
-      className="h-full"
-      result={featuredItem}
-      scores={featuredScoresByItemId?.[featuredItem.itemId]}
+      result={featuredItem ?? undefined}
+      title={`Review item ${featuredItem?.id ?? ''}`}
+      scores={featuredItem ? featuredScoresByItemId?.[featuredItem.itemId] : undefined}
       experimentLink={
-        featuredItem.experimentId ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId) : undefined
+        featuredItem?.experimentId
+          ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId)
+          : undefined
       }
       tagVocabulary={datasetTagVocabulary}
       onTagsChange={
-        showCompleted
+        showCompleted || !featuredItem
           ? undefined
           : tags => {
               setItemTags(featuredItem.id, tags);
@@ -503,17 +567,16 @@ export function DatasetReview({
               }
             }
       }
-      onComplete={showCompleted ? undefined : () => completeItem(featuredItem.id)}
+      onComplete={showCompleted || !featuredItem ? undefined : () => completeItem(featuredItem.id)}
       onPrevious={toPreviousItem}
       onNext={toNextItem}
       onClose={() => setFeaturedItemId(null)}
     />
-  ) : null;
+  );
 
   return (
-    <>
-      <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
-
+    <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+      <h1 className="sr-only">Review Queue</h1>
       {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -524,25 +587,25 @@ export function DatasetReview({
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-ui-sm mb-1 block">Provider</Label>
+                <Label className="mb-1 block">Provider</Label>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
               </div>
               <div>
-                <Label className="text-ui-sm mb-1 block">Model</Label>
+                <Label className="mb-1 block">Model</Label>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
-            <Txt variant="ui-xs" className="text-neutral3">
+            <Txt variant="meta" tone="muted">
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
-              <Label className="text-ui-sm">Instructions (optional)</Label>
+              <Label>Instructions (optional)</Label>
               <Textarea
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-ui-sm mt-1"
+                className="mt-1 text-caption"
               />
             </div>
           </div>
@@ -571,7 +634,7 @@ export function DatasetReview({
             {proposedAssignments.map((proposal, idx) => {
               const item = items.find(i => i.id === proposal.itemId);
               return (
-                <div key={proposal.itemId} className={cn('p-3 border rounded-lg', !proposal.accepted && 'opacity-50')}>
+                <div key={proposal.itemId} className={cn('rounded-lg border p-3', !proposal.accepted && 'opacity-50')}>
                   <div className="flex items-start gap-2">
                     <Checkbox
                       checked={proposal.accepted}
@@ -582,7 +645,7 @@ export function DatasetReview({
                       }
                     />
                     <div className="min-w-0 flex-1">
-                      <Txt variant="ui-xs" className="text-neutral4 block truncate">
+                      <Txt variant="meta" tone="muted" className="block truncate">
                         {item
                           ? typeof item.input === 'string'
                             ? item.input.slice(0, 100)
@@ -610,7 +673,7 @@ export function DatasetReview({
                         ))}
                       </div>
                       {proposal.reason && (
-                        <Txt variant="ui-xs" className="text-neutral3 mt-1 block italic">
+                        <Txt variant="meta" tone="muted" className="mt-1 block italic">
                           {proposal.reason}
                         </Txt>
                       )}
@@ -635,31 +698,21 @@ export function DatasetReview({
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: List + Detail Panel */}
-      <PageLayout.MainArea
-        className={cn(
-          'grid h-full min-h-0 w-full grid-cols-1 gap-4',
-          detailPanelVariant === 'overlay' ? 'overflow-visible' : 'overflow-hidden',
-          featuredItem && detailPanelVariant === 'inline' && 'grid-cols-[1fr_1fr]',
-        )}
-      >
+      {/* Main layout: list; the detail opens as a drawer. */}
+      <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay ? (
-            <div className="flex h-full items-center justify-center">
-              <Spinner className="h-6 w-6" />
-            </div>
+            <Spinner fill />
           ) : displayItems.length === 0 ? (
-            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
-              <EmptyState
-                iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
-                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
-                descriptionSlot={
-                  showCompleted
-                    ? 'Items marked as complete will appear here for auditing.'
-                    : 'When experiment results are flagged for review, they will appear here.'
-                }
-              />
-            </div>
+            <EmptyState
+              titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
+              descriptionSlot={
+                showCompleted
+                  ? 'Items marked as complete will appear here for auditing.'
+                  : 'When experiment results are flagged for review, they will appear here.'
+              }
+              variant="fill"
+            />
           ) : (
             <ExperimentResultsList
               results={displayItems}
@@ -674,17 +727,8 @@ export function DatasetReview({
           )}
         </div>
 
-        {detailPanel &&
-          (detailPanelVariant === 'overlay' ? (
-            <RouteItemOverlay label={`Review item ${featuredItem?.id ?? ''}`}>
-              <div className="[&>section]:bg-surface3 h-full min-h-0 p-3 [&>section]:rounded-lg [&>section]:shadow-lg">
-                {detailPanel}
-              </div>
-            </RouteItemOverlay>
-          ) : (
-            detailPanel
-          ))}
-      </PageLayout.MainArea>
-    </>
+        {detailPanel}
+      </div>
+    </PageLayout>
   );
 }

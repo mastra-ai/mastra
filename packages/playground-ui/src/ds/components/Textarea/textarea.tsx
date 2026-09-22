@@ -3,21 +3,21 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import {
-  inputOutlineAndFocusStyle,
   inputSurfaceAndFocusStyle,
+  resolveFieldVariant,
   sharedFormElementDisabledStyle,
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
+import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const textareaVariants = cva(
   cn(
-    // Base styles with enhanced transitions
-    'flex w-full border bg-transparent text-neutral6',
-    'transition-all duration-normal ease-out-custom',
-    // Better placeholder styling
-    'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
-    'focus:placeholder:opacity-70',
+    'flex w-full text-foreground',
+    controlStateColorTransition,
+    'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
+    'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
     // Textarea specific
     'min-h-20 resize-y',
   ),
@@ -25,17 +25,14 @@ const textareaVariants = cva(
     variants: {
       variant: {
         default: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
-        filled: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
-        outline: cn(inputOutlineAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
         unstyled: unstyledFormElementStyle,
       },
-      // Text tokens mirror the Input size scale (xs→ui-xs, sm→ui-sm, md→ui-smd, lg→ui-md)
-      // so a Textarea reads at the same size as a sibling Input.
+      // Text roles mirror the Input size scale so a Textarea reads at the same size as a
+      // sibling Input: a field value is 400 weight at every height.
       size: {
-        xs: 'px-1.5 py-1 text-ui-xs',
-        sm: 'px-2 py-1.5 text-ui-sm',
-        md: 'px-2.5 py-1.5 text-ui-smd',
-        lg: 'px-3 py-2 text-ui-md',
+        sm: 'px-2 py-1.5 text-caption',
+        md: 'px-2.5 py-1.5 text-body-sm',
+        lg: 'px-3 py-2 text-body',
       },
     },
     defaultVariants: {
@@ -46,7 +43,9 @@ const textareaVariants = cva(
 );
 
 export type TextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'size'> &
-  VariantProps<typeof textareaVariants> & {
+  Omit<VariantProps<typeof textareaVariants>, 'variant'> & {
+    /** `filled` is a deprecated alias for `default`; both render the filled surface. */
+    variant?: VariantProps<typeof textareaVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
     error?: boolean;
   };
@@ -56,8 +55,8 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <textarea
         className={cn(
-          textareaVariants({ variant, size }),
-          error && 'border-error focus-visible:border-error',
+          textareaVariants({ variant: resolveFieldVariant(variant), size }),
+          error && 'border-destructive focus-visible:border-destructive',
           className,
         )}
         data-testid={testId}

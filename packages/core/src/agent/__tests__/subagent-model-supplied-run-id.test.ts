@@ -5,16 +5,14 @@ import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 
 /**
- * A sub-agent delegation must not take the resume path when the model fills the
- * optional `suspendedToolRunId` schema field with a sentinel string like "null".
+ * A sub-agent delegation must not take the resume path when the model supplies an
+ * arbitrary `suspendedToolRunId` together with model-authored `resumeData`.
  *
- * Some models emit the literal string "null" for the always-exposed optional field
- * on fresh calls. "null" is truthy, so together with model-authored `resumeData` it
- * used to pass the resume gate and route resumeStream/resumeGenerate at a
- * non-existent run — nothing ran, and toModelOutput crashed dereferencing the empty
- * result. Sentinels must be treated as absent so the delegation runs fresh.
+ * Run identity is framework-owned. Without persisted suspension state tying the ID
+ * to this tool call, the delegation must run fresh rather than calling
+ * resumeStream/resumeGenerate for a nonexistent or foreign run.
  *
- * Related: https://github.com/mastra-ai/mastra/issues/23739
+ * Related: https://github.com/mastra-ai/mastra/issues/23811
  */
 
 let subAgentCalls = 0;
@@ -59,15 +57,14 @@ function buildSubAgent() {
 
 /**
  * Supervisor whose first turn emits a single delegation carrying model-authored
- * `resumeData` and the sentinel string "null" for `suspendedToolRunId` — nothing
- * is suspended anywhere.
+ * `resumeData` and an arbitrary `suspendedToolRunId` — nothing is suspended anywhere.
  */
 function buildSupervisor() {
   let step = 0;
   const delegationInput = JSON.stringify({
     prompt: 'do the work',
     resumeData: { fileUrl: ['https://example.com/f.pdf'] },
-    suspendedToolRunId: 'null',
+    suspendedToolRunId: 'hallucinated-run-id',
   });
   const model = new MockLanguageModelV2({
     doGenerate: async () => {
@@ -142,7 +139,7 @@ function mentionsNoSnapshotError(value: unknown): boolean {
   return JSON.stringify(value ?? '')?.includes('AGENT_RESUME_NO_SNAPSHOT_FOUND') ?? false;
 }
 
-describe('sub-agent delegation with model-supplied sentinel suspendedToolRunId', () => {
+describe('sub-agent delegation with unverified model-supplied suspendedToolRunId', () => {
   beforeEach(() => {
     subAgentCalls = 0;
   });

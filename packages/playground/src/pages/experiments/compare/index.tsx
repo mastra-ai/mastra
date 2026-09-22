@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -8,16 +8,20 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftRightIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useDatasetExperiment } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { ExperimentsComparison } from '@/domains/experiments';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useLinkComponent } from '@/lib/framework';
+
+const crumbs = [navCrumb('/experiments'), { id: 'experiments-compare', label: 'Compare' }];
 
 function ExperimentIdLink({ experimentId }: { experimentId: string }) {
   const { Link, paths } = useLinkComponent();
   return (
     <Button
-      as={Link}
-      href={paths.experimentLink(experimentId)}
+      render={<Link href={paths.experimentLink(experimentId)} />}
+
       size="sm"
       aria-label={`Open experiment ${experimentId}`}
     >
@@ -41,37 +45,36 @@ function CompareExperimentsPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="experiments" />
-        </div>
-      </MainContentLayout>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
+        <PermissionDenied variant="fill" resource="experiments" />
+      </PageLayout>
     );
   }
 
   if (!datasetId || !experimentIdA || !experimentIdB) {
     return (
-      <MainContentLayout>
-        <MainContentContent>
-          <div className="text-neutral4 py-5 text-center">
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
+        <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Select two experiments to compare.</p>
-            <p className="text-ui-md mt-2">
+            <p className="mt-2 text-body">
               Use the URL format: /experiments/compare?dataset={'{datasetId}'}&baseline={'{experimentIdA}'}&contender=
               {'{experimentIdB}'}
             </p>
           </div>
-        </MainContentContent>
-      </MainContentLayout>
+        </div>
+      </PageLayout>
     );
   }
 
@@ -79,22 +82,22 @@ function CompareExperimentsPage() {
 
   if (error && !is404NotFoundError(error)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <ErrorState title="Failed to load experiments" message={error.message} />
-        </div>
-      </MainContentLayout>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
+        <ErrorState variant="fill" title="Failed to load experiments" message={error.message} />
+      </PageLayout>
     );
   }
 
   // 404 (or no data): the experiment does not exist or belongs to another dataset.
   if (error || !experimentA.data || !experimentB.data) {
     return (
-      <MainContentLayout>
-        <MainContentContent>
-          <div className="text-neutral4 py-5 text-center">
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Compare</h1>
+        <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
-            <p className="text-ui-md mt-2 flex items-center justify-center gap-2">
+            <p className="mt-2 flex items-center justify-center gap-2 text-body">
               One of
               <ExperimentIdLink experimentId={experimentIdA} />
               and
@@ -102,23 +105,23 @@ function CompareExperimentsPage() {
               was not found in it.
             </p>
           </div>
-        </MainContentContent>
-      </MainContentLayout>
+        </div>
+      </PageLayout>
     );
   }
 
   return (
-    <MainContentLayout>
-      <MainContentContent>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
         {/* Padding lives on the toolbar only: the comparison table runs edge to edge. */}
         <div className="grid w-full content-start">
           <div className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
-              <Txt as="h1" variant="ui-lg" className="text-neutral6 font-medium">
+              <Txt as="h1" variant="heading" tone="ink">
                 Experiments comparison
               </Txt>
 
-              <p className="text-ui-sm text-neutral4 flex items-center gap-2">
+              <p className="flex items-center gap-2 text-caption text-muted-foreground">
                 <ExperimentIdLink experimentId={experimentIdA} />
                 and
                 <ExperimentIdLink experimentId={experimentIdB} />
@@ -142,8 +145,8 @@ function CompareExperimentsPage() {
 
           <ExperimentsComparison datasetId={datasetId} experimentIdA={experimentIdA} experimentIdB={experimentIdB} />
         </div>
-      </MainContentContent>
-    </MainContentLayout>
+      </div>
+    </PageLayout>
   );
 }
 

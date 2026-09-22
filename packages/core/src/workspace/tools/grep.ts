@@ -1,6 +1,5 @@
 import { z } from 'zod/v4';
 import { createTool } from '../../tools';
-import { pMap } from '../../utils/p-map';
 import { WORKSPACE_TOOLS } from '../constants';
 import { UnsupportedGrepPatternError } from '../errors';
 import type { FilesystemGrepResult } from '../filesystem';
@@ -216,6 +215,7 @@ Usage:
               const entriesByDirectory = new Map<string, Awaited<ReturnType<typeof filesystem.readdir>>>();
               let directoryFrontier = [searchPath];
 
+              const pMap = (await import('p-map')).default;
               while (directoryFrontier.length > 0) {
                 const directoryEntries = await pMap(
                   directoryFrontier,
@@ -425,6 +425,7 @@ Usage:
           }
         }
 
+        const pMap = (await import('p-map')).default;
         for (
           let batchStart = 0;
           batchStart < filePaths.length && !truncated;

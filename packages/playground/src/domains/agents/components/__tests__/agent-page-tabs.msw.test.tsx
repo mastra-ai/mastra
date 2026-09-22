@@ -11,7 +11,6 @@ import { AgentLayout } from '../../agent-layout';
 import { systemPackages } from './fixtures/channels';
 import { v2Agent } from './fixtures/composer-model-settings';
 import { LinkComponentProvider } from '@/lib/framework';
-import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { server } from '@/test/msw-server';
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
@@ -60,21 +59,18 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={navigateSpy} paths={noopPaths}>
           <TooltipProvider>
-            <RouteHeaderActionsProvider>
-              <RouteHeaderActionsSlot />
-              <MemoryRouter initialEntries={[initialEntry]}>
-                <Routes>
-                  <Route
-                    path="/agents/:agentId/*"
-                    element={
-                      <AgentLayout>
-                        <div data-testid="agent-child" />
-                      </AgentLayout>
-                    }
-                  />
-                </Routes>
-              </MemoryRouter>
-            </RouteHeaderActionsProvider>
+            <MemoryRouter initialEntries={[initialEntry]}>
+              <Routes>
+                <Route
+                  path="/agents/:agentId/*"
+                  element={
+                    <AgentLayout>
+                      <div data-testid="agent-child" />
+                    </AgentLayout>
+                  }
+                />
+              </Routes>
+            </MemoryRouter>
           </TooltipProvider>
         </LinkComponentProvider>
       </QueryClientProvider>
@@ -110,25 +106,13 @@ describe('AgentLayout tool tabs', () => {
   });
 
   describe('when the editor is configured', () => {
-    it('renders the selected Editor after Chat, Traces, and Evals', async () => {
+    it('renders the selected Editor after Chat and Traces', async () => {
       server.use(...commonHandlers(enabledPackages));
       renderLayout('/agents/agent-1/editor');
       const editor = await screen.findByRole('tab', { name: 'Editor' });
-      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Evals', 'Editor']);
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Editor']);
       expect(editor.getAttribute('aria-selected')).toBe('true');
       expect(screen.queryByRole('button', { name: 'Editor' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Evals' })).toBeNull();
-    });
-  });
-
-  describe('when observability is unavailable', () => {
-    it('offers Evals as an icon-only setup hint instead of a tab', async () => {
-      server.use(...commonHandlers());
-      renderLayout();
-      const evals = await screen.findByRole('button', { name: 'Evals' });
-      expect(evals.textContent).toBe('');
-      expect(evals.getAttribute('aria-disabled')).toBe('true');
-      expect(screen.queryByRole('tab', { name: 'Evals' })).toBeNull();
     });
   });
 
@@ -181,14 +165,5 @@ describe('AgentLayout tool tabs', () => {
     expect(await screen.findByRole('tab', { name: 'Editor' })).not.toBeNull();
     expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
     expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
-  });
-
-  it('keeps run options out of the top-level Evaluate tab bar', async () => {
-    server.use(...commonHandlers(enabledPackages));
-
-    renderLayout('/agents/agent-1/evaluate');
-
-    await screen.findByRole('tab', { name: 'Editor' });
-    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
   });
 });

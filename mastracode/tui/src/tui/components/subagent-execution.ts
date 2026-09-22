@@ -84,6 +84,8 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   private startTime = Date.now();
   private durationMs = 0;
   private finalResult?: string;
+  private backgroundTaskId?: string;
+  private cancelled = false;
   private expanded = false;
   private collapseOnComplete: boolean;
   private expandOnComplete: boolean;
@@ -168,6 +170,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   }
 
   finish(isError: boolean, durationMs: number, result?: string): void {
+    if (this.cancelled) return;
     this.done = true;
     this.isError = isError;
     this.durationMs = durationMs;
@@ -177,6 +180,21 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     } else if (this.collapseOnComplete) {
       this.expanded = false;
     }
+    this.rebuild();
+  }
+
+  cancel(result = 'Background execution cancelled.'): void {
+    this.cancelled = true;
+    this.done = true;
+    this.isError = false;
+    this.durationMs = Date.now() - this.startTime;
+    this.finalResult = result;
+    this.expanded = false;
+    this.rebuild();
+  }
+
+  setBackgroundTaskId(taskId: string): void {
+    this.backgroundTaskId = taskId;
     this.rebuild();
   }
 
@@ -213,17 +231,25 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
       colorText(this.colors.agentType, typeLabelText, (text: string) => theme.fg('accent', text)),
     );
     const modelLabel = this.modelId ? theme.fg('muted', ` ${this.modelId}`) : '';
-    const statusIcon = this.done
-      ? this.isError
-        ? colorText(this.colors.icon, ` ${this.icons.error}`, (text: string) => theme.fg('error', text))
-        : colorText(this.colors.icon, ` ${this.icons.success}`, (text: string) => theme.fg('success', text))
-      : colorText(this.colors.icon, ` ${this.icons.running}`, (text: string) => theme.fg('muted', text));
+    const statusIcon = this.backgroundTaskId
+      ? this.done
+        ? this.cancelled
+          ? theme.fg('muted', ` ■ background · ${this.backgroundTaskId}`)
+          : this.isError
+            ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)
+            : theme.fg('success', ` ✓ background · ${this.backgroundTaskId}`)
+        : theme.fg('warning', ` ◌ background · ${this.backgroundTaskId}`)
+      : this.done
+        ? this.isError
+          ? colorText(this.colors.icon, ` ${this.icons.error}`, (text: string) => theme.fg('error', text))
+          : colorText(this.colors.icon, ` ${this.icons.success}`, (text: string) => theme.fg('success', text))
+        : colorText(this.colors.icon, ` ${this.icons.running}`, (text: string) => theme.fg('muted', text));
     const durationStr = this.done ? theme.fg('muted', ` ${formatDuration(this.durationMs)}`) : '';
     const footerText = `${theme.bold(colorText(this.colors.label, this.label, (text: string) => theme.fg('toolTitle', text)))} ${typeLabel}${modelLabel}${durationStr}${statusIcon}`;
 
-    // When collapse-on-complete is enabled, render only the single-line footer summary.
-    // Quiet mode does not enable this for subagents; it is kept for explicit callers/tests.
-    if (this.collapseOnComplete && this.done && !this.expanded) {
+    // Completed background work follows the ordinary tool display model: compact by default,
+    // with the authoritative result available through Ctrl+E expansion.
+    if ((this.collapseOnComplete || this.backgroundTaskId) && this.done && !this.expanded) {
       this.addChild(new Text(`${border('╰──')} ${footerText}`, BOX_INDENT, 0));
       this.invalidate();
       this.ui.requestRender();

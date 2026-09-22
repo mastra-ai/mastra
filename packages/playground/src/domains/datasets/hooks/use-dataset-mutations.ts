@@ -8,7 +8,6 @@ import type {
   UpdateExperimentResultParams,
   BatchInsertDatasetItemsParams,
   BatchDeleteDatasetItemsParams,
-  GenerateDatasetItemsParams,
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -127,10 +126,6 @@ export const useDatasetMutations = () => {
     },
   });
 
-  const generateItems = useMutation({
-    mutationFn: (params: GenerateDatasetItemsParams) => client.generateDatasetItems(params),
-  });
-
   const triggerExperiment = useMutation({
     mutationFn: (params: TriggerDatasetExperimentParams) => client.triggerDatasetExperiment(params),
     onSuccess: (_, variables) => {
@@ -187,7 +182,6 @@ export const useDatasetMutations = () => {
     deleteItems,
     batchInsertItems,
     batchDeleteItems,
-    generateItems,
     triggerExperiment,
     deleteExperiment,
     updateExperiment,

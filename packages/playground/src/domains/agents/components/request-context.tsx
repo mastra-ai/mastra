@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -101,7 +103,7 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
     setSelectedPreset(getMatchingPresetKey(presets, requestContextStr));
   };
 
-  const buttonClass = 'text-neutral3 hover:text-neutral6';
+  const buttonClass = cn(quietTextHover, controlStateColorTransition);
 
   const formatRequestContext = async () => {
     if (!isValidJson(requestContextValue)) {
@@ -189,8 +191,8 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
           extensions={[jsonLanguage]}
           className={cn(
             editorClassName,
-            'overflow-y-scroll rounded-lg border border-border1 bg-surface2 overflow-hidden p-3',
-            '[&_.cm-editor]:!bg-surface2 [&_.cm-gutters]:!bg-surface2',
+            'overflow-hidden overflow-y-scroll rounded-lg border border-border bg-background p-3',
+            '[&_.cm-editor]:!bg-background [&_.cm-gutters]:!bg-background',
           )}
         />
 
@@ -225,7 +227,7 @@ export const RequestContextWrapper = ({ children }: { children: ReactNode }) => 
         title="Request context"
         className="mb-5"
         action={
-          <Notice.Button as={Link} to="https://mastra.ai/docs/server/request-context" target="_blank">
+          <Notice.Button render={<Link href="https://mastra.ai/docs/server/request-context" target="_blank" />}>
             <Icon>
               <ExternalLink />
             </Icon>

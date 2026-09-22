@@ -20,12 +20,7 @@ import {
 } from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { AgentLayout } from '@/domains/agents/agent-layout';
-import {
-  emptyThreadTracesList,
-  threadTracesList,
-  traceASpans,
-  traceBSpans,
-} from '@/domains/traces/components/__tests__/fixtures/thread-traces';
+import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
@@ -330,9 +325,10 @@ describe('Standalone thread page', () => {
         expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
         await act(async () => releaseHistory());
         await waitFor(() =>
-          expect(queryClient.getQueryState(['memory', 'messages', THREAD_ID, AGENT_ID, 'requestContext'])?.status).toBe(
-            'success',
-          ),
+          expect(
+            queryClient.getQueryCache().find({ queryKey: ['memory', 'messages', THREAD_ID, AGENT_ID], exact: false })
+              ?.state.status,
+          ).toBe('success'),
         );
         expect(historyReturned).toHaveBeenCalledOnce();
         await waitFor(
@@ -696,12 +692,11 @@ describe('Standalone thread page', () => {
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
-  it('does not render the "Show thread traces" switch nor fetch traces on /new', async () => {
+  it('does not fetch traces on /new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.queryByRole('switch', { name: 'Show thread traces' })).toBeNull();
     expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
@@ -803,62 +798,6 @@ describe('Standalone thread page', () => {
       await screen.findByText('Sushi ideas');
 
       expect(screen.queryByRole('button', { name: /delete thread/i })).toBeNull();
-    });
-  });
-
-  describe('with ?variant=advanced', () => {
-    const installTraceHandlers = () => {
-      server.use(
-        http.get(`${BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(threadTracesList)),
-        http.get(`${BASE_URL}/api/observability/traces`, () => HttpResponse.json(threadTracesList)),
-        http.get(`${BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
-          HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
-        ),
-      );
-    };
-
-    it('renders the thread as its traces instead of the chat', async () => {
-      installHandlers();
-      installTraceHandlers();
-      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}?variant=advanced`);
-
-      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-      expect(await screen.findByText('Chef agent run')).not.toBeNull();
-      expect(screen.queryByText('Tonight we cook carbonara.')).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Traces' })).toBeNull();
-    });
-
-    it('still renders the chat for a new thread', async () => {
-      installHandlers();
-      installTraceHandlers();
-      renderAt(`/agents/${AGENT_ID}/threads/new?variant=advanced`);
-
-      expect(await screen.findByText('Sushi ideas')).not.toBeNull();
-      expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-      expect(screen.queryByRole('switch', { name: 'Show thread traces' })).toBeNull();
-    });
-
-    it('is toggled from the "Show thread traces" switch in the tab bar', async () => {
-      installHandlers();
-      installTraceHandlers();
-      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
-
-      const toggle = await screen.findByRole('switch', { name: 'Show thread traces' });
-      expect(toggle.getAttribute('aria-checked')).toBe('false');
-
-      fireEvent.click(toggle);
-      await waitFor(() =>
-        expect(screen.getByTestId('location-probe').textContent).toBe(
-          `/agents/${AGENT_ID}/threads/${THREAD_ID}?variant=advanced`,
-        ),
-      );
-      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-
-      fireEvent.click(screen.getByRole('switch', { name: 'Show thread traces' }));
-      await waitFor(() =>
-        expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`),
-      );
-      expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
     });
   });
 

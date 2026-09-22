@@ -23,7 +23,7 @@
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "pnpm build && vitest run",
     "test:watch": "vitest watch",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."

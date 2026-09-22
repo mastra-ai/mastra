@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../di';
 import type { PubSub } from '../../events/pubsub';
 import { SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
@@ -81,7 +80,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
   });
 
   if (fn) {
-    const stepCallId = randomUUID();
+    const stepCallId = globalThis.crypto.randomUUID();
     duration = await engine.wrapDurableOperation(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
       return fn({
         runId,
@@ -215,7 +214,7 @@ export async function executeSleepUntil(
   });
 
   if (fn) {
-    const stepCallId = randomUUID();
+    const stepCallId = globalThis.crypto.randomUUID();
     const dateResult = await engine.wrapDurableOperation(`workflow.${workflowId}.sleepUntil.${entry.id}`, async () => {
       return fn({
         runId,

@@ -7,13 +7,20 @@ export type SidebarNewSectionLinkProps = {
   activeCandidates: NavLink[];
   level?: number;
   isActive?: (link: NavLink, activeCandidates: NavLink[]) => boolean;
+  onSelect?: (link: NavLink) => void;
 };
 
 function getSidebarNewLinkKey(link: NavLink) {
   return `${link.url}:${link.name}`;
 }
 
-export function SidebarNewSectionLink({ link, activeCandidates, level = 0, isActive }: SidebarNewSectionLinkProps) {
+export function SidebarNewSectionLink({
+  link,
+  activeCandidates,
+  level = 0,
+  isActive,
+  onSelect,
+}: SidebarNewSectionLinkProps) {
   const childLinks = link.children ?? [];
 
   return (
@@ -21,6 +28,10 @@ export function SidebarNewSectionLink({ link, activeCandidates, level = 0, isAct
       link={link}
       isActive={isActive?.(link, activeCandidates) ?? link.isActive}
       level={level}
+      onClick={event => {
+        if (event.target instanceof Element && event.target.closest('li') !== event.currentTarget) return;
+        onSelect?.(link);
+      }}
       subItems={
         childLinks.length > 0 ? (
           <MainSidebarNavList className="mt-0.5">
@@ -31,6 +42,7 @@ export function SidebarNewSectionLink({ link, activeCandidates, level = 0, isAct
                 activeCandidates={activeCandidates}
                 level={level + 1}
                 isActive={isActive}
+                onSelect={onSelect}
               />
             ))}
           </MainSidebarNavList>

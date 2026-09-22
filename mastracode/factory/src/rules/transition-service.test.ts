@@ -53,7 +53,7 @@ async function createItem(
   storage: WorkItemsStorage,
   overrides: Partial<{
     orgId: string;
-    source: 'github-issue' | 'github-pr' | 'slack-thread';
+    source: 'github-issue' | 'github-pr' | 'gitlab-pr' | 'slack-thread';
     sourceKey: string;
     board: string;
     stages: string[];
@@ -70,8 +70,8 @@ async function createItem(
       input: {
         ...(overrides.board ? { board: overrides.board } : {}),
         externalSource: {
-          integrationId: source === 'slack-thread' ? 'slack' : 'github',
-          type: source === 'slack-thread' ? 'slack-thread' : source === 'github-pr' ? 'pull-request' : 'issue',
+          integrationId: source === 'slack-thread' ? 'slack' : source === 'gitlab-pr' ? 'gitlab' : 'github',
+          type: source === 'slack-thread' ? 'slack-thread' : source.endsWith('-pr') ? 'pull-request' : 'issue',
           externalId: overrides.sourceKey ?? '1',
         },
         title: 'Fix the bug',
@@ -902,6 +902,50 @@ describe('FactoryTransitionService', () => {
     warn.mockRestore();
   });
 
+  it('isolates a synchronous acceptance-hook failure after the transition commits', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage);
+    const onAccepted = vi.fn(() => {
+      throw new Error('label sync threw');
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      audit: seed.audit,
+      onAccepted,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'classify' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'classify' },
+      triageType: 'feature request',
+    });
+    const acceptRequest = {
+      ...request({ id: item.id, revision: (classified as { revision: number }).revision }, { stage: 'planning' }),
+      cause: 'board_drag',
+    };
+    const accepted = await service.transition(acceptRequest);
+    expect(accepted).toMatchObject({ status: 'accepted', stage: 'planning' });
+
+    const stored = await storage.get({ orgId: 'org-1', factoryProjectId: PROJECT_ID, id: item.id });
+    expect(stored).toMatchObject({ stages: ['planning'], acceptedAt: expect.any(Date) });
+
+    await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(warn.mock.calls[0]?.[0]).toBe(`[factory] acceptance hook failed for work item ${item.id}:`);
+
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(events.filter(event => event.action === 'factory.work_item.stage_moved')).toMatchObject([
+      { metadata: { transitionId: accepted.transitionId, to: 'planning' } },
+    ]);
+
+    expect(await service.transition(acceptRequest)).toEqual(accepted);
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   it('keeps bugs autonomous and leaves grandfathered work and terminal transitions unaffected', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const bug = await createItem(storage, { metadata: { authorTrusted: true } });
@@ -1327,6 +1371,21 @@ describe('FactoryTransitionService', () => {
 
     expect(result).toMatchObject({ status: 'accepted', stage: 'review', decisions: [] });
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('allows a GitLab merge request to enter Review like a GitHub pull request', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'review', source: 'gitlab-pr', stages: ['intake'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    await expect(
+      service.transition({ ...request(item, { board: 'review', stage: 'review' }), cause: 'run_start' }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'review' });
+    const updated = await storage.get({ orgId: 'org-1', id: item.id });
+    expect(updated).not.toBeNull();
+    await expect(
+      service.transition(request(updated!, { board: 'work', stage: 'execute', identity: 'wrong-gitlab-board' })),
+    ).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
   });
 
   it('lets the bound agent walk its parked card back into its lane without racing a second run', async () => {

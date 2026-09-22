@@ -55,9 +55,9 @@ export const AgentSelectableCard = ({
       data-testid={testId}
       style={containerStyle}
       className={cn(
-        'flex w-full flex-col gap-2 rounded-lg border bg-surface3 p-4 transition-colors',
-        'focus-visible:!border-[var(--agent-color-bg)] focus-within:!border-[var(--agent-color-bg)]',
-        isSelected ? 'bg-surface4' : 'border-border1',
+        'flex w-full flex-col gap-2 rounded-lg border bg-card p-4 transition-colors',
+        'focus-within:!border-[var(--agent-color-bg)] focus-visible:!border-[var(--agent-color-bg)]',
+        isSelected ? 'bg-muted' : 'border-border',
         disabled && 'opacity-60',
       )}
     >
@@ -75,11 +75,11 @@ export const AgentSelectableCard = ({
       >
         {icon}
         <div className="flex min-w-0 flex-1 flex-col">
-          <Txt variant="ui-md" className="text-neutral6 truncate font-medium">
+          <Txt variant="subheading" tone="ink" className="truncate">
             {title}
           </Txt>
           {subtitle && (
-            <Txt variant="ui-sm" className="text-neutral3 truncate">
+            <Txt variant="caption" tone="muted" className="truncate">
               {subtitle}
             </Txt>
           )}
@@ -90,7 +90,7 @@ export const AgentSelectableCard = ({
           style={checkStyle}
           className={cn(
             'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-            !isSelected && 'border-border1 bg-transparent',
+            !isSelected && 'border-border bg-transparent',
           )}
         >
           {isSelected && <Check className="h-3 w-3" />}

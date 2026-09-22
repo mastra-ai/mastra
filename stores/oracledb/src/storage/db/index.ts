@@ -138,6 +138,38 @@ export class OracleDB {
     return this.config.poolManager.withConnection(callback);
   }
 
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: string;
+    column: string;
+    cutoff: Date;
+    limit: number;
+  }): Promise<number> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+    return this.config.poolManager.withConnection(async connection => {
+      try {
+        const table = this.table(tableName);
+        const result = await connection.execute(
+          `DELETE FROM ${table} WHERE ROWID IN (
+            SELECT ROWID FROM ${table} WHERE "${column}" < :cutoff ORDER BY "${column}" FETCH FIRST :limit ROWS ONLY
+          )`,
+          asBindParameters({ cutoff, limit }),
+        );
+        await connection.commit();
+        return result.rowsAffected ?? 0;
+      } catch (error) {
+        await rollbackQuietly(connection);
+        throw error;
+      }
+    });
+  }
+
   async none(sql: string, binds: OracleQueryBinds = {}): Promise<void> {
     await this.config.poolManager.withConnection(async connection => {
       await connection.execute(sql, asBindParameters(binds));

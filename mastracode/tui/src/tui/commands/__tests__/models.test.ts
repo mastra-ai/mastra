@@ -25,6 +25,7 @@ vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   }),
   stripMastraCodeCustomProviderPrefix: (modelId: string) => modelId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY: 'activeModelPackId',
+  THREAD_FALLBACK_STATUS_KEY: 'mastracodeFallbackStatus',
 }));
 
 vi.mock('@mastra/code-sdk/onboarding/packs', () => ({
@@ -341,6 +342,70 @@ describe('handleModelCommand', () => {
     expect(ctx.showError).not.toHaveBeenCalled();
   });
 
+  it('clears a pending pack-fallback marker on manual model switch', async () => {
+    const model = {
+      id: 'openai/gpt-5.4',
+      provider: 'openai',
+      modelName: 'gpt-5.6-sol',
+      hasApiKey: true,
+      apiKeyEnvVar: 'OPENAI_API_KEY',
+    };
+    const pendingHop = { fromPackId: 'anthropic', toModelId: 'anthropic/claude-opus-4-6' };
+    const threadSettings: Record<string, unknown> = {
+      activeModelPackId: 'openai',
+      mastracodePendingPackFallback: pendingHop,
+    };
+    const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
+      threadSettings[key] = value;
+    });
+    const getSetting = vi.fn(async ({ key }: { key: string }) => threadSettings[key]);
+    const stateSet = vi.fn(async () => undefined);
+    const modes = [{ id: 'build', defaultModelId: 'openai/gpt-5.6-sol' }];
+    mocks.loadSettings.mockReturnValue({
+      customProviders: [],
+      customModelPacks: [],
+      models: { activeModelPackId: 'openai', modeDefaults: {}, modePackOverrides: {} },
+    });
+    mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
+
+    const ctx = {
+      authStorage: {},
+      state: {
+        controller: {
+          listAvailableModels: vi.fn(async () => [model]),
+          invalidateAvailableModelsCache: vi.fn(),
+          listModes: vi.fn(() => modes),
+        },
+        session: {
+          mode: { get: vi.fn(() => 'build') },
+          model: { get: vi.fn(() => 'openai/gpt-5.6-sol'), switch: vi.fn(async () => undefined) },
+          state: {
+            get: vi.fn(() => ({ activeModelPackId: 'openai', mastracodePendingPackFallback: pendingHop })),
+            set: stateSet,
+          },
+          thread: {
+            getId: vi.fn(() => 'thread-1'),
+            list: vi.fn(async () => [{ id: 'thread-1', metadata: { ...threadSettings } }]),
+            setSetting,
+            getSetting,
+          },
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      updateStatusLine: vi.fn(),
+      showInfo: vi.fn(),
+    } as any;
+
+    const command = handleModelCommand(ctx);
+    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+    await mocks.selectorOptions.onSelect(model);
+    await command;
+
+    expect(setSetting).toHaveBeenCalledWith({ key: 'mastracodePendingPackFallback', value: undefined });
+    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingPackFallback: null });
+    expect(threadSettings.mastracodePendingPackFallback).toBeUndefined();
+  });
+
   it('stores a same-provider override without replacing the built-in pack', async () => {
     const model = {
       id: 'openai/gpt-5.4',
@@ -351,7 +416,10 @@ describe('handleModelCommand', () => {
     };
     const invalidateAvailableModelsCache = vi.fn();
     const switchModel = vi.fn(async () => undefined);
-    const threadSettings: Record<string, unknown> = { activeModelPackId: 'openai' };
+    const threadSettings: Record<string, unknown> = {
+      activeModelPackId: 'openai',
+      mastracodeFallbackStatus: { usingPack: 'OpenAI', failedPack: 'Anthropic' },
+    };
     const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
       threadSettings[key] = value;
     });
@@ -388,6 +456,7 @@ describe('handleModelCommand', () => {
         session: {
           mode: { get: vi.fn(() => 'build') },
           model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-6'), switch: switchModel },
+          state: { set: vi.fn(async () => undefined) },
           thread: {
             getId: vi.fn(() => 'thread-1'),
             list: vi.fn(async () => [{ id: 'thread-1', metadata: { ...threadSettings } }]),
@@ -396,6 +465,7 @@ describe('handleModelCommand', () => {
           },
         },
         ui: { hideOverlay: vi.fn() },
+        fallbackStatus: { usingPack: 'OpenAI', failedPack: 'Anthropic' },
       },
       updateStatusLine: vi.fn(),
       showInfo: vi.fn(),
@@ -420,6 +490,8 @@ describe('handleModelCommand', () => {
     expect(savedSettings.customModelPacks).toEqual([]);
     expect(setSetting).toHaveBeenNthCalledWith(1, { key: 'modeModelId_build', value: model.id });
     expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'openai' });
+    expect(setSetting).toHaveBeenNthCalledWith(3, { key: 'mastracodeFallbackStatus', value: undefined });
+    expect(ctx.state.fallbackStatus).toBeUndefined();
   });
 
   it('keeps mode selections isolated between threads', async () => {
@@ -482,6 +554,7 @@ describe('handleModelCommand', () => {
           },
           session: {
             mode: { get: vi.fn(() => modeId) },
+            state: { set: vi.fn(async () => undefined) },
             model: {
               get: vi.fn(() => currentModelId),
               switch: vi.fn(async ({ modelId }: { modelId: string }) => {

@@ -12,8 +12,8 @@ const emptyThreadClass =
 function FactoryMetadata({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
-      <dt className="text-icon3">{label}</dt>
-      <dd className="text-icon5 min-w-0 truncate">{value}</dd>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-foreground min-w-0 truncate">{value}</dd>
     </div>
   );
 }
@@ -33,10 +33,10 @@ export function EmptyThreadState() {
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
       <Logo size="md" aria-label="Mastra Code" />
-      <h1 id="empty-thread-title" className="text-header-xl text-icon6 mt-7 font-medium tracking-tight text-balance">
+      <h1 id="empty-thread-title" className="text-display text-foreground mt-7 tracking-tight text-balance">
         What can I help you build?
       </h1>
-      <p className="text-ui-lg text-icon3 mt-2 max-w-lg leading-relaxed text-pretty">
+      <p className="text-body text-muted-foreground mt-2 max-w-lg leading-relaxed text-pretty">
         Ask about this codebase, plan a change, or describe something that isn&apos;t working.
       </p>
 
@@ -70,10 +70,10 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <details className="group text-ui-sm text-icon3 mt-8 w-full max-w-lg min-w-0">
-        <summary className="hover:text-icon5 focus-visible:outline-accent1 flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+      <details className="group text-caption text-muted-foreground mt-8 w-full max-w-lg min-w-0">
+        <summary className="hover:text-foreground focus-visible:outline-accent1 flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
           <span>
-            Working in <span className="text-icon5 font-medium">{activeFactory.name}</span>
+            Working in <span className="text-foreground font-medium">{activeFactory.name}</span>
           </span>
           <ChevronDown
             aria-hidden="true"

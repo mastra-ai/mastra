@@ -1,6 +1,15 @@
+import {
+  ACCOUNT_SWITCH_PART_TYPE,
+  isAccountSwitchReason,
+  isPackFallbackReason,
+  type AccountSwitchPartData,
+  type PackFallbackPartData,
+} from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';
+
+import { getBackgroundToolMetadata } from './background-tool-result.js';
 
 /**
  * DB-native accessors for `MastraDBMessage`.
@@ -32,6 +41,7 @@ export interface ToolRenderPart {
   result: unknown;
   hasResult: boolean;
   isError: boolean;
+  backgroundTask?: ReturnType<typeof getBackgroundToolMetadata>;
 }
 
 export interface OmRenderPart {
@@ -41,7 +51,19 @@ export interface OmRenderPart {
   data: Record<string, unknown>;
 }
 
-export type AssistantRenderPart = TextRenderPart | ThinkingRenderPart | ToolRenderPart | OmRenderPart;
+export interface AccountSwitchRenderPart extends AccountSwitchPartData {
+  kind: 'account-switch';
+}
+
+export type PackFallbackRenderPart = PackFallbackPartData & { kind: 'pack-fallback' };
+
+export type AssistantRenderPart =
+  | TextRenderPart
+  | ThinkingRenderPart
+  | ToolRenderPart
+  | OmRenderPart
+  | AccountSwitchRenderPart
+  | PackFallbackRenderPart;
 
 function getParts(message: MastraDBMessage): MessagePart[] {
   const content = message.content;
@@ -63,6 +85,60 @@ const OM_EVENT_BY_TYPE: Record<string, OmRenderPart['event']> = {
   'data-om-observation-failed': 'failed',
   'data-om-thread-update': 'thread-title',
 };
+
+const PACK_FALLBACK_PART_TYPE = 'data-mastracode-pack-fallback';
+
+function packFallbackRenderPart(data: unknown): PackFallbackRenderPart | null {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  const endpoint = (value: unknown): { packId: string; label: string } | null => {
+    if (!value || typeof value !== 'object') return null;
+    const entry = value as Record<string, unknown>;
+    if (typeof entry.packId !== 'string' || typeof entry.label !== 'string') return null;
+    return { packId: entry.packId, label: entry.label };
+  };
+  const from = endpoint(record.from);
+  const to = endpoint(record.to);
+  if (!from || !to || !isPackFallbackReason(record.reason)) return null;
+  return {
+    kind: 'pack-fallback',
+    from,
+    to,
+    reason: record.reason,
+    at: typeof record.at === 'string' ? record.at : '',
+  };
+}
+
+function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  if (typeof record.provider !== 'string' || !isAccountSwitchReason(record.reason)) return null;
+  const endpoint = (value: unknown): { id: string; label: string } | null => {
+    if (!value || typeof value !== 'object') return null;
+    const entry = value as Record<string, unknown>;
+    if (typeof entry.id !== 'string' || typeof entry.label !== 'string') return null;
+    return { id: entry.id, label: entry.label };
+  };
+  // `null` is the explicit persisted marker for "no usable account" (pool
+  // exhaustion). Anything else that doesn't parse is schema drift and must not
+  // collapse to `null` either — that renders as "All accounts unavailable",
+  // misreporting a rotation as exhaustion. Unknown endpoint instead.
+  const toEndpoint = (value: unknown): { id: string; label: string } | null => {
+    if (value === null || value === undefined) return null;
+    return endpoint(value) ?? { id: 'unknown', label: 'unknown' };
+  };
+  return {
+    kind: 'account-switch',
+    provider: record.provider,
+    from: endpoint(record.from),
+    to: toEndpoint(record.to),
+    reason: record.reason,
+    at: typeof record.at === 'string' ? record.at : '',
+    // A12 exclusivity flag: without it a pinned route's exhaustion would
+    // re-render from history as "all accounts unavailable".
+    ...(record.exclusive === true ? { exclusive: true } : {}),
+  };
+}
 
 /**
  * Walk a message's `content.parts` and project them into flat render items in
@@ -87,7 +163,9 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
       case 'tool-invocation': {
         const inv = (part as { toolInvocation: Record<string, unknown> }).toolInvocation;
         const hasResult = inv.state === 'result' && inv.result !== undefined;
+        const backgroundTask = getBackgroundToolMetadata((part as { providerMetadata?: unknown }).providerMetadata);
         out.push({
+          ...(backgroundTask ? { backgroundTask } : {}),
           kind: 'tool',
           toolCallId: String(inv.toolCallId ?? ''),
           toolName: String(inv.toolName ?? ''),
@@ -108,7 +186,9 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
         const legacyPart = part as { toolCallId?: string; toolName?: string; result?: unknown; isError?: boolean };
         const toolCallId = String(legacyPart.toolCallId ?? '');
         const call = toolCalls.get(toolCallId);
+        const backgroundTask = getBackgroundToolMetadata((part as { providerMetadata?: unknown }).providerMetadata);
         out.push({
+          ...(backgroundTask ? { backgroundTask } : {}),
           kind: 'tool',
           toolCallId,
           toolName: String(legacyPart.toolName ?? call?.toolName ?? ''),
@@ -121,6 +201,16 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
         break;
       }
       default: {
+        if (partType === ACCOUNT_SWITCH_PART_TYPE) {
+          const switchPart = accountSwitchRenderPart((part as { data?: unknown }).data);
+          if (switchPart) out.push(switchPart);
+          break;
+        }
+        if (partType === PACK_FALLBACK_PART_TYPE) {
+          const hopPart = packFallbackRenderPart((part as { data?: unknown }).data);
+          if (hopPart) out.push(hopPart);
+          break;
+        }
         const event = OM_EVENT_BY_TYPE[part.type];
         if (event) {
           const data = ((part as { data?: Record<string, unknown> }).data ?? {}) as Record<string, unknown>;
@@ -186,7 +276,7 @@ export function getSignalKind(message: MastraDBMessage): SignalKind {
   if (type === 'state') return 'state';
   if (type === 'reactive' && tagName === 'system-reminder') return 'reminder';
   if (type === 'notification' && tagName === 'notification-summary') return 'notification-summary';
-  if (type === 'notification' && tagName === 'notification') return 'notification';
+  if (type === 'notification') return 'notification';
   if (type === 'reactive') return 'reactive';
   return 'user';
 }
@@ -321,6 +411,66 @@ export function getReactiveSignalView(message: MastraDBMessage): ReactiveSignalV
   return {
     tagName: asString(signal.tagName),
     message: contentsToText(signal.contents),
+  };
+}
+
+export interface BackgroundWorkLifecycleView {
+  tagName: 'work-deferred' | 'work-awaited' | 'work-completed' | 'work-failed' | 'work-cancelled';
+  originToolCallId: string;
+  taskId?: string;
+  status?: string;
+}
+
+const BACKGROUND_WORK_TAGS = new Set([
+  'work-deferred',
+  'work-awaited',
+  'work-completed',
+  'work-failed',
+  'work-cancelled',
+]);
+
+/** Correlation fields for a background-work lifecycle signal. */
+export function getBackgroundWorkLifecycleView(message: MastraDBMessage): BackgroundWorkLifecycleView | undefined {
+  const signal = getSignalView(message);
+  const tagName = asString(signal.tagName);
+  if (!tagName || !BACKGROUND_WORK_TAGS.has(tagName)) return undefined;
+
+  const metadata = asRecord(signal.metadata) ?? {};
+  const originToolCallId = asString(metadata.originToolCallId);
+  if (!originToolCallId) return undefined;
+
+  return {
+    tagName: tagName as BackgroundWorkLifecycleView['tagName'],
+    originToolCallId,
+    taskId: asString(metadata.taskId),
+    status: asString(metadata.status),
+  };
+}
+
+export interface BackgroundCompletionView {
+  eventId?: string;
+  taskId: string;
+  originToolCallId: string;
+  toolName?: string;
+  status?: string;
+  argsSummary?: string;
+  errorSummary?: string;
+}
+
+export function getBackgroundCompletionView(message: MastraDBMessage): BackgroundCompletionView | undefined {
+  const metadata = asRecord(getSignalView(message).metadata) ?? {};
+  const completion = asRecord(metadata.backgroundCompletion);
+  const taskId = asString(completion?.taskId);
+  const originToolCallId = asString(completion?.originToolCallId);
+  if (!taskId || !originToolCallId) return undefined;
+  return {
+    eventId: asString(completion?.eventId),
+    taskId,
+    originToolCallId,
+    toolName: asString(completion?.toolName),
+    status: asString(completion?.status),
+    argsSummary: asString(completion?.argsSummary),
+    errorSummary: asString(completion?.errorSummary),
   };
 }
 

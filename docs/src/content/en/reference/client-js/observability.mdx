@@ -92,6 +92,79 @@ const result = await mastraClient.queryTraces({
 })
 ```
 
+### Load a page and poll for traces
+
+`queryTraces()` supports keyset traversal with `page`, numbered pages with `pagination`, and delta polling with `mode: 'delta'`. Use one mode per request. To migrate from `listTracesLight()`, read `traces` instead of `spans` and retain the numbered page's `deltaCursor`:
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+const initial = await mastraClient.queryTraces({
+  timeRange,
+  pagination: { page: 0, perPage: 100 },
+})
+if (!initial.deltaCursor) throw new Error('Delta polling is unavailable')
+
+const changes = await mastraClient.queryTraces({
+  timeRange,
+  mode: 'delta',
+  after: initial.deltaCursor,
+  limit: 100,
+})
+```
+
+Merge `changes.traces` by `traceId`, retain `changes.deltaCursor`, and continue while `changes.delta.hasMore` is `true`. Keep the same time range and predicate across polls. Only completed traces are returned; polling doesn't guarantee notifications for related-record updates, deletions, or traces that stop matching.
+
+See [Delta polling](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) for bootstrap behavior, cursor lifetime, retention, and a complete polling loop. `queryTraceThreads()` remains keyset-only.
+
+### Discover trace-query fields and values
+
+`getTraceQueryFields()` returns canonical query fields and observed top-level string metadata fields for one predicate scope. The response includes each field's value kind, supported operators, and whether value suggestions are available.
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+
+const fields = await mastraClient.getTraceQueryFields({
+  timeRange,
+  predicateScope: 'spans',
+  search: 'model',
+  limit: 25,
+})
+```
+
+Use the exact local path from the response with the same scope. For example, `model` belongs inside a `spans.some` or `spans.none` predicate. A global picker can fetch `trace`, `spans`, `scores`, and `feedback` in parallel.
+
+Call `getTraceQueryValues()` only after selecting a field with `valueSuggestions: true`:
+
+```typescript
+const controller = new AbortController()
+
+const values = await mastraClient.getTraceQueryValues(
+  {
+    timeRange,
+    predicateScope: 'spans',
+    path: 'model',
+    search: 'claude',
+    limit: 25,
+  },
+  { signal: controller.signal },
+)
+
+// Cancel this autocomplete request when the search text changes.
+controller.abort()
+```
+
+Both methods use case-insensitive literal substring search and accept an empty search. Limits default to 25 and can't exceed 100. Results are ordered by occurrence count, then deterministically by path or value. `observedFieldsTruncated` and `valuesTruncated` indicate that the caller should refine `search`. Discovery has no cursor.
+
+Suggestions are bounded and advisory. Manual values remain valid when suggestions are unavailable, empty, or truncated. Discovery doesn't accept a draft query predicate. The client doesn't retry either request, and a per-call `AbortSignal` takes precedence over the signal configured on `MastraClient`.
+
+A discovery timeout rejects with `504 TRACE_QUERY_EXECUTION_TIMEOUT`. Backend memory or resource exhaustion rejects with `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither error contains partial suggestions; truncation flags are only present on successful, completely ranked responses.
+
 `queryTraceThreads()` returns thread identities derived from observability traces after applying eligibility and cross-trace conditions. It doesn't read or return memory thread records or messages. In this example, one production trace can have the low factuality score while another production trace in the same thread has the clinician correction:
 
 ```typescript
@@ -190,7 +263,7 @@ const scores = await mastraClient.listScoresBySpan({
 
 ## Feedback
 
-Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the target Mastra runtime and its configured observability storage. They don't call the hosted Mastra Platform feedback query API. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the target Mastra runtime and its configured observability storage. They don't call the hosted Mastra Platform Feedback API. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
 
 ### Creating feedback
 
@@ -241,6 +314,8 @@ const feedback = await mastraClient.listFeedback({
   orderBy: { field: 'timestamp', direction: 'DESC' },
 })
 ```
+
+`filters` accepts every [`FeedbackFilter`](/reference/observability/feedback#feedbackfilter) field. The client sends them as query parameters on `GET /api/observability/feedback`. See [list query parameters](/reference/observability/feedback#list-query-parameters).
 
 ### Aggregating feedback
 

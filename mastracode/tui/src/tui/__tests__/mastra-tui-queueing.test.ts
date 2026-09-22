@@ -952,6 +952,150 @@ describe('syncInitialThreadState', () => {
     expect(state.session.sendMessage).not.toHaveBeenCalled();
   });
 
+  it('restores the fallback status from thread metadata', async () => {
+    const fallbackStatus = { usingPack: 'OpenAI', failedPack: 'Anthropic' };
+    const state = {
+      session: {
+        thread: {
+          getId: vi.fn(() => 'thread-1'),
+          list: vi
+            .fn()
+            .mockResolvedValue([
+              { id: 'thread-1', title: 'Fallback thread', metadata: { mastracodeFallbackStatus: fallbackStatus } },
+            ]),
+        },
+      },
+      goalManager: {
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
+    } as unknown as TUIState;
+
+    await syncInitialThreadState(state);
+
+    expect(state.fallbackStatus).toEqual(fallbackStatus);
+  });
+
+  it('restores a durable pending pack hop into session state', async () => {
+    const pending = {
+      fromPackId: 'anthropic',
+      toPackId: 'openai',
+      toModelId: 'openai/gpt-5.6-sol',
+      reason: 'pool-exhausted',
+      at: '2026-09-14T20:00:00.000Z',
+    };
+    const exhaustedRouting = {
+      anthropic: { 'anthropic/claude-fable-5': ['anthropic:account-a'] },
+    };
+    const stateSet = vi.fn(async () => {});
+    const state = {
+      session: {
+        state: { set: stateSet },
+        thread: {
+          getId: vi.fn(() => 'thread-1'),
+          list: vi.fn().mockResolvedValue([
+            {
+              id: 'thread-1',
+              title: 'Pending fallback',
+              metadata: {
+                mastracodePendingPackFallback: pending,
+                mastracodeAccountRoutingExhausted: exhaustedRouting,
+              },
+            },
+          ]),
+        },
+      },
+      goalManager: {
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
+    } as unknown as TUIState;
+
+    await syncInitialThreadState(state);
+
+    // A14: the persisted exhausted-route map is no longer restored — a stale
+    // mark must not come back as routing state. The durable pending hop is.
+    expect(stateSet).toHaveBeenCalledWith({
+      mastracodePendingPackFallback: pending,
+    });
+  });
+
+  it('clears stale pending fallback state when the target thread has no durable marker', async () => {
+    const stateSet = vi.fn(async () => {});
+    const state = {
+      session: {
+        state: {
+          get: () => ({ mastracodePendingPackFallback: { fromPackId: 'anthropic', toPackId: 'openai' } }),
+          set: stateSet,
+        },
+        thread: {
+          getId: vi.fn(() => 'thread-2'),
+          list: vi.fn().mockResolvedValue([{ id: 'thread-2', title: 'Other thread', metadata: {} }]),
+        },
+      },
+      goalManager: {
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
+    } as unknown as TUIState;
+
+    await syncInitialThreadState(state);
+
+    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingPackFallback: null });
+  });
+
+  it('does not apply hydration when the active thread changes during the thread lookup', async () => {
+    let currentThreadId = 'thread-1';
+    let resolveThreads!: (threads: Array<{ id: string; title: string; metadata: Record<string, unknown> }>) => void;
+    const threads = new Promise<Array<{ id: string; title: string; metadata: Record<string, unknown> }>>(resolve => {
+      resolveThreads = resolve;
+    });
+    const stateSet = vi.fn(async () => {});
+    const state = {
+      session: {
+        state: { get: () => ({}), set: stateSet },
+        thread: {
+          getId: vi.fn(() => currentThreadId),
+          list: vi.fn(() => threads),
+        },
+      },
+      goalManager: {
+        loadFromThread: vi.fn(),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
+      currentThreadTitle: 'Current thread',
+      fallbackStatus: { usingPack: 'OpenAI', failedPack: 'Anthropic' },
+    } as unknown as TUIState;
+
+    const hydration = syncInitialThreadState(state);
+    currentThreadId = 'thread-2';
+    resolveThreads([
+      {
+        id: 'thread-1',
+        title: 'Stale thread',
+        metadata: { mastracodeFallbackStatus: { usingPack: 'Anthropic', failedPack: 'Kimi' } },
+      },
+    ]);
+    await hydration;
+
+    expect(state.currentThreadTitle).toBe('Current thread');
+    expect(state.fallbackStatus).toEqual({ usingPack: 'OpenAI', failedPack: 'Anthropic' });
+    expect(stateSet).not.toHaveBeenCalled();
+    expect(state.goalManager.loadFromThread).not.toHaveBeenCalled();
+  });
+
   it('does not re-hydrate from legacy metadata when the durable objective load succeeds', async () => {
     const persistedGoal = {
       id: 'goal-1',
@@ -991,6 +1135,93 @@ describe('syncInitialThreadState', () => {
 
     expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
     expect(state.goalManager.loadFromThreadMetadata).not.toHaveBeenCalled();
+  });
+});
+
+describe('background completion queue', () => {
+  it.each([undefined, false])('does not refresh background activity when enabled is %s', backgroundToolsEnabled => {
+    const setActivities = vi.fn();
+    const getActivities = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      options: { backgroundToolsEnabled },
+      globalBackgroundNotice: { setActivities },
+    };
+    tui.getCurrentThreadBackgroundActivities = getActivities;
+
+    tui.refreshBackgroundActivity();
+
+    expect(getActivities).not.toHaveBeenCalled();
+    expect(setActivities).not.toHaveBeenCalled();
+  });
+
+  beforeEach(() => {
+    mocks.showError.mockReset();
+  });
+
+  it('continues processing completions after a render failure', async () => {
+    const refreshBackgroundActivity = vi.fn().mockImplementationOnce(() => {
+      throw new Error('render failed');
+    });
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = { backgroundActivities: new Map() };
+    tui.backgroundNoticeQueue = Promise.resolve();
+    tui.refreshBackgroundActivity = refreshBackgroundActivity;
+
+    tui.handleBackgroundCompletion({
+      taskId: 'task-1',
+      originToolCallId: 'call-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolName: 'view',
+      status: 'completed',
+    });
+    tui.handleBackgroundCompletion({
+      taskId: 'task-2',
+      originToolCallId: 'call-2',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolName: 'search_content',
+      status: 'completed',
+    });
+    await tui.backgroundNoticeQueue;
+
+    expect(refreshBackgroundActivity).toHaveBeenCalledTimes(2);
+    expect(tui.state.backgroundActivities.get('task-2')?.status).toBe('completed');
+    expect(mocks.showError).toHaveBeenCalledWith(tui.state, 'render failed');
+  });
+});
+
+describe('background activity cancellation', () => {
+  it('reports cancellation failures and closes the activity overlay', async () => {
+    const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'));
+    const hideOverlay = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      controller: { getMastra: () => ({ backgroundTaskManager: { cancel } }) },
+      ui: { hideOverlay },
+    };
+
+    await tui.abortBackgroundActivity({ taskId: 'task-1' });
+
+    expect(cancel).toHaveBeenCalledWith('task-1');
+    expect(mocks.showError).toHaveBeenCalledWith(tui.state, 'cancel failed');
+    expect(hideOverlay).toHaveBeenCalledOnce();
+  });
+
+  it('closes the activity overlay when no background task manager exists', async () => {
+    mocks.showError.mockClear();
+    const hideOverlay = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      controller: { getMastra: () => undefined },
+      ui: { hideOverlay },
+    };
+
+    await tui.abortBackgroundActivity({ taskId: 'task-1' });
+
+    expect(mocks.showError).not.toHaveBeenCalled();
+    expect(hideOverlay).toHaveBeenCalledOnce();
   });
 });
 

@@ -1,5 +1,6 @@
 import { ToolCallMono } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
@@ -40,6 +41,9 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   status?: ToolCallStatus;
   /** Error message when the delegation failed (tool part state `output-error`). */
   errorText?: string;
+  /** When set, shows a control that loads older messages from the sub-agent thread. */
+  onLoadPrevious?: () => void;
+  isLoadingPrevious?: boolean;
 }
 
 export const AgentBadge = ({
@@ -56,16 +60,14 @@ export const AgentBadge = ({
   keepOpenForStreamingChildMessages = false,
   status = 'idle',
   errorText,
+  onLoadPrevious,
+  isLoadingPrevious = false,
 }: AgentBadgeProps) => {
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
-  const parentRequireApprovalMetadata =
-    metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate'
-      ? metadata?.requireApprovalMetadata
-      : undefined;
   const parentSuspendedTools =
     metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate'
       ? metadata?.suspendedTools
@@ -85,7 +87,7 @@ export const AgentBadge = ({
       return message.toolOutput !== undefined;
     });
 
-  let toolCalled = allChildToolsComplete;
+  let toolCalled = isComplete && allChildToolsComplete;
 
   if (isNetwork) {
     toolCalled = toolCalledProp ?? allChildToolsComplete;
@@ -96,7 +98,7 @@ export const AgentBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <ToolCallMono copyText={suspendPayload} className="text-icon3">
+      <ToolCallMono copyText={suspendPayload} className="text-muted-foreground">
         {suspendPayload}
       </ToolCallMono>
     ) : (
@@ -121,6 +123,18 @@ export const AgentBadge = ({
         ) : null
       }
     >
+      {onLoadPrevious && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onLoadPrevious}
+          disabled={isLoadingPrevious}
+          data-testid="agent-badge-load-previous"
+        >
+          {isLoadingPrevious ? 'Loading earlier messages…' : 'Load earlier messages'}
+        </Button>
+      )}
+
       {messages.map((message, index) => {
         if (message.type === 'text') {
           return <Markdown key={index}>{message.content}</Markdown>;
@@ -144,7 +158,8 @@ export const AgentBadge = ({
               toolCallId={message.toolCallId}
               metadata={{
                 mode: 'stream',
-                requireApprovalMetadata: parentRequireApprovalMetadata,
+                // Delegation approvals belong to this badge, not its child tool cards.
+                requireApprovalMetadata: isNetwork ? metadata?.requireApprovalMetadata : undefined,
                 suspendedTools: parentSuspendedTools,
               }}
             />

@@ -1,4 +1,4 @@
-import { createHttpLoggingTestSuite } from '@internal/server-adapter-test-utils';
+import { createHttpLoggingTestSuite } from '@mastra/server-adapters-test-suite';
 import { Hono } from 'hono';
 import { describe } from 'vitest';
 import { MastraServer } from '../index';

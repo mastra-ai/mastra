@@ -605,6 +605,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     if (so.schema) {
       serializedStructuredOutput = {
         jsonPromptInjection: so.jsonPromptInjection,
+        // `instructions` means two different things depending on `model`: structuring-agent
+        // instructions when a separate structuring pass runs, injected prompt text when it
+        // does not. The durable path has no structuring pass (`structuringModelConfig` is
+        // never populated, so `llm-execution.ts` always takes the direct branch), so carrying
+        // the field when `model` is set would inject structuring-agent prose as the model's
+        // only output guidance. Withhold it there and let the generated schema instruction stand.
+        instructions: so.model ? undefined : so.instructions,
         useAgent: so.useAgent,
       };
       // Convert Zod schema to JSON Schema if possible

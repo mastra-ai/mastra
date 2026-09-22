@@ -35,9 +35,9 @@ export function SettingsPageLayout({ children }: { children: ReactNode }) {
 
   if (!factoryId) {
     return (
-      <main className="bg-surface2 flex min-h-dvh flex-col">
+      <main className="bg-background flex min-h-dvh flex-col">
         {isMobile && (
-          <div className="bg-surface2 sticky top-0 z-2 shrink-0 px-3 py-2">
+          <div className="bg-background sticky top-0 z-2 shrink-0 px-3 py-2">
             <SettingsHeader autoFocus placement="mobile" />
           </div>
         )}

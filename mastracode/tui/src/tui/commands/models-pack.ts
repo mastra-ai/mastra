@@ -1,10 +1,15 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
+import { PACK_FALLBACK_STATE_KEY, providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
-import { getAvailableModePacks, getBuiltinModePack } from '@mastra/code-sdk/onboarding/packs';
+import {
+  getAvailableModePacks,
+  getBuiltinModePack,
+  resolveModePackFallbackChain,
+} from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
@@ -13,6 +18,7 @@ import {
   saveSettings,
   stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import chalk from 'chalk';
@@ -37,13 +43,18 @@ const SHARE_PREFIX = 'mastra-pack:';
 
 interface SharedPackPayload {
   name: string;
-  models: { build: string; plan: string; fast: string };
+  models: { build: string; plan: string; fast: string; memory?: string };
 }
 
 export function serializePack(pack: ModePack): string {
   const payload: SharedPackPayload = {
     name: pack.name,
-    models: { build: pack.models.build, plan: pack.models.plan, fast: pack.models.fast },
+    models: {
+      build: pack.models.build,
+      plan: pack.models.plan,
+      fast: pack.models.fast,
+      ...(pack.models.memory ? { memory: pack.models.memory } : {}),
+    },
   };
   return SHARE_PREFIX + Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64');
 }
@@ -64,13 +75,14 @@ export function deserializePack(input: string): ModePack | null {
     const build = typeof models.build === 'string' ? models.build : '';
     const plan = typeof models.plan === 'string' ? models.plan : '';
     const fast = typeof models.fast === 'string' ? models.fast : '';
+    const memory = typeof models.memory === 'string' && models.memory.trim() ? models.memory.trim() : undefined;
     if (!build || !plan || !fast) return null;
 
     return {
       id: `custom:${name}`,
       name,
       description: 'Imported custom pack',
-      models: { build, plan, fast },
+      models: { build, plan, fast, ...(memory ? { memory } : {}) },
     };
   } catch {
     return null;
@@ -140,14 +152,87 @@ async function askCustomPackName(ctx: SlashCommandContext, defaultName?: string)
   });
 }
 
+/** Detail line fragment: dim lead-in with the chain itself highlighted. */
+function fallbackChainLine(leadIn: string, chain: string): string {
+  return `${theme.fg('dim', leadIn)}${theme.fg('textHighlight', chain)}`;
+}
+
+/** Detail line for the "Set fallback…" row of a pack's action menu. */
+function fallbackActionDetail(packs: ModePack[], packId: string): string {
+  const chain = formatPackFallbackChain(loadSettings(), packs, packId);
+  return chain
+    ? fallbackChainLine('  When every account is unavailable, hop to: ', chain)
+    : theme.fg('dim', '  No fallback — when this pack is unavailable the error surfaces.');
+}
+
+type AccountLabelLookup = (providerId: string) => Array<{ id: string; label: string }>;
+
+function packRoutingEntries(
+  pack: ModePack,
+): Array<{ modelId: string; modes: string[]; providerId: string | undefined }> {
+  const byModel = new Map<string, string[]>();
+  // OM is excluded: OM observer/reflector agents bypass the main-agent
+  // processors, so a per-OM-model account preference would never be consumed.
+  for (const mode of ['plan', 'build', 'fast'] as const) {
+    const modelId = pack.models[mode];
+    if (!modelId) continue;
+    const modes = byModel.get(modelId) ?? [];
+    modes.push(mode);
+    byModel.set(modelId, modes);
+  }
+  return [...byModel].map(([modelId, modes]) => ({ modelId, modes, providerId: providerFromModelId(modelId) }));
+}
+
+export function formatPackAccountRoutingSummary(
+  settings: GlobalSettings,
+  pack: ModePack,
+  lookupAccounts: AccountLabelLookup = () => [],
+): string {
+  const preferences = settings.models.packAccountPreferences?.[pack.id] ?? {};
+  return packRoutingEntries(pack)
+    .map(({ modelId, modes, providerId }) => {
+      const preferredId = preferences[modelId];
+      // A12: a selected account is exclusive to the route; `Automatic` is the
+      // mode that rotates through accounts on failure.
+      const label = preferredId
+        ? `${(providerId ? lookupAccounts(providerId).find(account => account.id === preferredId)?.label : undefined) ?? preferredId} (only)`
+        : 'Automatic (rotate)';
+      return `  ${modes.join('/')} → ${label}`;
+    })
+    .join('\n');
+}
+
+function accountRoutingActionDetail(ctx: SlashCommandContext, pack: ModePack): string {
+  const summary = formatPackAccountRoutingSummary(
+    loadSettings(),
+    pack,
+    providerId => ctx.authStorage?.listAccounts(providerId) ?? [],
+  );
+  return `${theme.fg('dim', '  Subscription per resolved model:')}\n${theme.fg('textHighlight', summary)}`;
+}
+
+/** "Activate" detail: the pack's model lines plus its fallback chain when one is set. */
+export function activateActionDetail(
+  baseDetail: string,
+  settings: GlobalSettings,
+  packs: ModePack[],
+  packId: string,
+): string {
+  const chain = formatPackFallbackChain(settings, packs, packId);
+  return baseDetail + (chain ? `\n${fallbackChainLine('  fallback → ', chain)}` : '');
+}
+
 async function askCustomPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
-): Promise<'activate' | 'edit' | 'share' | 'delete' | null> {
+  packs: ModePack[],
+): Promise<'activate' | 'routing' | 'fallback' | 'edit' | 'share' | 'delete' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use this pack as-is' },
     { id: 'edit', label: 'Edit', description: 'Update this pack' },
     { id: 'share', label: 'Share', description: 'Copy to clipboard' },
+    { id: 'routing', label: 'Set subscription routing…', description: 'Pin each model to one account, or rotate' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
     { id: 'delete', label: 'Delete', description: 'Remove this custom pack' },
   ] as const;
 
@@ -164,8 +249,10 @@ async function askCustomPackAction(
     const selectList = new SelectList(items, items.length, getSelectListTheme());
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
-      activate: getPackDetail(pack),
-      edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast).'),
+      activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
+      routing: accountRoutingActionDetail(ctx, pack),
+      fallback: fallbackActionDetail(packs, pack.id),
+      edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast, memory).'),
       share: theme.fg('dim', '  Copy shareable config to clipboard. Paste it to import elsewhere.'),
       delete: theme.fg('error', '  Permanently removes this custom pack from settings.'),
     };
@@ -182,7 +269,7 @@ async function askCustomPackAction(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'edit' | 'share' | 'delete');
+      resolve(item.value as 'activate' | 'routing' | 'fallback' | 'edit' | 'share' | 'delete');
     };
 
     selectList.onCancel = () => {
@@ -203,14 +290,80 @@ async function askCustomPackAction(
   });
 }
 
+/**
+ * Action menu for an unmodified built-in pack — the "view" of the pack you
+ * land on when picking it from the /models list.
+ */
+async function askBuiltinPackAction(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  packs: ModePack[],
+): Promise<'activate' | 'routing' | 'fallback' | null> {
+  const actions = [
+    { id: 'activate', label: 'Activate', description: 'Switch to this pack' },
+    { id: 'routing', label: 'Set subscription routing…', description: 'Pin each model to one account, or rotate' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
+  ] as const;
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Pack: ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+
+    const items: SelectItem[] = actions.map(action => ({
+      value: action.id,
+      label: `  ${action.label}  ${theme.fg('dim', action.description)}`,
+    }));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const detailText = new Text('', 0, 0);
+    const detailById: Record<string, string> = {
+      activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
+      routing: accountRoutingActionDetail(ctx, pack),
+      fallback: fallbackActionDetail(packs, pack.id),
+    };
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    selectList.onSelectionChange = item => {
+      detailText.setText(detailById[item.value] ?? '');
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value as 'activate' | 'routing' | 'fallback');
+    };
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(null);
+    };
+
+    detailText.setText(detailById.activate!);
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(detailText);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
 async function askModifiedBuiltinPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
   builtinPack: ModePack,
-): Promise<'activate' | 'reset' | null> {
+  packs: ModePack[],
+): Promise<'activate' | 'reset' | 'routing' | 'fallback' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use the modified models' },
     { id: 'reset', label: 'Reset to built-in models', description: 'Remove all overrides' },
+    { id: 'routing', label: 'Set subscription routing…', description: 'Pin each model to one account, or rotate' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
   ] as const;
 
   return new Promise(resolve => {
@@ -225,8 +378,15 @@ async function askModifiedBuiltinPackAction(
     const selectList = new SelectList(items, items.length, getSelectListTheme());
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
-      activate: `${theme.fg('warning', '  This built-in pack has model overrides.')}\n${getModifiedPackDetail(pack, builtinPack)}`,
+      activate: activateActionDetail(
+        `${theme.fg('warning', '  This built-in pack has model overrides.')}\n${getModifiedPackDetail(pack, builtinPack)}`,
+        loadSettings(),
+        packs,
+        pack.id,
+      ),
       reset: `${theme.fg('dim', '  Restore the original built-in models:')}\n${getPackDetail(builtinPack)}`,
+      routing: accountRoutingActionDetail(ctx, pack),
+      fallback: fallbackActionDetail(packs, pack.id),
     };
 
     const closeOverlay = () => {
@@ -240,7 +400,7 @@ async function askModifiedBuiltinPackAction(
     };
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'reset');
+      resolve(item.value as 'activate' | 'reset' | 'routing' | 'fallback');
     };
     selectList.onCancel = () => {
       closeOverlay();
@@ -263,21 +423,80 @@ async function askModifiedBuiltinPackAction(
 async function askCustomPackEditTarget(
   ctx: SlashCommandContext,
   pack: ModePack,
-): Promise<'rename' | 'plan' | 'build' | 'fast' | 'save' | null> {
+): Promise<'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-clear' | 'save' | null> {
   return new Promise(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', `Edit custom pack: ${pack.name}`)), 0, 0));
     container.addChild(new Spacer(1));
 
+    const items: SelectItem[] = [
+      { value: 'rename', label: `  Rename → ${theme.fg('text', pack.name)}` },
+      { value: 'plan', label: `  ${chalk.hex(mastra.purple)('plan')} → ${theme.fg('text', pack.models.plan)}` },
+      { value: 'build', label: `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}` },
+      { value: 'fast', label: `  ${chalk.hex(mastra.orange)('fast')} → ${theme.fg('text', pack.models.fast)}` },
+      {
+        value: 'memory',
+        label: `  ${chalk.hex(mastra.pink)('memory')} → ${
+          pack.models.memory
+            ? theme.fg('text', pack.models.memory)
+            : theme.fg('dim', 'not set (uses standalone OM config)')
+        }`,
+      },
+    ];
+    if (pack.models.memory) {
+      items.push({ value: 'memory-clear', label: `  ${theme.fg('warning', 'Clear memory model')}` });
+    }
+    items.push({ value: 'save', label: `  ${theme.fg('success', 'Save')}` });
+
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-clear' | 'save');
+    };
+
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(null);
+    };
+
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' | 'skip' | null> {
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', 'Observational memory model (optional)')), 0, 0));
+    container.addChild(
+      new Text(
+        theme.fg(
+          'dim',
+          'Drives the OM observer/reflector for this pack. Skipped packs fall back to your standalone OM configuration.',
+        ),
+        0,
+        0,
+      ),
+    );
+    container.addChild(new Spacer(1));
+
     const selectList = new SelectList(
       [
-        { value: 'rename', label: `  Rename → ${theme.fg('text', pack.name)}` },
-        { value: 'plan', label: `  ${chalk.hex(mastra.purple)('plan')} → ${theme.fg('text', pack.models.plan)}` },
-        { value: 'build', label: `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}` },
-        { value: 'fast', label: `  ${chalk.hex(mastra.orange)('fast')} → ${theme.fg('text', pack.models.fast)}` },
-        { value: 'save', label: `  ${theme.fg('success', 'Save')}` },
+        { value: 'choose', label: `  ${chalk.hex(mastra.pink)('Choose model…')}` },
+        { value: 'skip', label: `  ${theme.fg('dim', 'Skip — use standalone OM config')}` },
       ],
-      5,
+      2,
       getSelectListTheme(),
     );
 
@@ -288,7 +507,7 @@ async function askCustomPackEditTarget(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'save');
+      resolve(item.value as 'choose' | 'skip');
     };
 
     selectList.onCancel = () => {
@@ -326,6 +545,7 @@ async function runCustomFlow(
     build: existing.build ?? '',
     plan: existing.plan ?? '',
     fast: existing.fast ?? '',
+    memory: existing.memory ?? '',
   };
 
   for (const mode of modes) {
@@ -339,11 +559,30 @@ async function runCustomFlow(
     models[mode.id] = modelId;
   }
 
+  const omChoice = await askOptionalOmChoice(ctx);
+  if (omChoice === null) return null;
+  if (omChoice === 'choose') {
+    const memoryModelId = await selectModel(
+      ctx,
+      'Select observational memory model',
+      mastra.pink,
+      models.memory || undefined,
+    );
+    if (!memoryModelId) return null;
+    models.memory = memoryModelId;
+  }
+
   return {
     id: `custom:${name}`,
     name,
     description: 'Saved custom pack',
-    models: models as ModePack['models'],
+    // The mode loop above either returns null or assigns each mode model.
+    models: {
+      build: models.build!,
+      plan: models.plan!,
+      fast: models.fast!,
+      ...(models.memory ? { memory: models.memory } : {}),
+    },
   };
 }
 
@@ -372,6 +611,25 @@ async function runCustomPackEditFlow(
       continue;
     }
 
+    if (editTarget === 'memory-clear') {
+      const models = { ...workingPack.models };
+      delete models.memory;
+      workingPack = { ...workingPack, models };
+      continue;
+    }
+
+    if (editTarget === 'memory') {
+      const memoryModelId = await selectModel(
+        ctx,
+        'Select observational memory model',
+        mastra.pink,
+        workingPack.models.memory,
+      );
+      if (!memoryModelId) continue;
+      workingPack = { ...workingPack, models: { ...workingPack.models, memory: memoryModelId } };
+      continue;
+    }
+
     const modeColors: Record<'plan' | 'build' | 'fast', string> = {
       plan: mastra.purple,
       build: mastra.green,
@@ -396,8 +654,42 @@ async function runCustomPackEditFlow(
   }
 }
 
+/**
+ * Set (or clear, with null) a pack's fallback pack. Values come from the
+ * /models picker, which only lists known packs — write-time validation is the
+ * picker itself. Load-time dangling tolerance lives in settings parsing.
+ */
+export function setPackFallback(settings: GlobalSettings, packId: string, fallbackId: string | null): void {
+  // `??=` tolerates hand-built settings fixtures and pre-feature in-memory
+  // objects; settings loaded from disk always carry the default {}.
+  const fallbacks = (settings.models.packFallbacks ??= {});
+  if (fallbackId === null) {
+    delete fallbacks[packId];
+  } else {
+    fallbacks[packId] = fallbackId;
+  }
+}
+
+/** Picker candidates for a pack's fallback: every pack except the pack itself (and the "New Custom" pseudo-row). */
+export function fallbackPackCandidates(packs: ModePack[], packId: string): ModePack[] {
+  return packs.filter(p => p.id !== packId && p.id !== 'custom');
+}
+
 export function resetBuiltinPackOverrides(settings: GlobalSettings, packId: string): void {
   delete settings.models.modePackOverrides?.[packId];
+  const builtinPack = getBuiltinModePack(packId);
+  const accountPreferences = settings.models.packAccountPreferences?.[packId];
+  if (builtinPack && accountPreferences) {
+    const modelIds = new Set(Object.values(builtinPack.models));
+    const nextPreferences = Object.fromEntries(
+      Object.entries(accountPreferences).filter(([modelId]) => modelIds.has(modelId)),
+    );
+    if (Object.keys(nextPreferences).length > 0) {
+      settings.models.packAccountPreferences[packId] = nextPreferences;
+    } else {
+      delete settings.models.packAccountPreferences[packId];
+    }
+  }
   if (settings.models.activeModelPackId === packId) {
     settings.models.modeDefaults = {};
   }
@@ -413,7 +705,18 @@ export function upsertCustomPackInSettings(
   if (!pack.id.startsWith('custom:')) return;
 
   if (previousPackId && previousPackId.startsWith('custom:') && previousPackId !== pack.id) {
+    const migratedFallbacks = Object.fromEntries(
+      Object.entries(settings.models.packFallbacks ?? {}).map(([sourcePackId, targetPackId]) => [
+        sourcePackId === previousPackId ? pack.id : sourcePackId,
+        targetPackId === previousPackId ? pack.id : targetPackId,
+      ]),
+    );
+    const previousAccountPreferences = settings.models.packAccountPreferences?.[previousPackId];
     removeCustomPackFromSettings(settings, previousPackId);
+    settings.models.packFallbacks = migratedFallbacks;
+    if (previousAccountPreferences) {
+      settings.models.packAccountPreferences[pack.id] = previousAccountPreferences;
+    }
   }
 
   const customName = pack.id.slice('custom:'.length);
@@ -424,6 +727,20 @@ export function upsertCustomPackInSettings(
   } else {
     settings.customModelPacks.push(entry);
   }
+
+  const accountPreferences = settings.models.packAccountPreferences?.[pack.id];
+  if (accountPreferences) {
+    const modelIds = new Set(Object.values(modeDefaults));
+    const nextPreferences = Object.fromEntries(
+      Object.entries(accountPreferences).filter(([modelId]) => modelIds.has(modelId)),
+    );
+    if (Object.keys(nextPreferences).length > 0) {
+      settings.models.packAccountPreferences[pack.id] = nextPreferences;
+    } else {
+      delete settings.models.packAccountPreferences[pack.id];
+    }
+  }
+
   if (setActive) {
     settings.models.activeModelPackId = pack.id;
     settings.models.modeDefaults = modeDefaults;
@@ -457,6 +774,13 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
   }
 
   await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
+  await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+  // A manual switch supersedes any queued hop: getDynamicModel prefers the
+  // pending toModelId over the session model, so leaving the marker in place
+  // would override the user's choice until the hop landed.
+  await ctx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+  ctx.state.fallbackStatus = undefined;
+  await ctx.state.session.state.set({ activeModelPackId: pack.id, [PACK_FALLBACK_STATE_KEY]: null });
 
   const s = loadSettings();
   const modeDefaults: Record<string, string> = {};
@@ -464,6 +788,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     const modelId = (pack.models as Record<string, string>)[mode.id];
     if (modelId) modeDefaults[mode.id] = modelId;
   }
+  if (pack.models.memory) modeDefaults.memory = pack.models.memory;
 
   if (pack.id.startsWith('custom:')) {
     upsertCustomPackInSettings(s, pack, modeDefaults, previousPackId);
@@ -507,22 +832,34 @@ function getModifiedPackDetail(pack: ModePack, builtinPack: ModePack): string {
       ? theme.fg('warning', `${pack.models[mode]} (overridden)`)
       : theme.fg('text', pack.models[mode]);
 
-  return [
-    `  ${chalk.hex(mastra.purple)('plan')}  → ${modelText('plan')}`,
-    `  ${chalk.hex(mastra.green)('build')} → ${modelText('build')}`,
-    `  ${chalk.hex(mastra.orange)('fast')}  → ${modelText('fast')}`,
-  ].join('\n');
+  const lines = [
+    `  ${chalk.hex(mastra.purple)('plan')}   → ${modelText('plan')}`,
+    `  ${chalk.hex(mastra.green)('build')}  → ${modelText('build')}`,
+    `  ${chalk.hex(mastra.orange)('fast')}   → ${modelText('fast')}`,
+  ];
+  if (pack.models.memory) {
+    const memoryText =
+      pack.models.memory !== builtinPack.models.memory
+        ? theme.fg('warning', `${pack.models.memory} (overridden)`)
+        : theme.fg('text', pack.models.memory);
+    lines.push(`  ${chalk.hex(mastra.pink)('memory')} → ${memoryText}`);
+  }
+  return lines.join('\n');
 }
 
 function getPackDetail(pack: ModePack): string {
   if (pack.id === 'custom') {
     return theme.fg('dim', '  Create a named custom pack and pick a model for each mode.');
   }
-  return [
-    `  ${chalk.hex(mastra.purple)('plan')}  → ${theme.fg('text', pack.models.plan)}`,
-    `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}`,
-    `  ${chalk.hex(mastra.orange)('fast')}  → ${theme.fg('text', pack.models.fast)}`,
-  ].join('\n');
+  const lines = [
+    `  ${chalk.hex(mastra.purple)('plan')}   → ${theme.fg('text', pack.models.plan)}`,
+    `  ${chalk.hex(mastra.green)('build')}  → ${theme.fg('text', pack.models.build)}`,
+    `  ${chalk.hex(mastra.orange)('fast')}   → ${theme.fg('text', pack.models.fast)}`,
+  ];
+  if (pack.models.memory) {
+    lines.push(`  ${chalk.hex(mastra.pink)('memory')} → ${theme.fg('text', pack.models.memory)}`);
+  }
+  return lines.join('\n');
 }
 
 async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<void> {
@@ -538,6 +875,7 @@ async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, pre
     plan: pack.models.plan,
     build: pack.models.build,
     fast: pack.models.fast,
+    ...(pack.models.memory ? { memory: pack.models.memory } : {}),
   };
 
   upsertCustomPackInSettings(settings, pack, modeDefaults, previousPackId, false);
@@ -653,6 +991,273 @@ async function askImportCollision(
   });
 }
 
+/**
+ * Render the fallback chain a pack implies, e.g. "OpenAI → GitHub Copilot".
+ * Returns null when the pack has no fallback. The walk is the SDK's
+ * construction-capped one, so the display matches what a cascade would do.
+ */
+export function formatPackFallbackChain(settings: GlobalSettings, packs: ModePack[], packId: string): string | null {
+  const chain = resolveModePackFallbackChain(settings.models.packFallbacks ?? {}, packId, settings.customModelPacks);
+  if (chain.length < 2) return null;
+  const nameOf = (id: string) => packs.find(p => p.id === id)?.name ?? id;
+  return chain
+    .slice(1)
+    .map(id => nameOf(id))
+    .join(' → ');
+}
+
+/**
+ * Chain preview shown at the bottom of the fallback picker, recomputed for the
+ * currently highlighted candidate on every cursor move (null = "Clear fallback").
+ * Walks a preview copy of settings so hovering never mutates the real ones.
+ */
+function fallbackChainPreviewParts(
+  settings: GlobalSettings,
+  packs: ModePack[],
+  pack: ModePack,
+  fallbackId: string | null,
+): { leadIn: string; chain: string | null } {
+  const preview: GlobalSettings = {
+    ...settings,
+    models: { ...settings.models, packFallbacks: { ...settings.models.packFallbacks } },
+  };
+  setPackFallback(preview, pack.id, fallbackId);
+  const chain = formatPackFallbackChain(preview, packs, pack.id);
+  return {
+    leadIn: chain
+      ? `When ${pack.name} is unavailable: ${pack.name} → `
+      : `No fallback — when ${pack.name} is unavailable the error surfaces.`,
+    chain,
+  };
+}
+
+export function formatFallbackChainPreview(
+  settings: GlobalSettings,
+  packs: ModePack[],
+  pack: ModePack,
+  fallbackId: string | null,
+): string {
+  const { leadIn, chain } = fallbackChainPreviewParts(settings, packs, pack, fallbackId);
+  return chain ? `${leadIn}${chain}` : leadIn;
+}
+
+/** Picker preview line: dim lead-in with the chain highlighted so it stands out. */
+export function formatFallbackChainPreviewStyled(
+  settings: GlobalSettings,
+  packs: ModePack[],
+  pack: ModePack,
+  fallbackId: string | null,
+): string {
+  const { leadIn, chain } = fallbackChainPreviewParts(settings, packs, pack, fallbackId);
+  return `  ${theme.fg('dim', leadIn)}${chain ? theme.fg('textHighlight', chain) : ''}`;
+}
+
+async function askFallbackTarget(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  packs: ModePack[],
+): Promise<string | null | undefined> {
+  const settings = loadSettings();
+  const current = settings.models.packFallbacks[pack.id];
+  const candidates = fallbackPackCandidates(packs, pack.id);
+
+  const items: SelectItem[] = candidates.map(p => ({
+    value: p.id,
+    label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === current ? theme.fg('accent', ' (current)') : ''}`,
+  }));
+  if (current) {
+    items.unshift({
+      value: '__clear__',
+      label: `  Clear fallback  ${theme.fg('dim', 'Stop hopping away from this pack')}`,
+    });
+  }
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Fallback for ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const detailText = new Text('', 0, 0);
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    const chainPreview = (fallbackId: string | null): string =>
+      formatFallbackChainPreviewStyled(settings, packs, pack, fallbackId);
+
+    selectList.onSelectionChange = item => {
+      detailText.setText(chainPreview(item.value === '__clear__' ? null : item.value));
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value === '__clear__' ? null : item.value);
+    };
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(undefined);
+    };
+
+    detailText.setText(chainPreview(current ?? null));
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(detailText);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function runSetFallbackForPack(ctx: SlashCommandContext, pack: ModePack, packs: ModePack[]): Promise<void> {
+  const fallbackId = await askFallbackTarget(ctx, pack, packs);
+  if (fallbackId === undefined) return;
+
+  const next = loadSettings();
+  setPackFallback(next, pack.id, fallbackId);
+  saveSettings(next);
+  const fallbackName = fallbackId ? (packs.find(p => p.id === fallbackId)?.name ?? fallbackId) : null;
+  ctx.showInfo(fallbackName ? `Fallback for ${pack.name}: ${fallbackName}` : `Cleared the fallback for ${pack.name}`);
+}
+
+async function askRoutingModel(ctx: SlashCommandContext, pack: ModePack): Promise<string | undefined> {
+  const settings = loadSettings();
+  const preferences = settings.models.packAccountPreferences?.[pack.id] ?? {};
+  const entries = packRoutingEntries(pack);
+  const items: SelectItem[] = entries.map(({ modelId, modes, providerId }) => {
+    const preferredId = preferences[modelId];
+    const account = preferredId
+      ? ctx.authStorage?.listAccounts(providerId ?? '').find(candidate => candidate.id === preferredId)
+      : undefined;
+    return {
+      value: modelId,
+      label: `  ${modes.join('/')}  ${theme.fg('dim', modelId)}  ${theme.fg(preferredId ? 'textHighlight' : 'dim', preferredId ? `${account?.label ?? preferredId} (only)` : 'Automatic')}`,
+    };
+  });
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Subscription routing: ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    selectList.onSelect = item => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+      resolve(item.value);
+    };
+    selectList.onCancel = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+      resolve(undefined);
+    };
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc back'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = data => selectList.handleInput(data);
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function askPreferredAccount(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  modelId: string,
+): Promise<string | null | undefined> {
+  const providerId = providerFromModelId(modelId);
+  const accounts = providerId ? (ctx.authStorage?.listAccounts(providerId) ?? []) : [];
+  const current = loadSettings().models.packAccountPreferences?.[pack.id]?.[modelId];
+  const items: SelectItem[] = [
+    {
+      value: '__automatic__',
+      label: `  Automatic  ${theme.fg('dim', 'Rotate through accounts on failure')}${!current ? theme.fg('accent', ' (current)') : ''}`,
+    },
+    ...accounts.map(account => ({
+      value: account.id,
+      label: `  ${account.label}${account.active ? theme.fg('success', ' (active)') : ''}${account.id === current ? theme.fg('accent', ' (selected)') : ''}`,
+    })),
+  ];
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Subscription for ${modelId}`)), 0, 0));
+    container.addChild(new Spacer(1));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const preview = new Text('', 0, 0);
+    const updatePreview = (selectedId: string) => {
+      const preferred = selectedId === '__automatic__' ? null : selectedId;
+      const preferredAccount = preferred ? accounts.find(account => account.id === preferred) : undefined;
+      if (preferredAccount) {
+        // A12: the selected account is used exclusively. On failure the pack's
+        // fallback chain takes over — other subscriptions are never touched,
+        // so a heavy model cannot drain a second subscription's quota.
+        preview.setText(
+          `${theme.fg('dim', '  Uses only: ')}${theme.fg('textHighlight', preferredAccount.label)}${theme.fg('dim', ' — on failure the pack fallback chain is used, not another account.')}`,
+        );
+      } else {
+        const labels = accounts.map(account => `${account.label}${account.active ? ' (active)' : ''}`);
+        preview.setText(
+          labels.length > 0
+            ? `${theme.fg('dim', '  Rotation order: ')}${theme.fg('textHighlight', labels.join(' → '))}`
+            : theme.fg('dim', '  No OAuth subscriptions available for this model.'),
+        );
+      }
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelectionChange = item => updatePreview(item.value);
+    selectList.onSelect = item => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+      resolve(item.value === '__automatic__' ? null : item.value);
+    };
+    selectList.onCancel = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+      resolve(undefined);
+    };
+    updatePreview(current ?? '__automatic__');
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(preview);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc back'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = data => selectList.handleInput(data);
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function runSetSubscriptionRouting(ctx: SlashCommandContext, pack: ModePack): Promise<void> {
+  while (true) {
+    const modelId = await askRoutingModel(ctx, pack);
+    if (!modelId) return;
+    const accountId = await askPreferredAccount(ctx, pack, modelId);
+    if (accountId === undefined) continue;
+
+    const settings = loadSettings();
+    const packPreferences = settings.models.packAccountPreferences[pack.id] ?? {};
+    if (accountId === null) {
+      delete packPreferences[modelId];
+    } else {
+      packPreferences[modelId] = accountId;
+    }
+    if (Object.keys(packPreferences).length > 0) {
+      settings.models.packAccountPreferences[pack.id] = packPreferences;
+    } else {
+      delete settings.models.packAccountPreferences[pack.id];
+    }
+    saveSettings(settings);
+    const providerId = providerFromModelId(modelId);
+    const accountLabel = accountId
+      ? (ctx.authStorage?.listAccounts(providerId ?? '').find(account => account.id === accountId)?.label ?? accountId)
+      : 'Automatic';
+    ctx.showInfo(`${pack.name} · ${modelId}: ${accountLabel}`);
+  }
+}
+
 export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise<void> {
   if (ctx.state.pendingNewThread) {
     await ctx.state.session.thread.create();
@@ -740,7 +1345,17 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
       }
       const pack = packs.find(p => p.id === packId);
       if (!pack) return;
-      detailText.setText(getPackDetail(pack));
+      const fallbackChain = formatPackFallbackChain(settings, packs, packId);
+      const routingSummary = settings.models.packAccountPreferences?.[packId]
+        ? formatPackAccountRoutingSummary(settings, pack, providerId => ctx.authStorage?.listAccounts(providerId) ?? [])
+        : null;
+      detailText.setText(
+        getPackDetail(pack) +
+          (routingSummary
+            ? `\n${theme.fg('dim', '  subscription routing:')}\n${theme.fg('textHighlight', routingSummary)}`
+            : '') +
+          (fallbackChain ? `\n${fallbackChainLine('  fallback → ', fallbackChain)}` : ''),
+      );
       ctx.state.ui.requestRender();
     };
 
@@ -813,32 +1428,23 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
       if (pack.id === 'custom') {
         pack = await runCustomFlow(ctx);
-      } else if (modifiedPackIds.has(pack.id)) {
-        const builtinPack = getBuiltinModePack(pack.id);
-        if (!builtinPack) {
-          resolve();
-          return;
-        }
-        const action = await askModifiedBuiltinPackAction(ctx, pack, builtinPack);
-        if (action === null) {
-          await handleModelsPackCommand(ctx);
-          resolve();
-          return;
-        }
-        if (action === 'reset') {
-          const nextSettings = loadSettings();
-          resetBuiltinPackOverrides(nextSettings, pack.id);
-          saveSettings(nextSettings);
-          pack = builtinPack;
-          resetBuiltinPack = true;
-        }
       } else if (pack.id.startsWith('custom:')) {
         while (true) {
-          const action = await askCustomPackAction(ctx, pack);
+          const action = await askCustomPackAction(ctx, pack, packs);
           if (action === null) {
             await handleModelsPackCommand(ctx);
             resolve();
             return;
+          }
+
+          if (action === 'routing') {
+            await runSetSubscriptionRouting(ctx, pack);
+            continue;
+          }
+
+          if (action === 'fallback') {
+            await runSetFallbackForPack(ctx, pack, packs);
+            continue;
           }
 
           if (action === 'delete') {
@@ -867,6 +1473,41 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
           await saveCustomPackEdits(ctx, pack, previousPackId);
           previousPackId = undefined;
           ctx.showInfo(`Updated custom pack: ${pack.name}`);
+        }
+      } else {
+        // Built-in pack: land on the pack's action view. Modified built-ins
+        // also offer a reset; every pack offers fallback configuration.
+        while (true) {
+          const modified = modifiedPackIds.has(pack.id);
+          const builtinPack = modified ? getBuiltinModePack(pack.id) : undefined;
+          if (modified && !builtinPack) {
+            resolve();
+            return;
+          }
+          const action = modified
+            ? await askModifiedBuiltinPackAction(ctx, pack, builtinPack!, packs)
+            : await askBuiltinPackAction(ctx, pack, packs);
+          if (action === null) {
+            await handleModelsPackCommand(ctx);
+            resolve();
+            return;
+          }
+          if (action === 'routing') {
+            await runSetSubscriptionRouting(ctx, pack);
+            continue;
+          }
+          if (action === 'fallback') {
+            await runSetFallbackForPack(ctx, pack, packs);
+            continue;
+          }
+          if (action === 'reset') {
+            const nextSettings = loadSettings();
+            resetBuiltinPackOverrides(nextSettings, pack.id);
+            saveSettings(nextSettings);
+            pack = builtinPack!;
+            resetBuiltinPack = true;
+          }
+          break;
         }
       }
 

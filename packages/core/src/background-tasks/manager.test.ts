@@ -1117,11 +1117,10 @@ describe('BackgroundTaskManager', () => {
       expect(executeFn).toHaveBeenCalledTimes(2);
     });
 
-    it('drops a model-authored sentinel suspendedToolRunId so the framework-persisted id wins on resume', async () => {
-      // Some models emit the literal string "null" for the optional
-      // `suspendedToolRunId` arg on fresh calls. It must be treated as absent:
-      // dropped from the fresh call, and replaced by the suspend payload's
-      // framework-persisted run id on resume (#23739).
+    it('drops a model-authored suspendedToolRunId so the framework-persisted id wins on resume', async () => {
+      // A queued model payload cannot establish delegated identity. The arbitrary
+      // ID must be dropped from the fresh call and replaced by the framework ID
+      // recovered from the task's suspension snapshot on resume (#23811).
       const executeFn = vi.fn(async (args, opts: any) => {
         if (!opts.resumeData) {
           await opts.suspend(
@@ -1133,14 +1132,15 @@ describe('BackgroundTaskManager', () => {
         return {
           approvedBy: (opts.resumeData as { user: string }).user,
           suspendedToolRunId: args.suspendedToolRunId,
+          contextSuspendedToolRunId: opts.suspendedToolRunId,
         };
       });
 
       const { task } = await manager.enqueue(
         {
           toolName: 't',
-          toolCallId: 'cres-sentinel',
-          args: { suspendedToolRunId: 'null' },
+          toolCallId: 'cres-unverified',
+          args: { suspendedToolRunId: 'model-authored-run-id' },
           agentId: 'a1',
           runId: 'r3s',
         },
@@ -1155,8 +1155,13 @@ describe('BackgroundTaskManager', () => {
 
       const completed = await manager.getTask(task.id);
       expect(completed?.status).toBe('completed');
-      expect(completed?.result).toEqual({ approvedBy: 'alice', suspendedToolRunId: 'delegated-run-id' });
+      expect(completed?.result).toEqual({
+        approvedBy: 'alice',
+        suspendedToolRunId: 'delegated-run-id',
+        contextSuspendedToolRunId: 'delegated-run-id',
+      });
       expect(executeFn.mock.calls[1]?.[0]).toMatchObject({ suspendedToolRunId: 'delegated-run-id' });
+      expect(executeFn.mock.calls[1]?.[1]).toMatchObject({ suspendedToolRunId: 'delegated-run-id' });
       expect(executeFn).toHaveBeenCalledTimes(2);
     });
 

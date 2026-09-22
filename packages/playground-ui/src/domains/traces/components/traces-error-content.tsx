@@ -17,8 +17,8 @@ export interface TracesErrorContentProps {
  * Renders the appropriate fallback content for a traces-related query error:
  * `<SessionExpired />` for 401, `<PermissionDenied />` for 403, otherwise `<ErrorState />`.
  *
- * The consumer wraps it in whatever layout they want (NoDataPageLayout for the list page,
- * PageLayout.MainArea for the detail page, etc.) — this component only owns the 3-branch decision.
+ * The consumer wraps it in whatever layout they want (PageLayout for the list page,
+ * a centered div for the detail page, etc.) — this component only owns the 3-branch decision.
  */
 export function TracesErrorContent({ error, resource, errorTitle }: TracesErrorContentProps) {
   if (is401UnauthorizedError(error)) return <SessionExpired />;

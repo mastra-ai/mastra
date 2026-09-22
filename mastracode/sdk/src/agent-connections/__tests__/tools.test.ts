@@ -292,7 +292,24 @@ describe('agent connection tools', () => {
         priority: 'high',
         summary: 'Please review this',
         dedupeKey: 'agent-signal:code-agent:resource-1:thread-1:request-1',
-        attributes: { expectsReply: true, messageId: 'request-1', returnPeerId: 'code-agent:resource-1:thread-1' },
+        attributes: {
+          expectsReply: true,
+          messageId: 'request-1',
+          sourcePeerId: 'code-agent:resource-1:thread-1',
+          returnPeerId: 'code-agent:resource-1:thread-1',
+        },
+        metadata: {
+          crossAgentMessaging: expect.objectContaining({
+            expectsReply: true,
+            messageId: 'request-1',
+            returnPeerId: 'code-agent:resource-1:thread-1',
+          }),
+        },
+        payload: expect.objectContaining({
+          expectsReply: true,
+          messageId: 'request-1',
+          returnPeerId: 'code-agent:resource-1:thread-1',
+        }),
       }),
       expect.objectContaining({
         resourceId: 'resource-2',
@@ -300,6 +317,60 @@ describe('agent connection tools', () => {
         ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       }),
     );
+  });
+
+  it('attributes concurrent fire-and-forget signals from different peer threads', async () => {
+    const sendNotificationSignal = createSignalRuntime();
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const first = createContext([savedPeer()], 'sender-one');
+    const second = createContext([savedPeer()], 'sender-two');
+
+    await Promise.all([
+      (tools.agent_signal_send as any).execute(
+        {
+          targetId: PEER_ID,
+          summary: 'First update',
+          priority: 'low',
+          expectsReply: false,
+          messageId: 'fire-and-forget-one',
+        },
+        first.context,
+      ),
+      (tools.agent_signal_send as any).execute(
+        {
+          targetId: PEER_ID,
+          summary: 'Second update',
+          priority: 'low',
+          expectsReply: false,
+          messageId: 'fire-and-forget-two',
+        },
+        second.context,
+      ),
+    ]);
+
+    const notifications = sendNotificationSignal.mock.calls.map((call: unknown[]) => call[0] as Record<string, any>);
+    expect(notifications.map(notification => notification.attributes)).toEqual(
+      expect.arrayContaining([
+        {
+          expectsReply: false,
+          messageId: 'fire-and-forget-one',
+          sourcePeerId: 'code-agent:resource-1:sender-one',
+        },
+        {
+          expectsReply: false,
+          messageId: 'fire-and-forget-two',
+          sourcePeerId: 'code-agent:resource-1:sender-two',
+        },
+      ]),
+    );
+    for (const notification of notifications) {
+      expect(notification.attributes).not.toHaveProperty('returnPeerId');
+      expect(notification.metadata.crossAgentMessaging).not.toHaveProperty('returnPeerId');
+      expect(notification.payload).not.toHaveProperty('returnPeerId');
+    }
   });
 
   it('reports unacknowledged delivery as retryable and does not record sent history', async () => {
@@ -330,6 +401,130 @@ describe('agent connection tools', () => {
       content: 'Failed to send agent signal: owner acceptance timed out',
     });
     expect(getStored().sentSignals).toBeUndefined();
+  });
+
+  it('does not report a summarized low-priority signal as a successful reply obligation', async () => {
+    const sendNotificationSignal = vi
+      .fn()
+      .mockResolvedValueOnce({
+        record: { id: 'notification-1', status: 'pending' as const, deliveryReason: 'idle-low-summary' },
+        decision: { action: 'summarize' as const, reason: 'idle-low-summary' },
+        persisted: Promise.resolve(),
+      })
+      .mockResolvedValueOnce({
+        record: { id: 'notification-2' },
+        decision: { action: 'deliver' as const },
+        accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-2' }),
+      });
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+    const input = {
+      targetId: PEER_ID,
+      summary: 'Reply later',
+      priority: 'low',
+      expectsReply: true,
+      messageId: 'low-reply-message',
+    };
+
+    expect((tools.agent_signal_send as any).inputSchema.safeParse(input).success).toBe(true);
+    await expect((tools.agent_signal_send as any).execute(input, context)).resolves.toMatchObject({
+      isError: true,
+      messageId: 'low-reply-message',
+      priority: 'low',
+      expectsReply: true,
+      routingAction: 'persist',
+      content:
+        'Failed to establish a reply obligation: the signal was queued for a notification summary instead of being delivered directly to "Peer One". Send a new signal at a priority that routes directly when a reply is required.',
+    });
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ ifIdle: { behavior: 'persist' } }),
+    );
+    expect(getStored().sentSignals).toBeUndefined();
+
+    await expect(
+      (tools.agent_signal_send as any).execute(
+        { ...input, priority: 'medium', messageId: 'medium-reply-message' },
+        context,
+      ),
+    ).resolves.toMatchObject({
+      isError: false,
+      messageId: 'medium-reply-message',
+      priority: 'medium',
+      expectsReply: true,
+      routingAction: 'deliver',
+    });
+    expect(getStored().sentSignals).toEqual([
+      expect.objectContaining({ messageId: 'medium-reply-message', priority: 'medium', routingAction: 'deliver' }),
+    ]);
+  });
+
+  it('does not record a reply obligation when policy summarizes a medium-priority signal', async () => {
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: { id: 'notification-1', status: 'pending' as const, deliveryReason: 'active-batch-summary' },
+      decision: { action: 'summarize' as const, reason: 'active-batch-summary' },
+      persisted: Promise.resolve(),
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+
+    await expect(
+      (tools.agent_signal_send as any).execute(
+        {
+          targetId: PEER_ID,
+          summary: 'Reply when available',
+          priority: 'medium',
+          expectsReply: true,
+          messageId: 'medium-summary-message',
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({
+      isError: true,
+      priority: 'medium',
+      expectsReply: true,
+      routingAction: 'persist',
+    });
+    expect(getStored().sentSignals).toBeUndefined();
+  });
+
+  it('reports low-priority notifications queued for summary as persisted', async () => {
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: { id: 'notification-1', status: 'pending' as const, deliveryReason: 'idle-low-summary' },
+      decision: { action: 'summarize' as const, reason: 'idle-low-summary' },
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+
+    await expect(
+      (tools.agent_signal_send as any).execute(
+        {
+          targetId: PEER_ID,
+          summary: 'Read this later',
+          priority: 'low',
+          expectsReply: false,
+          messageId: 'low-summary-message',
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({
+      isError: false,
+      messageId: 'low-summary-message',
+      routingAction: 'persist',
+      content: 'Persisted low signal for "Peer One" to process later: Read this later',
+    });
+    expect(getStored().sentSignals).toEqual([
+      expect.objectContaining({ messageId: 'low-summary-message', routingAction: 'persist' }),
+    ]);
   });
 
   it('treats blocked routing as a retryable failure and does not record sent history', async () => {
@@ -384,6 +579,44 @@ describe('agent connection tools', () => {
         context,
       ),
     ).resolves.toMatchObject({ isError: false, routingAction: 'deliver' });
+  });
+
+  it('treats discarded routing as retryable and does not record sent history', async () => {
+    const sendNotificationSignal = vi
+      .fn()
+      .mockResolvedValueOnce({
+        record: { id: 'notification-1' },
+        decision: { action: 'discard' as const },
+      })
+      .mockResolvedValueOnce({
+        record: { id: 'notification-2' },
+        decision: { action: 'deliver' as const },
+        accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-2' }),
+      });
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+    const input = {
+      targetId: PEER_ID,
+      summary: 'Retry discarded signal',
+      priority: 'medium',
+      expectsReply: false,
+      messageId: 'discarded-message',
+    };
+
+    await expect((tools.agent_signal_send as any).execute(input, context)).resolves.toMatchObject({
+      isError: true,
+      messageId: 'discarded-message',
+      routingAction: 'discard',
+    });
+    expect(getStored().sentSignals).toBeUndefined();
+
+    const retry = await (tools.agent_signal_send as any).execute(input, context);
+    expect(retry).toMatchObject({ isError: false, routingAction: 'deliver' });
+    expect(retry).not.toHaveProperty('duplicate');
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(2);
   });
 
   it('applies concurrent connect and disconnect deltas without clobbering each other', async () => {

@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
-import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
@@ -9,9 +9,13 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from '@/domains/datasets';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { datasetCrumb, navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-versions', label: 'Versions' }];
 
 function DatasetCompareVersionsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -48,33 +52,32 @@ function DatasetCompareVersionsPage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Versions</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
-        </div>
-      </MainContentLayout>
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Versions</h1>
+        <PermissionDenied variant="fill" resource="datasets" />
+      </PageLayout>
     );
   }
 
   if (!datasetId || versionNumbers.length < 2) {
     return (
-      <MainContentLayout>
-        <MainContentContent>
-          <div className="text-neutral4 py-5 text-center">
+      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Versions</h1>
+        <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
+          <div className="py-5 text-center text-muted-foreground">
             <p>Select at least two versions to compare.</p>
           </div>
-        </MainContentContent>
-      </MainContentLayout>
+        </div>
+      </PageLayout>
     );
   }
 
@@ -85,7 +88,8 @@ function DatasetCompareVersionsPage() {
   };
 
   return (
-    <MainContentLayout>
+    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Versions</h1>
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-4">
           <MainHeader>
@@ -101,7 +105,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`} icon={<ArrowLeft />}>
+              <Button render={<Link to={`/datasets/${datasetId}`} />} icon={<ArrowLeft />}>
                 Back to Dataset
               </Button>
             </MainHeader.Column>
@@ -127,7 +131,7 @@ function DatasetCompareVersionsPage() {
           </Columns>
         </div>
       </div>
-    </MainContentLayout>
+    </PageLayout>
   );
 }
 

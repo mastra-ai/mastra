@@ -4,7 +4,6 @@ import {
   SettingsDescription,
   SettingsGroup,
   SettingsHeader,
-  SettingsLayout,
   SettingsRow,
   SettingsTitle,
 } from './index';
@@ -53,22 +52,20 @@ export const General: Story = {
 
 export const Connection: Story = {
   render: () => (
-    <SettingsLayout>
-      <SettingsGroup>
-        <SettingsHeader action={<Button>Save configuration</Button>}>
-          <SettingsTitle>Mastra Connection</SettingsTitle>
-          <SettingsDescription>Configure the connection used by Studio.</SettingsDescription>
-        </SettingsHeader>
-        <SettingsContainer>
-          <SettingsRow label="Mastra instance URL" htmlFor="mastra-url">
-            <Input id="mastra-url" defaultValue="http://localhost:4111" className="w-full lg:max-w-96" />
-          </SettingsRow>
-          <SettingsRow label="API prefix" htmlFor="api-prefix">
-            <Input id="api-prefix" defaultValue="/api" className="w-full lg:max-w-96" />
-          </SettingsRow>
-        </SettingsContainer>
-      </SettingsGroup>
-    </SettingsLayout>
+    <SettingsGroup>
+      <SettingsHeader action={<Button>Save configuration</Button>}>
+        <SettingsTitle>Connection</SettingsTitle>
+        <SettingsDescription>Configure the connection used by Studio.</SettingsDescription>
+      </SettingsHeader>
+      <SettingsContainer>
+        <SettingsRow label="Mastra instance URL" htmlFor="mastra-url">
+          <Input id="mastra-url" defaultValue="http://localhost:4111" className="w-full sm:max-w-96" />
+        </SettingsRow>
+        <SettingsRow label="API prefix" htmlFor="api-prefix">
+          <Input id="api-prefix" defaultValue="/api" className="w-full sm:max-w-96" />
+        </SettingsRow>
+      </SettingsContainer>
+    </SettingsGroup>
   ),
 };
 

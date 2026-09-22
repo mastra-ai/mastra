@@ -1,6 +1,8 @@
+import { z } from 'zod';
 import { serializePreparedTraceBatch } from '../prepared-traces.js';
 import type { TraceImportTarget, TraceImportTargetUploadOptions } from '../target.js';
 import type { PreparedTraceBatch } from '../types.js';
+import type { TraceImportReadResult, TraceImportVerifier, TraceImportVerifierReadOptions } from '../verifier.js';
 
 const DEFAULT_ENDPOINT = 'https://observability.mastra.ai';
 const DEFAULT_MAX_ATTEMPTS = 5;
@@ -8,8 +10,16 @@ const DEFAULT_MAX_RETRY_AFTER_MS = 30_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_SPANS_PER_SECOND = 100;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const MAX_QUERY_RESPONSE_BYTES = 16 * 1024 * 1024;
 const OBSERVABILITY_CAPABILITIES_HEADER = 'x-mastra-observability-capabilities';
 const QUOTA_PAUSE_CAPABILITY = 'quota-pause-v1';
+
+class QueryResponseTooLargeError extends Error {
+  constructor() {
+    super('Mastra Platform query response exceeds the 16 MiB verification limit.');
+    this.name = 'QueryResponseTooLargeError';
+  }
+}
 
 type Fetch = typeof globalThis.fetch;
 type Sleep = (milliseconds: number, signal?: AbortSignal) => Promise<void>;
@@ -43,12 +53,30 @@ export class MastraPlatformUploadError extends Error {
   }
 }
 
+const storedSpanSchema = z.object({
+  traceId: z.string().min(1),
+  spanId: z.string().min(1),
+  parentSpanId: z.string().nullish(),
+  name: z.string(),
+  spanType: z.string().min(1),
+  startedAt: z.string().datetime({ offset: true }),
+  endedAt: z.string().datetime({ offset: true }).nullish(),
+  isEvent: z.boolean(),
+  error: z.unknown().optional(),
+});
+
+const storedTraceSchema = z.object({
+  traceId: z.string().min(1),
+  spans: z.array(storedSpanSchema).min(1),
+});
+
 /** Uploads normalized trace batches to the project-scoped Mastra collector. */
-export class MastraPlatformTraceTarget implements TraceImportTarget {
+export class MastraPlatformTraceTarget implements TraceImportTarget, TraceImportVerifier {
   readonly projectId: string;
 
   private readonly accessToken: string;
   private readonly endpoint: string;
+  private readonly queryOrigin: string;
   private readonly fetch: Fetch;
   private readonly sleep: Sleep;
   private readonly now: () => number;
@@ -61,6 +89,7 @@ export class MastraPlatformTraceTarget implements TraceImportTarget {
     this.accessToken = requireValue(options.accessToken, 'Mastra Platform access token');
     this.projectId = requireProjectId(options.projectId);
     this.endpoint = resolveTracesEndpoint(options.endpoint ?? DEFAULT_ENDPOINT, this.projectId);
+    this.queryOrigin = new URL(this.endpoint).origin;
     this.fetch = dependencies.fetch ?? globalThis.fetch;
     this.sleep = dependencies.sleep ?? sleep;
     this.now = dependencies.now ?? Date.now;
@@ -162,6 +191,92 @@ export class MastraPlatformTraceTarget implements TraceImportTarget {
 
     const waitMilliseconds = uploadAt - currentTime;
     if (waitMilliseconds > 0) await this.sleep(waitMilliseconds, signal);
+  }
+
+  async readTrace(traceId: string, options: TraceImportVerifierReadOptions = {}): Promise<TraceImportReadResult> {
+    options.signal?.throwIfAborted();
+    let response: Response;
+    try {
+      const timeoutSignal = AbortSignal.timeout(this.requestTimeoutMs);
+      response = await this.fetch(`${this.queryOrigin}/api/observability/traces/${encodeURIComponent(traceId)}/light`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'X-Mastra-Project-Id': this.projectId,
+        },
+        redirect: 'manual',
+        signal: options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal,
+      });
+    } catch (cause) {
+      if (options.signal?.aborted) throw options.signal.reason ?? cause;
+      return { kind: 'retryable', reason: 'Could not reach the Mastra Platform query API.' };
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      await discardResponseBody(response);
+      return {
+        kind: 'unavailable',
+        reason: `Mastra Platform redirected an authenticated query request (HTTP ${response.status}).`,
+      };
+    }
+    if (response.status === 404) {
+      await discardResponseBody(response);
+      return { kind: 'pending' };
+    }
+    if (response.status === 401 || response.status === 403) {
+      await discardResponseBody(response);
+      return {
+        kind: 'unavailable',
+        reason: `Mastra Platform query authentication failed with HTTP ${response.status}.`,
+      };
+    }
+    if (isRetryableStatus(response.status)) {
+      const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'), 1_000);
+      await discardResponseBody(response);
+      return {
+        kind: 'retryable',
+        reason: `Mastra Platform query returned HTTP ${response.status}.`,
+        ...(response.headers.has('retry-after') ? { retryAfterMs } : {}),
+      };
+    }
+    if (!response.ok) {
+      await discardResponseBody(response);
+      return { kind: 'unavailable', reason: `Mastra Platform query returned HTTP ${response.status}.` };
+    }
+
+    let body: string;
+    try {
+      body = await readResponseText(response, MAX_QUERY_RESPONSE_BYTES);
+    } catch (cause) {
+      if (options.signal?.aborted) throw options.signal.reason ?? cause;
+      if (cause instanceof QueryResponseTooLargeError) {
+        return { kind: 'unavailable', reason: cause.message };
+      }
+      return { kind: 'retryable', reason: 'Could not read the Mastra Platform query response.' };
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      return { kind: 'unavailable', reason: 'Mastra Platform query returned an invalid lightweight trace.' };
+    }
+
+    const parsed = storedTraceSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { kind: 'unavailable', reason: 'Mastra Platform query returned an invalid lightweight trace.' };
+    }
+    if (parsed.data.traceId !== traceId || parsed.data.spans.some(span => span.traceId !== traceId)) {
+      return { kind: 'unavailable', reason: 'Mastra Platform query returned a trace with inconsistent IDs.' };
+    }
+    return {
+      kind: 'found',
+      spans: parsed.data.spans.map(span => ({
+        ...span,
+        parentSpanId: span.parentSpanId ?? null,
+        endedAt: span.endedAt ?? null,
+      })),
+    };
   }
 }
 
@@ -298,5 +413,33 @@ async function discardResponseBody(response: Response): Promise<void> {
     await response.body?.cancel();
   } catch {
     // Cleanup must not replace the upload error that the caller needs.
+  }
+}
+
+async function readResponseText(response: Response, maximumBytes: number): Promise<string> {
+  const contentLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > maximumBytes) {
+    await discardResponseBody(response);
+    throw new QueryResponseTooLargeError();
+  }
+  if (!response.body) return '';
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    bytes += value.byteLength;
+    if (bytes > maximumBytes) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Cancellation is best-effort cleanup; preserve the meaningful size error.
+      }
+      throw new QueryResponseTooLargeError();
+    }
+    text += decoder.decode(value, { stream: true });
   }
 }

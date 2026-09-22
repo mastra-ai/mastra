@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { topLevelWorkflowNodes } from '../../__utils__/workflow-nodes';
 
 /**
  * FEATURE: Workflow debug mode "Run next step" on the run-detail (:runId) page
@@ -35,7 +36,7 @@ function runNextStepButton(page: Page) {
 }
 
 function nodes(page: Page) {
-  return page.locator('[data-workflow-node]');
+  return topLevelWorkflowNodes(page);
 }
 
 async function expectStepSuccess(page: Page, index: number) {
@@ -60,8 +61,8 @@ test.describe('Workflow debug per-step controls on the run-detail page', () => {
       // is genuinely paused mid-flow (add-letter done, parallel block still pending).
       await page.goto('/workflows/complexWorkflow/graph');
       await page.getByRole('textbox', { name: 'Text' }).fill('A');
-      await page.getByRole('switch', { name: 'Debug' }).click();
-      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      await page.getByRole('switch', { name: 'Step by step' }).click();
+      await expect(page.getByRole('switch', { name: 'Step by step' })).toBeChecked();
 
       await runButton(page).click();
       await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
@@ -84,9 +85,8 @@ test.describe('Workflow debug per-step controls on the run-detail page', () => {
       // ASSERT: the per-step controls appear purely from the paused status — no toggle needed.
       await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
 
-      // The run-input form is collapsed/read-only while viewing a paused run: only the
-      // "Run input" button is present, not the editable text field / "Run" button.
-      await expect(page.getByRole('button', { name: 'Run input' })).toBeVisible({ timeout: 20000 });
+      // Viewing a paused run shows the collapsed "Run data" section instead of the editable form.
+      await expect(page.getByRole('button', { name: 'Run data' })).toBeVisible({ timeout: 20000 });
       await expect(runButton(page)).toHaveCount(0);
 
       // The first step's success is still reflected on the run page.

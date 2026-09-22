@@ -194,13 +194,13 @@ export const Thread: Story = {
             <CommentItemBody>{row.body}</CommentItemBody>
           </CommentItemContent>
           <CommentItemActions>
-            <Button size="icon-xs" variant="ghost" aria-label="Quote reply">
+            <Button size="icon-sm" variant="ghost" aria-label="Quote reply">
               <Quote />
             </Button>
-            <Button size="icon-xs" variant="ghost" aria-label="Copy link">
+            <Button size="icon-sm" variant="ghost" aria-label="Copy link">
               <Link2 />
             </Button>
-            <Button size="icon-xs" variant="ghost" aria-label="Edit comment">
+            <Button size="icon-sm" variant="ghost" aria-label="Edit comment">
               <Pencil />
             </Button>
           </CommentItemActions>
@@ -239,7 +239,7 @@ const EditableRow = () => {
           )}
         </CommentItemContent>
         <CommentItemActions>
-          <Button size="icon-xs" variant="ghost" aria-label="Edit comment" onClick={() => setEditing(true)}>
+          <Button size="icon-sm" variant="ghost" aria-label="Edit comment" onClick={() => setEditing(true)}>
             <Pencil />
           </Button>
         </CommentItemActions>

@@ -1,6 +1,6 @@
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import { Injectable, Inject } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import express from 'express';
@@ -454,9 +454,7 @@ describe('MastraModule', () => {
       expect(response.status).toBe(404);
 
       const body = response.body as any;
-      // Error response should have structured format
-      expect(body.error).toBeDefined();
-      expect(body.timestamp).toBeDefined();
+      expect(body).toEqual({ error: expect.any(String) });
 
       await app.close();
     });

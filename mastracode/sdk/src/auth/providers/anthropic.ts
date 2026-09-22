@@ -87,8 +87,7 @@ export async function completeAnthropicLogin(input: string, verifier: string): P
   });
 
   if (!tokenResponse.ok) {
-    const error = await tokenResponse.text();
-    throw new Error(`Token exchange failed: ${error}`);
+    throw new Error(`Token exchange failed: ${tokenResponse.status}`);
   }
 
   const tokenData = (await tokenResponse.json()) as {
@@ -141,8 +140,7 @@ export async function refreshAnthropicToken(refreshToken: string): Promise<OAuth
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Anthropic token refresh failed: ${error}`);
+    throw new Error(`Anthropic token refresh failed: ${response.status}`);
   }
 
   const data = (await response.json()) as {

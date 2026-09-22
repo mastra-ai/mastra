@@ -96,7 +96,8 @@ describe('agent suggested prompts', () => {
 
       messagesGate.release();
 
-      expect(await screen.findByRole('button', { name: SUGGESTED_PROMPT })).not.toBeNull();
+      const suggestedPrompt = await screen.findByRole('button', { name: SUGGESTED_PROMPT });
+      expect(suggestedPrompt.classList.contains('h-auto')).toBe(true);
       expect(screen.getByText('How can I help you today?')).not.toBeNull();
       expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
     });
