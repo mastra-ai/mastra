@@ -279,13 +279,29 @@ describe('Agent objective methods', () => {
       pausedReason: 'The goal judge failed to evaluate the objective.',
     });
 
-    // Pausing again without a cause — what Esc during judge evaluation does —
-    // must replace the earlier cause, not inherit it. Otherwise the next reload
-    // explains this pause with the reason for the last one.
+    // Pausing again without a cause — what `/goal pause` does — must replace the
+    // earlier cause, not inherit it. Otherwise the next reload explains this
+    // pause with the reason for the last one.
     const repaused = await agent.updateObjectiveOptions({ threadId: THREAD, status: 'paused' });
     expect(repaused?.status).toBe('paused');
     expect(repaused?.pausedReason).toBeUndefined();
     expect((await agent.getObjective({ threadId: THREAD }))?.pausedReason).toBeUndefined();
+  });
+
+  it('updateObjectiveOptions keeps the pause cause when an update carries no status', async () => {
+    const agent = makeAgent();
+    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+    await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      status: 'paused',
+      pausedReason: 'The goal judge failed to evaluate the objective.',
+    });
+
+    // Only an explicit pause is authoritative about its own cause. A settings
+    // update that says nothing about status must not silently retire it.
+    const updated = await agent.updateObjectiveOptions({ threadId: THREAD, maxRuns: 9 });
+    expect(updated?.status).toBe('paused');
+    expect(updated?.pausedReason).toBe('The goal judge failed to evaluate the objective.');
   });
 
   it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
