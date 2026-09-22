@@ -45,29 +45,28 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
 
   return (
     <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery}>
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<CircleSlashIcon />}
-          titleSlot="Metrics are not available with your current storage"
-          descriptionSlot="Metrics require ClickHouse, DuckDB, Postgres v-next, Spanner, or in-memory storage for observability. Other relational databases (LibSQL, MSSQL) and document stores (MongoDB) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
-          actionSlot={
-            <Button
-              variant="ghost"
-              render={
-                <a
-                  href="https://mastra.ai/docs/observability/metrics/overview"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                />
-              }
+      <EmptyState
+        iconSlot={<CircleSlashIcon />}
+        titleSlot="Metrics are not available with your current storage"
+        descriptionSlot="Metrics require ClickHouse, DuckDB, Postgres v-next, Spanner, or in-memory storage for observability. Other relational databases (LibSQL, MSSQL) and document stores (MongoDB) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+        actionSlot={
+          <Button
+            variant="ghost"
+            render={
+              <a
+                href="https://mastra.ai/docs/observability/metrics/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+            }
 
-              icon={<ExternalLinkIcon />}
-            >
-              Metrics Documentation
-            </Button>
-          }
-        />
-      </div>
+            icon={<ExternalLinkIcon />}
+          >
+            Metrics Documentation
+          </Button>
+        }
+        variant="fill"
+      />
     </MetricsPageLayout>
   );
 }

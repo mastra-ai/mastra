@@ -706,17 +706,16 @@ export function DatasetReview({
               <Spinner className="h-6 w-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
-              <EmptyState
-                iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
-                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
-                descriptionSlot={
-                  showCompleted
-                    ? 'Items marked as complete will appear here for auditing.'
-                    : 'When experiment results are flagged for review, they will appear here.'
-                }
-              />
-            </div>
+            <EmptyState
+              iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
+              titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
+              descriptionSlot={
+                showCompleted
+                  ? 'Items marked as complete will appear here for auditing.'
+                  : 'When experiment results are flagged for review, they will appear here.'
+              }
+              variant="fill"
+            />
           ) : (
             <ExperimentResultsList
               results={displayItems}

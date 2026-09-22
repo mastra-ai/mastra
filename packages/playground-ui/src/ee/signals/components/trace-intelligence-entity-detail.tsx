@@ -57,13 +57,12 @@ export function TraceIntelligenceEntityDetail({
   }
   if (!entity) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<Radar aria-hidden="true" />}
-          titleSlot="Trace Intelligence entity not found"
-          descriptionSlot="The requested entity is unavailable in this project."
-        />
-      </div>
+      <EmptyState
+        iconSlot={<Radar aria-hidden="true" />}
+        titleSlot="Trace Intelligence entity not found"
+        descriptionSlot="The requested entity is unavailable in this project."
+        variant="fill"
+      />
     );
   }
   if (signalNames.length < 2) {

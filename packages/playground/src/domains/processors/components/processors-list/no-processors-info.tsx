@@ -3,21 +3,20 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 
 export const NoProcessorsInfo = () => (
-  <div className="flex h-full items-center justify-center">
-    <EmptyState
-      iconSlot={<CircleSlashIcon />}
-      titleSlot="No Processors yet"
-      descriptionSlot="Configure processors. Add input or output processors to your agents to transform messages."
-      actionSlot={
-        <Button
-          variant="ghost"
-          render={<a href="https://mastra.ai/docs/agents/processors" target="_blank" rel="noopener noreferrer" />}
+  <EmptyState
+    iconSlot={<CircleSlashIcon />}
+    titleSlot="No Processors yet"
+    descriptionSlot="Configure processors. Add input or output processors to your agents to transform messages."
+    actionSlot={
+      <Button
+        variant="ghost"
+        render={<a href="https://mastra.ai/docs/agents/processors" target="_blank" rel="noopener noreferrer" />}
 
-          icon={<ExternalLinkIcon />}
-        >
-          Processors Documentation
-        </Button>
-      }
-    />
-  </div>
+        icon={<ExternalLinkIcon />}
+      >
+        Processors Documentation
+      </Button>
+    }
+    variant="fill"
+  />
 );

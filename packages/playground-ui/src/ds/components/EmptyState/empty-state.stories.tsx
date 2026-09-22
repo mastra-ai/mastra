@@ -68,3 +68,19 @@ export const CustomHeading: Story = {
     actionSlot: <Button>Get Started</Button>,
   },
 };
+
+export const Fill: Story = {
+  parameters: { layout: 'fullscreen' },
+  args: {
+    iconSlot: <CircleSlashIcon className="text-muted-foreground h-auto w-[126px]" />,
+    titleSlot: 'Your inbox is empty',
+    descriptionSlot: 'The fill variant centers the block in the full height of its parent.',
+    actionSlot: <Button variant="outline">Go to traces</Button>,
+    variant: 'fill',
+  },
+  render: args => (
+    <div className="border-border h-[480px] border border-dashed">
+      <EmptyState {...args} />
+    </div>
+  ),
+};

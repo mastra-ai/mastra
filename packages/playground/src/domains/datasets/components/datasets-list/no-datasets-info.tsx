@@ -7,33 +7,32 @@ export interface NoDatasetsInfoProps {
 }
 
 export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
-  <div className="flex h-full items-center justify-center">
-    <EmptyState
-      iconSlot={<CircleSlashIcon />}
-      titleSlot="No Datasets yet"
-      descriptionSlot={
-        <>
-          Create your first dataset to start evaluating <br />
-          your agents and workflows.
-        </>
-      }
-      actionSlot={
-        <div className="flex flex-col items-center gap-2">
-          {onCreateClick && (
-            <Button variant="primary" onClick={onCreateClick} icon={<Plus />}>
-              Create Dataset
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
-
-            icon={<ExternalLinkIcon />}
-          >
-            Datasets Documentation
+  <EmptyState
+    iconSlot={<CircleSlashIcon />}
+    titleSlot="No Datasets yet"
+    descriptionSlot={
+      <>
+        Create your first dataset to start evaluating <br />
+        your agents and workflows.
+      </>
+    }
+    actionSlot={
+      <div className="flex flex-col items-center gap-2">
+        {onCreateClick && (
+          <Button variant="primary" onClick={onCreateClick} icon={<Plus />}>
+            Create Dataset
           </Button>
-        </div>
-      }
-    />
-  </div>
+        )}
+        <Button
+          variant="ghost"
+          render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
+
+          icon={<ExternalLinkIcon />}
+        >
+          Datasets Documentation
+        </Button>
+      </div>
+    }
+    variant="fill"
+  />
 );

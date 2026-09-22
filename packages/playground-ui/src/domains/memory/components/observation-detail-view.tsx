@@ -319,13 +319,12 @@ export function ObservationDetailView({
 
   if (!selected) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<CircleSlashIcon className="size-4" />}
-          titleSlot="No observations"
-          descriptionSlot="No observational memory snapshots available for this thread."
-        />
-      </div>
+      <EmptyState
+        iconSlot={<CircleSlashIcon className="size-4" />}
+        titleSlot="No observations"
+        descriptionSlot="No observational memory snapshots available for this thread."
+        variant="fill"
+      />
     );
   }
 
