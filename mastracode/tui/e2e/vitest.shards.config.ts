@@ -11,6 +11,11 @@ export default defineConfig({
     maxWorkers,
     fileParallelism: true,
     isolate: false,
+    // Each scenario builds its own isolated home, app data, and temp dir in
+    // `prepare`, so a retry re-runs from a clean state. Scenario screens poll
+    // for UI text with tight per-wait budgets, which flakes under the four
+    // parallel shard workers on CI.
+    retry: 2,
     testTimeout: 90_000,
     hookTimeout: 30_000,
     env: {

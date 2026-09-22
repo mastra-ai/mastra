@@ -763,7 +763,7 @@ export class AgentController<TState = {}> {
       this.#sessionsBeingDeleted.add(session);
       // tolerantPromise is set synchronously below before this microtask runs.
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
-      session.abort();
+      session.abort({ localOnly: true });
       session.thread.cleanupSubscription();
       try {
         await session.thread.clearAndReleaseLock();
@@ -1928,6 +1928,7 @@ export class AgentController<TState = {}> {
     tracingOptions,
     untilIdle,
     abortSignal,
+    threadId,
   }: {
     session: Session<TState>;
     requestContext?: RequestContext;
@@ -1935,8 +1936,11 @@ export class AgentController<TState = {}> {
     tracingOptions?: TracingOptions;
     untilIdle?: boolean | { maxIdleMs?: number };
     abortSignal?: AbortSignal;
+    threadId?: string;
   }): Promise<Record<string, unknown>> {
-    const runThreadId = session.thread.getId();
+    // A caller may name the thread the run belongs to (a claimed thread woken by
+    // a peer); otherwise the run belongs to whichever thread the session holds.
+    const runThreadId = threadId ?? session.thread.getId();
     if (!runThreadId) {
       throw new Error('Cannot build stream options without a current thread');
     }
