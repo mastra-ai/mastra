@@ -15,8 +15,8 @@ function describeQuestions(questions: ClassifierQuestions | undefined) {
     instructions: question.instructions,
     choices: question.type === 'choice' ? Object.keys(question.criteria) : undefined,
     criteria: question.criteria,
-    valuePath: `values.${id}`,
-    answerPath: `answers.${id}`,
+    valuePath: `inputData.values.${id}`,
+    answerPath: `inputData.answers.${id}`,
   }));
 }
 
@@ -64,9 +64,9 @@ export const listAvailableClassifiersTool = createTool({
           id,
           questions: describeQuestions(classifier.questions),
           outputPaths: {
-            values: 'values.<question>',
-            answers: 'answers.<question>',
-            usage: 'usage',
+            values: 'inputData.values.<question>',
+            answers: 'inputData.answers.<question>',
+            usage: 'inputData.usage',
           },
         })),
     };

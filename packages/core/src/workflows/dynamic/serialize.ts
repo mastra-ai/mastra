@@ -19,6 +19,7 @@
  */
 import { standardSchemaToJSONSchema, toStandardSchema } from '../../schema';
 import type {
+  SerializableClassifierStepOptions,
   SerializedSingleStepEntry,
   SerializedStepFlowEntry,
   SerializedStepOptions,
@@ -160,12 +161,13 @@ function serializeSingleEntry(entry: SingleStepEntry): SerializedSingleStepEntry
         `Classifier step "${entry.id}" cannot be stored: the state selector function does not round-trip. Use a path mapping instead.`,
       );
     }
+    const options = pickSerializableClassifierStepOptions(entry.options);
     return {
       type: 'classifier',
       id: entry.id,
       classifierId: entry.classifierId,
       ...(entry.state ? { state: entry.state } : {}),
-      ...(entry.options ? { options: entry.options } : {}),
+      ...(options ? { options } : {}),
     };
   }
   if (entry.type === 'mapping') {
@@ -231,6 +233,19 @@ function stepDescriptor(step: any) {
     component: step.component,
     canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
   };
+}
+
+function pickSerializableClassifierStepOptions(options: any): SerializableClassifierStepOptions | undefined {
+  if (!options || typeof options !== 'object') return undefined;
+
+  const out: SerializableClassifierStepOptions = {};
+  if (typeof options.maxRetries === 'number') out.maxRetries = options.maxRetries;
+  if (options.providerOptions && typeof options.providerOptions === 'object') {
+    out.providerOptions = options.providerOptions;
+  }
+  if (typeof options.retries === 'number') out.retries = options.retries;
+  if (options.metadata && typeof options.metadata === 'object') out.metadata = options.metadata;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**

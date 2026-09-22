@@ -220,13 +220,14 @@ const getStepNodeAndEdge = ({
   if (
     stepFlow.type === 'agent' ||
     stepFlow.type === 'tool' ||
+    stepFlow.type === 'classifier' ||
     stepFlow.type === 'mapping' ||
     stepFlow.type === 'workflow'
   ) {
     const stepId = stepFlow.id;
     const rawNodeId = allPrevNodeIds.has(getWorkflowNodeId(stepId)) ? `${stepId}-${yIndex}` : stepId;
     const nodeId = getWorkflowNodeId(rawNodeId);
-    const description = stepFlow.description;
+    const description = stepFlow.type === 'classifier' ? undefined : stepFlow.description;
     const label = stepFlow.type === 'mapping' ? formatMappingLabel(stepId, prevStepIds, nextStepIds) : stepId;
     const conditionNodes: WorkflowStepNode[] = condition
       ? [

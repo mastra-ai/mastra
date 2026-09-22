@@ -299,7 +299,7 @@ export const workflowBuilderPredicateSchema: z.ZodType<Predicate> = z.lazy(() =>
 );
 
 const PARALLEL_DESCRIPTION =
-  'Parallel container. Each child receives the same preceding input and children must be agent/tool/nested workflow — no nested containers or mappings. The result is an object keyed by each child step id containing that child complete output; downstream steps pluck fields via stepResults.<childId>.<field>.';
+  'Parallel container. Each child receives the same preceding input and children must be agent/tool/classifier/nested workflow — no nested containers or mappings. The result is an object keyed by each child step id containing that child complete output; downstream steps pluck fields via stepResults.<childId>.<field>.';
 const FOREACH_DESCRIPTION =
   'Foreach container. The preceding output MUST be a raw array (not an object with an array field). Each item is passed directly to the child step — no child inputMapping — and the output is an array of child outputs, order preserved. Give the inner step its own unique id.';
 const CONDITIONAL_DESCRIPTION =

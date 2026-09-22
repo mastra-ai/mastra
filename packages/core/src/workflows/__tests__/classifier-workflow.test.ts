@@ -6,6 +6,7 @@ import { Classifier } from '../../classifier';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createWorkflow } from '../create';
+import { toStorableGraph } from '../dynamic';
 import { createStep } from '../workflow';
 
 const questions = {
@@ -179,6 +180,36 @@ describe('classifier workflow construction', () => {
         metadata: { source: 'test' },
       },
     });
+  });
+
+  it('stores only serializable classifier options', () => {
+    const workflow = createWorkflow({
+      id: 'serializable-options',
+      inputSchema: z.string(),
+      outputSchema: z.any(),
+    })
+      .classifier('ticket-router', {
+        id: 'custom-step-id',
+        retries: 2,
+        maxRetries: 3,
+        providerOptions: { test: { mode: 'fast' } },
+        metadata: { source: 'test' },
+      })
+      .commit();
+
+    expect(toStorableGraph(workflow.stepGraph)).toEqual([
+      {
+        type: 'classifier',
+        id: 'custom-step-id',
+        classifierId: 'ticket-router',
+        options: {
+          retries: 2,
+          maxRetries: 3,
+          providerOptions: { test: { mode: 'fast' } },
+          metadata: { source: 'test' },
+        },
+      },
+    ]);
   });
 
   it('supports live state selectors and preserves classifier entries from createStep()', async () => {

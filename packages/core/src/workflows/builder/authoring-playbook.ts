@@ -23,7 +23,7 @@ There are eleven step types. The COLUMNS in the table below are the contract you
 | \`agent\`       | STRICTLY \`{ prompt: string }\`. The engine does NOT coerce; it validates and throws "expected object, received …" if the previous step's output isn't exactly this shape. If your previous step doesn't already produce \`{ prompt: string }\`, you MUST insert a \`mapping\` step in between. | Default: \`{ text: string }\`. If the entry sets \`outputSchema\` (see "Structured agent output" below), the output IS that schema's shape. |
 | \`workflow\`    | Previous step's output, validated against the referenced workflow's \`inputSchema\`. The nested workflow is identified by \`workflowId\` (id of another workflow registered on the Mastra instance — either code-defined via \`createWorkflow\` or stored through the authoring surface). | The referenced workflow's \`outputSchema\`. |
 | \`mapping\`     | Nothing directly — mappings *project* from any prior step's results, the workflow input, etc. (See "Mappings" below.) | An object whose top-level keys are the keys of \`mapConfig\`. |
-| \`parallel\`    | Previous step's output, forwarded to EVERY child step. Children must be single-step-like (\`agent\` / \`tool\` / \`workflow\`) — no mappings or nested containers. | An object keyed by each child step's \`id\`, whose value is that child's output. |
+| \`parallel\`    | Previous step's output, forwarded to EVERY child step. Children must be single-step-like (\`agent\` / \`tool\` / \`classifier\` / \`workflow\`) — no mappings or nested containers. | An object keyed by each child step's \`id\`, whose value is that child's output. |
 | \`foreach\`     | An **array**. The previous step MUST output an array. The inner step runs once per element (with concurrency you choose). | An array of the inner step's outputs, one per input element, order-preserving. |
 | \`sleep\`       | Passes the previous step's output through unchanged after waiting \`duration\` ms. | Same as its input. Use to space out steps deterministically. |
 | \`sleepUntil\`  | Passes the previous step's output through unchanged after waiting until an ISO date. | Same as its input. Use for "run at a specific wall-clock time". |
@@ -162,7 +162,7 @@ Use structured output when: the downstream step needs an array (for \`foreach\`)
 
 # Fan-out, iteration, and waiting — the container step types
 
-These four types are top-level entries in \`graph\`. They can NOT nest inside each other in v1: a \`parallel\`'s children are \`agent\` / \`tool\` / \`workflow\` only, and \`foreach\`'s inner step is a single step, not another container.
+These four types are top-level entries in \`graph\`. They can NOT nest inside each other in v1: a \`parallel\`'s children are \`agent\` / \`tool\` / \`classifier\` / \`workflow\` only, and \`foreach\`'s inner step is a single step, not another container.
 
 **\`parallel\` — run several branches on the same input.** Emit exactly this shape:
 
@@ -326,7 +326,7 @@ The engine supports \`conditional\` (branch-on-predicate) and \`loop\` (dowhile 
 Rules:
 - \`predicates\` MUST be the same length as \`steps\`, aligned by index — predicate \`i\` gates step \`i\`.
 - Every branch that evaluates truthy runs (multiple branches CAN run in parallel — this is not a switch/case). If you need exactly-one, make the predicates mutually exclusive.
-- Every branch step is a single step (\`agent\` / \`tool\` / \`workflow\`) — no mappings or nested containers.
+- Every branch step is a single step (\`agent\` / \`tool\` / \`classifier\` / \`workflow\`) — no mappings or nested containers.
 - All branches receive the same input: the previous step's output.
 - The output is an object keyed by each branch step's \`id\`; a branch whose predicate was false has an \`undefined\` entry.
 
