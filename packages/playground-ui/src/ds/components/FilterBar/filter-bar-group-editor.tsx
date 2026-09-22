@@ -68,7 +68,7 @@ export function FilterBarGroupEditor({
   const targeted = ctx.inputTarget === group.id;
   const canNest = depth < ctx.maxDepth;
 
-  // `+ Filter` is disabled while the input is open; focus it once it re-enables.
+  // `+ Filter` is hidden while the input is open; focus it once it remounts.
   useEffect(() => {
     if (targeted || !focusAddFilter.current) return;
     focusAddFilter.current = false;
@@ -127,16 +127,17 @@ export function FilterBarGroupEditor({
         data-pinned={rows.length === 0 || targeted || undefined}
         className="filter-bar-editor-actions flex w-full items-center gap-0.5"
       >
-        <Button
-          ref={addFilterRef}
-          variant="ghost"
-          size="icon-sm"
-          tooltip="Filter"
-          disabled={targeted}
-          onClick={() => ctx.openGroupInput(group.id)}
-        >
-          <PlusIcon />
-        </Button>
+        {!targeted && (
+          <Button
+            ref={addFilterRef}
+            variant="ghost"
+            size="icon-sm"
+            tooltip="Filter"
+            onClick={() => ctx.openGroupInput(group.id)}
+          >
+            <PlusIcon />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon-sm"
