@@ -77,6 +77,7 @@ export type ScenarioName =
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
   | 'initial-prompt'
+  | 'initial-prompt-skill'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'

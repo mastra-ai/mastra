@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { composeInitialMessage, takeInitialPrompt } from '../../src/initial-prompt.js';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
@@ -41,5 +43,46 @@ export const initialPromptScenario: McE2eScenario = {
     const body = JSON.stringify(chat[0]);
     assert.ok(body.includes(PROMPT), 'the chat request carries the initial prompt');
     assert.ok(!body.includes('piped via stdin'), 'the initial prompt is sent without the piped-stdin preamble');
+  },
+};
+
+const SKILL_NAME = 'initial-prompt-skill-e2e';
+const SKILL_INSTRUCTIONS = 'Initial prompt skill instructions.';
+const SKILL_ARGS = 'https://github.com/mastra-ai/mastra/pull/1';
+
+export const initialPromptSkillScenario: McE2eScenario = {
+  name: 'initial-prompt-skill',
+  description: 'Start the interactive TUI with --initial-prompt set to /skill/<name> and assert the skill activates.',
+  testName: 'runs a /skill command passed as the --initial-prompt',
+  projectFixture: 'long-branch',
+  useOpenAIModel: true,
+  aimockFixture: 'initial-prompt-skill.json',
+  prepare({ projectDir }) {
+    const dir = join(projectDir, '.mastracode', 'skills', SKILL_NAME);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'SKILL.md'),
+      `---\nname: ${SKILL_NAME}\ndescription: ${SKILL_NAME} description\nuser-invocable: true\n---\n${SKILL_INSTRUCTIONS}\n`,
+    );
+  },
+  async inProcessApp({ startMastraCodeApp }) {
+    const { prompt } = takeInitialPrompt(
+      ['node', 'mastracode', '--initial-prompt', `/skill/${SKILL_NAME} ${SKILL_ARGS}`],
+      {},
+    );
+    return startMastraCodeApp({ tui: { initialMessage: composeInitialMessage(prompt, null) } });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/MC initial prompt skill response/, terminal, 15_000);
+    runtime.printScreen('after initial skill prompt', terminal);
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const chat = requests.filter(request => !JSON.stringify(request).includes('generate a short title'));
+    assert.equal(chat.length, 1, 'expected exactly one chat request');
+    const body = JSON.stringify(chat[0]);
+    assert.ok(body.includes(SKILL_INSTRUCTIONS), 'the skill instructions reach the model');
+    assert.ok(body.includes(`ARGUMENTS: ${SKILL_ARGS}`), 'the skill arguments reach the model');
   },
 };

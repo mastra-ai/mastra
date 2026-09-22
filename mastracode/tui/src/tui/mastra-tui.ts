@@ -407,23 +407,10 @@ export class MastraTUI {
       hookMgr.runSessionStart().catch(() => {});
     }
 
-    // Process initial message if provided (--initial-prompt and/or piped stdin).
-    // Goes through the same path as typed input: model check, prompt hooks, and
-    // one optimistic message that the sent signal takes over.
+    // Initial message (--initial-prompt and/or piped stdin) is submitted exactly
+    // like typed input, so slash commands and skills work too.
     if (this.state.options.initialMessage) {
-      const msg = this.state.options.initialMessage;
-
-      if (!this.state.session.model.hasSelection()) {
-        showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
-      } else {
-        const pendingNewThread = this.state.pendingNewThread;
-        const optimisticMessageId = this.renderOptimisticUserMessage(msg);
-        if (await this.runUserPromptHook(msg)) {
-          this.sendOptimisticSignal(msg, undefined, optimisticMessageId, pendingNewThread);
-        } else {
-          this.removeOptimisticUserMessage(optimisticMessageId);
-        }
-      }
+      await this.submitUserInput(this.state.options.initialMessage);
     }
 
     // Main interactive loop — never blocks on streaming,
@@ -432,42 +419,49 @@ export class MastraTUI {
       const userInput = await this.getUserInput();
       // allow space as transparent continue (for recovering from api errors manually)
       if (!userInput.trim() && userInput !== ' ') continue;
+      await this.submitUserInput(userInput);
+    }
+  }
 
-      try {
-        const pendingNewThread = this.state.pendingNewThread;
+  /**
+   * Handle one submitted input: slash command, shell passthrough, or a message
+   * to the agent (after the model check and prompt hooks).
+   */
+  private async submitUserInput(userInput: string): Promise<void> {
+    try {
+      const pendingNewThread = this.state.pendingNewThread;
 
-        // Handle slash commands
-        if (userInput.startsWith('/')) {
-          const handled = await this.handleSlashCommand(userInput);
-          if (handled) continue;
-        }
-
-        // Handle shell passthrough (! prefix)
-        if (userInput.startsWith('!')) {
-          await handleShellPassthrough(this.state, userInput.slice(1).trim());
-          continue;
-        }
-
-        // Check if a model is selected (sync — fast, no reason to defer)
-        if (!this.state.session.model.hasSelection()) {
-          showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
-          continue;
-        }
-
-        const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
-        this.state.pendingImages = [];
-
-        const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
-        const allowed = await this.runUserPromptHook(userInput);
-        if (!allowed) {
-          this.removeOptimisticUserMessage(optimisticMessageId);
-          continue;
-        }
-
-        this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
-      } catch (error) {
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      // Handle slash commands
+      if (userInput.startsWith('/')) {
+        const handled = await this.handleSlashCommand(userInput);
+        if (handled) return;
       }
+
+      // Handle shell passthrough (! prefix)
+      if (userInput.startsWith('!')) {
+        await handleShellPassthrough(this.state, userInput.slice(1).trim());
+        return;
+      }
+
+      // Check if a model is selected (sync — fast, no reason to defer)
+      if (!this.state.session.model.hasSelection()) {
+        showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
+        return;
+      }
+
+      const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
+      this.state.pendingImages = [];
+
+      const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
+      const allowed = await this.runUserPromptHook(userInput);
+      if (!allowed) {
+        this.removeOptimisticUserMessage(optimisticMessageId);
+        return;
+      }
+
+      this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
+    } catch (error) {
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
