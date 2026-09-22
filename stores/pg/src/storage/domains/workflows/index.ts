@@ -5212,7 +5212,12 @@ export class WorkflowsPG extends WorkflowsStorage {
     // cannot rewrite the expected state mid-capture.
     const { workflowName, runId, mutationFence, resourceId, expectedCanonical: rawExpectedCanonical } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
-    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId);
+    validateWorkflowSnapshotHandoffIdentity(
+      workflowName,
+      runId,
+      resourceId,
+      rawExpectedCanonical.kind === 'present' ? rawExpectedCanonical.resourceId : undefined,
+    );
     const expectedCanonical: WorkflowSnapshotHandoffCanonicalState =
       rawExpectedCanonical.kind === 'present'
         ? {
@@ -5681,6 +5686,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
   }): Promise<void> {
+    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId);
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;

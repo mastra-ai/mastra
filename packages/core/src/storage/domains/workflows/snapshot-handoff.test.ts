@@ -1218,6 +1218,27 @@ describe('workflow snapshot handoff', () => {
         mutationFence: 'owner',
       }),
     ).rejects.toThrow(TypeError);
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'utf16-workflow',
+        runId,
+        expectedCanonical: {
+          kind: 'present',
+          resourceId: 'resource-\uD800',
+          snapshot: snapshot(runId, 'waiting'),
+        },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).rejects.toThrow(TypeError);
+    await expect(
+      workflows.persistWorkflowSnapshot({
+        workflowName: 'utf16-workflow',
+        runId,
+        resourceId: 'resource-\uD800',
+        snapshot: snapshot(runId, 'waiting'),
+      }),
+    ).rejects.toThrow(TypeError);
 
     // Well-formed astral pairs still round-trip identically in both adapters.
     await expect(
@@ -1253,6 +1274,27 @@ describe('workflow snapshot handoff', () => {
         expectedCanonical: { kind: 'absent' },
         snapshot: snapshot(runId, 'waiting'),
         mutationFence: 'owner',
+      }),
+    ).rejects.toThrow(TypeError);
+    await expect(
+      workflows.claimWorkflowSnapshotHandoff({
+        workflowName: 'nul-workflow',
+        runId,
+        expectedCanonical: {
+          kind: 'present',
+          resourceId: 'resource\0id',
+          snapshot: snapshot(runId, 'waiting'),
+        },
+        snapshot: snapshot(runId, 'waiting'),
+        mutationFence: 'owner',
+      }),
+    ).rejects.toThrow(TypeError);
+    await expect(
+      workflows.persistWorkflowSnapshot({
+        workflowName: 'nul-workflow',
+        runId,
+        resourceId: 'resource\0id',
+        snapshot: snapshot(runId, 'waiting'),
       }),
     ).rejects.toThrow(TypeError);
   });

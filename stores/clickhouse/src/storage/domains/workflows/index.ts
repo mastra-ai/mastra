@@ -4,6 +4,7 @@ import {
   createStorageErrorId,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
   TABLE_SCHEMAS,
   WorkflowsStorage,
 } from '@mastra/core/storage';
@@ -43,10 +44,15 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       schema,
       ifNotExists: ['resourceId'],
     });
+    await this.#db.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT_HANDOFF],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT_HANDOFF });
   }
 
   async updateWorkflowResults(_args: {

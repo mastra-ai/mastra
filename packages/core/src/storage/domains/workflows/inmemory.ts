@@ -1758,7 +1758,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     // caller code that must not be able to rewrite the expected state.
     const { workflowName, runId, mutationFence, resourceId, expectedCanonical: rawExpectedCanonical } = input;
     validateWorkflowSnapshotHandoffFence(mutationFence);
-    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId);
+    validateWorkflowSnapshotHandoffIdentity(
+      workflowName,
+      runId,
+      resourceId,
+      rawExpectedCanonical.kind === 'present' ? rawExpectedCanonical.resourceId : undefined,
+    );
     const expectedCanonical: WorkflowSnapshotHandoffCanonicalState =
       rawExpectedCanonical.kind === 'present'
         ? {
@@ -2383,6 +2388,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
   }): Promise<void> {
+    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId);
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
     for (let attempt = 1; ; attempt++) {
