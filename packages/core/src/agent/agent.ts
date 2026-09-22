@@ -1225,8 +1225,9 @@ export class Agent<
    * are persisted into the record (so the precedence over agent config is
    * remembered in thread state). No-ops when no objective is set.
    *
-   * One field departs from that rule: `pausedReason` describes a single pause,
-   * so an explicit `status: 'paused'` is authoritative about its own cause and
+   * One field departs from that rule: `pausedReason` describes a single pause.
+   * Any non-paused resulting status retires it, even when one is supplied, and
+   * an explicit `status: 'paused'` is authoritative about its own cause — it
    * clears a stored one when no replacement is supplied.
    */
   async updateObjectiveOptions(options: {
