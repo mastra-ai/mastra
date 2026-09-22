@@ -1,6 +1,12 @@
 {
   "fixtures": [
     {
+      "match": { "userMessage": "hello on the new thread", "model": "gpt-5.4-mini" },
+      "response": {
+        "content": "New thread reply."
+      }
+    },
+    {
       "match": { "model": "gpt-5.4-mini" },
       "response": {
         "content": "Mid-goal thread switch e2e acknowledged."

@@ -12,7 +12,9 @@ const OBJECTIVE = 'Keep the mid-goal thread switch e2e objective alive.';
  * must still be there when the app shuts down.
  *
  * This is NOT a discriminating regression test for the empty-mirror deletion
- * defect, and it cannot be made into one from this harness. Two reasons:
+ * defect, and it cannot be made into one from this harness. That is measured,
+ * not assumed: this scenario was run against the pre-fix production files and
+ * passed (recorded in the issue's proof transcript). Two reasons:
  *
  *  1. `GoalManager.saveToThread` resolves its thread id from the live session
  *     (`state.session.thread.getId()`), and the session assigns the new thread
@@ -64,7 +66,9 @@ export const goalSaveDoesNotDeleteScenario: McE2eScenario = {
     // thread has a goal" — which a delete-then-recreate would also satisfy.
     const beforeDb = new DatabaseSync(dbPath, { readOnly: true });
     let originalThreadId: string;
+    let threadCountBefore: number;
     try {
+      threadCountBefore = (beforeDb.prepare('select count(*) as n from mastra_threads').get() as { n: number }).n;
       const before = beforeDb.prepare(`select threadId from mastra_thread_state where type = 'goal'`).all() as Array<{
         threadId: string;
       }>;
@@ -78,8 +82,15 @@ export const goalSaveDoesNotDeleteScenario: McE2eScenario = {
 
     // Create a second thread while the goal is still live. This is the
     // `thread_created` path that empties the in-memory goal mirror.
+    // A thread row is only persisted once the thread carries a turn, so `/new`
+    // alone leaves the count unchanged and the switch unproven. Send a message
+    // on the new thread to materialize it — the count assertion below is what
+    // caught this.
     terminal.submit('/new');
-    await runtime.sleep(1500);
+    await runtime.sleep(1000);
+    terminal.submit('hello on the new thread');
+    await runtime.waitForScreenText(/New thread reply\./i, terminal, 20_000);
+    await runtime.sleep(1000);
 
     terminal.keyCtrlC();
     await runtime.stopApp?.();
@@ -103,9 +114,14 @@ export const goalSaveDoesNotDeleteScenario: McE2eScenario = {
         throw new Error(`Expected the goal to remain set, found status ${JSON.stringify(goal.status)}`);
       }
 
-      const threadRows = db.prepare('select id from mastra_threads').all() as Array<{ id: string }>;
-      if (threadRows.length < 2) {
-        throw new Error(`Expected a second thread to have been created mid-goal, found ${threadRows.length}`);
+      // Compare against the pre-switch count rather than a bare `>= 2`: the
+      // point is that `/new` actually created a thread, which a fixture that
+      // happened to start with two threads would otherwise hide.
+      const threadCountAfter = (db.prepare('select count(*) as n from mastra_threads').get() as { n: number }).n;
+      if (threadCountAfter <= threadCountBefore) {
+        throw new Error(
+          `Expected /new to create a thread mid-goal, count went ${threadCountBefore} -> ${threadCountAfter}`,
+        );
       }
       if (rows[0]!.threadId !== originalThreadId) {
         throw new Error(
