@@ -2,12 +2,14 @@ import type { BaseUIEvent } from '@base-ui/react/types';
 import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
-import { FilterBarOptionList } from './filter-bar-option-list';
+import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { findGroup } from './filter-bar-tree';
 import { matchesQueryFilter } from './match-query';
-import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
+import type { FilterBarDraft, FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
+import { parseFieldValue } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
@@ -27,6 +29,7 @@ type Item = FilterBarField | FilterBarOperator | FilterBarOption;
 
 const getItemLabel = (item: Item) => ('label' in item && item.label ? item.label : 'value' in item ? item.value : '');
 
+const EMPTY_ITEMS: readonly Item[] = [];
 /** Pinned last entry of the field list that spawns an advanced filter (an `or` group) instead of a filter. */
 const ADVANCED_FIELD_ID = '__filter-bar-advanced__';
 const ADVANCED_FIELD: FilterBarField = {
@@ -72,10 +75,11 @@ function FilterBarInputImpl({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState<Item | null>(null);
+  const [emptyForStepChange, setEmptyForStepChange] = useState(false);
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
 
   // The draft lives in the provider so the chip list can render it; the step follows from it.
-  const { draft, setDraft, commitDraft } = ctx;
+  const { draft, setDraft: setDraftState, commitDraft } = ctx;
   const step: Step = !draft ? 'field' : !draft.operatorId ? 'operator' : 'value';
   const field = draft ? ctx.getField(draft.fieldId) : undefined;
   const operator = draft?.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
@@ -93,10 +97,24 @@ function FilterBarInputImpl({
     if (groupId) inputRef.current?.focus();
   }, [groupId]);
 
+  // Base UI owns the highlight index and keeps it when the list content changes, so a row
+  // reached with ArrowDown would carry over into the step that follows. An empty list committed
+  // first drops that index, and `autoHighlight` re-anchors on the first row of the new step.
+  const withHighlightReset = useCallback((change: () => void) => {
+    flushSync(() => setEmptyForStepChange(true));
+    change();
+    setEmptyForStepChange(false);
+  }, []);
+
+  const setDraft = useCallback(
+    (next: Omit<FilterBarDraft, 'id' | 'from'> | null) => withHighlightReset(() => setDraftState(next)),
+    [withHighlightReset, setDraftState],
+  );
+
   const reset = useCallback(() => {
-    setDraft(null);
+    setDraftState(null);
     setQuery('');
-  }, [setDraft]);
+  }, [setDraftState]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -105,11 +123,11 @@ function FilterBarInputImpl({
 
   const commit = useCallback(
     (fieldId: string, operatorId: string, value: FilterBarValue) => {
-      commitDraft({ fieldId, operatorId }, value);
+      withHighlightReset(() => commitDraft({ fieldId, operatorId }, value));
       setQuery('');
       inputRef.current?.focus();
     },
-    [commitDraft],
+    [withHighlightReset, commitDraft],
   );
 
   const selectOperator = useCallback(
@@ -135,8 +153,14 @@ function FilterBarInputImpl({
         setOpen(false);
         return;
       }
-      // A single allowed operator is implied: skip straight to the value step.
       const [only, ...rest] = ctx.getFieldOperators(next);
+      // Free-text entry with text already typed: that text is the value, so neither the
+      // operator nor the value step has anything left to ask.
+      if (next.search && only && query.trim() !== '') {
+        commit(next.id, only.id, parseFieldValue(next.type, query));
+        return;
+      }
+      // A single allowed operator is implied: skip straight to the value step.
       if (only && rest.length === 0) {
         selectOperator(next.id, only);
         return;
@@ -144,7 +168,7 @@ function FilterBarInputImpl({
       setDraft({ fieldId: next.id });
       setQuery('');
     },
-    [ctx, selectOperator, setDraft],
+    [ctx, commit, query, selectOperator, setDraft],
   );
 
   const valueStep = useValueStep({
@@ -237,8 +261,20 @@ function FilterBarInputImpl({
     }
   };
 
-  const items: readonly Item[] =
-    step === 'field' ? visibleFields : step === 'operator' ? fieldOperators : valueStep.options;
+  const optionsForStep: Record<Step, readonly Item[]> = {
+    field: visibleFields,
+    operator: fieldOperators,
+    value: valueStep.options,
+  };
+  const items: readonly Item[] = emptyForStepChange ? EMPTY_ITEMS : optionsForStep[step];
+
+  // A search field is the way out for text that names no field, so it survives the field
+  // step's own filtering whatever was typed; every other item matches on its label.
+  const filterItem = useCallback(
+    (item: Item, text: string, itemToString?: (item: Item) => string) =>
+      ('search' in item && item.search === true) || matchesQueryFilter(item, text, itemToString),
+    [],
+  );
 
   const searchPlaceholder =
     step === 'field' ? 'Search fields…' : step === 'operator' ? 'Search operators…' : 'Search values…';
@@ -260,7 +296,7 @@ function FilterBarInputImpl({
         items={items}
         itemToStringLabel={getItemLabel}
         // The value step is already filtered (locally or server-side) by useValueSuggestions.
-        filter={step === 'value' ? null : matchesQueryFilter}
+        filter={step === 'value' ? null : filterItem}
         value={null}
         onValueChange={(item, details) => {
           // Never let Base UI keep the selection, fill the input or close: each step routes it.
@@ -367,7 +403,16 @@ function FilterBarInputImpl({
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"
                   getKey={f => f.id}
-                  renderOption={f => <FilterBarFieldLabel field={f} />}
+                  renderOption={f => (
+                    <>
+                      <FilterBarFieldLabel field={f} />
+                      {f.search && query !== '' && (
+                        <span className="text-muted-foreground min-w-0 truncate">
+                          {ctx.getFieldOperators(f)[0]?.label} "{query}"
+                        </span>
+                      )}
+                    </>
+                  )}
                   emptyText="No matching field."
                 />
               )}
@@ -384,7 +429,7 @@ function FilterBarInputImpl({
                   aria-label="Values"
                   aria-multiselectable={valueStep.isMany || undefined}
                   getKey={o => o.value}
-                  renderOption={o => o.label ?? o.value}
+                  renderOption={option => <FilterBarOptionLabel option={option} />}
                   isSelected={o => valueStep.isMany && valueStep.selected.includes(o.value)}
                   isLoading={valueStep.isLoading}
                   error={valueStep.error}

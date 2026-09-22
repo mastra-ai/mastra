@@ -7,7 +7,7 @@ description: "Browse Kilo Gateway model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/kilo.svg" alt="Kilo Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kilo Gateway
 
-Access 383 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
+Access 382 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
 
 Learn more in the [Kilo Gateway documentation](https://kilo.ai).
 
@@ -112,10 +112,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1024000,
-    "maxOutput": 384000,
-    "inputCost": 0.638616,
-    "outputCost": 1.915848
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
+    "inputCost": 0.624,
+    "outputCost": 2.88
   },
   {
     "model": "kilo/~deepseek/deepseek-v4-flash-latest",
@@ -127,7 +127,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1048576,
     "maxOutput": 943718,
     "inputCost": 0.03,
-    "outputCost": 0.8
+    "outputCost": 1
   },
   {
     "model": "kilo/~google/gemini-flash-latest",
@@ -1472,18 +1472,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.05,
     "outputCost": 0.4
-  },
-  {
-    "model": "kilo/kwaipilot/kat-coder-pro-v2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 144000,
-    "inputCost": 0.3,
-    "outputCost": 1.2
   },
   {
     "model": "kilo/kwaipilot/kat-coder-pro-v2.5",
@@ -3520,8 +3508,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
+    "contextWindow": 262144,
+    "maxOutput": 235929,
     "inputCost": 0.15,
     "outputCost": 1.2
   },

@@ -356,6 +356,42 @@ const github = new PlatformGithubIntegration({
 
 Pass the integration in `MastraFactory`'s `integrations` array. The direct `GithubIntegration` accepts the same `rules` option alongside its GitHub App credentials. A function replaces one default handler without composing with it. `null` disables that event's handler, not authentication, webhook ingestion, or reconciliation bookkeeping. Omitted events and `undefined` retain their defaults. Each instance copies and freezes its resolved handler map; unknown event names and invalid handler values are rejected during construction.
 
+When Platform credentials are present, `MastraFactory` installs a `PlatformGithubIntegration` itself, so a deploy can change its handlers without constructing one. Pass the same options under `platform.github` and they are forwarded to that integration's constructor:
+
+```typescript
+import { MastraFactory } from '@mastra/factory';
+
+// Your own label → board mapping (Settings › Intake › GitHub label routes remain
+// the stored, per-project alternative when labels alone are enough).
+const boardForLabels = (labels: string[]) => (labels.includes('design') ? 'design' : 'work');
+
+new MastraFactory({
+  storage,
+  platform: {
+    github: {
+      rules: {
+        // Route a new issue to the board its existing labels select, instead of
+        // defaulting to Work.
+        issueOpened: context => ({
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: `${context.ingress.id}:issue-intake`,
+          board: boardForLabels(context.issue?.labels ?? []),
+          source: 'github-issue',
+          sourceKey: `github-issue:${context.issue!.number}`,
+          title: context.issue!.title,
+          url: context.issue!.url,
+          stage: 'intake',
+        }),
+      },
+      // Optional. Overrides the sibling `githubAppSlug` for recognizing Factory's own writes.
+      slug: 'factory-app',
+    },
+  },
+});
+```
+
+`platform.github` applies only to the integration the factory installs itself. An explicit `github` entry in `integrations` takes precedence and makes the key a no-op; the factory warns rather than ignoring it silently, and warns the same way when no Platform credentials and no explicit GitHub integration are present. `GithubRuleOverrides` (the `rules` option type) is exported from `@mastra/factory`.
+
 **Migration:** Move each global `rules.github[event].onEvent` value to the integration constructor's `rules[event]` option:
 
 ```typescript
