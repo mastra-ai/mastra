@@ -11,6 +11,7 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultGithubRules, resolveGithubRules } from './github/default-rules.js';
 import type { GithubRuleOverrides } from './github/default-rules.js';
 import { createGithubIssueReconciler } from './github/issue-reconciler.js';
+import { reconciledIssueRelabeledEvent } from './github/rules.js';
 import type { GithubIssueFetcher, ReconcileIssueState } from './github/rules.js';
 import { createIssueReconciler } from './issue-reconciler.js';
 import { resolveLinearRules } from './linear/default-rules.js';
@@ -465,6 +466,78 @@ describe('issue reconcilers', () => {
 
     await expect(setup.reconciler([repository])).resolves.toMatchObject({ checked: 1, relabeled: 0 });
     expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toEqual([]);
+  });
+
+  it('gives retries of one observed issue version the same relabel identity', () => {
+    const deliveryId = (labels: string[], updatedAt?: string) =>
+      reconciledIssueRelabeledEvent(repository, 42, githubState({ labels, ...(updatedAt ? { updatedAt } : {}) }))
+        .deliveryId;
+
+    // Same labels, same issue version: the ingress dedupes rather than re-placing.
+    expect(deliveryId(['bug'], '2026-08-01T00:00:00Z')).toBe(deliveryId(['bug'], '2026-08-01T00:00:00Z'));
+    // Label order is not a version: only the set matters.
+    expect(deliveryId(['bug', 'curated'], '2026-08-01T00:00:00Z')).toBe(
+      deliveryId(['curated', 'bug'], '2026-08-01T00:00:00Z'),
+    );
+    // A → B → A is three observed versions, so the final A is not a replay of the first.
+    expect(
+      new Set([
+        deliveryId(['bug', AUTO_TRIAGED_LABEL], '2026-08-01T00:00:00Z'),
+        deliveryId(['bug'], '2026-08-02T00:00:00Z'),
+        deliveryId(['bug', AUTO_TRIAGED_LABEL], '2026-08-03T00:00:00Z'),
+      ]).size,
+    ).toBe(3);
+  });
+
+  it('relocates A to B and back to A because each observed version is its own delivery', async () => {
+    // Labels decide the phase: `status: auto-triaged` files on Planning, without
+    // it the card belongs on Triage, wherever it currently rests.
+    const issueOpened = vi.fn((context: Parameters<typeof defaultGithubRules.issueOpened>[0]) => {
+      const decision = defaultGithubRules.issueOpened(context);
+      if (!decision || !context.issue) return decision;
+      const moved = context.item !== undefined && !context.item.stages.includes(decision.stage);
+      if ((context.issue.labels ?? []).includes(AUTO_TRIAGED_LABEL))
+        return { ...decision, stage: 'planning' as const, skipRules: true };
+      return moved
+        ? { ...decision, stage: 'triage' as const, skipRules: true }
+        : { ...decision, stage: 'triage' as const };
+    });
+    const fetched = vi.fn();
+    const setup = await githubSetup({
+      stages: ['triage'],
+      metadata: { labels: ['bug'] },
+      fetchIssue: fetched,
+      rules: { issueOpened },
+    });
+    const boards = createBoardRegistry();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      storage: setup.workItems,
+      boards,
+      transitionService: new FactoryTransitionService({
+        storage: setup.workItems,
+        boards,
+        configVersion: 'factory-config-v1',
+      }),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'reconcile-worker',
+    });
+    const sweep = async (labels: string[], version: string, tick: string) => {
+      fetched.mockResolvedValue(githubState({ labels, updatedAt: version }));
+      await setup.reconciler([repository]);
+      await dispatcher.runOnce(new Date(tick));
+      return (await setup.workItems.get({ orgId: 'org-1', id: setup.workItem.id }))?.stages;
+    };
+
+    // A → B → A: the third sweep sees the same label set as the first, but a
+    // later issue version, so it is a new placement rather than a replay.
+    expect(await sweep(['bug', AUTO_TRIAGED_LABEL], '2026-08-01T00:00:00Z', '2030-01-01T00:00:01Z')).toEqual([
+      'planning',
+    ]);
+    expect(await sweep(['bug'], '2026-08-02T00:00:00Z', '2030-01-01T00:00:02Z')).toEqual(['triage']);
+    expect(await sweep(['bug', AUTO_TRIAGED_LABEL], '2026-08-03T00:00:00Z', '2030-01-01T00:00:03Z')).toEqual([
+      'planning',
+    ]);
   });
 
   it('uses a replacement handler for reconciled closures without running the default', async () => {

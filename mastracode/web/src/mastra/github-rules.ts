@@ -54,7 +54,8 @@ export const githubRules: GithubRuleOverrides = {
     // already past it is being re-placed, not entered.
     const moved =
       context.item !== undefined &&
-      ((context.board !== undefined && context.board !== decision.board) || !context.item.stages.includes(decision.stage));
+      ((context.board !== undefined && context.board !== decision.board) ||
+        !context.item.stages.includes(decision.stage));
     if (has(labels, NEEDS_TRIAGE_LABEL)) return moved ? { ...decision, skipRules: true } : decision;
     if (has(labels, AUTO_TRIAGED_LABEL)) return { ...decision, stage: 'planning', skipRules: true };
     return moved ? { ...decision, stage: 'triage', skipRules: true } : { ...decision, stage: 'triage' };

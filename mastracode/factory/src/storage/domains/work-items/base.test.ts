@@ -434,7 +434,24 @@ describe('WorkItemsStorage', () => {
       });
 
     expect((await commit()).status).toBe('committed');
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a claimable decision');
+    await storage.completeDeferredDecision(
+      { orgId: 'org1', factoryProjectId: 'p1', id: claimed.id, ownerId: 'worker-1' },
+      now,
+    );
+
+    // The card still exists, so the replayed ingress leaves the spent decision alone
+    // instead of re-leasing work that already happened.
     expect((await commit()).status).toBe('replayed');
+    const [spent] = await storage.listDeferredDecisions('org1', 'p1');
+    expect(spent).toMatchObject({ idempotencyKey: 'decision-1', status: 'succeeded' });
 
     await storage.delete({ orgId: 'org1', id: created.item.id });
 
