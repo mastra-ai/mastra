@@ -15,12 +15,13 @@ export function MetricsKpiCardChange({
 }) {
   const isGood = lowerIsBetter ? changePct < 0 : changePct >= 0;
   const Icon = changePct >= 0 ? ArrowUpRightIcon : ArrowDownRightIcon;
+  const formattedChangePct = Math.abs(changePct) < 10 ? changePct.toFixed(1) : changePct.toFixed(0);
 
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
       <Badge variant={isGood ? 'green' : 'red'} emphasis="muted" size="xs" icon={<Icon />} className="tabular-nums">
         {changePct > 0 ? '+' : ''}
-        {changePct.toFixed(1)}%
+        {formattedChangePct}%
       </Badge>
       <span className="text-meta text-placeholder">
         vs prior period

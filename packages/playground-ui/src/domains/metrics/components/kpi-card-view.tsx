@@ -31,7 +31,7 @@ export function KpiCardView({
         ) : isLoading ? (
           <MetricsKpiCard.Loading />
         ) : hasData ? (
-          changePct != null ? (
+          changePct != null && changePct !== 0 ? (
             <MetricsKpiCard.Change changePct={changePct} prevValue={prevValue} lowerIsBetter={lowerIsBetter} />
           ) : (
             <MetricsKpiCard.NoChange />

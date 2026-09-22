@@ -11,8 +11,8 @@ export function AgentRunsKpiCard() {
   return (
     <KpiCardView
       label="Total Agent Runs"
-      value={data?.value != null ? data.value.toLocaleString() : null}
-      prevValue={data?.previousValue != null ? data.previousValue.toLocaleString() : undefined}
+      value={data?.value != null ? formatCompact(data.value) : null}
+      prevValue={data?.previousValue != null ? formatCompact(data.previousValue) : undefined}
       changePct={data?.changePercent ?? null}
       isLoading={isLoading}
       isError={isError}

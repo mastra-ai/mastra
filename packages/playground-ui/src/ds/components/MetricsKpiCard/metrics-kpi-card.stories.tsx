@@ -18,8 +18,8 @@ export const WithPositiveChange: Story = {
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Total Agent Runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
-          <MetricsKpiCard.Value>12,345</MetricsKpiCard.Value>
-          <MetricsKpiCard.Change changePct={15.3} prevValue="10,700" />
+          <MetricsKpiCard.Value>12.3k</MetricsKpiCard.Value>
+          <MetricsKpiCard.Change changePct={15.3} prevValue="10.7k" />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
     </div>
@@ -74,8 +74,8 @@ export const GridOfCards: Story = {
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Total Agent Runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
-          <MetricsKpiCard.Value>12,345</MetricsKpiCard.Value>
-          <MetricsKpiCard.Change changePct={15.3} prevValue="10,700" />
+          <MetricsKpiCard.Value>12.3k</MetricsKpiCard.Value>
+          <MetricsKpiCard.Change changePct={15.3} prevValue="10.7k" />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>
