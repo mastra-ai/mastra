@@ -350,6 +350,49 @@ describe('GoalManager adapter', () => {
     );
   });
 
+  it('does not delete the durable objective when a failed read left the mirror empty', async () => {
+    const agent = createAgent();
+    agent.getObjective.mockRejectedValue(new Error('storage unavailable'));
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    // The read failure is swallowed and leaves the mirror null. That is "I know
+    // nothing", not "the user cleared the goal" — a save must not act on it.
+    await manager.loadFromThread(state);
+    await manager.saveToThread(state);
+
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+    expect(state.session.thread.setSetting).not.toHaveBeenCalledWith({ key: 'goal', value: undefined });
+  });
+
+  it('does not delete the objective when a save races the setGoal await window', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager();
+
+    let resolveSetObjective: (record: unknown) => void = () => {};
+    agent.setObjective.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveSetObjective = resolve;
+        }),
+    );
+
+    const setting = manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    // The mirror is not assigned until `setObjective` resolves. This is the save
+    // the armed `thread_created` branch performs inside that window.
+    await manager.saveToThread(state);
+
+    // Only this assertion discriminates the defect.
+    expect(agent.clearObjective).not.toHaveBeenCalled();
+
+    resolveSetObjective(makeRecord({ objective: 'finish the task' }));
+    await setting;
+    // Sanity check only — this half passes on the pre-fix code too, because the
+    // mirror is assigned after the await regardless.
+    expect(manager.getGoal()).toMatchObject({ objective: 'finish the task' });
+  });
+
   it('retires the pause cause when the goal completes', async () => {
     const agent = createAgent();
     const state = createState(agent);

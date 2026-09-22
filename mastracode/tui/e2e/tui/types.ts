@@ -70,6 +70,7 @@ export type ScenarioName =
   | 'goal-api-error-stops-loop'
   | 'goal-duration-tool-approval'
   | 'goal-fresh-thread-persistence'
+  | 'goal-save-does-not-delete'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
   | 'goal-max-runs-ends-goal'
