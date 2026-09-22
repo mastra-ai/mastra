@@ -39,6 +39,10 @@ describe('snapshotRequestContextForScore', () => {
     expect(Object.getPrototypeOf(snapshot)).toBe(Object.prototype);
   });
 
+  it('skips non-finite numbers', () => {
+    expect(snapshotRequestContextForScore({ n: 1, a: NaN, b: Infinity, c: -Infinity })).toEqual({ n: 1 });
+  });
+
   it('returns an empty object for missing input', () => {
     expect(snapshotRequestContextForScore(undefined)).toEqual({});
   });
