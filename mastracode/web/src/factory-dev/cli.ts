@@ -54,11 +54,6 @@ async function apiJson<T>(url: string, token: string, orgId: string): Promise<T>
   return (await response.json()) as T;
 }
 
-interface OrganizationToken {
-  id: string;
-  name: string;
-}
-
 async function deleteOrgApiKey(token: string, orgId: string, tokenId: string): Promise<void> {
   const response = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens/${encodeURIComponent(tokenId)}`, {
     method: 'DELETE',
@@ -76,15 +71,6 @@ async function mintOrgApiKey(
   projectName: string,
 ): Promise<{ id: string; secret: string }> {
   const name = `factory-dev: ${projectName}`;
-  const existing = await apiJson<{ tokens: OrganizationToken[] }>(
-    `${MASTRA_PLATFORM_API_URL}/v1/auth/tokens`,
-    token,
-    orgId,
-  );
-  await Promise.all(
-    existing.tokens.filter(item => item.name === name).map(item => deleteOrgApiKey(token, orgId, item.id)),
-  );
-
   const response = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens`, {
     method: 'POST',
     headers: { ...authHeaders(token, orgId), 'content-type': 'application/json' },
@@ -269,6 +255,7 @@ async function run() {
   let platformSecretKey = existingSettings
     ? await loadEnvironmentValue(envFile, 'MASTRA_PLATFORM_SECRET_KEY')
     : undefined;
+  const previousTokenId = settings.auth.tokenId;
   let createdToken: { id: string; secret: string } | undefined;
   let setupToken: string | undefined;
   if (!platformSecretKey) {
@@ -278,8 +265,18 @@ async function run() {
       setupToken = await getToken();
       createdToken = await mintOrgApiKey(setupToken, settings.organization.id, settings.project.name);
       platformSecretKey = createdToken.secret;
+      settings.auth.tokenId = createdToken.id;
+      await saveSettings(root, settings);
       spinner.stop('Platform API key created');
     } catch (error) {
+      if (createdToken && setupToken) {
+        await deleteOrgApiKey(setupToken, settings.organization.id, createdToken.id).catch(cleanupError => {
+          throw new AggregateError(
+            [error, cleanupError],
+            'Failed to save Factory settings and revoke its platform API key.',
+          );
+        });
+      }
       spinner.stop('Platform API key creation failed');
       throw error;
     }
@@ -306,8 +303,15 @@ async function run() {
           'Failed to save Factory environment and revoke its platform API key.',
         );
       });
+      settings.auth.tokenId = previousTokenId;
+      await saveSettings(root, settings);
     }
     throw error;
+  }
+  if (createdToken && setupToken && previousTokenId && previousTokenId !== createdToken.id) {
+    await deleteOrgApiKey(setupToken, settings.organization.id, previousTokenId).catch(error => {
+      p.log.warn(`Could not revoke the previous Factory platform API key: ${String(error)}`);
+    });
   }
   const dev = await x(
     'pnpm',

@@ -9,7 +9,7 @@ export type DatabaseSettings =
 
 export interface FactoryDevSettings {
   version: 1;
-  auth: { source: 'mastra-cli-session' };
+  auth: { source: 'mastra-cli-session'; tokenId?: string };
   organization: { id: string; name: string };
   project: { id: string; name: string };
   environment: { id: string; name: string };

@@ -34,7 +34,7 @@ describe('Factory development settings', () => {
     const root = await createTempDir();
     const settings: FactoryDevSettings = {
       version: 1,
-      auth: { source: 'mastra-cli-session' },
+      auth: { source: 'mastra-cli-session', tokenId: 'token-1' },
       organization: { id: 'org-1', name: 'Mastra' },
       project: { id: 'project-1', name: 'Factory' },
       environment: { id: 'env-1', name: 'Production' },
@@ -46,7 +46,8 @@ describe('Factory development settings', () => {
 
     expect(await loadSettings(root)).toEqual(settings);
     const contents = await fs.readFile(settingsPath(root), 'utf8');
-    expect(contents).not.toContain('token');
+    expect(contents).toContain('"tokenId": "token-1"');
+    expect(contents).not.toContain('secret');
     expect(contents).not.toContain('DATABASE_URL');
     expect((await fs.stat(settingsPath(root))).mode & 0o777).toBe(0o600);
     expect(await fs.readdir(path.dirname(settingsPath(root)))).toEqual(['settings.json']);
