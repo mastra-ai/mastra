@@ -296,8 +296,8 @@ export class GoalManager {
    * intent, so it works just as well when the mirror is already empty.
    *
    * An explicit clear reaches for every place a goal can live. The legacy
-   * thread-metadata key is reachable without an agent, so it is wiped whenever
-   * the durable delete did not throw, while the durable record itself needs an
+   * thread-metadata key is reachable without an agent, so it is wiped whether or
+   * not a durable delete was attempted, while the durable record itself needs an
    * agent and a thread. (Persistence is non-critical here as it is in
    * {@link saveToThread}: if the durable delete fails the legacy wipe is
    * skipped with it, which is the pre-existing behaviour, not a guarantee.) That
