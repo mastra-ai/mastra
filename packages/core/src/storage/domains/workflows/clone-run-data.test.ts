@@ -260,6 +260,46 @@ describe('cloneRunData', () => {
     expect(JSON.stringify(out)).toBe('{"message":"frozen-toJSON"}');
   });
 
+  it('re-projects a getter result that points at a mutated earlier sibling', () => {
+    // JSON.stringify serializes `backing` first ({ n: 0 }), then `x`'s getter
+    // mutates the source and returns the same object — persisted as { n: 1 }.
+    const make = () => ({
+      backing: { n: 0 },
+      get x() {
+        this.backing.n = 1;
+        return this.backing;
+      },
+    });
+    expect(JSON.stringify(make())).toBe('{"backing":{"n":0},"x":{"n":1}}');
+    const out = cloneRunData(make()) as { backing: { n: number }; x: { n: number } };
+    expect(out.backing.n).toBe(0);
+    expect(out.x.n).toBe(1);
+    expect(JSON.stringify(out)).toBe('{"backing":{"n":0},"x":{"n":1}}');
+  });
+
+  it('still terminates getter self-cycles through a rescoped projection', () => {
+    const src = {
+      backing: { n: 0 },
+      get self() {
+        return this;
+      },
+    };
+    const out = cloneRunData(src) as { backing: { n: number }; self: unknown };
+    expect(out.self).toBe(out);
+  });
+
+  it('suppresses stack for an Error subclass whose prototype toJSON omits it', () => {
+    class SerializedError extends Error {
+      toJSON() {
+        return { message: this.message };
+      }
+    }
+    const out = cloneRunData(new SerializedError('proto-toJSON'));
+    expect(out.message).toBe('proto-toJSON');
+    expect(out.stack).toBeUndefined();
+    expect(JSON.stringify(out)).toBe('{"message":"proto-toJSON"}');
+  });
+
   it('never invokes a copied toJSON accessor on the clone it stores', () => {
     const src = new Error('getter-toJSON') as Error & { mutations: number };
     src.mutations = 0;

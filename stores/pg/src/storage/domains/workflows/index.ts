@@ -439,14 +439,10 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
-    // Pin the object-valued CAS guard before destructuring anything else: a
-    // getter on a later payload field could otherwise mutate the guard's
-    // contents between the destructure and the pin.
-    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
-    // Pin every field in one ordered capture: CAS/identity fields before the
-    // payload fields so a payload getter cannot retarget an expectation — each
-    // input property's getter fires exactly once and a spread would re-read
-    // them all.
+    // Capture CAS/identity fields first: scalars before any serialization so
+    // guard-internal toJSON/getters cannot retarget them, and the object
+    // guard by reference so it is pinned before payload getters fire. Each
+    // named read fires that field's own accessor exactly once.
     const {
       workflowName,
       runId,
@@ -454,11 +450,14 @@ export class WorkflowsPG extends WorkflowsStorage {
       executionGeneration,
       lifecycleResumeAttempt,
       nextLifecycleResumeAttempt,
+      lifecycleStepStates: rawLifecycleStepStates,
       resourceId,
-      requestContext,
       replaceRequestContext,
-      operationReplayContext,
     } = input;
+    const lifecycleStepStates = pinWorkflowCasGuardValue(rawLifecycleStepStates);
+    // Payload fields last: their getters may run arbitrary caller code now
+    // that every expectation is pinned.
+    const { requestContext, operationReplayContext } = input;
     const frozenInput: AdmitWorkflowResumeInput = {
       workflowName,
       runId,
@@ -486,11 +485,21 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
-    // Pin the object-valued CAS guard before destructuring anything else: a
-    // getter on a later payload field could otherwise mutate the guard's
-    // contents between the destructure and the pin.
-    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
-    const { workflowName, runId, resumeOperationHash, executionGeneration, lifecycleResumeAttempt, resourceId } = input;
+    // Capture every field before pinning the object-valued guard: scalar CAS
+    // fields must be read before guard serialization runs caller code, and the
+    // guard itself must be pinned before any other caller code could mutate
+    // its contents. Rollback inputs carry no payload fields, so one ordered
+    // destructure covers both.
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates: rawLifecycleStepStates,
+      resourceId,
+    } = input;
+    const lifecycleStepStates = pinWorkflowCasGuardValue(rawLifecycleStepStates);
     const frozenInput: RollbackWorkflowResumeInput = {
       workflowName,
       runId,
@@ -511,22 +520,24 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
-    // Pin the object-valued CAS guard before destructuring anything else: a
-    // getter on a later payload field could otherwise mutate the guard's
-    // contents between the destructure and the pin.
-    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
+    // Capture CAS/identity fields first: scalars before any serialization so
+    // guard-internal toJSON/getters cannot retarget them, and the object
+    // guard by reference so it is pinned before payload getters fire.
     const {
       workflowName,
       runId,
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
+      lifecycleStepStates: rawLifecycleStepStates,
       resourceId,
       shouldPersistSnapshot,
       receiptKey,
-      snapshot,
-      result,
     } = input;
+    const lifecycleStepStates = pinWorkflowCasGuardValue(rawLifecycleStepStates);
+    // Payload fields last: their getters fire only after every expectation
+    // is pinned.
+    const { snapshot, result } = input;
     const frozenInput: FinalizeWorkflowResumeInput = {
       workflowName,
       runId,
@@ -5540,13 +5551,28 @@ export class WorkflowsPG extends WorkflowsStorage {
     // mutate expectations while the row locks are being acquired.
     // `expectedStatus` is a compare-and-set guard, not state; `finalState` is
     // likewise a directive rather than snapshot state.
-    // `expectedStatus` may be an array the caller retains — pin its contents
-    // before the rest-spread enumerates payload getters, which could otherwise
-    // retarget the CAS guard mid-capture.
+    // Scalar guards are read before `expectedStatus` is pinned — its
+    // serialization runs caller code that could otherwise retarget them — and
+    // payload fields are copied through descriptors afterwards so their
+    // getters fire exactly once and the guard accessors are never re-read.
+    const expectedExecutionGeneration = opts.expectedExecutionGeneration;
+    const expectedLifecycleResumeAttempt = opts.expectedLifecycleResumeAttempt;
     const expectedStatus = pinWorkflowCasGuardValue(opts.expectedStatus);
-    const { expectedExecutionGeneration, expectedLifecycleResumeAttempt, finalState, ...stateOptions } = opts;
-    // Guard fields are never merged into the persisted snapshot.
-    delete stateOptions.expectedStatus;
+    const finalState = opts.finalState;
+    const stateOptions: Record<PropertyKey, unknown> = {};
+    for (const key of Reflect.ownKeys(opts)) {
+      if (
+        key === 'expectedStatus' ||
+        key === 'expectedExecutionGeneration' ||
+        key === 'expectedLifecycleResumeAttempt' ||
+        key === 'finalState'
+      ) {
+        continue;
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(opts, key);
+      if (!descriptor?.enumerable) continue;
+      stateOptions[key] = 'value' in descriptor ? descriptor.value : descriptor.get?.call(opts);
+    }
     try {
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {

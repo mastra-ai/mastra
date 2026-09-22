@@ -181,7 +181,34 @@ import {
  */
 /** @internal Exported for testing only. */
 export function cloneRunData<T>(value: T): T {
-  return deepCloneForRun(value, new WeakMap()) as T;
+  return deepCloneForRun(value, new Map()) as T;
+}
+
+// JSON.stringify serializes an enumerable getter's return value as a fresh
+// projection, not a reference. When the getter returns an object that was
+// already cloned — a sibling serialized earlier in enumeration order that the
+// getter may since have mutated — the cached clone would diverge from the
+// durable projection. Re-clone under a copy of `seen` minus that entry so
+// ancestor back-references still terminate. Rescoping is bounded to one
+// generation: inside a rescoped clone, seen hits return the cached clone, so
+// crafted getter cycles cannot regress forever.
+function cloneEnumerableGetterResult(
+  raw: unknown,
+  owner: object,
+  seen: Map<object, unknown>,
+  skipErrorToJSONProbe: boolean,
+  getterRescope: boolean,
+): unknown {
+  if (raw !== null && typeof raw === 'object') {
+    const cached = seen.get(raw);
+    if (cached !== undefined) {
+      if (!getterRescope || raw === owner) return cached;
+      const rescoped = new Map(seen);
+      rescoped.delete(raw);
+      return deepCloneForRun(raw, rescoped, skipErrorToJSONProbe, false);
+    }
+  }
+  return deepCloneForRun(raw, seen, skipErrorToJSONProbe, getterRescope);
 }
 
 const TERMINAL_PARENT_STATUSES = ['success', 'failed', 'canceled', 'tripwire', 'bailed', 'skipped'] as const;
@@ -226,7 +253,12 @@ function materializeTerminalSnapshot(snapshot: WorkflowRunState): WorkflowRunSta
   return materialized;
 }
 
-function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErrorToJSONProbe = false): unknown {
+function deepCloneForRun(
+  value: unknown,
+  seen: Map<object, unknown>,
+  skipErrorToJSONProbe = false,
+  getterRescope = true,
+): unknown {
   if (value === null || typeof value !== 'object') return value;
   const cached = seen.get(value as object);
   if (cached !== undefined) return cached;
@@ -247,7 +279,10 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
     const out = new Map();
     seen.set(value, out);
     for (const [k, v] of value) {
-      out.set(deepCloneForRun(k, seen, skipErrorToJSONProbe), deepCloneForRun(v, seen, skipErrorToJSONProbe));
+      out.set(
+        deepCloneForRun(k, seen, skipErrorToJSONProbe, getterRescope),
+        deepCloneForRun(v, seen, skipErrorToJSONProbe, getterRescope),
+      );
     }
     return out;
   }
@@ -256,7 +291,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
     const out = new Set();
     seen.set(value, out);
     for (const v of value) {
-      out.add(deepCloneForRun(v, seen, skipErrorToJSONProbe));
+      out.add(deepCloneForRun(v, seen, skipErrorToJSONProbe, getterRescope));
     }
     return out;
   }
@@ -318,7 +353,13 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
           continue;
         }
         if (descriptor.enumerable && typeof descriptor.get === 'function') {
-          const resolved = deepCloneForRun(descriptor.get.call(value), seen, skipErrorToJSONProbe);
+          const resolved = cloneEnumerableGetterResult(
+            descriptor.get.call(value),
+            value,
+            seen,
+            skipErrorToJSONProbe,
+            getterRescope,
+          );
           Object.defineProperty(outRecord, key, {
             configurable: true,
             writable: true,
@@ -334,7 +375,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
       const cloned =
         key === 'message' || key === 'name' || key === 'stack'
           ? descriptor.value
-          : deepCloneForRun(descriptor.value, seen, skipErrorToJSONProbe);
+          : deepCloneForRun(descriptor.value, seen, skipErrorToJSONProbe, getterRescope);
       Object.defineProperty(outRecord, key, {
         configurable: true,
         writable: true,
@@ -351,16 +392,25 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
     // the agent-loop snapshot tests don't expect. Invoke it on a throwaway
     // clone so a counting or self-mutating serializer neither corrupts the
     // stored row nor shifts the durable projection on later serializations.
-    const toJSONDescriptor = Object.getOwnPropertyDescriptor(outRecord, 'toJSON');
     // Detect toJSON by descriptor, never by property access: `out` may be the
     // record destined for the store, and invoking a verbatim-copied accessor
-    // here would let it mutate the clone that becomes stored state.
+    // here would let it mutate the clone that becomes stored state. The walk
+    // covers subclass prototype serializers — an Error subtype whose
+    // prototype toJSON omits stack must suppress it just like an own one.
+    let toJSONHolder: object | null = outRecord;
+    let toJSONDescriptor: PropertyDescriptor | undefined;
+    while (
+      toJSONHolder !== null &&
+      (toJSONDescriptor = Object.getOwnPropertyDescriptor(toJSONHolder, 'toJSON')) === undefined
+    ) {
+      toJSONHolder = Object.getPrototypeOf(toJSONHolder);
+    }
     const hasToJSONSerializer =
       toJSONDescriptor !== undefined &&
       (typeof toJSONDescriptor.value === 'function' || typeof toJSONDescriptor.get === 'function');
     if (!skipErrorToJSONProbe && Object.getOwnPropertyDescriptor(out, 'stack') !== undefined && hasToJSONSerializer) {
       try {
-        const probe = deepCloneForRun(out, new WeakMap(), true) as Record<PropertyKey, unknown>;
+        const probe = deepCloneForRun(out, new Map(), true) as Record<PropertyKey, unknown>;
         const probeToJSON = probe.toJSON;
         const serialized = typeof probeToJSON === 'function' ? probeToJSON.call(probe) : undefined;
         if (serialized && typeof serialized === 'object' && !('stack' in serialized)) {
@@ -377,7 +427,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
     const out: unknown[] = new Array(value.length);
     seen.set(value, out);
     for (let i = 0; i < value.length; i++) {
-      out[i] = deepCloneForRun(value[i], seen, skipErrorToJSONProbe);
+      out[i] = deepCloneForRun(value[i], seen, skipErrorToJSONProbe, getterRescope);
     }
     return out;
   }
@@ -421,7 +471,13 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
     if (!descriptor) continue;
     if (!('value' in descriptor)) {
       if (descriptor.enumerable && typeof descriptor.get === 'function') {
-        const resolved = deepCloneForRun(descriptor.get.call(value), seen, skipErrorToJSONProbe);
+        const resolved = cloneEnumerableGetterResult(
+          descriptor.get.call(value),
+          value,
+          seen,
+          skipErrorToJSONProbe,
+          getterRescope,
+        );
         Object.defineProperty(out, key, {
           configurable: true,
           writable: true,
@@ -437,7 +493,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>, skipErr
       configurable: true,
       writable: true,
       enumerable: descriptor.enumerable,
-      value: deepCloneForRun(descriptor.value, seen, skipErrorToJSONProbe),
+      value: deepCloneForRun(descriptor.value, seen, skipErrorToJSONProbe, getterRescope),
     });
   }
   return out;
@@ -571,14 +627,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
-    // Pin the object-valued CAS guard before destructuring anything else: a
-    // getter on a later payload field could otherwise mutate the guard's
-    // contents between the destructure and the pin.
-    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
-    // Pin every field in one ordered capture: CAS/identity fields before the
-    // payload fields so a payload getter cannot retarget an expectation — each
-    // input property's getter fires exactly once and a spread would re-read
-    // them all.
+    // Capture CAS/identity fields first: scalars before any serialization so
+    // guard-internal toJSON/getters cannot retarget them, and the object
+    // guard by reference so it is pinned before payload getters fire. Each
+    // named read fires that field's own accessor exactly once.
     const {
       workflowName,
       runId,
@@ -586,11 +638,14 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       executionGeneration,
       lifecycleResumeAttempt,
       nextLifecycleResumeAttempt,
+      lifecycleStepStates: rawLifecycleStepStates,
       resourceId,
-      requestContext,
       replaceRequestContext,
-      operationReplayContext,
     } = input;
+    const lifecycleStepStates = pinWorkflowCasGuardValue(rawLifecycleStepStates);
+    // Payload fields last: their getters may run arbitrary caller code now
+    // that every expectation is pinned.
+    const { requestContext, operationReplayContext } = input;
     const frozenInput: AdmitWorkflowResumeInput = {
       workflowName,
       runId,
@@ -613,11 +668,21 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
-    // Pin the object-valued CAS guard before destructuring anything else: a
-    // getter on a later payload field could otherwise mutate the guard's
-    // contents between the destructure and the pin.
-    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
-    const { workflowName, runId, resumeOperationHash, executionGeneration, lifecycleResumeAttempt, resourceId } = input;
+    // Capture every field before pinning the object-valued guard: scalar CAS
+    // fields must be read before guard serialization runs caller code, and the
+    // guard itself must be pinned before any other caller code could mutate
+    // its contents. Rollback inputs carry no payload fields, so one ordered
+    // destructure covers both.
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates: rawLifecycleStepStates,
+      resourceId,
+    } = input;
+    const lifecycleStepStates = pinWorkflowCasGuardValue(rawLifecycleStepStates);
     const frozenInput: RollbackWorkflowResumeInput = {
       workflowName,
       runId,
@@ -633,22 +698,24 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
-    // Pin the object-valued CAS guard before destructuring anything else: a
-    // getter on a later payload field could otherwise mutate the guard's
-    // contents between the destructure and the pin.
-    const lifecycleStepStates = pinWorkflowCasGuardValue(input.lifecycleStepStates);
+    // Capture CAS/identity fields first: scalars before any serialization so
+    // guard-internal toJSON/getters cannot retarget them, and the object
+    // guard by reference so it is pinned before payload getters fire.
     const {
       workflowName,
       runId,
       resumeOperationHash,
       executionGeneration,
       lifecycleResumeAttempt,
+      lifecycleStepStates: rawLifecycleStepStates,
       resourceId,
       shouldPersistSnapshot,
       receiptKey,
-      snapshot,
-      result,
     } = input;
+    const lifecycleStepStates = pinWorkflowCasGuardValue(rawLifecycleStepStates);
+    // Payload fields last: their getters fire only after every expectation
+    // is pinned.
+    const { snapshot, result } = input;
     const frozenInput: FinalizeWorkflowResumeInput = {
       workflowName,
       runId,
@@ -2205,13 +2272,28 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const key = this.getWorkflowKey(workflowName, runId);
     // Pin the CAS fields and state options once: getters on `opts` would
     // otherwise re-run per retry and could hand each attempt different
-    // expectations. `expectedStatus` may be an array the caller retains — pin
-    // its contents before the rest-spread enumerates payload getters, which
-    // could otherwise retarget the CAS guard mid-capture.
+    // expectations. Scalar guards are read before `expectedStatus` is pinned —
+    // its serialization runs caller code that could otherwise retarget them —
+    // and payload fields are copied through descriptors afterwards so their
+    // getters fire exactly once and the guard accessors are never re-read.
+    const expectedExecutionGeneration = opts.expectedExecutionGeneration;
+    const expectedLifecycleResumeAttempt = opts.expectedLifecycleResumeAttempt;
     const expectedStatus = pinWorkflowCasGuardValue(opts.expectedStatus);
-    const { expectedExecutionGeneration, expectedLifecycleResumeAttempt, finalState, ...stateOptions } = opts;
-    // Guard fields are never merged into the persisted snapshot.
-    delete stateOptions.expectedStatus;
+    const finalState = opts.finalState;
+    const stateOptions: Record<PropertyKey, unknown> = {};
+    for (const key of Reflect.ownKeys(opts)) {
+      if (
+        key === 'expectedStatus' ||
+        key === 'expectedExecutionGeneration' ||
+        key === 'expectedLifecycleResumeAttempt' ||
+        key === 'finalState'
+      ) {
+        continue;
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(opts, key);
+      if (!descriptor?.enumerable) continue;
+      stateOptions[key] = 'value' in descriptor ? descriptor.value : descriptor.get?.call(opts);
+    }
     for (let attempt = 1; ; attempt++) {
       const run = this.db.workflows.get(key);
       this.assertWorkflowSnapshotHandoffAvailable(workflowName, runId);

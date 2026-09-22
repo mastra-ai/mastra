@@ -1081,6 +1081,59 @@ describe('workflow snapshot handoff in PostgreSQL', () => {
     });
   });
 
+  it('pins scalar CAS guards before guard serialization runs caller code', async () => {
+    const workflowName = `scalar-guard-${randomUUID()}`;
+    const runId = randomUUID();
+    const stored = snapshot(runId, 'suspended');
+    stored.executionGeneration = 'gen-current';
+    stored.lifecycleResumeAttempt = 0;
+    stored.lifecycleStepStates = { wait: { stepCallId: 'call-1', stepAttempt: 1 } };
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: stored });
+
+    // The guard's toJSON retargets a scalar CAS field mid-serialization. The
+    // scalar must already be captured, so the admit still sees 'gen-stale'
+    // and rejects — pinning before the destructure would read the mutated
+    // generation and wrongly admit.
+    const lifecycleStepStates = { wait: { stepCallId: 'call-1', stepAttempt: 1 } };
+    const input = {
+      workflowName,
+      runId,
+      resumeOperationHash: `sha256:${'0'.repeat(64)}` as `sha256:${string}`,
+      executionGeneration: 'gen-stale',
+      lifecycleResumeAttempt: 0,
+      lifecycleStepStates,
+      nextLifecycleResumeAttempt: 1,
+      operationReplayContext: { version: 1 as const, steps: [] },
+    };
+    Object.defineProperty(lifecycleStepStates, 'toJSON', {
+      value() {
+        input.executionGeneration = 'gen-current';
+        return { wait: { stepCallId: 'call-1', stepAttempt: 1 } };
+      },
+    });
+    await expect(workflows.admitWorkflowResume(input)).resolves.toMatchObject({ status: 'fence_conflict' });
+  });
+
+  it('reads expectedStatus exactly once', async () => {
+    const workflowName = `status-read-once-${randomUUID()}`;
+    const runId = randomUUID();
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, 'running') });
+    let reads = 0;
+    const opts = {
+      get expectedStatus() {
+        reads += 1;
+        if (reads > 1) throw new Error('guard read twice');
+        return ['running'] as WorkflowRunState['status'][];
+      },
+      status: 'suspended' as const,
+    };
+    await workflows.updateWorkflowState({ workflowName, runId, opts });
+    expect(reads).toBe(1);
+    await expect(workflows.loadWorkflowSnapshot({ workflowName, runId })).resolves.toMatchObject({
+      status: 'suspended',
+    });
+  });
+
   it('keeps draining eligible rows when a candidate is skipped mid-batch', async () => {
     const prefix = `prune-race-${randomUUID()}`;
     const nameA = `${prefix}-a`;
