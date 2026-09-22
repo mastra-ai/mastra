@@ -8,7 +8,7 @@ type ProcessStepListItemVariant = 'default' | 'plain';
 /** Same ring geometry and stroke as `<Spinner size="sm" />`, so pending and running read as one shape. */
 function PendingRing() {
   return (
-    <svg viewBox="0 0 24 24" className="text-neutral2" aria-hidden>
+    <svg viewBox="0 0 24 24" className="text-placeholder" aria-hidden>
       <circle
         cx="12"
         cy="12"
@@ -85,8 +85,8 @@ export function ProcessStepListItem({ step, isActive, position, variant = 'defau
       <div className="grid min-w-0 grid-cols-[auto_1fr] gap-2">
         <span
           className={cn('flex min-w-6 justify-end text-ui-md', transitions.colors, {
-            'text-neutral5': isActive || step.status === 'success',
-            'text-neutral3': !isActive && step.status !== 'success',
+            'text-foreground': isActive || step.status === 'success',
+            'text-muted-foreground': !isActive && step.status !== 'success',
           })}
         >
           {position}.
@@ -94,14 +94,14 @@ export function ProcessStepListItem({ step, isActive, position, variant = 'defau
         <div className="min-w-0">
           <h4
             className={cn('text-ui-md', transitions.colors, {
-              'text-neutral5': isActive || step.status === 'success',
-              'text-neutral3': !isActive && step.status !== 'success',
+              'text-foreground': isActive || step.status === 'success',
+              'text-muted-foreground': !isActive && step.status !== 'success',
             })}
           >
             {step.title}
           </h4>
           {step.description && (
-            <p className={cn('-mt-0.5 text-ui-md text-neutral2', { truncate: variant === 'plain' })}>
+            <p className={cn('-mt-0.5 text-ui-md text-placeholder', { truncate: variant === 'plain' })}>
               {step.description}
             </p>
           )}

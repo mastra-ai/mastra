@@ -149,7 +149,7 @@ describe('InputGroup', () => {
       </InputGroup>,
     );
     expect(getInput().getAttribute('aria-invalid')).toBe('true');
-    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:border-error');
+    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:border-destructive');
   });
 
   it('still renders the filled surface for a call site on the removed filled variant', () => {

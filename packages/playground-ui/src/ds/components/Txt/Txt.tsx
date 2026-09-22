@@ -26,8 +26,8 @@ const variants = {
   'header-md': 'text-header-md leading-header-md',
   'header-lg': 'text-header-lg leading-header-lg',
   'header-xl': 'text-header-xl leading-header-xl',
-  title: 'text-ui-md leading-ui-md font-semibold text-neutral6',
-  caption: 'text-ui-sm leading-ui-sm text-neutral3',
+  title: 'text-ui-md leading-ui-md font-semibold text-foreground',
+  caption: 'text-ui-sm leading-ui-sm text-muted-foreground',
 };
 
 const fonts = {

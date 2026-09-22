@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { DataList } from './data-list';
+import type { DataListSort } from './data-list';
 import { DataListSkeleton } from './data-list-skeleton';
 import { Button } from '@/ds/components/Button';
 import { useTableKeydown } from '@/lib/keyboard';
@@ -215,6 +216,53 @@ export const WithActions: Story = {
       ))}
     </DataList>
   ),
+};
+
+type RunSortKey = 'id' | 'input' | 'status' | 'createdAt';
+
+function sortRuns(runs: SampleRun[], key: RunSortKey, sort: DataListSort) {
+  const multiplier = sort === 'asc' ? 1 : -1;
+  return [...runs].sort((left, right) => left[key].localeCompare(right[key]) * multiplier);
+}
+
+/**
+ * Column sorting is opt-in per column via `SortableTopCell`. The parent owns the sort state:
+ * `sort` is set only on the active column, and `onSortChange` receives the next sort and the column key.
+ */
+export const WithSorting: Story = {
+  render: function WithSortingStory() {
+    const [runSort, setRunSort] = useState<{ key: RunSortKey; value: DataListSort }>({
+      key: 'createdAt',
+      value: 'desc',
+    });
+    const handleSort = (value: DataListSort, key: string) => setRunSort({ key: key as RunSortKey, value });
+    const sortFor = (key: RunSortKey) => (runSort.key === key ? runSort.value : undefined);
+
+    return (
+      <DataList columns={COLUMNS}>
+        <DataList.Top>
+          <DataList.SortableTopCell sortKey="id" sort={sortFor('id')} onSortChange={handleSort}>
+            ID
+          </DataList.SortableTopCell>
+          <DataList.SortableTopCell sortKey="input" sort={sortFor('input')} onSortChange={handleSort}>
+            Input
+          </DataList.SortableTopCell>
+          <DataList.SortableTopCell sortKey="status" sort={sortFor('status')} onSortChange={handleSort}>
+            Status
+          </DataList.SortableTopCell>
+          <DataList.SortableTopCell sortKey="createdAt" sort={sortFor('createdAt')} onSortChange={handleSort}>
+            Date
+          </DataList.SortableTopCell>
+          <DataList.TopCell>Time</DataList.TopCell>
+        </DataList.Top>
+        {sortRuns(SAMPLE_RUNS, runSort.key, runSort.value).map(run => (
+          <DataList.RowButton key={run.id} onClick={() => {}}>
+            <RunCells run={run} />
+          </DataList.RowButton>
+        ))}
+      </DataList>
+    );
+  },
 };
 
 export const Empty: Story = {

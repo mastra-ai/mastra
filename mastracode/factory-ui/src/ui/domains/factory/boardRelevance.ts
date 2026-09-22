@@ -37,7 +37,7 @@ export function boardRelevanceQueryValue(
 }
 
 export interface BoardParticipant extends AuditActorProfile {
-  source: 'factory' | 'github' | 'linear' | 'jira' | 'incidentio';
+  source: 'factory' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio';
 }
 
 interface RelevanceTarget {
@@ -58,6 +58,7 @@ function metadataStrings(metadata: Record<string, unknown>, key: string): string
 
 function externalId(source: RelevanceTarget['source'], name: string): string | undefined {
   if (source === 'github-issue' || source === 'github-pr') return `github:${name.toLowerCase()}`;
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return `gitlab:${name.toLowerCase()}`;
   if (source === 'linear-issue') return `linear:${name.toLowerCase()}`;
   if (source === 'jira-issue') return `jira:${name.toLowerCase()}`;
   if (source === 'incidentio-follow-up') return `incidentio:${name.toLowerCase()}`;
@@ -75,6 +76,7 @@ function externalProfile(source: RelevanceTarget['source'], name: string): Board
       source: 'github',
     };
   }
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return { id, name, source: 'gitlab' };
   return {
     id,
     name,
@@ -83,7 +85,12 @@ function externalProfile(source: RelevanceTarget['source'], name: string): Board
 }
 
 function externalCreator(target: RelevanceTarget): string | undefined {
-  if (target.source === 'github-issue' || target.source === 'github-pr') {
+  if (
+    target.source === 'github-issue' ||
+    target.source === 'github-pr' ||
+    target.source === 'gitlab-issue' ||
+    target.source === 'gitlab-pr'
+  ) {
     return metadataString(target.metadata, 'author');
   }
   if (target.source === 'linear-issue' || target.source === 'jira-issue' || target.source === 'incidentio-follow-up') {
@@ -97,7 +104,12 @@ function externalCreator(target: RelevanceTarget): string | undefined {
 }
 
 function externalAssignees(target: RelevanceTarget): string[] {
-  if (target.source === 'github-issue' || target.source === 'github-pr') {
+  if (
+    target.source === 'github-issue' ||
+    target.source === 'github-pr' ||
+    target.source === 'gitlab-issue' ||
+    target.source === 'gitlab-pr'
+  ) {
     const assignees = metadataStrings(target.metadata, 'assignees');
     const assignee = metadataString(target.metadata, 'assignee');
     return [...new Set([...assignees, ...(assignee ? [assignee] : [])])];
@@ -110,7 +122,7 @@ function externalAssignees(target: RelevanceTarget): string[] {
 }
 
 function requestedReviewers(target: RelevanceTarget): string[] {
-  if (target.source !== 'github-pr') return [];
+  if (target.source !== 'github-pr' && target.source !== 'gitlab-pr') return [];
   return metadataStrings(target.metadata, 'requestedReviewers');
 }
 

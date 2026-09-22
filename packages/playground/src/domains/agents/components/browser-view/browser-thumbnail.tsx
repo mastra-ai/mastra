@@ -110,7 +110,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
             <img ref={imgRef} alt="Browser preview" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <Monitor className="text-neutral3 h-5 w-5" />
+              <Monitor className="text-muted-foreground h-5 w-5" />
             </div>
           )}
           {/* Live indicator dot */}
@@ -120,16 +120,16 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         {/* Info section */}
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
-            <span className="text-neutral6 text-ui-md truncate font-medium">{agentName}&apos;s browser</span>
+            <span className="text-foreground text-ui-md truncate font-medium">{agentName}&apos;s browser</span>
             <Badge variant={isLive ? 'green' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
             </Badge>
           </div>
-          <p className="text-neutral4 text-ui-sm mt-0.5 truncate">{displayUrl}</p>
+          <p className="text-muted-foreground text-ui-sm mt-0.5 truncate">{displayUrl}</p>
         </div>
 
         {/* Expand/collapse indicator */}
-        <div className="text-neutral4 group-hover:text-neutral5 shrink-0 transition-colors">
+        <div className="text-muted-foreground group-hover:text-foreground shrink-0 transition-colors">
           {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
         </div>
       </button>
@@ -169,7 +169,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
           {toolCalls.length > 0 && (
             <div ref={actionsRef} className="border-border1 max-h-40 overflow-y-auto border-t">
               <div className="px-3 py-2">
-                <h4 className="text-neutral4 text-ui-md mb-2 font-medium">Browser Actions</h4>
+                <h4 className="text-muted-foreground text-ui-md mb-2 font-medium">Browser Actions</h4>
                 <div className="space-y-1">
                   {toolCalls.slice(-5).map(entry => (
                     <BrowserToolCallItem key={entry.toolCallId} entry={entry} />

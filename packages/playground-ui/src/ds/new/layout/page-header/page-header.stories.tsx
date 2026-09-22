@@ -51,7 +51,7 @@ function PageHeaderStory({
         {showMeta && (
           <PageHeader.Meta beside={metaBeside}>
             <Badge variant="green">Active</Badge>
-            {!metaBeside && <span className="text-ui-xs text-neutral2 font-mono">agent_8f3a91b2</span>}
+            {!metaBeside && <span className="text-ui-xs text-placeholder font-mono">agent_8f3a91b2</span>}
           </PageHeader.Meta>
         )}
         {showDescription && <PageHeader.Description isLoading={isLoading}>{description}</PageHeader.Description>}
@@ -133,7 +133,7 @@ export const MetaBoth: Story = {
           <Badge variant="green">Live</Badge>
         </PageHeader.Meta>
         <PageHeader.Meta>
-          <span className="text-ui-xs text-neutral2 font-mono">env_01j9</span>
+          <span className="text-ui-xs text-placeholder font-mono">env_01j9</span>
         </PageHeader.Meta>
         <PageHeader.Action>
           <Button size="sm">Settings</Button>

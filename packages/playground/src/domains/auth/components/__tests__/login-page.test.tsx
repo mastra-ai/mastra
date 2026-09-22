@@ -152,8 +152,8 @@ describe('LoginPage UI parity for /login and /signup', () => {
     mockCapabilities(credentialsCapabilities);
     renderLogin();
 
-    expect(await screen.findByLabelText('Email')).toBeTruthy();
-    expect(screen.getByLabelText('Password')).toBeTruthy();
+    expect(await screen.findByLabelText(/^Email/)).toBeTruthy();
+    expect(screen.getByLabelText(/^Password/)).toBeTruthy();
     expect(screen.queryByText('or continue with')).toBeNull();
   });
 
@@ -170,7 +170,7 @@ describe('LoginPage UI parity for /login and /signup', () => {
     mockCapabilities(bothCapabilities);
     renderLogin();
 
-    expect(await screen.findByLabelText('Email')).toBeTruthy();
+    expect(await screen.findByLabelText(/^Email/)).toBeTruthy();
     expect(screen.getByText('or continue with')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Continue with SSO' })).toBeTruthy();
   });
@@ -222,8 +222,8 @@ describe('LoginPage UI parity for /login and /signup', () => {
 
       try {
         renderRoute('/login', <LoginPage />);
-        fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'user@example.com' } });
-        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
+        fireEvent.change(await screen.findByLabelText(/^Email/), { target: { value: 'user@example.com' } });
+        fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'password' } });
         fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
         await waitFor(() => expect(hrefSetter).toHaveBeenCalledWith('/studio/'));

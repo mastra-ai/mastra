@@ -170,7 +170,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
         <div className="bg-surface1/80 absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-2">
             <div className="border-neutral4 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
-            <span className="text-neutral4 text-ui-md">Reconnecting...</span>
+            <span className="text-muted-foreground text-ui-md">Reconnecting...</span>
           </div>
         </div>
       )}

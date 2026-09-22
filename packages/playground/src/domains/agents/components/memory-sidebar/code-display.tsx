@@ -43,7 +43,7 @@ export function CodeDisplay({
             </span>
           )}
           {onCopy && (
-            <span className="text-ui-xs bg-surface4 text-neutral4 pointer-events-none absolute top-2 right-2 z-20 rounded-full px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="text-ui-xs bg-surface4 text-muted-foreground pointer-events-none absolute top-2 right-2 z-20 rounded-full px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
               Click to copy
             </span>
           )}

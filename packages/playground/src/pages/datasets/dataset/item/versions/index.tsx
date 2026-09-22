@@ -124,7 +124,7 @@ function DatasetItemVersionsComparePage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 py-5 text-center">
+          <div className="text-muted-foreground py-5 text-center">
             <p>Item not found.</p>
           </div>
         </MainContentContent>
@@ -170,14 +170,14 @@ function DatasetItemVersionsComparePage() {
             </CardHeader>
             <CardContent className="grid content-start gap-5 overflow-y-auto">
               {isLoading ? (
-                <div className="text-neutral4 text-ui-md">Loading...</div>
+                <div className="text-muted-foreground text-ui-md">Loading...</div>
               ) : leftItem ? (
                 <DatasetItemDetails
                   item={leftItem}
                   diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
                 />
               ) : (
-                <div className="text-neutral4 text-ui-md">Item data not available</div>
+                <div className="text-muted-foreground text-ui-md">Item data not available</div>
               )}
             </CardContent>
           </Card>
@@ -196,19 +196,19 @@ function DatasetItemVersionsComparePage() {
               {rightNumber == null ? (
                 <EmptyState
                   className="h-full"
-                  iconSlot={<GitCompareIcon className="text-neutral3 size-8" />}
+                  iconSlot={<GitCompareIcon className="text-muted-foreground size-8" />}
                   titleSlot="No version selected"
                   descriptionSlot="Pick a version above to compare it with the one on the left."
                 />
               ) : isRightLoading ? (
-                <div className="text-neutral4 text-ui-md">Loading...</div>
+                <div className="text-muted-foreground text-ui-md">Loading...</div>
               ) : rightItem ? (
                 <DatasetItemDetails
                   item={rightItem}
                   diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
                 />
               ) : (
-                <div className="text-neutral4 text-ui-md">Version {rightNumber} not found</div>
+                <div className="text-muted-foreground text-ui-md">Version {rightNumber} not found</div>
               )}
             </CardContent>
           </Card>

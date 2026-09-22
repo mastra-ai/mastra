@@ -55,7 +55,7 @@ export function TraceSpanTimeline({
         {/* Header row: empty name cell, then the axis aligned with the bars (same horizontal padding, minus the duration label). */}
         <div />
         <div aria-label="Trace time axis" className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 px-2 pb-1">
-          <div className="text-ui-xs text-neutral3 flex justify-between tabular-nums">
+          <div className="text-ui-xs text-muted-foreground flex justify-between tabular-nums">
             {TICKS.map(tick => (
               <span key={tick}>{formatTick(overallLatency * tick)}</span>
             ))}

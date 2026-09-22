@@ -77,9 +77,14 @@ export function BrowserViewPanel() {
         onClick={e => e.stopPropagation()}
       >
         <div className="border-border1 flex shrink-0 items-center gap-3 border-b px-4 py-3">
-          <Globe className="text-neutral4 h-4 w-4 shrink-0" />
+          <Globe className="text-muted-foreground h-4 w-4 shrink-0" />
           <div className="bg-surface3 border-border1 min-w-0 flex-1 rounded-md border px-3 py-1.5">
-            <span className={cn('text-ui-md truncate block', currentUrl ? 'text-neutral5' : 'text-neutral3 italic')}>
+            <span
+              className={cn(
+                'text-ui-md truncate block',
+                currentUrl ? 'text-foreground' : 'text-muted-foreground italic',
+              )}
+            >
               {currentUrl || 'No URL'}
             </span>
           </div>

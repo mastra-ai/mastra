@@ -208,6 +208,7 @@ function createMappingActivityStatements(
   filePath: string,
   staticFunctionBindings: Set<string>,
   usedExportNames: Set<string>,
+  requestContextClassName: string,
   addBinding: (exportName: string, stepId: string) => void,
 ): t.Statement[] {
   const chain = parseWorkflowChain(workflowExpression);
@@ -248,13 +249,22 @@ function createMappingActivityStatements(
       exportName = `${baseExportName}${exportSuffix++}`;
     }
     usedExportNames.add(exportName);
+    const contextNames = ['requestContext', 'runId', 'resourceId', 'workflowId'];
     const params = t.objectPattern([
       t.objectProperty(t.identifier('inputData'), t.identifier('inputData'), false, true),
       t.objectProperty(t.identifier('initData'), t.identifier('initData'), false, true),
+      ...contextNames.map(name => t.objectProperty(t.identifier(name), t.identifier(name), false, true)),
     ]);
     const callbackContext = t.objectExpression([
       t.objectProperty(t.identifier('inputData'), t.identifier('inputData'), false, true),
       t.objectProperty(t.identifier('getInitData'), t.arrowFunctionExpression([], t.identifier('initData'))),
+      t.objectProperty(
+        t.identifier('requestContext'),
+        t.newExpression(t.identifier(requestContextClassName), [t.identifier('requestContext')]),
+      ),
+      ...contextNames
+        .filter(name => name !== 'requestContext')
+        .map(name => t.objectProperty(t.identifier(name), t.identifier(name), false, true)),
     ]);
     const callbackExpression = t.cloneNode(callback, true) as t.Expression;
     const body = t.callExpression(callbackExpression, [callbackContext]);
@@ -344,31 +354,45 @@ function hasLocalMastraBinding(ast: t.File): boolean {
 function createTemporalActivitiesHelperStatements(
   mastraImportPath: string | null,
   hasMastraBinding: boolean,
+  requestContextClassName: string,
 ): t.Statement[] {
-  const helperSource = mastraImportPath
-    ? `
-        function createStep(args) {
-          return async (params) => {
-            const { mastra } = await import(${JSON.stringify(mastraImportPath)});
-            return args.execute({ ...params, mastra });
-          };
-        }
-      `
-    : hasMastraBinding
-      ? `
-        function createStep(args) {
-          return async (params) => {
-            return args.execute({ ...params, mastra });
-          };
-        }
-      `
-      : `
-        function createStep(args) {
-          return async (params) => {
-            return args.execute(params);
-          };
-        }
-      `;
+  const helperSource = `
+    function withRequestContext(params) {
+      const { requestContext, initData, ...rest } = params;
+      return {
+        ...rest,
+        requestContext: new ${requestContextClassName}(requestContext),
+        getInitData: () => initData,
+      };
+    }
+
+    ${
+      mastraImportPath
+        ? `
+          function createStep(args) {
+            return async (params) => {
+              const { mastra } = await import(${JSON.stringify(mastraImportPath)});
+              return args.execute({ ...withRequestContext(params), mastra });
+            };
+          }
+        `
+        : hasMastraBinding
+          ? `
+            function createStep(args) {
+              return async (params) => {
+                return args.execute({ ...withRequestContext(params), mastra });
+              };
+            }
+          `
+          : `
+            function createStep(args) {
+              return async (params) => {
+                return args.execute(withRequestContext(params));
+              };
+            }
+          `
+    }
+  `;
 
   return parse(helperSource, {
     sourceType: 'module',
@@ -412,13 +436,25 @@ export async function buildTemporalActivitiesModule(
             sourceFilename: id,
           });
 
-          const statements: t.Statement[] = [];
+          const usedExportNames = collectTopLevelBindingNames(ast.program);
+          let requestContextClassName = 'TemporalRequestContext';
+          let requestContextSuffix = 1;
+          while (usedExportNames.has(requestContextClassName)) {
+            requestContextClassName = `TemporalRequestContext${requestContextSuffix++}`;
+          }
+          usedExportNames.add(requestContextClassName);
+
+          const statements: t.Statement[] = [
+            t.importDeclaration(
+              [t.importSpecifier(t.identifier(requestContextClassName), t.identifier('RequestContext'))],
+              t.stringLiteral('@mastra/core/di'),
+            ),
+          ];
           const seenNames = new Set<string>();
           const strippedNames = new Set<string>();
           const workflowBindingNames = collectWorkflowBindingNames(ast);
           const stepFactoryBindings = collectCreateStepFactoryBindings(ast.program);
           const staticFunctionBindings = collectStaticFunctionBindings(ast.program);
-          const usedExportNames = collectTopLevelBindingNames(ast.program);
           const sourceFilePath = id;
           const hasMastraBinding = hasLocalMastraBinding(ast);
           let helperInserted = false;
@@ -428,7 +464,9 @@ export async function buildTemporalActivitiesModule(
               return;
             }
 
-            statements.push(...createTemporalActivitiesHelperStatements(null, hasMastraBinding));
+            statements.push(
+              ...createTemporalActivitiesHelperStatements(null, hasMastraBinding, requestContextClassName),
+            );
             helperInserted = true;
           };
 
@@ -546,6 +584,7 @@ export async function buildTemporalActivitiesModule(
                       sourceFilePath,
                       staticFunctionBindings,
                       usedExportNames,
+                      requestContextClassName,
                       addGeneratedActivityBinding,
                     ),
                   );
@@ -623,6 +662,7 @@ export async function buildTemporalActivitiesModule(
                       sourceFilePath,
                       staticFunctionBindings,
                       usedExportNames,
+                      requestContextClassName,
                       addGeneratedActivityBinding,
                     ),
                   );

@@ -28,7 +28,7 @@ type Story = StoryObj<typeof JSONSchemaForm.Root>;
 function JSONSchemaPreview({ schema }: { schema: JsonSchema | null }) {
   if (!schema) return null;
   return (
-    <pre className="bg-surface2 text-neutral4 text-ui-sm mt-4 max-h-64 overflow-auto rounded-md p-4">
+    <pre className="bg-surface2 text-muted-foreground text-ui-sm mt-4 max-h-64 overflow-auto rounded-md p-4">
       {JSON.stringify(schema, null, 2)}
     </pre>
   );
@@ -247,8 +247,8 @@ export const CustomStyling: Story = {
                 />
                 <div className="flex items-center justify-between">
                   <div className="flex gap-6">
-                    <JSONSchemaForm.FieldOptional label="Optional field" labelClassName="text-neutral4" />
-                    <JSONSchemaForm.FieldNullable label="Allow null" labelClassName="text-neutral4" />
+                    <JSONSchemaForm.FieldOptional label="Optional field" labelClassName="text-muted-foreground" />
+                    <JSONSchemaForm.FieldNullable label="Allow null" labelClassName="text-muted-foreground" />
                   </div>
                   <JSONSchemaForm.FieldRemove variant="outline" tooltip="Remove this field" />
                 </div>

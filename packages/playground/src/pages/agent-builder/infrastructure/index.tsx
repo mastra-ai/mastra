@@ -20,7 +20,7 @@ const InfrastructureStatus = ({ ok, label }: { ok: boolean; label: string }) => 
 );
 
 const EmptyRow = ({ message }: { message: string }) => (
-  <Txt variant="ui-sm" className="text-neutral3">
+  <Txt variant="ui-sm" className="text-muted-foreground">
     {message}
   </Txt>
 );
@@ -35,7 +35,7 @@ const titleCase = (value: string | number | null | undefined) => {
 
 const Detail = ({ label, value }: { label: string; value: string | number | null | undefined }) => (
   <div className="flex flex-col gap-0.5">
-    <Txt variant="ui-xs" className="text-neutral4">
+    <Txt variant="ui-xs" className="text-muted-foreground">
       {label}
     </Txt>
     <Txt variant="ui-sm" className="text-icon6">
@@ -75,15 +75,15 @@ export const AgentBuilderInfrastructure = () => {
           description="Deployment-level defaults Agent Builder applies when users create or run builder agents."
         >
           {!canViewInfrastructure ? (
-            <Txt variant="ui-sm" className="text-neutral3">
+            <Txt variant="ui-sm" className="text-muted-foreground">
               You do not have permission to view Agent Builder infrastructure.
             </Txt>
           ) : isLoading ? (
-            <Txt variant="ui-sm" className="text-neutral3">
+            <Txt variant="ui-sm" className="text-muted-foreground">
               Loading infrastructure configuration…
             </Txt>
           ) : error || !data ? (
-            <Txt variant="ui-sm" className="text-neutral3">
+            <Txt variant="ui-sm" className="text-muted-foreground">
               Infrastructure configuration unavailable.
             </Txt>
           ) : (
@@ -93,7 +93,7 @@ export const AgentBuilderInfrastructure = () => {
                   <Txt variant="ui-md" className="font-medium">
                     Channels
                   </Txt>
-                  <Txt variant="ui-xs" className="text-neutral3">
+                  <Txt variant="ui-xs" className="text-muted-foreground">
                     Configured channel providers available to Agent Builder publish/share flows. Unconfigured providers
                     are omitted until their required environment/config is present.
                   </Txt>
@@ -109,7 +109,7 @@ export const AgentBuilderInfrastructure = () => {
                             <Txt variant="ui-sm" className="font-medium">
                               {titleCase(provider.name)}
                             </Txt>
-                            <Txt variant="ui-xs" className="text-neutral3">
+                            <Txt variant="ui-xs" className="text-muted-foreground">
                               Provider ID: {provider.id}
                             </Txt>
                           </div>
@@ -133,7 +133,7 @@ export const AgentBuilderInfrastructure = () => {
                   <Txt variant="ui-md" className="font-medium">
                     Browser
                   </Txt>
-                  <Txt variant="ui-xs" className="text-neutral3">
+                  <Txt variant="ui-xs" className="text-muted-foreground">
                     Browser automation provider configured for builder agents. The card shows the selected provider and
                     only non-default options explicitly passed in configuration.
                   </Txt>
@@ -168,7 +168,7 @@ export const AgentBuilderInfrastructure = () => {
                   <Txt variant="ui-md" className="font-medium">
                     Registries
                   </Txt>
-                  <Txt variant="ui-xs" className="text-neutral3">
+                  <Txt variant="ui-xs" className="text-muted-foreground">
                     External skill registries available to import skills into the workspace.
                   </Txt>
                 </div>
@@ -178,7 +178,7 @@ export const AgentBuilderInfrastructure = () => {
                       <Txt variant="ui-sm" className="font-medium">
                         skills.sh
                       </Txt>
-                      <Txt variant="ui-xs" className="text-neutral3">
+                      <Txt variant="ui-xs" className="text-muted-foreground">
                         GitHub-backed public skills registry.
                       </Txt>
                     </div>
@@ -195,7 +195,7 @@ export const AgentBuilderInfrastructure = () => {
                   <Txt variant="ui-md" className="font-medium">
                     Workspace
                   </Txt>
-                  <Txt variant="ui-xs" className="text-neutral3">
+                  <Txt variant="ui-xs" className="text-muted-foreground">
                     Workspace config used for generated files and sandbox execution. This reports the builder workspace
                     only, not agent-specific runtime workspaces.
                   </Txt>

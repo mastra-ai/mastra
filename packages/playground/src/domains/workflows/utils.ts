@@ -130,3 +130,8 @@ export function getRunTimestamp(value: Date | string | number | undefined): numb
   const timestamp = new Date(value).getTime();
   return Number.isFinite(timestamp) ? timestamp : undefined;
 }
+
+export function getRunResourceId(run: unknown): string | undefined {
+  if (!run || typeof run !== 'object' || !('resourceId' in run)) return undefined;
+  return typeof run.resourceId === 'string' && run.resourceId.length > 0 ? run.resourceId : undefined;
+}

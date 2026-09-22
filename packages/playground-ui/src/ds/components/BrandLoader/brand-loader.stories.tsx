@@ -68,7 +68,7 @@ export const SuperposedOnLogo: Story = {
     <div className="flex flex-col items-center gap-10">
       {(['sm', 'md', 'lg'] as const).map(size => (
         <div key={size} className="flex flex-col items-center gap-2">
-          <span className="text-ui-sm text-neutral3">
+          <span className="text-ui-sm text-muted-foreground">
             size=&quot;{size}&quot; · {SIZE_PX[size]}px (per-size stroke)
           </span>
           <div className="relative" style={{ width: SIZE_PX[size], aspectRatio: '34 / 21' }}>
@@ -81,7 +81,7 @@ export const SuperposedOnLogo: Story = {
       ))}
       {[240, 400, 640].map(px => (
         <div key={px} className="flex flex-col items-center gap-2">
-          <span className="text-ui-sm text-neutral3">{px}px (uses lg stroke via className)</span>
+          <span className="text-ui-sm text-muted-foreground">{px}px (uses lg stroke via className)</span>
           <div className="relative" style={{ width: px, aspectRatio: '34 / 21' }}>
             <LogoWithoutText className="absolute inset-0 size-full text-[#ef4444]/70" aria-hidden />
             <div className="absolute inset-0">

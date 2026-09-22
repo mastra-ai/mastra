@@ -2,33 +2,15 @@
 
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Pencil, X, Check } from 'lucide-react';
+import { DatasetFieldErrors } from '../dataset-field-errors';
 import { DatasetItemScorerSelector } from './dataset-item-scorer-selector';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
   field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
-}
-
-/** Displays field-level validation errors */
-function ValidationErrors({ field, errors }: { field: string; errors: Array<{ path: string; message: string }> }) {
-  if (!errors.length) return null;
-
-  return (
-    <div className="mt-2 space-y-1">
-      {errors.map((err, idx) => (
-        <p key={idx} className="text-destructive text-ui-sm">
-          <code className="bg-destructive/10 rounded px-1">
-            {field}
-            {err.path !== '/' ? err.path : ''}
-          </code>
-          : {err.message}
-        </p>
-      ))}
-    </div>
-  );
 }
 
 /**
@@ -89,27 +71,43 @@ export function EditModeContent({
 
       <div className="space-y-6">
         <div className="space-y-2">
-          <Label>Input (JSON) *</Label>
-          <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
-          {validationErrors?.field === 'input' && <ValidationErrors field="input" errors={validationErrors.errors} />}
+          <FieldBlock.Label name="item-input" required>
+            Input (JSON)
+          </FieldBlock.Label>
+          <CodeEditor
+            id="input-item-input"
+            aria-invalid={validationErrors?.field === 'input' ? true : undefined}
+            aria-describedby={validationErrors?.field === 'input' ? fieldErrorId('item-input') : undefined}
+            value={inputValue}
+            onChange={setInputValue}
+            showCopyButton={false}
+            className="min-h-[120px]"
+          />
+          {validationErrors?.field === 'input' && (
+            <DatasetFieldErrors name="item-input" field="input" errors={validationErrors.errors} />
+          )}
         </div>
 
         <div className="space-y-2">
-          <Label>Ground Truth (JSON, optional)</Label>
+          <FieldBlock.Label name="item-ground-truth">Ground Truth (JSON, optional)</FieldBlock.Label>
           <CodeEditor
+            id="input-item-ground-truth"
+            aria-invalid={validationErrors?.field === 'groundTruth' ? true : undefined}
+            aria-describedby={validationErrors?.field === 'groundTruth' ? fieldErrorId('item-ground-truth') : undefined}
             value={groundTruthValue}
             onChange={setGroundTruthValue}
             showCopyButton={false}
             className="min-h-[100px]"
           />
           {validationErrors?.field === 'groundTruth' && (
-            <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
+            <DatasetFieldErrors name="item-ground-truth" field="groundTruth" errors={validationErrors.errors} />
           )}
         </div>
 
         <div className="space-y-2">
-          <Label>Expected Trajectory (JSON, optional)</Label>
+          <FieldBlock.Label name="item-trajectory">Expected Trajectory (JSON, optional)</FieldBlock.Label>
           <CodeEditor
+            id="input-item-trajectory"
             value={trajectoryValue}
             onChange={setTrajectoryValue}
             showCopyButton={false}
@@ -118,20 +116,23 @@ export function EditModeContent({
         </div>
 
         <div className="space-y-2">
-          <Label>Tool Mocks (JSON array, optional)</Label>
+          <FieldBlock.Label name="item-tool-mocks">Tool Mocks (JSON array, optional)</FieldBlock.Label>
           <p className="text-muted-foreground text-ui-sm">
             Ordered static mocks served in place of executing the tool. Each entry is{' '}
             <code>{`{ "toolName", "args", "output" }`}</code>. Calling a mocked tool with non-matching args fails the
             item; unmocked tools run live.
           </p>
           <CodeEditor
+            id="input-item-tool-mocks"
+            aria-invalid={validationErrors?.field === 'toolMocks' ? true : undefined}
+            aria-describedby={validationErrors?.field === 'toolMocks' ? fieldErrorId('item-tool-mocks') : undefined}
             value={toolMocksValue}
             onChange={setToolMocksValue}
             showCopyButton={false}
             className="min-h-[100px]"
           />
           {validationErrors?.field === 'toolMocks' && (
-            <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
+            <DatasetFieldErrors name="item-tool-mocks" field="toolMocks" errors={validationErrors.errors} />
           )}
         </div>
 
@@ -144,8 +145,9 @@ export function EditModeContent({
         />
 
         <div className="space-y-2">
-          <Label>Request Context (JSON, optional)</Label>
+          <FieldBlock.Label name="item-request-context">Request Context (JSON, optional)</FieldBlock.Label>
           <CodeEditor
+            id="input-item-request-context"
             value={requestContextValue}
             onChange={setRequestContextValue}
             showCopyButton={false}
@@ -154,8 +156,9 @@ export function EditModeContent({
         </div>
 
         <div className="space-y-2">
-          <Label>Metadata (JSON, optional)</Label>
+          <FieldBlock.Label name="item-metadata">Metadata (JSON, optional)</FieldBlock.Label>
           <CodeEditor
+            id="input-item-metadata"
             value={metadataValue}
             onChange={setMetadataValue}
             showCopyButton={false}

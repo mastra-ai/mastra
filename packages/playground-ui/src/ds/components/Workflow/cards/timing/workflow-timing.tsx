@@ -3,7 +3,7 @@ import type { WorkflowStepCardViewProps } from '../../types';
 import { ClockDial, DurationDial } from './workflow-time-dial';
 import type { DurationUnit } from './workflow-time-dial';
 
-const captionClasses = 'text-ui-xs tracking-wider whitespace-nowrap text-neutral3 uppercase';
+const captionClasses = 'text-ui-xs tracking-wider whitespace-nowrap text-muted-foreground uppercase';
 
 function durationReading(duration: number): { amount: number; unit: DurationUnit } {
   if (duration < 1000) return { amount: duration, unit: 'ms' };
@@ -24,11 +24,11 @@ function TimingReading({
   dial: ReactNode;
 }) {
   return (
-    <span className="text-neutral6 mt-1 flex min-h-[108px] items-center justify-between gap-1">
+    <span className="text-foreground mt-1 flex min-h-[108px] items-center justify-between gap-1">
       <span className="z-10 flex min-w-0 flex-col gap-2">
         <span className="text-header-xl flex items-baseline gap-1 leading-none font-normal tracking-tighter whitespace-nowrap tabular-nums">
           {value}
-          <small className="text-ui-xs text-neutral3 font-normal tracking-normal">{unit}</small>
+          <small className="text-ui-xs text-muted-foreground font-normal tracking-normal">{unit}</small>
         </span>
         <span className={captionClasses}>{caption}</span>
       </span>

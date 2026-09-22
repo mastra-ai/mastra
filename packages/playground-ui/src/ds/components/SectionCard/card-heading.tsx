@@ -25,7 +25,7 @@ export function CardHeading({
         id={id}
         className={cn(
           'font-display text-header-sm font-normal tracking-normal',
-          danger ? 'text-accent2' : 'text-neutral4',
+          danger ? 'text-accent2' : 'text-muted-foreground',
           className,
         )}
       >
@@ -35,7 +35,7 @@ export function CardHeading({
         <p
           className={cn(
             'mt-1 max-w-[62ch] font-sans text-ui-sm leading-ui-sm',
-            danger ? 'text-accent2/70' : 'text-neutral3',
+            danger ? 'text-accent2/70' : 'text-muted-foreground',
             descriptionClassName,
           )}
         >

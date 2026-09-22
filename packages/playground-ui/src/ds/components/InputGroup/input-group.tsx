@@ -25,7 +25,7 @@ const inputGroupBaseClassName = cn(
   'border border-border text-foreground',
   transitions.all,
   'has-[:disabled]:cursor-not-allowed has-[:disabled]:border-border has-[:disabled]:bg-muted has-[:disabled]:text-muted-foreground',
-  'has-[[aria-invalid=true]]:border-error',
+  'has-[[aria-invalid=true]]:border-destructive',
   // Height is on the root (border-box) so the group matches a same-size sibling control.
   // Auto height when vertical (block-* addon) or wrapping a textarea.
   'has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col',

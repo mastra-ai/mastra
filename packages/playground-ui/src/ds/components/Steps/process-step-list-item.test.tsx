@@ -62,10 +62,10 @@ describe('ProcessStepListItem', () => {
   });
 
   it.each([
-    ['the active step', { isActive: true, status: 'running' }, 'text-neutral5'],
-    ['a finished step', { isActive: false, status: 'success' }, 'text-neutral5'],
-    ['a step still waiting its turn', { isActive: false, status: 'pending' }, 'text-neutral3'],
-    ['a step that failed', { isActive: false, status: 'failed' }, 'text-neutral3'],
+    ['the active step', { isActive: true, status: 'running' }, 'text-foreground'],
+    ['a finished step', { isActive: false, status: 'success' }, 'text-foreground'],
+    ['a step still waiting its turn', { isActive: false, status: 'pending' }, 'text-muted-foreground'],
+    ['a step that failed', { isActive: false, status: 'failed' }, 'text-muted-foreground'],
   ])('reads %s at the right weight', (_, { isActive, status }, expected) => {
     render(<ProcessStepListItem step={{ ...step, status }} isActive={isActive} position={1} />);
 

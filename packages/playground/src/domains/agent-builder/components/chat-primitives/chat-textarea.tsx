@@ -13,7 +13,7 @@ export const ChatTextarea = forwardRef<HTMLTextAreaElement, ChatTextareaProps>((
       variant="unstyled"
       rows={1}
       className={cn(
-        'min-h-[44px] resize-none text-ui-md bg-transparent text-neutral6 placeholder:text-neutral3',
+        'min-h-[44px] resize-none text-ui-md bg-transparent text-foreground placeholder:text-muted-foreground',
         'outline-none focus:outline-none focus-visible:outline-none',
         'disabled:cursor-not-allowed disabled:opacity-50',
         className,

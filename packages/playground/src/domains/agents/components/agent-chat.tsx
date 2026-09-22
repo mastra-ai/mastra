@@ -33,7 +33,13 @@ export const AgentChat = ({
   const { settings } = useAgentSettings();
   const requestContext = useMergedRequestContext();
 
-  const { data, isLoading: isMessagesLoading } = useAgentMessages({
+  const {
+    data,
+    isLoading: isMessagesLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useAgentMessages({
     agentId: agentId,
     threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
     memory: memory ?? false,
@@ -66,6 +72,10 @@ export const AgentChat = ({
 
   const messages = data?.messages ?? emptyMessagesRef.current.messages;
 
+  const loadOlderMessages = () => {
+    if (!isFetchingNextPage) void fetchNextPage();
+  };
+
   return (
     <ChatProvider
       agentId={agentId}
@@ -89,6 +99,8 @@ export const AgentChat = ({
         refreshThreadList={refreshThreadList}
         runOptionsSlot={runOptionsSlot}
         isHistoryLoading={isMessagesLoading}
+        onLoadPrevious={hasNextPage ? loadOlderMessages : undefined}
+        isLoadingPrevious={isFetchingNextPage}
       />
     </ChatProvider>
   );

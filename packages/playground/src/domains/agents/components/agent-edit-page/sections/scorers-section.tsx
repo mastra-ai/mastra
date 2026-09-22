@@ -87,9 +87,9 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="bg-surface3 flex items-center justify-between p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="text-neutral3 h-4 w-4" />
-                    <SectionTitle icon={<JudgeIcon className="text-neutral3" />}>
-                      Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+                    <ChevronRight className="text-muted-foreground h-4 w-4" />
+                    <SectionTitle icon={<JudgeIcon className="text-muted-foreground" />}>
+                      Scorers{count > 0 && <span className="text-muted-foreground font-normal">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
                 </div>
@@ -99,6 +99,8 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                     <div className="flex flex-col gap-2">
                       <Combobox
                         multiple
+                        name="scorers"
+                        aria-label="Scorers"
                         options={options}
                         value={selectedIds}
                         onValueChange={handleValueChange}
@@ -180,9 +182,9 @@ function ScorerConfigPanel({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon size="sm">
-            <JudgeIcon className="text-neutral3" />
+            <JudgeIcon className="text-muted-foreground" />
           </Icon>
-          <span className="text-neutral6 text-ui-sm font-medium">{scorerName}</span>
+          <span className="text-foreground text-ui-sm font-medium">{scorerName}</span>
         </div>
         {!readOnly && (
           <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -202,7 +204,7 @@ function ScorerConfigPanel({
       />
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-ui-sm">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-muted-foreground">
           Sampling
         </Label>
         <RadioGroup
@@ -214,13 +216,13 @@ function ScorerConfigPanel({
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 text-ui-md cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="text-foreground cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 text-ui-md cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-foreground cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>
@@ -228,7 +230,7 @@ function ScorerConfigPanel({
 
         {samplingType === 'ratio' && (
           <div className="mt-1 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-ui-sm">
+            <Label htmlFor={`rate-${scorerId}`} className="text-muted-foreground">
               Sample Rate (0-1)
             </Label>
             <Input

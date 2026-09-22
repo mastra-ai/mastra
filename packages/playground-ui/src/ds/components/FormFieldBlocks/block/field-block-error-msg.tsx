@@ -1,5 +1,4 @@
 import '../../../../../new-theme.css';
-import { TriangleAlertIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type FieldBlockErrorMsgProps = {
@@ -21,15 +20,9 @@ export function FieldBlockErrorMsg({ children, name, className }: FieldBlockErro
       // remembering to wrap it.
       role="alert"
       id={name !== undefined ? `error-${name}` : undefined}
-      className={cn(
-        'new-theme flex items-center gap-2 text-ui-sm text-foreground',
-        // Colour is never the only signal: the icon carries the error meaning, the text
-        // states it, and the field itself draws an error border.
-        '[&>svg]:size-[1.2em] [&>svg]:text-destructive',
-        className,
-      )}
+      className={cn('new-theme text-ui-sm text-destructive', className)}
     >
-      <TriangleAlertIcon aria-hidden /> {children}
+      {children}
     </p>
   );
 }

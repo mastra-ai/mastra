@@ -52,16 +52,18 @@ afterEach(() => cleanup());
 
 describe('TracesListView columns', () => {
   describe('when no column preferences are provided', () => {
-    it('keeps the existing default headers and grid', () => {
+    it('renders the default headers in order with the matching grid', () => {
       const { container } = render(<TracesListView traces={[]} onTraceClick={vi.fn()} />);
 
-      expect(screen.getByText('Input')).toBeTruthy();
-      expect(screen.getByText('Entity')).toBeTruthy();
-      expect(screen.queryByText('Duration')).toBeNull();
-
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      const top = container.querySelector('.data-list-top');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('11rem 14rem minmax(8rem,1fr) 14rem 6rem');
+      assert(top);
+      const headers = Array.from(top.children).map(cell => cell.textContent);
+      expect(headers).toEqual(['Start', 'Type', 'Name', 'Input', 'Status', 'Duration', 'Est. cost']);
+      expect(screen.queryByText('Created')).toBeNull();
+      expect(screen.queryByText('Entity')).toBeNull();
+      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 
@@ -79,7 +81,7 @@ describe('TracesListView columns', () => {
       );
 
       expect(screen.queryByText('Input')).toBeNull();
-      expect(screen.queryByText('Entity')).toBeNull();
+      expect(screen.queryByText('Type')).toBeNull();
       expect(screen.getByText('Duration')).toBeTruthy();
       expect(screen.getByText('Input tokens')).toBeTruthy();
       expect(screen.getByText('Output tokens')).toBeTruthy();
@@ -94,9 +96,13 @@ describe('TracesListView columns', () => {
 });
 
 describe('TracesListView — status column', () => {
+  // Status is the last default column only when the trailing optional ones are hidden.
+  const statusLast = { visibleColumns: [], metadataKeys: [] } as const;
+
   it('renders the computed status carried by lightweight rows', () => {
     render(
       <TracesListView
+        columnPreferences={statusLast}
         traces={[
           makeTrace({ traceId: 'trace-failed', status: 'error', endedAt: timestamp }),
           makeTrace({ traceId: 'trace-succeeded', status: 'success', endedAt: timestamp }),
@@ -106,35 +112,42 @@ describe('TracesListView — status column', () => {
       />,
     );
 
-    const statuses = screen
-      .getAllByRole('button')
-      .map(row => row.lastElementChild?.textContent)
-      .filter(text => text !== undefined);
+    const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
     expect(statuses).toEqual(['ERR', 'OK', 'RUN']);
   });
 
   it('renders a dash when a row carries no status', () => {
-    render(<TracesListView traces={[makeTrace({ traceId: 'trace-unknown' })]} onTraceClick={vi.fn()} />);
+    render(
+      <TracesListView
+        columnPreferences={statusLast}
+        traces={[makeTrace({ traceId: 'trace-unknown' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
 
     const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
     expect(statuses).toEqual(['-']);
   });
 });
 
-describe('TracesListView — entity column', () => {
-  it('names the entity from entityName, falling back to entityId', () => {
-    render(
-      <TracesListView
-        traces={[
-          makeTrace({ traceId: 'trace-named', entityType: 'agent', entityName: 'weatherAgent' }),
-          makeTrace({ traceId: 'trace-unnamed', entityType: 'agent', entityId: 'agent-42' }),
-        ]}
-        onTraceClick={vi.fn()}
-      />,
-    );
+describe('TracesListView — type column', () => {
+  describe('when rows carry an entity type', () => {
+    it('labels each row by its entity type', () => {
+      render(
+        <TracesListView
+          traces={[
+            makeTrace({ traceId: 'trace-agent', entityType: 'agent', name: 'weatherAgent' }),
+            makeTrace({ traceId: 'trace-tool', entityType: 'tool', name: 'fetchWeather' }),
+          ]}
+          onTraceClick={vi.fn()}
+        />,
+      );
 
-    expect(screen.getByText('weatherAgent')).not.toBeNull();
-    expect(screen.getByText('agent-42')).not.toBeNull();
+      expect(screen.getByText('Agent')).not.toBeNull();
+      expect(screen.getByText('Tool')).not.toBeNull();
+      expect(screen.getByText('weatherAgent')).not.toBeNull();
+      expect(screen.getByText('fetchWeather')).not.toBeNull();
+    });
   });
 });
 

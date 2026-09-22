@@ -1,5 +1,41 @@
 # @mastra/react
 
+## 1.6.0-alpha.11
+
+### Minor Changes
+
+- Added an optional `resourceId` to `useCreateWorkflowRun` and `useStreamWorkflow`, so a manually started workflow run can be attributed to a resource. ([#24519](https://github.com/mastra-ai/mastra/pull/24519))
+
+  ```tsx
+  const createWorkflowRun = useCreateWorkflowRun();
+  const { streamWorkflow } = useStreamWorkflow();
+
+  const { runId } = await createWorkflowRun.mutateAsync({ workflowId, resourceId: 'tenant-42' });
+  await streamWorkflow.mutateAsync({ workflowId, runId, inputData, requestContext: {}, resourceId: 'tenant-42' });
+  ```
+
+### Patch Changes
+
+- Fix `useSpeechRecognition` (browser path) dropping earlier finalized phrases during continuous dictation. Each `onresult` event now appends its finalized results to the session transcript instead of replacing it, and the transcript resets when a new dictation session starts. Fixes #24330. ([#24579](https://github.com/mastra-ai/mastra/pull/24579))
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0), [`d77beee`](https://github.com/mastra-ai/mastra/commit/d77beeec3f4c17f1c47376730a90faccc06247cb)]:
+  - @mastra/core@1.68.0-alpha.10
+  - @mastra/client-js@1.47.0-alpha.10
+
+## 1.6.0-alpha.10
+
+### Patch Changes
+
+- Fixed live progress for deeply nested agents in React and Studio. Inner agent messages now appear in the correct nested agent card before the outer delegation finishes. ([#21735](https://github.com/mastra-ai/mastra/pull/21735))
+
+## 1.6.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`2cb5319`](https://github.com/mastra-ai/mastra/commit/2cb5319fc72ef20e7feebfa1e786ff78956aae84), [`f6e7562`](https://github.com/mastra-ai/mastra/commit/f6e7562b2ccfdd5d7d77a7eeea0849b6ffd2ec94), [`d4795a4`](https://github.com/mastra-ai/mastra/commit/d4795a42067605d2bbec10ad0b3dcc45acf02147), [`b87aa0d`](https://github.com/mastra-ai/mastra/commit/b87aa0dc38055558950024f750532ddae6ccf40c), [`53519a2`](https://github.com/mastra-ai/mastra/commit/53519a29ce0063712786b74973ae2dbe97a433a7)]:
+  - @mastra/core@1.68.0-alpha.9
+  - @mastra/client-js@1.47.0-alpha.9
+
 ## 1.6.0-alpha.8
 
 ### Patch Changes

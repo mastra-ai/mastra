@@ -108,7 +108,7 @@ export function ReviewItemCard({
           />
         )}
         <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
-          <Txt variant="ui-xs" className="text-neutral4 block truncate">
+          <Txt variant="ui-xs" className="text-muted-foreground block truncate">
             {inputPreview}
           </Txt>
         </button>
@@ -167,7 +167,7 @@ export function ReviewItemCard({
           {/* Scores */}
           {item.scores && Object.keys(item.scores).length > 0 && (
             <div className="mr-1 flex items-center gap-1">
-              <Icon size="sm" className="text-neutral3">
+              <Icon size="sm" className="text-muted-foreground">
                 <GaugeIcon />
               </Icon>
               <div className="flex gap-1">
@@ -194,7 +194,7 @@ export function ReviewItemCard({
                 </Button>
               )}
               <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
-                <Icon size="sm" className="text-neutral2 hover:text-negative1">
+                <Icon size="sm" className="text-placeholder hover:text-negative1">
                   <Trash2 />
                 </Icon>
               </Button>
@@ -208,35 +208,35 @@ export function ReviewItemCard({
         <div className="border-border1 mt-3 space-y-3 border-t pt-3">
           {item.experimentId && (
             <div className="flex items-center gap-1.5">
-              <Txt variant="ui-xs" className="text-neutral3">
+              <Txt variant="ui-xs" className="text-muted-foreground">
                 Experiment:
               </Txt>
-              <code className="text-neutral4 bg-surface2 text-ui-xs rounded px-1.5 py-0.5 font-mono">
+              <code className="text-muted-foreground bg-surface2 text-ui-xs rounded px-1.5 py-0.5 font-mono">
                 {item.experimentId.slice(0, 8)}
               </code>
             </div>
           )}
           <div>
-            <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
+            <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
               Input
             </Txt>
-            <pre className="text-neutral5 bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+            <pre className="text-foreground bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
               {formatUnknown(item.input)}
             </pre>
           </div>
           {item.output !== undefined && item.output !== null && (
             <div>
-              <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
+              <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
                 Output
               </Txt>
-              <pre className="text-neutral5 bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="text-foreground bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.output)}
               </pre>
             </div>
           )}
           {Boolean(item.error) && (
             <div>
-              <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
+              <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
                 Error
               </Txt>
               <pre className="text-negative1 bg-surface2 text-ui-sm max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
@@ -247,7 +247,7 @@ export function ReviewItemCard({
           {/* Comment */}
           {!isCompleted && (
             <div>
-              <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
+              <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
                 Comment
               </Txt>
               <Textarea
@@ -276,10 +276,10 @@ export function ReviewItemCard({
           )}
           {isCompleted && item.comment && (
             <div>
-              <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
+              <Txt variant="ui-xs" className="text-muted-foreground mb-1 block font-semibold">
                 Comment
               </Txt>
-              <Txt variant="ui-xs" className="text-neutral4 block">
+              <Txt variant="ui-xs" className="text-muted-foreground block">
                 {item.comment}
               </Txt>
             </div>

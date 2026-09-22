@@ -27,7 +27,8 @@ export interface DataPanelProps {
    * Drawer width. `md` (default) is a narrow detail panel whose width shrinks
    * with `depth`. `half`/`wide`/`full` are for multi-column content (e.g. the
    * trace panel); each `depth` level trims them by a small fixed amount so a
-   * same-size parent still peeks out beneath.
+   * same-size parent still peeks out beneath. Changing `size` while open
+   * animates the width.
    */
   size?: 'md' | 'half' | 'wide' | 'full';
   children: React.ReactNode;

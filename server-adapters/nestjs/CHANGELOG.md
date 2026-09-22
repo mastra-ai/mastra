@@ -1,5 +1,21 @@
 # @mastra/nestjs
 
+## 0.2.27-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0), [`d7c695b`](https://github.com/mastra-ai/mastra/commit/d7c695b29dd0903a14b6972ff80e7c6e5fe1897a), [`1256188`](https://github.com/mastra-ai/mastra/commit/1256188af4a294840cc6d5b87d4f042c6b147488)]:
+  - @mastra/core@1.68.0-alpha.10
+  - @mastra/server@1.68.0-alpha.10
+
+## 0.2.27-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`2cb5319`](https://github.com/mastra-ai/mastra/commit/2cb5319fc72ef20e7feebfa1e786ff78956aae84), [`f6e7562`](https://github.com/mastra-ai/mastra/commit/f6e7562b2ccfdd5d7d77a7eeea0849b6ffd2ec94), [`d4795a4`](https://github.com/mastra-ai/mastra/commit/d4795a42067605d2bbec10ad0b3dcc45acf02147), [`b87aa0d`](https://github.com/mastra-ai/mastra/commit/b87aa0dc38055558950024f750532ddae6ccf40c), [`53519a2`](https://github.com/mastra-ai/mastra/commit/53519a29ce0063712786b74973ae2dbe97a433a7)]:
+  - @mastra/core@1.68.0-alpha.9
+  - @mastra/server@1.68.0-alpha.9
+
 ## 0.2.27-alpha.8
 
 ### Patch Changes

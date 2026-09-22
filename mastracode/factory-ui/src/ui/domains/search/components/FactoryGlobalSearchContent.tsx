@@ -43,7 +43,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const workItems = useGlobalSearchWorkItems(searchableFactoryId);
   // Both boards read `repositories[0]`, so that is the repository whose intake feeds are searchable.
   const projectRepositoryId = activeFactory?.repositories[0]?.projectRepositoryId;
-  const intake = useGlobalSearchIntake(projectRepositoryId);
+  const intake = useGlobalSearchIntake(factoryId, projectRepositoryId, activeFactory?.repositories[0]?.provider);
   // The palette closes on select, so a failed move has no card left to carry its reason.
   const board = useBoardItems({
     factoryProjectId: searchableFactoryId,
@@ -62,8 +62,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const unstartedItems = createWorkItemSearchResults({
     factoryId,
     workItems: workItems.items,
-    issues: intake.issues,
-    pullRequests: intake.pullRequests,
+    candidates: intake.candidates,
   });
   const counts = createGlobalSearchScopeCounts({
     work: sessionGroups.work.length,

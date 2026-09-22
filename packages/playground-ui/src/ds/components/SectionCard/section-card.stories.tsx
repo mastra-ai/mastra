@@ -11,7 +11,7 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
     <div className={`border-border1 rounded-2xl border p-6 ${className}`}>
-      <p className="text-ui-xs text-neutral3 mb-4 tracking-wide uppercase">{label}</p>
+      <p className="text-ui-xs text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
   );
@@ -38,7 +38,7 @@ type Story = StoryObj<typeof SectionCard>;
 export const Default: Story = {
   render: () => (
     <SectionCard title="Activity Over Time" description="Track request volume, cost, and latency over time">
-      <p className="text-neutral3">Body content goes here.</p>
+      <p className="text-muted-foreground">Body content goes here.</p>
     </SectionCard>
   ),
 };
@@ -49,7 +49,7 @@ export const WithAction: Story = {
       title="Activity Over Time"
       description="Track request volume, cost, and latency over time"
       action={
-        <div className="text-ui-sm text-neutral3 flex gap-2">
+        <div className="text-ui-sm text-muted-foreground flex gap-2">
           <span>Cost</span>
           <span>Requests</span>
           <span>Tokens</span>
@@ -96,7 +96,7 @@ export const OnSurfaces: Story = {
         <SurfaceFrame key={token} className={className} label={label}>
           <div className="flex flex-col gap-4">
             <SectionCard title="Activity Over Time" description="Default variant on this surface.">
-              <p className="text-neutral3">Body content goes here.</p>
+              <p className="text-muted-foreground">Body content goes here.</p>
             </SectionCard>
             <SectionCard variant="danger" title="Delete project" description="Danger variant on this surface.">
               <p className="text-accent2/80">Confirmation controls go here.</p>

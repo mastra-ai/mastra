@@ -38,13 +38,13 @@ export const TextSlot: Story = {
     <main className="flex flex-col gap-4">
       <h1 className="sr-only">Status text hierarchy</h1>
       <div className="flex items-center gap-4">
-        <Txt as="span" variant="ui-sm" className="text-neutral3 w-24">
+        <Txt as="span" variant="ui-sm" className="text-muted-foreground w-24">
           Meta
         </Txt>
         <Status presentation={RUNNING} />
       </div>
       <div className="flex items-center gap-4">
-        <Txt as="span" variant="ui-sm" className="text-neutral3 w-24">
+        <Txt as="span" variant="ui-sm" className="text-muted-foreground w-24">
           Secondary
         </Txt>
         <Status presentation={RUNNING}>

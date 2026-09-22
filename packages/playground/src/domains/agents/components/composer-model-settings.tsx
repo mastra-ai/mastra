@@ -36,9 +36,9 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
 
   const radio = (
     <div className="flex items-center gap-2">
-      <RadioGroupItem value="network" id="network" className="text-neutral6" disabled={itemDisabled} />
+      <RadioGroupItem value="network" id="network" className="text-foreground" disabled={itemDisabled} />
       <Label
-        className={cn('text-neutral6 text-ui-md', !isNetworkAvailable && 'text-neutral3! cursor-not-allowed')}
+        className={cn('text-foreground', !isNetworkAvailable && 'text-muted-foreground! cursor-not-allowed')}
         htmlFor="network"
       >
         Network
@@ -81,11 +81,11 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
       <RadioGroupItem
         value="streamSubscription"
         id="streamSubscription"
-        className="text-neutral6"
+        className="text-foreground"
         disabled={itemDisabled}
       />
       <Label
-        className={cn('text-neutral6 text-ui-md', !supported && 'text-neutral3! cursor-not-allowed')}
+        className={cn('text-foreground', !supported && 'text-muted-foreground! cursor-not-allowed')}
         htmlFor="streamSubscription"
       >
         Stream subscription (default)
@@ -180,7 +180,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
             tooltip="Model settings"
             data-testid="composer-model-settings-trigger"
           >
-            <Sliders className="text-neutral3 hover:text-neutral6 h-5 w-5" />
+            <Sliders className="text-muted-foreground hover:text-foreground h-5 w-5" />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-4">
@@ -212,10 +212,10 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       <RadioGroupItem
                         value="generateLegacy"
                         id="generateLegacy"
-                        className="text-neutral6"
+                        className="text-foreground"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="generateLegacy">
+                      <Label className="text-foreground" htmlFor="generateLegacy">
                         Generate (Legacy)
                       </Label>
                     </div>
@@ -225,10 +225,10 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       <RadioGroupItem
                         value="generate"
                         id="generate"
-                        className="text-neutral6"
+                        className="text-foreground"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="generate">
+                      <Label className="text-foreground" htmlFor="generate">
                         Generate
                       </Label>
                     </div>
@@ -238,10 +238,10 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       <RadioGroupItem
                         value="streamLegacy"
                         id="streamLegacy"
-                        className="text-neutral6"
+                        className="text-foreground"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="streamLegacy">
+                      <Label className="text-foreground" htmlFor="streamLegacy">
                         Stream (Legacy)
                       </Label>
                     </div>
@@ -254,10 +254,10 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       <RadioGroupItem
                         value="stream"
                         id="stream"
-                        className="text-neutral6"
+                        className="text-foreground"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="stream">
+                      <Label className="text-foreground" htmlFor="stream">
                         Stream
                       </Label>
                     </div>
@@ -284,7 +284,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               {showSamplingBanner && (
                 <div
-                  className="text-neutral3 bg-surface3 text-ui-sm flex items-center gap-2 rounded px-3 py-2"
+                  className="text-muted-foreground bg-surface3 text-ui-sm flex items-center gap-2 rounded px-3 py-2"
                   data-testid="sampling-restriction-banner"
                 >
                   <Info className="h-3.5 w-3.5 shrink-0" />
@@ -315,7 +315,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                       })
                     }
                   />
-                  <Txt as="p" variant="ui-sm" className="text-neutral3">
+                  <Txt as="p" variant="ui-sm" className="text-muted-foreground">
                     {settings?.modelSettings?.temperature ?? 'n/a'}
                   </Txt>
                 </div>
@@ -337,7 +337,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                     min={-0.1}
                     step={0.1}
                   />
-                  <Txt as="p" variant="ui-sm" className="text-neutral3">
+                  <Txt as="p" variant="ui-sm" className="text-muted-foreground">
                     {settings?.modelSettings?.topP ?? 'n/a'}
                   </Txt>
                 </div>

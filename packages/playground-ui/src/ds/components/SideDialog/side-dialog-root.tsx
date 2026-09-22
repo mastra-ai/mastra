@@ -79,9 +79,9 @@ export function SideDialogRoot({
                   <button
                     type="button"
                     className={cn(
-                      'absolute top-0 -left-14 flex size-14 appearance-none items-center justify-center rounded-bl-lg border-b border-l border-border2 bg-surface2 text-neutral3',
+                      'absolute top-0 -left-14 flex size-14 appearance-none items-center justify-center rounded-bl-lg border-b border-l border-border2 bg-surface2 text-muted-foreground',
                       transitions.all,
-                      'hover:bg-surface4 hover:text-neutral5',
+                      'hover:bg-surface4 hover:text-foreground',
                     )}
                     aria-label="Close"
                   >

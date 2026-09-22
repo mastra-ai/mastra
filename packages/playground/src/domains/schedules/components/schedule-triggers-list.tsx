@@ -62,7 +62,7 @@ export function ScheduleTriggersList({
 
   if (triggers.length === 0) {
     return (
-      <Txt variant="ui-md" className="text-neutral4 p-4">
+      <Txt variant="ui-md" className="text-muted-foreground p-4">
         No trigger history yet.
       </Txt>
     );
@@ -95,7 +95,7 @@ export function ScheduleTriggersList({
             className={
               isLinked
                 ? 'text-accent1 text-ui-sm font-mono whitespace-nowrap'
-                : 'text-neutral3 text-ui-sm font-mono whitespace-nowrap'
+                : 'text-muted-foreground text-ui-sm font-mono whitespace-nowrap'
             }
           >
             {t.runId}
@@ -116,7 +116,7 @@ export function ScheduleTriggersList({
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="text-ui-sm text-neutral3 inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="text-ui-sm text-muted-foreground inline-flex items-center gap-1.5 whitespace-nowrap">
                     pending
                   </span>
                 )}
@@ -150,7 +150,11 @@ export function ScheduleTriggersList({
             </DataList.Cell>
 
             <DataList.Cell>
-              {t.run ? <span>{formatDuration(t.run.durationMs)}</span> : <span className="text-neutral4">—</span>}
+              {t.run ? (
+                <span>{formatDuration(t.run.durationMs)}</span>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
             </DataList.Cell>
             <DataList.Cell> </DataList.Cell>
           </>

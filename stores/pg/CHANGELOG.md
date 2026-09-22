@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 1.26.0-alpha.4
+
+### Patch Changes
+
+- Added storage-level filtering for `Agent.listSuspendedRuns()` thread lookups. When the workflow snapshot column is `jsonb`, the thread id embedded in suspended run snapshots is filtered directly in PostgreSQL and backed by a new expression index, turning thread-scoped suspended-run discovery from a full table scan into an indexed lookup. Part of https://github.com/mastra-ai/mastra/issues/22627 ([#24376](https://github.com/mastra-ai/mastra/pull/24376))
+
+- Updated dependencies [[`2cb5319`](https://github.com/mastra-ai/mastra/commit/2cb5319fc72ef20e7feebfa1e786ff78956aae84), [`f6e7562`](https://github.com/mastra-ai/mastra/commit/f6e7562b2ccfdd5d7d77a7eeea0849b6ffd2ec94), [`d4795a4`](https://github.com/mastra-ai/mastra/commit/d4795a42067605d2bbec10ad0b3dcc45acf02147), [`b87aa0d`](https://github.com/mastra-ai/mastra/commit/b87aa0dc38055558950024f750532ddae6ccf40c), [`53519a2`](https://github.com/mastra-ai/mastra/commit/53519a29ce0063712786b74973ae2dbe97a433a7)]:
+  - @mastra/core@1.68.0-alpha.9
+
 ## 1.26.0-alpha.3
 
 ### Minor Changes

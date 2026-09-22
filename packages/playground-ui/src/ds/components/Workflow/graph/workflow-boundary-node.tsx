@@ -15,7 +15,7 @@ export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeMod
         data-workflow-boundary-node
         data-testid={`workflow-boundary-${data.boundaryRole}`}
         className={cn(
-          'relative flex h-[38px] w-28 items-center justify-center text-neutral4 after:absolute after:inset-x-0 after:mask-x-from-60%',
+          'relative flex h-[38px] w-28 items-center justify-center text-muted-foreground after:absolute after:inset-x-0 after:mask-x-from-60%',
           isStart
             ? 'after:bottom-0 after:h-px after:bg-neutral3'
             : 'after:top-0 after:h-1 after:border-y after:border-neutral3',

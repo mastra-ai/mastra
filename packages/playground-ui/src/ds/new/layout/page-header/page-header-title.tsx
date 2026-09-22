@@ -23,7 +23,7 @@ export function PageHeaderTitle({ children, className, isLoading, size = 'md', .
     <h1
       data-slot="page-header-title"
       className={cn(
-        'col-start-[title] row-start-1 flex min-w-0 items-center gap-2 self-start font-medium text-neutral4 [&>svg]:size-[1.25em] [&>svg]:opacity-50',
+        'col-start-[title] row-start-1 flex min-w-0 items-center gap-2 self-start font-medium text-muted-foreground [&>svg]:size-[1.25em] [&>svg]:opacity-50',
         titleSizeClasses[size],
         isLoading && 'w-60 max-w-[50%] animate-pulse rounded-md bg-surface4',
         className,

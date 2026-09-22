@@ -3,7 +3,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import React from 'react';
 
 export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, error, id, value }) => {
-  const { key, ...props } = inputProps;
+  const {
+    key: _key,
+    error: _error,
+    'aria-describedby': ariaDescribedBy,
+    'aria-invalid': ariaInvalid,
+    ...props
+  } = inputProps;
 
   return (
     <Select
@@ -19,7 +25,12 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
         props.onChange(syntheticEvent);
       }}
     >
-      <SelectTrigger id={id} className={error ? 'border-accent2' : ''}>
+      <SelectTrigger
+        id={id}
+        className={error ? 'border-accent2' : ''}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
+      >
         <SelectValue placeholder="Select an option" />
       </SelectTrigger>
       <SelectContent>

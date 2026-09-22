@@ -78,13 +78,13 @@ export function PublishChannelContent({
       </DialogHeader>
 
       <DialogBody>
-        <Txt variant="ui-sm" className="text-neutral3">
+        <Txt variant="ui-sm" className="text-muted-foreground">
           {!platform.isConfigured ? (
             copy.notConfigured(platform.name)
           ) : activeInstallation ? (
             <>
-              Connected <span className="text-neutral6">{platform.name}</span> to{' '}
-              <span className="text-neutral6">Mastra</span>
+              Connected <span className="text-foreground">{platform.name}</span> to{' '}
+              <span className="text-foreground">Mastra</span>
             </>
           ) : (
             copy.notConnected(platform.name)

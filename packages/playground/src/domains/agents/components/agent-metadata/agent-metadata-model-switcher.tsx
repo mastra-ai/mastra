@@ -180,9 +180,9 @@ export const AgentMetadataModelSwitcher = ({
         className="border-border1 bg-surface3 flex items-center gap-2 rounded-md border px-3 py-2"
         data-testid="agent-metadata-model-locked"
       >
-        <Lock className="text-neutral3 h-4 w-4 shrink-0" />
-        <span className="text-ui-sm text-neutral6 truncate">{lockedLabel}</span>
-        <span className="text-ui-xs text-neutral3 ml-auto shrink-0">Set by admin</span>
+        <Lock className="text-muted-foreground h-4 w-4 shrink-0" />
+        <span className="text-ui-sm text-foreground truncate">{lockedLabel}</span>
+        <span className="text-ui-xs text-muted-foreground ml-auto shrink-0">Set by admin</span>
       </div>
     );
   }

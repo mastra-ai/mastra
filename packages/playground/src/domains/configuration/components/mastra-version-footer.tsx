@@ -38,7 +38,7 @@ const packageManagerCommands: Record<PackageManager, string> = {
 };
 
 const versionBadgeClassName =
-  'inline-flex h-[1.375rem] items-center rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs font-semibold leading-none tracking-normal text-black/80 tabular-nums whitespace-nowrap dark:text-neutral6';
+  'inline-flex h-[1.375rem] items-center rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs font-semibold leading-none tracking-normal text-black/80 tabular-nums whitespace-nowrap dark:text-foreground';
 
 export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => {
   const { data, isLoading: isLoadingPackages } = useMastraPackages();
@@ -90,7 +90,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
             <span className="relative inline-flex">
               {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
                 <span className="absolute -top-1.5 -right-1.5 flex items-center gap-1">
-                  {isLoadingUpdates && <Spinner className="text-neutral3 size-3" />}
+                  {isLoadingUpdates && <Spinner className="text-muted-foreground size-3" />}
                   {outdatedCount > 0 && (
                     <Badge
                       variant="yellow"
@@ -171,9 +171,9 @@ const PackagesModalContent = ({
       </DialogHeader>
 
       <DialogBody>
-        <div className="text-neutral3 text-ui-md flex items-center justify-between gap-3 py-2">
+        <div className="text-muted-foreground text-ui-md flex items-center justify-between gap-3 py-2">
           {isLoadingUpdates ? (
-            <span className="text-neutral3">Checking for updates...</span>
+            <span className="text-muted-foreground">Checking for updates...</span>
           ) : !hasUpdates ? (
             <span className="text-accent1">✓ All packages are up to date</span>
           ) : (
@@ -219,7 +219,7 @@ const PackagesModalContent = ({
                     <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
                   </a>
                 </div>
-                <div className="text-neutral3 flex items-center gap-1.5 px-3 py-2 font-mono">
+                <div className="text-muted-foreground flex items-center gap-1.5 px-3 py-2 font-mono">
                   {pkg.isOutdated || pkg.isDeprecated ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -242,10 +242,10 @@ const PackagesModalContent = ({
                     <span>{pkg.version}</span>
                   )}
                 </div>
-                <div className="text-neutral3 flex items-center px-3 py-2 font-mono">
+                <div className="text-muted-foreground flex items-center px-3 py-2 font-mono">
                   {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
                     <>
-                      <MoveRight className="text-neutral3 mx-2 h-4 w-4" />
+                      <MoveRight className="text-muted-foreground mx-2 h-4 w-4" />
                       <span className="text-accent1">{pkg.latestVersion}</span>
                     </>
                   )}
@@ -258,8 +258,8 @@ const PackagesModalContent = ({
         {hasUpdates && updateCommand && (
           <div className="border-border1 space-y-2 border-t pt-2">
             <div className="flex items-center gap-2 pt-3">
-              <Info className="text-neutral3 h-4 w-4" />
-              <Txt as="span" variant="ui-sm" className="text-neutral3">
+              <Info className="text-muted-foreground h-4 w-4" />
+              <Txt as="span" variant="ui-sm" className="text-muted-foreground">
                 Use the command below to update your packages
               </Txt>
             </div>

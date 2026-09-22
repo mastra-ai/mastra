@@ -15,7 +15,10 @@ import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
-import { backgroundPlaceholderOptOutScenario } from './background-placeholder-opt-out.js';
+import {
+  backgroundPlaceholderOptInScenario,
+  backgroundPlaceholderOptOutScenario,
+} from './background-placeholder-opt-out.js';
 import { backgroundSubagentsScenario } from './background-subagents.js';
 import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
 import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
@@ -66,6 +69,7 @@ import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.
 import { goalFreshThreadPersistenceScenario } from './goal-fresh-thread-persistence.js';
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
+import { goalMaxRunsEndsGoalScenario } from './goal-max-runs-ends-goal.js';
 import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
@@ -221,6 +225,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
+  'background-placeholder-opt-in': backgroundPlaceholderOptInScenario,
   'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
   'background-subagents': backgroundSubagentsScenario,
   'background-tools-settings': backgroundToolsSettingsScenario,
@@ -268,6 +273,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-fresh-thread-persistence': goalFreshThreadPersistenceScenario,
   'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
+  'goal-max-runs-ends-goal': goalMaxRunsEndsGoalScenario,
   'goal-resume-single-render': goalResumeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,

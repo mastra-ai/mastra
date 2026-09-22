@@ -148,7 +148,7 @@ ButtonsGroupSeparator.displayName = 'ButtonsGroupSeparator';
 
 const buttonsGroupTextVariants = cva(
   cn(
-    'inline-flex items-center justify-center border border-border1 bg-surface3 text-neutral5 select-none',
+    'inline-flex items-center justify-center border border-border1 bg-surface3 text-foreground select-none',
     'shrink-0 gap-[.75em] rounded-full px-[1em] whitespace-nowrap',
     '[&>svg]:size-[1.1em] [&>svg]:opacity-50',
   ),

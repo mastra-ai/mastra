@@ -134,6 +134,14 @@ function lastGhToken(): string | undefined {
   return update?.({}).GH_TOKEN;
 }
 
+function lastSandboxEnv(): Record<string, string | undefined> {
+  const calls = mocks.setEnv.mock.calls;
+  const update = calls[calls.length - 1]?.[0] as
+    | ((env: Record<string, string | undefined>) => Record<string, string | undefined>)
+    | undefined;
+  return update?.({}) ?? {};
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(tempDir => fs.rm(tempDir, { recursive: true, force: true })));
   mocks.projects.splice(0);
@@ -319,6 +327,8 @@ describe('bundled Factory skill assets', () => {
     expect(assetNames).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
+      'factory-gitlab-rereview',
+      'factory-gitlab-review',
       'factory-plan',
       'factory-rereview',
       'factory-review',
@@ -327,6 +337,18 @@ describe('bundled Factory skill assets', () => {
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
+  });
+
+  it('bundles GitLab review instructions that use the scoped provider tools', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    for (const name of ['factory-gitlab-review', 'factory-gitlab-rereview']) {
+      const instructions = await fs.readFile(path.join(assetRoot, name, 'SKILL.md'), 'utf8');
+      expect(instructions).toContain('source_control_get_change_request');
+      expect(instructions).toContain('source_control_list_change_request_reviews');
+      expect(instructions).toContain('source_control_review_change_request');
+      expect(instructions).toContain('factory_transition_work_item');
+      expect(instructions).not.toMatch(/`gh pr |`glab mr /);
+    }
   });
 
   it('uses work-item-specific artifact paths for Factory handoffs', async () => {
@@ -801,6 +823,57 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('materializes a GitLab-backed session through its provider storage and clone URL', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-gitlab-sessions-'));
+    tempDirs.push(root);
+    mocks.localRoot = root;
+    const sourceControl = fakeGithubIntegration().sourceControlStorage;
+    const getRepositoryAccess = vi.fn(async () => ({
+      cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+      authorization: { scheme: 'bearer' as const, token: 'glpat-secret', username: 'oauth2' },
+    }));
+    const workspace = eager(
+      createWorkspaceFactory({
+        sandbox: mocks.createSandbox as any,
+        sourceControls: [
+          {
+            id: 'gitlab',
+            versionControl: { getRepositoryAccess },
+            storage: sourceControl as any,
+          },
+        ],
+      }),
+    );
+    addProject({ repoFullName: 'acme/platform/app' });
+    addSession({ id: 'session-a', branch: 'factory/gitlab-mr-6-2c3b494988ac' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
+    expect(mocks.materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoInfo: expect.objectContaining({
+          repoFullName: 'acme/platform/app',
+          cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+          authUsername: 'oauth2',
+        }),
+        token: 'glpat-secret',
+      }),
+    );
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(String),
+      expect.objectContaining({
+        repoFullName: 'acme/platform/app',
+        cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+        authUsername: 'oauth2',
+        mergeRequestNumber: 6,
+      }),
+    );
+    expect(lastGhToken()).toBeUndefined();
+    expect(mocks.setEnv).not.toHaveBeenCalled();
   });
 
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
@@ -2274,6 +2347,8 @@ describe('FactorySkillSource layering', () => {
     expect(names).toEqual([
       'configure-factory-rules',
       'factory-complete-issue',
+      'factory-gitlab-rereview',
+      'factory-gitlab-review',
       'factory-plan',
       'factory-rereview',
       'factory-review',

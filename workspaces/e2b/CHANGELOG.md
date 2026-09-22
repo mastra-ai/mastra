@@ -1,5 +1,14 @@
 # @mastra/e2b
 
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- Commands without an explicit timeout now use the sandbox timeout (5 minutes by default) instead of hitting E2B's 60 second connection deadline and failing with `[deadline_exceeded]`. ([#24484](https://github.com/mastra-ai/mastra/pull/24484))
+
+- Updated dependencies [[`2cb5319`](https://github.com/mastra-ai/mastra/commit/2cb5319fc72ef20e7feebfa1e786ff78956aae84), [`f6e7562`](https://github.com/mastra-ai/mastra/commit/f6e7562b2ccfdd5d7d77a7eeea0849b6ffd2ec94), [`d4795a4`](https://github.com/mastra-ai/mastra/commit/d4795a42067605d2bbec10ad0b3dcc45acf02147), [`b87aa0d`](https://github.com/mastra-ai/mastra/commit/b87aa0dc38055558950024f750532ddae6ccf40c), [`53519a2`](https://github.com/mastra-ai/mastra/commit/53519a29ce0063712786b74973ae2dbe97a433a7)]:
+  - @mastra/core@1.68.0-alpha.9
+
 ## 0.12.1-alpha.0
 
 ### Patch Changes

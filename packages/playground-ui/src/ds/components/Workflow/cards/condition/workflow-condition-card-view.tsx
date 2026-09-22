@@ -37,7 +37,7 @@ export function WorkflowConditionCardView({
       data-testid="workflow-condition-node"
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}
     >
-      <div className="text-ui-xs text-neutral3 flex h-[46px] items-center gap-2 px-2.5">
+      <div className="text-ui-xs text-muted-foreground flex h-[46px] items-center gap-2 px-2.5">
         <Badge size="xs" variant={type === 'else' ? 'neutral' : 'yellow'} emphasis="muted" icon={<Icon aria-hidden />}>
           {label}
         </Badge>
@@ -53,7 +53,7 @@ export function WorkflowConditionCardView({
           role="region"
           aria-label="Condition details"
           tabIndex={0}
-          className={`${surfaceClasses} text-neutral5 nodrag nopan nowheel max-h-[220px] overflow-auto p-3.5 [&_pre]:leading-relaxed [&_pre]:whitespace-pre-wrap`}
+          className={`${surfaceClasses} text-foreground nodrag nopan nowheel max-h-[220px] overflow-auto p-3.5 [&_pre]:leading-relaxed [&_pre]:whitespace-pre-wrap`}
         >
           {sources.map(({ condition, expression, key }) => (
             <div key={key}>
@@ -71,7 +71,7 @@ export function WorkflowConditionCardView({
           ))}
         </div>
       ) : (
-        <p className={`${surfaceClasses} text-neutral3 p-3`}>
+        <p className={`${surfaceClasses} text-muted-foreground p-3`}>
           {type === 'else' ? 'When no other branch matches' : 'Condition expression unavailable'}
         </p>
       )}

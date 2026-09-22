@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import type { GitLabProject, GitLabStatus } from '../../../factory/services/gitlab';
 import type { IntakeConfig, IntakeSourceBinding } from '../../../factory/services/intake';
 import type { JiraProject, JiraStatus } from '../../../factory/services/jira';
 import type { LinearProject, LinearStatus } from '../../../factory/services/linear';
@@ -52,6 +53,8 @@ const JIRA_CONNECT_SESSION_URL = `${TEST_BASE_URL}/web/integrations/platform/jir
 const JIRA_CONNECTIONS_URL = `${TEST_BASE_URL}/web/integrations/platform/jira/connections`;
 const INCIDENTIO_CONNECTIONS_URL = `${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`;
 const INTAKE_SOURCES_URL = `${TEST_BASE_URL}/web/intake/sources`;
+const GITLAB_STATUS_URL = `${TEST_BASE_URL}/web/gitlab/status`;
+const GITLAB_PROJECTS_URL = `${TEST_BASE_URL}/web/gitlab/projects`;
 
 /**
  * Stub the platform connect seam: session minting plus the connection list
@@ -93,6 +96,7 @@ const FACTORY_B = '22222222-2222-4222-8222-222222222222';
 function baseConfig(): IntakeConfig {
   return {
     github: { enabled: true, sourceIds: null },
+    gitlab: { enabled: false, sourceIds: null },
     linear: { enabled: true, sourceIds: null },
     jira: { enabled: false, sourceIds: null },
     incidentio: { enabled: false, sourceIds: null },
@@ -290,6 +294,58 @@ function useIncidentioHandlers({
   return { saved, savedBindings };
 }
 
+const gitlabReadyStatus: GitLabStatus = {
+  enabled: true,
+  configured: true,
+  connections: [{ id: 'a1b_acme', integrationId: 'gitlab', status: 'active', accountLabel: 'acme' }],
+  accounts: ['acme'],
+  reauthRequired: false,
+  reason: 'ready',
+};
+
+const gitlabProjects: GitLabProject[] = [
+  {
+    id: 'gitlab-project:encoded',
+    name: 'acme/app',
+    connectionId: 'a1b_acme',
+    accountLabel: 'acme',
+    defaultBranch: 'main',
+  },
+];
+
+function useGitLabHandlers(config: IntakeConfig, status: GitLabStatus = gitlabReadyStatus) {
+  const saved = useIntakeHandlers({ config });
+  const savedBindings: Array<{
+    integrationId: string;
+    sourceId: string;
+    factoryProjectId: string | null;
+    board: string | null;
+  }> = [];
+  server.use(
+    http.get(GITLAB_STATUS_URL, () => HttpResponse.json(status)),
+    http.get(GITLAB_PROJECTS_URL, () => HttpResponse.json({ projects: gitlabProjects })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web' }] }),
+    ),
+    http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: savedBindings })),
+    http.put(BINDINGS_URL, async ({ request }) => {
+      const body = (await request.json()) as (typeof savedBindings)[number];
+      const index = savedBindings.findIndex(
+        binding => binding.integrationId === body.integrationId && binding.sourceId === body.sourceId,
+      );
+      if (index === -1) savedBindings.push(body);
+      else savedBindings[index] = body;
+      return HttpResponse.json({ bindings: savedBindings });
+    }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
+      HttpResponse.json({
+        boards: [{ id: 'work', title: 'Work', initialPhase: 'intake', phases: [] }],
+      }),
+    ),
+  );
+  return { saved, savedBindings };
+}
+
 function seedFactories() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
@@ -354,6 +410,7 @@ describe('IntakeSection', () => {
       useIntakeHandlers({
         config: {
           github: { enabled: true, sourceIds: ['mastra'] },
+          gitlab: { enabled: false, sourceIds: null },
           linear: { enabled: true, sourceIds: ['lproj-1'] },
           jira: { enabled: false, sourceIds: null },
           incidentio: { enabled: false, sourceIds: null },
@@ -506,6 +563,7 @@ describe('IntakeSection', () => {
       const saved = useIntakeHandlers({
         config: {
           github: { enabled: true, sourceIds: null },
+          gitlab: { enabled: false, sourceIds: null },
           linear: { enabled: true, sourceIds: ['linear-team:opaque-eng', 'lproj-1'] },
           jira: { enabled: false, sourceIds: null },
           incidentio: { enabled: false, sourceIds: null },
@@ -939,6 +997,7 @@ describe('IntakeSection', () => {
       // GitHub defaults to enabled; Linear stays off until it's connected here.
       expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
       expect(screen.getByRole('switch', { name: 'Sync Linear issues' })).not.toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Sync GitLab issues' })).not.toBeChecked();
     });
   });
 
@@ -954,6 +1013,100 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       expect(await screen.findByText(/Intake configuration is unavailable/)).toBeInTheDocument();
+    });
+  });
+
+  describe('given GitLab is configured', () => {
+    it('does not offer a linked GitLab repository as a GitHub intake source', async () => {
+      useGitLabHandlers({
+        ...baseConfig(),
+        gitlab: { enabled: true, sourceIds: null },
+      });
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+          HttpResponse.json({
+            connections: [
+              {
+                id: 'gitlab-connection',
+                integrationId: 'gitlab',
+                installationId: 'gitlab-installation',
+                repositories: [
+                  {
+                    id: 'gitlab-link',
+                    branch: 'main',
+                    sandboxWorkdir: '~/app',
+                    repository: { slug: 'acme/app', defaultBranch: 'main' },
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const githubSection = await screen.findByRole('region', { name: 'GitHub issues' });
+      expect(await within(githubSection).findByText(/No linked repositories yet/)).toBeInTheDocument();
+      expect(within(githubSection).queryByRole('checkbox', { name: 'acme/app' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'GitHub routing' })).not.toBeInTheDocument();
+      const gitlabProjects = await screen.findByRole('group', { name: 'GitLab projects' });
+      expect(within(gitlabProjects).getByRole('checkbox', { name: 'acme/app' })).toBeInTheDocument();
+    });
+
+    it('selects a project and routes it to a Factory board', async () => {
+      const { saved, savedBindings } = useGitLabHandlers({
+        ...baseConfig(),
+        gitlab: { enabled: true, sourceIds: null },
+      });
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('Connected to acme')).toBeInTheDocument();
+      const projects = await screen.findByRole('group', { name: 'GitLab projects' });
+      await userEvent.click(within(projects).getByRole('checkbox', { name: 'acme/app' }));
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.gitlab.sourceIds).toEqual(['gitlab-project:encoded']);
+      expect(await screen.findByText(/Not routed — this source's issues won't be picked up/)).toBeInTheDocument();
+
+      await userEvent.click(await screen.findByLabelText('Factory for acme/app'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
+      await userEvent.click(await screen.findByLabelText('Board for acme/app'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Work' }));
+
+      await waitFor(() =>
+        expect(savedBindings).toEqual([
+          {
+            integrationId: 'gitlab',
+            sourceId: 'gitlab-project:encoded',
+            factoryProjectId: 'fp-1',
+            board: 'work',
+          },
+        ]),
+      );
+      expect((await screen.findAllByText('GitLab routing updated')).length).toBeGreaterThan(0);
+    });
+
+    it('keeps healthy projects available when another Platform connection needs reauthorization', async () => {
+      useGitLabHandlers(
+        { ...baseConfig(), gitlab: { enabled: true, sourceIds: null } },
+        {
+          ...gitlabReadyStatus,
+          connections: [
+            ...gitlabReadyStatus.connections!,
+            { id: 'a1b_old', integrationId: 'gitlab', status: 'needs_reauth', accountLabel: 'old' },
+          ],
+          reauthRequired: true,
+        },
+      );
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText('A GitLab account needs to be reconnected in Mastra Platform.'),
+      ).toBeInTheDocument();
+      expect(await screen.findByRole('checkbox', { name: 'acme/app' })).toBeInTheDocument();
     });
   });
 });

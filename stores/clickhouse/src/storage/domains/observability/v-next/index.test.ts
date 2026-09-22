@@ -32,6 +32,7 @@ import {
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   MV_SCORE_EVENTS_CURRENT,
+  MV_TRACE_ROOTS_DELTA,
   parseTtlExpression,
   SCORE_EVENT_COLUMN_NAMES,
   TABLE_DELETION_REQUESTS,
@@ -45,8 +46,9 @@ import {
   TABLE_SCORE_EVENTS_DELTA,
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
+  TABLE_TRACE_ROOTS_DELTA,
 } from './ddl';
-import { feedbackRecordToRow, scoreRecordToRow } from './helpers';
+import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
 import { backfillCurrentScores } from './score-current';
 import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
@@ -480,7 +482,10 @@ LIMIT 1`,
 
   describe('delta polling', () => {
     async function withFallbackStorage<T>(
-      run: (fallbackStorage: ObservabilityStorageClickhouseVNext) => Promise<T>,
+      run: (
+        fallbackStorage: ObservabilityStorageClickhouseVNext,
+        client: ReturnType<typeof createClient>,
+      ) => Promise<T>,
     ): Promise<T> {
       let adminClient: ReturnType<typeof createClient> | null = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -496,8 +501,12 @@ LIMIT 1`,
       const database = `fallback_delta_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       await adminClient.command({ query: `CREATE DATABASE ${database}` });
 
+      // A database in the URL overrides the explicit database option.
+      const fixtureUrl = new URL(process.env.CLICKHOUSE_URL || 'http://localhost:8123');
+      fixtureUrl.pathname = '/';
+      fixtureUrl.searchParams.delete('database');
       let client: ReturnType<typeof createClient> | null = createClient({
-        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        url: fixtureUrl.toString(),
         username: process.env.CLICKHOUSE_USERNAME || 'default',
         password: process.env.CLICKHOUSE_PASSWORD || 'password',
         database,
@@ -517,7 +526,7 @@ LIMIT 1`,
       try {
         await fallbackStorage.init();
         await fallbackStorage.dangerouslyClearAll();
-        return await run(fallbackStorage);
+        return await run(fallbackStorage, client);
       } finally {
         if (fallbackStorage) {
           await fallbackStorage.dangerouslyClearAll();
@@ -531,6 +540,136 @@ LIMIT 1`,
         }
       }
     }
+
+    it('characterizes a delta index entry becoming visible before its trace root', async () => {
+      await withFallbackStorage(async (isolatedStorage, client) => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        const poll = async (after?: string) => {
+          const result = await isolatedStorage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta', after })),
+          );
+          if (!('delta' in result)) throw new Error('Expected delta response');
+          return result;
+        };
+        const bootstrap = await poll();
+        const root = spanRecordToRow({
+          traceId: 'visibility-gap',
+          spanId: 'visibility-gap-root',
+          parentSpanId: null,
+          name: 'delayed root visibility',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt,
+          endedAt: new Date(startedAt.getTime() + 1),
+        });
+
+        // Stage physical-table visibility explicitly: ClickHouse does not make
+        // a source insert and its materialized views atomic for concurrent readers.
+        await client.insert({
+          table: TABLE_TRACE_ROOTS_DELTA,
+          format: 'JSONEachRow',
+          values: [
+            {
+              cursorId: '1',
+              ingestedAt: startedAt.toISOString(),
+              startedAt: startedAt.toISOString(),
+              traceId: root.traceId,
+              dedupeKey: root.dedupeKey,
+            },
+          ],
+        });
+        const gap = await poll(bootstrap.deltaCursor);
+        expect(gap.traces).toEqual([]);
+        expect(gap.deltaCursor).not.toBe(bootstrap.deltaCursor);
+
+        // The same insert becomes visible in the root table without producing a
+        // second index entry. Isolate the fixture so no shared MV is detached.
+        await client.command({ query: `DETACH TABLE ${MV_TRACE_ROOTS_DELTA}` });
+        try {
+          await client.insert({ table: TABLE_TRACE_ROOTS, format: 'JSONEachRow', values: [root] });
+        } finally {
+          await client.command({ query: `ATTACH TABLE ${MV_TRACE_ROOTS_DELTA}` });
+        }
+        expect((await poll(gap.deltaCursor)).traces).toEqual([]);
+        // An older cursor still sees the row, but the advanced cursor cannot.
+        expect((await poll(bootstrap.deltaCursor)).traces.map(trace => trace.traceId)).toEqual(['visibility-gap']);
+        const reloaded = await isolatedStorage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } })),
+        );
+        expect('traces' in reloaded && reloaded.traces.map(trace => trace.traceId)).toEqual(['visibility-gap']);
+      });
+    });
+
+    it('characterizes concurrent trace inserts and delta polls with numbered-page reconciliation', async () => {
+      await withFallbackStorage(async isolatedStorage => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        const poll = async (after?: string) => {
+          const result = await isolatedStorage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta', after, limit: 3 })),
+          );
+          if (!('delta' in result)) throw new Error('Expected delta response');
+          return result;
+        };
+        let after = (await poll()).deltaCursor;
+        const expected = Array.from({ length: 12 }, (_, index) => `concurrent-${String(index).padStart(2, '0')}`);
+        const observed = new Set<string>();
+        const record = (result: Awaited<ReturnType<typeof poll>>) => {
+          expect(result.traces.length).toBeLessThanOrEqual(3);
+          expect(new Set(result.traces.map(trace => trace.traceId)).size).toBe(result.traces.length);
+          for (const trace of result.traces) {
+            expect(expected).toContain(trace.traceId);
+            observed.add(trace.traceId);
+          }
+          after = result.deltaCursor;
+        };
+        // Promise.all starts each poll before waiting for the insert acknowledgment.
+        // A missed trace is permitted: this test characterizes best-effort polling.
+        for (const traceId of expected) {
+          const [, result] = await Promise.all([
+            isolatedStorage.batchCreateSpans({
+              records: [
+                {
+                  traceId,
+                  spanId: `${traceId}-root`,
+                  parentSpanId: null,
+                  name: 'concurrent completed root',
+                  spanType: SpanType.AGENT_RUN,
+                  isEvent: false,
+                  startedAt,
+                  endedAt: new Date(startedAt.getTime() + 1),
+                },
+              ],
+            }),
+            poll(after),
+          ]);
+          record(result);
+        }
+        for (let batch = 0; batch <= expected.length; batch++) {
+          const result = await poll(after);
+          record(result);
+          if (!result.delta.hasMore) break;
+          expect(batch).toBeLessThan(expected.length);
+        }
+        const reloaded = await isolatedStorage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 100 } })),
+        );
+        if (!('pagination' in reloaded)) throw new Error('Expected numbered-page response');
+        expect(reloaded.traces.map(trace => trace.traceId).sort()).toEqual(expected);
+        expect(reloaded.pagination.total).toBe(expected.length);
+        // Reload reconciles every acknowledged insert, including any polling gaps.
+        expect([...observed].every(traceId => reloaded.traces.some(trace => trace.traceId === traceId))).toBe(true);
+        expect(reloaded.deltaCursor).toBeTypeOf('string');
+        expect((await poll(reloaded.deltaCursor)).traces).toEqual([]);
+      });
+    });
 
     it('advertises metrics, logs, delta polling, trace query discovery, and queries when enabled', () => {
       expect(storage.getFeatures()).toEqual([

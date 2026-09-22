@@ -58,7 +58,7 @@ export function ScatterPlotChart({
     return (
       <div
         className={cn(
-          'flex items-center justify-center rounded-md border border-border1 text-ui-sm text-neutral3',
+          'flex items-center justify-center rounded-md border border-border1 text-ui-sm text-muted-foreground',
           className,
         )}
         style={{ height }}
