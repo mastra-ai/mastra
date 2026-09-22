@@ -12,6 +12,7 @@ import { SpanOutputRenderer } from './span-output-renderers';
 import { asCoreSpan } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
 import { SpanProcessorAttributes } from './span-processor-attributes';
+import { cn } from '@/lib/utils';
 
 type FixtureName = keyof typeof ALL_SPAN_FIXTURES;
 const FIXTURE_NAMES = Object.keys(ALL_SPAN_FIXTURES) as FixtureName[];
@@ -207,24 +208,12 @@ const PROCESSOR_FIXTURES = [
 
 /** Widths the span panel is read at: a phone drawer, a tablet split, a desktop panel. */
 const PANEL_WIDTHS = [
-  { label: 'Mobile', className: 'w-[360px]' },
-  { label: 'Tablet', className: 'w-[640px]' },
-  { label: 'Desktop', className: 'w-[960px]' },
+  { label: 'Mobile', className: 'w-90' },
+  { label: 'Tablet', className: 'w-160' },
+  { label: 'Desktop', className: 'w-240' },
 ];
 
-export const ProcessorSpans: StoryObj = {
-  render: () => (
-    <Grid>
-      {PROCESSOR_FIXTURES.map(name => (
-        <Cell key={name} title={name} tag={describeSpanInput(asCoreSpan(ALL_SPAN_FIXTURES[name]))?.type}>
-          <Both span={ALL_SPAN_FIXTURES[name]} />
-        </Cell>
-      ))}
-    </Grid>
-  ),
-};
-
-export const ProcessorKnownAttributes: StoryObj = {
+export const ProcessorAttributes: StoryObj = {
   render: () => (
     <Grid>
       {PROCESSOR_FIXTURES.map(name => {
@@ -250,7 +239,7 @@ export const ProcessorSpanAtPanelWidths: StoryObj<FixtureArgs> = {
     return (
       <div className="flex flex-wrap items-start gap-4">
         {PANEL_WIDTHS.map(width => (
-          <div key={width.label} className={`flex h-[80vh] flex-col gap-2 ${width.className}`}>
+          <div key={width.label} className={cn('flex h-[80vh] flex-col gap-2', width.className)}>
             <div className="text-meta tracking-widest text-placeholder uppercase">{width.label}</div>
             <SpanDataPanelView traceId={span.traceId} spanId={span.spanId} span={span} />
           </div>

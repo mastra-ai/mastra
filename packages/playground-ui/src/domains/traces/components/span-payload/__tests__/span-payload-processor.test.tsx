@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import type { SpanRecord } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
 import { SpanDetailsView } from '../../span-details-view';
 import { SpanInputRenderer } from '../span-input-renderers';
@@ -11,11 +12,11 @@ import {
   legacyProcessorSpan,
   malformedProcessorSpan,
   processorClearedMessagesSpan,
-  processorSystemMutationSpan,
   processorInputSpan,
   processorInputStepSpan,
   processorOutputStreamSpan,
   processorRequestErrorSpan,
+  processorSystemMutationSpan,
   processorToolResultSpan,
   processorTripwireSpan,
 } from './fixtures/span-payloads';
@@ -25,178 +26,168 @@ beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
 afterAll(() => vi.unstubAllGlobals());
 afterEach(cleanup);
 
-describe('processor span payloads', () => {
-  it('reads the phase from the span rather than the payload shape', () => {
-    const { container } = render(<SpanInputRenderer span={processorToolResultSpan} />);
+const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
 
-    expect(container.querySelector('[data-slot="span-payload-processor"]')?.getAttribute('data-phase')).toBe(
-      'toolResult',
-    );
-    expect(screen.getByText('search')).toBeTruthy();
+/** The value in the labelled row, e.g. `valueOf('Executor')` → `'Workflow'`. */
+const valueOf = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
+
+const section = (title: string) => {
+  const found = screen.getByText(title).closest('[data-slot="span-payload-section"]');
+  if (!(found instanceof HTMLElement)) throw new Error(`Missing ${title} section`);
+  return found;
+};
+
+const LAYOUTS = [
+  ['data panel', (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
+  ['details', (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
+] as const;
+
+describe('SpanPayloadProcessor', () => {
+  it('reads the phase from the span rather than the payload shape', () => {
+    render(<SpanInputRenderer span={processorToolResultSpan} />);
+    expect(slot('span-payload-processor')?.getAttribute('data-phase')).toBe('toolResult');
+  });
+
+  it('shows system and user messages as one list tagged by role', () => {
+    render(<SpanInputRenderer span={processorRequestErrorSpan} />);
+    expect(document.querySelectorAll('[data-slot="span-payload-messages"]').length).toBe(1);
+    expect(document.querySelectorAll('[data-role="system"]').length).toBe(1);
+    expect(document.querySelectorAll('[data-role="user"]').length).toBe(1);
+    expect(screen.queryByText('System messages')).toBeNull();
+  });
+
+  it('shows the system messages a processor returned as output', () => {
+    render(<SpanOutputRenderer span={processorInputSpan} />);
+    expect(screen.getByText('Answer in exactly three words.')).toBeTruthy();
+  });
+
+  it('shows single values as labelled rows, with copy buttons on ids', () => {
+    render(<SpanInputRenderer span={processorToolResultSpan} />);
+    expect(valueOf('Tool')).toBe('search');
+    expect(valueOf('Step')).toBe('3');
+    expect(valueOf('Provider executed')).toBe('No');
     expect(screen.getByText('call_17')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Copy to clipboard' })).toBeTruthy();
   });
 
-  it('renders processor input messages with the shared message components', () => {
-    const { container } = render(<SpanInputRenderer span={processorInputSpan} />);
-
-    expect(container.querySelector('[data-slot="span-payload-messages"]')).toBeTruthy();
-    expect(screen.getByText('What colour is the sky?')).toBeTruthy();
-  });
-
-  it('renders the system messages a processor added as output', () => {
-    render(<SpanOutputRenderer span={processorInputSpan} />);
-
-    expect(screen.getByText('Answer in exactly three words.')).toBeTruthy();
-  });
-
-  it('keeps an empty output as JSON, as any other span would', () => {
-    const { container } = render(<SpanOutputRenderer span={processorSystemMutationSpan} />);
-
-    expect(container.querySelector('[data-slot="span-payload-messages"]')).toBeNull();
-    expect(container.textContent).toContain('{}');
-  });
-
-  it('leaves out empty lists instead of an empty collapsible', () => {
-    render(<SpanInputRenderer span={processorInputStepSpan} />);
-
-    expect(screen.queryByText(/^Tools/)).toBeNull();
-    expect(screen.getByText('Active tools (1)')).toBeTruthy();
-  });
-
-  it('shows system and user messages as one list tagged by role', () => {
-    const { container } = render(<SpanInputRenderer span={processorRequestErrorSpan} />);
-
-    expect(container.querySelectorAll('[data-slot="span-payload-messages"]')).toHaveLength(1);
-    expect(screen.getByText('You are helpful.')).toBeTruthy();
-    expect(screen.getByText('What colour is the sky?')).toBeTruthy();
-    expect(screen.queryByText('System messages')).toBeNull();
+  it('keeps the two output hooks apart', () => {
+    render(<SpanOutputRenderer span={processorOutputStreamSpan} />);
+    expect(slot('span-payload-processor')?.getAttribute('data-phase')).toBe('outputStream');
+    expect(screen.getByText('The sky is blue.')).toBeTruthy();
+    expect(valueOf('Chunks')).toBe('126');
   });
 
   it('shows the error a request-error processor saw', () => {
     render(<SpanInputRenderer span={processorRequestErrorSpan} />);
-
+    expect(screen.getByText('Error')).toBeTruthy();
     expect(screen.getByText('Provider returned 429')).toBeTruthy();
-    expect(screen.getByText('What colour is the sky?')).toBeTruthy();
   });
 
-  it('keeps the two output hooks apart', () => {
-    const { container } = render(<SpanOutputRenderer span={processorOutputStreamSpan} />);
+  it('collapses secondary context with a count, and leaves out empty lists', () => {
+    render(<SpanInputRenderer span={processorInputStepSpan} />);
+    expect(screen.getByText('Active tools (1)')).toBeTruthy();
+    expect(screen.queryByText(/^Tools/)).toBeNull();
+    expect(screen.getByText('msg-step-0')).toBeTruthy();
+  });
 
-    expect(container.querySelector('[data-slot="span-payload-processor"]')?.getAttribute('data-phase')).toBe(
-      'outputStream',
-    );
-    expect(screen.getByText('The sky is blue.')).toBeTruthy();
+  it('keeps an empty output as JSON, as any other span would', () => {
+    render(<SpanOutputRenderer span={processorSystemMutationSpan} />);
+    expect(slot('span-payload-messages')).toBeNull();
+    expect(slot('span-payload-json')?.textContent).toContain('{}');
+  });
+
+  it('keeps a known field with an unexpected shape under Other fields', () => {
+    render(<SpanInputRenderer span={malformedProcessorSpan} />);
+    fireEvent.click(screen.getByText('Other fields'));
+    expect(slot('span-payload-processor')?.textContent).toContain('redacted-message-content');
   });
 
   it('falls back to JSON for a span stored before the phase was recorded', () => {
-    const { container } = render(<SpanInputRenderer span={legacyProcessorSpan} />);
-
-    expect(container.querySelector('[data-slot="span-payload-processor"]')).toBeNull();
+    render(<SpanInputRenderer span={legacyProcessorSpan} />);
+    expect(slot('span-payload-processor')).toBeNull();
+    expect(slot('span-payload-json')).not.toBeNull();
   });
 });
 
-describe('processor span attributes', () => {
-  it('presents the pipeline facts as labelled values', () => {
+describe('SpanProcessorAttributes', () => {
+  it('shows the pipeline facts as labelled values', () => {
     render(<SpanProcessorAttributes span={processorInputSpan} />);
-
-    expect(screen.getByText('Processor')).toBeTruthy();
-    expect(screen.getByText('context-note')).toBeTruthy();
-    expect(screen.getByText('Phase')).toBeTruthy();
-    expect(screen.getByText('Input')).toBeTruthy();
-    expect(screen.getByText('Workflow')).toBeTruthy();
-    // processorIndex is 0-based; position reads as 1-based.
-    expect(screen.getByText('2')).toBeTruthy();
-    expect(screen.getByText('1.84s')).toBeTruthy();
+    expect(valueOf('Processor')).toBe('context-note');
+    expect(valueOf('Phase')).toBe('Input');
+    expect(valueOf('Executor')).toBe('Workflow');
+    // processorIndex is 0-based; the position reads 1-based.
+    expect(valueOf('Pipeline position')).toBe('2');
+    expect(valueOf('Hook duration')).toBe('1.84s');
   });
 
-  it('presents message-list mutations as readable actions', () => {
+  it('shows message-list changes as readable actions', () => {
     render(<SpanProcessorAttributes span={processorInputSpan} />);
-
     expect(screen.getByText('Added system message')).toBeTruthy();
     expect(screen.getByText('context-note · 1 message')).toBeTruthy();
   });
 
-  it('surfaces a tripwire with its reason and retry state', () => {
-    render(<SpanProcessorAttributes span={processorTripwireSpan} />);
+  it('shows cleared and removed messages, with the removed ids collapsed', () => {
+    render(<SpanProcessorAttributes span={processorClearedMessagesSpan} />);
+    expect(screen.getByText('Cleared messages')).toBeTruthy();
+    expect(screen.getByText('Removed messages')).toBeTruthy();
+    fireEvent.click(screen.getByText('Removed ids (2)'));
+    expect(slot('span-processor-mutations')?.textContent).toContain('msg-1');
+  });
 
+  it('shows a tripwire with its reason, retry state and metadata', () => {
+    render(<SpanProcessorAttributes span={processorTripwireSpan} />);
     expect(screen.getByText('Tripwire')).toBeTruthy();
     expect(screen.getByText('Prompt injection detected')).toBeTruthy();
-    expect(screen.getByText('Retry')).toBeTruthy();
-    expect(screen.getByText('No')).toBeTruthy();
+    expect(valueOf('Retry')).toBe('No');
+    fireEvent.click(screen.getByText('Metadata'));
+    expect(slot('span-processor-attributes')?.textContent).toContain('injection/v2');
+  });
+
+  it('keeps attributes it does not show under Other attributes', () => {
+    render(<SpanProcessorAttributes span={processorTripwireSpan} />);
+    fireEvent.click(screen.getByText('Other attributes'));
+    expect(slot('span-processor-attributes')?.textContent).toContain('customGuardScore');
+  });
+
+  it('keeps a known attribute with an unexpected shape under Other attributes', () => {
+    render(<SpanProcessorAttributes span={malformedProcessorSpan} />);
+    fireEvent.click(screen.getByText('Other attributes'));
+    expect(slot('span-processor-attributes')?.textContent).toContain('redacted-mutation-log');
   });
 
   it('renders nothing for a span with no recorded phase', () => {
     const { container } = render(<SpanProcessorAttributes span={legacyProcessorSpan} />);
-
     expect(container.innerHTML).toBe('');
   });
 });
 
-describe('processor spans in both span layouts', () => {
-  it.each([
-    ['data panel', (span: typeof processorInputSpan) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
-    ['details', (span: typeof processorInputSpan) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
-  ])('shows a failed processor span with its error in the %s layout', (_name, renderView) => {
-    const { container } = render(renderView(processorRequestErrorSpan));
-
-    expect(screen.getByText('Request error')).toBeTruthy();
-    expect(screen.getByText('rate-limit-retry')).toBeTruthy();
-    expect(screen.getByText('Provider returned 429')).toBeTruthy();
-    expect(container.textContent).toContain('Retry budget exhausted');
+describe.each(LAYOUTS)('processor spans in the %s layout', (_name, renderView) => {
+  it('previews the input, output and attributes', () => {
+    render(renderView(processorInputSpan));
+    expect(slot('span-payload-processor')).not.toBeNull();
+    expect(slot('span-processor-attributes')).not.toBeNull();
   });
 
-  it.each([
-    ['data panel', (span: typeof processorInputSpan) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
-    ['details', (span: typeof processorInputSpan) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
-  ])('shows the processor preview in the %s layout', (_name, renderView) => {
-    const { container } = render(renderView(processorInputSpan));
+  it('keeps the recorded attributes one click away as JSON', () => {
+    render(renderView(processorSystemMutationSpan));
+    const attributes = section('Attributes');
+    expect(within(attributes).getByText('Added system message')).toBeTruthy();
 
-    expect(container.querySelector('[data-slot="span-processor-attributes"]')).toBeTruthy();
-    expect(container.querySelector('[data-slot="span-payload-processor"]')).toBeTruthy();
-  });
-  it.each([
-    ['data panel', (span: typeof processorInputSpan) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
-    ['details', (span: typeof processorInputSpan) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
-  ])('preserves recorded changes, raw data and fallback in the %s layout', (_name, renderView) => {
-    const { rerender, container } = render(renderView(processorSystemMutationSpan));
-    expect(screen.getByText('Answer briefly.')).toBeTruthy();
-    expect(screen.getByText('Added system message')).toBeTruthy();
-
-    const attributes = Array.from(container.querySelectorAll('[data-slot="span-payload-section"]')).find(section =>
-      within(section).queryByText('Attributes'),
-    );
-    if (!attributes) throw new Error('Missing attributes section');
     fireEvent.click(within(attributes).getByRole('button', { name: 'JSON', exact: true }));
     expect(attributes.textContent).toContain('messageListMutations');
     expect(attributes.textContent).toContain('Answer briefly.');
-    fireEvent.click(within(attributes).getByRole('button', { name: 'Preview', exact: true }));
-    expect(within(attributes).queryByText('messageListMutations')).toBeNull();
+  });
 
-    rerender(renderView(processorClearedMessagesSpan));
-    expect(screen.getByText('Cleared messages')).toBeTruthy();
+  it('shows a failed processor span with its error', () => {
+    render(renderView(processorRequestErrorSpan));
+    expect(valueOf('Phase')).toBe('Request error');
+    expect(screen.getByText('Provider returned 429')).toBeTruthy();
+    expect(document.body.textContent).toContain('Retry budget exhausted');
+  });
 
-    // A phase this release knows still previews. Values the layout cannot place
-    // are not dropped: they stay reachable as JSON, so one odd field never hides
-    // the rest of the span.
-    rerender(renderView(malformedProcessorSpan));
-    expect(container.querySelector('[data-slot="span-processor-attributes"]')).toBeTruthy();
-    expect(container.textContent).toContain('keep-this-value');
-
-    // `queryAllByText`: the phase value repeats a section's own name ("Input").
-    const sectionNamed = (title: string) =>
-      Array.from(container.querySelectorAll('[data-slot="span-payload-section"]')).find(
-        section => within(section).queryAllByText(title).length > 0,
-      );
-
-    const malformedAttributes = sectionNamed('Attributes');
-    if (!malformedAttributes) throw new Error('Missing attributes section');
-    fireEvent.click(within(malformedAttributes).getByRole('button', { name: 'JSON', exact: true }));
-    expect(malformedAttributes.textContent).toContain('redacted-mutation-log');
-
-    const malformedInput = sectionNamed('Input');
-    if (!malformedInput) throw new Error('Missing input section');
-    fireEvent.click(within(malformedInput).getByRole('button', { name: 'JSON', exact: true }));
-    expect(malformedInput.textContent).toContain('redacted-message-content');
+  it('keeps a span stored before the phase was recorded on JSON only', () => {
+    render(renderView(legacyProcessorSpan));
+    expect(slot('span-payload-processor')).toBeNull();
+    expect(slot('span-processor-attributes')).toBeNull();
   });
 });

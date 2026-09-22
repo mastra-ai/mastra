@@ -16,14 +16,12 @@ import {
   SpanPayloadToolCalls,
 } from './span-payload-primitives';
 import { SpanPayloadProcessor } from './span-payload-processor';
-import { asCoreSpan, pickRenderer } from './span-payload-registry';
+import { asCoreSpan, hasItems, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
 import { Reasoning } from '@/domains/chat/messages/reasoning';
 import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { Notice } from '@/ds/components/Notice';
-
-const hasItems = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0;
 
 function SpanTextRenderer({ value }: { value: string }) {
   return <SpanPayloadMarkdown>{value}</SpanPayloadMarkdown>;

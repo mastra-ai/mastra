@@ -294,7 +294,13 @@ export const processorClearedMessagesSpan = makeSpan({
   ...processorInputSpan,
   spanId: 'span-processor-cleared',
   output: { messages: [], systemMessages: [] },
-  attributes: { processorPhase: 'input', messageListMutations: [{ type: 'clear', count: 2 }] },
+  attributes: {
+    processorPhase: 'input',
+    messageListMutations: [
+      { type: 'clear', count: 2 },
+      { type: 'removeByIds', ids: ['msg-1', 'msg-2'], count: 2 },
+    ],
+  },
 });
 
 export const malformedProcessorSpan = makeSpan({
@@ -315,6 +321,7 @@ export const processorInputStepSpan = makeSpan({
   input: {
     messages: [{ role: 'user', content: 'Why is the sky blue?' }],
     stepNumber: 0,
+    messageId: 'msg-step-0',
     tools: [],
     activeTools: [{ id: 'get-weather', name: 'get-weather' }],
   },

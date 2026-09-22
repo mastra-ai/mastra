@@ -1,6 +1,5 @@
 import { describeProcessorPipeline } from '@mastra/core/observability';
 import type { ProcessorPipelineDescription } from '@mastra/core/observability';
-import { Fragment } from 'react';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
@@ -27,7 +26,6 @@ function Mutations({ mutations }: { mutations: NonNullable<ProcessorPipelineDesc
           mutation.source,
           mutation.tag,
           mutation.count !== undefined ? `${mutation.count} message${mutation.count === 1 ? '' : 's'}` : undefined,
-          mutation.ids?.length ? `${mutation.ids.length} id${mutation.ids.length === 1 ? '' : 's'}` : undefined,
         ]
           .filter(Boolean)
           .join(' · ');
@@ -39,9 +37,8 @@ function Mutations({ mutations }: { mutations: NonNullable<ProcessorPipelineDesc
               {detail && <span className="text-meta text-placeholder">{detail}</span>}
             </div>
             {mutation.message !== undefined && <SpanPayloadMessages value={[mutation.message]} />}
-            {mutation.text !== undefined && <SpanPayloadMessages value={[mutation.text]} />}
             {mutation.ids && mutation.ids.length > 0 && (
-              <SpanPayloadCollapsible label={`Removed message IDs (${mutation.ids.length})`}>
+              <SpanPayloadCollapsible label={`Removed ids (${mutation.ids.length})`}>
                 <SpanPayloadJson value={mutation.ids} />
               </SpanPayloadCollapsible>
             )}
@@ -58,10 +55,8 @@ export interface SpanProcessorAttributesProps {
 
 /**
  * The runner-owned attributes of a processor span, as labelled values.
- *
- * Which keys are "known" is decided by `describeProcessorPipeline` in core, so
- * the JSON block below only ever holds what this view did not explain — the
- * same value never appears in both.
+ * `describeProcessorPipeline` decides which keys are known, so "Other attributes"
+ * holds only what this view does not show.
  */
 export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) {
   const pipeline = describeProcessorPipeline(asCoreSpan(span));
@@ -71,39 +66,38 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
   const processorName = span.entityName ?? span.entityId;
   const hookDuration = hookDurationMs === undefined ? undefined : formatDuration(hookDurationMs);
 
-  // Carded like the Input and Output previews, so the three sections read alike.
   return (
     <Card data-slot="span-processor-attributes-card" className="min-w-0">
       <CardContent>
-        <div data-slot="span-processor-attributes" className="flex flex-col gap-6">
+        <div data-slot="span-processor-attributes" className="flex flex-col gap-3">
           <DataKeysAndValues>
             {processorName && (
-              <Fragment>
+              <>
                 <DataKeysAndValues.Key>Processor</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>{processorName}</DataKeysAndValues.Value>
-              </Fragment>
+              </>
             )}
-            <Fragment>
+            <>
               <DataKeysAndValues.Key>Phase</DataKeysAndValues.Key>
               <DataKeysAndValues.Value>{phaseLabel}</DataKeysAndValues.Value>
-            </Fragment>
+            </>
             {executor && (
-              <Fragment>
+              <>
                 <DataKeysAndValues.Key>Executor</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>{executor === 'workflow' ? 'Workflow' : 'Legacy'}</DataKeysAndValues.Value>
-              </Fragment>
+              </>
             )}
             {processorIndex !== undefined && (
-              <Fragment>
+              <>
                 <DataKeysAndValues.Key>Pipeline position</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>{processorIndex + 1}</DataKeysAndValues.Value>
-              </Fragment>
+              </>
             )}
             {hookDuration && (
-              <Fragment>
+              <>
                 <DataKeysAndValues.Key>Hook duration</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>{hookDuration}</DataKeysAndValues.Value>
-              </Fragment>
+              </>
             )}
           </DataKeysAndValues>
 
@@ -113,7 +107,7 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
               {tripwireAbort.retry !== undefined && (
                 <DataKeysAndValues>
                   <DataKeysAndValues.Key>Retry</DataKeysAndValues.Key>
-                  <DataKeysAndValues.Value>{tripwireAbort.retry ? 'Requested' : 'No'}</DataKeysAndValues.Value>
+                  <DataKeysAndValues.Value>{tripwireAbort.retry ? 'Yes' : 'No'}</DataKeysAndValues.Value>
                 </DataKeysAndValues>
               )}
               {tripwireAbort.metadata !== undefined && (

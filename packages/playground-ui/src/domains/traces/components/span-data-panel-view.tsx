@@ -127,7 +127,6 @@ function SpanDataPanelContent({
   isAnchor?: boolean;
 }) {
   const usage = span.attributes?.usage as TokenUsage | undefined;
-  const hasProcessorAttributes = describeProcessorPipeline(asCoreSpan(span)) !== undefined;
   const hasContext =
     (isAnchor ?? span.parentSpanId == null) &&
     Boolean(
@@ -243,9 +242,9 @@ function SpanDataPanelContent({
           title="Attributes"
           icon={<BracesIcon />}
           raw={span.attributes}
-          hasPreview={hasProcessorAttributes}
+          hasPreview={describeProcessorPipeline(asCoreSpan(span)) !== undefined}
         >
-          {hasProcessorAttributes ? <SpanProcessorAttributes span={span} /> : null}
+          <SpanProcessorAttributes span={span} />
         </SpanPayloadSection>
       </div>
     </>
