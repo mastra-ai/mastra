@@ -277,6 +277,12 @@ describe('processor span descriptions', () => {
     expect(description?.type).toBe('json');
   });
 
+  it('keeps an empty processor payload as JSON', () => {
+    const description = describeSpanOutput(processorSpan({ processorPhase: 'input' }, { output: {} }));
+
+    expect(description).toEqual({ type: 'json', value: {} });
+  });
+
   it('ignores a phase it does not know', () => {
     expect(describeProcessorPhase(processorSpan({ processorPhase: 'someFuturePhase' }))).toBeUndefined();
   });
@@ -328,15 +334,15 @@ describe('processor span descriptions', () => {
     expect(description?.rest).toBeUndefined();
   });
   it.each([
-    ['input', { messages: [] }, {}],
+    ['input', { messages: [] }, { systemMessages: [] }],
     ['inputStep', { messages: [], stepNumber: 1, model: { modelId: 'test' } }, { retryCount: 1 }],
     ['outputResult', { messages: [], result: { text: 'done' } }, { messages: [] }],
     ['outputStep', { messages: [], toolCalls: [] }, { systemMessages: [] }],
     ['outputStream', { totalChunks: 0 }, { totalChunks: 0, accumulatedText: '' }],
-    ['toolResult', { toolName: 'search', providerExecuted: false }, {}],
-    ['llmRequest', { prompt: [{ role: 'user', content: 'hello' }] }, {}],
-    ['llmResponse', { fromCache: false, chunkCount: 0 }, {}],
-    ['requestError', { messages: [], error: 'Request failed' }, {}],
+    ['toolResult', { toolName: 'search', providerExecuted: false }, { messages: [] }],
+    ['llmRequest', { prompt: [{ role: 'user', content: 'hello' }] }, { messages: [] }],
+    ['llmResponse', { fromCache: false, chunkCount: 0 }, { messages: [] }],
+    ['requestError', { messages: [], error: 'Request failed' }, { messages: [] }],
   ])('describes the recorded %s input and output without changing either payload', (phase, input, output) => {
     const record = processorSpan({ processorPhase: phase }, { input, output });
     const inputDescription = describeSpanInput(record);

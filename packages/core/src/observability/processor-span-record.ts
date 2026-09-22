@@ -65,7 +65,8 @@ function describeProcessorPayload<TByPhase extends Record<ProcessorSpanPayloadPh
   data: Record<string, unknown>,
 ): ProcessorSpanPayload<TByPhase> | undefined {
   const phase = describeProcessorPhase(span);
-  if (!phase) return undefined;
+  // An empty payload has nothing to describe; it stays JSON like any other span's.
+  if (!phase || Object.keys(data).length === 0) return undefined;
   return { phase, phaseLabel: PROCESSOR_PHASE_LABELS[phase], data } as ProcessorSpanPayload<TByPhase>;
 }
 

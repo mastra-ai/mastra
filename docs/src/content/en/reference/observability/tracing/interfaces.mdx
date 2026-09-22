@@ -199,8 +199,8 @@ read time instead, by the phase the span recorded, and narrowing on `phase` narr
 `data` to that phase alone.
 
 `describeSpanInput`, `describeSpanOutput` and `describeProcessorPipeline` return the
-JSON fallback for a span with no recorded phase, or one written by a newer version
-with a phase this release doesn't know. The stored payload and the JSON view remain
+JSON fallback for a span with no recorded phase, one written by a newer version
+with a phase this release doesn't know, or an empty payload. The stored payload and the JSON view remain
 unchanged.
 
 ### Span

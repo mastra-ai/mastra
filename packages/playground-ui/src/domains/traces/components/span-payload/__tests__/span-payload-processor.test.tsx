@@ -92,7 +92,7 @@ describe('SpanPayloadProcessor', () => {
 
   it('keeps an empty output as JSON, as any other span would', () => {
     render(<SpanOutputRenderer span={processorSystemMutationSpan} />);
-    expect(slot('span-payload-messages')).toBeNull();
+    expect(slot('span-payload-processor')).toBeNull();
     expect(slot('span-payload-json')?.textContent).toContain('{}');
   });
 
@@ -176,6 +176,13 @@ describe.each(LAYOUTS)('processor spans in the %s layout', (_name, renderView) =
     fireEvent.click(within(attributes).getByRole('button', { name: 'JSON', exact: true }));
     expect(attributes.textContent).toContain('messageListMutations');
     expect(attributes.textContent).toContain('Answer briefly.');
+  });
+
+  it('shows an empty output as JSON without a preview toggle', () => {
+    render(renderView(processorSystemMutationSpan));
+    const output = section('Output');
+    expect(output.querySelector('[data-slot="span-payload-view-toggle"]')).toBeNull();
+    expect(output.querySelector('[data-slot="span-payload-json"]')).not.toBeNull();
   });
 
   it('shows a failed processor span with its error', () => {
