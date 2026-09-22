@@ -31,12 +31,14 @@ export const TEMPLATE_SHA = 'bb789a55bfcf744b3c83aa9132e4ffa562106aa3';
  * NangoHQ/integration-templates#677 adds agent-focused actions across eight
  * integrations (posthog run-query, attio list-attributes, stripe reads,
  * github tags/tree, slack invite-shared, twitter-v2 search/following,
- * hubspot submit-form). The fork commit is upstream main plus that change,
- * so providers that only need upstream templates share the same pin for a
- * consistent generation source.
+ * hubspot submit-form). The pinned commit is that PR's head — upstream main
+ * plus the change — which GitHub serves directly from the upstream
+ * repository, so providers that only need upstream templates share the same
+ * pin for a consistent generation source. Move these providers back to
+ * `TEMPLATE_SHA` once #677 merges.
  */
 const PIN_677: TemplatePin = {
-  repo: 'arctic-char/integration-templates',
+  repo: 'NangoHQ/integration-templates',
   sha: 'c3091db1e8a623113d581197a8ee0d5b1aa87136',
 };
 
