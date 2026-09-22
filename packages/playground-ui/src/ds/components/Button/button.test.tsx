@@ -24,6 +24,19 @@ describe('Button', () => {
     expect(baseClasses).not.toContain('transition-all');
   });
 
+  // A filled variant covers what is behind it — card text, a list row, the pill it is
+  // stacked over. Answering a state by dropping its own alpha (`bg-foreground/75`) turns
+  // the button into a window exactly when the pointer arrives, so every state resolves to
+  // an opaque rung instead. Translucent variants are excluded on purpose: `ghost` and
+  // `outline` have no fill of their own and are state layers by design.
+  it.each(['primary', 'destructive'] as const)('keeps the %s fill opaque in every state', variant => {
+    const alphaModified = buttonVariants({ variant })
+      .split(' ')
+      .filter(className => /(^|:)bg-[\w-]+\/\d+$/.test(className));
+
+    expect(alphaModified).toEqual([]);
+  });
+
   // Base UI renders `type="button"` when the prop is absent. Keeping the attribute off
   // preserves the native `submit` default, so a form button that never set a type keeps
   // submitting instead of silently going inert.
