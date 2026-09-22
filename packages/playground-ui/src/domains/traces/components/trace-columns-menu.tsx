@@ -15,11 +15,11 @@ import {
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { TextFieldBlock } from '@/ds/components/FormFieldBlocks';
 
-const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['input', 'entity', 'duration'];
+const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration'];
 
 const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
+  type: 'Type',
   input: 'Input',
-  entity: 'Entity',
   duration: 'Duration',
   inputTokens: 'Input tokens',
   outputTokens: 'Output tokens',
@@ -106,7 +106,7 @@ export function TraceColumnsMenu({
             </DropdownMenu.CheckboxItem>
           ))}
           {usageDisabledReason && (
-            <p className="text-ui-xs leading-ui-sm text-placeholder px-2 py-1" role="note">
+            <p className="text-meta text-placeholder px-2 py-1" role="note">
               {usageDisabledReason}
             </p>
           )}

@@ -61,7 +61,7 @@ function RowAction({
     <Button
       type="button"
       variant="ghost"
-      size="icon-xs"
+      size="icon-sm"
       tooltip={label}
       aria-label={label}
       onClick={onClick}
@@ -111,12 +111,12 @@ function CommentRowEditor({
 }
 
 function CommentRowBody({ comment, ref }: { comment: WorkItemComment; ref: Ref<HTMLElement> }) {
-  if (comment.deletedAt !== undefined) return <p className="text-ui-sm text-icon2 m-0 italic">Comment deleted</p>;
+  if (comment.deletedAt !== undefined) return <p className="text-caption text-icon2 m-0 italic">Comment deleted</p>;
 
   return (
     <CommentItemBody ref={ref}>
       <MarkdownRenderer>{comment.body}</MarkdownRenderer>
-      {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
+      {comment.editedAt ? <span className="text-meta text-icon2 ml-1">(edited)</span> : null}
     </CommentItemBody>
   );
 }

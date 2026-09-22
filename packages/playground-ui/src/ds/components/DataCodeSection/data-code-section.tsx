@@ -26,6 +26,7 @@ import {
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // -- Search highlight extension -----------------------------------------------
@@ -111,7 +112,7 @@ function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-ui-sm)',
+      fontSize: 'var(--text-caption)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -125,8 +126,8 @@ function buildLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
-      fontSize: 'var(--text-ui-sm)',
+      color: 'var(--foreground)',
+      fontSize: 'var(--text-caption)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',
@@ -137,8 +138,8 @@ function buildLightTheme(): Extension {
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--foreground)',
+      caretColor: 'var(--foreground)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -147,7 +148,7 @@ function buildLightTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--foreground)',
     },
   });
 
@@ -327,7 +328,12 @@ export function DataCodeSection({
         </div>
       </div>
 
-      <div className="border-border1 bg-surface3 text-ui-sm text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div
+        className={cn(
+          raisedSurfaceStyle,
+          'text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+        )}
+      >
         {usePlainTextView ? (
           <div className="text-muted-foreground font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
@@ -346,7 +352,7 @@ export function DataCodeSection({
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
         <DialogContent className="grid h-[calc(100vh-6rem)]! max-w-[90vw]! grid-rows-[auto_1fr] [&>.absolute]:hidden">
           <DialogHeader className="flex-row items-center justify-between">
-            <DialogTitle className="text-ui-sm flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
+            <DialogTitle className="text-caption flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
               {dialogTitle ?? (
                 <>
                   {icon}
@@ -390,7 +396,12 @@ export function DataCodeSection({
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="border-border1 bg-surface3 text-ui-sm text-muted-foreground overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+              <div
+                className={cn(
+                  raisedSurfaceStyle,
+                  'text-caption text-muted-foreground overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+                )}
+              >
                 <div className="text-muted-foreground font-mono break-all">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>

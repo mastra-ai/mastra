@@ -133,8 +133,8 @@ export function DateTimeRangePicker({
             aria-describedby={customRangeError ? fieldErrorId(customRangeFieldName) : undefined}
           >
             <div className={cn('flex')}>
-              <div className={cn('border-r border-border1')}>
-                <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-muted-foreground')}>Start</span>
+              <div className={cn('border-r border-border')}>
+                <span className={cn('block px-4 pt-3 text-column text-muted-foreground')}>Start</span>
                 <DatePicker
                   mode="single"
                   selected={draftDateFrom}
@@ -152,7 +152,7 @@ export function DateTimeRangePicker({
                 />
               </div>
               <div>
-                <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-muted-foreground')}>End</span>
+                <span className={cn('block px-4 pt-3 text-column text-muted-foreground')}>End</span>
                 <DatePicker
                   mode="single"
                   selected={draftDateTo}

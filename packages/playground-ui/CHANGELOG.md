@@ -1,5 +1,31 @@
 # @mastra/playground-ui
 
+## 56.0.0-alpha.12
+
+### Minor Changes
+
+- Added column sorting across Studio lists. Click a column header to toggle ascending/descending on agents, workflows, tools, processors, scorers, MCP servers, schedules, workspace skills, logs, traces, scores, inbox feedback, prompt blocks, datasets, dataset items and experiments. Sort on server-backed lists is kept in the URL (\`?sort=<field>&dir=asc|desc\`) so it survives reloads. Also exports shared \`sortBy\` and \`useUrlSort\` helpers from \`@mastra/playground-ui/sort/*\`. ([#24567](https://github.com/mastra-ai/mastra/pull/24567))
+
+### Patch Changes
+
+- Showed the MCP server icon for `mcp_server` entities in the traces list. ([#24150](https://github.com/mastra-ai/mastra/pull/24150))
+
+- Rework the Studio trace list columns: ([#24584](https://github.com/mastra-ai/mastra/pull/24584))
+
+  - Rename "Created" to "Start"
+  - Replace the "Entity" column with a "Type" column showing an icon + label for agents, workflows, steps, tools, scorers, memory, processors, and more
+  - Strip the `agent run: '…'` / `workflow run: '…'` / `scorer run: '…'` prefixes from the Name column
+  - Reorder columns to Start → Type → Name → Input → Status → Duration → Est. cost
+  - Show Duration and Est. cost by default
+  - Reset saved column preferences to the new defaults
+
+- Fixed a Playground UI type error when querying traces with cursor pagination. ([#24329](https://github.com/mastra-ai/mastra/pull/24329))
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192)]:
+  - @mastra/core@1.68.0-alpha.11
+  - @mastra/client-js@1.47.0-alpha.11
+  - @mastra/react@1.6.0-alpha.12
+
 ## 56.0.0-alpha.11
 
 ### Minor Changes

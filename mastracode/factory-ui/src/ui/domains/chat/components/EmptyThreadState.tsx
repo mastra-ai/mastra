@@ -33,10 +33,10 @@ export function EmptyThreadState() {
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
       <Logo size="md" aria-label="Mastra Code" />
-      <h1 id="empty-thread-title" className="text-header-xl text-icon6 mt-7 font-medium tracking-tight text-balance">
+      <h1 id="empty-thread-title" className="text-display text-icon6 mt-7 tracking-tight text-balance">
         What can I help you build?
       </h1>
-      <p className="text-ui-lg text-icon3 mt-2 max-w-lg leading-relaxed text-pretty">
+      <p className="text-body text-icon3 mt-2 max-w-lg leading-relaxed text-pretty">
         Ask about this codebase, plan a change, or describe something that isn&apos;t working.
       </p>
 
@@ -70,7 +70,7 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <details className="group text-ui-sm text-icon3 mt-8 w-full max-w-lg min-w-0">
+      <details className="group text-caption text-icon3 mt-8 w-full max-w-lg min-w-0">
         <summary className="hover:text-icon5 focus-visible:outline-accent1 flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
           <span>
             Working in <span className="text-icon5 font-medium">{activeFactory.name}</span>

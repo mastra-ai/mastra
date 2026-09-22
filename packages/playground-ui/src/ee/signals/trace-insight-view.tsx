@@ -5,6 +5,8 @@ import type { TraceInsightResponse } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 interface TraceInsightViewProps {
   traceId: string;
@@ -30,8 +32,8 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
           Open full trace
         </Button>
       </div>
-      {insightQuery.isPending && <p className="text-ui-md text-muted-foreground">Loading trace insight…</p>}
-      {insightQuery.isError && <p className="text-ui-md text-red-500">Unable to load the trace insight.</p>}
+      {insightQuery.isPending && <p className="text-body text-muted-foreground">Loading trace insight…</p>}
+      {insightQuery.isError && <p className="text-body text-red-500">Unable to load the trace insight.</p>}
       {insightQuery.data && <TraceInsightBody insight={insightQuery.data} />}
     </div>
   );
@@ -68,18 +70,18 @@ function parseTraceObservation(observation: string): ParsedObservation {
 }
 
 const OBSERVATION_SEVERITY_CARD: Record<ObservationSeverity, string> = {
-  info: 'border-border1 bg-surface3',
-  success: 'border-green-400/30 bg-green-500/10',
-  problem: 'border-red-400/30 bg-red-500/10',
+  info: raisedSurfaceStyle,
+  success: 'border border-green-400/30 bg-green-500/10',
+  problem: 'border border-red-400/30 bg-red-500/10',
 };
 
 function ObservationItem({ observation }: { observation: string }) {
   const { severity, kind, text } = parseTraceObservation(observation);
 
   return (
-    <li className={`text-ui-md rounded-md border p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
+    <li className={`text-body rounded-md p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
       {kind !== undefined && (
-        <p className="text-ui-xs text-muted-foreground font-mono tracking-wider uppercase">
+        <p className="text-meta text-muted-foreground font-mono tracking-wider uppercase">
           {severity === 'problem' && (
             <>
               <span className="text-red-400">problem</span>
@@ -99,30 +101,30 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
   return (
     <>
       {insight.summary === undefined ? (
-        <p className="text-ui-md text-muted-foreground">No insight available yet for this trace.</p>
+        <p className="text-body text-muted-foreground">No insight available yet for this trace.</p>
       ) : (
         <section aria-labelledby="trace-insight-summary-heading">
           <h2
             id="trace-insight-summary-heading"
-            className="text-ui-sm text-muted-foreground font-mono tracking-wider uppercase"
+            className="text-caption text-muted-foreground font-mono tracking-wider uppercase"
           >
             Trace summary
           </h2>
-          <p className="text-ui-md text-foreground mt-3">{insight.summary.summary}</p>
+          <p className="text-body text-foreground mt-3">{insight.summary.summary}</p>
           {insight.summary.currentTask !== undefined && (
-            <dl className="text-ui-md mt-4">
+            <dl className="text-body mt-4">
               <dt className="text-muted-foreground">Current task</dt>
               <dd className="text-foreground mt-1">{insight.summary.currentTask}</dd>
             </dl>
           )}
           {insight.summary.degenerate === true && (
-            <p className="text-ui-md mt-4 text-red-500">This trace was flagged as degenerate or looping.</p>
+            <p className="text-body mt-4 text-red-500">This trace was flagged as degenerate or looping.</p>
           )}
           {insight.summary.observations.length > 0 && (
             <>
               <h3
                 id="trace-insight-observations-heading"
-                className="text-ui-sm text-muted-foreground mt-4 font-mono tracking-wider uppercase"
+                className="text-caption text-muted-foreground mt-4 font-mono tracking-wider uppercase"
               >
                 Observations
               </h3>
@@ -139,13 +141,13 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
         <section aria-labelledby="trace-insight-signals-heading">
           <h2
             id="trace-insight-signals-heading"
-            className="text-ui-sm text-muted-foreground font-mono tracking-wider uppercase"
+            className="text-caption text-muted-foreground font-mono tracking-wider uppercase"
           >
             Trace signal summaries
           </h2>
           <ul className="mt-3 space-y-3">
             {insight.signals.map(signal => (
-              <li key={signal.signalName} className="border-border1 bg-surface3 text-ui-md rounded-md border p-3">
+              <li key={signal.signalName} className={cn(raisedSurfaceStyle, 'text-body rounded-md p-3')}>
                 <p className="text-muted-foreground">{signalLabel(signalCatalog, signal.signalName)}</p>
                 <p className="text-foreground mt-1">{signal.signalText}</p>
               </li>

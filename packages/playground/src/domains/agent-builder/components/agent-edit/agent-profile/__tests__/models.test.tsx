@@ -100,7 +100,7 @@ describe('Models', () => {
       const container = getByTestId('model-card-anthropic-claude-3-5-sonnet') as HTMLButtonElement;
       expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
       expect(container.style.borderColor).toBe('');
-      expect(container.className).toContain('border-border1');
+      expect(container.className).toContain('border-border');
       expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
       expect(container.className).not.toContain('focus-visible:ring');
     });
@@ -123,7 +123,7 @@ describe('Models', () => {
       expect(openaiTitle.textContent).toBe('OpenAI');
       expect(openaiTitle.className).toContain('text-muted-foreground');
       expect(openaiTitle.className).toContain('uppercase');
-      expect(openaiTitle.className).toContain('text-ui-sm');
+      expect(openaiTitle.className).toContain('text-caption');
 
       const anthropicTitle = getByTestId('model-provider-section-title-anthropic');
       expect(anthropicTitle.textContent).toBe('Anthropic');

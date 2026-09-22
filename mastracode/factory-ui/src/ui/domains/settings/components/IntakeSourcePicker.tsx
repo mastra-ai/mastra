@@ -70,7 +70,7 @@ export function SourcePicker({
           <Spinner size="sm" aria-label={`Saving ${label} selection`} />
         ) : (
           selectedCount > 0 && (
-            <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
+            <Txt as="span" variant="meta" className="text-icon3 shrink-0">
               {selectedCount} selected
             </Txt>
           )
@@ -80,14 +80,14 @@ export function SourcePicker({
       <ScrollArea orientation="vertical" maxHeight="20rem">
         <div role="group" aria-label={label} className="flex flex-col gap-px p-2">
           {matchingGroups.length === 0 ? (
-            <Txt as="p" variant="ui-sm" className="text-icon3 px-2 py-2">
+            <Txt as="p" variant="caption" className="text-icon3 px-2 py-2">
               No matches
             </Txt>
           ) : (
             matchingGroups.map(group => (
               <Fragment key={group.id}>
                 {group.label && (
-                  <Txt as="p" variant="ui-xs" className="text-icon3 px-2 pt-3 pb-1 first:pt-0">
+                  <Txt as="p" variant="meta" className="text-icon3 px-2 pt-3 pb-1 first:pt-0">
                     {group.label}
                   </Txt>
                 )}
@@ -101,11 +101,11 @@ export function SourcePicker({
                       disabled={disabled || item.disabled}
                       onCheckedChange={() => onToggleItem(item.id)}
                     />
-                    <Txt as="span" variant="ui-md" className="text-icon5 truncate">
+                    <Txt as="span" variant="body" className="text-icon5 truncate">
                       {item.label}
                     </Txt>
                     {item.hint && (
-                      <Txt as="span" variant="ui-xs" className="text-icon3 ml-auto shrink-0">
+                      <Txt as="span" variant="meta" className="text-icon3 ml-auto shrink-0">
                         {item.hint}
                       </Txt>
                     )}

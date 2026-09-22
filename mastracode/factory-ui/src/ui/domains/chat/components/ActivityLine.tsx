@@ -88,7 +88,7 @@ export function ActivityLine() {
     <Arriving>
       <Txt
         as="p"
-        variant="ui-sm"
+        variant="caption"
         aria-hidden
         className={cn('text-icon3 px-1.5 py-1 transition-opacity duration-300', !thinking && 'opacity-0')}
       >

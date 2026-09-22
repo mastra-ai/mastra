@@ -4,6 +4,6 @@
   bottom: 0;
   z-index: 1;
   padding-block: 12px;
-  background: var(--surface3);
-  box-shadow: 0 -1px var(--border1);
+  background: var(--card);
+  box-shadow: 0 -1px var(--border);
 }

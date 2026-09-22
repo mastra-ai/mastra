@@ -85,7 +85,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   if (!tool)
     return (
       <div className="px-4 py-8 text-center">
-        <Txt variant="header-md" className="text-muted-foreground">
+        <Txt variant="heading" tone="muted">
           Tool not found
         </Txt>
       </div>
@@ -94,7 +94,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   if (!canExecuteTool)
     return (
       <div className="px-4 py-8 text-center">
-        <Txt variant="ui-sm" className="text-muted-foreground">
+        <Txt variant="caption" tone="muted">
           You don't have permission to execute tools.
         </Txt>
       </div>
@@ -112,7 +112,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   return (
     <div className="flex flex-col gap-4">
       {appHtml && (
-        <div className="border-border1 border-b p-4">
+        <div className="border-border border-b p-4">
           <McpAppViewer html={appHtml} toolName={tool.name} onToolCall={handleToolCall} />
         </div>
       )}

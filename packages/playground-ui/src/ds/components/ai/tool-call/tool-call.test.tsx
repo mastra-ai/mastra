@@ -77,8 +77,9 @@ describe('ToolCall', () => {
     expect(screen.getByTestId('icon').className).toContain('size-4');
     expect(screen.getByTestId('icon').textContent).toBe('$');
     expect(screen.getByText('Ran command').className).toContain('truncate');
-    expect(screen.getByText('pnpm test').className).toContain('text-icon3 min-w-0 truncate');
-    expect(screen.getByText('pnpm test').className).toContain('font-mono');
+    expect(screen.getByText('pnpm test').classList).toContain('text-muted-foreground');
+    expect(screen.getByText('pnpm test').classList).toContain('truncate');
+    expect(screen.getByText('pnpm test').classList).toContain('font-mono');
     expect(screen.getByText('2 files').className).toContain('items-center');
     expect(screen.getByText('Done').className).toContain('shrink-0');
     expect(screen.getByTestId('disclosure').firstElementChild?.className).toContain(
@@ -86,7 +87,7 @@ describe('ToolCall', () => {
     );
 
     const content = document.querySelector<HTMLDivElement>('.body-class');
-    expect(content?.className).toContain('before:bg-border1');
+    expect(content?.className).toContain('before:bg-border');
     expect(content?.textContent).toBe('Command output');
   });
 
@@ -169,10 +170,10 @@ describe('ToolCall', () => {
 
     expect(screen.getByRole('group', { name: 'Tool: custom' }).getAttribute('data-status')).toBe('idle');
     expect(screen.getByTestId('spacer').className).toContain('min-w-2 flex-1');
-    expect(screen.getByTestId('spacer').className).toContain('bg-border1');
+    expect(screen.getByTestId('spacer').className).toContain('bg-border');
     expect(screen.getByTestId('custom-disclosure').className).toContain('justify-center');
     expect(screen.getByText('Toggle').className).toContain(
-      'text-icon3 flex shrink-0 items-center opacity-0 transition duration-150',
+      'text-muted-foreground flex shrink-0 items-center opacity-0 transition duration-150',
     );
     expect(screen.getByText('Toggle').textContent).toBe('Toggle');
   });

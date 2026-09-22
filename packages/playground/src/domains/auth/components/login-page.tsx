@@ -57,7 +57,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   if (isLoadingCapabilities) {
     return (
-      <div className="bg-surface1 flex min-h-screen items-center justify-center">
+      <div className="bg-sidebar flex min-h-screen items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
       </div>
     );
@@ -65,7 +65,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   if (!capabilities?.enabled || !capabilities?.login) {
     return (
-      <div className="bg-surface1 flex min-h-screen items-center justify-center">
+      <div className="bg-sidebar flex min-h-screen items-center justify-center">
         <div className="text-muted-foreground">Authentication is not configured</div>
       </div>
     );
@@ -117,9 +117,9 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   };
 
   const description = login.description ? (
-    <div className="border-border1 bg-surface1 flex items-start gap-2.5 rounded-md border p-3">
+    <div className="border-border bg-sidebar flex items-start gap-2.5 rounded-md border p-3">
       <Lock className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-      <p className="text-muted-foreground text-ui-md">{login.description}</p>
+      <p className="text-muted-foreground text-body">{login.description}</p>
     </div>
   ) : null;
 
@@ -185,7 +185,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           </Button>
 
           {signUpEnabled && (
-            <div className="text-ui-md text-center">
+            <div className="text-body text-center">
               <span className="text-muted-foreground">
                 {isSignIn ? "Don't have an account? " : 'Already have an account? '}
               </span>
@@ -200,10 +200,10 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       {hasSSO && hasCredentials && (
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="border-border1 w-full border-t" />
+            <div className="border-border w-full border-t" />
           </div>
-          <div className="text-ui-md relative flex justify-center">
-            <span className="bg-surface1 text-muted-foreground px-2">or continue with</span>
+          <div className="text-body relative flex justify-center">
+            <span className="bg-sidebar text-muted-foreground px-2">or continue with</span>
           </div>
         </div>
       )}

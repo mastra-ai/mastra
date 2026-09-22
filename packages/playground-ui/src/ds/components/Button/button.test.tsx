@@ -16,7 +16,8 @@ describe('Button', () => {
     const baseClasses = buttonVariants().split(' ');
     expect(baseClasses).toEqual(
       expect.arrayContaining([
-        'transition-[background-color,border-color,color]',
+        'transition-[color]',
+        'duration-fast',
         'motion-reduce:transition-none',
         'aria-disabled:pointer-events-none',
       ]),
@@ -26,13 +27,12 @@ describe('Button', () => {
     const variants: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost', 'outline'];
     const expectedClasses = {
       default: [
-        'new-theme',
         'border-border',
-        'bg-foreground/10',
+        'bg-fill',
         'text-foreground',
-        'not-disabled:hover:bg-foreground/14',
-        'not-disabled:active:bg-foreground/18',
-        'aria-disabled:bg-muted',
+        'not-disabled:hover:bg-fill-hover',
+        'not-disabled:active:bg-fill-active',
+        'aria-disabled:bg-fill-subtle',
       ],
       primary: [
         'bg-foreground',
@@ -53,17 +53,17 @@ describe('Button', () => {
       ],
       ghost: [
         'text-muted-foreground',
-        'not-disabled:hover:bg-foreground/4',
-        'not-disabled:active:bg-foreground/10',
+        'not-disabled:hover:bg-fill-subtle',
+        'not-disabled:active:bg-fill',
         'aria-disabled:bg-transparent',
       ],
       outline: [
-        'border-foreground/18',
+        'border-border-strong',
         'bg-transparent',
         'text-foreground',
-        'not-disabled:hover:border-foreground/30',
-        'not-disabled:hover:bg-foreground/4',
-        'not-disabled:active:bg-foreground/10',
+        'not-disabled:hover:border-border-hover',
+        'not-disabled:hover:bg-fill-subtle',
+        'not-disabled:active:bg-fill',
         'aria-disabled:border-border',
       ],
     } satisfies Record<ButtonVariant, string[]>;
@@ -99,7 +99,6 @@ describe('Button', () => {
     const link = screen.getByRole('link', { name: 'Agents' });
     expect(link.getAttribute('href')).toBe('/agents');
     expect(link.getAttribute('target')).toBe('_blank');
-    expect(link.className).toContain('new-theme');
   });
 
   it('prefers render over the deprecated as API', () => {
@@ -116,18 +115,16 @@ describe('Button', () => {
     render(<Button render={<a href="/docs" />}>Read docs</Button>);
     const link = screen.getByRole('link', { name: 'Read docs' });
     expect(link.getAttribute('href')).toBe('/docs');
-    expect(link.className).toContain('new-theme');
   });
 
   // One icon step per control step. Before this, the same nominal size rendered a
   // 20px, 16px, or 15.39px icon depending on whether it arrived as an icon-mode
   // child, the `icon` prop, or a bare SVG.
   it.each([
-    ['xs', 'icon-xs', 'h-icon-sm'],
-    ['sm', 'icon-sm', 'h-icon-smd'],
-    ['md', 'icon-md', 'h-icon-default'],
-    ['lg', 'icon-lg', 'h-icon-lg'],
-  ] as const)('sizes the %s icon the same through every path', (textSize, iconSize, expected) => {
+    ['sm', 'icon-sm'],
+    ['md', 'icon-md'],
+    ['lg', 'icon-lg'],
+  ] as const)('sizes the %s icon the same through every path', (textSize, iconSize) => {
     const { container } = render(
       <>
         <Button size={iconSize} aria-label="icon mode">
@@ -139,9 +136,9 @@ describe('Button', () => {
       </>,
     );
 
-    for (const slot of container.querySelectorAll('span[class*="h-icon"]')) {
-      expect(slot.className).toContain(expected);
-    }
+    const slots = [...container.querySelectorAll('span[class*="size-icon"]')];
+    expect(slots).toHaveLength(2);
+    expect(new Set(slots.map(slot => slot.className)).size).toBe(1);
   });
 
   describe('icon prop', () => {
@@ -279,7 +276,6 @@ describe('Button', () => {
       const cls = screen.getByRole('link', { name: 'Docs' }).className;
       expect(cls).toContain('custom-link');
       expect(cls).toContain('from-caller');
-      expect(cls).toContain('new-theme');
     });
 
     it('detects a router link by its `to` prop', () => {
@@ -299,7 +295,7 @@ describe('Button', () => {
       expect(link.getAttribute('href')).toBeNull();
       expect(link.getAttribute('aria-disabled')).toBe('true');
       expect(link.className).toContain('aria-disabled:pointer-events-none');
-      expect(link.className).toContain('aria-disabled:bg-muted');
+      expect(link.classList.contains('aria-disabled:bg-fill-subtle')).toBe(true);
       fireEvent.click(link);
       expect(onClick).not.toHaveBeenCalled();
       expect(fireEvent.keyDown(link, { key: 'Enter' })).toBe(false);

@@ -1,5 +1,43 @@
 # @mastra/mcp
 
+## 2.0.0-alpha.5
+
+### Minor Changes
+
+- Added an `MCP_SERVER_REQUEST` root span for every request an `MCPServer` handles (`tools/list`, `tools/call`, `resources/*`, `prompts/*`) and for `executeTool()`. The span records the method, target, request params, response, server name and version, negotiated protocol version, and client name and version. ([#24150](https://github.com/mastra-ai/mastra/pull/24150))
+
+  Register the server on a Mastra instance that has observability configured and served requests are traced, with no extra setup:
+
+  ```ts
+  import { Mastra } from '@mastra/core/mastra';
+  import { MCPServer } from '@mastra/mcp';
+  import { Observability } from '@mastra/observability';
+
+  export const mastra = new Mastra({
+    mcpServers: {
+      orderMcp: new MCPServer({ name: 'Order MCP', version: '1.0.0', tools: { lookupOrder } }),
+    },
+    observability: new Observability({ configs: { default: { serviceName: 'orders' } } }),
+  });
+  ```
+
+  Agents and workflows exposed as tools nest under the request span, and a served tool no longer produces a separate root `TOOL_CALL` span:
+
+  ```
+  MCP_SERVER_REQUEST  tools/call ask_supportAgent
+  └── AGENT_RUN       support-agent
+      └── TOOL_CALL   lookupOrder
+  ```
+
+  See https://github.com/mastra-ai/mastra/issues/23921
+
+### Patch Changes
+
+- Fixed a resource leak in MCP clients whose connection attempt fails. A failed connect left behind the shutdown handlers it had registered, so applications that create a client per request — or retry against a server that is unreachable, timing out, or exiting on startup — slowly accumulated handlers until Node warned about a possible leak. Failed attempts now release them, and a failed command-based connection no longer leaves its subprocess running. ([#24502](https://github.com/mastra-ai/mastra/pull/24502))
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b)]:
+  - @mastra/core@1.68.0-alpha.11
+
 ## 2.0.0-alpha.4
 
 ### Major Changes

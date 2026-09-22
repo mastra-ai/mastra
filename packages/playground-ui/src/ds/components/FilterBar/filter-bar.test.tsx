@@ -779,6 +779,87 @@ describe('FilterBar', () => {
     });
   });
 
+  describe('when a chip is removed', () => {
+    const INITIAL: FilterBarItem[] = [
+      { id: 'a', fieldId: 'status', operatorId: 'is', value: 'running' },
+      { id: 'b', fieldId: 'traceId', operatorId: 'is', value: 'x' },
+    ];
+
+    // jsdom has no Web Animations; emulate one animation whose `finished` we control.
+    const mockAnimations = () => {
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const original = Element.prototype.getAnimations;
+      Element.prototype.getAnimations = vi.fn(() => [{ finished } as unknown as Animation]);
+      return { finish, restore: () => void (Element.prototype.getAnimations = original) };
+    };
+
+    it('keeps the chip rendered as leaving until its animations settle', async () => {
+      const { finish, restore } = mockAnimations();
+      try {
+        const onChange = vi.fn();
+        render(<Harness initial={INITIAL} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Status filter' }));
+
+        expect(argAt(onChange, 0, 0).map((i: FilterBarItem) => i.id)).toEqual(['b']);
+        const [leavingChip, liveChip] = [...getChips()];
+        expect(liveChip).toBeDefined();
+        expect(leavingChip?.dataset.leaving).toBe('true');
+        expect(leavingChip?.getAttribute('aria-hidden')).toBe('true');
+        expect(leavingChip?.querySelector('[role="combobox"], button')).toBeNull();
+        // Still first in DOM order; live chip untouched.
+        expect(liveChip?.dataset.leaving).toBeUndefined();
+
+        finish();
+        await waitFor(() => expect(getChips()).toHaveLength(1));
+        expect(screen.getByRole('group', { name: 'Trace ID is x' })).toBeDefined();
+      } finally {
+        restore();
+      }
+    });
+
+    it('drops the chip immediately when nothing animates', () => {
+      render(<Harness initial={INITIAL} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Status filter' }));
+      expect(getChips()).toHaveLength(1);
+      expect(document.querySelector('[data-leaving]')).toBeNull();
+    });
+
+    it('re-adding an item with the same id while it leaves cancels the exit', async () => {
+      const { finish, restore } = mockAnimations();
+      try {
+        function ReAddHarness() {
+          const [items, setItems] = useState<FilterBarItem[]>(INITIAL);
+          return (
+            <>
+              <button onClick={() => setItems(INITIAL)}>Re-add</button>
+              <FilterBar fields={FIELDS} operators={OPERATORS} value={items} onValueChange={setItems}>
+                <FilterBar.Chips />
+                <FilterBar.Input placeholder="Filter…" />
+              </FilterBar>
+            </>
+          );
+        }
+        render(<ReAddHarness />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Status filter' }));
+        expect(document.querySelector('[data-leaving]')).not.toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Re-add' }));
+        expect(getChips()).toHaveLength(2);
+        expect(document.querySelector('[data-leaving]')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Remove Status filter' })).toBeDefined();
+
+        finish();
+        await act(async () => {});
+        expect(getChips()).toHaveLength(2);
+      } finally {
+        restore();
+      }
+    });
+  });
+
   describe('lazy suggestions', () => {
     it('calls the resolver only once the value step opens, with query/operator/signal', async () => {
       const resolver = vi.fn(async ({ query }: { query: string }) =>

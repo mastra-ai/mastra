@@ -53,6 +53,36 @@
   .filter-bar-chip > .filter-bar-segment:nth-child(5 of .filter-bar-segment) {
     --filter-bar-segment-index: 4;
   }
+
+  /* Leaving: the whole chip folds shut from its right edge in one move, fading as it
+   * goes and swallowing the row gap it leaves. Segments keep their width so the pill
+   * clips them instead of restacking. Declared after the entrance rule so it wins on a
+   * chip that was still arriving. */
+  .filter-bar-chip[data-leaving] {
+    interpolate-size: allow-keywords;
+    overflow: hidden;
+    animation: filter-bar-chip-out 200ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+
+  .filter-bar-chip[data-leaving] > .filter-bar-segment {
+    animation: none;
+    flex-shrink: 0;
+  }
+}
+
+@keyframes filter-bar-chip-out {
+  from {
+    width: auto;
+    opacity: 1;
+    margin-inline-end: 0;
+  }
+
+  to {
+    width: 0;
+    opacity: 0;
+    margin-inline-end: -0.25rem;
+    border-inline-width: 0;
+  }
 }
 
 /* Once the value lands, a slanted band in the field's accent colour (the chip sets
@@ -89,7 +119,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .filter-bar-segment {
+  .filter-bar-segment,
+  .filter-bar-chip[data-leaving] {
     animation: none;
   }
 

@@ -20,6 +20,8 @@ import {
   toReactiveSignalData,
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MastraDBMessageMetadata, RequireApprovalEntry } from '@mastra/react';
 import { MessageFactory } from '@mastra/react/ui';
@@ -81,8 +83,8 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   };
 
   return (
-    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-surface4 border-transparent">
-      <Txt variant="ui-sm" className="text-foreground pb-2" as="div">
+    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-muted border-transparent">
+      <Txt variant="caption" tone="ink" className="pb-2" as="div">
         Approval required for <span className="text-foreground font-mono">{toolName}</span>
       </Txt>
       <div className="flex items-center gap-2">
@@ -266,7 +268,7 @@ export const Txtmessage = ({
     return (
       <div className="flex justify-end">
         <Txt
-          variant="ui-md"
+          variant="body"
           className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
           as="div"
         >
@@ -279,8 +281,9 @@ export const Txtmessage = ({
   if (role === 'assistant' || role === 'system') {
     return (
       <Txt
-        variant="ui-md"
-        className="text-muted-foreground max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
+        variant="body"
+        tone="muted"
+        className="max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
         as="div"
       >
         <MessageText text={txt} metadata={metadata} externalLinkTarget={role === 'assistant' ? 'window' : undefined} />
@@ -301,12 +304,13 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
       <div className="flex items-start gap-2.5">
         <AlertTriangle className="text-accent6 mt-0.5 size-4 shrink-0" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
-          <Txt variant="ui-md" className="text-icon6 font-medium" as="div">
+          <Txt variant="subheading" tone="ink" as="div">
             Something went wrong while building the agent.
           </Txt>
           <Txt
-            variant="ui-sm"
-            className="text-muted-foreground break-words"
+            variant="caption"
+            tone="muted"
+            className="break-words"
             as="div"
             data-testid="agent-builder-chat-error-summary"
           >
@@ -329,7 +333,11 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               </Button>
             )}
             <CollapsibleTrigger
-              className="text-muted-foreground hover:text-foreground text-ui-md underline-offset-2 hover:underline"
+              className={cn(
+                'text-body underline-offset-2 hover:underline',
+                quietTextHover,
+                controlStateColorTransition,
+              )}
               data-testid="agent-builder-chat-error-details-trigger"
             >
               Details
@@ -337,7 +345,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <pre
-              className="text-muted-foreground bg-surface1 text-ui-sm max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
+              className="text-muted-foreground bg-sidebar text-caption max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
@@ -399,9 +407,9 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
           className="group flex w-full items-center gap-2 text-left"
           data-testid="agent-builder-chat-generic-tool-trigger"
         >
-          <span className="border-border1/60 bg-surface1 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
+          <span className="border-border/60 bg-sidebar inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
             <Wrench className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-            <Txt variant="ui-sm" className="text-foreground" as="span">
+            <Txt variant="caption" tone="ink" as="span">
               Executing <span className="text-foreground font-mono">{toolName}</span>
             </Txt>
           </span>
@@ -412,24 +420,24 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
-            <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
-              <div className="border-border1/60 border-b px-2 py-1">
-                <Txt variant="ui-sm" className="text-muted-foreground" as="div">
+            <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
+              <div className="border-border/60 border-b px-2 py-1">
+                <Txt variant="caption" tone="muted" as="div">
                   Input
                 </Txt>
               </div>
-              <pre className="text-foreground text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
+              <pre className="text-foreground text-caption m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
                 {inputJson || '{}'}
               </pre>
             </div>
             {hasOutput ? (
-              <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
-                <div className="border-border1/60 border-b px-2 py-1">
-                  <Txt variant="ui-sm" className="text-muted-foreground" as="div">
+              <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
+                <div className="border-border/60 border-b px-2 py-1">
+                  <Txt variant="caption" tone="muted" as="div">
                     Output
                   </Txt>
                 </div>
-                <pre className="text-foreground text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
+                <pre className="text-foreground text-caption m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
                   {outputJson}
                 </pre>
               </div>
@@ -453,7 +461,7 @@ export const ToolCard = ({
   <Card
     data-testid={testId}
     className={cn(
-      'max-w-[80%] p-3 bg-surface2/60 border-border1/60 animate-in fade-in slide-in-from-left-2 duration-300',
+      'max-w-[80%] p-3 bg-background/60 border-border/60 animate-in fade-in slide-in-from-left-2 duration-300',
       className,
     )}
   >
@@ -466,8 +474,8 @@ const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string;
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
-    <Txt variant="ui-md" className="text-muted-foreground min-w-0 flex-1 truncate" as="div">
-      {label} <strong className="text-foreground font-semibold">{value}</strong>
+    <Txt variant="body" tone="muted" className="min-w-0 flex-1 truncate" as="div">
+      {label} <strong className="text-foreground font-medium">{value}</strong>
     </Txt>
   </div>
 );

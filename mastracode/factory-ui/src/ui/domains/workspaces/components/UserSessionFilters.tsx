@@ -108,7 +108,7 @@ function FilterSelect<Value extends string>({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <Txt as="span" variant="ui-xs" className="text-icon4">
+      <Txt as="span" variant="meta" className="text-icon4">
         {label}
       </Txt>
       <Select value={value} onValueChange={onValueChange}>

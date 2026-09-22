@@ -36,7 +36,7 @@ export function MobilePageTitle({
   const { pathname } = useLocation();
 
   return (
-    <Txt as="h1" variant="header-sm" ref={ref} tabIndex={tabIndex} className="text-icon6 min-w-0 truncate md:hidden">
+    <Txt as="h1" variant="heading" ref={ref} tabIndex={tabIndex} className="text-icon6 min-w-0 truncate md:hidden">
       {children ?? routeTitle(pathname)}
     </Txt>
   );

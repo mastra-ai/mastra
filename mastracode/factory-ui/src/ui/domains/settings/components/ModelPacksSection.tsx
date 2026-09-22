@@ -53,7 +53,7 @@ function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignm
           {label}: {description}
         </TooltipContent>
       </Tooltip>
-      <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
+      <Txt as="span" variant="meta" className="text-icon3 truncate">
         {model || '—'}
       </Txt>
     </span>
@@ -131,20 +131,20 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
 
   return (
     <div className="flex flex-col gap-3">
-      <Txt as="p" variant="ui-sm" className="text-icon3">
+      <Txt as="p" variant="caption" className="text-icon3">
         Set your default for new interactive chats. Choose a different pack from within a specific chat. Factory work
         runs continue to use the Factory default model.
       </Txt>
       {error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
           {error}
         </Txt>
       )}
 
       {draft && (
-        <div className="border-border1 flex flex-col gap-3 rounded-lg border p-3">
+        <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
           <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
+            <Txt as="span" variant="caption" className="text-icon5">
               Name
             </Txt>
             <Input
@@ -156,19 +156,19 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
             />
           </label>
           <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
+            <Txt as="span" variant="caption" className="text-icon5">
               Build model
             </Txt>
             {modelSelect(draft.build, v => setDraft({ ...draft, build: v }))}
           </label>
           <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
+            <Txt as="span" variant="caption" className="text-icon5">
               Plan model
             </Txt>
             {modelSelect(draft.plan, v => setDraft({ ...draft, plan: v }))}
           </label>
           <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
+            <Txt as="span" variant="caption" className="text-icon5">
               Fast model
             </Txt>
             {modelSelect(draft.fast, v => setDraft({ ...draft, fast: v }))}
@@ -187,7 +187,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
       {loading ? (
         <SkeletonRows label="Loading model packs" rows={3} rowClassName="h-9 w-full" />
       ) : packs.length === 0 && !draft ? (
-        <Txt as="p" variant="ui-sm" className="text-icon3">
+        <Txt as="p" variant="caption" className="text-icon3">
           No model packs available. Configure provider keys or add a custom pack.
         </Txt>
       ) : (
@@ -197,7 +197,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
                   {p.active && <Check size={13} className="text-accent1 shrink-0" />}
-                  <Txt as="span" variant="ui-md" className="text-icon6 truncate">
+                  <Txt as="span" variant="body" className="text-icon6 truncate">
                     {p.name}
                   </Txt>
                   {p.custom && <Badge size="sm">Custom</Badge>}

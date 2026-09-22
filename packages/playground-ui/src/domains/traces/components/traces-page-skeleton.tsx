@@ -21,8 +21,8 @@ export function TracesPageSkeleton({ columnPreferences = DEFAULT_TRACE_COLUMN_PR
       data-testid="traces-page-skeleton"
     >
       <div className="flex items-center gap-2">
-        <Skeleton className="h-form-md min-w-64 flex-1" />
-        <Skeleton className="h-form-md w-28" />
+        <Skeleton className="h-control-md min-w-64 flex-1" />
+        <Skeleton className="h-control-md w-28" />
       </div>
       <DataListSkeleton columns={columns} fit="container" />
     </div>

@@ -28,7 +28,7 @@ export function ExperimentTraceTimelineStructureSign({
       {hasChildren && (
         <span
           className={cn(
-            'flex absolute left-[50%] top-[50%] translate-y-[-50%] translate-x-[-50%] items-center justify-center bg-surface2 p-1',
+            'flex absolute left-[50%] top-[50%] translate-y-[-50%] translate-x-[-50%] items-center justify-center bg-background p-1',
             '[&>svg]:shrink-0 [&>svg]:opacity-60 [&>svg]:w-[0.8rem] [&>svg]:h-[0.8rem]',
           )}
         >

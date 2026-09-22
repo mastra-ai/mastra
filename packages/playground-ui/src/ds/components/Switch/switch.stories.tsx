@@ -7,10 +7,10 @@ import type { SwitchProps } from './switch';
 import { Switch } from './switch';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
-  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface1' },
-  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface2' },
-  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface3' },
-  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
+  { token: 'sidebar', label: 'sidebar · the recessed shell', className: 'bg-sidebar' },
+  { token: 'background', label: 'background · the page canvas', className: 'bg-background' },
+  { token: 'card', label: 'card · a raised surface', className: 'bg-card' },
+  { token: 'muted', label: 'muted · the quiet step above the canvas', className: 'bg-muted' },
 ];
 
 type SwitchIconProps = Pick<SwitchProps, 'checkedIcon' | 'icon' | 'uncheckedIcon'>;
@@ -34,27 +34,27 @@ function RepositoryVisibilitySwitch() {
   const [isPrivate, setIsPrivate] = useState(true);
 
   return (
-    <div className="flex items-center justify-between gap-4">
-      <Label htmlFor="repository-visibility">Repository visibility</Label>
-      <span className="inline-flex items-center gap-2">
-        <span>{isPrivate ? 'Private' : 'Public'}</span>
-        <Switch
-          id="repository-visibility"
-          checked={isPrivate}
-          onCheckedChange={setIsPrivate}
-          aria-label="Private repository"
-          checkedIcon={<LockKeyhole />}
-          uncheckedIcon={<GlobeIcon />}
-        />
-      </span>
-    </div>
+ <div className="flex items-center justify-between gap-4">
+ <Label htmlFor="repository-visibility">Repository visibility</Label>
+ <span className="inline-flex items-center gap-2">
+ <span>{isPrivate ? 'Private' : 'Public'}</span>
+ <Switch
+ id="repository-visibility"
+ checked={isPrivate}
+ onCheckedChange={setIsPrivate}
+ aria-label="Private repository"
+ checkedIcon={<LockKeyhole />}
+ uncheckedIcon={<GlobeIcon />}
+ />
+ </span>
+ </div>
   );
 }`;
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
-    <div className={`border-border1/70 rounded-2xl border p-5 ${className}`}>
-      <p className="text-ui-xs text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
+    <div className={`border-border/70 rounded-2xl border p-5 ${className}`}>
+      <p className="text-meta text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
   );
@@ -62,7 +62,7 @@ function SurfaceFrame({ className, label, children }: { className: string; label
 
 function SwitchStateGrid({ idPrefix, icons }: { idPrefix: string; icons?: SwitchIconProps }) {
   return (
-    <div className="text-ui-sm text-muted-foreground grid grid-cols-[5rem_repeat(4,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
+    <div className="text-caption text-muted-foreground grid grid-cols-[5rem_repeat(4,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
       <span />
       <span>Default</span>
       <span>On</span>
@@ -82,11 +82,11 @@ function RepositoryVisibilitySwitch() {
   const [isPrivate, setIsPrivate] = useState(true);
 
   return (
-    <div className="bg-surface2 grid gap-4 rounded-lg p-4">
+    <div className="bg-background grid gap-4 rounded-lg p-4">
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="repository-visibility-icons">Repository visibility</Label>
         <span className="inline-flex items-center gap-2">
-          <span className="text-neutral7 text-ui-sm font-medium">{isPrivate ? 'Private' : 'Public'}</span>
+          <span className="text-foreground text-column">{isPrivate ? 'Private' : 'Public'}</span>
           <Switch
             id="repository-visibility-icons"
             checked={isPrivate}
@@ -184,8 +184,8 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="bg-surface2 grid min-w-108 gap-4 rounded-lg p-4">
-      <div className="text-ui-sm text-muted-foreground grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
+    <div className="bg-background grid min-w-108 gap-4 rounded-lg p-4">
+      <div className="text-caption text-muted-foreground grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
         <span />
         <span>Default</span>
         <span>On</span>
@@ -242,7 +242,7 @@ export const WithLabel: Story = {
 
 export const SettingsList: Story = {
   render: () => (
-    <div className="w-dropdown-max-height flex flex-col gap-4">
+    <div className="flex w-75 flex-col gap-4">
       <div className="flex items-center justify-between">
         <Label htmlFor="email">Email notifications</Label>
         <Switch id="email" defaultChecked />
@@ -264,7 +264,7 @@ export const WithDescription: Story = {
     <div className="flex w-[350px] items-start justify-between gap-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="dark-mode">Dark mode</Label>
-        <span className="text-muted-foreground text-ui-sm">Switch to a darker color scheme</span>
+        <span className="text-muted-foreground text-caption">Switch to a darker color scheme</span>
       </div>
       <Switch id="dark-mode" />
     </div>

@@ -97,8 +97,8 @@ describe('LoginPage UI parity for /login and /signup', () => {
     const loginRoot = await screen.findByTestId('login-page');
     const loginInner = loginRoot.firstElementChild as HTMLElement;
     expect(loginInner.className).not.toMatch(/rounded-lg/);
-    expect(loginInner.className).not.toMatch(/border-border1/);
-    expect(loginInner.className).not.toMatch(/bg-surface2/);
+    expect(loginInner.className).not.toMatch(/border-border/);
+    expect(loginInner.className).not.toMatch(/bg-background/);
     expect(loginInner.className).not.toMatch(/\bp-8\b/);
 
     unmount();
@@ -109,8 +109,8 @@ describe('LoginPage UI parity for /login and /signup', () => {
     const signUpRoot = await screen.findByTestId('login-page');
     const signUpInner = signUpRoot.firstElementChild as HTMLElement;
     expect(signUpInner.className).not.toMatch(/rounded-lg/);
-    expect(signUpInner.className).not.toMatch(/border-border1/);
-    expect(signUpInner.className).not.toMatch(/bg-surface2/);
+    expect(signUpInner.className).not.toMatch(/border-border/);
+    expect(signUpInner.className).not.toMatch(/bg-background/);
     expect(signUpInner.className).not.toMatch(/\bp-8\b/);
   });
 

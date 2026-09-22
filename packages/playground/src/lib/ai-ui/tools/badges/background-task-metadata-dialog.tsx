@@ -62,21 +62,19 @@ const BackgroundTaskMetadata = ({
     const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
     argSlot = <CodeEditor data={formattedArgs} />;
   } catch {
-    argSlot = (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{args as unknown as string}</pre>
-    );
+    argSlot = <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{args as unknown as string}</pre>;
   }
 
   const resultSlot =
     typeof result === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{result}</pre>
+      <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{result}</pre>
     ) : (
       <CodeEditor data={result} />
     );
 
   const suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <pre className="bg-muted overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
     ) : (
       <CodeEditor data={suspendPayload as Record<string, unknown> | Record<string, unknown>[] | undefined} />
     );
@@ -91,25 +89,27 @@ const BackgroundTaskMetadata = ({
 
         <DialogBody className="space-y-4">
           <div className="space-y-2">
-            <Txt className="text-muted-foreground">Background Task Duration</Txt>
-            <Txt className="text-foreground text-ui-md">{toSigFigs(timeDiff, 3)}ms</Txt>
+            <Txt tone="muted">Background Task Duration</Txt>
+            <Txt tone="ink" className="text-body">
+              {toSigFigs(timeDiff, 3)}ms
+            </Txt>
           </div>
 
           <div className="space-y-2">
-            <Txt className="text-muted-foreground">Background Task Arguments</Txt>
+            <Txt tone="muted">Background Task Arguments</Txt>
             {argSlot}
           </div>
 
           {suspendPayloadSlot !== undefined && suspendPayload && (
             <div className="space-y-2">
-              <Txt className="text-muted-foreground">Background Task Suspend Data</Txt>
+              <Txt tone="muted">Background Task Suspend Data</Txt>
               {suspendPayloadSlot}
             </div>
           )}
 
           {resultSlot !== undefined && result && (
             <div className="space-y-2">
-              <Txt className="text-muted-foreground">Background Task Result</Txt>
+              <Txt tone="muted">Background Task Result</Txt>
               {resultSlot}
             </div>
           )}

@@ -194,22 +194,22 @@ export const WithActions: Story = {
             <Button
               type="button"
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               tooltip={`Edit ${item.name}`}
               aria-label={`Edit ${item.name}`}
               onClick={event => event.stopPropagation()}
             >
-              <Pencil className="size-4" />
+              <Pencil />
             </Button>
             <Button
               type="button"
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               tooltip={`Delete ${item.name}`}
               aria-label={`Delete ${item.name}`}
               onClick={event => event.stopPropagation()}
             >
-              <Trash2 className="size-4" />
+              <Trash2 />
             </Button>
           </DataList.ActionsCell>
         </DataList.RowWrapper>

@@ -182,7 +182,7 @@ export function SelectDataFilter({
       <DropdownMenu.Sub key={cat.id} onOpenChange={resetSubSearch}>
         <DropdownMenu.SubTrigger>
           <span className="flex-1 truncate">{cat.label}</span>
-          {selectedCount > 0 && <span className={cn('text-ui-sm text-accent1')}>{selectedCount}</span>}
+          {selectedCount > 0 && <span className={cn('text-caption text-accent1')}>{selectedCount}</span>}
         </DropdownMenu.SubTrigger>
         <DropdownMenu.SubContent>
           {cat.values.length >= searchThreshold && (
@@ -225,7 +225,7 @@ export function SelectDataFilter({
           {activeFilterCount > 0 && (
             <span
               className={cn(
-                'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-accent1/50 text-ui-sm text-foreground',
+                'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-accent1/50 text-caption text-foreground',
               )}
             >
               {activeFilterCount}

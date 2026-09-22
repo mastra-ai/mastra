@@ -3,14 +3,14 @@
    so the single :root declaration computes correctly under `html.light` too. Only the shadow
    needs an explicit per-theme override (light gets a gloss highlight, dark stays elevation-only). */
 :root {
-  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--surface1));
-  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--surface1));
-  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--surface1));
-  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--surface1));
-  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--surface1));
-  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--surface1));
-  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--surface1));
-  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--surface1));
+  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--sidebar));
+  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--sidebar));
+  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--sidebar));
+  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--sidebar));
+  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--sidebar));
+  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--sidebar));
+  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--sidebar));
+  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--sidebar));
   --toast-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -12px oklch(0 0 0 / 0.55);
 }
 html.light {
@@ -23,9 +23,9 @@ html.light {
    The `[data-sonner-toaster][data-sonner-theme]` prefix matches sonner's own theme rules
    (specificity 0,2,0) and adds our class for (0,3,0) so our notice tokens win without !important. */
 [data-sonner-toaster][data-sonner-theme].mastra-toaster {
-  --normal-bg: var(--surface3);
+  --normal-bg: var(--card);
   --normal-text: var(--neutral5);
-  --normal-border: var(--border1);
+  --normal-border: var(--border);
   --success-bg: var(--toast-success-bg);
   --success-text: var(--notice-success-fg);
   --success-border: var(--toast-success-border);

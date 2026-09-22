@@ -40,7 +40,7 @@ export function CardDetailsHint() {
   return (
     <span
       aria-hidden
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-xs' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
     >
       <Maximize2 size={13} aria-hidden />
     </span>
@@ -70,7 +70,7 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 
   if (status.kind === 'busy') {
     return (
-      <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex shrink-0 items-center gap-1.5">
+      <span role="status" aria-live="polite" className="text-meta text-icon4 flex shrink-0 items-center gap-1.5">
         <Spinner size="sm" aria-hidden className="size-3" />
         {status.label}
       </span>
@@ -82,7 +82,7 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
       role="alert"
       tabIndex={status.detail === undefined ? undefined : 0}
       className={cn(
-        'text-ui-xs text-error flex w-full min-w-0 items-start gap-1.5',
+        'text-meta text-error flex w-full min-w-0 items-start gap-1.5',
         status.detail !== undefined &&
           'focus-visible:outline-accent1 relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
       )}
@@ -129,7 +129,7 @@ export function CardLabels({
         {displayLabels.map(label => (
           <span
             key={label}
-            className="border-border1 text-ui-xs text-icon4 inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
+            className="border-border text-meta text-icon4 inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
             title={label}
           >
             <span

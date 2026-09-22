@@ -31,7 +31,7 @@ function authProviderLabel(provider: string | undefined): string {
 
 function AccountValue({ children, mono = false }: { children: string; mono?: boolean }) {
   return (
-    <Txt as="span" variant="ui-sm" font={mono ? 'mono' : undefined} className="text-icon4 truncate">
+    <Txt as="span" variant="caption" font={mono ? 'mono' : undefined} className="text-icon4 truncate">
       {children}
     </Txt>
   );
@@ -41,7 +41,7 @@ function CopyableAccountValue({ value, label }: { value: string; label: string }
   return (
     <div className="flex min-w-0 items-center gap-1">
       <AccountValue mono>{value}</AccountValue>
-      <CopyButton content={value} size="icon-xs" variant="ghost" tooltip={`Copy ${label}`} />
+      <CopyButton content={value} size="icon-sm" variant="ghost" tooltip={`Copy ${label}`} />
     </div>
   );
 }

@@ -114,11 +114,11 @@ describe('Tree', () => {
     expect(folderRow?.className).not.toContain('ring-accent1');
     expect(folderRow?.className).not.toContain('shadow-focus-ring');
 
-    expect(fileItem.className).toContain('focus-visible:bg-surface4');
+    expect(fileItem.className).toContain('focus-visible:bg-fill-subtle');
     expect(fileItem.className).not.toContain('ring-accent1');
     expect(fileItem.className).not.toContain('shadow-focus-ring');
 
-    expect(inputItem?.className).toContain('focus-within:bg-surface4');
+    expect(inputItem?.className).toContain('focus-within:bg-fill-subtle');
     expect(inputItem?.className).not.toContain('ring-accent1');
     expect(inputItem?.className).not.toContain('shadow-focus-ring');
   });
@@ -152,14 +152,14 @@ describe('Tree', () => {
     const childRow = getFolderRow('child');
 
     fireEvent.focus(root);
-    expect(getClassTokens(rootRow)).toContain('bg-surface4');
-    expect(getClassTokens(childRow)).not.toContain('bg-surface4');
-    expect(childRow.className).not.toContain('group-focus-visible/treeitem:bg-surface4');
+    expect(getClassTokens(rootRow)).toContain('bg-fill-hover');
+    expect(getClassTokens(childRow)).not.toContain('bg-fill-hover');
+    expect(childRow.className).not.toContain('group-focus-visible/treeitem:bg-fill-subtle');
 
     fireEvent.blur(root, { relatedTarget: child });
     fireEvent.focus(child);
-    expect(getClassTokens(rootRow)).not.toContain('bg-surface4');
-    expect(getClassTokens(childRow)).toContain('bg-surface4');
+    expect(getClassTokens(rootRow)).not.toContain('bg-fill-hover');
+    expect(getClassTokens(childRow)).toContain('bg-fill-hover');
   });
 
   it('moves focus through visible items with arrow, home, and end keys', () => {

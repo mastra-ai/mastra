@@ -11,18 +11,13 @@ import {
   InputGroupText,
   InputGroupTextarea,
 } from './input-group';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof InputGroup> = {
   title: 'Composite/InputGroup',
   component: InputGroup,
   parameters: {
     layout: 'centered',
-  },
-  argTypes: {
-    variant: {
-      control: { type: 'select' },
-      options: ['default', 'outline'],
-    },
   },
 };
 
@@ -39,23 +34,17 @@ export const Default: Story = {
   ),
 };
 
-export const Variants: Story = {
+export const WithTextarea: Story = {
   render: () => (
     <div className="flex w-80 flex-col gap-3">
-      <InputGroup variant="default">
+      <InputGroup>
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Default" />
+        <InputGroupInput placeholder="Search" />
       </InputGroup>
-      <InputGroup variant="outline">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Outline" />
-      </InputGroup>
-      <InputGroup variant="outline">
-        <InputGroupTextarea placeholder="Outline textarea" />
+      <InputGroup>
+        <InputGroupTextarea placeholder="Textarea" />
       </InputGroup>
     </div>
   ),
@@ -167,12 +156,6 @@ export const BlockEndAddon: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex w-80 flex-col gap-3">
-      <InputGroup size="xs">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Extra Small" />
-      </InputGroup>
       <InputGroup size="sm">
         <InputGroupAddon>
           <SearchIcon />
@@ -263,9 +246,9 @@ export const NumberWithStepper: Story = {
 
 export const OnDifferentSurfaces: Story = {
   render: () => (
-    <div className="new-theme flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
+    <div className="flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
       <div className="border-border bg-sidebar rounded-lg border p-4">
-        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Sidebar
         </Txt>
         <InputGroup>
@@ -276,7 +259,7 @@ export const OnDifferentSurfaces: Story = {
         </InputGroup>
       </div>
       <div className="border-border bg-background rounded-lg border p-4">
-        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Main canvas
         </Txt>
         <InputGroup>
@@ -286,8 +269,8 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput aria-label="Search agents on the main canvas" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border bg-card rounded-lg border p-4">
-        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+      <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
+        <Txt variant="caption" tone="muted" className="mb-2">
           Card
         </Txt>
         <InputGroup>
@@ -298,7 +281,7 @@ export const OnDifferentSurfaces: Story = {
         </InputGroup>
       </div>
       <div className="border-border bg-popover rounded-lg border p-4">
-        <Txt variant="ui-sm" className="text-muted-foreground mb-2">
+        <Txt variant="caption" tone="muted" className="mb-2">
           Popover
         </Txt>
         <InputGroup>

@@ -108,7 +108,7 @@ describe('Tools', () => {
     const container = getByTestId('tool-card-tool-unchecked-tool') as HTMLButtonElement;
     expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
     expect(container.style.borderColor).toBe('');
-    expect(container.className).toContain('border-border1');
+    expect(container.className).toContain('border-border');
     expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
     expect(container.className).not.toContain('focus-visible:ring');
   });

@@ -5,12 +5,13 @@ import type { ComponentProps, ReactNode } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 export type TaskListItem = TaskItem;
 
 export const TaskListContainer = ({ className, ...props }: ComponentProps<'section'>) => (
-  <section className={cn('rounded-2xl border border-border2/40 bg-surface3 px-3 py-2.5', className)} {...props} />
+  <section className={cn(raisedSurfaceStyle, 'rounded-2xl px-3 py-2.5', className)} {...props} />
 );
 
 export const TaskListHeader = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
@@ -23,7 +24,7 @@ export const TaskListHeader = ({ className, ...props }: ComponentProps<typeof Co
 const barColors: Record<TaskListItem['status'], string> = {
   completed: 'bg-positive1',
   in_progress: 'bg-warning1',
-  pending: 'bg-surface6',
+  pending: 'bg-fill-hover',
 };
 
 export interface TaskListProgressProps extends Omit<ComponentProps<'span'>, 'children'> {
@@ -77,7 +78,7 @@ const statusLabels: Record<TaskListItem['status'], string> = {
 
 const textClasses: Record<TaskListItem['status'], string> = {
   completed: 'text-muted-foreground line-through',
-  in_progress: 'font-medium text-warning1',
+  in_progress: 'text-column text-warning1',
   pending: 'text-foreground',
 };
 
@@ -100,21 +101,21 @@ export interface TaskListRowProps extends ComponentProps<'li'> {
 export const TaskListRow = ({ task, className, ...props }: TaskListRowProps) => (
   <li className={cn('flex items-start gap-2 py-0.5', className)} {...props}>
     <TaskListStatusIcon status={task.status} />
-    <span className={cn('text-ui-sm leading-ui-sm', textClasses[task.status])}>{taskLabel(task)}</span>
+    <span className={cn('text-caption', textClasses[task.status])}>{taskLabel(task)}</span>
   </li>
 );
 
 const TaskListSummary = ({ task }: { task: TaskListItem }) => (
   <span className="flex min-w-0 flex-1 items-center gap-2">
     <TaskListStatusIcon status={task.status} className="pt-0" />
-    <span className={cn('truncate text-ui-sm leading-ui-sm', textClasses[task.status])}>{taskLabel(task)}</span>
+    <span className={cn('truncate text-caption', textClasses[task.status])}>{taskLabel(task)}</span>
   </span>
 );
 
 const TaskListTitle = ({ title }: { title: ReactNode }) => (
   <span className="flex min-w-0 flex-1 items-center gap-2">
     <ListChecks className="text-accent6 size-4 shrink-0" />
-    <span className="text-ui-sm leading-ui-sm text-foreground truncate font-medium">{title}</span>
+    <span className="text-column text-foreground truncate">{title}</span>
   </span>
 );
 

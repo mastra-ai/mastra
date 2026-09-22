@@ -1,5 +1,18 @@
 # @mastra/code-sdk
 
+## 1.8.0-alpha.11
+
+### Patch Changes
+
+- Fixed cross-agent signals so a peer stays reachable after a session moves to another conversation. A session advertised only its active thread, so peers that had saved an earlier thread could no longer send messages to it after the user started a new thread or switched threads. Every thread a session has loaded now stays claimed, and a wake sent to a saved thread runs on that thread instead of the session's current one. Peer listings no longer show a session's own earlier threads as discoverable agents. ([#24510](https://github.com/mastra-ai/mastra/pull/24510))
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`fa08939`](https://github.com/mastra-ai/mastra/commit/fa08939df788c81feb3f0afe70e10a3c40072f93), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442)]:
+  - @mastra/core@1.68.0-alpha.11
+  - @mastra/pg@1.26.0-alpha.5
+  - @mastra/mcp@2.0.0-alpha.5
+  - @mastra/libsql@1.23.1-alpha.3
+  - @mastra/duckdb@1.10.0-alpha.3
+
 ## 1.8.0-alpha.10
 
 ### Patch Changes

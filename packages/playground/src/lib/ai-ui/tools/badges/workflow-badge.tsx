@@ -71,7 +71,7 @@ export const WorkflowBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <ToolCallMono copyText={suspendPayload} className="text-icon3">
+      <ToolCallMono copyText={suspendPayload} className="text-muted-foreground">
         {suspendPayload}
       </ToolCallMono>
     ) : (
@@ -162,7 +162,7 @@ const WorkflowBadgeStepDetail = () => {
   const { stepDetail } = useWorkflowStepDetail();
   if (!stepDetail) return null;
   return (
-    <div className="border-border1 bg-surface2 mt-2 flex max-h-[60vh] flex-col overflow-hidden rounded-md border">
+    <div className="border-border bg-background mt-2 flex max-h-[60vh] flex-col overflow-hidden rounded-md border">
       <WorkflowStepDetailContent />
     </div>
   );
