@@ -37,7 +37,7 @@ import { ThemeFilterBanner } from './theme-filter-banner';
 import { ThemeLifelines } from './theme-lifelines';
 import { TraceIntelligenceContext } from './trace-intelligence-context';
 import { TraceIntelligenceExplainer } from './trace-intelligence-explainer';
-import type { ThemeFlowResponse, TraceSignalName } from './types';
+import type { TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { ViewModeTab } from './view-mode-tab';
 import type { SignalsViewMode } from './view-mode-tab';

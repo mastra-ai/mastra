@@ -8,14 +8,23 @@ export type TokenUsage = UsageStats;
 
 type TokenDetailsObject = InputTokenDetails | OutputTokenDetails;
 
-const detailKeyLabels: Record<string, string> = {
-  text: 'Text',
-  cacheRead: 'Cache read',
-  cacheWrite: 'Cache write',
-  audio: 'Audio',
-  image: 'Image',
-  reasoning: 'Reasoning',
-};
+const detailRows = [
+  ['text', 'Text'],
+  ['cacheRead', 'Cache read'],
+  ['cacheWrite', 'Cache write'],
+  ['audio', 'Audio'],
+  ['image', 'Image'],
+  ['reasoning', 'Reasoning'],
+] as const;
+
+type DetailKey = (typeof detailRows)[number][0];
+
+function getDetailValue(details: TokenDetailsObject, key: DetailKey): number | undefined {
+  if (key === 'cacheRead') return 'cacheRead' in details ? details.cacheRead : undefined;
+  if (key === 'cacheWrite') return 'cacheWrite' in details ? details.cacheWrite : undefined;
+  if (key === 'reasoning') return 'reasoning' in details ? details.reasoning : undefined;
+  return details[key];
+}
 
 type SpanTokenUsageProps = {
   usage: UsageStats;
@@ -80,7 +89,7 @@ function UsageColumn({
     <div>
       <div className="mb-2 flex items-baseline gap-3 text-placeholder">
         <span className="text-body">{label}</span>
-        {typeof value === 'number' && (
+        {value !== undefined && (
           <span className="flex items-baseline gap-1.5">
             <span className="text-subheading text-muted-foreground">{value.toLocaleString()}</span>
             <span className="size-2 self-center rounded-full" style={{ backgroundColor: color }} />
@@ -95,11 +104,12 @@ function UsageColumn({
 function DetailsList({ details }: { details: TokenDetailsObject }) {
   return (
     <DataKeysAndValues density="dense">
-      {Object.entries(details).map(([detailKey, detailValue]) => {
-        if (typeof detailValue !== 'number') return null;
+      {detailRows.map(([detailKey, label]) => {
+        const detailValue = getDetailValue(details, detailKey);
+        if (detailValue === undefined) return null;
         return (
           <Fragment key={detailKey}>
-            <DataKeysAndValues.Key>{detailKeyLabels[detailKey] || detailKey}</DataKeysAndValues.Key>
+            <DataKeysAndValues.Key>{label}</DataKeysAndValues.Key>
             <DataKeysAndValues.Value className="text-right">{detailValue.toLocaleString()}</DataKeysAndValues.Value>
           </Fragment>
         );
