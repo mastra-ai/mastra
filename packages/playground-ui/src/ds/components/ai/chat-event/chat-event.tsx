@@ -22,7 +22,7 @@ export interface ChatEventProps {
   'data-skill-name'?: string;
 }
 
-function RowDetail({ children, font }: { children: string; font: 'mono' | 'sans' }) {
+function RowDetail({ children, font, wraps }: { children: string; font: 'mono' | 'sans'; wraps: boolean }) {
   const arriving = useArriving();
   return (
     <Txt
@@ -30,7 +30,7 @@ function RowDetail({ children, font }: { children: string; font: 'mono' | 'sans'
       variant="meta"
       tone="muted"
       font={font === 'mono' ? 'mono' : undefined}
-      className={cn('min-w-0 truncate', arriving)}
+      className={cn('min-w-0', wraps ? 'break-words' : 'truncate', arriving)}
     >
       {children}
     </Txt>
@@ -105,7 +105,11 @@ export function ChatEvent({
         {label}
       </Txt>
       {badges}
-      {detail && <RowDetail font={detailFont}>{detail}</RowDetail>}
+      {detail && (
+        <RowDetail font={detailFont} wraps={!folds}>
+          {detail}
+        </RowDetail>
+      )}
       <span aria-hidden className="min-w-2 flex-1" />
       <span aria-hidden className="flex size-4 shrink-0 items-center justify-center">
         {folds && (

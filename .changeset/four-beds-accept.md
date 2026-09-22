@@ -14,7 +14,7 @@ import { ChatEvent } from '@mastra/playground-ui/components/ai/chat-event';
 
 **A row only folds when its body says more than its line**
 
-A short single-line message fits in the row preview, so opening the disclosure used to reveal a copy of the line above it. Such a row is now a single line with no disclosure; rows whose message is truncated or spans several lines keep theirs, as do notifications carrying a link. Because folding is now the exception, a row that folds shows its chevron at rest instead of on hover, and a row preset picks its own preview typography — a notification message reads as prose, a signal preview stays monospaced.
+A short single-line message fits in the row preview, so opening the disclosure used to reveal a copy of the line above it. Such a row is now a single line with no disclosure; rows whose message is truncated or spans several lines keep theirs, as do notifications carrying a link. A row without a disclosure wraps its message instead of clipping it, so a narrow transcript never hides the end of a sentence it offers no way to open. Because folding is now the exception, a row that folds shows its chevron at rest instead of on hover, and a row preset picks its own preview typography — a notification message reads as prose, a signal preview stays monospaced.
 
 **`ChatTimeGap` replaced by `TranscriptDivider`**
 
