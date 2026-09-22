@@ -20,7 +20,7 @@ export const ZoomSlider = forwardRef<
     <Panel
       ref={ref}
       className={cn(
-        'flex items-center gap-1 rounded-full border border-border1 bg-surface2 p-1 text-foreground',
+        'flex items-center gap-1 rounded-full border border-border bg-background p-1 text-foreground',
         className,
       )}
       {...props}

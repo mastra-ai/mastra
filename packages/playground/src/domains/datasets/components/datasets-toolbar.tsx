@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { XIcon } from 'lucide-react';
@@ -53,7 +52,7 @@ export function DatasetsToolbar({
           onSearch={onSearchChange}
         />
       </div>
-      <ButtonsGroup>
+      <div className="flex items-center gap-2">
         <TargetFilter
           targetType={targetType}
           targetId={targetId}
@@ -85,7 +84,7 @@ export function DatasetsToolbar({
             Reset
           </Button>
         )}
-      </ButtonsGroup>
+      </div>
     </div>
   );
 }

@@ -73,6 +73,34 @@ export type FilterBarItem = {
   value: FilterBarValue;
 };
 
+export type FilterBarLogic = 'and' | 'or';
+
+/**
+ * Sub-filters joined by a single logic connector. Groups nest recursively (bounded by the
+ * bar's `maxDepth`); a root-level group renders as one "Advanced filter" chip whose popover
+ * edits the whole subtree.
+ */
+export type FilterBarGroup = {
+  id: string;
+  kind: 'group';
+  logic: FilterBarLogic;
+  nodes: FilterBarNode[];
+};
+
+export type FilterBarNode = FilterBarItem | FilterBarGroup;
+
+/**
+ * Tree-shaped value: root nodes joined by `logic`, groups nest their own. The bar itself
+ * always joins root nodes with `'and'`; `logic` is kept on the type for symmetry with groups.
+ */
+export type FilterBarExpression = {
+  logic: FilterBarLogic;
+  nodes: FilterBarNode[];
+};
+
+export const isFilterBarGroup = (node: FilterBarNode): node is FilterBarGroup =>
+  'kind' in node && node.kind === 'group';
+
 /**
  * The filter being built in the typeahead input. Its `id` is kept when it becomes an
  * item, so the chip rendered for the draft is the very node the committed chip lands on.
@@ -83,6 +111,8 @@ export type FilterBarDraft = {
   operatorId?: string;
   /** What the draft chip showed before this step, so only the new segments animate in. */
   from: DraftStage;
+  /** Group the draft is being built inside; `undefined` = root. */
+  groupId?: string;
 };
 
 /** How far a draft had progressed: nothing yet, its field, or its field and operator. */
@@ -96,6 +126,8 @@ export type FilterBarCommit = {
   item: FilterBarItem;
   from: DraftStage;
   glint: boolean;
+  /** Group the item was committed into; `undefined` = root. */
+  groupId?: string;
 };
 
 export type FilterBarSegment = 'field' | 'operator' | 'value' | 'remove';

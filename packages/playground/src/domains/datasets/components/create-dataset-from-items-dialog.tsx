@@ -175,7 +175,7 @@ export function CreateDatasetFromItemsDialog({
               />
             </div>
 
-            <p className="text-muted-foreground text-ui-md">
+            <p className="text-muted-foreground text-body">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the new dataset
             </p>
 
@@ -187,7 +187,7 @@ export function CreateDatasetFromItemsDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-ui-md">
+                <p className="text-muted-foreground text-body">
                   Copying items: {progress} / {items.length}
                 </p>
               </div>

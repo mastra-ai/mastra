@@ -3,22 +3,19 @@ import { cn } from '@/lib/utils';
 export type MainHeaderTitleProps = {
   children?: React.ReactNode;
   isLoading?: boolean;
-  size?: 'default' | 'smaller';
 };
 
-export function MainHeaderTitle({ children, isLoading, size = 'default' }: MainHeaderTitleProps) {
+export function MainHeaderTitle({ children, isLoading }: MainHeaderTitleProps) {
   return (
     <h1
       className={cn(
-        'flex items-center gap-2 text-header-md font-normal text-foreground',
+        'flex items-center gap-2',
+        'text-heading text-foreground',
         '[&>svg]:size-[1.25em] [&>svg]:opacity-50',
-        {
-          'bg-surface4 w-60 max-w-[50%] rounded-md animate-pulse': isLoading,
-          'text-ui-md': size === 'smaller',
-        },
+        isLoading && 'w-60 max-w-[50%] animate-pulse rounded-md bg-fill',
       )}
     >
-      {isLoading ? <>&nbsp;</> : <>{children}</>}
+      {isLoading ? <>&nbsp;</> : children}
     </h1>
   );
 }

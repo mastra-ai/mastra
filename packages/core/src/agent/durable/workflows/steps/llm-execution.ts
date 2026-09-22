@@ -34,6 +34,7 @@ import { EntityType } from '../../../../observability';
 import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
+import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
 import { execute } from '../../../../stream/aisdk/v5/execute';
@@ -418,9 +419,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // construction, don't port that guard here.
       let lastError: Error | undefined;
       let processorRetryCount = 0;
-      const maxProcessorRetries =
-        typedInput.options?.maxProcessorRetries ??
-        (globalRunRegistry.get(runId)?.errorProcessors?.length ? 10 : undefined);
+      const maxProcessorRetries = resolveMaxProcessorRetries({
+        maxProcessorRetries: typedInput.options?.maxProcessorRetries,
+        hasErrorProcessors: Boolean(globalRunRegistry.get(runId)?.errorProcessors?.length),
+        agentId,
+        logger,
+      });
 
       // Hoisted: a retry must keep the id an error processor rotated to.
       let currentMessageId = messageId;
@@ -1835,7 +1839,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // Try processAPIError before deciding retry/break
               const registryEntryInner = globalRunRegistry.get(runId);
               const canRetryErrorInner = maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
-              if (registryEntryInner?.errorProcessors?.length && canRetryErrorInner) {
+              // See the outer site below: the processor always runs, only the retry is gated.
+              if (registryEntryInner?.errorProcessors?.length) {
                 try {
                   const runner = new ProcessorRunner({
                     inputProcessors: registryEntryInner.inputProcessors ?? [],
@@ -1856,7 +1861,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     retryCount: processorRetryCount,
                     requestContext,
                   });
-                  if (retry) {
+                  if (retry && canRetryErrorInner) {
                     processorRetryCount++;
                     // Error processor retry should NOT consume a model retry attempt.
                     // Decrement attempt so the `for` loop increment restores it.
@@ -2294,7 +2299,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // errors are already handled in the inner catch above.
             const registryEntry = globalRunRegistry.get(runId);
             const canRetryError = maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
-            if (registryEntry?.errorProcessors?.length && canRetryError) {
+            // The processor always runs so it can observe (and report) the terminal
+            // failure; only the retry itself is gated by the budget. This matches the
+            // non-durable loop path in loop/workflows/agentic-execution/llm-execution-step.ts.
+            if (registryEntry?.errorProcessors?.length) {
               try {
                 const runner = new ProcessorRunner({
                   inputProcessors: registryEntry.inputProcessors ?? [],
@@ -2316,7 +2324,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   requestContext,
                   tracingContext,
                 });
-                if (retry) {
+                if (retry && canRetryError) {
                   processorRetryCount++;
                   // Error processor retry should NOT consume a model retry attempt.
                   attempt--;

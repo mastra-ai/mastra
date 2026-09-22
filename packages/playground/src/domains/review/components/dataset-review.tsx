@@ -1,6 +1,5 @@
 import type { DatasetExperiment, ExperimentTargetType } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
   Dialog,
@@ -444,7 +443,7 @@ export function DatasetReview({
           })}
         </>
       ) : (
-        <ButtonsGroup>
+        <div className="flex items-center gap-2">
           {toolbarStart}
           <SelectFieldBlock
             label="Status"
@@ -471,7 +470,7 @@ export function DatasetReview({
               Reset
             </Button>
           )}
-        </ButtonsGroup>
+        </div>
       )}
 
       {(hasSelection || toolbarEnd || showCreateScorer) && (
@@ -483,7 +482,7 @@ export function DatasetReview({
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
-              <Icon size="sm">
+              <Icon size="xs">
                 <GaugeIcon />
               </Icon>
               Create Scorer
@@ -510,14 +509,14 @@ export function DatasetReview({
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={openAnalyzeDialog}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Sparkles />
                     </Icon>
                     Analyze
                   </DropdownMenu.Item>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item onSelect={handleBulkRemove}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Trash2 />
                     </Icon>
                     Remove from queue
@@ -594,7 +593,7 @@ export function DatasetReview({
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
-            <Txt variant="ui-xs" className="text-muted-foreground">
+            <Txt variant="meta" tone="muted">
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
@@ -604,7 +603,7 @@ export function DatasetReview({
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-ui-sm mt-1"
+                className="text-caption mt-1"
               />
             </div>
           </div>
@@ -644,7 +643,7 @@ export function DatasetReview({
                       }
                     />
                     <div className="min-w-0 flex-1">
-                      <Txt variant="ui-xs" className="text-muted-foreground block truncate">
+                      <Txt variant="meta" tone="muted" className="block truncate">
                         {item
                           ? typeof item.input === 'string'
                             ? item.input.slice(0, 100)
@@ -672,7 +671,7 @@ export function DatasetReview({
                         ))}
                       </div>
                       {proposal.reason && (
-                        <Txt variant="ui-xs" className="text-muted-foreground mt-1 block italic">
+                        <Txt variant="meta" tone="muted" className="mt-1 block italic">
                           {proposal.reason}
                         </Txt>
                       )}

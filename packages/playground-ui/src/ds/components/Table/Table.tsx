@@ -30,7 +30,7 @@ export interface TheadProps {
 export const Thead = ({ className, children }: TheadProps) => {
   return (
     <thead>
-      <tr className={cn('h-table-header border-b border-border1 bg-surface2/80', className)}>{children}</tr>
+      <tr className={cn('h-table-header border-b border-border bg-card', className)}>{children}</tr>
     </thead>
   );
 };
@@ -45,7 +45,7 @@ export const Th = ({ className, children, ...props }: ThProps) => {
   return (
     <th
       className={cn(
-        'h-full text-left text-ui-xs font-medium tracking-wide whitespace-nowrap text-placeholder uppercase first:pl-3 last:pr-3',
+        'h-full text-left text-meta tracking-wide whitespace-nowrap text-placeholder uppercase first:pl-3 last:pr-3',
         className,
       )}
       {...props}
@@ -110,13 +110,13 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
     return (
       <tr
         className={cn(
-          'border-b border-border1',
+          'border-b border-border',
           // Smooth hover transition
           'transition-colors duration-normal ease-out-custom',
-          'hover:bg-surface3',
+          'hover:bg-fill-subtle',
           // Focus state
-          'focus:bg-surface3 focus:ring-1 focus:ring-accent1/50 focus:outline-hidden focus:ring-inset',
-          selected && 'bg-surface4',
+          'focus:bg-fill-subtle focus:ring-1 focus:ring-accent1/50 focus:outline-hidden focus:ring-inset',
+          selected && 'bg-fill-hover',
           onClick && 'cursor-pointer',
           className,
         )}

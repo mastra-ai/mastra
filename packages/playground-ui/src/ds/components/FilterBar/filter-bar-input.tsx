@@ -1,10 +1,11 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { ListFilterIcon, Search } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { FilterBarFieldLabel } from './filter-bar-chip';
+import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionList } from './filter-bar-option-list';
+import { findGroup } from './filter-bar-tree';
 import { matchesQueryFilter } from './match-query';
 import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
 import { useValueStep } from './use-value-step';
@@ -26,20 +27,44 @@ type Item = FilterBarField | FilterBarOperator | FilterBarOption;
 
 const getItemLabel = (item: Item) => ('label' in item && item.label ? item.label : 'value' in item ? item.value : '');
 
+/** Pinned last entry of the field list that spawns an advanced filter (an `or` group) instead of a filter. */
+const ADVANCED_FIELD_ID = '__filter-bar-advanced__';
+const ADVANCED_FIELD: FilterBarField = {
+  id: ADVANCED_FIELD_ID,
+  label: 'Advanced filter…',
+  icon: BracesIcon,
+  operators: [],
+};
+
 export type FilterBarInputProps = {
   placeholder?: string;
   className?: string;
   'aria-label'?: string;
+  /**
+   * Group this instance commits into; omit for the bar's own input. Only the instance whose
+   * `groupId` matches the provider's `inputTarget` renders, so a single input is ever mounted.
+   */
+  groupId?: string;
+  /** Called when Escape is pressed on an empty query inside a group, after the input hands back to the bar. */
+  onLeave?: () => void;
 };
 
 /**
  * Typeahead entry point: type to pick a field, then an operator, then a value.
  * Focus never leaves the input; the popup is driven with the arrow keys.
  */
-export function FilterBarInput({
+export function FilterBarInput(props: FilterBarInputProps) {
+  const ctx = useFilterBarContext();
+  if (ctx.inputTarget !== props.groupId) return null;
+  return <FilterBarInputImpl {...props} />;
+}
+
+function FilterBarInputImpl({
   placeholder = 'Filter…',
   className,
   'aria-label': ariaLabel = 'Add filter',
+  groupId,
+  onLeave,
 }: FilterBarInputProps) {
   const ctx = useFilterBarContext();
   const container = usePortalContainer();
@@ -55,7 +80,18 @@ export function FilterBarInput({
   const field = draft ? ctx.getField(draft.fieldId) : undefined;
   const operator = draft?.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
-  const visibleFields = useMemo(() => ctx.fields.filter(f => !f.hidden), [ctx.fields]);
+  // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
+  const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
+  const visibleFields = useMemo(() => {
+    const fields = ctx.fields.filter(f => !f.hidden);
+    return offerAdvanced ? [...fields, ADVANCED_FIELD] : fields;
+  }, [ctx.fields, offerAdvanced]);
+  const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
+
+  // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
+  useEffect(() => {
+    if (groupId) inputRef.current?.focus();
+  }, [groupId]);
 
   const reset = useCallback(() => {
     setDraft(null);
@@ -90,6 +126,15 @@ export function FilterBarInput({
 
   const selectField = useCallback(
     (next: FilterBarField) => {
+      if (next.id === ADVANCED_FIELD_ID) {
+        // `or` is the useful default: an `and` group is indistinguishable from the root.
+        const id = ctx.addGroup(undefined, 'or');
+        ctx.setOpenGroup(id);
+        ctx.openGroupInput(id);
+        setQuery('');
+        setOpen(false);
+        return;
+      }
       // A single allowed operator is implied: skip straight to the value step.
       const [only, ...rest] = ctx.getFieldOperators(next);
       if (only && rest.length === 0) {
@@ -112,15 +157,24 @@ export function FilterBarInput({
     },
   });
 
+  // Leaving a group's input hands the target back to the bar; empty groups are pruned when the
+  // popover closes, never here.
+  const leaveGroup = useCallback(() => {
+    if (!groupId) return false;
+    ctx.openGroupInput(undefined);
+    onLeave?.();
+    return true;
+  }, [ctx, groupId, onLeave]);
+
   const stepBack = useCallback(() => {
     if (step === 'value' && draft) {
       // Back to the field step when the operator was implied (single operator).
       const skipOperator = field ? fieldOperators.length === 1 : false;
       setDraft(skipOperator ? null : { fieldId: draft.fieldId });
     } else if (step === 'operator') setDraft(null);
-    else setOpen(false);
+    else if (!leaveGroup()) setOpen(false);
     setQuery('');
-  }, [step, draft, field, fieldOperators, setDraft]);
+  }, [step, draft, field, fieldOperators, setDraft, leaveGroup]);
 
   // Selection is routed per step and never kept by Base UI (`value` stays null).
   const handleSelect = (item: Item) => {
@@ -133,6 +187,8 @@ export function FilterBarInput({
   const handleKeyDown = (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
+      // Consumed here: an enclosing popover (advanced filter) must not close on it.
+      event.stopPropagation();
       event.preventBaseUIHandler();
       stepBack();
       return;
@@ -148,8 +204,14 @@ export function FilterBarInput({
         event.preventDefault();
         event.preventBaseUIHandler();
         if (step !== 'field') stepBack();
-        else {
-          const last = ctx.items[ctx.items.length - 1];
+        else if (targetGroup) {
+          // Inside a group: eat its last chip, or drop the group once it is empty.
+          const last = targetGroup.nodes.findLast(node => !ctx.leaving.has(node.id));
+          if (last) ctx.removeItem(last.id);
+          else leaveGroup();
+        } else {
+          // Chips still animating out are already gone from the value: skip them.
+          const last = ctx.items.findLast(item => !ctx.leaving.has(item.id));
           if (last) ctx.removeItem(last.id);
         }
         return;
@@ -239,9 +301,9 @@ export function FilterBarInput({
             // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
             // and the Button icon offset); the bar itself has no chrome. Focus lives on the
             // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
-            comboboxTriggerClass({ variant: 'default', size: 'md' }),
+            comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
             'w-auto cursor-text',
-            'focus-within:bg-foreground/14',
+            'focus-within:bg-fill-hover',
             inputFocusBorderWithin,
             step === 'field' ? 'min-w-40' : 'min-w-28',
             className,
@@ -257,12 +319,13 @@ export function FilterBarInput({
             spellCheck={false}
             data-slot="filter-bar-input"
             data-step={step}
+            data-target={targetGroup?.id}
             inputMode={step === 'value' && field?.type === 'number' ? 'decimal' : undefined}
             placeholder={inputPlaceholder}
             className={cn(
               unstyledFormElementStyle,
               'min-w-0 flex-1 bg-transparent',
-              'placeholder:text-placeholder placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
+              'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             )}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
@@ -332,11 +395,11 @@ export function FilterBarInput({
               )}
               {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
-                  <Txt variant="ui-sm" className="text-muted-foreground">
+                  <Txt variant="caption" tone="muted">
                     Type a value
                   </Txt>
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
                     disabled={!valueStep.canCommitQuery}
                     onMouseDown={e => e.preventDefault()}
@@ -348,9 +411,9 @@ export function FilterBarInput({
                 </div>
               )}
               {step === 'value' && valueStep.isMany && (
-                <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
+                <div className="border-border flex items-center justify-end gap-1 border-t p-1">
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="default"
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}

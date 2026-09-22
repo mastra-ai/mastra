@@ -1,4 +1,3 @@
-import '../../../../../new-theme.css';
 import { cn } from '@/lib/utils';
 
 export type FieldBlockErrorMsgProps = {
@@ -20,7 +19,7 @@ export function FieldBlockErrorMsg({ children, name, className }: FieldBlockErro
       // remembering to wrap it.
       role="alert"
       id={name !== undefined ? `error-${name}` : undefined}
-      className={cn('new-theme text-ui-sm text-destructive', className)}
+      className={cn('text-caption text-destructive', className)}
     >
       {children}
     </p>

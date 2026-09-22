@@ -17,29 +17,27 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
   const title = reminder.path || reminder.type || 'System reminder';
 
   return (
-    <div className="border-border1 bg-surface2 overflow-hidden rounded-lg border">
+    <div className="border-border bg-background overflow-hidden rounded-lg border">
       <button
         type="button"
         onClick={() => setIsExpanded(value => !value)}
-        className="hover:bg-surface3 flex w-full items-start gap-3 px-4 py-3 text-left transition-colors"
+        className="hover:bg-fill-subtle flex w-full items-start gap-3 px-4 py-3 text-left"
       >
-        <FileText className="text-icon3 mt-0.5 size-4 shrink-0" />
+        <FileText className="text-muted-foreground mt-0.5 size-4 shrink-0" />
         <div className="min-w-0 flex-1">
-          <p className="text-ui-sm leading-ui-sm text-foreground font-medium">System reminder</p>
-          <p className="text-ui-xs leading-ui-xs text-muted-foreground mt-1 break-all">{title}</p>
+          <p className="text-column text-foreground">System reminder</p>
+          <p className="text-meta text-muted-foreground mt-1 break-all">{title}</p>
         </div>
         {isExpanded ? (
-          <ChevronDown className="text-icon3 size-4 shrink-0" />
+          <ChevronDown className="text-muted-foreground size-4 shrink-0" />
         ) : (
-          <ChevronRight className="text-icon3 size-4 shrink-0" />
+          <ChevronRight className="text-muted-foreground size-4 shrink-0" />
         )}
       </button>
 
       {isExpanded && reminder.body && (
-        <div className="border-border1 bg-surface1 border-t px-4 py-3">
-          <pre className="text-ui-xs leading-ui-md text-foreground font-mono break-words whitespace-pre-wrap">
-            {reminder.body}
-          </pre>
+        <div className="border-border bg-sidebar border-t px-4 py-3">
+          <pre className="text-meta text-foreground font-mono break-words whitespace-pre-wrap">{reminder.body}</pre>
         </div>
       )}
     </div>

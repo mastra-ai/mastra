@@ -12,7 +12,7 @@ type RunDataTab = 'input' | 'output' | 'execution';
 function RunDataValue({ value }: { value: unknown }) {
   if (value === undefined) {
     return (
-      <Txt className="text-muted-foreground block p-4" variant="ui-sm">
+      <Txt className="block p-4" variant="caption" tone="muted">
         No input recorded
       </Txt>
     );
@@ -22,7 +22,7 @@ function RunDataValue({ value }: { value: unknown }) {
       value={safeStringify(value, 2)}
       editable={false}
       lineNumbers={false}
-      className="border-border1 bg-surface2 max-h-72 overflow-auto rounded-lg border p-3"
+      className="border-border bg-background max-h-72 overflow-auto rounded-lg border p-3"
     />
   );
 }
@@ -34,8 +34,8 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
   const tab = selectedTab ?? (hasOutput ? 'output' : 'input');
 
   return (
-    <Collapsible className="border-border1/50 border-t" data-testid="workflow-run-data">
-      <CollapsibleTrigger className="text-ui-sm text-muted-foreground flex min-h-11 w-full items-center gap-2 px-5 py-3">
+    <Collapsible className="border-border/50 border-t" data-testid="workflow-run-data">
+      <CollapsibleTrigger className="text-caption text-muted-foreground flex min-h-11 w-full items-center gap-2 px-5 py-3">
         <Database aria-hidden className="text-muted-foreground size-3.5" />
         <span>Run data</span>
         <ChevronRight aria-hidden className="text-muted-foreground ml-auto size-4" />

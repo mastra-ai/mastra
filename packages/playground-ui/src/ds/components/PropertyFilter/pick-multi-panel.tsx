@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 // Same rendering as Combobox items: no visible control, a trailing check when selected.
 // Focus is on the item itself (roving via [data-pick-multi-item]), so highlight rides on :focus.
-const pickMultiItemClass = cn(menuItemClass, 'min-w-0 focus:bg-neutral6/5 focus:text-foreground');
+const pickMultiItemClass = cn(menuItemClass, 'min-w-0 focus:bg-fill-subtle focus:text-foreground');
 
 function PickMultiItem({
   role,

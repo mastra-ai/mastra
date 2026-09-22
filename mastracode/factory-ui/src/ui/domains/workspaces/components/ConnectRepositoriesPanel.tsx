@@ -92,7 +92,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </div>
 
           {error && (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg px-4 pb-2">
+            <Txt as="p" variant="caption" className="text-notice-destructive-fg px-4 pb-2">
               {error.message}
             </Txt>
           )}
@@ -103,16 +103,18 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
               {visibleLinked.map(repo => (
                 <div key={repo.projectRepositoryId} className="flex w-full items-center gap-3 rounded-md px-2 py-2">
                   <span className="min-w-0 flex-1">
-                    <span className="text-ui-md text-icon6 flex items-center gap-1.5">
+                    <span className="text-body text-foreground flex items-center gap-1.5">
                       {repo.provider === 'gitlab' ? (
-                        <GitLabIcon className="text-icon5 size-3.5 shrink-0" />
+                        <GitLabIcon className="text-foreground size-3.5 shrink-0" />
                       ) : (
-                        <GithubIcon className="text-icon5 size-3.5 shrink-0" />
+                        <GithubIcon className="text-foreground size-3.5 shrink-0" />
                       )}
                       <span className="min-w-0 truncate">{repo.slug}</span>
                     </span>
                     {repo.gitBranch && (
-                      <span className="text-ui-sm text-icon3 block truncate">Default branch: {repo.gitBranch}</span>
+                      <span className="text-caption text-muted-foreground block truncate">
+                        Default branch: {repo.gitBranch}
+                      </span>
                     )}
                   </span>
                   <Button
@@ -134,7 +136,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 </div>
               ) : available.length === 0 ? (
                 visibleLinked.length === 0 && (
-                  <Txt as="p" variant="ui-sm" className="text-icon3 px-2 py-2">
+                  <Txt as="p" variant="caption" className="text-muted-foreground px-2 py-2">
                     {repos.length > 0 ? 'All available repositories are linked.' : 'No repositories found.'}
                   </Txt>
                 )
@@ -153,20 +155,20 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                         onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
                       >
                         <span className="min-w-0 flex-1">
-                          <span className="text-ui-md text-icon5 flex items-center gap-1.5">
+                          <span className="text-body text-foreground flex items-center gap-1.5">
                             {gitlab ? (
-                              <GitLabIcon className="text-icon3 size-3.5 shrink-0" />
+                              <GitLabIcon className="text-muted-foreground size-3.5 shrink-0" />
                             ) : (
-                              <FolderIcon size={14} className="text-icon3 shrink-0" />
+                              <FolderIcon size={14} className="text-muted-foreground shrink-0" />
                             )}
                             <span className="min-w-0 truncate">{repo.fullName}</span>
                           </span>
-                          <span className="text-ui-sm text-icon3 block truncate">
+                          <span className="text-caption text-muted-foreground block truncate">
                             {gitlab ? 'GitLab' : repo.private ? 'private' : 'public'} · Default branch:{' '}
                             {repo.defaultBranch}
                           </span>
                         </span>
-                        {busyRepoId === repo.id && <span className="text-ui-sm text-icon3">Linking…</span>}
+                        {busyRepoId === repo.id && <span className="text-caption text-muted-foreground">Linking…</span>}
                       </button>
                     );
                   })}
@@ -182,7 +184,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
 
 function ListHeading({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" variant="ui-xs" className="text-icon3 px-2 pt-3 pb-1 first:pt-0">
+    <Txt as="p" variant="meta" className="text-muted-foreground px-2 pt-3 pb-1 first:pt-0">
       {children}
     </Txt>
   );
@@ -194,7 +196,7 @@ function ListHeading({ children }: { children: ReactNode }) {
  * booleans, and public URLs.
  */
 function StatusCallout({ status, connected, empty }: { status: GithubStatus; connected: boolean; empty: boolean }) {
-  const calloutClass = 'px-4 py-3 text-ui-sm leading-relaxed text-icon3';
+  const calloutClass = 'px-4 py-3 text-caption leading-relaxed text-muted-foreground';
 
   // Auth required: the session expired or was never established.
   if (status.authRequired) {
@@ -213,14 +215,14 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
         <p className="m-0 mb-1">GitHub is disabled on the server.</p>
         {missing.length > 0 && (
           <p className="m-0 mb-1">
-            Missing env vars: <code className="text-icon4">{missing.join(', ')}</code>
+            Missing env vars: <code className="text-muted-foreground">{missing.join(', ')}</code>
           </p>
         )}
         <p className="m-0">
-          Set them in <code className="text-icon4">mastracode/web/.env</code>, register{' '}
-          <code className="text-icon4">http://localhost:5173/auth/github/callback</code> as the GitHub App callback URL,
-          then restart <code className="text-icon4">pnpm web:dev</code> from{' '}
-          <code className="text-icon4">mastracode/web</code>.
+          Set them in <code className="text-muted-foreground">mastracode/web/.env</code>, register{' '}
+          <code className="text-muted-foreground">http://localhost:5173/auth/github/callback</code> as the GitHub App
+          callback URL, then restart <code className="text-muted-foreground">pnpm web:dev</code> from{' '}
+          <code className="text-muted-foreground">mastracode/web</code>.
         </p>
       </div>
     );
@@ -241,8 +243,8 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
     return (
       <div className={calloutClass}>
         The GitHub App isn't connected yet. Click <strong>Connect GitHub</strong> to install it. After install, GitHub
-        redirects to <code className="text-icon4">/auth/github/callback</code> — make sure that URL is registered in
-        your GitHub App settings (Callback URL).
+        redirects to <code className="text-muted-foreground">/auth/github/callback</code> — make sure that URL is
+        registered in your GitHub App settings (Callback URL).
       </div>
     );
   }
@@ -252,8 +254,8 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
     return (
       <div className={calloutClass}>
         No repositories found. Your GitHub App installation may not have access to any repos. Check the installation's
-        repository access at <code className="text-icon4">https://github.com/settings/installations</code> and grant
-        access to at least one repo.
+        repository access at <code className="text-muted-foreground">https://github.com/settings/installations</code>{' '}
+        and grant access to at least one repo.
       </div>
     );
   }

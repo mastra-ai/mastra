@@ -152,7 +152,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
                   {file.part ? (
                     <UserFilePartRenderer part={file.part} />
                   ) : (
-                    <Txt variant="ui-sm">
+                    <Txt variant="caption">
                       {file.filename}
                       {file.error ? '' : ' — Reading…'}
                     </Txt>
@@ -193,7 +193,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
             >
               <Paperclip />
             </Button>
-            <Txt variant="ui-xs" role="status" aria-live="polite">
+            <Txt variant="meta" role="status" aria-live="polite">
               {reading ? 'Reading attachments…' : composerStatus[phase ?? 'complete']}
             </Txt>
             <div className="ml-auto">

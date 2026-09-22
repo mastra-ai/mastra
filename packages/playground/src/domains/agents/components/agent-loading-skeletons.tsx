@@ -11,7 +11,7 @@ export function AgentSidebarLoadingSkeleton() {
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
             <Skeleton className="h-3 w-16" />
           </SidebarLoadingRow>
-          <hr aria-hidden="true" className="bg-border1/40 -mx-1 my-1 h-px border-0" />
+          <hr aria-hidden="true" className="bg-border/40 -mx-1 my-1 h-px border-0" />
           <div className="flex flex-col gap-px">
             <SidebarLoadingRow>
               <Skeleton className="h-3 w-32" />
@@ -29,7 +29,7 @@ export function AgentSidebarLoadingSkeleton() {
         </div>
       </div>
 
-      <div className="rounded-studio-panel border-border1/40 bg-surface4 m-2 border px-3 py-2.5">
+      <div className="rounded-studio-panel border-border/40 bg-muted m-2 border px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
@@ -76,7 +76,7 @@ export function AgentChatLoadingSkeleton() {
       <div className="mx-auto grid h-full min-h-0 w-full max-w-[80ch] grid-rows-[1fr_auto]">
         <ChatMessagesLoadingSkeleton />
 
-        <div className="border-border1 bg-surface2 rounded-3xl border px-3 py-2.5">
+        <div className="border-border bg-background rounded-3xl border px-3 py-2.5">
           <Skeleton className="h-5 w-1/2 rounded-full" />
           <div className="mt-4 flex items-center justify-between">
             <Skeleton className="h-8 w-24 rounded-full" />

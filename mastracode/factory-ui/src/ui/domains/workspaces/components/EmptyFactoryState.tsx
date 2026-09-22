@@ -132,7 +132,7 @@ export function EmptyFactoryState() {
   const stepIndex = steps.indexOf(step);
 
   return (
-    <main className="factory-signin-theme bg-surface1 text-neutral6 min-h-dvh">
+    <main className="bg-sidebar text-foreground min-h-dvh">
       <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
@@ -141,7 +141,7 @@ export function EmptyFactoryState() {
                 <li
                   key={item}
                   aria-current={step === item ? 'step' : undefined}
-                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-surface4'}`}
+                  className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-accent1' : 'bg-fill'}`}
                 >
                   <span className="sr-only">Step {index + 1}</span>
                 </li>
@@ -154,8 +154,9 @@ export function EmptyFactoryState() {
             {STEP_META[step].description && (
               <Txt
                 as="p"
-                variant="ui-lg"
-                className="text-neutral3 mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em]"
+                variant="body"
+                tone="muted"
+                className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em]"
               >
                 {STEP_META[step].description}
               </Txt>
