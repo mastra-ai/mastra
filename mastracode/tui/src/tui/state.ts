@@ -246,6 +246,8 @@ export interface TUIState {
   pendingNewThread: boolean;
   /** Current thread title (for display in status line) */
   currentThreadTitle?: string;
+  /** Landed model-pack fallback for the current thread. */
+  fallbackStatus?: { usingPack: string; failedPack: string };
   /** GitHub PR subscriptions for the current thread. */
   activeGithubPrSubscriptions: GithubPrSubscriptionBadge[];
   /** Cached thread previews for the current TUI session */

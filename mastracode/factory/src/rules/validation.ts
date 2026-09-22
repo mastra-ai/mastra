@@ -32,8 +32,11 @@ const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|tok
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'github-issue',
   'github-pr',
+  'gitlab-issue',
+  'gitlab-pr',
   'linear-issue',
   'jira-issue',
+  'incidentio-follow-up',
   'manual',
 ];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [

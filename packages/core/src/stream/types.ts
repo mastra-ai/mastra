@@ -1132,6 +1132,12 @@ export type MastraOnStepFinishCallback<OUTPUT = undefined> = (
 export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPUT> & {
   error?: Error | string | { message: string; stack: string };
   object?: OUTPUT;
+  /**
+   * True when `object` is the configured `fallbackValue`, substituted because the model
+   * output failed schema validation (or the separate structuring model failed) under
+   * `errorStrategy: 'fallback'`.
+   */
+  usedFallbackValue?: boolean;
   steps: LLMStepResult<OUTPUT>[];
   totalUsage: LanguageModelUsage;
   model?: partialModel;

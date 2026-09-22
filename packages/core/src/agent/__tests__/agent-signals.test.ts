@@ -103,6 +103,8 @@ class AsyncCallbackPubSub extends PubSub {
   #subscribers = new Map<string, Set<EventCallback>>();
   #index = 0;
   #pending = new Set<Promise<void>>();
+  /** Callback rejections, which a real backend turns into a nack and redelivery. */
+  subscriptionFailures: unknown[] = [];
 
   async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
@@ -115,7 +117,9 @@ class AsyncCallbackPubSub extends PubSub {
     const pending = new Promise<void>(resolve => {
       setTimeout(() => {
         try {
-          for (const subscriber of subscribers) subscriber(envelope);
+          for (const subscriber of subscribers) {
+            void Promise.resolve(subscriber(envelope)).catch(error => this.subscriptionFailures.push(error));
+          }
         } finally {
           resolve();
         }
@@ -145,6 +149,8 @@ class RetainedAsyncCallbackPubSub extends PubSub {
   #history = new Map<string, any[]>();
   #pending = new Set<Promise<void>>();
   #index = 0;
+  /** Callback rejections, which a real backend turns into a nack and redelivery. */
+  subscriptionFailures: unknown[] = [];
 
   async publish(topic: string, event: any): Promise<void> {
     const envelope = { ...event, id: `retained-${this.#index}`, createdAt: new Date(), index: this.#index++ };
@@ -154,7 +160,9 @@ class RetainedAsyncCallbackPubSub extends PubSub {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
     const pending = new Promise<void>(resolve => {
       setTimeout(() => {
-        for (const subscriber of subscribers) subscriber(envelope);
+        for (const subscriber of subscribers) {
+          void Promise.resolve(subscriber(envelope)).catch(error => this.subscriptionFailures.push(error));
+        }
         resolve();
       }, 0);
     });
@@ -166,7 +174,9 @@ class RetainedAsyncCallbackPubSub extends PubSub {
     const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
     subscribers.add(cb);
     this.#subscribers.set(topic, subscribers);
-    for (const event of this.#history.get(topic) ?? []) cb(event);
+    for (const event of this.#history.get(topic) ?? []) {
+      void Promise.resolve(cb(event)).catch(error => this.subscriptionFailures.push(error));
+    }
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -2734,6 +2744,96 @@ describe('Agent signals', () => {
     expect(peers[0].sourceId).toBeDefined();
     expect(peers[0].discoveredAt).toBeInstanceOf(Date);
 
+    claim.unsubscribe();
+  });
+
+  it('marks the discovering agent own advertisements and leaves sibling agents discoverable', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const sessionAgent = new Agent({
+      id: 'session-peer-agent',
+      name: 'Session Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('session response'),
+      pubsub,
+    });
+    const siblingAgent = new Agent({
+      id: 'sibling-peer-agent',
+      name: 'Sibling Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sibling response'),
+      pubsub,
+    });
+
+    const sessionClaim = await sessionAgent.claimThreadOwnership({
+      resourceId: 'shared-peer-resource',
+      threadId: 'session-peer-thread',
+      peer: { label: 'Session' },
+    });
+    const siblingClaim = await siblingAgent.claimThreadOwnership({
+      resourceId: 'shared-peer-resource',
+      threadId: 'sibling-peer-thread',
+      peer: { label: 'Sibling' },
+    });
+
+    const peers = await sessionAgent.discoverThreadPeers({ timeoutMs: 10 });
+    const byId = new Map(peers.map(peer => [peer.id, peer]));
+
+    // Both advertisements live in one process-wide runtime, but only the caller's
+    // own thread is the caller's own — a sibling agent is a peer it can address.
+    expect(byId.get('session-peer-agent:shared-peer-resource:session-peer-thread')?.selfAdvertised).toBe(true);
+    expect(byId.get('sibling-peer-agent:shared-peer-resource:sibling-peer-thread')?.selfAdvertised).toBeUndefined();
+
+    sessionClaim.unsubscribe();
+    siblingClaim.unsubscribe();
+  });
+
+  it('keeps the own-advertisement mark when another instance answers discovery for the same thread', async () => {
+    const pubsub = new RetainedAsyncCallbackPubSub();
+    const agent = new Agent({
+      id: 'session-peer-agent',
+      name: 'Session Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('session response'),
+      pubsub,
+    });
+
+    const claim = await agent.claimThreadOwnership({
+      resourceId: 'shared-peer-resource',
+      threadId: 'session-peer-thread',
+      peer: { label: 'Session' },
+    });
+
+    // A second live instance with the same thread loaded answers discovery too, and
+    // its reply replaces the local entry with one rebuilt from the wire payload — so
+    // a mark computed only from the local advertisements is lost on that path.
+    const responder: EventCallback = async event => {
+      const data = event.data as any;
+      if (data?.type !== 'thread-peer-request') return;
+      await pubsub.publish(data.replyTopic, {
+        type: 'thread-peer-response',
+        runId: data.requestId,
+        data: {
+          type: 'thread-peer-response',
+          requestId: data.requestId,
+          sourceId: 'other-instance-source',
+          peer: {
+            id: 'session-peer-agent:shared-peer-resource:session-peer-thread',
+            agentId: 'session-peer-agent',
+            resourceId: 'shared-peer-resource',
+            threadId: 'session-peer-thread',
+            label: 'Session',
+          },
+        },
+      });
+    };
+    await pubsub.subscribe('agent.thread-peer-discovery', responder);
+
+    const peers = await agent.discoverThreadPeers({ timeoutMs: 10 });
+    const byId = new Map(peers.map(peer => [peer.id, peer]));
+
+    expect(byId.get('session-peer-agent:shared-peer-resource:session-peer-thread')?.selfAdvertised).toBe(true);
+
+    await pubsub.unsubscribe('agent.thread-peer-discovery', responder);
     claim.unsubscribe();
   });
 
@@ -7193,6 +7293,37 @@ describe('Agent signals', () => {
     });
   });
 
+  it('does not abort a successor run when the expected run has completed', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'conditional-abort-resource';
+    const threadId = 'conditional-abort-thread';
+    const successorRunId = 'run-b';
+    const options = runtime.prepareRunOptions(
+      { runId: successorRunId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+
+    runtime.registerRun(
+      { id: 'conditional-abort-agent' } as Agent<any, any, any, any>,
+      {
+        runId: successorRunId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      options,
+      pubsub,
+    );
+
+    expect(runtime.abortThread({ resourceId, threadId, expectedRunId: 'run-a' }, pubsub)).toBe(false);
+    expect(options.abortSignal?.aborted).toBe(false);
+    expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(successorRunId);
+
+    expect(runtime.abortThread({ resourceId, threadId, expectedRunId: successorRunId }, pubsub)).toBe(true);
+    expect(options.abortSignal?.aborted).toBe(true);
+  });
+
   it('routes remote abort requests to only the live lease owner', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
@@ -7229,7 +7360,24 @@ describe('Agent signals', () => {
     );
     await pubsub.flush();
     await waitForCondition(() => followerSubscription.activeRunId() === runId);
-    expect(followerSubscription.abort()).toBe(true);
+    const publishedBeforeMismatch = pubsub.publishedData.length;
+    expect(
+      followerRuntime.abortThread(
+        {
+          resourceId: 'remote-abort-resource',
+          threadId: 'remote-abort-thread',
+          expectedRunId: 'completed-run',
+        },
+        pubsub,
+      ),
+    ).toBe(false);
+    expect(pubsub.publishedData).toHaveLength(publishedBeforeMismatch);
+    expect(
+      followerRuntime.abortThread(
+        { resourceId: 'remote-abort-resource', threadId: 'remote-abort-thread', expectedRunId: runId },
+        pubsub,
+      ),
+    ).toBe(true);
     expect(options.abortSignal?.aborted).toBe(false);
     await pubsub.flush();
     await waitForCondition(() => options.abortSignal?.aborted === true);
@@ -7248,6 +7396,61 @@ describe('Agent signals', () => {
     await pubsub.flush();
     await nextTick();
     expect(pubsub.publishedData.filter(data => data?.type === 'run-aborted')).toHaveLength(terminalCount);
+    ownerSubscription.unsubscribe();
+    followerSubscription.unsubscribe();
+  });
+
+  it('keeps a remote owner run alive when a thread teardown aborts locally', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const followerRuntime = new AgentThreadStreamRuntime();
+    const resourceId = 'local-abort-resource';
+    const threadId = 'local-abort-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    const runId = 'local-abort-run';
+    pubsub.owners.set(key, runId);
+    const ownerSubscription = await ownerRuntime.subscribeToThread(
+      { id: 'local-abort-agent' } as Agent<any, any, any, any>,
+      { resourceId, threadId },
+      pubsub,
+    );
+    const followerSubscription = await followerRuntime.subscribeToThread(
+      { id: 'local-abort-agent' } as Agent<any, any, any, any>,
+      { resourceId, threadId },
+      pubsub,
+    );
+
+    const options = ownerRuntime.prepareRunOptions(
+      { runId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    ownerRuntime.registerRun(
+      { id: 'local-abort-agent' } as Agent<any, any, any, any>,
+      {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      options,
+      pubsub,
+    );
+    await pubsub.flush();
+    await waitForCondition(() => followerSubscription.activeRunId() === runId);
+
+    // Unbinding a thread (a follower running `/new`, or a session teardown) stops
+    // this process's own run and must not reach the owner's run over PubSub.
+    const publishedBeforeLocalAbort = pubsub.publishedData.length;
+    expect(followerSubscription.abort({ localOnly: true })).toBe(false);
+    await pubsub.flush();
+    await nextTick();
+    expect(options.abortSignal?.aborted).toBe(false);
+    expect(pubsub.publishedData).toHaveLength(publishedBeforeLocalAbort);
+    expect(pubsub.publishedData.some(data => data?.type === 'run-abort-requested')).toBe(false);
+    // The owner still holds the live lease, so a real abort from this follower
+    // would have been forwarded — the suppression above is what kept it alive.
+    expect(pubsub.owners.get(key)).toBe(runId);
+
     ownerSubscription.unsubscribe();
     followerSubscription.unsubscribe();
   });

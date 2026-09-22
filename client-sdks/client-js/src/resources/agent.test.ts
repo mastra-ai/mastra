@@ -6,6 +6,7 @@ import { z } from 'zod/v3';
 import { MastraClient } from '../client';
 import type { Body } from '../route-types.generated';
 import type {
+  AbortAgentThreadParams,
   ClientOptions,
   QueueAgentMessageParams,
   SendAgentMessageParams,
@@ -517,7 +518,8 @@ describe('Agent signal routes', () => {
     const params = {
       resourceId: 'resource-123',
       threadId: 'thread-123',
-    } satisfies SubscribeAgentThreadParams;
+      expectedRunId: 'run-a',
+    } satisfies AbortAgentThreadParams;
     const routeBody: Body<'POST /agents/:agentId/threads/abort'> = params;
 
     await expect(agent.abortThread(params)).resolves.toEqual({ aborted: true });

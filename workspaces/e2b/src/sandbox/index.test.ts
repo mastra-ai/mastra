@@ -600,6 +600,35 @@ describe('E2BSandbox', () => {
       expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.any(Object));
     });
 
+    it('forwards the configured timeout when reconnecting to an existing sandbox by metadata', async () => {
+      const { Sandbox } = await import('e2b');
+
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'paused' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'existing-id', timeout: 900_000 });
+      await sandbox._start();
+
+      // Regression (#24621): without timeoutMs the e2b SDK falls back to its
+      // 5-minute default, so a resumed sandbox always came back with a 5-minute
+      // window regardless of the configured timeout.
+      expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.objectContaining({ timeoutMs: 900_000 }));
+    });
+
+    it('forwards the default timeout when reconnecting to an existing sandbox by metadata', async () => {
+      const { Sandbox } = await import('e2b');
+
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'paused' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'existing-id' });
+      await sandbox._start();
+
+      expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.objectContaining({ timeoutMs: 300_000 }));
+    });
+
     it("reports outcome 'created' when a new sandbox is created", async () => {
       const sandbox = new E2BSandbox();
 
@@ -652,6 +681,23 @@ describe('E2BSandbox', () => {
       expect(Sandbox.list).not.toHaveBeenCalled();
       expect(Sandbox.create).not.toHaveBeenCalled();
       expect(sandbox.sandboxId).toBe('sbx_preferred');
+    });
+
+    it('forwards the configured timeout when connecting to the preferred sandbox', async () => {
+      const { Sandbox } = await import('e2b');
+      ((Sandbox as any).getInfo as any).mockResolvedValue({
+        sandboxId: 'sbx_preferred',
+        metadata: { 'mastra-sandbox-id': 'my-logical-id' },
+        state: 'paused',
+      });
+      (Sandbox.connect as any).mockResolvedValue({ ...mockSandbox, sandboxId: 'sbx_preferred' });
+
+      const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_preferred', timeout: 900_000 });
+      await sandbox._start();
+
+      // Regression (#24621): the preferred-sandbox resume path also dropped the
+      // configured timeout and fell back to the SDK's 5-minute default.
+      expect(Sandbox.connect).toHaveBeenCalledWith('sbx_preferred', expect.objectContaining({ timeoutMs: 900_000 }));
     });
 
     it('attaches to a preferred sandbox that has no mastra-sandbox-id metadata', async () => {
@@ -887,6 +933,44 @@ describe('E2BSandbox', () => {
       expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
         expect.any(String),
         expect.objectContaining({ envs: expect.objectContaining({ GH_TOKEN: 'tok_2' }) }),
+      );
+    });
+
+    it('fills in a provider default timeout when the caller omits one', async () => {
+      // Regression: an undefined timeoutMs reaches the E2B SDK, which falls back
+      // to its private 60s connection deadline and kills any longer command.
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ timeoutMs: 300_000 }),
+      );
+    });
+
+    it('uses the configured sandbox timeout as the per-command default', async () => {
+      const sandbox = new E2BSandbox({ timeout: 900_000 });
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo', ['test']);
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ timeoutMs: 900_000 }),
+      );
+    });
+
+    it('per-command timeout still wins over the default', async () => {
+      const sandbox = new E2BSandbox({ timeout: 900_000 });
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo', ['test'], { timeout: 5_000 });
+
+      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ timeoutMs: 5_000 }),
       );
     });
   });

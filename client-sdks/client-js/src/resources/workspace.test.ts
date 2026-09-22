@@ -210,6 +210,19 @@ describe('Workspace Resource', () => {
         }),
       );
     });
+
+    it('should serialize an explicit false flag on the wire', async () => {
+      mockFetchResponse({ path: '/', entries: [] });
+
+      await workspace.listFiles('/', false);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/list?path=%2F&recursive=false`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
   });
 
   describe('delete()', () => {
@@ -244,6 +257,19 @@ describe('Workspace Resource', () => {
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/delete?path=%2Fdir&recursive=true&force=true`,
+        expect.objectContaining({
+          method: 'DELETE',
+        }),
+      );
+    });
+
+    it('should serialize explicit false flags on the wire', async () => {
+      mockFetchResponse({ success: true, path: '/dir' });
+
+      await workspace.delete('/dir', { recursive: false, force: false });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/fs/delete?path=%2Fdir&recursive=false&force=false`,
         expect.objectContaining({
           method: 'DELETE',
         }),
@@ -504,6 +530,19 @@ describe('Workspace Resource', () => {
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/search?query=search+term&topK=5&minScore=0.7&skillNames=skill1%2Cskill2&includeReferences=true`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should serialize an explicit false includeReferences flag on the wire', async () => {
+      mockFetchResponse({ results: [], query: 'test' });
+
+      await workspace.searchSkills({ query: 'test', includeReferences: false });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/skills/search?query=test&includeReferences=false`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),

@@ -14,12 +14,16 @@ catalogs:
       version: 5.9.3
 
 overrides:
+  '@fastify/proxy-addr@<=5.1.0': 5.1.1
+  proxy-addr: 2.0.8
   '@mastra/core': link:../../../../packages/core
   '@mastra/hono': link:../../../../server-adapters/hono
   '@mastra/observability': link:../../../mastra
   '@mastra/otel-bridge': link:../../../otel-bridge
   '@mastra/otel-exporter': link:../../../otel-exporter
-  brace-expansion@>=2.0.0 <2.1.4: 2.1.4
+  brace-expansion@>=2.0.0 <2.1.7: 2.1.7
+  brace-expansion@>=4.0.0 <5.0.12: 5.0.12
+  fast-uri@<3.1.8: 3.1.8
   mastra: link:../../../../packages/cli
   vitest@>=2.1.0 <4.1.11: 4.1.11
   '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11
@@ -951,8 +955,8 @@ packages:
   bignumber.js@9.3.1:
     resolution: {integrity: sha512-Ko0uX15oIUS7wJ3Rb30Fs6SkVbLmPBAKdlm7q9+ak9bbIeFf0MwuBsQV6z7+X768/cHsfg+WlysDWJcmthjsjQ==}
 
-  brace-expansion@2.1.4:
-    resolution: {integrity: sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg==}
+  brace-expansion@2.1.7:
+    resolution: {integrity: sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g==}
 
   buffer-equal-constant-time@1.0.1:
     resolution: {integrity: sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==}
@@ -2311,7 +2315,7 @@ snapshots:
 
   bignumber.js@9.3.1: {}
 
-  brace-expansion@2.1.4:
+  brace-expansion@2.1.7:
     dependencies:
       balanced-match: 1.0.2
 
@@ -2676,7 +2680,7 @@ snapshots:
 
   minimatch@9.0.5:
     dependencies:
-      brace-expansion: 2.1.4
+      brace-expansion: 2.1.7
 
   minipass@7.1.2: {}
 

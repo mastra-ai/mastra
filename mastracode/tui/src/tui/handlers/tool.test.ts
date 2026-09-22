@@ -2,6 +2,7 @@ import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 
 import type { TUIState } from '../state.js';
 import {
@@ -16,7 +17,9 @@ import type { EventHandlerContext } from './types.js';
 async function flushParser(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // Streamed args are applied by the render scheduler's coalesce timer, so the
+  // wait must exceed it (`handlers/__tests__/tool.test.ts` does the same).
+  await new Promise(resolve => setTimeout(resolve, DEFAULT_RENDER_COALESCE_MS + 20));
 }
 
 function visibleChildren(ctx: EventHandlerContext) {
@@ -60,11 +63,54 @@ function createToolHandlerContext(): EventHandlerContext {
 }
 
 describe('background placeholder opt-in', () => {
+  it.each(['view', 'mastra_expert'])('reconciles trusted background metadata for %s', toolName => {
+    const ctx = createToolHandlerContext();
+    ctx.state.options.backgroundToolsEnabled = true;
+    if (toolName === 'mastra_expert') {
+      ctx.state.pluginManager = {
+        getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+      } as unknown as TUIState['pluginManager'];
+    }
+    handleToolStart(ctx, 'background-call', toolName, {});
+    handleToolEnd(ctx, 'background-call', 'Waiting', false, {
+      mastra: { backgroundTask: { taskId: 'trusted-task', status: 'running' } },
+    });
+    expect(ctx.state.pendingTools.has('background-call') || ctx.state.pendingSubagents.has('background-call')).toBe(
+      true,
+    );
+    handleToolEnd(ctx, 'background-call', 'Authoritative result', false, {
+      mastra: { backgroundTask: { taskId: 'trusted-task', status: 'completed' } },
+    });
+    expect(ctx.state.pendingTools.has('background-call')).toBe(false);
+    expect(ctx.state.pendingSubagents.has('background-call')).toBe(false);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('✓ background · trusted-task');
+  });
+
+  it.each(['execute_command', 'mastra_expert'])(
+    'does not infer background identity from %s output when enabled',
+    toolName => {
+      const ctx = createToolHandlerContext();
+      ctx.state.options.backgroundToolsEnabled = true;
+      if (toolName === 'mastra_expert') {
+        ctx.state.pluginManager = {
+          getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+        } as unknown as TUIState['pluginManager'];
+      }
+      handleToolStart(ctx, 'foreground-collision', toolName, {});
+      handleToolEnd(ctx, 'foreground-collision', 'Background task started. Task ID: visible-demo-123', false);
+      expect(ctx.state.pendingTools.has('foreground-collision')).toBe(false);
+      expect(ctx.state.pendingSubagents.has('foreground-collision')).toBe(false);
+      expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('background · visible-demo-123');
+    },
+  );
+
   it.each([undefined, false, true])('interprets ordinary tool placeholders only when enabled is true (%s)', enabled => {
     const ctx = createToolHandlerContext();
     ctx.state.options.backgroundToolsEnabled = enabled;
     handleToolStart(ctx, 'collision', 'execute_command', { command: 'printf demo' });
-    handleToolEnd(ctx, 'collision', 'Background task started. Task ID: visible-demo-123', false);
+    handleToolEnd(ctx, 'collision', 'Deferred output without a magic prefix', false, {
+      mastra: { backgroundTask: { taskId: 'visible-demo-123', status: 'running' } },
+    });
     expect(ctx.state.pendingTools.has('collision')).toBe(enabled === true);
     expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('background · visible-demo-123')).toBe(
       enabled === true,
@@ -78,7 +124,9 @@ describe('background placeholder opt-in', () => {
       getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
     } as unknown as TUIState['pluginManager'];
     handleToolStart(ctx, 'collision', 'mastra_expert', { question: 'demo' });
-    handleToolEnd(ctx, 'collision', 'Background task started. Task ID: visible-demo-123', false);
+    handleToolEnd(ctx, 'collision', 'Deferred output without a magic prefix', false, {
+      mastra: { backgroundTask: { taskId: 'visible-demo-123', status: 'running' } },
+    });
     expect(ctx.state.pendingSubagents.has('collision')).toBe(enabled === true);
     expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('background · visible-demo-123')).toBe(
       enabled === true,

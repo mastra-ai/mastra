@@ -1,5 +1,6 @@
 import { ScorerRunError } from '../../evals/base';
-import type { MastraScorer } from '../../evals/base';
+import type { MastraScorer, ScorerStepName } from '../../evals/base';
+import type { NotScorableOutcome } from '../../evals/not-scorable';
 import { extractTrajectory, extractTrajectoryFromTrace } from '../../evals/types';
 import type {
   ScorerRunInputForAgent,
@@ -295,6 +296,7 @@ interface ScorerPromptMetadata {
 function extractScorerRunFields(scoreResult: unknown): {
   score: number | null;
   reason: string | null;
+  notScorable?: NotScorableOutcome;
   promptMetadata: ScorerPromptMetadata;
 } {
   if (typeof scoreResult !== 'object' || scoreResult === null) {
@@ -309,9 +311,20 @@ function extractScorerRunFields(scoreResult: unknown): {
     return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
   };
 
+  const notScorable = obj('notScorable');
+
   return {
     score: typeof fields.score === 'number' ? fields.score : null,
     reason: typeof fields.reason === 'string' ? fields.reason : null,
+    // `step` is always one of the scorer's own step names; see MastraScorer.
+    ...(notScorable && typeof notScorable.step === 'string'
+      ? {
+          notScorable: {
+            step: notScorable.step as ScorerStepName,
+            ...(typeof notScorable.reason === 'string' ? { reason: notScorable.reason } : {}),
+          },
+        }
+      : {}),
     promptMetadata: {
       generateScorePrompt: str('generateScorePrompt'),
       generateReasonPrompt: str('generateReasonPrompt'),
@@ -393,7 +406,7 @@ async function runScorerSafe(
       };
     }
 
-    const { score, reason, promptMetadata } = extractScorerRunFields(scoreResult);
+    const { score, reason, notScorable, promptMetadata } = extractScorerRunFields(scoreResult);
 
     return {
       result: {
@@ -402,6 +415,7 @@ async function runScorerSafe(
         score,
         reason,
         error: null,
+        ...(notScorable ? { notScorable } : {}),
         targetScope: effectiveScope,
       },
       promptMetadata,
@@ -551,9 +565,7 @@ export async function runStepScorersForItem(
               stepId,
             };
           }
-          const fields = scoreResult as Record<string, unknown>;
-          const score = typeof fields.score === 'number' ? fields.score : null;
-          const reason = typeof fields.reason === 'string' ? fields.reason : null;
+          const { score, reason, notScorable } = extractScorerRunFields(scoreResult);
 
           // Persist score (best-effort, mirrors runScorersForItem)
           if (persistScores && storage && score !== null) {
@@ -592,6 +604,7 @@ export async function runStepScorersForItem(
             score,
             reason,
             error: null,
+            ...(notScorable ? { notScorable } : {}),
             targetScope: 'span' as const,
             stepId,
           };

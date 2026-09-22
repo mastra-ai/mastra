@@ -242,8 +242,10 @@ describe('useJiraProjectsQuery', () => {
 describe('intake config and bindings drive the Jira issue cache', () => {
   const config: IntakeConfig = {
     github: { enabled: true, sourceIds: null },
+    gitlab: { enabled: false, sourceIds: null },
     linear: { enabled: false, sourceIds: null },
     jira: { enabled: true, sourceIds: ['10001'] },
+    incidentio: { enabled: false, sourceIds: null },
   };
 
   it('given a server that omits the jira key, when the config resolves, then jira normalizes to disabled', async () => {

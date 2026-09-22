@@ -17,6 +17,7 @@ import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
 } from './chat-boundary-reconciliation.js';
+import { AccountSwitchNoticeComponent, PackFallbackNoticeComponent } from './components/account-switch-notice.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
@@ -54,12 +55,7 @@ import {
   isSignalMessage,
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
-import {
-  formatToolResult,
-  getBackgroundToolTaskId,
-  isBackgroundToolPlaceholder,
-  isTaskMutationTool,
-} from './handlers/tool.js';
+import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
@@ -997,7 +993,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             !!state.options?.backgroundToolsEnabled &&
             hasResult &&
             !resultIsError &&
-            isBackgroundToolPlaceholder(resultValue);
+            part.backgroundTask?.status === 'running' &&
+            !backgroundTasksByToolCallId.has(part.toolCallId);
 
           // Render subagent tool calls with dedicated component
           if (toolName === 'subagent') {
@@ -1080,8 +1077,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               },
             );
             const backgroundTaskId =
-              (isBackgroundPlaceholder ? getBackgroundToolTaskId(resultValue) : undefined) ??
-              backgroundTasksByToolCallId.get(part.toolCallId);
+              (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
+                ? part.backgroundTask?.taskId
+                : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
             if (backgroundTaskId) {
               subComponent.setBackgroundTaskId(backgroundTaskId);
             }
@@ -1108,8 +1106,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.ui,
           );
           const backgroundTaskId =
-            (isBackgroundPlaceholder ? getBackgroundToolTaskId(resultValue) : undefined) ??
-            backgroundTasksByToolCallId.get(part.toolCallId);
+            (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
+              ? part.backgroundTask?.taskId
+              : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
           if (backgroundTaskId) {
             toolComponent.setBackgroundTaskId(backgroundTaskId);
           }
@@ -1130,6 +1129,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
+            toolComponent.updateResult(
+              { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
+              true,
+            );
             toolComponent.cancelBackground();
           } else if (isBackgroundPlaceholder) {
             state.pendingTools.set(part.toolCallId, toolComponent);
@@ -1222,6 +1225,12 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.allToolComponents.push(toolComponent);
           } else {
           }
+        } else if (part.kind === 'account-switch') {
+          flushAccumulated();
+          state.chatContainer.addChild(new AccountSwitchNoticeComponent(part));
+        } else if (part.kind === 'pack-fallback') {
+          flushAccumulated();
+          state.chatContainer.addChild(new PackFallbackNoticeComponent(part));
         } else if (part.kind === 'om') {
           // Skip start markers in history — only show completed/failed results
           if (part.event === 'start') continue;

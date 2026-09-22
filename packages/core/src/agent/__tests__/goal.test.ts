@@ -567,6 +567,58 @@ describe('in-loop goal scoring', () => {
     expect(record?.runsUsed).toBe(2);
   });
 
+  it('parks an objective left active at the run budget when a later run re-enters the goal step', async () => {
+    // A `waiting` verdict deliberately keeps the record `active` (waiting is a
+    // per-turn display state, not a lifecycle state), which can leave an active
+    // objective sitting at its budget. The next run re-enters the goal step with
+    // nothing left to judge: the budget guard must park the objective rather
+    // than emit a stale `active` continuation chunk (which the UI renders as
+    // `continue` on every later turn).
+    let judgeCalls = 0;
+    const judge = goalJudgeModel([{ decision: 'waiting', reason: 'waiting for your review' }], () => {
+      judgeCalls++;
+    });
+    const agent = makeAgent({ judge: judge as any, maxRuns: 1 });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const firstStream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const _ of firstStream.fullStream) {
+      void _;
+    }
+    expect(judgeCalls).toBe(1);
+    // Waiting keeps the record active by design.
+    expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('active');
+    expect((await agent.getObjective({ threadId: THREAD }))?.runsUsed).toBe(1);
+
+    const goalChunks: any[] = [];
+    const secondStream = await agent.stream('again', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of secondStream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    // The guard is a backstop: no further judge call, no run past the budget.
+    expect(judgeCalls).toBe(1);
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+    expect(resultChunks).toHaveLength(1);
+    expect(resultChunks[0].payload).toMatchObject({
+      objective: 'Reach the goal',
+      passed: false,
+      status: 'paused',
+      maxRunsReached: true,
+    });
+    expect(resultChunks[0].payload.pausedReason).toContain('budget');
+
+    const record = await agent.getObjective({ threadId: THREAD });
+    expect(record?.status).toBe('paused');
+    expect(record?.runsUsed).toBe(1);
+  });
+
   it('does not re-score a budget-exhausted (now paused) objective on a later run', async () => {
     // An objective that stops at the run budget is parked as `paused`. A
     // subsequent run on the same thread must not burn another judge call or push

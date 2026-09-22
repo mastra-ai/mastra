@@ -200,6 +200,13 @@ export type AgentUpdateThreadPeerOptions = {
 export type AgentThreadPeerAdvertisement = AgentThreadPeerInfo & {
   sourceId: string;
   discoveredAt: Date;
+  /**
+   * True when the agent that ran this discovery published the advertisement
+   * itself, so it names one of that agent's own threads rather than a peer's.
+   * Discovery answers with the caller's own advertisements alongside peer
+   * responses; callers listing peers for a human use this to exclude their own.
+   */
+  selfAdvertised?: boolean;
 };
 
 export type DiscoverAgentThreadPeersOptions = {
@@ -441,6 +448,20 @@ export interface AgentThreadIdentityOptions {
 }
 
 /** @experimental Agent signals are experimental and may change in a future release. */
+export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
+  /** Abort only if this run is still the thread's active run. */
+  expectedRunId?: string;
+  /**
+   * Abort only what this process owns. When the active run belongs to a remote
+   * thread owner, an ordinary abort asks that owner to stop the run; a local-only
+   * abort leaves it running and reports `false` instead. Thread lifecycle
+   * transitions (detaching, switching threads) use this so unbinding a thread
+   * never kills another instance's run.
+   */
+  localOnly?: boolean;
+}
+
+/** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
   /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
   hideSignals?: boolean | AgentSignalType[];
@@ -454,7 +475,8 @@ export interface AgentThreadSubscription<OUTPUT = unknown> {
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
-  abort: () => boolean;
+  /** Abort the active run. Pass `localOnly` to leave a remote owner's run alone. */
+  abort: (options?: { localOnly?: boolean }) => boolean;
   unsubscribe: () => void;
 }
 

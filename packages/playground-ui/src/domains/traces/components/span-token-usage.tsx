@@ -22,8 +22,8 @@ type SpanTokenUsageProps = {
   className?: string;
 };
 
-const INPUT_COLOR = 'oklch(0.78 0.16 320)';
-const OUTPUT_COLOR = 'oklch(0.55 0.18 320)';
+const INPUT_COLOR = 'var(--chart-soft-3)';
+const OUTPUT_COLOR = 'var(--chart-soft-1)';
 
 export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
   const view = getTokenUsageView(usage);
@@ -32,19 +32,17 @@ export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
   const { inputValue, outputValue, total, showSplit, inputPct, outputPct, inputDetails, outputDetails } = view;
 
   return (
-    <div
-      className={cn('mt-2 mb-8 grid grid-cols-1 border-b border-border1 pb-3 4xl:grid-cols-2 4xl:gap-12', className)}
-    >
+    <div className={cn('mt-2 mb-8 grid grid-cols-1 border-b border-border pb-3 4xl:grid-cols-2 4xl:gap-12', className)}>
       {showSplit && (
         <div className="mb-2">
-          <div className="text-neutral2 flex items-baseline gap-3">
-            <span className="text-ui-md">Tokens Used</span>
-            <span className="text-ui-md text-neutral4 font-semibold">{total.toLocaleString()}</span>
-            <span className="text-ui-sm ml-auto">
+          <div className="flex items-baseline gap-3 text-placeholder">
+            <span className="text-body">Tokens Used</span>
+            <span className="text-subheading text-muted-foreground">{total.toLocaleString()}</span>
+            <span className="ml-auto text-caption">
               {Math.round(inputPct)}% Input vs {Math.round(outputPct)}% Output
             </span>
           </div>
-          <div className="bg-surface4 mt-2 rounded-md p-1.5">
+          <div className="mt-2 rounded-md bg-muted p-1.5">
             <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
               <div
                 className="absolute top-0 left-0 h-1.5"
@@ -80,11 +78,11 @@ function UsageColumn({
 }) {
   return (
     <div>
-      <div className="text-neutral2 mb-2 flex items-baseline gap-3">
-        <span className="text-ui-md">{label}</span>
+      <div className="mb-2 flex items-baseline gap-3 text-placeholder">
+        <span className="text-body">{label}</span>
         {typeof value === 'number' && (
           <span className="flex items-baseline gap-1.5">
-            <span className="text-ui-md text-neutral4 font-semibold">{value.toLocaleString()}</span>
+            <span className="text-subheading text-muted-foreground">{value.toLocaleString()}</span>
             <span className="size-2 self-center rounded-full" style={{ backgroundColor: color }} />
           </span>
         )}

@@ -175,6 +175,16 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('queued');
   });
 
+  it('shows the landed fallback pack and failed source pack', () => {
+    const state = createState();
+    state.fallbackStatus = { usingPack: 'OpenAI', failedPack: 'Anthropic' };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('Using fallback OpenAI (Anthropic failed)');
+  });
+
   it('shows active elapsed time directly after the model name', () => {
     vi.useFakeTimers();
     vi.setSystemTime(62_000);

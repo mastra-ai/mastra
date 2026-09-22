@@ -60,15 +60,15 @@ describe('platform connect routes', () => {
     });
   });
 
-  it('mints a connect session with the Jira integration id', async () => {
+  it('mints a connect session with the provider integration id', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(SESSION, 201));
     const app = buildApp(org1(), fetchImpl);
 
-    const response = await app.request('/web/integrations/platform/jira/connect-session', { method: 'POST' });
+    const response = await app.request('/web/integrations/platform/incident-io/connect-session', { method: 'POST' });
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(SESSION);
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://integrations.example.com/v2/integrations/jira/connect-sessions',
+      'https://integrations.example.com/v2/integrations/incident-io/connect-sessions',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ authorization: 'Bearer platform-secret' }),
@@ -93,11 +93,14 @@ describe('platform connect routes', () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(SESSION);
 
+    // A registered provider that does not own the connection: the ownership
+    // filter itself must reject, not the unknown-provider gate.
     const crossProvider = await app.request(
-      '/web/integrations/platform/notion/connections/conn-jira/reconnect-session',
+      '/web/integrations/platform/incident-io/connections/conn-jira/reconnect-session',
       { method: 'POST' },
     );
     expect(crossProvider.status).toBe(404);
+    await expect(crossProvider.json()).resolves.toEqual({ error: 'connection_not_found' });
   });
 
   it('rejects unknown providers, signed-out callers, and personal accounts', async () => {

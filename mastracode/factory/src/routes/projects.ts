@@ -154,6 +154,7 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   resolveRepository?: (input: {
     integrationId: string;
     orgId: string;
+    userId: string;
     installationId: string;
     externalId: string;
     slug: string;
@@ -452,6 +453,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               ? await this.deps.resolveRepository({
                   integrationId: found.connection.integrationId,
                   orgId: tenant.orgId,
+                  userId: tenant.userId,
                   installationId: found.connection.installationId,
                   ...input.repository,
                 })

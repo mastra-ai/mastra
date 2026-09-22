@@ -1,6 +1,6 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { useState, useCallback, useMemo } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
@@ -78,13 +78,13 @@ export function SkillFolder({
 
   return (
     <div className="grid h-full grid-cols-[300px_1fr]">
-      <div className="border-border1 h-full overflow-y-auto border-r p-4">
+      <div className="h-full overflow-y-auto border-r border-border p-4">
         {workspaceOptions.length > 0 && (
           <div className="flex flex-col gap-1.5 pb-4">
-            <Txt as="label" variant="ui-sm" className="text-neutral3">
-              Workspace
-            </Txt>
+            <FieldBlock.Label name="skill-workspace">Workspace</FieldBlock.Label>
             <Combobox
+              id="input-skill-workspace"
+              name="skill-workspace"
               options={workspaceOptions}
               value={workspaceId}
               onValueChange={setWorkspaceId}
@@ -107,11 +107,11 @@ export function SkillFolder({
         {isFileSelected ? (
           <>
             {isImage ? (
-              <div className="bg-surface2 flex flex-1 items-center justify-center p-4">
+              <div className="flex flex-1 items-center justify-center bg-background p-4">
                 <img
                   src={selectedFileContent}
                   alt={selectedFileName}
-                  className="max-h-dropdown-max-height max-w-full rounded-md object-contain"
+                  className="max-h-dropdown max-w-full rounded-md object-contain"
                 />
               </div>
             ) : (
@@ -127,7 +127,7 @@ export function SkillFolder({
             )}
           </>
         ) : (
-          <div className="text-neutral3 text-ui-sm flex h-full items-center justify-center">
+          <div className="flex h-full items-center justify-center text-caption text-muted-foreground">
             Select a file to edit its content
           </div>
         )}

@@ -88,7 +88,7 @@ function FeedbackSummary({ feedback, onMarkReviewed, isMarkingReviewed }: Feedba
   const author = feedbackAuthorLabel(feedback) ?? feedback.feedbackUserId;
 
   return (
-    <section aria-label="Feedback" className="border-border1 flex max-h-[33vh] shrink-0 flex-col border-b">
+    <section aria-label="Feedback" className="flex max-h-[33vh] shrink-0 flex-col border-b border-border">
       <DataPanel.Header>
         <DataPanel.HeaderContent>
           <DataPanel.Heading>
@@ -126,7 +126,7 @@ function FeedbackSummary({ feedback, onMarkReviewed, isMarkingReviewed }: Feedba
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <div className="min-h-0 overflow-y-auto p-3">
-        <Txt as="p" variant="ui-md" className="text-neutral5 whitespace-pre-wrap">
+        <Txt as="p" variant="body" tone="ink" className="whitespace-pre-wrap">
           {feedbackDisplayValue(feedback)}
         </Txt>
       </div>

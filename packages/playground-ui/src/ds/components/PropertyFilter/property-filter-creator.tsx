@@ -15,10 +15,12 @@ import type { ButtonProps } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 // Plain <button>s navigated with roving focus (not Base UI), so the highlight rides on `:focus`.
-const filterItemFocusClass = 'focus:bg-neutral6/5 focus:text-neutral6';
+const filterItemFocusClass = 'focus:bg-fill-subtle focus:text-foreground';
 
 export type PropertyFilterCreatorProps = {
   fields: PropertyFilterField[];
@@ -181,13 +183,13 @@ export function PropertyFilterCreator({
               <button
                 type="button"
                 aria-label="Back to properties"
-                className="text-neutral3 hover:text-neutral6 transition-colors"
+                className={cn(quietTextHover, controlStateColorTransition)}
                 onClick={reset}
               >
                 <ArrowLeftIcon className="size-4" />
               </button>
-              <FilterIcon className="text-neutral3 size-4 shrink-0" />
-              <span className="text-ui-sm text-neutral3">{`${selectedField.label} · is`}</span>
+              <FilterIcon className="size-4 shrink-0 text-muted-foreground" />
+              <span className="text-caption text-muted-foreground">{`${selectedField.label} · is`}</span>
             </div>
           )}
 
@@ -250,12 +252,12 @@ export function PropertyFilterCreator({
                     >
                       <span className="truncate">{f.label}</span>
                       {used ? (
-                        <span className="text-neutral3 ml-auto">In use</span>
+                        <span className="ml-auto text-muted-foreground">In use</span>
                       ) : (
                         <span
                           className={cn(
                             menuItemTrailingIconClass,
-                            'text-neutral3 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
+                            'text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
                           )}
                         >
                           <PlusIcon />
@@ -283,10 +285,11 @@ export function PropertyFilterCreator({
               searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
               emptyText={selectedField.emptyText ?? 'No option found.'}
               size="md"
+              name={`property-filter-${selectedField.id}`}
+              aria-label={selectedField.label}
+              error={error}
             />
           )}
-
-          {error && <div className="text-ui-sm text-red-500">{error}</div>}
 
           {selectedField && (
             <div className="flex items-center justify-end gap-2">
@@ -351,10 +354,10 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="text-neutral3" />}
+          {open && <ChevronRightIcon className="text-muted-foreground" />}
           <span className="truncate">{field.label}</span>
           {!open && (
-            <span className={cn(menuItemTrailingIconClass, 'text-neutral3')}>
+            <span className={cn(menuItemTrailingIconClass, 'text-muted-foreground')}>
               <ChevronRightIcon />
             </span>
           )}

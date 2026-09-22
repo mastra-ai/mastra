@@ -113,6 +113,29 @@ describe('fluid-menu primitive', () => {
     });
   });
 
+  describe('when rows unmount and new ones mount (virtualized lists)', () => {
+    it('reuses the released index instead of growing the index space', async () => {
+      const view = await setup({ rows: ['a', 'b', 'c'] });
+      view.rerender(<Menu rows={['a', 'b']} />);
+      view.rerender(<Menu rows={['a', 'b', 'd']} />);
+      screen.getAllByRole('button').forEach((row, i) => stubLayout(row, i * ROW_HEIGHT));
+      await flushFrames();
+
+      fireEvent.mouseMove(screen.getByTestId('menu'), { clientX: 10, clientY: ROW_HEIGHT * 2 + 5 });
+      await flushFrames();
+      expect(activeRow()).toBe('d');
+      expect(screen.getByTestId('menu').getAttribute('data-fluid-hover-active-index')).toBe('2');
+    });
+
+    it('skips a natively disabled row', async () => {
+      await setup();
+      (screen.getByText('c') as HTMLButtonElement).disabled = true;
+      fireEvent.mouseMove(screen.getByTestId('menu'), { clientX: 10, clientY: ROW_HEIGHT * 2 + 5 });
+      await flushFrames();
+      expect(activeRow()).toBe('a');
+    });
+  });
+
   describe('when a row renders outside a provider', () => {
     it('still renders and forwards its ref', () => {
       const ref = React.createRef<HTMLButtonElement>();

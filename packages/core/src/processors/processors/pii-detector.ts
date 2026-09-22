@@ -1,4 +1,3 @@
-import * as crypto from 'node:crypto';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
@@ -466,11 +465,13 @@ export class PIIDetector implements Processor<'pii-detector'> {
       // Apply redaction method if not already provided and we have detections
       if (this.strategy === 'redact') {
         if (!result.redacted_content && result.detections && result.detections.length > 0) {
-          result.redacted_content = this.applyRedactionMethod(content, result.detections);
-          result.detections = result.detections.map(detection => ({
-            ...detection,
-            redacted_value: detection.redacted_value || this.redactValue(detection.value, detection.type),
-          }));
+          result.redacted_content = await this.applyRedactionMethod(content, result.detections);
+          result.detections = await Promise.all(
+            result.detections.map(async detection => ({
+              ...detection,
+              redacted_value: detection.redacted_value || (await this.redactValue(detection.value, detection.type)),
+            })),
+          );
         }
       }
 
@@ -589,13 +590,13 @@ export class PIIDetector implements Processor<'pii-detector'> {
     return regions;
   }
 
-  private applyRedactionMethod(content: string, detections: PIIDetection[]): string {
+  private async applyRedactionMethod(content: string, detections: PIIDetection[]): Promise<string> {
     const regions = this.buildRedactionRegions(detections);
     let cursor = 0;
     let redacted = '';
     for (const region of regions) {
       redacted += content.slice(cursor, region.start);
-      redacted += this.redactValue(content.slice(region.start, region.end), region.owner.type);
+      redacted += await this.redactValue(content.slice(region.start, region.end), region.owner.type);
       cursor = region.end;
     }
     return redacted + content.slice(cursor);
@@ -604,7 +605,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
   /**
    * Redact individual PII value based on method and type
    */
-  private redactValue(value: string, type: string): string {
+  private async redactValue(value: string, type: string): Promise<string> {
     switch (this.redactionMethod) {
       case 'mask':
         return this.maskValue(value, type);
@@ -694,8 +695,10 @@ export class PIIDetector implements Processor<'pii-detector'> {
   /**
    * Hash PII value using SHA256
    */
-  private hashValue(value: string): string {
-    return `[HASH:${crypto.createHash('sha256').update(value).digest('hex').slice(0, 8)}]`;
+  private async hashValue(value: string): Promise<string> {
+    const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
+    const hash = Array.from(digest.subarray(0, 4), byte => byte.toString(16).padStart(2, '0')).join('');
+    return `[HASH:${hash}]`;
   }
 
   /**
@@ -737,9 +740,9 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
    * Context-dependent types (name, address, date-of-birth) are skipped
    * here and handled by the LLM-based detectPII in processOutputResult.
    */
-  private detectPIILocal(content: string): PIIDetectionResult {
+  private async detectPIILocal(content: string): Promise<PIIDetectionResult> {
     const categories: PIICategoryScores = [];
-    const detections: PIIDetection[] = [];
+    let detections: PIIDetection[] = [];
 
     for (const type of this.detectionTypes) {
       if (PIIDetector.LLM_ONLY_TYPES.has(type)) continue;
@@ -757,9 +760,17 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           confidence: 1.0,
           start: match.index,
           end: match.index + match[0].length,
-          ...(this.strategy === 'redact' ? { redacted_value: this.redactValue(match[0], type) } : {}),
         });
       }
+    }
+
+    if (this.strategy === 'redact') {
+      detections = await Promise.all(
+        detections.map(async detection => ({
+          ...detection,
+          redacted_value: await this.redactValue(detection.value, detection.type),
+        })),
+      );
     }
 
     const detectedTypes = new Set(detections.map(d => d.type));
@@ -769,7 +780,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     let redacted_content: string | null | undefined;
     if (this.strategy === 'redact' && detections.length > 0) {
-      redacted_content = this.applyRedactionMethod(content, detections);
+      redacted_content = await this.applyRedactionMethod(content, detections);
     } else if (this.strategy === 'redact') {
       redacted_content = null;
     }
@@ -913,7 +924,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       if (part.type === 'text-delta') {
         const previousLength = (state._piiRegexTail as string | undefined)?.length ?? 0;
         const combined = this.appendRegexCarryover(state, part as ChunkType & { type: 'text-delta' });
-        const regexResult = this.detectPIILocal(combined);
+        const regexResult = await this.detectPIILocal(combined);
         if (regexResult.detections?.some(detection => detection.end > previousLength)) {
           await this.emitDetection(combined, regexResult, true);
         }
@@ -931,7 +942,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       state._piiRegexTailPart = undefined;
 
       if (carryover && carryoverPart) {
-        const regexResult = this.detectPIILocal(carryover);
+        const regexResult = await this.detectPIILocal(carryover);
         const redacted = regexResult.redacted_content ?? carryover;
         if (this.hasLLMOnlyTypes) {
           if (!state._piiFirstPayloadId) {
@@ -963,7 +974,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     const previousLength = (state._piiRegexTail as string | undefined)?.length ?? 0;
     const combined = this.appendRegexCarryover(state, textPart);
-    const regexResult = this.detectPIILocal(combined);
+    const regexResult = await this.detectPIILocal(combined);
     const detections = regexResult.detections ?? [];
     const hasNewPII = detections.some(detection => detection.end > previousLength);
     if (hasNewPII) await this.emitDetection(combined, regexResult, true);
@@ -976,7 +987,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       if (region.start < emitEnd && region.end > emitEnd) emitEnd = region.start;
     }
 
-    const emitted = this.applyRedactionMethod(
+    const emitted = await this.applyRedactionMethod(
       combined.slice(0, emitEnd),
       detections.filter(detection => detection.end <= emitEnd),
     );
@@ -1079,7 +1090,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       // Step 1: Regex-based detection with carryover for split PII
       const tail: string = state._piiRegexTail || '';
       const combined = tail + textContent;
-      const regexResult = this.detectPIILocal(combined);
+      const regexResult = await this.detectPIILocal(combined);
       // Update tail for next chunk
       state._piiRegexTail = combined.slice(-PIIDetector.REGEX_CARRYOVER_SIZE);
 

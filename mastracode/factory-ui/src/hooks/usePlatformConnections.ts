@@ -38,6 +38,12 @@ function useInvalidateProviderState(provider: PlatformConnectProviderId) {
             queryClient.invalidateQueries({ queryKey: queryKeys.jiraProjects() }),
           ]
         : []),
+      ...(provider === 'incident-io'
+        ? [
+            queryClient.invalidateQueries({ queryKey: queryKeys.incidentioStatus() }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.incidentioSources() }),
+          ]
+        : []),
     ]);
   };
 }

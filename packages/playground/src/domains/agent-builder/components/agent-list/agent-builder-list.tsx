@@ -3,7 +3,7 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { LockIcon, CircleSlashIcon } from 'lucide-react';
+import { LockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { FavoriteButton } from './favorite-button';
 import { useLinkComponent } from '@/lib/framework';
@@ -45,9 +45,9 @@ function AuthorBadge({ agent, className }: { agent: StoredAgentResponse; classNa
   const avatarUrl = agent.author?.avatarUrl;
 
   return (
-    <div className={cn('flex items-center gap-1.5 min-w-0', className)} data-testid="agent-builder-row-author">
+    <div className={cn('flex min-w-0 items-center gap-1.5', className)} data-testid="agent-builder-row-author">
       <Avatar name={label} src={avatarUrl} size="sm" />
-      <span className="text-ui-xs text-neutral3 truncate">{label}</span>
+      <span className="truncate text-meta text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -57,11 +57,11 @@ function PrivateVisibilityIcon() {
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className="text-neutral3 shrink-0"
+          className="shrink-0 text-muted-foreground"
           aria-label="Private agent"
           data-testid="agent-builder-private-visibility-icon"
         >
-          <Icon size="sm">
+          <Icon size="xs">
             <LockIcon />
           </Icon>
         </span>
@@ -88,17 +88,13 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
   if (filtered.length === 0) {
     return (
       <div className="flex items-center-safe justify-center-safe">
-        <EmptyState
-          iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
-          titleSlot="No agents match your search"
-          descriptionSlot="Try a different name or description."
-        />
+        <EmptyState titleSlot="No agents match your search" descriptionSlot="Try a different name or description." />
       </div>
     );
   }
 
   return (
-    <div className="bg-surface2 border-border1 divide-border1 h-full content-start divide-y overflow-y-auto rounded-xl border">
+    <div className="h-full content-start divide-y divide-border overflow-y-auto rounded-xl border border-border bg-background">
       {filtered.map(agent => {
         const avatar = getAvatarUrl(agent);
 
@@ -106,18 +102,20 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
           <Link
             key={agent.id}
             href={`/agent-builder/agents/${agent.id}/view`}
-            className="hover:bg-surface3 flex items-start gap-4 px-4 py-3 transition-colors md:items-center"
+            className="flex items-start gap-4 px-4 py-3 hover:bg-fill-subtle md:items-center"
             data-testid={rowTestId}
           >
             <Avatar name={agent.name ?? ''} src={avatar} size="lg" />
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
+                <div className="truncate text-body text-foreground">{agent.name}</div>
                 {agent.visibility === 'private' && <PrivateVisibilityIcon />}
               </div>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
+                <span className="line-clamp-1 text-caption text-muted-foreground">
+                  {agent.description || 'No description'}
+                </span>
               </div>
               <AuthorBadge agent={agent} className="mt-2 md:hidden" />
               {showFavorites && (
@@ -150,12 +148,12 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
 
 export function AgentBuilderListSkeleton({ rows = 4, rowTestId }: AgentBuilderListSkeletonProps) {
   return (
-    <div className="bg-surface2 border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
+    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-background">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-4 px-4 py-3" data-testid={rowTestId}>
           <div className="min-w-0 flex-1 space-y-2">
-            <div className="bg-surface3 h-3.5 w-48 animate-pulse rounded" />
-            <div className="bg-surface3 h-3 w-72 max-w-full animate-pulse rounded" />
+            <div className="h-3.5 w-48 animate-pulse rounded bg-card" />
+            <div className="h-3 w-72 max-w-full animate-pulse rounded bg-card" />
           </div>
         </div>
       ))}

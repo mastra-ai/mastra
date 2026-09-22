@@ -299,6 +299,12 @@ export interface SessionMachinery {
     untilIdle?: boolean | { maxIdleMs?: number };
     /** Queue preparation owns this signal instead of mutating the active Session run. */
     abortSignal?: AbortSignal;
+    /**
+     * Thread the run should read and write, when it is not the session's current
+     * one — a claimed thread being woken by a peer, for instance. Memory and
+     * request-context thread bindings follow this value.
+     */
+    threadId?: string;
   }): Promise<Record<string, unknown>>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
   buildSharedRunOptions(): Record<string, unknown>;
@@ -523,8 +529,14 @@ export class SessionThread {
 
   /** Read a setting (metadata value) for the active thread. */
   async getSetting({ key }: { key: string }): Promise<unknown> {
-    if (!this.#store || this.#threadId === null) return undefined;
-    return this.#store.getMetadata({ threadId: this.#threadId, key });
+    if (this.#threadId === null) return undefined;
+    return this.getSettingOn({ threadId: this.#threadId, key });
+  }
+
+  /** Read a setting from a specific thread, regardless of the current binding. */
+  async getSettingOn({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
+    if (!this.#store) return undefined;
+    return this.#store.getMetadata({ threadId, key });
   }
 
   /** Persist a setting (metadata value) for the active thread. */
@@ -589,9 +601,14 @@ export class SessionThread {
     await this.ensureSubscription(this.#threadId);
   }
 
-  /** Detach from the current thread: abort the run and tear down the subscription. */
+  /**
+   * Detach from the current thread: stop this process's run and tear down the
+   * subscription. The abort is local — unbinding a thread must not reach a remote
+   * owner and kill its run (another instance on the same thread may be the one
+   * actually running it).
+   */
   detachFromCurrent(): void {
-    this.#owner.abort();
+    this.#owner.abort({ localOnly: true });
     this.cleanupSubscription();
   }
 
@@ -800,7 +817,7 @@ export class SessionThread {
   async switch({ threadId, emitEvent = true }: { threadId: string; emitEvent?: boolean }): Promise<void> {
     const session = this.#owner;
     const store = this.#store;
-    session.abort();
+    session.abort({ localOnly: true });
     this.cleanupSubscription();
 
     // Acquire lock on new thread before releasing old one.
@@ -1093,10 +1110,14 @@ export class SessionStream {
     return this.activeRunId() !== null;
   }
 
-  /** Abort the live subscription's in-flight run, if any. Swallows errors. */
-  abort(): void {
+  /**
+   * Abort the live subscription's in-flight run, if any. Swallows errors.
+   * `localOnly` keeps an abort caused by a thread lifecycle transition (detach,
+   * switch) from asking a remote thread owner to stop its run.
+   */
+  abort(options?: { localOnly?: boolean }): void {
     try {
-      this.#subscription?.abort();
+      this.#subscription?.abort(options);
     } catch {}
   }
 
@@ -1109,9 +1130,13 @@ export class SessionStream {
     this.#notifyTeardown();
   }
 
-  /** Fully tear down the live subscription: abort, unsubscribe, and clear. */
+  /**
+   * Fully tear down the live subscription: abort, unsubscribe, and clear. This is
+   * a lifecycle teardown, so the abort stays local — the binding is being dropped,
+   * not the run cancelled, and a remote owner's run must survive it.
+   */
   cleanup(): void {
-    this.#subscription?.abort();
+    this.#subscription?.abort({ localOnly: true });
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#agent = null;
@@ -2167,9 +2192,14 @@ class SessionState<TState = unknown> {
     return defaults as Partial<TState>;
   }
 
-  private async apply(updates: Partial<TState>, persistSetting?: PersistSettingFn): Promise<void> {
+  private async apply(
+    updates: Partial<TState>,
+    persistSetting?: PersistSettingFn,
+    shouldApply?: () => boolean,
+  ): Promise<boolean> {
     const changedKeys = Object.keys(updates as Record<string, unknown>);
     const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
+    let validatedState: TState;
 
     if (this.#schema) {
       const result = await this.#schema['~standard'].validate(newState);
@@ -2177,10 +2207,16 @@ class SessionState<TState = unknown> {
         const messages = result.issues.map(i => i.message).join('; ');
         throw new Error(`Invalid state update: ${messages}`);
       }
-      this.#state = result.value as TState;
+      validatedState = result.value as TState;
     } else {
-      this.#state = newState as TState;
+      validatedState = newState as TState;
     }
+
+    // Re-check after async schema validation, immediately before mutating the
+    // live session. Callers use this to prevent a queued update from crossing
+    // a session/thread ownership boundary while validation was in flight.
+    if (shouldApply && !shouldApply()) return false;
+    this.#state = validatedState;
 
     this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
 
@@ -2198,6 +2234,7 @@ class SessionState<TState = unknown> {
         }
       }
     }
+    return true;
   }
 
   set(updates: Partial<TState>): Promise<void> {
@@ -2205,7 +2242,21 @@ class SessionState<TState = unknown> {
     // Captured now, not at apply time: an update queued behind a thread switch
     // must persist to the thread that was active when the update was requested.
     const persistSetting = this.#capturePersistSetting?.();
-    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting));
+    const run = this.#updateQueue.then(async () => {
+      await this.apply(updateSnapshot, persistSetting);
+    });
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /** Apply an update only while a caller-owned identity still matches. */
+  setIf(updates: Partial<TState>, shouldApply: () => boolean): Promise<boolean> {
+    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
+    const persistSetting = this.#capturePersistSetting?.();
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting, shouldApply));
     this.#updateQueue = run.then(
       () => undefined,
       () => undefined,
@@ -2949,6 +3000,8 @@ export class Session<TState = unknown> {
   readonly #grantedTools = new Set<string>();
   /** Running token-usage tally for the active thread. */
   #tokenUsage: TokenUsage = createEmptyTokenUsage();
+  /** Whether the in-flight abort teardown must stay local to this process. */
+  #localOnlyAbort = false;
   /** Thread-settings persistence handle, injected by the AgentController via {@link setStore}. */
   #store: ThreadSettingsStore | undefined;
   /** Resolves a tool name to its category, injected by the AgentController via {@link setCategoryResolver} (the category map is AgentController config). */
@@ -3262,7 +3315,7 @@ export class Session<TState = unknown> {
    * awaiting `approval.arm()` is not streaming, so we resolve it as a decline so
    * the gated tool is rejected and the run can finalize rather than hang.
    */
-  abortRun(): void {
+  abortRun(options: { localOnly?: boolean } = {}): void {
     // Aborting twice while a gate is parked would tear the stream down before
     // the deferred decline lands (the second call sees the gate already
     // cancelled), which is the exact failure the deferral exists to avoid. Two
@@ -3276,6 +3329,10 @@ export class Session<TState = unknown> {
     for (const { toolCallId, toolName } of suspendedToolCalls) {
       this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
     }
+
+    // The teardown may be deferred (below), so remember whether this abort should
+    // stay local for when it actually runs.
+    this.#localOnlyAbort = options.localOnly === true;
 
     // A parked approval gate is special: the agent-side run is still alive and
     // waiting for the decision, so the gated call must be declined through it
@@ -3306,7 +3363,7 @@ export class Session<TState = unknown> {
       return;
     }
 
-    this.stream.abort();
+    this.stream.abort({ localOnly: this.#localOnlyAbort });
     this.run.requestAbort();
   }
 
@@ -3317,7 +3374,7 @@ export class Session<TState = unknown> {
    * through the agent, so the denial is persisted before the run is torn down.
    */
   completeDeferredAbort(): void {
-    this.stream.abort();
+    this.stream.abort({ localOnly: this.#localOnlyAbort });
     this.run.requestAbort();
   }
 
@@ -3329,10 +3386,10 @@ export class Session<TState = unknown> {
    * additionally clears the display-state mirror of those suspensions and
    * notifies subscribers so stale suspension UI doesn't linger.
    */
-  abort(): void {
+  abort(options: { localOnly?: boolean } = {}): void {
     const hadPendingSuspensions = this.displayState.get().pendingSuspensions.size > 0;
     this.displayState.clearPendingSuspensions();
-    this.abortRun();
+    this.abortRun(options);
     // Clearing the suspension mirror is a direct mutation, so it doesn't flow
     // through the display-state reducer. Notify subscribers explicitly when we
     // actually removed something, otherwise stale suspension UI can linger.

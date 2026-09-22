@@ -207,7 +207,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["childSpanTool"],
                       "toolChoice": "auto",
                       "usage": {
@@ -434,7 +436,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["childSpanTool"],
                       "toolChoice": "auto",
                       "usage": {

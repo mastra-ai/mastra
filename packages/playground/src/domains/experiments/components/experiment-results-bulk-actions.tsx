@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { ClipboardCheck, X } from 'lucide-react';
 
 import type { ExperimentResultsSelection } from '../hooks/use-experiment-results-selection';
@@ -17,7 +16,7 @@ export function ExperimentResultsBulkActions({ selection }: ExperimentResultsBul
   const busy = isFlagging || isTagging;
 
   return (
-    <ButtonsGroup className="whitespace-nowrap">
+    <div className="flex items-center gap-2 whitespace-nowrap">
       <Button variant="outline" disabled={busy} onClick={selection.flagSelectedForReview} icon={<ClipboardCheck />}>
         Flag {selectedIds.size} to review
       </Button>
@@ -30,6 +29,6 @@ export function ExperimentResultsBulkActions({ selection }: ExperimentResultsBul
       <Button icon={<X />} variant="ghost" onClick={selection.clearSelection}>
         Clear
       </Button>
-    </ButtonsGroup>
+    </div>
   );
 }

@@ -14,8 +14,38 @@ import { protocolExternalResolver } from '../plugins/protocol-external-resolver'
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
-import { getPackageName, isBareModuleSpecifier, slash } from '../utils';
+import { getPackageName, isBareModuleSpecifier, isDependencyPartOfPackage, slash } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
+
+function analysisExternals({
+  workspaceMap,
+  externals,
+  externalsPreset,
+}: {
+  workspaceMap: Map<string, WorkspacePackageInfo>;
+  externals: string[];
+  externalsPreset: boolean;
+}): Plugin {
+  return {
+    name: 'analysis-externals',
+    resolveId(source) {
+      if (!isBareModuleSpecifier(source)) {
+        return null;
+      }
+
+      const packageName = getPackageName(source);
+      if (packageName && workspaceMap.has(packageName)) {
+        return null;
+      }
+
+      if (externalsPreset || externals.some(external => isDependencyPartOfPackage(source, external))) {
+        return { id: source, external: true };
+      }
+
+      return null;
+    },
+  };
+}
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
@@ -24,7 +54,19 @@ import { DEPS_TO_IGNORE } from './constants';
 function getInputPlugins(
   { entry, isVirtualFile }: { entry: string; isVirtualFile: boolean },
   mastraEntry: string,
-  { sourcemapEnabled, env }: { sourcemapEnabled: boolean; env: Record<string, string> },
+  {
+    sourcemapEnabled,
+    env,
+    workspaceMap,
+    externals,
+    externalsPreset,
+  }: {
+    sourcemapEnabled: boolean;
+    env: Record<string, string>;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+    externals: string[];
+    externalsPreset: boolean;
+  },
 ): Plugin[] {
   let virtualPlugin = null;
   if (isVirtualFile) {
@@ -45,6 +87,7 @@ function getInputPlugins(
       mastraInternalAliasPlugin(mastraEntry),
       mastraToolsAliasPlugin(),
       tsConfigPaths(),
+      analysisExternals({ workspaceMap, externals, externalsPreset }),
       json(),
       esbuild({ define: env }),
       commonjs({
@@ -79,6 +122,8 @@ async function captureDependenciesToOptimize(
     env,
     analyzeCache,
     activeEntries,
+    externals,
+    externalsPreset,
   }: {
     logger: IMastraLogger;
     mastraEntry: string;
@@ -88,6 +133,8 @@ async function captureDependenciesToOptimize(
     analyzeCache?: Map<string, AnalyzeEntryResult>;
     /** Resolved entries currently being analyzed in this recursion path */
     activeEntries: Set<string>;
+    externals: string[];
+    externalsPreset: boolean;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -179,6 +226,8 @@ async function captureDependenciesToOptimize(
         shouldCheckTransitiveDependencies: true,
         analyzeCache,
         activeEntries,
+        externals,
+        externalsPreset,
       });
 
       if (!analysis?.dependencies) {
@@ -286,6 +335,8 @@ export async function analyzeEntry(
     shouldCheckTransitiveDependencies = false,
     analyzeCache,
     activeEntries: providedActiveEntries,
+    externals = [],
+    externalsPreset = false,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
@@ -297,13 +348,18 @@ export async function analyzeEntry(
     analyzeCache?: Map<string, AnalyzeEntryResult>;
     /** Resolved entries currently being analyzed in this recursion path */
     activeEntries?: Set<string>;
+    /** Dependencies that must remain external during analysis */
+    externals?: string[];
+    /** Whether all non-workspace dependencies must remain external during analysis */
+    externalsPreset?: boolean;
   },
 ): Promise<AnalyzeEntryResult> {
   const resolvedEntry = isVirtualFile ? undefined : slash(entry);
   const effectiveAnalyzeCache = analyzeCache ?? new Map<string, AnalyzeEntryResult>();
   // Transitive analysis produces a different result from direct analysis, so cache them separately.
+  const externalsCacheKey = JSON.stringify([externalsPreset, [...externals].sort()]);
   const cacheKey = resolvedEntry
-    ? `${resolvedEntry}:${shouldCheckTransitiveDependencies ? 'transitive' : 'direct'}`
+    ? `${resolvedEntry}:${shouldCheckTransitiveDependencies ? 'transitive' : 'direct'}:${externalsCacheKey}`
     : undefined;
   if (cacheKey && effectiveAnalyzeCache.has(cacheKey)) {
     return effectiveAnalyzeCache.get(cacheKey)!;
@@ -321,8 +377,14 @@ export async function analyzeEntry(
       input: isVirtualFile ? '#entry' : entry,
       treeshake: false,
       preserveSymlinks: true,
-      plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled, env }),
-      external: DEPS_TO_IGNORE,
+      plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, {
+        sourcemapEnabled,
+        env,
+        workspaceMap,
+        externals,
+        externalsPreset,
+      }),
+      external: id => DEPS_TO_IGNORE.some(dep => isDependencyPartOfPackage(id, dep)),
     });
 
     const { output } = await (async () => {
@@ -343,6 +405,8 @@ export async function analyzeEntry(
       env,
       analyzeCache: effectiveAnalyzeCache,
       activeEntries,
+      externals,
+      externalsPreset,
     });
 
     const result: AnalyzeEntryResult = {

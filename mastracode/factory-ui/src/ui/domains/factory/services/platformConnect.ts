@@ -13,7 +13,7 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira';
+export type PlatformConnectProviderId = 'jira' | 'incident-io';
 
 /** How the provider authorizes: OAuth consent popup or an API-key form. */
 export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
@@ -26,6 +26,7 @@ export interface PlatformConnectProviderMeta {
 
 export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
+  'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
 };
 
 export interface PlatformProviderConnection {
@@ -45,11 +46,19 @@ export interface PlatformConnectSession {
 }
 
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-    ...init,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+      ...init,
+    });
+  } catch (cause) {
+    const err = new Error('Network request failed');
+    (err as { transient?: boolean }).transient = true;
+    (err as { cause?: unknown }).cause = cause;
+    throw err;
+  }
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     let code: string | undefined;
@@ -63,9 +72,33 @@ async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit)
     }
     const err = new Error(message);
     (err as { code?: string }).code = code;
+    (err as { status?: number }).status = res.status;
     throw err;
   }
   return (await res.json()) as T;
+}
+
+/**
+ * Only confirmed transient failures are worth retrying: fetch rejections
+ * (tagged by `requestJson`) and 5xx responses. Everything else — 4xx (auth,
+ * gating) and contract failures like malformed JSON — fails immediately.
+ */
+function isRetryableListFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if ((error as { transient?: boolean }).transient === true) return true;
+  const status = (error as { status?: number }).status;
+  return status !== undefined && status >= 500;
+}
+
+/**
+ * True when the server says Platform connect is not offered here (auth off,
+ * no Platform credentials) — a 403/404, as opposed to a transient failure.
+ * Consumers hide the feature for the former and show a retry for the latter.
+ */
+export function isPlatformConnectUnavailableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const status = (error as { status?: number }).status;
+  return status === 403 || status === 404;
 }
 
 /** List the org's Platform connections for one provider (all auth variants). */
@@ -166,9 +199,16 @@ export async function waitForActiveConnection(
   const intervalMs = options.intervalMs ?? ACTIVE_POLL_INTERVAL_MS;
   const deadline = Date.now() + (options.deadlineMs ?? ACTIVE_POLL_DEADLINE_MS);
   for (;;) {
-    const connections = await listPlatformConnections(baseUrl, provider);
-    const connection = connections.find(candidate => candidate.id === connectionId);
-    if (connection?.status === 'active') return connection;
+    try {
+      const connections = await listPlatformConnections(baseUrl, provider);
+      const connection = connections.find(candidate => candidate.id === connectionId);
+      if (connection?.status === 'active') return connection;
+    } catch (error) {
+      // A transient list failure must not fail the whole connect flow — the
+      // vendor may already have confirmed auth. Keep polling until the
+      // deadline; permanent (4xx) failures still reject.
+      if (!isRetryableListFailure(error)) throw error;
+    }
     if (Date.now() >= deadline) return null;
     await new Promise(resolve => setTimeout(resolve, intervalMs));
   }

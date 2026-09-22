@@ -17,29 +17,27 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
   const title = reminder.path || reminder.type || 'System reminder';
 
   return (
-    <div className="border-border1 bg-surface2 overflow-hidden rounded-lg border">
+    <div className="overflow-hidden rounded-lg border border-border bg-background">
       <button
         type="button"
         onClick={() => setIsExpanded(value => !value)}
-        className="hover:bg-surface3 flex w-full items-start gap-3 px-4 py-3 text-left transition-colors"
+        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-fill-subtle"
       >
-        <FileText className="text-icon3 mt-0.5 size-4 shrink-0" />
+        <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <p className="text-ui-sm leading-ui-sm text-neutral6 font-medium">System reminder</p>
-          <p className="text-ui-xs leading-ui-xs text-neutral4 mt-1 break-all">{title}</p>
+          <p className="text-column text-foreground">System reminder</p>
+          <p className="mt-1 text-meta break-all text-muted-foreground">{title}</p>
         </div>
         {isExpanded ? (
-          <ChevronDown className="text-icon3 size-4 shrink-0" />
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="text-icon3 size-4 shrink-0" />
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
         )}
       </button>
 
       {isExpanded && reminder.body && (
-        <div className="border-border1 bg-surface1 border-t px-4 py-3">
-          <pre className="text-ui-xs leading-ui-md text-neutral5 font-mono break-words whitespace-pre-wrap">
-            {reminder.body}
-          </pre>
+        <div className="border-t border-border bg-sidebar px-4 py-3">
+          <pre className="font-mono text-meta break-words whitespace-pre-wrap text-foreground">{reminder.body}</pre>
         </div>
       )}
     </div>

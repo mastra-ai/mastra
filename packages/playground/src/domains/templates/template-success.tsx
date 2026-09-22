@@ -14,11 +14,11 @@ type TemplateSuccessProps = {
 
 export function TemplateSuccess({ name, installedEntities }: TemplateSuccessProps) {
   return (
-    <Container className={cn('grid items-center justify-items-center gap-4 content-center', '[&>svg]:w-8 [&>svg]:h-8')}>
+    <Container className={cn('grid content-center items-center justify-items-center gap-4', '[&>svg]:h-8 [&>svg]:w-8')}>
       <PackageOpenIcon />
-      <h2 className="text-header-md">Done!</h2>
-      <p className="text-ui-md text-neutral3 text-center">
-        The <b className="text-neutral4">{name}</b> template has been successfully installed.
+      <h2 className="text-heading">Done!</h2>
+      <p className="text-center text-body text-muted-foreground">
+        The <b className="text-muted-foreground">{name}</b> template has been successfully installed.
         {installedEntities && installedEntities.length > 0 && (
           <>
             <br /> Installed entities are listed below.

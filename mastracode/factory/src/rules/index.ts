@@ -2,6 +2,7 @@ export { resolveFactoryStageRules } from './resolve.js';
 export type { ResolvedFactoryStageRule } from './resolve.js';
 export {
   FACTORY_GITHUB_EVENTS,
+  FACTORY_INCIDENTIO_EVENTS,
   FACTORY_JIRA_EVENTS,
   FACTORY_LINEAR_EVENTS,
   FACTORY_RULE_BOARDS,
@@ -16,6 +17,8 @@ export type {
   FactoryCommitDecision,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
+  FactoryIncidentioEventName,
+  FactoryIncidentioRuleContext,
   FactoryJiraEventName,
   FactoryJiraRuleContext,
   FactoryLinearEventName,

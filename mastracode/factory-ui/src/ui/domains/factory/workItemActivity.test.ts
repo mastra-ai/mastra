@@ -202,6 +202,43 @@ describe('workItemActivity', () => {
     });
   });
 
+  it('shows GitLab authors and assignees as distinct external activity', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'gitlab-issue',
+        metadata: { identifier: 'group/project#7', assignee: 'grace', author: 'ada' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'gitlab:grace', name: 'grace' });
+    expect(activity.extraActors).toEqual({
+      'gitlab:grace': { id: 'gitlab:grace', name: 'grace' },
+      'gitlab:ada': { id: 'gitlab:ada', name: 'ada' },
+    });
+    expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
+      { id: `synthetic-assigned:${item.id}`, actorId: 'gitlab:grace' },
+      { id: `synthetic-created:${item.id}`, actorId: 'gitlab:ada' },
+    ]);
+  });
+
+  it('uses the first GitLab assignee from webhook metadata when the singular field is absent', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'gitlab-issue',
+        metadata: { author: 'ada', assignees: ['grace', 'linus'] },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'gitlab:grace', name: 'grace' });
+    expect(activity.events[0]?.actorId).toBe('gitlab:grace');
+  });
+
   it('falls back to the Linear assignee without an avatar url', () => {
     const activity = workItemActivity(
       {
@@ -236,6 +273,28 @@ describe('workItemActivity', () => {
     expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
       { id: `synthetic-assigned:${item.id}`, actorId: 'jira:Ada' },
       { id: `synthetic-created:${item.id}`, actorId: 'jira:Grace' },
+    ]);
+  });
+
+  it('shows incident.io creator and assignee metadata like Linear work items', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'incidentio-follow-up',
+        metadata: { identifier: 'INC-42', assignee: 'Grace Hopper', creator: 'Ada Lovelace' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'incidentio:Grace Hopper', name: 'Grace Hopper' });
+    expect(activity.extraActors).toEqual({
+      'incidentio:Grace Hopper': { id: 'incidentio:Grace Hopper', name: 'Grace Hopper' },
+      'incidentio:Ada Lovelace': { id: 'incidentio:Ada Lovelace', name: 'Ada Lovelace' },
+    });
+    expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
+      { id: `synthetic-assigned:${item.id}`, actorId: 'incidentio:Grace Hopper' },
+      { id: `synthetic-created:${item.id}`, actorId: 'incidentio:Ada Lovelace' },
     ]);
   });
 

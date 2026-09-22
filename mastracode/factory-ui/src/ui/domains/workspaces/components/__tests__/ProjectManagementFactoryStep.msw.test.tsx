@@ -38,18 +38,24 @@ describe('ProjectManagementFactoryStep', () => {
     });
   });
 
-  describe('given the Jira connect route is mounted', () => {
-    it('offers Jira as an equivalent choice beside Linear', async () => {
+  describe('given the Platform connect routes are mounted', () => {
+    it('offers Jira and incident.io as equivalent choices beside Linear', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
+          HttpResponse.json({ connections: [] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
           HttpResponse.json({ connections: [] }),
         ),
       );
       renderStep();
 
       expect(await screen.findByRole('button', { name: 'Connect Jira' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Connect incident.io' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Connect Linear/ })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
+      // The incident.io pane is scoped to follow-ups only.
+      expect(screen.getByText(/incident follow-ups/i)).toBeInTheDocument();
     });
 
     it('summarizes an active Jira account and unlocks Continue', async () => {
@@ -68,6 +74,21 @@ describe('ProjectManagementFactoryStep', () => {
       expect(screen.getByText('Connected to acme.atlassian.net.')).toBeInTheDocument();
       // Additional accounts are managed in Settings, not during onboarding.
       expect(screen.queryByRole('button', { name: 'Connect another' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    });
+
+    it('summarizes an active incident.io account', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
+          HttpResponse.json({
+            connections: [{ id: 'c1_acme', integrationId: 'incident-io', status: 'active', accountLabel: 'acme' }],
+          }),
+        ),
+      );
+      renderStep();
+
+      expect(await screen.findByText('incident.io connected')).toBeInTheDocument();
+      expect(screen.getByText('Connected to acme.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
   });

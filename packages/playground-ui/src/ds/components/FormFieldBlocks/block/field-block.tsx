@@ -3,6 +3,7 @@ import { FieldBlockErrorMsg } from './field-block-error-msg';
 import { FieldBlockHelpText } from './field-block-help-text';
 import { FieldBlockLabel } from './field-block-label';
 import { FieldBlockLayout } from './field-block-layout';
+import { FieldBlockMessage } from './field-block-message';
 
 export const FieldBlock = Object.assign(
   {},
@@ -12,5 +13,6 @@ export const FieldBlock = Object.assign(
     Label: FieldBlockLabel,
     HelpText: FieldBlockHelpText,
     ErrorMsg: FieldBlockErrorMsg,
+    Message: FieldBlockMessage,
   },
 );
