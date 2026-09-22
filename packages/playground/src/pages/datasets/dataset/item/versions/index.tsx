@@ -158,7 +158,7 @@ function DatasetItemVersionsComparePage() {
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         canDiff && (
-          <Button variant="outline" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
+          <Button variant="ghost" size="sm" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
             {isDiffView ? (
               <>
                 <ColumnsIcon /> Default View

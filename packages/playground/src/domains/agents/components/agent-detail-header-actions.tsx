@@ -28,9 +28,9 @@ export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsPr
   const showEditButton = canCreateAgent && agent?.source === 'stored' && Boolean(editPath);
 
   return (
-    <div className="flex items-center gap-2">
+    <>
       {showEditButton && (
-        <Button variant="outline" size="sm" render={<FrameworkLink href={editPath} />} icon={<Pencil />}>
+        <Button variant="ghost" size="sm" render={<FrameworkLink href={editPath} />} icon={<Pencil />}>
           Edit
         </Button>
       )}
@@ -46,6 +46,6 @@ export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsPr
         {isShareCopied ? <Check /> : <LinkIcon />}
       </Button>
       <AgentConfigToggle />
-    </div>
+    </>
   );
 }

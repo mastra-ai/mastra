@@ -1,5 +1,4 @@
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -12,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
@@ -281,8 +281,7 @@ function CmsPromptBlocksEditPage() {
   }
 
   const actions = (
-    <div className="flex items-center gap-2">
-      {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
+    <CmsEditHeaderActions hasDraft={hasDraft}>
       <PromptBlockVersionCombobox
         blockId={blockId}
         value={selectedVersionId ?? ''}
@@ -291,7 +290,7 @@ function CmsPromptBlocksEditPage() {
         activeVersionId={activeVersionId}
       />
       {isCmsAvailable && <DeletePromptBlockAction blockId={blockId} blockName={block.name} />}
-    </div>
+    </CmsEditHeaderActions>
   );
 
   return (

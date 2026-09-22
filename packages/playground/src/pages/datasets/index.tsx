@@ -1,4 +1,3 @@
-import { CreateButton } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
@@ -6,7 +5,8 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
+import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
@@ -20,7 +20,6 @@ const crumbs = [navCrumb('/datasets')];
 const DATASETS_SORT_KEYS = ['name', 'updatedAt'] as const;
 
 export default function Datasets() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { sort, onSortChange } = useUrlSort({
     searchParams,
@@ -55,12 +54,10 @@ export default function Datasets() {
   const isLoading = isLoadingDatasets || isLoadingExperiments;
   const error = errorDatasets || errorExperiments;
 
-  const openCreatePage = () => void navigate('/datasets/new');
-
   const headerCreateAction = (
-    <CreateButton onClick={openCreatePage} tooltip="Create a dataset" variant="ghost" size="sm">
+    <HeaderCreateAction href="/datasets/new" tooltip="Create a dataset">
       New dataset
-    </CreateButton>
+    </HeaderCreateAction>
   );
 
   if (error && is401UnauthorizedError(error)) {

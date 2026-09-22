@@ -1,4 +1,4 @@
-import { CreateButton } from '@mastra/playground-ui/components/Button';
+import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -9,12 +9,12 @@ import { useLinkComponent } from '@/lib/framework';
  */
 export function AgentHeaderCreateAction() {
   const { canCreateAgent } = useCanCreateAgent();
-  const { Link, paths } = useLinkComponent();
+  const { paths } = useLinkComponent();
   const createPath = paths.cmsAgentCreateLink();
   if (!canCreateAgent || !createPath) return null;
   return (
-    <CreateButton render={<Link href={createPath} />} tooltip="Create an agent" variant="ghost" size="sm">
+    <HeaderCreateAction href={createPath} tooltip="Create an agent">
       New agent
-    </CreateButton>
+    </HeaderCreateAction>
   );
 }

@@ -22,7 +22,7 @@ function CreateLayoutWrapper() {
   });
 
   const actions = (
-    <Button variant="primary" onClick={() => void handlePublish()} disabled={isSubmitting || !canPublish}>
+    <Button variant="primary" size="sm" onClick={() => void handlePublish()} disabled={isSubmitting || !canPublish}>
       {isSubmitting ? (
         <>
           <Spinner className="h-4 w-4" />

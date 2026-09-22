@@ -1,4 +1,3 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -17,6 +16,7 @@ import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
+import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
 import { useLinkComponent } from '@/lib/framework';
@@ -252,12 +252,13 @@ function EditLayoutWrapper() {
     : 'Open PR is available on Mastra-hosted projects with GitHub App support';
 
   const actions = isReady && (
-    <div className="flex items-center gap-2">
-      {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
+    <CmsEditHeaderActions hasDraft={hasDraft}>
       {showCodeModeActions ? (
         isCodeAgentEditable ? (
           <>
             <Button
+              variant="ghost"
+              size="sm"
               onClick={() => void handleDownloadJson()}
               disabled={isSavingDraft || isSubmitting}
               icon={<Download />}
@@ -266,6 +267,7 @@ function EditLayoutWrapper() {
             </Button>
             <Button
               variant="primary"
+              size="sm"
               disabled={!canOpenPr || isSavingDraft || isSubmitting}
               title={openPrTitle}
               onClick={() => {
@@ -283,7 +285,12 @@ function EditLayoutWrapper() {
         ) : null
       ) : !isCodeAgentEditable ? null : (
         <>
-          <Button onClick={() => void handleSaveDraft()} disabled={!isDirty || isSavingDraft || isSubmitting}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void handleSaveDraft()}
+            disabled={!isDirty || isSavingDraft || isSubmitting}
+          >
             {isSavingDraft ? (
               <>
                 <Spinner className="h-4 w-4" />
@@ -298,6 +305,7 @@ function EditLayoutWrapper() {
           </Button>
           <Button
             variant="primary"
+            size="sm"
             onClick={() => void handlePublishVersion()}
             disabled={
               isViewingPreviousVersion
@@ -319,7 +327,7 @@ function EditLayoutWrapper() {
           </Button>
         </>
       )}
-    </div>
+    </CmsEditHeaderActions>
   );
 
   return (

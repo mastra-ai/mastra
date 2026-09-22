@@ -1,5 +1,4 @@
 import type { UpdateStoredScorerParams } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -12,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredScorer, useStoredScorerMutations } from '@/domains/scores';
 import { ScorerEditMain } from '@/domains/scores/components/scorer-edit-page/scorer-edit-main';
@@ -278,8 +278,7 @@ function CmsScorersEditPage() {
   }
 
   const actions = (
-    <div className="flex items-center gap-2">
-      {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
+    <CmsEditHeaderActions hasDraft={hasDraft}>
       <ScorerVersionCombobox
         scorerId={scorerId}
         value={selectedVersionId ?? ''}
@@ -287,7 +286,7 @@ function CmsScorersEditPage() {
         variant="ghost"
         activeVersionId={activeVersionId}
       />
-    </div>
+    </CmsEditHeaderActions>
   );
 
   return (

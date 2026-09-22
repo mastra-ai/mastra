@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import DatasetsPage from '..';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
-import { TestLinkProvider } from '@/test/link-provider';
+import { LinkComponentProvider } from '@/lib/framework';
+import { Link } from '@/lib/link';
+import { stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -30,13 +32,14 @@ function LocationProbe() {
 const renderPage = (initialEntry = '/datasets') =>
   renderWithProviders(
     <TooltipProvider>
-      <TestLinkProvider>
+      {/* Real react-router Link so the C shortcut's synthetic click navigates the MemoryRouter. */}
+      <LinkComponentProvider Link={Link} navigate={() => {}} paths={stubLinkPaths}>
         <LocationProbe />
         <Routes>
           <Route path="/datasets" element={<DatasetsPage />} />
           <Route path="/datasets/new" element={<div>Create dataset page</div>} />
         </Routes>
-      </TestLinkProvider>
+      </LinkComponentProvider>
     </TooltipProvider>,
     { router: { initialEntries: [initialEntry] } },
   );
@@ -84,16 +87,17 @@ describe('Datasets page', () => {
   describe('header create action', () => {
     beforeEach(() => useDatasets());
 
-    it('shows a New dataset button in the header slot', async () => {
+    it('shows a New dataset link to the create page in the header slot', async () => {
       renderPage();
 
-      expect(await screen.findByRole('button', { name: 'New dataset' })).not.toBeNull();
+      const link = await screen.findByRole('link', { name: 'New dataset' });
+      expect(link.getAttribute('href')).toBe('/datasets/new');
     });
 
     it('navigates to the create page when pressing C', async () => {
       renderPage();
 
-      await screen.findByRole('button', { name: 'New dataset' });
+      await screen.findByRole('link', { name: 'New dataset' });
       fireEvent.keyDown(window, { key: 'c' });
 
       expect(await screen.findByText('Create dataset page')).not.toBeNull();
@@ -101,11 +105,12 @@ describe('Datasets page', () => {
   });
 
   describe('when there are no datasets', () => {
-    it('still shows the New dataset button in the header slot', async () => {
+    it('still shows the New dataset link in the header slot', async () => {
       useDatasets([]);
       renderPage();
 
-      expect(await screen.findByRole('button', { name: 'New dataset' })).not.toBeNull();
+      const link = await screen.findByRole('link', { name: 'New dataset' });
+      expect(link.getAttribute('href')).toBe('/datasets/new');
     });
   });
 });
