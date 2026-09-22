@@ -361,17 +361,23 @@ async function main() {
     process.exit(1);
   }
   if (initialPrompt.fromFlag) process.argv = initialPrompt.argv;
+  // The flag only means something to the interactive TUI. Paths that can't run
+  // it reject the flag instead of dropping the prompt; an env var prompt is
+  // just ignored there.
+  const rejectInitialPromptFlag = (reason: string) => {
+    if (!initialPrompt.fromFlag) return;
+    process.stderr.write(`${INITIAL_PROMPT_FLAG} starts the interactive TUI; ${reason}\n`);
+    process.exit(1);
+  };
 
   const headless = hasHeadlessFlag(process.argv);
-  if (headless && initialPrompt.fromFlag) {
-    process.stderr.write(`${INITIAL_PROMPT_FLAG} starts the interactive TUI; use --prompt for headless runs\n`);
-    process.exit(1);
-  }
+  if (headless) rejectInitialPromptFlag('use --prompt for headless runs');
   if (headless || process.argv.includes('--help') || process.argv.includes('-h')) {
     return runMCCli(undefined, { coAuthor: TUI_CO_AUTHOR });
   }
 
   if (process.argv.includes('--acp')) {
+    rejectInitialPromptFlag('it cannot be combined with --acp');
     const { acpMain } = await import('@mastra/code-sdk/acp/index');
     return acpMain({
       dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve'),
@@ -391,6 +397,7 @@ async function main() {
     // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
+      rejectInitialPromptFlag('no TTY is available, so use --prompt for headless runs');
       process.stderr.write('No TTY available — falling back to headless mode.\n');
       return runMCCli(pipedInput, { coAuthor: TUI_CO_AUTHOR });
     }
