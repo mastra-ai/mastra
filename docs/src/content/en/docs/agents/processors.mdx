@@ -160,6 +160,19 @@ new Agent({
 })
 ```
 
+To run only the processors you configure, with none of the defaults merged in, set `errorProcessorDefaults: false`:
+
+```typescript
+new Agent({
+  id: 'custom-error-recovery-agent',
+  name: 'custom-error-recovery-agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: '...',
+  errorProcessorDefaults: false,
+  errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })],
+})
+```
+
 Each array also accepts a function that returns an array, so processors can be built per-request from `RequestContext`:
 
 ```typescript

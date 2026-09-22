@@ -715,6 +715,7 @@ export class Agent<
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
   #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
+  #errorProcessorDefaults?: boolean;
   #browser?: MastraBrowser;
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
@@ -964,6 +965,9 @@ export class Agent<
 
     if (config.errorProcessors) {
       this.#errorProcessors = config.errorProcessors;
+    }
+    if (config.errorProcessorDefaults !== undefined) {
+      this.#errorProcessorDefaults = config.errorProcessorDefaults;
     }
 
     if (config.requestContextSchema) {
@@ -1850,6 +1854,7 @@ export class Agent<
       : undefined;
 
     if (!includeDefaults) return configured ?? [];
+    if (this.#errorProcessorDefaults === false) return configured ?? [];
     if (!configured) return defaultStabilityErrorProcessors();
 
     // Explicit empty array means "no error processors".
