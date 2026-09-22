@@ -442,6 +442,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               });
               try {
                 const processInputStepResult = await runner.runProcessInputStep({
+                  isRequestStage: true,
                   messageList,
                   stepNumber: stepIndex,
                   steps: inputData.accumulatedSteps ?? [],

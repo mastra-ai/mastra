@@ -1449,6 +1449,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               : undefined;
 
             const processInputStepResult = await processorRunner.runProcessInputStep({
+              isRequestStage: true,
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
               ...createObservabilityContext(stepTracingContext),

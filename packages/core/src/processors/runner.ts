@@ -1668,10 +1668,16 @@ export class ProcessorRunner {
             }
           : undefined;
 
+        // Set llmRequestStage when this processor implements processLLMRequest and
+        // the caller indicates this is the request stage (processLLMRequest will follow).
+        const llmRequestStage =
+          (args.isRequestStage && typeof (processor as Processor).processLLMRequest === 'function') || undefined;
+
         const processMethodArgs = {
           messageList,
           ...inputData,
           state: processorState.customState,
+          llmRequestStage,
           abort,
           ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
           ...createObservabilityContext({ currentSpan: processorSpan }),

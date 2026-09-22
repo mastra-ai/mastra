@@ -1,6 +1,6 @@
 ---
 title: "Reference: TokenLimiterProcessor | Processors"
-description: "Use TokenLimiterProcessor to constrain message tokens during input, per-step input, or output processing with configurable limits and strategies."
+description: "Use TokenLimiterProcessor to constrain message tokens during prompt, input, or output processing with configurable limits and strategies."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -8,10 +8,10 @@ packages:
 
 # TokenLimiterProcessor
 
-The `TokenLimiterProcessor` limits the number of tokens in messages. It can be used as an input, per-step input, and output processor:
+The `TokenLimiterProcessor` limits the number of tokens in messages. Depending on `trimMode`, it acts as a prompt processor, an input processor, and an output processor:
 
-- **Input processor** (`processInput`): Filters historical messages to fit within the context window before the agentic loop starts, prioritizing recent messages
-- **Per-step input processor** (`processInputStep`): Prunes messages at each step of a multi-step agent workflow, preventing unbounded token growth when tools trigger additional LLM calls
+- **Prompt processor** (`processLLMRequest`): In the default `best-fit` and `contiguous` trim modes, enforces the input budget on the provider prompt right before each model call, at every step of the agentic loop. The prompt is measured after earlier prompt processors (such as `ToolCallFilter`) have transformed it, so only tokens that actually reach the model are counted. Tool call and tool result messages are grouped so they're kept or removed together, and trimming is transient: stored messages are never modified.
+- **Input processor** (`processInput`): In `memory-only` trim mode, filters historical messages to fit within the context window before the agentic loop starts, prioritizing recent messages
 - **Output processor**: Limits generated response tokens via streaming or non-streaming with configurable strategies for handling exceeded limits
 
 ## Usage example
@@ -70,9 +70,9 @@ const processor = new TokenLimiterProcessor({
           },
           {
             name: 'trimMode',
-            type: "'best-fit' | 'contiguous'",
+            type: "'best-fit' | 'contiguous' | 'memory-only'",
             description:
-              "Controls how messages are trimmed when exceeding the token limit: 'best-fit' keeps as many messages as possible (may create gaps), 'contiguous' stops at the first message that does not fit, ensuring a continuous suffix of conversation history",
+              "Controls how the token limit is enforced: 'best-fit' trims the provider prompt while keeping as many messages as possible (may create gaps), 'contiguous' trims the provider prompt but stops at the first message that does not fit (keeping a continuous suffix of conversation history), and 'memory-only' trims stored history in processInput instead of the prompt",
             isOptional: true,
             default: "'best-fit'",
           },
@@ -103,15 +103,22 @@ const processor = new TokenLimiterProcessor({
     name: 'processInput',
     type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
     description:
-      'Filters input messages to fit within token limit before the agentic loop starts, prioritizing recent messages while preserving system messages',
-    isOptional: false,
+      "Trims stored history to fit within the token limit before the agentic loop starts in 'memory-only' trim mode, prioritizing recent messages while preserving system messages and the current turn",
+    isOptional: true,
   },
   {
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit. Mutates the messageList directly by removing oldest messages first while preserving system messages.',
-    isOptional: false,
+      "In 'memory-only' trim mode, applies stored-history trimming at each step. In standard 'best-fit' and 'contiguous' modes, trims stored history when called from legacy or workflow-nested paths that never invoke processLLMRequest, and defers to processLLMRequest on the agentic-loop prompt-stage path where earlier prompt processors may have already transformed the prompt.",
+    isOptional: true,
+  },
+  {
+    name: 'processLLMRequest',
+    type: '(args: ProcessLLMRequestArgs) => Promise<ProcessLLMRequestResult>',
+    description:
+      "Enforces the input budget on the provider prompt in the 'best-fit' and 'contiguous' trim modes. Runs after earlier prompt processors have transformed the prompt, counts that exact prompt, and returns a trimmed copy for the model call only. System messages are always preserved, and tool call and tool result messages are grouped so they are kept or removed together.",
+    isOptional: true,
   },
   {
     name: 'processOutputStream',
@@ -155,10 +162,11 @@ Images and file attachments are estimated instead of tokenized, including `file`
 
 ## Error behavior
 
-When used as an input processor (both `processInput` and `processInputStep`), `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
+When trimming input, `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
 
-- **Empty messages**: If there are no messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
+- **Empty messages**: If there are no non-system messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
 - **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you can't send an LLM request with only system messages and no user/assistant messages.
+- **No messages fit**: If no message fits within the remaining token budget, a TripWire is thrown because you can't send an LLM request with no messages.
 
 ```typescript
 import { TripWire } from '@mastra/core/agent'
@@ -195,9 +203,9 @@ export const agent = new Agent({
 })
 ```
 
-### As a per-step input processor (limit multi-step token growth)
+### As a per-step processor (limit multi-step token growth)
 
-When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. Use `inputProcessors` to also limit tokens at each step of the agentic loop. The `TokenLimiterProcessor` automatically applies to both the initial input and every subsequent step:
+When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. `TokenLimiterProcessor` applies its limit at every step, measuring the prompt that's about to be sent after any earlier prompt processors have run. Register prompt-shrinking processors such as `ToolCallFilter` before it, so the limiter counts the prompt the model actually receives:
 
 ```typescript title="src/mastra/agents/multi-step-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -218,6 +226,10 @@ const result = await agent.generate('Research this topic using your tools', {
   maxSteps: 10,
 })
 ```
+
+> **Note on processor workflow ordering:** If a `TokenLimiterProcessor` is nested inside a processor workflow (wrapped with `createStep`), it runs its trimming through `processInputStep`, which operates on stored messages before top-level prompt processors such as `ToolCallFilter` convert them. For post-filter counting — where earlier prompt processors like `ToolCallFilter` have already removed tool results from the prompt — register the limiter directly in `inputProcessors`, not wrapped in a `createStep`.
+
+````
 
 ### As an output processor (limit response length)
 
@@ -240,7 +252,7 @@ export const agent = new Agent({
     }),
   ],
 })
-```
+````
 
 ## Related
 
