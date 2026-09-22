@@ -219,6 +219,20 @@ describe('FilterBar', () => {
       await waitFor(() => expect(input.getAttribute('aria-activedescendant')).toBe(first.id));
     });
 
+    it('restarts the highlight on the first option of the next step', async () => {
+      render(<Harness />);
+      getInput().focus();
+      await screen.findByRole('option', { name: 'Status' });
+
+      key('ArrowDown');
+      key('ArrowDown');
+      key('Enter');
+
+      const first = await screen.findByRole('option', { name: 'prod' });
+      await waitFor(() => expect(first.hasAttribute('data-highlighted')).toBe(true));
+      expect(screen.getByRole('option', { name: 'staging' }).hasAttribute('data-highlighted')).toBe(false);
+    });
+
     it('keeps the draft when the input itself is clicked mid-flow', async () => {
       render(<Harness />);
       const input = getInput();
@@ -570,6 +584,61 @@ describe('FilterBar', () => {
       getInput().focus();
       key('Backspace');
       expect(argAt(onChange, 0, 0)).toEqual([{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'running' }]);
+    });
+  });
+
+  describe('a search field', () => {
+    const SEARCH_FIELDS: FilterBarField[] = [
+      { id: 'text', label: 'Text', search: true, operators: ['contains'] },
+      ...FIELDS,
+    ];
+
+    it('stays offered for text that names no field, and commits that text on Enter', async () => {
+      const onChange = vi.fn();
+      render(<Harness fields={SEARCH_FIELDS} onChange={onChange} />);
+      getInput().focus();
+      type('flaky login');
+
+      await screen.findByRole('option', { name: /contains "flaky login"/ });
+      key('Enter');
+
+      expect(argAt(onChange, 0, 0)).toEqual([
+        expect.objectContaining({ fieldId: 'text', operatorId: 'contains', value: 'flaky login' }),
+      ]);
+    });
+
+    it('keeps the field it shadows one arrow away when the text names both', async () => {
+      const onChange = vi.fn();
+      render(<Harness fields={SEARCH_FIELDS} onChange={onChange} />);
+      getInput().focus();
+      type('status');
+
+      await screen.findByRole('option', { name: 'Status' });
+      const options = screen.getAllByRole('option');
+      expect(options[0].textContent).toContain('contains "status"');
+      expect(options[1].textContent).toBe('Status');
+
+      key('ArrowDown');
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('steps through its value like any other field when nothing is typed', async () => {
+      const onChange = vi.fn();
+      render(<Harness fields={SEARCH_FIELDS} onChange={onChange} />);
+      const input = getInput();
+      input.focus();
+
+      await screen.findByRole('option', { name: 'Text' });
+      key('Enter');
+      expect(input.placeholder).toBe('Value…');
+
+      type('abc');
+      key('Enter');
+      expect(argAt(onChange, 0, 0)).toEqual([
+        expect.objectContaining({ fieldId: 'text', operatorId: 'contains', value: 'abc' }),
+      ]);
     });
   });
 

@@ -1,12 +1,13 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
 import { ListFilterIcon, Search } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
-import { FilterBarOptionList } from './filter-bar-option-list';
+import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
 import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
+import { parseFieldValue } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
@@ -25,6 +26,8 @@ type Step = 'field' | 'operator' | 'value';
 type Item = FilterBarField | FilterBarOperator | FilterBarOption;
 
 const getItemLabel = (item: Item) => ('label' in item && item.label ? item.label : 'value' in item ? item.value : '');
+
+const EMPTY_ITEMS: readonly Item[] = [];
 
 export type FilterBarInputProps = {
   placeholder?: string;
@@ -90,8 +93,14 @@ export function FilterBarInput({
 
   const selectField = useCallback(
     (next: FilterBarField) => {
-      // A single allowed operator is implied: skip straight to the value step.
       const [only, ...rest] = ctx.getFieldOperators(next);
+      // Free-text entry with text already typed: that text is the value, so neither the
+      // operator nor the value step has anything left to ask.
+      if (next.search && only && query.trim() !== '') {
+        commit(next.id, only.id, parseFieldValue(next.type, query));
+        return;
+      }
+      // A single allowed operator is implied: skip straight to the value step.
       if (only && rest.length === 0) {
         selectOperator(next.id, only);
         return;
@@ -99,7 +108,7 @@ export function FilterBarInput({
       setDraft({ fieldId: next.id });
       setQuery('');
     },
-    [ctx, selectOperator, setDraft],
+    [ctx, commit, query, selectOperator, setDraft],
   );
 
   const valueStep = useValueStep({
@@ -176,8 +185,23 @@ export function FilterBarInput({
     }
   };
 
-  const items: readonly Item[] =
+  const stepItems: readonly Item[] =
     step === 'field' ? visibleFields : step === 'operator' ? fieldOperators : valueStep.options;
+
+  // Base UI keeps its highlight index when the list content changes, so a field picked with
+  // ArrowDown would open the value step on its second option. Handing it an empty list for the
+  // commit that follows a step change drops the index; `autoHighlight` then re-anchors on the first.
+  const [itemsStep, setItemsStep] = useState(step);
+  useLayoutEffect(() => setItemsStep(step), [step]);
+  const items: readonly Item[] = itemsStep === step ? stepItems : EMPTY_ITEMS;
+
+  // A search field is the way out for text that names no field, so it survives the field
+  // step's own filtering whatever was typed; every other item matches on its label.
+  const filterItem = useCallback(
+    (item: Item, text: string, itemToString?: (item: Item) => string) =>
+      ('search' in item && item.search === true) || matchesQueryFilter(item, text, itemToString),
+    [],
+  );
 
   const searchPlaceholder =
     step === 'field' ? 'Search fields…' : step === 'operator' ? 'Search operators…' : 'Search values…';
@@ -199,7 +223,7 @@ export function FilterBarInput({
         items={items}
         itemToStringLabel={getItemLabel}
         // The value step is already filtered (locally or server-side) by useValueSuggestions.
-        filter={step === 'value' ? null : matchesQueryFilter}
+        filter={step === 'value' ? null : filterItem}
         value={null}
         onValueChange={(item, details) => {
           // Never let Base UI keep the selection, fill the input or close: each step routes it.
@@ -305,7 +329,16 @@ export function FilterBarInput({
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"
                   getKey={f => f.id}
-                  renderOption={f => <FilterBarFieldLabel field={f} />}
+                  renderOption={f => (
+                    <>
+                      <FilterBarFieldLabel field={f} />
+                      {f.search && query !== '' && (
+                        <span className="text-muted-foreground min-w-0 truncate">
+                          {ctx.getFieldOperators(f)[0]?.label} "{query}"
+                        </span>
+                      )}
+                    </>
+                  )}
                   emptyText="No matching field."
                 />
               )}
@@ -322,7 +355,7 @@ export function FilterBarInput({
                   aria-label="Values"
                   aria-multiselectable={valueStep.isMany || undefined}
                   getKey={o => o.value}
-                  renderOption={o => o.label ?? o.value}
+                  renderOption={option => <FilterBarOptionLabel option={option} />}
                   isSelected={o => valueStep.isMany && valueStep.selected.includes(o.value)}
                   isLoading={valueStep.isLoading}
                   error={valueStep.error}

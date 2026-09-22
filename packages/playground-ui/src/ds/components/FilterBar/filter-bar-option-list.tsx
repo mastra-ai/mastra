@@ -1,6 +1,7 @@
 import { CheckIcon } from 'lucide-react';
 import { forwardRef } from 'react';
 import type { ReactNode } from 'react';
+import type { FilterBarOption } from './types';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Spinner } from '@/ds/components/Spinner/spinner';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
@@ -17,6 +18,16 @@ export type FilterBarOptionListProps<T> = {
   'aria-label': string;
   'aria-multiselectable'?: boolean;
 };
+
+/** Default value row: the option's leading node (avatar, swatch…) followed by its label. */
+export function FilterBarOptionLabel({ option }: { option: FilterBarOption }) {
+  return (
+    <>
+      {option.start}
+      <span className="truncate">{option.label ?? option.value}</span>
+    </>
+  );
+}
 
 const FluidItem = forwardRef<HTMLDivElement, ComboboxPrimitive.Item.Props>((props, ref) => (
   <ComboboxPrimitive.Item ref={useFluidMenuItemRef(ref)} {...props} />
