@@ -40,7 +40,7 @@ import type {
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
+import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -374,23 +374,7 @@ function retryAt(now: Date, attempts: number): Date {
 }
 
 function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>) {
-  const [integrationId, type] =
-    decision.source === 'github-pr'
-      ? ['github', 'pull-request']
-      : decision.source === 'github-issue'
-        ? ['github', 'issue']
-        : decision.source === 'gitlab-pr'
-          ? ['gitlab', 'pull-request']
-          : decision.source === 'gitlab-issue'
-            ? ['gitlab', 'issue']
-            : decision.source === 'linear-issue'
-              ? ['linear', 'issue']
-              : decision.source === 'jira-issue'
-                ? ['jira', 'issue']
-                : decision.source === 'incidentio-follow-up'
-                  ? ['incidentio', 'issue']
-                  : ['factory', 'manual'];
-  return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
+  return externalSourceForWorkItem(decision.source, decision.sourceKey, decision.url ?? undefined);
 }
 
 function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor {
@@ -1194,7 +1178,7 @@ export class FactoryDecisionDispatcher {
       if (claimed) result = { ...result, item: claimed };
     }
     const itemBoard = boardForWorkItem(result.item);
-    if (itemBoard !== decision.board) {
+    if (!skipRules && itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
     }
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
@@ -1269,7 +1253,8 @@ export class FactoryDecisionDispatcher {
         initialEntry: true,
       });
       if (initial.status === 'rejected') {
-        if (result.created) await this.#storage.delete({ orgId: record.orgId, id: result.item.id });
+        if (result.created)
+          await this.#storage.delete({ orgId: record.orgId, id: result.item.id, purgeRuleState: false });
         throw new Error(`${initial.code}: ${initial.reason}`);
       }
       expectedRevision = initial.revision;

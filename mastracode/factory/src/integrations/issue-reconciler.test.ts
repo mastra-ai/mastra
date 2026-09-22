@@ -280,6 +280,24 @@ describe('issue reconcilers', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', stage: 'canceled' });
   });
 
+  it('adopts a missing label snapshot without replaying policy', async () => {
+    const issueOpened = vi.fn(defaultGithubRules.issueOpened);
+    const setup = await githubSetup({
+      stages: ['planning'],
+      metadata: {},
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ labels: ['bug'] })),
+      rules: { issueOpened },
+    });
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ checked: 1, relabeled: 0, failed: 0 });
+    expect(issueOpened).not.toHaveBeenCalled();
+    expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toHaveLength(0);
+    expect(await setup.workItems.get({ orgId: 'org-1', id: setup.workItem.id })).toMatchObject({
+      stages: ['planning'],
+      metadata: { labels: ['bug'] },
+    });
+  });
+
   it('replays a label change through rules ingress with the issue live labels', async () => {
     const issueOpened = vi.fn((context: Parameters<typeof defaultGithubRules.issueOpened>[0]) => {
       const decision = defaultGithubRules.issueOpened(context);

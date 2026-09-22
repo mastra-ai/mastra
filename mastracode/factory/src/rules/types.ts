@@ -10,6 +10,30 @@ export type WorkItemSource =
   | 'incidentio-follow-up'
   | 'manual';
 
+export function externalSourceForWorkItem(
+  source: WorkItemSource,
+  sourceKey: string,
+  url?: string,
+): ExternalWorkItemSource {
+  const [integrationId, type] =
+    source === 'github-pr'
+      ? ['github', 'pull-request']
+      : source === 'github-issue'
+        ? ['github', 'issue']
+        : source === 'gitlab-pr'
+          ? ['gitlab', 'pull-request']
+          : source === 'gitlab-issue'
+            ? ['gitlab', 'issue']
+            : source === 'linear-issue'
+              ? ['linear', 'issue']
+              : source === 'jira-issue'
+                ? ['jira', 'issue']
+                : source === 'incidentio-follow-up'
+                  ? ['incidentio', 'issue']
+                  : ['factory', 'manual'];
+  return { integrationId, type, externalId: sourceKey, ...(url ? { url } : {}) };
+}
+
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';

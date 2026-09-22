@@ -982,13 +982,15 @@ export function reconciledIssueRelabeledEvent(
   state: ReconcileIssueState,
 ): ParsedGithubWebhook {
   const labels = state.labels ?? [];
-  // The delivery id carries a digest of the new label set: the same drift
-  // dedupes on a retry, while a later, different drift is a new delivery the
-  // ingress commits rather than discards as a replay.
+  // GitHub updates `updated_at` for a label change. Including it makes retries
+  // of one observed issue version idempotent while allowing A → B → A to replay
+  // its final A placement as a new version. Synthetic callers without it retain
+  // the legacy label-only identity.
   const digest = createHash('sha256').update([...labels].sort().join('\n')).digest('hex').slice(0, 16);
+  const version = state.updatedAt ? `:${createHash('sha256').update(state.updatedAt).digest('hex').slice(0, 16)}` : '';
   return {
     event: 'issues',
-    deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:relabeled:${digest}`,
+    deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:relabeled:${digest}${version}`,
     payload: {
       // `opened` is the event that carries an issue's labels through the rules;
       // an already-filed card is re-placed by the decision, not re-materialized.

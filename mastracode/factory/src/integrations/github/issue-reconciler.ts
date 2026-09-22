@@ -132,7 +132,10 @@ export function createGithubIssueReconciler(
             // `unlabeled` webhook, replayed here so a label Factory never saw a
             // delivery for still re-places the card. Replayed before the
             // metadata patch, so the ingress sees the drift it acts on.
-            if (state.labels !== undefined && items.some(item => !sameStrings(item.metadata?.labels, state.labels))) {
+            if (
+              state.labels !== undefined &&
+              items.some(item => Array.isArray(item.metadata?.labels) && !sameStrings(item.metadata.labels, state.labels))
+            ) {
               await rules.ingest(reconciledIssueRelabeledEvent(repository, issueNumber, state));
               summary.relabeled += 1;
             }

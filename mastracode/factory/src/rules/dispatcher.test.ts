@@ -5505,6 +5505,39 @@ describe('custom-board deferred targets', () => {
     });
   });
 
+  it('relocates an existing card across boards for an explicit placement', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        board: 'work',
+        title: 'Existing',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { preserved: true },
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:release' },
+      },
+    });
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: { queued: { title: 'Queued', kind: 'resting' } },
+    });
+    await persist(storage, { ...linkedDecision, skipRules: true });
+
+    await dispatcherFor(storage, createBoardRegistry({ boards: [release] })).runOnce();
+
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      board: 'release',
+      stages: ['queued'],
+      metadata: { preserved: true },
+    });
+    expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({ status: 'succeeded' });
+  });
+
   it.each(['work', null] as const)(
     'does not adopt a %s item or change its metadata/parent on a source collision',
     async assignedBoard => {

@@ -405,7 +405,11 @@ describe('WorkItemsStorage', () => {
   it('purges replay state when a linked work item is deleted', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };
-    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const created = await storage.upsert({
+      ...scope,
+      userId: 'u',
+      input: { ...input, externalSource: { ...input.externalSource, externalId: 'github-issue:42' } },
+    });
     const commit = () =>
       storage.commitRuleEvaluation({
         ...scope,
@@ -418,7 +422,8 @@ describe('WorkItemsStorage', () => {
         decisions: [
           {
             type: 'upsertLinkedWorkItem',
-            sourceKey: 'github:issue:42',
+            source: 'github-issue',
+            sourceKey: 'github-issue:42',
             idempotencyKey: 'decision-1',
             board: 'work',
             stage: 'triage',
