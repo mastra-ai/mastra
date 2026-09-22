@@ -231,7 +231,7 @@ export const Multiple: Story = {
           {selectedCapabilities.map(option => (
             <span
               key={option.value}
-              className="border-border bg-card text-meta text-muted-foreground rounded-full border px-2.5 py-1"
+              className="rounded-full border border-border bg-card px-2.5 py-1 text-meta text-muted-foreground"
             >
               {option.label}
             </span>

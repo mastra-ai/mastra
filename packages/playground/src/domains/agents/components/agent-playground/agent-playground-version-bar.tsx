@@ -133,7 +133,7 @@ export function AgentPlaygroundVersionBar({
 
   return {
     versionSelector: (
-      <div className="border-border bg-card flex items-center gap-2 border-b px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-3">
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}
@@ -176,7 +176,7 @@ export function AgentPlaygroundVersionBar({
       </div>
     ),
     actionBar: (
-      <div className="border-border bg-card flex items-center justify-end border-t px-3 py-2">
+      <div className="flex items-center justify-end border-t border-border bg-card px-3 py-2">
         {showCodeModeActions ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="default" size="md" onClick={() => void onDownloadJson?.()} icon={<Download />}>
@@ -213,7 +213,7 @@ export function AgentPlaygroundVersionBar({
         ) : readOnly && !isViewingPreviousVersion ? null : (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <ButtonsGroup>
-              <Button variant="default" size="md" onClick={() => onSaveDraft()} disabled={saveDisabled}>
+              <Button variant="default" onClick={() => onSaveDraft()} disabled={saveDisabled}>
                 {isSavingDraft ? (
                   <>
                     <Spinner className="size-3.5" />
@@ -230,7 +230,7 @@ export function AgentPlaygroundVersionBar({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="default" size="md" disabled={saveDisabled} aria-label="More save options">
+                  <Button variant="default" disabled={saveDisabled} aria-label="More save options">
                     <ChevronDown className="size-3.5" />
                   </Button>
                 </DropdownMenu.Trigger>

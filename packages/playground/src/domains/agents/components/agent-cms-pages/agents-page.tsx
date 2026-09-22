@@ -136,8 +136,8 @@ export function AgentsPage() {
                           type="text"
                           disabled={isDisabled}
                           className={cn(
-                            'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
-                            !isDisabled && 'border-border border-dashed ',
+                            'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                            !isDisabled && 'border-dashed border-border',
                           )}
                           value={
                             isSelected

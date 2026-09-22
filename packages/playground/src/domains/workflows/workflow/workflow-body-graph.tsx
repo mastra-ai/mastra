@@ -16,8 +16,8 @@ export function WorkflowBodyGraph({
   return (
     <section aria-label={isForEach ? 'Loop body' : 'Nested workflow'} className="flex h-full min-h-0 flex-col">
       {isForEach && (
-        <div className="text-muted-foreground flex shrink-0 items-start gap-2 px-4 py-3">
-          <Repeat2 aria-hidden className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+        <div className="flex shrink-0 items-start gap-2 px-4 py-3 text-muted-foreground">
+          <Repeat2 aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <Txt variant="meta">Runs for every item. All items finish before the workflow continues.</Txt>
         </div>
       )}

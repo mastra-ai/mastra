@@ -26,7 +26,7 @@ export function MetricsKpiCardChange({
       </div>
       {prevValue && (
         <div>
-          vs previous <b className="text-placeholder text-column">{prevValue}</b>
+          vs previous <b className="text-column text-placeholder">{prevValue}</b>
         </div>
       )}
     </div>

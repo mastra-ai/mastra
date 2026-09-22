@@ -69,7 +69,7 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
       >
         <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
         <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
-        <span className="text-meta text-muted-foreground font-mono">
+        <span className="font-mono text-meta text-muted-foreground">
           {getShortId(score.id)} · {isToday(createdAt) ? 'Today' : format(createdAt, 'MMM dd')}{' '}
           {format(createdAt, 'h:mm:ss aaa')}
         </span>

@@ -66,7 +66,7 @@ export const WithOverlay: Story = {
       <WorkflowCanvasInsetContext.Provider value={280}>
         <GraphExample {...args} />
       </WorkflowCanvasInsetContext.Provider>
-      <aside className="border-border bg-background text-caption text-foreground absolute inset-y-0 left-0 w-[280px] border-r p-4">
+      <aside className="absolute inset-y-0 left-0 w-[280px] border-r border-border bg-background p-4 text-caption text-foreground">
         Run input panel
       </aside>
     </div>
