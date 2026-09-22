@@ -6,6 +6,14 @@ export { liveKitConnectionRoute } from './routes';
 export type { LiveKitConnectionRouteOptions, LiveKitConnectionDetails, ConnectionRequestArgs } from './routes';
 export { dispatchVoiceSession } from './dispatch';
 export type { DispatchVoiceSessionOptions } from './dispatch';
+export type { LiveKitRecordingOptions } from './recording';
+export { liveKitRecordingRoute } from './recording-route';
+export type {
+  LiveKitRecording,
+  LiveKitRecordingResponse,
+  LiveKitRecordingResolverArgs,
+  LiveKitRecordingRouteOptions,
+} from './recording-route';
 export { serializeSessionMetadata } from './metadata';
 export type { LiveKitSessionMetadata } from './metadata';
 export { pipeAgentReplyToWriter } from './workflow-generator';

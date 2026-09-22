@@ -432,6 +432,162 @@ await dispatchVoiceSession({
 })
 ```
 
+### Record calls
+
+Pass `recording` to `dispatchVoiceSession()` or `liveKitConnectionRoute()` to create a room with [LiveKit auto egress](https://docs.livekit.io/transport/media/ingress-egress/egress/autoegress/). Mastra creates the room with recording configured, then dispatches the voice agent. Omitting `recording` preserves the existing behavior and return values.
+
+Recording requires LiveKit Cloud or a self-hosted [egress service](https://docs.livekit.io/transport/self-hosting/egress/), plus an output destination. The example below records the caller and agent into a single mixed OGG audio file in an S3 bucket. Set `RECORDINGS_S3_BUCKET`, `RECORDINGS_S3_REGION`, `RECORDINGS_S3_ACCESS_KEY`, and `RECORDINGS_S3_SECRET` on your server, alongside the LiveKit credentials.
+
+Install the server SDK to use its output format enum:
+
+```bash npm2yarn
+npm install livekit-server-sdk
+```
+
+Define recording settings in a server-only module:
+
+```typescript title="src/mastra/recording.ts"
+import type { LiveKitRecordingOptions } from '@mastra/livekit'
+import { EncodedFileType } from 'livekit-server-sdk'
+
+export const recording: LiveKitRecordingOptions = {
+  room: {
+    audioOnly: true,
+    fileOutputs: [
+      {
+        fileType: EncodedFileType.OGG,
+        filepath: 'calls/{room_name}.ogg',
+        output: {
+          case: 's3',
+          value: {
+            bucket: process.env.RECORDINGS_S3_BUCKET!,
+            region: process.env.RECORDINGS_S3_REGION!,
+            accessKey: process.env.RECORDINGS_S3_ACCESS_KEY!,
+            secret: process.env.RECORDINGS_S3_SECRET!,
+          },
+        },
+      },
+    ],
+  },
+}
+```
+
+`LiveKitRecordingOptions` accepts the settings used to construct LiveKit's `RoomEgress`, as either a plain object or an SDK instance. Set `room.audioOnly: true` for mixed audio, or use `tracks` or `participant` for separate recordings. Mastra passes these settings to LiveKit without choosing a format or storage provider for you. See [LiveKit output options](https://docs.livekit.io/transport/media/ingress-egress/egress/outputs/) for other destinations.
+
+For an outbound phone call, configure recording before adding the phone participant:
+
+```typescript title="src/start-call.ts"
+import { randomUUID } from 'node:crypto'
+import { dispatchVoiceSession } from '@mastra/livekit'
+import { recording } from './mastra/recording'
+
+const roomName = `support-call-${randomUUID()}`
+
+await dispatchVoiceSession({
+  roomName,
+  metadata: { agentId: 'support', resourceId: 'caller-7' },
+  recording,
+})
+
+// Add the phone participant to roomName through your existing LiveKit SIP code.
+```
+
+Use a fresh room name for each recorded session and await dispatch before dialing. Mastra rejects a room found to already exist. The existence check and room creation are separate requests, so your application must prevent another process from creating the same room concurrently. This option doesn't start recording in an existing room or capture earlier audio.
+
+For browser sessions, pass the same settings to the connection route:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { liveKitConnectionRoute } from '@mastra/livekit'
+import { recording } from './recording'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [liveKitConnectionRoute({ recording })],
+  },
+})
+```
+
+With recording enabled, the route creates the room and dispatches the agent when connection details are requested, before the browser joins. The response remains `{ serverUrl, roomName, participantName, participantToken }`. Recording settings and storage credentials stay on the server and aren't included in the join token or agent metadata.
+
+The route also accepts a synchronous or asynchronous `recording` callback. It receives `{ body, context, roomName }`, including the resolved room name, so your server can choose settings for each session. Return `undefined` to skip recording for that request. Recording configuration isn't read directly from the request body.
+
+Room creation and dispatch errors reject the operation; the route doesn't issue a token on failure. If dispatch fails after room creation, the room remains in LiveKit. Successful setup doesn't guarantee that the recording finishes or uploads successfully. Use LiveKit's [egress events](https://docs.livekit.io/intro/basics/rooms-participants-tracks/webhooks-events/#webhook-events) to check completion and retrieve file details before making a recording available to users. To verify the setup, make a test call, end the room, and listen to the completed file under `calls/` in your bucket for audio from both participants.
+
+#### Recording lifecycle and consent
+
+Enabling `recording` starts recording during room creation, before a browser connects or a phone participant joins. An abandoned connection request can still start the agent and consume recording and storage resources. Configure authentication and application limits on the connection route before exposing it to users.
+
+`createConsentTool()` and `configuration.consentPolicy` don't control LiveKit egress. They don't delay, pause, or stop an automatic recording. If your application needs consent during the call before capturing audio, obtain it first and use LiveKit's explicit egress APIs to start recording in the existing room. A spoken greeting alone doesn't gate this feature.
+
+Recordings follow the LiveKit room lifecycle. Disconnecting only the agent doesn't necessarily end the room or finalize the file. Wait for a successful egress completion status and file results before marking a recording ready. Treat failed setup and abandoned rooms as application cleanup responsibilities.
+
+The audio file lives in the configured output storage, separately from Mastra memory, transcripts, and traces. Deleting a Mastra thread doesn't delete the recording. Your application manages storage access, retention, and download links for end users. Keep storage credentials in server configuration, including when choosing recording settings per session.
+
+### Review recordings in Studio
+
+Register `liveKitRecordingRoute()` to add **Review Audio** to a voice call's trace panel in Studio. The button opens an audio player for that call. Recording and trace storage must both be configured: the route reads the stored `voice call` span and passes its `roomName` to your server-side resolver. The browser supplies only the trace ID.
+
+The resolver returns `{ url, expiresAt? }`, or `undefined` when no file is available. Use a short-lived signed URL for private storage. The route doesn't persist playback URLs in traces, and Studio requests a fresh URL each time the review opens. Missing files and playback errors offer **Refresh recording** so you can retry after the upload finishes or a link expires.
+
+For the S3 configuration above, use the same `calls/{room_name}.ogg` object key for recording and playback. Room names must remain unique across calls, including after a room has ended. Install the AWS SDK in your application:
+
+```bash npm2yarn
+npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
+```
+
+```typescript title="src/mastra/recording-playback.ts"
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  S3Client,
+  S3ServiceException,
+} from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { liveKitRecordingRoute } from '@mastra/livekit'
+
+const s3 = new S3Client({
+  region: process.env.RECORDINGS_S3_REGION!,
+  credentials: {
+    accessKeyId: process.env.RECORDINGS_S3_ACCESS_KEY!,
+    secretAccessKey: process.env.RECORDINGS_S3_SECRET!,
+  },
+})
+
+export const recordingReviewRoute = liveKitRecordingRoute({
+  resolveRecording: async ({ roomName }) => {
+    const object = {
+      Bucket: process.env.RECORDINGS_S3_BUCKET!,
+      Key: `calls/${roomName}.ogg`,
+    }
+    try {
+      await s3.send(new HeadObjectCommand(object))
+    } catch (error) {
+      if (error instanceof S3ServiceException && error.$metadata.httpStatusCode === 404)
+        return undefined
+      throw error
+    }
+    const expiresIn = 15 * 60
+    return {
+      url: await getSignedUrl(
+        s3,
+        new GetObjectCommand({ ...object, ResponseContentType: 'audio/ogg' }),
+        { expiresIn },
+      ),
+      expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    }
+  },
+})
+```
+
+Add `recordingReviewRoute` to `server.apiRoutes` alongside `liveKitConnectionRoute({ recording })`. Keep the default path, `GET /voice/livekit/recordings/:traceId`, for Studio discovery. Both the connection route and server-initiated dispatch recordings can be reviewed, as long as the worker persisted the call trace and your resolver can locate its file.
+
+The review route requires authentication by default. Configure your server's authentication before exposing it. For application or tenant rules, supply an `authorize({ traceId, context })` callback that returns a boolean; it runs before the trace is read or a playback URL is generated. The resolver also receives the stored `span` and request `context` for application-specific lookup. Routes with `requiresAuth: false` are appropriate only for a local demo.
+
+Recording upload permissions alone don't grant playback access. The signing credentials need `s3:GetObject` for the recording objects, including the `HEAD` check. S3 also requires `s3:ListBucket` to return a missing-object `404` instead of `403`. Your application can use separate read credentials for playback. The browser receives a temporary URL that authorizes access to that file, so treat it as sensitive. See [S3 object permissions](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html) and [presigned URLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html).
+
+`liveKitRecordingRoute()` is storage-independent. You can resolve URLs from another provider or a recording index populated by LiveKit completion events. It doesn't depend on LiveKit retaining historical egress jobs. If you use timestamped filenames or change buckets, retain the mapping from room to object in your application and resolve that mapping instead of constructing a key.
+
 ### Observability
 
 When the Mastra instance has [observability](/docs/observability/overview) configured, the worker traces each call. It opens one `voice call` span per session and nests everything under it:
@@ -1615,6 +1771,13 @@ The route accepts a JSON body with optional `agentId`, `threadId`, and `resource
       'Builds the session metadata delivered to the worker. Defaults to passing through agentId, threadId, and resourceId from the request body.',
     isOptional: true,
   },
+  {
+    name: 'recording',
+    type: 'LiveKitRecordingOptions | (args) => LiveKitRecordingOptions | undefined | Promise<LiveKitRecordingOptions | undefined>',
+    description:
+      'Creates a fresh room with automatic recording and dispatches the agent before returning connection details. The server-side callback receives body, context, and the resolved roomName. Return undefined to skip recording. Existing rooms and setup failures reject the request.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -1652,6 +1815,13 @@ await dispatchVoiceSession({
     name: 'metadata',
     type: 'LiveKitSessionMetadata',
     description: 'Session metadata: agentId, threadId, resourceId, requestContext.',
+    isOptional: true,
+  },
+  {
+    name: 'recording',
+    type: 'LiveKitRecordingOptions',
+    description:
+      'Creates a fresh room with automatic recording before dispatching. Accepts LiveKit RoomEgress settings as a plain object or SDK instance. Existing rooms and setup failures reject the operation. Omit to preserve dispatch-only behavior.',
     isOptional: true,
   },
   {

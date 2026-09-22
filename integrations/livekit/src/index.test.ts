@@ -25,6 +25,7 @@ describe('root entry (@mastra/livekit)', () => {
       'createEndCallTool',
       'dispatchVoiceSession',
       'liveKitConnectionRoute',
+      'liveKitRecordingRoute',
       'pipeAgentReplyToWriter',
       'runVoiceBenchmarks',
       'serializeSessionMetadata',
