@@ -167,7 +167,8 @@ function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
 ): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }> | undefined;
+    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
+    | undefined;
   return agentControllerContext?.getState();
 }
 
@@ -299,7 +300,8 @@ export interface MastraCodeConfig {
   initialState?: Partial<MastraCodeState>;
   /** Trusted host instructions resolved outside mutable session state. */
   hostInstructions?:
-    string | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
+    | string
+    | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
   /** Commit co-author identity included in coding-agent commit guidance. Unspecified fields use core defaults. */
   coAuthor?: { name?: string; email?: string };
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
