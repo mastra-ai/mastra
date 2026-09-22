@@ -147,6 +147,9 @@ export interface CreateInngestAgentOptions {
    * Inngest function-level retries for the durable agent loop function. Inngest
    * re-invokes the function when an SDK request fails (e.g. the process restarts
    * mid-run), replaying memoized steps. Defaults to 0.
+   *
+   * All durable agents share the same loop functions, so the value from the first
+   * agent registered with Mastra applies to every durable agent.
    */
   retries?: InngestFlowControlConfig['retries'];
 }
