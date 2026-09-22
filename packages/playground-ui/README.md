@@ -21,27 +21,13 @@ export function SaveButton() {
 }
 ```
 
-### Opt-in semantic theme
+### Semantic color tokens
 
-`MainSidebar` and `SidebarNew` use the same root, which imports `new-theme.css` and applies `new-theme`, including in the mobile drawer. Their navigation uses semantic utilities directly; no legacy token aliases are needed. Mobile triggers and portalled tooltips apply their own scope. Keep importing `style.css` once in the app: it provides the compiled utilities. The theme import only adds scoped token values.
+`theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.
 
-For other components, import the theme and apply its scope where semantic colors are needed:
+Semantic values follow the existing `html.light` mode; dark mode is the default. Override `--card`, `--foreground`, or another semantic variable on an element to recolor its subtree.
 
-```tsx
-import '@mastra/playground-ui/new-theme.css';
-
-export function SummaryCard() {
-  return <div className="new-theme bg-card text-foreground">Summary</div>;
-}
-```
-
-The scope limits token defaults, not utility selectors. Classes such as `bg-card` remain global and share the host app's token contract. Audit existing uses before adopting these utilities; a previously ineffective class can start affecting the cascade.
-
-Semantic values follow the existing `html.light` mode; dark mode is the default. Override `--card`, `--foreground`, or another semantic variable on the themed element to customize it.
-
-Portalled content using semantic colors also needs `new-theme` on its popup root, since it renders outside the component's DOM subtree. The class supplies default values; custom overrides on the trigger's ancestors must also be applied to the popup.
-
-If your app generates additional semantic utilities, import `@mastra/playground-ui/new-theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
+If your app generates additional semantic utilities, import `@mastra/playground-ui/theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
 
 ## Documentation
 

@@ -246,6 +246,7 @@ describe('ChatProvider', () => {
                 }),
                 { headers: { 'content-type': 'text/event-stream' } },
               );
+            const toolName = kind === 'nested' ? 'agent-child' : 'approvedLookup';
             const decision = action === 'Approve' ? 'approve' : 'decline';
             const endpoint = signals ? 'send-tool-approval' : `${decision}-tool-call${generate ? '-generate' : ''}`;
             server.use(
@@ -315,13 +316,16 @@ describe('ChatProvider', () => {
               });
             }
             // Live tool rows share the transcript's paced reveal.
-            await waitFor(() => expect(screen.getAllByRole('button', { name: 'Approve' })).toHaveLength(2), {
-              timeout: 3000,
-            });
+            await waitFor(
+              () => expect(screen.getAllByRole('button', { name: `Approve ${toolName}` })).toHaveLength(2),
+              {
+                timeout: 3000,
+              },
+            );
             const cards = screen.getAllByTestId(kind === 'nested' ? 'agent-badge' : 'tool-badge');
             expect(cards).toHaveLength(2);
             for (const [index, id] of ['first', 'second'].entries()) {
-              fireEvent.click(within(cards[index]).getByRole('button', { name: action }));
+              fireEvent.click(within(cards[index]).getByRole('button', { name: `${action} ${toolName}` }));
               await waitFor(() => expect(requests).toHaveLength(index + 1));
               expect(requests[index].body).toMatchObject({ toolCallId: id });
               if (signals)
@@ -330,10 +334,22 @@ describe('ChatProvider', () => {
               expect(screen.getByTestId('approval-request-state').textContent).toBe('running');
               await act(async () => gates[index].resolve());
               await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
-              expect(within(cards[index]).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(true);
-              expect(within(cards[index]).getByRole('button', { name: 'Decline' }).hasAttribute('disabled')).toBe(true);
+              expect(
+                within(cards[index])
+                  .getByRole('button', { name: `Approve ${toolName}` })
+                  .hasAttribute('disabled'),
+              ).toBe(true);
+              expect(
+                within(cards[index])
+                  .getByRole('button', { name: `Decline ${toolName}` })
+                  .hasAttribute('disabled'),
+              ).toBe(true);
               if (index === 0)
-                expect(within(cards[1]).getByRole('button', { name: action }).hasAttribute('disabled')).toBe(false);
+                expect(
+                  within(cards[1])
+                    .getByRole('button', { name: `${action} ${toolName}` })
+                    .hasAttribute('disabled'),
+                ).toBe(false);
             }
             rendered.unmount();
             stream?.close();

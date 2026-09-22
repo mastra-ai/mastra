@@ -36,7 +36,7 @@ function makeSession(index: number, overrides: Partial<FactoryUserSession> = {})
 
 function stubSessions(sessions: FactoryUserSession[]) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json({ sessions }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>

@@ -39,6 +39,8 @@ import { logsAction } from './commands/studio/deploy-logs';
 import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
+import { traceImportAction } from './commands/traces/import/action.js';
+import { configureTraceImportCommand } from './commands/traces/import/command.js';
 import { parseComponents, parseLlmProvider, parseMcp, wrapAction } from './commands/utils';
 import { buildWorker } from './commands/worker/build';
 import { devWorker } from './commands/worker/dev';
@@ -102,6 +104,11 @@ program
   .action(initProject);
 
 registerApiCommand(program);
+
+const tracesCommand = program.command('traces').description('Manage observability traces');
+const traceImportCommand = tracesCommand.command('import');
+configureTraceImportCommand(traceImportCommand);
+traceImportCommand.action(wrapAction(traceImportAction));
 
 program
   .command('lint')

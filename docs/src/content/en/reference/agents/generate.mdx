@@ -957,6 +957,12 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
     description: 'The structured output object if structuredOutput was provided, validated against the schema.',
   },
   {
+    name: 'usedFallbackValue',
+    type: 'boolean',
+    description:
+      "True when `object` is the configured `fallbackValue`, substituted because the model output failed schema validation, or the separate structuring model failed, under `errorStrategy: 'fallback'`.",
+  },
+  {
     name: 'toolCalls',
     type: 'ToolCallChunk[]',
     description: 'Array of tool call chunks made during generation.',

@@ -170,7 +170,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                   {badge}
                 </Link>
               </TooltipTrigger>
-              <TooltipContent className="bg-surface3 text-neutral6 border-border1 border">Active</TooltipContent>
+              <TooltipContent>Active</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         ) : (
@@ -191,10 +191,6 @@ export interface AgentMetadataWorkspaceToolsListProps {
   tools: string[];
 }
 
-/**
- * Format a workspace tool name for display.
- * Converts "mastra_workspace_read_file" to "read_file"
- */
 function formatWorkspaceToolName(toolName: string): string {
   const prefix = `${WORKSPACE_TOOLS_PREFIX}_`;
   if (toolName.startsWith(prefix)) {

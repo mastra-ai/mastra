@@ -43,7 +43,7 @@ export function ExperimentCombobox({
   const experimentOptions = (data?.experiments ?? []).map(experiment => ({
     label: getExperimentDisplayName(experiment),
     value: experiment.id,
-    start: <ExperimentsIcon className="text-neutral3 size-4 shrink-0" data-testid="experiments-icon" />,
+    start: <ExperimentsIcon className="text-muted-foreground size-4 shrink-0" data-testid="experiments-icon" />,
     description: experiment.description
       ? truncate(experiment.description)
       : (getShortId(experiment.id) ?? experiment.id),

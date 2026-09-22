@@ -217,6 +217,8 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
 
   // Optional - only present if tool was previously suspended
   resumeData?: TResume;
+  /** Framework-resolved delegated run ID recovered from persisted suspension state. */
+  suspendedToolRunId?: string;
   // Optional - the payload this tool suspended with, present on resume
   suspendPayload?: TSuspend;
 
@@ -247,6 +249,8 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
   // Optional - only present if workflow step was previously suspended
   resumeData?: TResume;
+  /** Framework-resolved delegated run ID recovered from persisted suspension state. */
+  suspendedToolRunId?: string;
   // Optional - the payload this step suspended with, present on resume
   suspendPayload?: TSuspend;
 }
@@ -325,6 +329,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
   Partial<ObservabilityContext> & {
     suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
     resumeData?: any;
+    /** Framework-resolved delegated run ID recovered from persisted suspension state. */
+    suspendedToolRunId?: string;
     /** The payload the tool previously suspended with, when resuming. */
     suspendPayload?: any;
     outputWriter?: OutputWriter;
@@ -333,6 +339,12 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * This is populated by the MCP server and passed through to the tool's execution context.
      */
     mcp?: MCPToolExecutionContext;
+    /**
+     * Skip the TOOL_CALL span for this execution. Set by the MCP server, which
+     * already wraps the call in an MCP_SERVER_REQUEST span. Nested agent and
+     * workflow runs still attach to `tracingContext.currentSpan`.
+     */
+    skipToolSpan?: boolean;
     /**
      * Workspace for tool execution. When provided at execution time, this overrides
      * any workspace configured at tool build time. Allows dynamic workspace selection

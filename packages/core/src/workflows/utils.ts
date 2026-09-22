@@ -505,10 +505,8 @@ export const createTimeTravelExecutionParams = (params: {
     stepIds.forEach(stepId => {
       let result;
       const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-      // Siblings of the time-travel target inside a conditional were not selected by the
-      // branch's condition, so they should be reported as skipped rather than as a fake
-      // success (otherwise their empty output leaks into the conditional's aggregated result).
-      const isUnselectedConditionalSibling = isTargetEntry && entry.type === 'conditional' && !steps?.includes(stepId);
+      const isUnselectedConditionalSibling =
+        entry.type === 'conditional' && !steps.includes(stepId) && (isTargetEntry || !stepContext);
       const defaultStepStatus = steps?.includes(stepId)
         ? 'running'
         : isUnselectedConditionalSibling

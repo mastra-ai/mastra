@@ -7,7 +7,7 @@ description: "Browse Ofox model IDs, capabilities, context windows, and pricing.
 
 # <img src="https://models.dev/logos/ofox.svg" alt="Ofox logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ofox
 
-Access 143 Ofox models through Mastra's model router. Authentication is handled automatically using the `OFOX_API_KEY` environment variable.
+Access 144 Ofox models through Mastra's model router. Authentication is handled automatically using the `OFOX_API_KEY` environment variable.
 
 Learn more in the [Ofox documentation](https://ofox.ai/docs).
 
@@ -442,6 +442,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.2
   },
   {
+    "model": "ofox/bailian/qwen3.8-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.47
+  },
+  {
     "model": "ofox/bailian/qwen3.8-max",
     "imageInput": true,
     "audioInput": false,
@@ -510,8 +522,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.44,
-    "outputCost": 1.32
+    "inputCost": 0.308,
+    "outputCost": 0.924
   },
   {
     "model": "ofox/deepseek/deepseek-v4-flash-vision-exp",
@@ -558,8 +570,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 1.32,
-    "outputCost": 3.96
+    "inputCost": 0.924,
+    "outputCost": 2.772
   },
   {
     "model": "ofox/deepseek/deepseek-v4.1-flash",
@@ -570,8 +582,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": 0.21,
+    "outputCost": 0.84
   },
   {
     "model": "ofox/google/gemini-2.5-flash",
@@ -882,8 +894,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 1047576,
     "maxOutput": 32768,
-    "inputCost": 2,
-    "outputCost": 8
+    "inputCost": 1.6,
+    "outputCost": 6.4
   },
   {
     "model": "ofox/openai/gpt-4.1-mini",
@@ -894,8 +906,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 1047576,
     "maxOutput": 32768,
-    "inputCost": 0.4,
-    "outputCost": 1.6
+    "inputCost": 0.32,
+    "outputCost": 1.28
   },
   {
     "model": "ofox/openai/gpt-4o",
@@ -906,8 +918,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": 2.5,
-    "outputCost": 10
+    "inputCost": 2,
+    "outputCost": 8
   },
   {
     "model": "ofox/openai/gpt-4o-mini",
@@ -918,8 +930,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 16384,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    "inputCost": 0.12,
+    "outputCost": 0.48
   },
   {
     "model": "ofox/openai/gpt-5",
@@ -930,8 +942,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
+    "inputCost": 1,
+    "outputCost": 8
   },
   {
     "model": "ofox/openai/gpt-5-mini",
@@ -942,8 +954,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 32768,
-    "inputCost": 0.25,
-    "outputCost": 2
+    "inputCost": 0.2,
+    "outputCost": 1.6
   },
   {
     "model": "ofox/openai/gpt-5-nano",
@@ -954,8 +966,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 0.05,
-    "outputCost": 0.4
+    "inputCost": 0.04,
+    "outputCost": 0.32
   },
   {
     "model": "ofox/openai/gpt-5.1",
@@ -966,8 +978,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
+    "inputCost": 1,
+    "outputCost": 8
   },
   {
     "model": "ofox/openai/gpt-5.1-codex-max",
@@ -978,8 +990,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
+    "inputCost": 1,
+    "outputCost": 8
   },
   {
     "model": "ofox/openai/gpt-5.1-codex-mini",
@@ -990,8 +1002,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 65536,
-    "inputCost": 0.25,
-    "outputCost": 2
+    "inputCost": 0.2,
+    "outputCost": 1.6
   },
   {
     "model": "ofox/openai/gpt-5.2",
@@ -1002,8 +1014,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 1.75,
-    "outputCost": 14
+    "inputCost": 1.4,
+    "outputCost": 11.2
   },
   {
     "model": "ofox/openai/gpt-5.2-codex",
@@ -1014,8 +1026,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 1.75,
-    "outputCost": 14
+    "inputCost": 1.4,
+    "outputCost": 11.2
   },
   {
     "model": "ofox/openai/gpt-5.3-codex",
@@ -1026,8 +1038,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 1.75,
-    "outputCost": 14
+    "inputCost": 1.4,
+    "outputCost": 11.2
   },
   {
     "model": "ofox/openai/gpt-5.4",
@@ -1038,8 +1050,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 2.5,
-    "outputCost": 15
+    "inputCost": 2,
+    "outputCost": 12
   },
   {
     "model": "ofox/openai/gpt-5.4-mini",
@@ -1050,8 +1062,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 0.75,
-    "outputCost": 4.5
+    "inputCost": 0.6,
+    "outputCost": 3.6
   },
   {
     "model": "ofox/openai/gpt-5.4-nano",
@@ -1062,8 +1074,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 0.2,
-    "outputCost": 1.25
+    "inputCost": 0.16,
+    "outputCost": 1
   },
   {
     "model": "ofox/openai/gpt-5.4-pro",
@@ -1074,8 +1086,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 30,
-    "outputCost": 180
+    "inputCost": 24,
+    "outputCost": 144
   },
   {
     "model": "ofox/openai/gpt-5.5",
@@ -1086,8 +1098,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 5,
-    "outputCost": 30
+    "inputCost": 4,
+    "outputCost": 24
   },
   {
     "model": "ofox/openai/gpt-5.6-luna",
@@ -1134,8 +1146,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 10,
-    "outputCost": 50
+    "inputCost": 8,
+    "outputCost": 40
   },
   {
     "model": "ofox/qwen/qwen-flash",

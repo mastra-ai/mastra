@@ -8,6 +8,7 @@ export {
 export {
   createDockerRepoTemplate,
   type DockerRepoTemplateOptions,
+  type DockerRepoTemplateResolveOptions,
   type DockerRepoTemplateResolver,
   type RepositoryAccess,
 } from './repo-template';

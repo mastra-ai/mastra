@@ -79,7 +79,7 @@ export const WorkflowTracingRunOptions = ({
 
   return (
     <div className="space-y-2 px-5 py-2">
-      <Txt as="h3" variant="ui-md" className="text-neutral3">
+      <Txt as="h3" variant="body" tone="muted">
         Tracing Options
       </Txt>
 
@@ -88,7 +88,7 @@ export const WorkflowTracingRunOptions = ({
         onChange={handleChange}
         theme={theme}
         extensions={[jsonLanguage]}
-        className={cn('overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3', editorClassName)}
+        className={cn('overflow-y-scroll bg-card rounded-lg overflow-hidden p-3', editorClassName)}
       />
 
       <div className="flex items-center justify-end">

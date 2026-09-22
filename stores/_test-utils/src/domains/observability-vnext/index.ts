@@ -15,6 +15,7 @@ import {
 } from '@mastra/core/storage';
 import type {
   CreateFeedbackRecord,
+  CreateScoreRecord,
   CreateSpanRecord,
   ObservabilityStorage,
   TraceQueryRequest,
@@ -30,6 +31,8 @@ import {
   TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
   TRACE_QUERY_FIXTURE_DATA,
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
+  TRACE_QUERY_SCORE_REPLACEMENT_CASES,
+  TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
 import type { TraceQueryFixtureData } from './trace-query';
 
@@ -376,6 +379,167 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
     }
 
     if (capabilities.traceQuery) {
+      it('matches advanced predicate conformance when polling trace deltas', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const cases = TRACE_QUERY_CONFORMANCE_CASES.filter(
+            testCase =>
+              !testCase.request.group &&
+              !(testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false),
+          );
+          const requests = await Promise.all(
+            cases.map(async testCase => {
+              const request = {
+                timeRange: testCase.request.timeRange,
+                where: testCase.request.where,
+                mode: 'delta' as const,
+                limit: 2,
+              };
+              const bootstrap = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+              if (!('delta' in bootstrap)) throw new Error('Expected delta');
+              return { testCase, request, after: bootstrap.deltaCursor };
+            }),
+          );
+          await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+          for (const { testCase, request, after } of requests) {
+            const expected = testCase.expected.map(row => ('traceId' in row ? row.traceId : '')).sort();
+            const result = await waitFor(
+              async () => {
+                let cursor = after;
+                const ids: string[] = [];
+                for (let page = 0; page < 20; page++) {
+                  const batch = await storage.queryTraces(
+                    planTraceQuery(parseTraceQueryRequest({ ...request, after: cursor })),
+                  );
+                  if (!('delta' in batch)) throw new Error('Expected delta');
+                  ids.push(...batch.traces.map(trace => trace.traceId));
+                  cursor = batch.deltaCursor;
+                  if (!batch.delta.hasMore) return ids.sort();
+                }
+                throw new Error('Delta pagination did not terminate');
+              },
+              ids => JSON.stringify(ids) === JSON.stringify(expected),
+            );
+            expect(result, testCase.name).toEqual(expected);
+          }
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
+      it('hands numbered trace pages to delta polling and drains matching completed roots', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+          const predicate = {
+            op: 'and' as const,
+            args: [
+              { op: 'exists' as const, path: 'threadId' },
+              {
+                op: 'not' as const,
+                arg: { op: 'eq' as const, left: { path: 'traceId' }, right: { literal: 'excluded' } },
+              },
+            ],
+          };
+          const query = (fields: Partial<TraceQueryRequest>) =>
+            storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, where: predicate, ...fields })));
+          const page = await query({ pagination: { page: 0, perPage: 2 } });
+          if (!('pagination' in page)) throw new Error('Expected numbered page');
+          expect(page.traces).toEqual([]);
+          expect(page.deltaCursor).toBeTruthy();
+          const bootstrap = await query({ mode: 'delta' });
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          expect(bootstrap.traces).toEqual([]);
+          expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+          const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+          const rows = ['delta-a', 'delta-b', 'delta-c'].map((traceId, i) => ({
+            ...template,
+            traceId,
+            spanId: traceId,
+            cursorId: 100 + i,
+            threadId: 'delta-thread',
+          }));
+          await writeTraceQueryFixture(
+            storage,
+            {
+              spans: [{ ...rows[0]!, traceId: 'excluded', spanId: 'excluded', name: 'excluded' }, ...rows],
+              scores: [],
+              feedback: [],
+            },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const first = await waitFor(
+            () => query({ mode: 'delta', after: page.deltaCursor, limit: 2 }),
+            result => 'delta' in result && result.traces.length === 2,
+          );
+          if (!('delta' in first)) throw new Error('Expected delta');
+          expect(first.delta).toEqual({ limit: 2, hasMore: true });
+          const second = await query({ mode: 'delta', after: first.deltaCursor, limit: 2 });
+          if (!('delta' in second)) throw new Error('Expected delta');
+          expect(second.delta.hasMore).toBe(false);
+          expect([...first.traces, ...second.traces].map(trace => trace.traceId).sort()).toEqual([
+            'delta-a',
+            'delta-b',
+            'delta-c',
+          ]);
+          const empty = await query({ mode: 'delta', after: second.deltaCursor });
+          if (!('delta' in empty)) throw new Error('Expected delta');
+          expect(empty.traces).toEqual([]);
+          expect(empty.delta.hasMore).toBe(false);
+
+          // A child write does not constitute a new root/completion candidate.
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [{ ...rows[0]!, spanId: 'child', parentSpanId: rows[0]!.spanId }], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const childPoll = await query({ mode: 'delta', after: empty.deltaCursor });
+          expect('traces' in childPoll && childPoll.traces).toEqual([]);
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
+      it('returns a root completed after the delta bootstrap', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+          const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+          const root = { ...template, traceId: 'delta-completion', spanId: 'delta-completion' };
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [{ ...root, isPending: true, endedAt: null }], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const bootstrap = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta' })),
+          );
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [root], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const poll = await waitFor(
+            () =>
+              storage.queryTraces(
+                planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta', after: bootstrap.deltaCursor })),
+              ),
+            result => 'traces' in result && result.traces.length === 1,
+          );
+          expect('traces' in poll && poll.traces.map(trace => trace.traceId)).toEqual(['delta-completion']);
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
       it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
         await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
@@ -398,12 +562,86 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             }),
           );
           const response = await storage.queryTraces(pagePlan);
-          if (!('traces' in response)) throw new Error('Expected trace results');
+          if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
           pagedTraceIds.push(...response.traces.map(trace => trace.traceId));
           after = response.page.next ?? undefined;
         } while (after);
         expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
         expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+
+      describe('score replacement conformance', () => {
+        it('uses one current score per scoreId before trace predicates', async () => {
+          await writeTraceQueryFixture(
+            storage,
+            TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
+            capabilities.traceQuerySpanWriteModel,
+          );
+
+          for (const testCase of TRACE_QUERY_SCORE_REPLACEMENT_CASES) {
+            const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+            const response = await storage.queryTraces(plan);
+            expect.soft(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
+          }
+        });
+      });
+
+      it('matches list-compatible trace-query page boundaries and metadata', async () => {
+        await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+        const pages = [
+          { page: 0, ids: ['trace-d', 'trace-c'], hasMore: true },
+          { page: 1, ids: ['trace-a', 'trace-b'], hasMore: false },
+          { page: 2, ids: [], hasMore: false },
+        ];
+
+        const consecutiveIds: string[] = [];
+        for (const expected of pages) {
+          const plan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              pagination: { page: expected.page, perPage: 2 },
+            }),
+          );
+          const response = await storage.queryTraces(plan);
+          if (!('traces' in response) || !('pagination' in response)) throw new Error('Expected paginated traces');
+          expect(response.traces.map(trace => trace.traceId)).toEqual(expected.ids);
+          expect(response.pagination).toEqual({
+            total: 4,
+            page: expected.page,
+            perPage: 2,
+            hasMore: expected.hasMore,
+          });
+          if (expected.page < 2) consecutiveIds.push(...response.traces.map(trace => trace.traceId));
+        }
+        expect(consecutiveIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
+        expect(new Set(consecutiveIds).size).toBe(consecutiveIds.length);
+
+        const filteredPlan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            where: { op: 'exists', path: 'threadId' },
+            orderBy: [{ field: 'startedAt', direction: 'asc' }],
+            pagination: { page: 0, perPage: 3 },
+          }),
+        );
+        const filtered = await storage.queryTraces(filteredPlan);
+        if (!('traces' in filtered) || !('pagination' in filtered)) throw new Error('Expected paginated traces');
+        expect(filtered.traces.map(trace => trace.traceId)).toEqual(['trace-a', 'trace-b', 'trace-c']);
+        expect(filtered.pagination).toEqual({ total: 3, page: 0, perPage: 3, hasMore: false });
+
+        const emptyPlan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'missing' } },
+            pagination: { page: 0, perPage: 10 },
+          }),
+        );
+        const empty = await storage.queryTraces(emptyPlan);
+        if (!('traces' in empty) || !('pagination' in empty)) throw new Error('Expected paginated traces');
+        expect(empty).toMatchObject({
+          traces: [],
+          pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+        });
       });
 
       describe('feedback replacement conformance', () => {
@@ -506,6 +744,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             } else {
               values.push(...response.groups.map(group => group.threadId));
             }
+            if (!('page' in response)) throw new Error('Expected keyset results');
             after = response.page.next ?? undefined;
           } while (after);
           return values;
@@ -3685,6 +3924,205 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           }),
         );
         expect(await storage.getScoreById('missing-score')).toBeNull();
+      });
+
+      it('uses only the current score version for lookup, pages, filters, and OLAP reads', async () => {
+        const timestamp = new Date('2026-01-01T00:10:00.000Z');
+        const staleScore: CreateScoreRecord = {
+          scoreId: 'score-current-a',
+          timestamp,
+          traceId: 'trace-current',
+          spanId: 'span-current',
+          scorerId: 'rewrite-quality',
+          scorerVersion: 'stale',
+          scoreSource: 'manual',
+          score: 0.2,
+          entityName: 'stale-agent',
+          metadata: { revision: 'stale' },
+        };
+        const lowScore: CreateScoreRecord = {
+          scoreId: 'score-current-b',
+          timestamp: new Date('2026-01-01T00:20:00.000Z'),
+          traceId: 'trace-current',
+          spanId: 'span-current',
+          scorerId: 'rewrite-quality',
+          scorerVersion: 'current',
+          scoreSource: 'automated',
+          score: 0.1,
+          entityName: 'low-agent',
+          metadata: { revision: 'current' },
+        };
+        const currentScore: CreateScoreRecord = {
+          ...staleScore,
+          scorerVersion: 'current',
+          scoreSource: 'automated',
+          score: 0.8,
+          entityName: 'current-agent',
+          metadata: { revision: 'current' },
+        };
+
+        await storage.createScore({ score: staleScore });
+        await storage.createScore({ score: lowScore });
+        await storage.createScore({ score: currentScore });
+
+        await expect(storage.getScoreById('score-current-a')).resolves.toEqual(
+          expect.objectContaining({ score: 0.8, scorerVersion: 'current', entityName: 'current-agent' }),
+        );
+
+        const all = await storage.listScores({ orderBy: { field: 'score', direction: 'ASC' } });
+        expect(all.scores.map(score => [score.scoreId, score.score])).toEqual([
+          ['score-current-b', 0.1],
+          ['score-current-a', 0.8],
+        ]);
+        expect(all.pagination?.total).toBe(2);
+
+        const firstPage = await storage.listScores({
+          pagination: { page: 0, perPage: 1 },
+          orderBy: { field: 'score', direction: 'ASC' },
+        });
+        const secondPage = await storage.listScores({
+          pagination: { page: 1, perPage: 1 },
+          orderBy: { field: 'score', direction: 'ASC' },
+        });
+        expect(firstPage.scores.map(score => score.scoreId)).toEqual(['score-current-b']);
+        expect(secondPage.scores.map(score => score.scoreId)).toEqual(['score-current-a']);
+        expect(firstPage.pagination).toEqual({ total: 2, page: 0, perPage: 1, hasMore: true });
+        expect(secondPage.pagination).toEqual({ total: 2, page: 1, perPage: 1, hasMore: false });
+
+        await expect(storage.listScores({ filters: { scoreSource: 'manual' } })).resolves.toMatchObject({
+          scores: [],
+          pagination: { total: 0 },
+        });
+        await expect(storage.listScores({ filters: { metadata: { revision: 'stale' } } })).resolves.toMatchObject({
+          scores: [],
+          pagination: { total: 0 },
+        });
+
+        await expect(storage.getScoreAggregate({ scorerId: 'rewrite-quality', aggregation: 'count' })).resolves.toEqual(
+          { value: 2 },
+        );
+        await expect(storage.getScoreAggregate({ scorerId: 'rewrite-quality', aggregation: 'avg' })).resolves.toEqual({
+          value: 0.45,
+        });
+
+        const breakdown = await storage.getScoreBreakdown({
+          scorerId: 'rewrite-quality',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        });
+        expect(breakdown.groups).toEqual([
+          { dimensions: { entityName: 'current-agent' }, value: 0.8 },
+          { dimensions: { entityName: 'low-agent' }, value: 0.1 },
+        ]);
+
+        await expect(
+          storage.getScoreTimeSeries({ scorerId: 'rewrite-quality', aggregation: 'avg', interval: '1h' }),
+        ).resolves.toEqual({
+          series: [
+            {
+              name: 'rewrite-quality',
+              points: [{ timestamp: new Date('2026-01-01T00:00:00.000Z'), value: 0.45 }],
+            },
+          ],
+        });
+        const percentiles = await storage.getScorePercentiles({
+          scorerId: 'rewrite-quality',
+          percentiles: [0.5],
+          interval: '1h',
+        });
+        expect(percentiles.series).toHaveLength(1);
+        expect(percentiles.series[0]!.percentile).toBe(0.5);
+        expect(percentiles.series[0]!.points).toHaveLength(1);
+        expect(percentiles.series[0]!.points[0]!.timestamp).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+        expect(percentiles.series[0]!.points[0]!.value).toBeCloseTo(0.45);
+      });
+
+      it('uses the last repeated scoreId entry within one batch', async () => {
+        const timestamp = new Date('2026-01-01T00:00:00.000Z');
+        await storage.batchCreateScores({
+          scores: [
+            {
+              scoreId: 'score-batch-rewrite',
+              timestamp,
+              traceId: 'trace-batch',
+              scorerId: 'batch-quality',
+              score: 0.2,
+            },
+            {
+              scoreId: 'score-batch-other',
+              timestamp,
+              traceId: 'trace-batch',
+              scorerId: 'batch-quality',
+              score: 0.1,
+            },
+            {
+              scoreId: 'score-batch-rewrite',
+              timestamp,
+              traceId: 'trace-batch',
+              scorerId: 'batch-quality',
+              score: 0.8,
+            },
+          ],
+        });
+
+        const result = await storage.listScores({ orderBy: { field: 'score', direction: 'ASC' } });
+        expect(result.scores.map(score => [score.scoreId, score.score])).toEqual([
+          ['score-batch-other', 0.1],
+          ['score-batch-rewrite', 0.8],
+        ]);
+        expect(result.pagination?.total).toBe(2);
+      });
+
+      it('selects the current score before target and timestamp filters', async () => {
+        await storage.createScore({
+          score: {
+            scoreId: 'score-moved-target',
+            timestamp: new Date('2026-02-15T00:00:00.000Z'),
+            traceId: 'trace-old',
+            spanId: 'span-old',
+            scorerId: 'old-scorer',
+            score: 0.9,
+            environment: 'stale',
+            metadata: { revision: 'stale' },
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-moved-target',
+            timestamp: new Date('2026-01-15T00:00:00.000Z'),
+            traceId: 'trace-current',
+            spanId: 'span-current',
+            scorerId: 'current-scorer',
+            score: 0.4,
+            environment: 'production',
+            metadata: { revision: 'current' },
+          },
+        });
+
+        const current = await storage.listScores({ filters: { traceId: 'trace-current', spanId: 'span-current' } });
+        expect(current.scores).toEqual([
+          expect.objectContaining({ scoreId: 'score-moved-target', scorerId: 'current-scorer', score: 0.4 }),
+        ]);
+        expect(current.pagination?.total).toBe(1);
+
+        const staleFilters = [
+          { traceId: 'trace-old' },
+          { spanId: 'span-old' },
+          { scorerId: 'old-scorer' },
+          { environment: 'stale' },
+          { metadata: { revision: 'stale' } },
+          {
+            timestamp: {
+              start: new Date('2026-02-01T00:00:00.000Z'),
+              end: new Date('2026-03-01T00:00:00.000Z'),
+            },
+          },
+        ];
+        for (const filters of staleFilters) {
+          const result = await storage.listScores({ filters });
+          expect.soft(result.scores, JSON.stringify(filters)).toEqual([]);
+          expect.soft(result.pagination?.total, JSON.stringify(filters)).toBe(0);
+        }
       });
 
       it('supports nullable traceId for scores at the storage boundary', async () => {

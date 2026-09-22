@@ -3,3 +3,9 @@ packages:
 
 catalog:
   tsx: ^4.23.1
+
+overrides:
+  jsondiffpatch: 0.7.6
+  proxy-addr: 2.0.8
+  qs: 6.16.0
+  fast-uri: 3.1.7

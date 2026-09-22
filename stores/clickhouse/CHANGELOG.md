@@ -1,5 +1,45 @@
 # @mastra/clickhouse
 
+## 1.20.0-alpha.4
+
+### Minor Changes
+
+- Added ClickHouse support for handing numbered trace-query pages to delta polling, with stable cursor tie-breaking and the existing two-day retention window. ([#24329](https://github.com/mastra-ai/mastra/pull/24329))
+
+  Numbered pages remain available without a polling cursor when the installed core version lacks trace-query delta support.
+
+  ```ts
+  // Start with a numbered page.
+  const page = await client.queryTraces({ timeRange, pagination: { page: 0, perPage: 100 } });
+  // Continue with delta polling.
+  const delta = await client.queryTraces({ timeRange, mode: 'delta', after: page.deltaCursor });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b)]:
+  - @mastra/core@1.68.0-alpha.11
+
+## 1.20.0-alpha.3
+
+### Minor Changes
+
+- Added list-compatible page pagination for advanced trace queries in ClickHouse storage. ([#24061](https://github.com/mastra-ai/mastra/pull/24061))
+
+  ```ts
+  const result = await client.queryTraces({
+    timeRange,
+    pagination: { page: 0, perPage: 25 },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed rewritten observability scores so ordinary reads and trace predicates use compact current state and consistently return the latest sequentially written value for each score ID. Overlapping concurrent rewrites of one score ID have an undefined winner. ([#24242](https://github.com/mastra-ai/mastra/pull/24242))
+
+- Updated dependencies [[`4266b67`](https://github.com/mastra-ai/mastra/commit/4266b677d33bb20651ca296f64aa91fa3b3d4e82), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`abecb67`](https://github.com/mastra-ai/mastra/commit/abecb6709643785fd87a3ff9251032a61479ccab), [`ee7187e`](https://github.com/mastra-ai/mastra/commit/ee7187e7bf66db46630f33c64e86b1ff7bb0c0b7), [`babda00`](https://github.com/mastra-ai/mastra/commit/babda005397d2780aa21be0a7670688b704bdb2f), [`2476423`](https://github.com/mastra-ai/mastra/commit/24764233246dc85d7bcba8f8bb610110449a54d6), [`bdab4a8`](https://github.com/mastra-ai/mastra/commit/bdab4a889808d502f398a8086af3b50cc3bfbcd5), [`53cdd63`](https://github.com/mastra-ai/mastra/commit/53cdd6368b12aea743f95118a49fc6b93985fd20)]:
+  - @mastra/core@1.68.0-alpha.5
+
 ## 1.20.0-alpha.2
 
 ### Minor Changes

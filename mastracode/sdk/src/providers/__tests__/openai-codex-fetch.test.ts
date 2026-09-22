@@ -57,8 +57,10 @@ describe('OpenAI Codex OAuth fetch', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0].toString()).toBe('https://chatgpt.com/backend-api/codex/responses');
-    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const [input, init] = fetchMock.mock.calls[0]!;
+    const request = input instanceof Request ? input : new Request(input, init);
+    expect(request.url).toBe('https://chatgpt.com/backend-api/codex/responses');
+    const headers = request.headers;
     expect(headers.get('Authorization')).toBe('Bearer oauth-token');
     expect(headers.get('ChatGPT-Account-ID')).toBe('acct-123');
     expect(headers.get('originator')).toBe('mastracode');

@@ -42,7 +42,7 @@ const getStatusColor = (status?: string) => {
       return 'bg-yellow-500';
     case 'stopped':
     case 'paused':
-      return 'bg-gray-500';
+      return 'bg-muted-foreground';
     case 'error':
     case 'failed':
       return 'bg-red-500';
@@ -102,13 +102,13 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
   }, [content]);
 
   return (
-    <div className="border-border1 overflow-hidden rounded-md border">
+    <div className="border-border overflow-hidden rounded-md border">
       {/* Terminal header with command */}
       {command && (
-        <div className="bg-surface3 border-border1 flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="bg-card border-border flex items-center justify-between gap-2 border-b px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="text-neutral6 text-ui-sm shrink-0">$</span>
-            <code className="text-neutral5 text-ui-sm truncate font-mono">{command}</code>
+            <span className="text-foreground text-caption shrink-0">$</span>
+            <code className="text-foreground text-caption truncate font-mono">{command}</code>
           </div>
           {onCopy && (
             <Button variant="default" size="icon-sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
@@ -134,9 +134,9 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
       <pre
         ref={contentRef}
         style={{ maxHeight }}
-        className="text-ui-md overflow-x-auto overflow-y-auto bg-black p-3 font-mono whitespace-pre-wrap text-neutral-300"
+        className="text-body overflow-x-auto overflow-y-auto bg-black p-3 font-mono whitespace-pre-wrap text-neutral-300"
       >
-        {content || <span className="text-neutral6 italic">No output</span>}
+        {content || <span className="text-foreground italic">No output</span>}
       </pre>
     </div>
   );
@@ -199,7 +199,16 @@ export const SandboxExecutionBadge = ({
 
   // Exit chunk scoped to this tool call
   const exitChunk = dataParts.find(chunk => chunk.name === 'sandbox-exit' && chunk.data?.toolCallId === toolCallId) as
-    | { name: string; data: { exitCode: number; success: boolean; executionTimeMs?: number; killed?: boolean } }
+    | {
+        name: string;
+        data: {
+          exitCode: number;
+          success: boolean;
+          executionTimeMs?: number;
+          killed?: boolean;
+          timedOut?: boolean;
+        };
+      }
     | undefined;
 
   // Streaming is complete if we have exit chunk or a final result
@@ -254,7 +263,7 @@ export const SandboxExecutionBadge = ({
           {execMeta?.sandbox && (
             <Link
               href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
-              className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 text-ui-sm flex items-center gap-1.5 rounded border px-1.5 py-0.5 transition-colors"
+              className="text-foreground bg-card border-border state-layer hover:border-border-strong text-caption flex items-center gap-1.5 rounded border px-1.5 py-0.5"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               <span className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(execMeta.sandbox.status))} />
@@ -267,11 +276,11 @@ export const SandboxExecutionBadge = ({
         <div className="flex items-center gap-2">
           {isRunning ? (
             <>
-              <span className="text-accent6 text-ui-sm flex items-center gap-1.5">
+              <span className="text-accent6 text-caption flex items-center gap-1.5">
                 <span className="bg-accent6 h-1.5 w-1.5 animate-pulse rounded-full" />
                 <span className="animate-pulse">running</span>
               </span>
-              <span className="text-neutral6 text-ui-sm tabular-nums">{elapsedTime}ms</span>
+              <span className="text-foreground text-caption tabular-nums">{elapsedTime}ms</span>
             </>
           ) : (
             <>
@@ -279,15 +288,11 @@ export const SandboxExecutionBadge = ({
                 (exitSuccess ? (
                   <CheckIcon className="text-green-400" size={14} />
                 ) : wasKilled ? (
-                  <span className="text-ui-xs rounded bg-orange-500/20 px-1.5 py-0.5 font-medium text-orange-400">
-                    killed
-                  </span>
+                  <span className="text-meta rounded bg-orange-500/20 px-1.5 py-0.5 text-orange-400">killed</span>
                 ) : (
-                  <span className="text-ui-xs rounded bg-red-500/20 px-1.5 py-0.5 font-medium text-red-400">
-                    exit {exitCode}
-                  </span>
+                  <span className="text-meta rounded bg-red-500/20 px-1.5 py-0.5 text-red-400">exit {exitCode}</span>
                 ))}
-              {executionTime !== undefined && <span className="text-neutral6 text-ui-sm">{executionTime}ms</span>}
+              {executionTime !== undefined && <span className="text-foreground text-caption">{executionTime}ms</span>}
             </>
           )}
         </div>

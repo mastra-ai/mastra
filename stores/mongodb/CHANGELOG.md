@@ -1,5 +1,23 @@
 # @mastra/mongodb
 
+## 1.18.9-alpha.2
+
+### Patch Changes
+
+- Dataset, dataset item, experiment and experiment result listings now honor the `orderBy` option instead of always returning a fixed order. This requires `@mastra/core` 1.68.0 or newer. ([#24567](https://github.com/mastra-ai/mastra/pull/24567))
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b)]:
+  - @mastra/core@1.68.0-alpha.11
+
+## 1.18.9-alpha.1
+
+### Patch Changes
+
+- Fixed the type of `documentFilter` on `MongoDBVector.query()`. It is applied to the single `document` field, so it now accepts a condition such as `{ $regex: /astronaut/ }` or a plain value. Previously it was typed as a whole filter, which rejected those correct calls and accepted a field-map shape that produced a query against a field inside the document text. ([#24365](https://github.com/mastra-ai/mastra/pull/24365))
+
+- Updated dependencies [[`6ef8186`](https://github.com/mastra-ai/mastra/commit/6ef8186ade9c8ca69269deed07fd47a942ecf70d), [`34e4d21`](https://github.com/mastra-ai/mastra/commit/34e4d21e62c61e11e52aa7d6c39748b1120fbb93), [`8702f39`](https://github.com/mastra-ai/mastra/commit/8702f39331322ef0296fd3d68c0bd0997079faaa), [`e6072cb`](https://github.com/mastra-ai/mastra/commit/e6072cbbd3482e37027e53e4d62da7aad6a36c41), [`8d808d8`](https://github.com/mastra-ai/mastra/commit/8d808d8452b8acd5eda4f8cfe014331a8c0f1e92)]:
+  - @mastra/core@1.68.0-alpha.6
+
 ## 1.18.9-alpha.0
 
 ### Patch Changes

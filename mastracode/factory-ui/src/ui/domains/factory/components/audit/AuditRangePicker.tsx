@@ -134,14 +134,14 @@ export function AuditRangePicker({
               <Fragment key={at}>
                 {opensADay(at, majorTicks[index - 1]) ? (
                   <span
-                    className="text-ui-xs text-neutral6/50 absolute top-0 -translate-x-1/2 font-medium whitespace-nowrap tabular-nums"
+                    className="text-meta text-muted-foreground absolute top-0 -translate-x-1/2 whitespace-nowrap tabular-nums"
                     style={{ left: `${position}%` }}
                   >
                     {dayLabel(at)}
                   </span>
                 ) : null}
                 <span
-                  className="text-ui-xs text-neutral6/50 absolute bottom-0 -translate-x-1/2 font-medium whitespace-nowrap tabular-nums"
+                  className="text-meta text-muted-foreground absolute bottom-0 -translate-x-1/2 whitespace-nowrap tabular-nums"
                   style={{ left: `${position}%` }}
                 >
                   {majorStep < DAY ? timeLabel(at) : weekdayLabel(at)}
@@ -168,13 +168,13 @@ export function AuditRangePicker({
           boundary === 'to' && !showEndLabels ? null : (
             <Fragment key={boundary}>
               <span
-                className="text-ui-xs text-neutral6/80 pointer-events-none absolute top-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
+                className="text-meta text-foreground pointer-events-none absolute top-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
                 style={{ left: labelLeft(selection[boundary]) }}
               >
                 {dayLabel(selection[boundary])}
               </span>
               <span
-                className="text-ui-xs text-neutral6/80 pointer-events-none absolute bottom-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
+                className="text-meta text-foreground pointer-events-none absolute bottom-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
                 style={{ left: labelLeft(selection[boundary]) }}
               >
                 {timeLabel(selection[boundary])}
@@ -185,7 +185,7 @@ export function AuditRangePicker({
 
         <div
           className={cn(
-            'bg-surface1/30 ring-border2 dark:bg-white/5 absolute top-1/2 flex h-8 min-w-8 -translate-y-1/2 cursor-grab items-stretch justify-between rounded-lg backdrop-blur-xs ring-1 active:cursor-grabbing',
+            'bg-sidebar/30 ring-border-strong dark:bg-white/5 absolute top-1/2 flex h-8 min-w-8 -translate-y-1/2 cursor-grab items-stretch justify-between rounded-lg backdrop-blur-xs ring-1 active:cursor-grabbing',
             LENS_SHADOW,
             drag === undefined && 'transition-[left,width] duration-150 ease-out motion-reduce:transition-none',
           )}

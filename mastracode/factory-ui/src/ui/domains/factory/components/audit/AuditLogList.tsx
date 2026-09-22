@@ -18,7 +18,7 @@ import { LoadMoreSentinel } from '../LoadMoreSentinel';
 const AUDIT_GRID_CLASS =
   'grid-cols-[4.5rem_minmax(0,1fr)_1rem] lg:grid-cols-[7rem_minmax(8rem,0.8fr)_minmax(10rem,0.9fr)_minmax(11rem,1.1fr)_minmax(13rem,1.4fr)_1rem]';
 
-const CELL_CLASS = 'min-w-0 truncate text-ui-sm';
+const CELL_CLASS = 'min-w-0 truncate text-caption';
 
 function AuditCell({ children, className, title }: { children: ReactNode; className?: string; title?: string }) {
   return (
@@ -49,7 +49,7 @@ function AuditEventRow({
   const mobileSummary = [actor, targetLabel, detail].filter(Boolean).join(' · ');
   const cells = (
     <>
-      <AuditCell className="text-ui-xs text-neutral2 self-start tabular-nums lg:self-auto" title={event.occurredAt}>
+      <AuditCell className="text-meta text-neutral2 self-start tabular-nums lg:self-auto" title={event.occurredAt}>
         {relativeTime(event.occurredAt)}
       </AuditCell>
       <AuditCell className={cn('hidden lg:block', event.actorType === 'agent' ? 'text-accent6' : 'text-neutral3')}>
@@ -65,7 +65,7 @@ function AuditEventRow({
         </span>
       </AuditCell>
       <AuditCell className="text-neutral4 hidden lg:block">{targetLabel}</AuditCell>
-      <AuditCell className="text-ui-xs text-neutral2 hidden lg:block">{detail}</AuditCell>
+      <AuditCell className="text-meta text-neutral2 hidden lg:block">{detail}</AuditCell>
       <span className="text-neutral2 flex justify-end">
         {hasMetadata ? (
           <span
@@ -79,7 +79,7 @@ function AuditEventRow({
           </span>
         ) : null}
       </span>
-      <span className="text-ui-xs text-neutral2 col-start-2 col-end-3 row-start-2 min-w-0 truncate lg:hidden">
+      <span className="text-meta text-neutral2 col-start-2 col-end-3 row-start-2 min-w-0 truncate lg:hidden">
         {mobileSummary}
       </span>
     </>
@@ -88,8 +88,8 @@ function AuditEventRow({
   return (
     <li
       className={cn(
-        'rounded-md transition-colors even:bg-neutral6/5 hover:bg-neutral6/10',
-        expanded && 'bg-neutral6/10 even:bg-neutral6/10',
+        'rounded-md transition-colors even:bg-fill-subtle hover:bg-fill-hover',
+        expanded && 'bg-fill-active even:bg-fill-active',
       )}
     >
       {hasMetadata ? (
@@ -114,7 +114,7 @@ function AuditEventRow({
         <Code
           code={JSON.stringify(visibleMetadata, null, 2)}
           lang="json"
-          className="text-ui-xs text-neutral4 m-0 mx-3 mb-3 px-2 py-1 font-sans break-all whitespace-pre-wrap"
+          className="text-meta text-neutral4 m-0 mx-3 mb-3 px-2 py-1 font-sans break-all whitespace-pre-wrap"
         />
       ) : null}
     </li>
@@ -147,7 +147,7 @@ export function AuditLogList({
     <div className="min-w-0 lg:min-w-[57rem] lg:pr-1">
       <div
         className={cn(
-          'sticky top-(--page-sticky-top) z-20 hidden items-center gap-4 rounded-lg bg-surface4 px-3 py-2 text-ui-sm font-semibold tracking-tight text-neutral2 lg:grid',
+          'sticky top-(--page-sticky-top) z-20 hidden items-center gap-4 rounded-lg bg-fill px-3 py-2 text-column font-semibold tracking-tight text-neutral2 lg:grid',
           AUDIT_GRID_CLASS,
         )}
       >

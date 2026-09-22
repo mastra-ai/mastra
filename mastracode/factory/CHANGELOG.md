@@ -1,5 +1,156 @@
 # @mastra/factory
 
+## 0.16.0-alpha.11
+
+### Minor Changes
+
+- Added GitLab as a Factory source-control and work-intake provider for direct and Platform-managed deployments, with the same session, board, review, and notification behaviour that GitHub repositories get. Both credential modes can back Factory sessions with GitLab repositories. ([#24604](https://github.com/mastra-ai/mastra/pull/24604))
+
+  - Intake discovers GitLab projects, ingests issues with labels, label colours, assignees, weight-derived priority, and comment counts, reads discussions, adds comments, updates issue state, and routes selected projects to factories from the Settings UI. GitLab issue and GitHub issue routing are stored separately.
+  - Version control registers repositories, manages the merge request lifecycle, creates and edits merge request notes, manages diff-anchored review discussions, and adds or removes individual reviewers. Direct tokens and Platform connection credentials both provide authenticated clone and push for repository-backed sessions.
+  - Webhook ingress verifies `X-Gitlab-Token` and routes supported issue, note, and merge request events into Factory rules. Unsupported events, including push events, are acknowledged without changing board state. Issue and merge request reconcilers cover missed terminal events and settle cards the same way the GitHub reconcilers do.
+  - Sessions that open a merge request through `source_control_create_change_request` are subscribed to it automatically. New notes, closes, and merges wake the subscribed session as the user who created it, with a notification that links to the merge request. `gitlab_subscribe_mr` and `gitlab_unsubscribe_mr` manage subscriptions by hand, `gitlab_get_issue` fetches a routed issue with its discussion, and `GET /web/gitlab/subscriptions` lists a thread's subscriptions for the UI.
+  - Review board runs use the `factory-gitlab-review` and `factory-gitlab-rereview` skills, check out the merge request head, and re-review when new commits arrive. The UI names merge requests as `!n`, shows merged and closed states, and offers GitLab in onboarding, repository settings, intake routing, and board empty states.
+
+  GitLab approvals are exposed as an approval snapshot and are used for submitted `approve` reviews; submitted `comment` reviews become merge request notes. Individual listed approvals and comment reviews can be fetched through synthetic review IDs. GitLab has no equivalent for mutable pending reviews, request-changes reviews, approval dismissal, team review requests, or synchronous rebase-and-merge, so those operations fail explicitly with a not-supported response.
+
+  ```ts
+  import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
+
+  const gitlab = new GitLabIntegration({
+    baseUrl: 'https://gitlab.example.com',
+    accessToken: process.env.GITLAB_ACCESS_TOKEN!,
+    accessTokenType: 'group', // Or 'personal'.
+    webhookSecret: process.env.GITLAB_WEBHOOK_SECRET,
+  });
+  ```
+
+  Direct mode reads the same values from `GITLAB_ACCESS_TOKEN`, `GITLAB_ACCESS_TOKEN_TYPE`, `GITLAB_BASE_URL`, and `GITLAB_WEBHOOK_SECRET` when constructor options are omitted. Personal and Group Access Tokens are both supported; use `api` and `write_repository` scopes. `GITLAB_BASE_URL` must use HTTPS except for loopback development instances.
+
+  When Platform credentials are configured, Factory discovers active GitLab connections for the organization, and `MASTRA_GITLAB_CONNECTION_ID` optionally pins one of them. Requests go through `/v2/connections/{connectionId}/proxy`, and `MASTRA_GITLAB_WEBHOOK_SECRET` verifies webhooks. Explicit direct credentials take precedence. Platform-managed clone and push resolve a fresh repository credential for the selected connection; the connection selector itself is never used as a Git token.
+
+### Patch Changes
+
+- Fixed git credentials appearing in command lines and remote URLs inside session sandboxes. Clone, fetch, push and pull request creation now receive the token through the process environment only. Branch names git would refuse (`a..b`, `x.lock`, a trailing `/`) are now rejected when saved instead of failing later at checkout. ([#24604](https://github.com/mastra-ai/mastra/pull/24604))
+
+- Fixed Platform-managed GitLab connections created with a personal access token not being discovered. Factory now lists connections from every GitLab credential flow the Platform offers, and the documentation no longer presents `MASTRA_GITLAB_CONNECTION_ID` as required; it only pins discovery to one connection. ([#24630](https://github.com/mastra-ai/mastra/pull/24630))
+
+- Platform-connected GitLab deployments now receive issue, note, merge request and push events by polling the Platform event log, so they no longer need a direct project webhook to Factory or a shared `MASTRA_GITLAB_WEBHOOK_SECRET`. Polling is on by default and controlled with `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED` and `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS`. ([#24631](https://github.com/mastra-ai/mastra/pull/24631))
+
+  A Platform-connected deployment needs no webhook configuration; polling starts with the integration:
+
+  ```ts
+  import { PlatformGitLabIntegration } from '@mastra/factory/integrations/platform/gitlab/integration';
+
+  // Discovers every active Platform GitLab connection and polls its event log.
+  const gitlab = new PlatformGitLabIntegration();
+
+  // Tune or disable polling per deployment instead of through the environment.
+  const quiet = new PlatformGitLabIntegration({ pollingIntervalMs: 60_000 });
+  const webhookOnly = new PlatformGitLabIntegration({ pollingEnabled: false });
+  ```
+
+- Fixed sessions woken by a pull request comment or close failing with `missing-user-context` or `No usable openai credential`. Woken runs now execute as the user who subscribed, with that organization's credentials available. ([#24604](https://github.com/mastra-ai/mastra/pull/24604))
+
+- Improved Factory PR reviews and re-reviews: ([#24626](https://github.com/mastra-ai/mastra/pull/24626))
+
+  - The reviewer writes its own design for the problem before opening the diff, then judges whether the PR's approach and scope are justified — not only whether the implementation works.
+  - Before every verdict it checks its own requested changes: why each belongs in this PR, what happens if the author follows them exactly, and whether each verification probe could actually detect the failure it claims to rule out.
+  - Requested changes in the posted review are written as direct, evidence-backed change requests with no optional tiers.
+  - The reviewer loads bundled per-category review guidance (behavior change, bug fix, public API, schema/storage, security, and others) matched to the change, before opening the diff and again as the change reveals further categories.
+
+- Updated dependencies [[`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`89b8005`](https://github.com/mastra-ai/mastra/commit/89b8005902259b7c53b4079787a4798262b83192), [`9cfb572`](https://github.com/mastra-ai/mastra/commit/9cfb5720d30af5421c021ab2cf8edd7a517b0442), [`6fd532a`](https://github.com/mastra-ai/mastra/commit/6fd532a2462858637a5f0b38096e9ab105bc146f), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`33a46bd`](https://github.com/mastra-ai/mastra/commit/33a46bd43a5945b052e00341d1eecdcd78327d6e), [`f43da93`](https://github.com/mastra-ai/mastra/commit/f43da9335acf26f9d18a1fa4abb49efe70be935e), [`02f8f09`](https://github.com/mastra-ai/mastra/commit/02f8f09bc3665ed9a82ffbbc769e42e6027dc29b)]:
+  - @mastra/core@1.68.0-alpha.11
+  - @mastra/code-sdk@1.8.0-alpha.11
+
+## 0.16.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`372dfed`](https://github.com/mastra-ai/mastra/commit/372dfed464ad1cbf2d42e5559f08205eea8d54a0)]:
+  - @mastra/core@1.68.0-alpha.10
+  - @mastra/code-sdk@1.8.0-alpha.10
+
+## 0.16.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`2cb5319`](https://github.com/mastra-ai/mastra/commit/2cb5319fc72ef20e7feebfa1e786ff78956aae84), [`f6e7562`](https://github.com/mastra-ai/mastra/commit/f6e7562b2ccfdd5d7d77a7eeea0849b6ffd2ec94), [`d4795a4`](https://github.com/mastra-ai/mastra/commit/d4795a42067605d2bbec10ad0b3dcc45acf02147), [`b87aa0d`](https://github.com/mastra-ai/mastra/commit/b87aa0dc38055558950024f750532ddae6ccf40c), [`53519a2`](https://github.com/mastra-ai/mastra/commit/53519a29ce0063712786b74973ae2dbe97a433a7)]:
+  - @mastra/core@1.68.0-alpha.9
+  - @mastra/code-sdk@1.8.0-alpha.9
+
+## 0.16.0-alpha.8
+
+### Minor Changes
+
+- Brought incident.io follow-up intake to full parity with Linear and Jira. ([#24319](https://github.com/mastra-ai/mastra/pull/24319))
+
+  - **Connections**: in-app connect and reconnect for Platform-managed incident.io accounts, runtime discovery of multiple installations, and no more `MASTRA_INCIDENT_IO_CONNECTION_ID`.
+  - **Auto-ingestion**: observed follow-ups materialize as Work-board cards through configurable event rules (`followUpObserved`, `followUpClosed`), with close events transitioning cards to done/canceled.
+  - **Agent tools**: board runs get `incidentio_get_follow_up` for reading follow-up details.
+  - **Board UX**: follow-up cards carry assignee, creator, labels, priority, and incident metadata, plus the same Investigate/Build actions and work-item menu as Linear cards.
+  - **Routing**: teams choose which Factory and board receive follow-ups; incidents stay unrouted.
+
+  ```ts
+  import { IncidentioIntegration } from '@mastra/factory';
+
+  const incidentio = new IncidentioIntegration({
+    apiKey: process.env.INCIDENT_IO_API_KEY!,
+    // Optionally override the default follow-up rules:
+    rules: { followUpClosed: null }, // disable automatic close transitions
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`2e68388`](https://github.com/mastra-ai/mastra/commit/2e68388d003347fa3276a3985cb7f5a9c0b41f82), [`d21aa84`](https://github.com/mastra-ai/mastra/commit/d21aa84aac0dc61bbc43434af7a3b3180373a8a7), [`a0fbeab`](https://github.com/mastra-ai/mastra/commit/a0fbeabf6298854bcc6d64c8b31530bedd1ea934), [`79385bb`](https://github.com/mastra-ai/mastra/commit/79385bbd8a52ed5e5536b16190dd8b8ac1ee0840), [`5014bf6`](https://github.com/mastra-ai/mastra/commit/5014bf6a52f04304c30b4e572df4052085e3ac02), [`38368c1`](https://github.com/mastra-ai/mastra/commit/38368c18b49f08d90223431226ce33baf644fc57), [`fc1e4f2`](https://github.com/mastra-ai/mastra/commit/fc1e4f2d4e0c1caa9d29de02f7be6a7d69ee2ea2), [`58c88c4`](https://github.com/mastra-ai/mastra/commit/58c88c4e58504176ccb06d52df9440105aca788d), [`fc1e4f2`](https://github.com/mastra-ai/mastra/commit/fc1e4f2d4e0c1caa9d29de02f7be6a7d69ee2ea2), [`aee580d`](https://github.com/mastra-ai/mastra/commit/aee580d98976560e68e401c36790ce0cc6443aad), [`7c73bac`](https://github.com/mastra-ai/mastra/commit/7c73baccc8336a4fb0db92614bf778bae5459e24)]:
+  - @mastra/code-sdk@1.8.0-alpha.8
+  - @mastra/core@1.68.0-alpha.8
+
+## 0.16.0-alpha.7
+
+### Minor Changes
+
+- Added a Jira Cloud intake integration for the Software Factory with full Linear-equivalent behavior, supporting both direct credentials and Platform-managed connections. ([#20579](https://github.com/mastra-ai/mastra/pull/20579))
+
+  Direct mode: set `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` to use a deployment-global Atlassian API token — no OAuth app setup, intended for self-hosted/single-tenant deployments. Platform mode: with `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` configured, Factory automatically discovers visible Platform Jira connections (multiple sites supported) and proxies Jira requests through the Platform integrations service; an explicitly configured `JiraIntegration` takes precedence.
+
+  Factory settings and onboarding connect Jira accounts in-app, select Jira projects as intake sources, and route each project to a Factory board. Observed issues on routed projects materialize automatically as work items, closed issues transition their linked card to done or canceled, and both Jira integrations accept `rules` overrides for the `issueObserved` and `issueClosed` events. A background reconciliation worker keeps imported work items fresh (`MASTRACODE_JIRA_RECONCILE_ENABLED`, `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS`). Work cards preserve Jira descriptions, labels, reporters, assignees, priority, project, site, state, and timestamps, appear in the board's teammate filters, and offer the same investigate and build actions as Linear issues. Agents get `jira_get_issue` and `jira_create_comment` tools, including on automated board runs.
+
+### Patch Changes
+
+- Fixed a zod version mismatch that could make tool and workflow schemas built by these packages incompatible with schemas from @mastra/core. ([#24428](https://github.com/mastra-ai/mastra/pull/24428))
+
+- Updated dependencies [[`2339809`](https://github.com/mastra-ai/mastra/commit/2339809d73e8d28272df7e503d392bfc9ca18647), [`11560f5`](https://github.com/mastra-ai/mastra/commit/11560f54627055f5ae541a6825669778983a23c9), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`15d3e76`](https://github.com/mastra-ai/mastra/commit/15d3e7647636c7286650ef517953c9885806c3dd), [`3c86726`](https://github.com/mastra-ai/mastra/commit/3c867260be59d3cd8337bc0af9a76bac517fe16f), [`0a989ab`](https://github.com/mastra-ai/mastra/commit/0a989abf37c409040ee2ce9a9ccfcfb5a700508e), [`ed24c7f`](https://github.com/mastra-ai/mastra/commit/ed24c7f654bb193a0c503469f4f19dda9d687ecb), [`0894a0e`](https://github.com/mastra-ai/mastra/commit/0894a0e6ede48058b547aab5bb8a2a3d71c3878a), [`5968b71`](https://github.com/mastra-ai/mastra/commit/5968b718044f8dd21bab6ce4ae7da3590729842b), [`dafabf2`](https://github.com/mastra-ai/mastra/commit/dafabf22e4f4b0aabecb09839de5abe54e03151a), [`150a670`](https://github.com/mastra-ai/mastra/commit/150a67086539eea91cac3550fc068e6ac5c7e79b), [`9fe69d6`](https://github.com/mastra-ai/mastra/commit/9fe69d6566c3e6d1e5c9f5bf5e9848b35c73e182), [`c6999e2`](https://github.com/mastra-ai/mastra/commit/c6999e2b4ab805301e66723ca8ba9fe30faa82ca)]:
+  - @mastra/code-sdk@1.8.0-alpha.7
+  - @mastra/core@1.68.0-alpha.7
+
+## 0.16.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`6ef8186`](https://github.com/mastra-ai/mastra/commit/6ef8186ade9c8ca69269deed07fd47a942ecf70d), [`34e4d21`](https://github.com/mastra-ai/mastra/commit/34e4d21e62c61e11e52aa7d6c39748b1120fbb93), [`8702f39`](https://github.com/mastra-ai/mastra/commit/8702f39331322ef0296fd3d68c0bd0997079faaa), [`e6072cb`](https://github.com/mastra-ai/mastra/commit/e6072cbbd3482e37027e53e4d62da7aad6a36c41), [`2ea44c1`](https://github.com/mastra-ai/mastra/commit/2ea44c1b578d8116507160ac32c7824faa07158e), [`8d808d8`](https://github.com/mastra-ai/mastra/commit/8d808d8452b8acd5eda4f8cfe014331a8c0f1e92), [`8d808d8`](https://github.com/mastra-ai/mastra/commit/8d808d8452b8acd5eda4f8cfe014331a8c0f1e92)]:
+  - @mastra/core@1.68.0-alpha.6
+  - @mastra/code-sdk@1.8.0-alpha.6
+
+## 0.16.0-alpha.5
+
+### Patch Changes
+
+- Fixed synchronous `onAccepted` hook failures rejecting an already-committed Factory transition and skipping its `stage_moved` audit record. Synchronous throws are now isolated and logged the same way as asynchronous rejections. ([#24304](https://github.com/mastra-ai/mastra/pull/24304))
+
+- Updated dependencies [[`8d578e4`](https://github.com/mastra-ai/mastra/commit/8d578e42f3ecfa9d625f23d6a78e666023cda7ff), [`4266b67`](https://github.com/mastra-ai/mastra/commit/4266b677d33bb20651ca296f64aa91fa3b3d4e82), [`bec18d0`](https://github.com/mastra-ai/mastra/commit/bec18d05e7f997ead6ada04a4dc0179c3cad8aa2), [`abecb67`](https://github.com/mastra-ai/mastra/commit/abecb6709643785fd87a3ff9251032a61479ccab), [`ee7187e`](https://github.com/mastra-ai/mastra/commit/ee7187e7bf66db46630f33c64e86b1ff7bb0c0b7), [`babda00`](https://github.com/mastra-ai/mastra/commit/babda005397d2780aa21be0a7670688b704bdb2f), [`2476423`](https://github.com/mastra-ai/mastra/commit/24764233246dc85d7bcba8f8bb610110449a54d6), [`bdab4a8`](https://github.com/mastra-ai/mastra/commit/bdab4a889808d502f398a8086af3b50cc3bfbcd5), [`53cdd63`](https://github.com/mastra-ai/mastra/commit/53cdd6368b12aea743f95118a49fc6b93985fd20)]:
+  - @mastra/code-sdk@1.8.0-alpha.5
+  - @mastra/core@1.68.0-alpha.5
+
+## 0.16.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`697fecc`](https://github.com/mastra-ai/mastra/commit/697feccaa4ad5df913c22e47bf16f493dd7956a8), [`0bf287c`](https://github.com/mastra-ai/mastra/commit/0bf287c36ec14b45f5a4fdd0d279698694f592dd), [`6249741`](https://github.com/mastra-ai/mastra/commit/6249741f8463bdc5a05ded2b35b143f92f33afbf), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`b26e528`](https://github.com/mastra-ai/mastra/commit/b26e5288891641044a3c26a498c06259985fed10), [`b2f412a`](https://github.com/mastra-ai/mastra/commit/b2f412ae77fa5379471d103ebcc1ba69b22dd353)]:
+  - @mastra/core@1.68.0-alpha.4
+  - @mastra/code-sdk@1.8.0-alpha.4
+
 ## 0.16.0-alpha.3
 
 ### Minor Changes

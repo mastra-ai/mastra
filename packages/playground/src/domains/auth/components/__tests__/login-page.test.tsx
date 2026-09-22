@@ -90,15 +90,13 @@ describe('LoginPage UI parity for /login and /signup', () => {
     expect(root).toBeTruthy();
   });
 
-  it('does not wrap content in a bordered card on either route', async () => {
+  it('does not wrap content in a rounded padded card on either route', async () => {
     mockCapabilities(credentialsCapabilities);
     const { unmount } = renderLogin();
 
     const loginRoot = await screen.findByTestId('login-page');
     const loginInner = loginRoot.firstElementChild as HTMLElement;
     expect(loginInner.className).not.toMatch(/rounded-lg/);
-    expect(loginInner.className).not.toMatch(/border-border1/);
-    expect(loginInner.className).not.toMatch(/bg-surface2/);
     expect(loginInner.className).not.toMatch(/\bp-8\b/);
 
     unmount();
@@ -109,8 +107,6 @@ describe('LoginPage UI parity for /login and /signup', () => {
     const signUpRoot = await screen.findByTestId('login-page');
     const signUpInner = signUpRoot.firstElementChild as HTMLElement;
     expect(signUpInner.className).not.toMatch(/rounded-lg/);
-    expect(signUpInner.className).not.toMatch(/border-border1/);
-    expect(signUpInner.className).not.toMatch(/bg-surface2/);
     expect(signUpInner.className).not.toMatch(/\bp-8\b/);
   });
 
@@ -152,8 +148,8 @@ describe('LoginPage UI parity for /login and /signup', () => {
     mockCapabilities(credentialsCapabilities);
     renderLogin();
 
-    expect(await screen.findByLabelText('Email')).toBeTruthy();
-    expect(screen.getByLabelText('Password')).toBeTruthy();
+    expect(await screen.findByLabelText(/^Email/)).toBeTruthy();
+    expect(screen.getByLabelText(/^Password/)).toBeTruthy();
     expect(screen.queryByText('or continue with')).toBeNull();
   });
 
@@ -170,7 +166,7 @@ describe('LoginPage UI parity for /login and /signup', () => {
     mockCapabilities(bothCapabilities);
     renderLogin();
 
-    expect(await screen.findByLabelText('Email')).toBeTruthy();
+    expect(await screen.findByLabelText(/^Email/)).toBeTruthy();
     expect(screen.getByText('or continue with')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Continue with SSO' })).toBeTruthy();
   });
@@ -222,8 +218,8 @@ describe('LoginPage UI parity for /login and /signup', () => {
 
       try {
         renderRoute('/login', <LoginPage />);
-        fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'user@example.com' } });
-        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
+        fireEvent.change(await screen.findByLabelText(/^Email/), { target: { value: 'user@example.com' } });
+        fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'password' } });
         fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
         await waitFor(() => expect(hrefSetter).toHaveBeenCalledWith('/studio/'));

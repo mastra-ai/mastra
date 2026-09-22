@@ -1,0 +1,175 @@
+/*
+ * Raw colour ramps — where every literal colour value is authored.
+ *
+ * The achromatic foundations (`--background-*`, `--gray-*`, `--gray-alpha-*`)
+ * are deliberately not exported as Tailwind colours: a component reaches for a
+ * semantic role (`bg-card`, `text-muted-foreground`), never for a rung.
+ */
+
+:root {
+  /* Dark theme (default) */
+
+  --background-1: oklch(0.1382 0 0);
+  --background-2: oklch(0.1591 0 0);
+  --background-3: oklch(0.1913 0 0);
+  --gray-1: oklch(0.2178 0 0);
+  --gray-2: oklch(0.2435 0 0);
+  --gray-3: oklch(0.2686 0 0);
+  --gray-4: oklch(0.3092 0 0);
+  --gray-5: oklch(0.3715 0 0);
+  --gray-6: oklch(0.4495 0 0);
+  --gray-7: oklch(0.5208 0 0);
+  --gray-8: oklch(0.65 0 0);
+  --gray-9: oklch(0.7699 0 0);
+  --gray-10: oklch(0.9851 0 0);
+  --gray-alpha-1: rgb(255 255 255 / 4%);
+  --gray-alpha-2: rgb(255 255 255 / 7%);
+  --gray-alpha-3: rgb(255 255 255 / 10%);
+  --gray-alpha-4: rgb(255 255 255 / 14%);
+  --gray-alpha-5: rgb(255 255 255 / 18%);
+  --gray-alpha-6: rgb(255 255 255 / 30%);
+  --gray-alpha-7: rgb(255 255 255 / 45%);
+  --gray-alpha-8: rgb(255 255 255 / 60%);
+  --gray-alpha-9: rgb(255 255 255 / 75%);
+  --gray-alpha-10: rgb(255 255 255 / 90%);
+
+  --accent1: oklch(0.723 0.219 149.579);
+  --accent2: oklch(0.637 0.237 25.331);
+  --accent3: oklch(0.623 0.214 259.815);
+  --accent5: oklch(0.707 0.165 254.624);
+  --accent6: oklch(0.769 0.188 70.08);
+
+  --accent1Dark: oklch(0.242 0.051 151);
+  --accent2Dark: oklch(0.216 0.044 22);
+  --accent3Dark: oklch(0.234 0.052 261);
+  --accent5Dark: oklch(0.227 0.03 244);
+  --accent6Dark: oklch(0.229 0.031 71);
+
+  --accent1Darker: oklch(0.181 0.033 147);
+  --accent2Darker: oklch(0.16 0.023 19);
+  --accent3Darker: oklch(0.174 0.031 263);
+  --accent5Darker: oklch(0.17 0.015 240);
+  --accent6Darker: oklch(0.175 0.019 72);
+
+  --neutral1: oklch(0.372 0 0);
+  --neutral2: oklch(0.553 0 0);
+  --neutral3: oklch(0.705 0 0);
+  --neutral4: oklch(0.871 0 0);
+  --neutral5: oklch(0.92 0 0);
+  --neutral6: oklch(0.985 0 0);
+
+  /* Brand green (dark). Remaps Tailwind green-* via @theme below. */
+  --brand-green-50: oklch(99% 0.024 138);
+  --brand-green-100: oklch(97.5% 0.055 138);
+  --brand-green-200: oklch(95.5% 0.105 138);
+  --brand-green-300: oklch(94% 0.18 138);
+  --brand-green-400: oklch(93% 0.235 138);
+  --brand-green-500: var(--notice-success);
+  --brand-green-600: oklch(76% 0.22 140);
+  --brand-green-700: oklch(62% 0.19 140);
+  --brand-green-800: oklch(45% 0.13 142);
+  --brand-green-900: oklch(33% 0.09 144);
+  --brand-green-950: oklch(22% 0.06 145);
+}
+
+html.light {
+  --background-1: oklch(0.9642 0 0);
+  --background-2: oklch(0.9851 0 0);
+  --background-3: oklch(1 0 0);
+  --gray-1: oklch(0.9431 0 0);
+  --gray-2: oklch(0.9189 0 0);
+  --gray-3: oklch(0.8945 0 0);
+  --gray-4: oklch(0.8452 0 0);
+  --gray-5: oklch(0.7604 0 0);
+  --gray-6: oklch(0.6201 0 0);
+  --gray-7: oklch(0.5486 0 0);
+  --gray-8: oklch(0.4459 0 0);
+  --gray-9: oklch(0.3092 0 0);
+  --gray-10: oklch(0.1286 0 0);
+  --gray-alpha-1: rgb(0 0 0 / 4%);
+  --gray-alpha-2: rgb(0 0 0 / 7%);
+  --gray-alpha-3: rgb(0 0 0 / 10%);
+  --gray-alpha-4: rgb(0 0 0 / 14%);
+  --gray-alpha-5: rgb(0 0 0 / 18%);
+  --gray-alpha-6: rgb(0 0 0 / 30%);
+  --gray-alpha-7: rgb(0 0 0 / 45%);
+  --gray-alpha-8: rgb(0 0 0 / 60%);
+  --gray-alpha-9: rgb(0 0 0 / 75%);
+  --gray-alpha-10: rgb(0 0 0 / 90%);
+
+  --accent1: oklch(0.627 0.194 149.214);
+  --accent2: oklch(0.577 0.245 27.325);
+  --accent3: oklch(0.546 0.245 262.881);
+  --accent5: oklch(0.623 0.214 259.815);
+  --accent6: oklch(0.666 0.179 58.318);
+
+  --accent1Dark: oklch(0.962 0.044 156.743);
+  --accent2Dark: oklch(0.936 0.032 17.717);
+  --accent3Dark: oklch(0.932 0.032 255.585);
+  --accent5Dark: oklch(0.932 0.032 255.585);
+  --accent6Dark: oklch(0.962 0.059 95.617);
+
+  --accent1Darker: oklch(0.925 0.084 155.995);
+  --accent2Darker: oklch(0.885 0.062 18.334);
+  --accent3Darker: oklch(0.882 0.059 254.128);
+  --accent5Darker: oklch(0.882 0.059 254.128);
+  --accent6Darker: oklch(0.924 0.12 95.746);
+
+  --neutral1: oklch(0.554 0 0);
+  --neutral2: oklch(0.446 0 0);
+  --neutral3: oklch(0.372 0 0);
+  --neutral4: oklch(0.279 0 0);
+  --neutral5: oklch(0.208 0 0);
+  --neutral6: oklch(0.13 0 0);
+
+  /* Brand green (light). badge + chart inherit :root. */
+  --brand-green-50: oklch(97.8% 0.025 140);
+  --brand-green-100: oklch(95.5% 0.055 140);
+  --brand-green-200: oklch(91.5% 0.095 140);
+  --brand-green-300: oklch(84.5% 0.145 140);
+  --brand-green-400: oklch(72.5% 0.18 140);
+  --brand-green-500: var(--notice-success);
+  --brand-green-600: oklch(47% 0.17 142);
+  --brand-green-700: oklch(38% 0.13 144);
+  --brand-green-800: oklch(30% 0.1 145);
+  --brand-green-900: oklch(24% 0.075 146);
+  --brand-green-950: oklch(17% 0.05 147);
+}
+
+@theme {
+  --color-accent1: var(--accent1);
+  --color-accent2: var(--accent2);
+  --color-accent3: var(--accent3);
+  --color-accent5: var(--accent5);
+  --color-accent6: var(--accent6);
+  --color-accent1Dark: var(--accent1Dark);
+  --color-accent2Dark: var(--accent2Dark);
+  --color-accent3Dark: var(--accent3Dark);
+  --color-accent5Dark: var(--accent5Dark);
+  --color-accent6Dark: var(--accent6Dark);
+  --color-accent1Darker: var(--accent1Darker);
+  --color-accent2Darker: var(--accent2Darker);
+  --color-accent3Darker: var(--accent3Darker);
+  --color-accent5Darker: var(--accent5Darker);
+  --color-accent6Darker: var(--accent6Darker);
+  --color-neutral1: var(--neutral1);
+  --color-neutral2: var(--neutral2);
+  --color-neutral3: var(--neutral3);
+  --color-neutral4: var(--neutral4);
+  --color-neutral5: var(--neutral5);
+  --color-neutral6: var(--neutral6);
+
+  /* Replace Tailwind green with brand green. initial clears defaults (native v4), then remap. */
+  --color-green-*: initial;
+  --color-green-50: var(--brand-green-50);
+  --color-green-100: var(--brand-green-100);
+  --color-green-200: var(--brand-green-200);
+  --color-green-300: var(--brand-green-300);
+  --color-green-400: var(--brand-green-400);
+  --color-green-500: var(--brand-green-500);
+  --color-green-600: var(--brand-green-600);
+  --color-green-700: var(--brand-green-700);
+  --color-green-800: var(--brand-green-800);
+  --color-green-900: var(--brand-green-900);
+  --color-green-950: var(--brand-green-950);
+}

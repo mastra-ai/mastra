@@ -2,6 +2,8 @@ import type { GetAgentResponse, GetMemoryStatusResponse } from '@mastra/client-j
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -83,7 +85,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       <span
         aria-label={`${label}: ${status}`}
         className={cn(
-          'pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-neutral3',
+          'pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-muted-foreground',
           enabled ? toneIcon : undefined,
         )}
       >
@@ -99,28 +101,34 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-ui-xs text-neutral4 transition-colors duration-normal',
-        'hover:bg-surface4/60 hover:text-neutral6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border2',
+        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-meta',
+        'hover:bg-fill-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border-strong',
+        quietTextHover,
+        controlStateColorTransition,
       )}
     >
       <span
         className={cn(
-          'mt-0.5 size-3.5 shrink-0 text-neutral3 transition-colors duration-normal [&>svg]:size-3.5',
-          enabled ? toneIcon : 'group-hover/capability-row:text-neutral5',
+          'mt-0.5 size-3.5 shrink-0 text-muted-foreground [&>svg]:size-3.5',
+          controlStateColorTransition,
+          enabled ? toneIcon : 'group-hover/capability-row:text-foreground',
         )}
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="text-neutral5 min-w-0 truncate font-medium">{label}</span>
-          <span className="text-neutral3 shrink-0 tabular-nums">{status}</span>
+          <span className="text-foreground min-w-0 truncate font-medium">{label}</span>
+          <span className="text-muted-foreground shrink-0 tabular-nums">{status}</span>
         </span>
-        <span className="text-neutral3 duration-normal group-hover/capability-row:text-neutral4 mt-0.5 block transition-colors">
-          {description}
-        </span>
+        <span className="text-muted-foreground mt-0.5 block">{description}</span>
       </span>
-      <ExternalLink className="text-neutral3 duration-normal group-hover/capability-row:text-neutral5 mt-0.5 size-3 shrink-0 transition-colors" />
+      <ExternalLink
+        className={cn(
+          'text-muted-foreground group-hover/capability-row:text-foreground mt-0.5 size-3 shrink-0',
+          controlStateColorTransition,
+        )}
+      />
     </a>
   );
 }
@@ -286,7 +294,7 @@ function CapabilitiesSummary({ agentId }: { agentId: string }) {
   const enabledCount = enabledFlags.filter(Boolean).length;
 
   return (
-    <Txt as="span" variant="ui-xs" className="text-neutral3 shrink-0">
+    <Txt as="span" variant="meta" tone="muted" className="shrink-0">
       {enabledCount}/{enabledFlags.length}
     </Txt>
   );
@@ -297,12 +305,16 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-      <div className="border-border1/50 shrink-0 border-t">
+      <div className="border-border/50 shrink-0 border-t">
         <CollapsibleTrigger asChild aria-label={isExpanded ? 'Hide capability details' : 'Show capability details'}>
           <button
             type="button"
             data-testid="agent-capabilities-footer"
-            className="text-neutral4 duration-normal hover:!text-neutral4 hover:bg-surface4 focus-visible:!text-neutral4 focus-visible:bg-surface4 focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70 flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left transition-colors focus-visible:ring-1 focus-visible:outline-none focus-visible:ring-inset"
+            className={cn(
+              'hover:bg-fill-subtle focus-visible:bg-fill-subtle focus-visible:ring-border-strong active:bg-fill aria-expanded:bg-fill-hover data-[panel-open]:bg-fill-hover flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left focus-visible:ring-1 focus-visible:outline-none focus-visible:ring-inset',
+              quietTextHover,
+              controlStateColorTransition,
+            )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               <MemoryCapability agentId={agentId} view="chip" />
@@ -315,7 +327,7 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
             <CapabilitiesSummary agentId={agentId} />
             <ChevronRight
               className={cn(
-                'size-3.5 shrink-0 text-neutral3 transition-transform duration-normal ease-out-custom',
+                'size-3.5 shrink-0 text-muted-foreground transition-transform duration-normal ease-out-custom',
                 isExpanded ? 'rotate-90' : undefined,
               )}
             />

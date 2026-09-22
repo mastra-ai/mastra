@@ -24,4 +24,34 @@ describe('toTracesListViewTraces', () => {
       },
     ]);
   });
+
+  describe('when the span name carries a run prefix', () => {
+    const base = firstTraceQueryPage.traces[0];
+    if (!base) throw new Error('Expected a trace fixture');
+    const nameOf = (name: string | null) => toTracesListViewTraces([{ ...base, name }])[0]?.name;
+
+    it('strips the agent run prefix', () => {
+      expect(nameOf("agent run: 'weatherAgent'")).toBe('weatherAgent');
+    });
+
+    it('strips the workflow run prefix', () => {
+      expect(nameOf("workflow run: 'orderFlow'")).toBe('orderFlow');
+    });
+
+    it('strips the scorer run prefix', () => {
+      expect(nameOf("scorer run: 'toxicity'")).toBe('toxicity');
+    });
+
+    it('keeps the resumed suffix after stripping', () => {
+      expect(nameOf("agent run: 'weatherAgent' (resumed)")).toBe('weatherAgent (resumed)');
+    });
+
+    it('leaves names without a prefix untouched', () => {
+      expect(nameOf('fetchWeather')).toBe('fetchWeather');
+    });
+
+    it('keeps a null name null', () => {
+      expect(nameOf(null)).toBeNull();
+    });
+  });
 });

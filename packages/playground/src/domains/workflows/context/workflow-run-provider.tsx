@@ -1,86 +1,29 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useCreateWorkflowRun, useCancelWorkflowRun, useStreamWorkflow } from '@mastra/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { useCreateWorkflowRun, useCancelWorkflowRun } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 
-import { convertWorkflowRunStateToStreamResult } from '../utils';
+import {
+  convertWorkflowRunStateToStreamResult,
+  isIdleRunStatus,
+  isWorkflowRunFinished,
+  readStoredPayload,
+  resolveWorkflowRunResult,
+} from '../utils';
+import { useLocalRun } from './use-local-run';
+import { usePersistedWorkflowRun } from './use-persisted-workflow-run';
+import { useStreamForRun } from './use-stream-for-run';
+import type { StreamMode } from './use-stream-for-run';
 import { WorkflowRunContext } from './workflow-run-context';
-import type { WorkflowRunContextType, WorkflowRunStreamResult } from './workflow-run-context';
+import type {
+  ObserveWorkflowRunParams,
+  TimeTravelWorkflowRunParams,
+  WorkflowRunContextType,
+} from './workflow-run-context';
+import { WorkflowStepDetailContext } from './workflow-step-detail-context';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
-import { useWorkflow, useWorkflowRun } from '@/hooks';
-
-function getRunTimestamp(value: Date | string | number | undefined): number | undefined {
-  if (!value) return undefined;
-  const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
-  return Number.isFinite(timestamp) ? timestamp : undefined;
-}
-
-function useWorkflowStreamActions({
-  debugMode,
-  tracingOptions,
-  setIsRunning,
-}: {
-  debugMode: boolean;
-  tracingOptions?: Parameters<typeof useStreamWorkflow>[0]['tracingOptions'];
-  setIsRunning: Dispatch<SetStateAction<boolean>>;
-}) {
-  const {
-    streamWorkflow,
-    streamResult,
-    isStreaming,
-    observeWorkflowStream,
-    closeStreamsAndReset,
-    resumeWorkflowStream,
-    timeTravelWorkflowStream,
-  } = useStreamWorkflow({
-    debugMode,
-    tracingOptions,
-    onError: error => toast.error(error.message),
-  });
-
-  const startStreamWorkflow = useCallback(
-    (props: Parameters<WorkflowRunContextType['streamWorkflow']>[0]) => {
-      setIsRunning(true);
-      return streamWorkflow.mutateAsync(props);
-    },
-    [setIsRunning, streamWorkflow],
-  );
-
-  const startResumeWorkflow = useCallback(
-    (props: Parameters<WorkflowRunContextType['resumeWorkflow']>[0]) => {
-      setIsRunning(true);
-      return resumeWorkflowStream.mutateAsync(props);
-    },
-    [resumeWorkflowStream, setIsRunning],
-  );
-
-  const startObserveWorkflowStream = useCallback(
-    (props: Parameters<NonNullable<WorkflowRunContextType['observeWorkflowStream']>>[0]) => {
-      setIsRunning(true);
-      return observeWorkflowStream.mutate(props);
-    },
-    [observeWorkflowStream, setIsRunning],
-  );
-
-  const startTimeTravelWorkflowStream = useCallback(
-    (props: Parameters<WorkflowRunContextType['timeTravelWorkflowStream']>[0]) => {
-      setIsRunning(true);
-      return timeTravelWorkflowStream.mutateAsync(props);
-    },
-    [setIsRunning, timeTravelWorkflowStream],
-  );
-
-  return {
-    streamResult,
-    isStreaming,
-    closeStreamsAndReset,
-    startStreamWorkflow,
-    startResumeWorkflow,
-    startObserveWorkflowStream,
-    startTimeTravelWorkflowStream,
-  };
-}
+import { useWorkflow, workflowRunQueryKey } from '@/hooks';
 
 export function WorkflowRunProvider({
   children,
@@ -95,150 +38,180 @@ export function WorkflowRunProvider({
   initialRunId?: string;
   withoutTimeTravel?: boolean;
 }) {
-  const [result, setResult] = useState<WorkflowRunStreamResult | null>(() =>
-    snapshot ? convertWorkflowRunStateToStreamResult(snapshot) : null,
-  );
-  const [payload, setPayload] = useState<any>(() => snapshot?.context?.input ?? null);
-  const [runId, setRunId] = useState<string>(() => initialRunId ?? '');
-  const routeRunIdRef = useRef(initialRunId ?? snapshot?.runId ?? '');
-  const [isRunning, setIsRunning] = useState(false);
+  const resetStepDetail = useContext(WorkflowStepDetailContext)?.resetStepDetail;
   const [debugMode, setDebugMode] = useState(false);
-
-  const refetchExecResultInterval = isRunning
-    ? undefined
-    : ['success', 'failed', 'canceled', 'bailed'].includes(result?.status ?? '')
-      ? undefined
-      : 5000;
-
-  const { isLoading: isLoadingRunExecutionResult, data: runExecutionResult } = useWorkflowRun(
-    workflowId,
-    initialRunId ?? '',
-    refetchExecResultInterval,
-  );
-
-  const runSnapshot = useMemo(() => {
-    return runExecutionResult && initialRunId
-      ? ({
-          context: {
-            input: runExecutionResult?.payload,
-            ...runExecutionResult?.steps,
-          },
-          status: runExecutionResult?.status,
-          result: runExecutionResult?.result,
-          error: runExecutionResult?.error,
-          runId: initialRunId,
-          serializedStepGraph: runExecutionResult?.serializedStepGraph,
-          timestamp: getRunTimestamp(runExecutionResult?.updatedAt) ?? getRunTimestamp(runExecutionResult?.createdAt),
-          value: runExecutionResult?.initialState,
-        } as WorkflowRunState)
-      : undefined;
-  }, [runExecutionResult, initialRunId]);
-
   const { data: workflow, isLoading, error } = useWorkflow(workflowId);
   const { settings } = useTracingSettings();
-
+  const queryClient = useQueryClient();
   const createWorkflowRun = useCreateWorkflowRun();
   const cancelWorkflowRun = useCancelWorkflowRun();
   const {
-    streamResult,
-    isStreaming,
-    closeStreamsAndReset,
-    startStreamWorkflow,
-    startResumeWorkflow,
-    startObserveWorkflowStream,
-    startTimeTravelWorkflowStream,
-  } = useWorkflowStreamActions({
-    debugMode,
-    tracingOptions: settings?.tracingOptions,
-    setIsRunning,
+    runId,
+    payload: localPayload,
+    override,
+    setRunId: selectLocalRun,
+    setPayload,
+    setResult,
+    dropOverride,
+    reset: resetLocalRun,
+  } = useLocalRun(initialRunId);
+  const {
+    result: streamedResult,
+    isOpen: isStreamOpen,
+    isObserving,
+    select: selectStream,
+    close: closeStreamsAndReset,
+    streamWorkflow,
+    resumeWorkflowStream,
+    observeWorkflowStream,
+    timeTravelWorkflowStream,
+  } = useStreamForRun({ runId, debugMode, tracingOptions: settings?.tracingOptions });
+
+  const liveResult = override ?? streamedResult;
+  const localRunFinished = !initialRunId && isWorkflowRunFinished(liveResult?.status);
+  const persistedRunId = initialRunId || (localRunFinished ? runId : '');
+  const { persistedRun, isLoading: isLoadingRunExecutionResult } = usePersistedWorkflowRun(workflowId, persistedRunId, {
+    poll: !isStreamOpen,
   });
+  const storedSnapshot = persistedRun ?? snapshot;
+  const storedResult = useMemo(
+    () => (storedSnapshot ? convertWorkflowRunStateToStreamResult(storedSnapshot) : null),
+    [storedSnapshot],
+  );
+  const result = useMemo(() => resolveWorkflowRunResult(liveResult, storedResult), [liveResult, storedResult]);
+  const runSnapshot = initialRunId ? storedSnapshot : undefined;
+  const observedRunIsIdle = isObserving && isIdleRunStatus(result?.status);
+  const isStreamingWorkflow = isStreamOpen && !observedRunIsIdle;
+  const payload = useMemo(
+    () => (runSnapshot ? readStoredPayload(runSnapshot, storedResult?.input) : localPayload),
+    [runSnapshot, storedResult, localPayload],
+  );
 
+  const setRunId = useCallback(
+    (runId: string) => {
+      resetStepDetail?.();
+      selectLocalRun(runId);
+    },
+    [resetStepDetail, selectLocalRun],
+  );
   const clearData = useCallback(() => {
-    setResult(null);
-    setPayload(null);
-  }, []);
+    resetStepDetail?.();
+    closeStreamsAndReset();
+    resetLocalRun();
+  }, [resetStepDetail, closeStreamsAndReset, resetLocalRun]);
 
-  useEffect(() => {
-    setIsRunning(false);
-  }, [initialRunId]);
+  // Cleanup on route change instead of a key remount, so the canvas stays mounted.
+  useEffect(() => clearData, [workflowId, initialRunId, clearData]);
 
-  useEffect(() => {
-    if (runSnapshot?.runId) {
-      routeRunIdRef.current = runSnapshot.runId;
-      setResult(convertWorkflowRunStateToStreamResult(runSnapshot));
-      if (runSnapshot.value && Object.keys(runSnapshot.value).length > 0) {
-        setPayload({
-          initialState: runSnapshot.value,
-          inputData: runSnapshot.context?.input,
-        });
-      } else {
-        setPayload(runSnapshot.context?.input);
+  const selectStreamRun = useCallback(
+    (runId: string, mode?: StreamMode) => {
+      selectStream(runId, mode);
+      dropOverride(runId);
+    },
+    [selectStream, dropOverride],
+  );
+  const refreshPersistedRun = useCallback(
+    (workflowId: string, runId: string) =>
+      queryClient.invalidateQueries({ queryKey: workflowRunQueryKey(workflowId, runId), exact: true }),
+    [queryClient],
+  );
+
+  const startStreamWorkflow: WorkflowRunContextType['streamWorkflow'] = useCallback(
+    async params => {
+      selectStreamRun(params.runId);
+      await streamWorkflow(params);
+    },
+    [selectStreamRun, streamWorkflow],
+  );
+  const startResumeWorkflow: WorkflowRunContextType['resumeWorkflow'] = useCallback(
+    async params => {
+      selectStreamRun(params.runId);
+      try {
+        await resumeWorkflowStream(params);
+      } finally {
+        await refreshPersistedRun(params.workflowId, params.runId);
       }
-      setRunId(runSnapshot.runId);
-      return;
-    }
-
-    if (!initialRunId && routeRunIdRef.current) {
-      routeRunIdRef.current = '';
-      setResult(null);
-      setPayload(null);
-      setRunId('');
-      setIsRunning(false);
-    }
-  }, [initialRunId, runSnapshot]);
+    },
+    [refreshPersistedRun, selectStreamRun, resumeWorkflowStream],
+  );
+  const startObserveWorkflowStream = useCallback(
+    (params: ObserveWorkflowRunParams) => {
+      if (params.storedStatus === 'suspended') {
+        closeStreamsAndReset();
+        return;
+      }
+      selectStreamRun(params.runId, 'observe');
+      observeWorkflowStream({ workflowId: params.workflowId, runId: params.runId, storeRunResult: null });
+    },
+    [closeStreamsAndReset, selectStreamRun, observeWorkflowStream],
+  );
+  const startTimeTravelWorkflowStream = useCallback(
+    async (params: TimeTravelWorkflowRunParams) => {
+      selectStreamRun(params.runId);
+      try {
+        await timeTravelWorkflowStream(params);
+      } finally {
+        await refreshPersistedRun(params.workflowId, params.runId);
+      }
+    },
+    [refreshPersistedRun, selectStreamRun, timeTravelWorkflowStream],
+  );
 
   const value = useMemo<WorkflowRunContextType>(
     () => ({
       workflowId,
+      workflow: workflow ?? undefined,
+      workflowError: error ?? null,
+      isLoading,
+      runId,
+      setRunId,
       result,
       setResult,
+      streamResult: streamedResult,
       payload,
       setPayload,
       clearData,
       snapshot,
-      runId,
-      setRunId,
-      workflowError: error ?? null,
-      workflow: workflow ?? undefined,
-      isLoading,
+      runSnapshot,
+      isLoadingRunExecutionResult,
+      isStreamingWorkflow,
+      isCancellingWorkflowRun: cancelWorkflowRun.isPending,
       createWorkflowRun: createWorkflowRun.mutateAsync,
       streamWorkflow: startStreamWorkflow,
       resumeWorkflow: startResumeWorkflow,
-      streamResult,
-      isStreamingWorkflow: isStreaming,
-      isCancellingWorkflowRun: cancelWorkflowRun.isPending,
-      cancelWorkflowRun: cancelWorkflowRun.mutateAsync,
       observeWorkflowStream: startObserveWorkflowStream,
-      closeStreamsAndReset,
       timeTravelWorkflowStream: startTimeTravelWorkflowStream,
-      runSnapshot,
-      isLoadingRunExecutionResult,
+      cancelWorkflowRun: cancelWorkflowRun.mutateAsync,
+      closeStreamsAndReset,
       withoutTimeTravel,
       debugMode,
       setDebugMode,
     }),
     [
       workflowId,
+      workflow,
+      error,
+      isLoading,
+      runId,
+      setRunId,
       result,
+      setResult,
+      streamedResult,
       payload,
+      setPayload,
       clearData,
       snapshot,
-      runId,
-      error,
-      workflow,
-      isLoading,
+      runSnapshot,
+      isLoadingRunExecutionResult,
+      isStreamingWorkflow,
+      cancelWorkflowRun.isPending,
       createWorkflowRun.mutateAsync,
       startStreamWorkflow,
       startResumeWorkflow,
-      streamResult,
-      isStreaming,
-      cancelWorkflowRun.isPending,
-      cancelWorkflowRun.mutateAsync,
       startObserveWorkflowStream,
-      closeStreamsAndReset,
       startTimeTravelWorkflowStream,
-      runSnapshot,
-      isLoadingRunExecutionResult,
+      cancelWorkflowRun.mutateAsync,
+      closeStreamsAndReset,
       withoutTimeTravel,
       debugMode,
     ],

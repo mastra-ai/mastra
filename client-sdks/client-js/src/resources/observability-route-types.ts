@@ -21,6 +21,21 @@ export type ListTracesResponse = Response<'GET /observability/traces'>;
 export type ListTracesLightResponse = Response<'GET /observability/traces/light'>;
 export type TraceQueryRequest = Body<'POST /observability/traces/query'>;
 export type TraceQueryResponse = Extract<Response<'POST /observability/traces/query'>, { traces: unknown[] }>;
+export type GetTraceQueryFieldsArgs = Body<'POST /observability/traces/query/fields'>;
+export type GetTraceQueryFieldsResponse = Extract<
+  Response<'POST /observability/traces/query/fields'>,
+  { canonicalFields: unknown[] }
+>;
+export type GetTraceQueryValuesArgs = Body<'POST /observability/traces/query/values'>;
+export type GetTraceQueryValuesResponse = Extract<
+  Response<'POST /observability/traces/query/values'>,
+  { values: unknown[] }
+>;
+export type TraceQueryCanonicalFieldDescriptor = GetTraceQueryFieldsResponse['canonicalFields'][number];
+export type TraceQueryObservedFieldDescriptor = GetTraceQueryFieldsResponse['observedFields'][number];
+export type TraceQueryOperator = TraceQueryCanonicalFieldDescriptor['operators'][number];
+export type TraceQueryPredicateScope = GetTraceQueryFieldsArgs['predicateScope'];
+export type TraceQueryValueKind = TraceQueryCanonicalFieldDescriptor['valueKind'];
 export type ListBranchesArgs = ListArgs<Query<'GET /observability/branches'>>;
 export type ListBranchesResponse = Response<'GET /observability/branches'>;
 export type GetBranchArgs = PathParams<'GET /observability/traces/:traceId/branches/:spanId'> &

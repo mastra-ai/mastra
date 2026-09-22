@@ -1,7 +1,13 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { describe, expect, it, vi } from 'vitest';
 
-import { DELETION_REQUESTS_DDL, TABLE_DELETION_REQUESTS, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS } from './ddl';
+import {
+  DELETION_REQUESTS_DDL,
+  TABLE_DELETION_REQUESTS,
+  TABLE_FEEDBACK_EVENTS,
+  TABLE_SCORE_EVENTS,
+  TABLE_SCORE_EVENTS_CURRENT,
+} from './ddl';
 import { deleteFeedback, updateFeedbackReviewStatus } from './feedback';
 import { feedbackRecordToRow } from './helpers';
 import { deleteScores } from './scores';
@@ -55,8 +61,7 @@ describe('ClickHouse deletion lifecycle', () => {
       format: 'JSONEachRow',
       clickhouse_settings: expect.objectContaining({ insert_quorum: 'auto', insert_quorum_parallel: 1 }),
     });
-    expect(command).toHaveBeenCalledWith({
-      query: `DELETE FROM ${TABLE_SCORE_EVENTS} WHERE scoreId IN ({sid_0:String}, {sid_1:String}) AND organizationId = {delOrganizationId:String} AND resourceId = {delResourceId:String}`,
+    const deleteCommand = {
       query_params: {
         sid_0: 'score-1',
         sid_1: 'score-2',
@@ -64,6 +69,14 @@ describe('ClickHouse deletion lifecycle', () => {
         delResourceId: 'resource-1',
       },
       clickhouse_settings: { lightweight_deletes_sync: '2' },
+    };
+    expect(command).toHaveBeenNthCalledWith(1, {
+      ...deleteCommand,
+      query: `DELETE FROM ${TABLE_SCORE_EVENTS_CURRENT} WHERE scoreId IN ({sid_0:String}, {sid_1:String}) AND organizationId = {delOrganizationId:String} AND resourceId = {delResourceId:String}`,
+    });
+    expect(command).toHaveBeenNthCalledWith(2, {
+      ...deleteCommand,
+      query: `DELETE FROM ${TABLE_SCORE_EVENTS} WHERE scoreId IN ({sid_0:String}, {sid_1:String}) AND organizationId = {delOrganizationId:String} AND resourceId = {delResourceId:String}`,
     });
     expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
   });

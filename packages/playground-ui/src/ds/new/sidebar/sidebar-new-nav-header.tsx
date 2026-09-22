@@ -28,11 +28,11 @@ export function SidebarNewNavHeader({
   const Link = LinkProp ?? context?.LinkComponent ?? 'a';
 
   return (
-    <div className={cn('mt-2 mb-0.5 flex min-h-8 min-w-0 items-center', className)}>
+    <div className={cn('mt-1 flex min-h-7 min-w-0 items-center', className)}>
       {showTitle ? (
         <header
           {...props}
-          className={cn('max-w-full min-w-0 truncate pl-3 text-ui-sm font-medium', {
+          className={cn('max-w-full min-w-0 truncate pl-3 text-column', {
             'text-foreground': isActive,
             'text-muted-foreground': !isActive,
           })}

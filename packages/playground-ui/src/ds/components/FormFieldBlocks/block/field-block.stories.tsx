@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { FieldBlock } from './field-block';
+import { Input } from '@/ds/components/Input';
 
 const meta: Meta = {
   title: 'FormFieldBlocks/FieldBlock',
@@ -25,11 +26,7 @@ export const VerticalLayout: StoryObj = {
         <FieldBlock.Label name="email" required>
           Email
         </FieldBlock.Label>
-        <input
-          id="input-email"
-          className="border-border1 text-ui-sm text-neutral6 h-9 rounded-md border bg-transparent px-3"
-          placeholder="john@example.com"
-        />
+        <Input id="input-email" placeholder="john@example.com" />
         <FieldBlock.HelpText>We will never share your email.</FieldBlock.HelpText>
       </FieldBlock.Column>
     </FieldBlock.Layout>
@@ -46,11 +43,7 @@ export const HorizontalLayout: StoryObj = {
         </FieldBlock.Label>
       </FieldBlock.Column>
       <FieldBlock.Column>
-        <input
-          id="input-email"
-          className="border-border1 text-ui-sm text-neutral6 h-9 w-full rounded-md border bg-transparent px-3"
-          placeholder="john@example.com"
-        />
+        <Input id="input-email" placeholder="john@example.com" />
         <FieldBlock.HelpText>We will never share your email.</FieldBlock.HelpText>
       </FieldBlock.Column>
     </FieldBlock.Layout>
@@ -65,19 +58,14 @@ export const WithErrorMsg: StoryObj = {
         <FieldBlock.Label name="password" required>
           Password
         </FieldBlock.Label>
-        <input
-          id="input-password"
-          type="password"
-          className="text-ui-sm text-neutral6 h-9 rounded-md border border-red-400 bg-transparent px-3"
-        />
-        <FieldBlock.ErrorMsg>Password must be at least 8 characters.</FieldBlock.ErrorMsg>
+        <Input id="input-password" type="password" error aria-describedby="error-password" />
+        <FieldBlock.Message name="password" errorMsg="Password must be at least 8 characters." />
       </FieldBlock.Column>
     </FieldBlock.Layout>
   ),
 };
 
 export const LabelSizes: StoryObj = {
-  name: 'Label Sizes',
   render: () => (
     <div className="grid gap-6">
       <FieldBlock.Layout>
@@ -85,10 +73,7 @@ export const LabelSizes: StoryObj = {
           <FieldBlock.Label name="default" size="default">
             Default label
           </FieldBlock.Label>
-          <input
-            id="input-default"
-            className="border-border1 text-ui-sm text-neutral6 h-9 rounded-md border bg-transparent px-3"
-          />
+          <Input id="input-default" />
         </FieldBlock.Column>
       </FieldBlock.Layout>
       <FieldBlock.Layout>
@@ -96,10 +81,7 @@ export const LabelSizes: StoryObj = {
           <FieldBlock.Label name="bigger" size="bigger">
             Bigger label
           </FieldBlock.Label>
-          <input
-            id="input-bigger"
-            className="border-border1 text-ui-sm text-neutral6 h-9 rounded-md border bg-transparent px-3"
-          />
+          <Input id="input-bigger" />
         </FieldBlock.Column>
       </FieldBlock.Layout>
     </div>
@@ -114,13 +96,12 @@ export const AllParts: StoryObj = {
         <FieldBlock.Label name="username" required>
           Username
         </FieldBlock.Label>
-        <input
-          id="input-username"
-          className="text-ui-sm text-neutral6 h-9 rounded-md border border-red-400 bg-transparent px-3"
-          defaultValue="ab"
+        <Input id="input-username" defaultValue="ab" error aria-describedby="error-username" />
+        <FieldBlock.Message
+          name="username"
+          helpText="Must be 3-20 characters long."
+          errorMsg="Username is too short."
         />
-        <FieldBlock.HelpText>Must be 3-20 characters long.</FieldBlock.HelpText>
-        <FieldBlock.ErrorMsg>Username is too short.</FieldBlock.ErrorMsg>
       </FieldBlock.Column>
     </FieldBlock.Layout>
   ),

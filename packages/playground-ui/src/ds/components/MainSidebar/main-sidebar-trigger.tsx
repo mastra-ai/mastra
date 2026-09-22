@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { Kbd } from '@/ds/components/Kbd';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarTriggerProps = ComponentPropsWithoutRef<'button'>;
@@ -28,10 +29,10 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
               'flex items-center justify-center rounded-md text-muted-foreground',
               'size-7',
               isCollapsed ? 'mx-auto' : 'ml-auto',
-              'hover:bg-sidebar-accent hover:text-foreground',
-              'transition-all duration-normal ease-out-custom',
-              'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
-              '[&_svg]:size-4 [&_svg]:text-muted-foreground [&_svg]:transition-transform [&_svg]:duration-normal [&:hover_svg]:text-foreground',
+              'hover:bg-fill-subtle hover:text-foreground',
+              'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
+              focusRing.visible,
+              '[&_svg]:size-4 [&_svg]:text-muted-foreground [&_svg]:transition-transform [&_svg]:duration-slow [&_svg]:ease-out-custom motion-reduce:[&_svg]:transition-none [&:hover_svg]:text-foreground',
               className,
             )}
           >
@@ -44,10 +45,10 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
         }
       />
 
-      <TooltipContent className="new-theme border-border bg-popover text-foreground">
+      <TooltipContent>
         <span className="inline-flex items-center gap-1.5">
           Toggle Sidebar
-          <Kbd size="xs" className="border-border bg-muted text-muted-foreground">
+          <Kbd size="xs" className="bg-muted text-muted-foreground">
             [
           </Kbd>
         </span>

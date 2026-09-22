@@ -1,24 +1,32 @@
 import { Database } from 'lucide-react';
 import { useState } from 'react';
+import type { MouseEventHandler } from 'react';
 import { WorkflowCodeContent } from './workflow-code-dialog-content';
 import { Button } from '@/ds/components/Button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { Txt } from '@/ds/components/Txt';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 export interface WorkflowEdgeDataButtonProps {
   previousStepId?: string;
   output?: unknown;
   label?: string;
+  selected?: boolean;
+  onInspect?: MouseEventHandler<HTMLButtonElement>;
 }
 
-const hasPayload = (value: unknown) => value !== undefined;
-
-export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: WorkflowEdgeDataButtonProps) => {
+export const WorkflowEdgeDataButton = ({
+  previousStepId,
+  output,
+  label,
+  selected,
+  onInspect,
+}: WorkflowEdgeDataButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
-  const hasOutput = hasPayload(output);
   const dataLabel = label ?? (previousStepId ? `${previousStepId} output` : 'Previous output');
 
-  if (!hasOutput) {
+  if (output === undefined) {
     return null;
   }
 
@@ -26,8 +34,15 @@ export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: Workfl
     <>
       <Button
         size="sm"
-        onClick={() => setIsOpen(true)}
-        className="border-border1 bg-surface3/95 text-neutral5 hover:bg-surface4 h-7 rounded-full border px-2 shadow-lg"
+        variant="ghost"
+        onClick={onInspect ?? (() => setIsOpen(true))}
+        aria-label={`View ${dataLabel}`}
+        aria-pressed={selected}
+        className={cn(
+          raisedSurfaceStyle,
+          surfaceStateLayerStyle,
+          'text-foreground aria-pressed:before:bg-fill h-7 rounded-lg px-2',
+        )}
         icon={<Database className="text-accent1" />}
       >
         Data
@@ -39,8 +54,8 @@ export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: Workfl
             <DialogTitle>Step output</DialogTitle>
           </DialogHeader>
           <DialogBody className="overflow-auto" style={{ maxHeight: 700 }}>
-            <div className="border-border1 bg-surface2 min-w-0 rounded-lg border p-3">
-              <Txt variant="ui-sm" className="text-neutral5 mb-2 block">
+            <div className="border-border bg-background min-w-0 rounded-lg border p-3">
+              <Txt variant="caption" tone="ink" className="mb-2 block">
                 {dataLabel}
               </Txt>
               <WorkflowCodeContent data={output} />

@@ -9,7 +9,7 @@ export const WorkspaceNotSupported = () => (
       titleSlot="Workspace Not Supported"
       descriptionSlot={
         <>
-          The workspace feature requires a newer version of <code className="text-neutral5">@mastra/core</code>.
+          The workspace feature requires a newer version of <code className="text-foreground">@mastra/core</code>.
           <br />
           Please upgrade your dependencies to enable workspace functionality.
         </>
@@ -17,10 +17,8 @@ export const WorkspaceNotSupported = () => (
       actionSlot={
         <Button
           variant="ghost"
-          as="a"
-          href="https://mastra.ai/en/docs/workspace/overview"
-          target="_blank"
-          rel="noopener noreferrer"
+          render={<a href="https://mastra.ai/en/docs/workspace/overview" target="_blank" rel="noopener noreferrer" />}
+
           icon={<ExternalLinkIcon />}
         >
           Workspaces Documentation

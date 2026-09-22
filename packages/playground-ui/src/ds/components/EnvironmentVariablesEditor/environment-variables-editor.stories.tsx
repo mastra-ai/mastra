@@ -176,12 +176,12 @@ function EnvironmentVariablesPage({ children }: { children?: ReactNode }) {
       : readOnlyVariables;
 
   return (
-    <div className="bg-surface1 text-neutral6 min-h-190 p-6">
+    <div className="bg-sidebar text-foreground min-h-190 p-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-ui-xl text-neutral6 font-semibold">Environment Variables</h2>
-            <p className="text-ui-sm text-neutral3 mt-1">Store API keys, tokens, and config securely.</p>
+            <h2 className="text-title text-foreground">Environment Variables</h2>
+            <p className="text-caption text-muted-foreground mt-1">Store API keys, tokens, and config securely.</p>
           </div>
           {children}
         </div>
@@ -233,7 +233,7 @@ function EnvironmentVariablesDrawerStory() {
         </DrawerTrigger>
         <DrawerContent className="w-3xl max-w-[calc(100vw-2rem)]">
           <EnvironmentVariablesEditor.Root editor={editor} className="contents">
-            <DrawerHeader className="border-border1 flex-row items-center justify-between gap-3 border-b">
+            <DrawerHeader className="border-border flex-row items-center justify-between gap-3 border-b">
               <DrawerTitle>Add Environment Variable</DrawerTitle>
               <EnvironmentVariablesEditor.UploadButton variant="outline" size="sm">
                 Import .env
@@ -247,7 +247,7 @@ function EnvironmentVariablesDrawerStory() {
                 <EnvironmentVariablesEditor.DuplicateKeysError />
               </div>
             </DrawerBody>
-            <DrawerFooter className="border-border1 items-center border-t">
+            <DrawerFooter className="border-border items-center border-t">
               <Button
                 type="button"
                 variant="primary"

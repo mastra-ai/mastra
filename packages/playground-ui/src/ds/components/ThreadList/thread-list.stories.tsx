@@ -34,7 +34,7 @@ function ThreadListPreview({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className="h-96 w-80">
       <ThreadList embedded={embedded}>
-        <ThreadListNewItem as="a" href="#new">
+        <ThreadListNewItem render={<a href="#new" />}>
           <PlusIcon />
           New thread
         </ThreadListNewItem>
@@ -67,7 +67,7 @@ export const Default: Story = {
 
 export const Embedded: Story = {
   render: () => (
-    <div className="border-border1 bg-surface2 rounded-xl border p-3">
+    <div className="border-border bg-background rounded-xl border p-3">
       <ThreadListPreview embedded />
     </div>
   ),

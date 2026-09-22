@@ -15,7 +15,10 @@ export interface IntakeSelection {
 
 export interface IntakeConfig {
   github: IntakeSelection;
+  gitlab: IntakeSelection;
   linear: IntakeSelection;
+  jira: IntakeSelection;
+  incidentio: IntakeSelection;
 }
 
 /**
@@ -23,13 +26,18 @@ export interface IntakeConfig {
  * only returns the integrations registered in the running deployment, so a key
  * is absent whenever that integration isn't connected. Fill the fixed shape the
  * UI relies on so reads like `config.github.enabled` never touch `undefined`.
- * GitHub defaults to enabled (issues sync once a repo is picked); Linear stays
- * off until it's connected and a project is selected.
+ * GitHub defaults to enabled (issues sync once a repo is picked); GitLab, Linear,
+ * Jira, and incident.io stay off until they're set up and a source is selected.
+ * Saving the fixed shape back is safe on servers without those integrations — the server
+ * ignores disabled/unselected keys for unregistered integrations.
  */
 function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | null | undefined): IntakeConfig {
   return {
     github: raw?.github ?? { enabled: true, sourceIds: null },
+    gitlab: raw?.gitlab ?? { enabled: false, sourceIds: null },
     linear: raw?.linear ?? { enabled: false, sourceIds: null },
+    jira: raw?.jira ?? { enabled: false, sourceIds: null },
+    incidentio: raw?.incidentio ?? { enabled: false, sourceIds: null },
   };
 }
 

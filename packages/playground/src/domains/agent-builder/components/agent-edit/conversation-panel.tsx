@@ -52,7 +52,13 @@ export const ConversationPanelProvider = ({
   children,
 }: ConversationPanelProviderProps) => {
   const builderThreadId = getBuilderThreadId(agentId);
-  const { data, isLoading: isConversationLoading } = useAgentMessages({
+  const {
+    data,
+    isLoading: isConversationLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useAgentMessages({
     agentId: BUILDER_AGENT_ID,
     threadId: builderThreadId,
     memory: !isFreshThread,
@@ -96,9 +102,10 @@ export const ConversationPanelProvider = ({
     [agentBuilderTools, createSkillTool, features.skills],
   );
 
-  const conversationContextValue = useMemo(
-    () => ({ isLoading: isConversationLoading, agentId }),
-    [isConversationLoading, agentId],
+  const loadPrevious = hasNextPage ? fetchNextPage : undefined;
+  const conversationContextValue = useMemo<ConversationContextValue>(
+    () => ({ isLoading: isConversationLoading, loadPrevious, isLoadingPrevious: isFetchingNextPage, agentId }),
+    [isConversationLoading, loadPrevious, isFetchingNextPage, agentId],
   );
 
   // Only forward the starter prompt into StreamChatProvider when it's actually
@@ -136,6 +143,8 @@ export const ConversationPanelProvider = ({
 
 interface ConversationContextValue {
   isLoading: boolean;
+  loadPrevious?: () => void;
+  isLoadingPrevious?: boolean;
   agentId: string;
 }
 
@@ -165,13 +174,15 @@ export const ConversationPanel = (props: ConversationPanelProps) => (
 const ConversationMessageList = () => {
   const messages = useStreamMessages();
   const isRunning = useStreamRunning();
-  const { isLoading: isConversationLoading } = useContext(ConversationContext);
+  const { isLoading: isConversationLoading, loadPrevious, isLoadingPrevious } = useContext(ConversationContext);
 
   return (
     <MessageList
       messages={messages}
       isLoading={isConversationLoading}
       isRunning={isRunning}
+      onLoadPrevious={loadPrevious}
+      isLoadingPrevious={isLoadingPrevious}
       skeletonTestId="agent-builder-conversation-messages-skeleton"
     />
   );

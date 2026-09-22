@@ -27,14 +27,10 @@ describe('TaskList', () => {
       expect(screen.getByRole('progressbar').getAttribute('aria-valuemax')).toBe('3');
     });
 
-    it('renders one progress bar per task, colored by status', () => {
+    it('renders one progress bar per task', () => {
       render(<TaskList tasks={mixedTasks} />);
 
-      const bars = Array.from(screen.getByRole('progressbar').children).map(bar => bar.className);
-      expect(bars).toHaveLength(3);
-      expect(bars[0]).toContain('bg-positive1');
-      expect(bars[1]).toContain('bg-warning1');
-      expect(bars[2]).toContain('bg-surface6');
+      expect(screen.getByRole('progressbar').children).toHaveLength(3);
     });
 
     it('reveals the exact count on hover', async () => {
@@ -73,15 +69,14 @@ describe('TaskList', () => {
       expect(new Set(icons).size).toBe(3);
     });
 
-    it('strikes a completed task through and leans on the one in progress', () => {
+    it('strikes only the completed task through', () => {
       render(<TaskList tasks={mixedTasks} />);
 
       const labelOf = (status: string) => screen.getByLabelText(status).nextElementSibling as HTMLElement;
 
       expect(labelOf('Completed').classList.contains('line-through')).toBe(true);
-      expect(labelOf('In progress').classList.contains('font-medium')).toBe(true);
+      expect(labelOf('In progress').classList.contains('line-through')).toBe(false);
       expect(labelOf('Pending').classList.contains('line-through')).toBe(false);
-      expect(labelOf('Pending').classList.contains('font-medium')).toBe(false);
     });
 
     it('brings the active task no further into view than it needs', () => {

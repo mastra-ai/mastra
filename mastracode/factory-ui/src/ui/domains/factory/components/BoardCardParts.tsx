@@ -40,7 +40,7 @@ export function CardDetailsHint() {
   return (
     <span
       aria-hidden
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-xs' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
     >
       <Maximize2 size={13} aria-hidden />
     </span>
@@ -70,7 +70,7 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 
   if (status.kind === 'busy') {
     return (
-      <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex shrink-0 items-center gap-1.5">
+      <span role="status" aria-live="polite" className="text-meta text-icon4 flex shrink-0 items-center gap-1.5">
         <Spinner size="sm" aria-hidden className="size-3" />
         {status.label}
       </span>
@@ -82,7 +82,7 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
       role="alert"
       tabIndex={status.detail === undefined ? undefined : 0}
       className={cn(
-        'text-ui-xs text-error flex w-full min-w-0 items-start gap-1.5',
+        'text-meta text-error flex w-full min-w-0 items-start gap-1.5',
         status.detail !== undefined &&
           'focus-visible:outline-accent1 relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
       )}
@@ -114,7 +114,13 @@ function labelDotClass(label: string): string {
   return 'bg-icon3';
 }
 
-export function CardLabels({ labels }: { labels: readonly string[] }) {
+export function CardLabels({
+  labels,
+  colors = {},
+}: {
+  labels: readonly string[];
+  colors?: Readonly<Record<string, string>>;
+}) {
   const displayLabels = labels.filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
   if (displayLabels.length === 0) return null;
   return (
@@ -123,10 +129,14 @@ export function CardLabels({ labels }: { labels: readonly string[] }) {
         {displayLabels.map(label => (
           <span
             key={label}
-            className="border-border1 text-ui-xs text-icon4 inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
+            className="border-border text-meta text-icon4 inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
             title={label}
           >
-            <span className={cn('size-1 shrink-0 rounded-full', labelDotClass(label))} aria-hidden />
+            <span
+              className={cn('size-1 shrink-0 rounded-full', labelDotClass(label))}
+              style={colors[label] ? { backgroundColor: colors[label] } : undefined}
+              aria-hidden
+            />
             <span className="truncate">{label}</span>
           </span>
         ))}
@@ -134,8 +144,6 @@ export function CardLabels({ labels }: { labels: readonly string[] }) {
     </ScrollArea>
   );
 }
-
-/** Pinned to the card's bottom: the likeliest click first, lit only while the card waits on a person, the rest stacked under it, `trailing` at the right. */
 export function CardActions({
   actions,
   beforeStart,

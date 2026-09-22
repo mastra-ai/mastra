@@ -1,6 +1,6 @@
 {
   "name": "@mastra/azure-ai-search",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Azure AI Search vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",

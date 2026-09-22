@@ -159,18 +159,11 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
 
       try {
         const args = { ...task.args };
-        // The model authors the optional `suspendedToolRunId` arg, and some models emit
-        // sentinel strings like "null" for it. Drop sentinels so the framework-persisted
-        // id from `suspendData` back-fills on resume (#23739). The suspendData-side value
-        // is framework-written and stays unfiltered.
-        const resolvedArgsSuspendedToolRunId = resolveSuspendedToolRunId(args.suspendedToolRunId);
-        if (resolvedArgsSuspendedToolRunId === undefined) {
-          delete args.suspendedToolRunId;
-        } else {
-          args.suspendedToolRunId = resolvedArgsSuspendedToolRunId;
-        }
-        const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
-        if (resumeData !== undefined && !args.suspendedToolRunId && typeof suspendedToolRunId === 'string') {
+        delete args.suspendedToolRunId;
+        const suspendedToolRunId = resolveSuspendedToolRunId(
+          (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId,
+        );
+        if (resumeData !== undefined && suspendedToolRunId) {
           args.suspendedToolRunId = suspendedToolRunId;
         }
 
@@ -181,6 +174,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           // On resume the runtime populates `resumeData`; undefined on
           // the initial run.
           resumeData,
+          suspendedToolRunId: resumeData !== undefined ? suspendedToolRunId : undefined,
         });
 
         if (pendingSuspend) {

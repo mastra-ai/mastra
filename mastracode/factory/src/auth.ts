@@ -789,7 +789,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (path.startsWith('/auth/')) {
       return next();
     }
-    if (c.req.method === 'POST' && path === '/web/github/webhook') {
+    if (c.req.method === 'POST' && (path === '/web/github/webhook' || path === '/web/gitlab/webhook')) {
       return next();
     }
     // Inbound chat-channel webhooks (Slack events) carry no user session: they

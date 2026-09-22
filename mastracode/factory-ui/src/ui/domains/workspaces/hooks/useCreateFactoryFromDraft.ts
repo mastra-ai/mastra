@@ -20,7 +20,7 @@ export interface CreateFactoryFromDraftOptions {
 
 /**
  * The wizard's single write: create the Factory, link the repository (which
- * feeds its issue intake), route the Linear project when one was picked, and
+ * feeds its issue intake), route the selected project-management source, and
  * save the model its runs start on. Nothing before this touches the server, so
  * an abandoned wizard leaves nothing behind.
  */
@@ -38,18 +38,22 @@ export function useCreateFactoryFromDraft({
   const saveIntakeBinding = useSaveIntakeBindingMutation();
   const saveIntakeConfig = useSaveIntakeConfigMutation();
 
-  const feedLinearProject = async (linear: { sourceId: string; factoryProjectId: string }) => {
+  const feedProject = async (input: {
+    integrationId: 'linear' | 'jira';
+    sourceId: string;
+    factoryProjectId: string;
+  }) => {
     await saveIntakeBinding.mutateAsync({
-      integrationId: 'linear',
-      sourceId: linear.sourceId,
-      factoryProjectId: linear.factoryProjectId,
+      integrationId: input.integrationId,
+      sourceId: input.sourceId,
+      factoryProjectId: input.factoryProjectId,
       // A fresh Factory only has its built-in boards; issues belong on Work.
       board: 'work',
     });
     const config = await fetchIntakeConfig(baseUrl);
-    const linearSelection = selectIntakeSource(config.linear, linear.sourceId);
-    if (linearSelection === config.linear) return;
-    await saveIntakeConfig.mutateAsync({ ...config, linear: linearSelection });
+    const selection = selectIntakeSource(config[input.integrationId], input.sourceId);
+    if (selection === config[input.integrationId]) return;
+    await saveIntakeConfig.mutateAsync({ ...config, [input.integrationId]: selection });
   };
 
   return useMutation({
@@ -70,7 +74,10 @@ export function useCreateFactoryFromDraft({
         updateFactoryDefaultModel(baseUrl, factory.id, modelId),
         applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId, factoryId: factory.id }),
         draft.linearProjectId
-          ? feedLinearProject({ sourceId: draft.linearProjectId, factoryProjectId: factory.id })
+          ? feedProject({ integrationId: 'linear', sourceId: draft.linearProjectId, factoryProjectId: factory.id })
+          : undefined,
+        draft.jiraProjectId
+          ? feedProject({ integrationId: 'jira', sourceId: draft.jiraProjectId, factoryProjectId: factory.id })
           : undefined,
       ]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });

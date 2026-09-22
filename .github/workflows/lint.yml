@@ -142,6 +142,13 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
+      # The build transpiles without type checking, so a type error here would
+      # otherwise reach main unnoticed: nothing else in CI runs this package's
+      # `check` script, because the root `typecheck` task only visits packages
+      # that define a `typecheck` script and this one is named `check`.
+      - name: Validate Mastra Code types
+        run: pnpm --filter ./mastracode/sdk check
+
       - name: Validate generated files are committed
         run: bash .github/scripts/check-clean-worktree.bash
 

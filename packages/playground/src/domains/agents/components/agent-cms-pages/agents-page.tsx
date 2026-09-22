@@ -108,7 +108,7 @@ export function AgentsPage() {
             <SubSectionHeader title="Available Agents" icon={<AgentIcon />} />
           </Section.Header>
 
-          <InputGroup variant="outline">
+          <InputGroup>
             <InputGroupAddon align="inline-start">
               <SearchIcon />
             </InputGroupAddon>
@@ -128,7 +128,7 @@ export function AgentsPage() {
                 const isDisabled = readOnly || !isSelected;
 
                 return (
-                  <Entity key={agent.value} className="bg-surface2">
+                  <Entity key={agent.value} className="bg-background">
                     <EntityContent>
                       <EntityName>{agent.label}</EntityName>
                       <EntityDescription>
@@ -136,8 +136,8 @@ export function AgentsPage() {
                           type="text"
                           disabled={isDisabled}
                           className={cn(
-                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                            !isDisabled && 'border-border1 border-dashed ',
+                            'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
+                            !isDisabled && 'border-border border-dashed ',
                           )}
                           value={
                             isSelected

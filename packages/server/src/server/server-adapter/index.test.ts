@@ -11,7 +11,7 @@ import { z } from 'zod/v4';
 import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
 import { HTTPException } from '../http-exception';
 import { createRoute } from './routes/route-builder';
-import { MastraServer, getCustomHTTPExceptionResponse } from './index';
+import { MastraServer, getCustomHTTPExceptionResponse, getFGAProvider, MASTRA_AUTH_MODE_KEY } from './index';
 
 class TestMastraServer extends MastraServer<any, any, any> {
   stream = vi.fn();
@@ -401,6 +401,31 @@ describe('agent channel webhook diagnostics', () => {
     adapter.warnIfUnregisteredChannelWebhookForTest('/api/agents/support/channels/slack/webhook', 'POST', 404);
 
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('getFGAProvider', () => {
+  it.each([
+    [undefined, false, false, undefined],
+    [undefined, true, false, 'server'],
+    ['studio', true, true, 'studio'],
+    ['studio', false, true, 'studio'],
+    ['studio', true, false, 'server'],
+    ['default', false, true, undefined],
+    ['default', true, true, 'server'],
+  ] as const)('selects %s with server=%s and studio=%s', (mode, hasServer, hasStudio, expected) => {
+    const server = createMockFGAProvider();
+    const studio = createMockFGAProvider();
+    const mastra = {
+      getServer: () => ({ fga: hasServer ? server : undefined }),
+      getStudio: () => ({ fga: hasStudio ? studio : undefined }),
+    };
+    const context = new RequestContext();
+    if (mode) context.set(MASTRA_AUTH_MODE_KEY, mode);
+    expect(getFGAProvider(mastra, context)).toBe(
+      expected === 'server' ? server : expected === 'studio' ? studio : undefined,
+    );
+    expect(getFGAProvider(mastra)).toBe(hasServer ? server : undefined);
   });
 });
 

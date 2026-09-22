@@ -1,11 +1,12 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Link, Route, Routes } from 'react-router';
+import { Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { AgentHeaderCreateAction } from '../agent-header-actions';
 import type { AuthCapabilities } from '@/domains/auth/types';
 import { LinkComponentProvider } from '@/lib/framework';
+import { Link } from '@/lib/link';
 import { RouteHeaderActionsProvider } from '@/lib/route-header';
 import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { stubLinkPaths } from '@/test/link-provider';

@@ -17,6 +17,7 @@ import {
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { emptyMcpServers } from '@/lib/ai-ui/__tests__/fixtures/agent';
+import { emptyTraceSpanScores } from '@/pages/traces/__tests__/fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -39,6 +40,9 @@ const installHandlers = ({ list = newestFirstList }: { list?: typeof threadTrace
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(list)),
     http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(list)),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () => HttpResponse.json(spanADetail)),
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
+      HttpResponse.json(emptyTraceSpanScores),
+    ),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
       HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
     ),
@@ -171,13 +175,13 @@ describe('ThreadViewByTrace', () => {
       await refocus();
       expect(requested).not.toHaveBeenCalled();
       fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByRole('button', { name: /close/i });
+      await screen.findByRole('heading', { name: /^Span/ });
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(requested.mock.calls).toEqual([['trace-a']]);
       requested.mockClear();
       await refocus();
       expect(requested.mock.calls).toEqual([['trace-a']]);
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      fireEvent.click(screen.getByText('Chef agent run'));
       requested.mockClear();
       await refocus();
       expect(requested).not.toHaveBeenCalled();
@@ -197,24 +201,21 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('frames the timeline columns with rounded outer corners', async () => {
+  it('underlines each turn and frames the messages column with side borders, like the trace panel', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
     expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    // The timeline column is the row's second grid child (the Spans / Feedback tabs root).
-    const [first, second] = screen
+    const rows = screen
       .getAllByTestId('trace-row-timeline')
-      .map(el => el.closest<HTMLElement>('[data-trace-id]')!.children[1] as HTMLElement);
-    expect(first.className).toContain('border-t');
-    expect(first.className).toContain('rounded-t-xl');
-    expect(second.className).not.toContain('rounded-t-xl');
-    for (const column of [first, second]) {
-      expect(column.className).toContain('border-x');
-      expect(column.className).toContain('border-b');
-      expect(column.className).toContain('group-last:rounded-b-xl');
+      .map(el => el.closest<HTMLElement>('[data-trace-id]') as HTMLElement);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.className).toContain('border-b');
+      expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-x');
+      expect((row.children[1] as HTMLElement).className).not.toMatch(/border|rounded/);
     }
   });
 
@@ -231,15 +232,15 @@ describe('ThreadViewByTrace', () => {
 
     fireEvent.click(await screen.findByText('Chef agent run'));
 
-    // The span panel is the only place with a close button; its detail body shows the span input.
-    const closeButton = await screen.findByRole('button', { name: /close/i });
+    await screen.findByRole('heading', { name: /^Span/ });
     // The conversation column stays mounted while the span panel is open.
     expect(screen.getByTestId('thread-view-by-trace')).not.toBeNull();
     expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(closeButton);
-    await waitFor(() => expect(screen.queryByRole('button', { name: /close/i })).toBeNull());
+    // Re-clicking the selected span toggles the span panel off.
+    fireEvent.click(screen.getByText('Chef agent run'));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
   });
 
   it('shows a rail with one stop per turn that jumps to the matching row', async () => {
@@ -338,13 +339,13 @@ describe('ThreadViewByTrace', () => {
       screen.getByTestId('thread-view-by-trace').querySelector(`[data-trace-id="${traceId}"]`);
 
     fireEvent.click(await screen.findByText('Chef agent run'));
-    await screen.findByRole('button', { name: /close/i });
+    await screen.findByRole('heading', { name: /^Span/ });
 
     expect(rowOf('trace-a')?.getAttribute('data-active')).toBe('true');
     expect(rowOf('trace-b')?.getAttribute('data-active')).toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    fireEvent.click(screen.getByText('Chef agent run'));
     await waitFor(() => expect(rowOf('trace-a')?.getAttribute('data-active')).toBeNull());
   });
 
@@ -362,7 +363,7 @@ describe('ThreadViewByTrace', () => {
       fireEvent.click(within(toolBadge).getAllByRole('button')[0]!);
 
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
-      expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
+      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
@@ -385,7 +386,7 @@ describe('ThreadViewByTrace', () => {
       expect(spanLabel('Chef agent follow-up').className).not.toContain('opacity-30');
       // Highlighting is a timeline-only affordance: no span is selected and the panel stays closed,
       // so opening a span remains the user's own click.
-      expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
+      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(spanLabel('Chef agent run').getAttribute('aria-selected')).toBe('false');
       // The most specific span behind the message (last id, deepest in the tree) is brought into
@@ -442,7 +443,8 @@ describe('ThreadViewByTrace', () => {
 
       // Highlighting does not open the panel, so open a span by hand and then close it.
       fireEvent.click(spanLabel('Recipe lookup'));
-      fireEvent.click(await screen.findByRole('button', { name: /close/i }));
+      await screen.findByRole('heading', { name: /^Span/ });
+      fireEvent.click(spanLabel('Recipe lookup'));
       await waitFor(() => expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
@@ -512,15 +514,15 @@ describe('ThreadViewByTrace', () => {
 
       await screen.findAllByRole('button', { name: 'Show more' });
       fireEvent.click(await screen.findByText('Chef agent run'));
-      await screen.findByRole('button', { name: /close/i });
+      await screen.findByRole('heading', { name: /^Span/ });
 
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
       // Collapsing would hide the selection, so the control is withheld while a span is open.
       expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      fireEvent.click(screen.getByRole('button', { name: /close/i }));
-      await waitFor(() => expect(screen.queryByRole('button', { name: /close/i })).toBeNull());
+      fireEvent.click(screen.getByText('Chef agent run'));
+      await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
       expect(screen.getByRole('button', { name: 'Show less' })).not.toBeNull();
     });
@@ -537,45 +539,39 @@ describe('ThreadViewByTrace', () => {
       expect(firstRow.getByRole('link', { name: 'Go to trace' }).getAttribute('href')).toBe('/traces?traceId=trace-a');
     });
 
-    it('shows the span tree by default and switches to the feedback thread on the Feedback tab', async () => {
+    it('shows the messages by default and swaps them for the feedback thread on the Feedback tab, keeping the span tree', async () => {
       installHandlers();
       installFeedbackHandlers();
       renderView();
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
 
-      // The old hover toggle is gone; each row carries a Spans / Feedback tab list instead.
+      // The messages column carries the Messages / Feedback / Scores tabs; the details column only has the tree.
       expect(screen.queryByRole('button', { name: 'Toggle feedback' })).toBeNull();
-      expect(firstRow.getByRole('tab', { name: /Spans/ }).getAttribute('aria-selected')).toBe('true');
+      expect(firstRow.queryByRole('tab', { name: /Spans/ })).toBeNull();
+      expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('true');
       expect(firstRow.queryByPlaceholderText('Leave feedback...')).toBeNull();
 
       fireEvent.click(firstRow.getByRole('tab', { name: /Feedback/ }));
 
       expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
-      await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).toBeNull());
+      expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('false');
+      expect(firstRow.getByText('Chef agent run')).not.toBeNull();
     });
 
-    it('returns to the Spans tab when a message highlights its spans while Feedback is open', async () => {
+    it('shows the scores of the root span on the Scores tab', async () => {
       installHandlers();
       installFeedbackHandlers();
       renderView();
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
-      fireEvent.click(firstRow.getByRole('tab', { name: /Feedback/ }));
-      await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).toBeNull());
 
-      fireEvent.click(firstRow.getAllByRole('button', { name: 'Highlight spans' })[0]);
+      fireEvent.click(firstRow.getByRole('tab', { name: /Scores/ }));
 
-      // The highlight lives in the span tree, so it would be invisible on the Feedback tab.
-      expect(firstRow.getByRole('tab', { name: /Spans/ }).getAttribute('aria-selected')).toBe('true');
-      await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).not.toBeNull());
-      // The user message is backed by the root span only, so the tool span is faded.
-      await waitFor(() =>
-        expect(screen.getByLabelText('View details for span Recipe lookup').className).toContain('opacity-30'),
-      );
+      expect(await firstRow.findByText('No scores yet')).not.toBeNull();
     });
 
-    it('marks the Feedback tab only when some feedback still needs review', async () => {
+    it('shows the feedback count on the Feedback tab', async () => {
       installHandlers();
       installFeedbackHandlers(
         listFeedbackResponse([
@@ -585,19 +581,16 @@ describe('ThreadViewByTrace', () => {
       renderView();
 
       await screen.findByText('Chef agent run');
-      const feedbackTabs = screen.getAllByRole('tab', { name: /Feedback/ });
-      await waitFor(() => expect(within(feedbackTabs[0]).queryByTestId('needs-review-dot')).not.toBeNull());
+      expect((await screen.findAllByRole('tab', { name: /^Feedback \(1\)/ })).length).toBeGreaterThan(0);
     });
 
-    it('shows no badge on the Feedback tab when there is no feedback', async () => {
+    it('shows a zero count on the Feedback tab when there is no feedback', async () => {
       installHandlers();
       installFeedbackHandlers(listFeedbackResponse([]));
       renderView();
 
       await screen.findByText('Chef agent run');
-      // Give the feedback query a chance to resolve before asserting the absence of the dot.
-      await waitFor(() => expect(screen.getAllByRole('tab', { name: /Feedback/ }).length).toBeGreaterThan(0));
-      expect(screen.queryByTestId('needs-review-dot')).toBeNull();
+      expect((await screen.findAllByRole('tab', { name: /^Feedback \(0\)/ })).length).toBeGreaterThan(0);
     });
 
     it('submits trace-level feedback from the Feedback tab', async () => {

@@ -1,3 +1,4 @@
+import { MastraError } from '@mastra/core/error';
 import type {
   MCPServerBase as MastraMCPServerImplementation,
   MCPToolExecutionResultV2,
@@ -258,11 +259,15 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
       // A 2026-07-28 server runs the tool with no protocol client attached: a tool
       // that suspends for input is reported as such instead of pretending it finished, and
       // the caller answers by sending the same args with `resumeData` and `suspendPayload`.
-      const execution: MCPToolExecutionResultV2 = await server.executeTool(toolId, data, {
-        requestContext,
-        resumeData,
-        suspendPayload,
-      });
+      let execution: MCPToolExecutionResultV2;
+      try {
+        execution = await server.executeTool(toolId, data, { requestContext, resumeData, suspendPayload });
+      } catch (error) {
+        if (error instanceof MastraError && error.id === 'MCP_SERVER_TOOL_INVALID_INPUT') {
+          throw new HTTPException(400, { message: error.message, cause: error });
+        }
+        throw error;
+      }
       if (execution.status === 'suspended') {
         return {
           status: 'suspended' as const,

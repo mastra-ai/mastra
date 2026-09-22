@@ -181,7 +181,7 @@ export function ModelPicker() {
         aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
         aria-busy={busy}
         className={cn(
-          buttonVariants({ variant: 'ghost', size: 'xs' }),
+          buttonVariants({ variant: 'ghost', size: 'sm' }),
           notConfigured ? 'text-accent2' : 'text-neutral3',
         )}
         title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}
@@ -217,7 +217,7 @@ export function ModelPicker() {
                           </Badge>
                         ) : null}
                       </span>
-                      <span className="text-ui-xs text-neutral3 truncate">{packSummary(pack)}</span>
+                      <span className="text-meta text-neutral3 truncate">{packSummary(pack)}</span>
                     </div>
                     {pack.id === selectedPackId && !packModelDeviates ? (
                       <Check aria-hidden className="ml-auto shrink-0" />
@@ -278,7 +278,7 @@ export function ModelPicker() {
             ) : null}
           </CommandList>
           {modeKey ? (
-            <p className="text-ui-xs text-neutral3 border-border1 border-t px-3 py-2">
+            <p className="text-meta text-neutral3 border-border border-t px-3 py-2">
               Model choices apply to {titleCase(modeKey)} mode only.
               {showPacks ? ' Packs set all three modes.' : ''}
             </p>

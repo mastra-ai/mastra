@@ -104,10 +104,10 @@ const AgentMetadataModelListItem = ({
   const [enabled, setEnabled] = useState(() => modelConfig.enabled);
 
   return (
-    <div className="bg-surface1 hover:bg-surface4/50 rounded-lg transition-colors">
+    <div className="bg-sidebar state-layer rounded-lg">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
-          <div {...dragHandleProps} className="text-neutral3 shrink-0 cursor-grab active:cursor-grabbing">
+          <div {...dragHandleProps} className="text-muted-foreground shrink-0 cursor-grab active:cursor-grabbing">
             <Icon>
               <GripVertical />
             </Icon>

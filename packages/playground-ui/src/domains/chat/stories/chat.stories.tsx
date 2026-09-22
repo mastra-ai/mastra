@@ -67,11 +67,11 @@ export const ReviewAndApprove: Story = {
     await userEvent.click(within(await canvas.findByRole('group', { name: 'Tool: read_file' })).getByRole('button'));
     await waitFor(() => expect(canvas.getByText('Enter currently adds a newline.')).toBeVisible());
     await userEvent.click(canvas.getByRole('radio', { name: /Keyboard access/ }));
-    await userEvent.click(await canvas.findByRole('button', { name: 'Approve' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'Approve edit_file' }));
     await waitFor(() => expect(canvas.getByText('The conversation is ready for another review.')).toBeVisible(), {
       timeout: 8000,
     });
-    await expect(canvas.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'Approve edit_file' })).not.toBeInTheDocument();
   },
 };
 
@@ -79,7 +79,7 @@ export const DeclineEdit: Story = {
   args: { scenario: 'approval' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Decline' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Decline edit_file' }));
     await waitFor(() => expect(canvas.getByText(/The edit was declined/)).toBeVisible());
     await expect(canvas.queryByRole('button', { name: 'Stop response' })).not.toBeInTheDocument();
   },

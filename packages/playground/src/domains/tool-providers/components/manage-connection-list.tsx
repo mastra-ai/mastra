@@ -31,7 +31,7 @@ export const ManageConnectionList = ({
           {connections.map(connection => (
             <Entity
               key={connection.connectionId}
-              className="hover:bg-surface4 relative items-center rounded-lg px-2 py-2 transition-colors"
+              className="hover:bg-fill-subtle relative items-center rounded-lg px-2 py-2"
             >
               <EntityContent className="min-w-0">
                 <button
@@ -42,7 +42,7 @@ export const ManageConnectionList = ({
                   className="focus-visible:after:ring-accent1 flex w-full items-center justify-between gap-2 text-left outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2"
                 >
                   <EntityName className="truncate">{connection.label?.trim() || 'Unnamed connection'}</EntityName>
-                  <Icon className="text-neutral3 shrink-0">
+                  <Icon className="text-muted-foreground shrink-0">
                     <ChevronRight />
                   </Icon>
                 </button>

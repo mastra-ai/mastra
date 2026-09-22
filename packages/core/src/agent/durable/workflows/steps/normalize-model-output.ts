@@ -1,10 +1,15 @@
 /**
- * Normalize modelOutput from toModelOutput() into the AI SDK's
- * LanguageModelV2ToolResultOutput shape.
+ * Normalize modelOutput from toModelOutput() into the lossless V2-authored
+ * storage shape kept in `providerMetadata.mastra.modelOutput`.
  *
- * The AI SDK's content array only accepts type 'text' or 'media'.
- * Mastra's createTool docs expose image-url as a convenience shorthand,
- * so normalize it here into type 'media' with the correct structure.
+ * Base64 payloads (`image-data`/`file-data`, and `image-url` parts carrying a
+ * `data:` URI) are stored as the V2 `media` content type. Remote-URL parts
+ * (`image-url`/`file-url`) are kept as-is because `media.data` is Base64-only —
+ * the spec-boundary prompt converters (aiV5PromptToAIV6Prompt /
+ * aiV5PromptToAIV7Prompt) emit the correct URL-shaped part for the target
+ * model's specification version.
+ *
+ * `providerOptions` and any other author-supplied keys are preserved.
  */
 export function normalizeModelOutput(output: unknown): unknown {
   if (output == null || typeof output !== 'object') return output;
@@ -18,19 +23,24 @@ export function normalizeModelOutput(output: unknown): unknown {
       if (item == null || typeof item !== 'object') return item;
       const part = item as Record<string, unknown>;
       if (part.type === 'image-url' && typeof part.url === 'string') {
+        // Remote URLs can't be represented as `media` (Base64-only `data`).
+        // Keep the part untouched — url, mediaType and providerOptions intact.
+        // Scheme matching is case-insensitive per RFC 3986.
+        if (!/^data:/i.test(part.url)) return part;
+        // data: URIs are Base64 payloads, so `media` is the right storage shape.
         const mediaType =
           typeof part.mediaType === 'string' && part.mediaType
             ? part.mediaType
-            : part.url.startsWith('data:')
-              ? part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg'
-              : 'image/jpeg';
-        return { type: 'media', data: part.url, mediaType };
+            : part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg';
+        const rest = { ...part };
+        delete rest.url;
+        return { ...rest, type: 'media', data: part.url, mediaType };
       }
       if (part.type === 'image-data' && typeof part.data === 'string') {
-        return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'image/jpeg' };
+        return { ...part, type: 'media', mediaType: part.mediaType ?? 'image/jpeg' };
       }
       if (part.type === 'file-data' && typeof part.data === 'string') {
-        return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'application/octet-stream' };
+        return { ...part, type: 'media', mediaType: part.mediaType ?? 'application/octet-stream' };
       }
       return part;
     }),

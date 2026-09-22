@@ -64,7 +64,7 @@ export function WorkspaceOverview({
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowChanges}>
         <FileDiff />
         <span>Changes</span>
-        <span className="text-ui-xs ml-auto font-medium">
+        <span className="text-meta ml-auto">
           <WorkspaceOverviewStatus loading={changesLoading} error={changesError}>
             {changesStatus}
           </WorkspaceOverviewStatus>
@@ -73,7 +73,7 @@ export function WorkspaceOverview({
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowFiles}>
         <NotepadText />
         <span>Files</span>
-        <span className="text-ui-xs ml-auto font-medium">
+        <span className="text-meta ml-auto">
           <WorkspaceOverviewStatus loading={filesLoading} error={filesError}>
             <span className="text-icon3">{fileLabel}</span>
           </WorkspaceOverviewStatus>
@@ -83,9 +83,7 @@ export function WorkspaceOverview({
         <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
           <MessageSquare />
           <span>Comments</span>
-          <span className="text-ui-xs text-icon3 ml-auto font-medium">
-            {commentCount === 0 ? 'None yet' : commentCount}
-          </span>
+          <span className="text-meta text-icon3 ml-auto">{commentCount === 0 ? 'None yet' : commentCount}</span>
         </Button>
       ) : null}
     </aside>

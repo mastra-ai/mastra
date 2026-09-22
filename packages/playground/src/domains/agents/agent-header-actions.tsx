@@ -15,7 +15,7 @@ export function AgentHeaderCreateAction() {
   if (!canCreateAgent || !createPath) return null;
   return (
     <RouteHeaderActions owner="agent-list">
-      <CreateButton as={Link} to={createPath} tooltip="Create an agent" variant="ghost" size="sm">
+      <CreateButton render={<Link href={createPath} />} tooltip="Create an agent" variant="ghost" size="sm">
         New agent
       </CreateButton>
     </RouteHeaderActions>

@@ -1,4 +1,5 @@
 import type * as authStudioModule from '@mastra/auth-studio';
+import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
@@ -636,6 +637,51 @@ describe('MastraFactory.prepare', () => {
     expect(paths).not.toContain('/web/channel-accounts');
   });
 
+  it('registers Platform Jira with an access token and no explicit connection ID', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('registers Platform Jira with a secret key and no explicit connection ID', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-secret');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps an explicit Jira integration instead of registering Platform Jira', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({
+            id: 'jira',
+            routes: () => [{ path: '/web/custom-jira', method: 'GET', handler: () => new Response() }],
+          }),
+        ],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/custom-jira');
+      expect(paths).not.toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
@@ -938,6 +984,43 @@ describe('MastraFactory.prepare integrations', () => {
     expect(initialize.mock.calls[0]![0].storage.integrationId).toBe('custom-version-control');
   });
 
+  it('requires source-control storage before GitLab integration routes are ready', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'source-control');
+    const ensureDomainReady = vi.spyOn(storage, 'ensureDomainReady').mockResolvedValue(undefined);
+    const routes = vi.fn((_ctx: IntegrationContext) => [
+      {
+        path: '/web/gitlab/webhook',
+        method: 'POST' as const,
+        handler: () => new Response(null, { status: 202 }),
+      },
+    ]);
+    const versionControl = {
+      initialize: vi.fn(),
+      registerInstallation: vi.fn(),
+      registerRepositories: vi.fn(),
+      getRepositoryAccess: vi.fn(),
+    } as unknown as VersionControl;
+    const config = await prepareFactory({
+      storage,
+      integrations: [fakeIntegration({ id: 'gitlab', routes, versionControl })],
+    });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{
+      path: string;
+      handler?: (context: unknown) => Promise<Response>;
+    }>;
+    const apiRoutes = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} });
+    const route = apiRoutes.find(candidate => candidate.path === '/web/gitlab/webhook');
+
+    expect(apiRoutes.map(candidate => candidate.path)).toEqual(
+      expect.arrayContaining(['/web/source-control/projects/:id/sessions', '/web/user-sessions/:sessionId']),
+    );
+
+    await route?.handler?.({});
+
+    expect(ensureDomainReady).toHaveBeenCalledWith('source-control');
+  });
+
   it("folds a ready integration's routes into buildApiRoutes", async () => {
     const routes = vi.fn((_ctx: IntegrationContext) => [
       { path: '/web/custom/status', method: 'GET' as const, handler: () => new Response() },
@@ -961,6 +1044,28 @@ describe('MastraFactory.prepare integrations', () => {
     const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/github/status');
     expect(paths).toContain('/web/linear/status');
+  });
+
+  it('prefers an explicit GitLab integration over the platform fallback', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_platform_test');
+    const routes = vi.fn(() => [
+      { path: '/web/gitlab/direct-test', method: 'GET' as const, handler: () => new Response() },
+    ]);
+
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        stateSecret: 'deployment-stable-secret',
+        integrations: [fakeIntegration({ id: 'gitlab', routes })],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(route => route.path);
+
+      expect(routes).toHaveBeenCalledOnce();
+      expect(paths).toContain('/web/gitlab/direct-test');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('merges agentTools and sessionTools from ready integrations into extraTools', async () => {

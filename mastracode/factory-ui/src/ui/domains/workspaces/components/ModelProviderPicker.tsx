@@ -17,7 +17,7 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
   if (connection.isPending) return <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />;
   if (connection.catalogError) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0" role="alert">
+      <Txt as="p" variant="caption" className="text-notice-destructive-fg m-0" role="alert">
         {connection.catalogError.message}
       </Txt>
     );
@@ -48,11 +48,11 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
           </div>
 
           <div className="flex items-center gap-3" aria-hidden="true">
-            <div className="bg-border1 h-px flex-1" />
-            <Txt as="span" variant="ui-sm" className="text-icon3">
+            <div className="bg-border h-px flex-1" />
+            <Txt as="span" variant="caption" className="text-icon3">
               OR
             </Txt>
-            <div className="bg-border1 h-px flex-1" />
+            <div className="bg-border h-px flex-1" />
           </div>
         </>
       )}
@@ -85,7 +85,7 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
           </div>
         )}
         {search.trim() && visibleKeyProviders.length === 0 && (
-          <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
+          <Txt as="p" variant="caption" className="text-icon3 m-0">
             {`No providers match “${search.trim()}”.`}
           </Txt>
         )}

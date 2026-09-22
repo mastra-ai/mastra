@@ -1,9 +1,8 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Plus } from 'lucide-react';
+import { GitBranch, Plus } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
 import { useBoardCatalog } from '../../hooks/useBoardCatalog';
@@ -96,12 +95,12 @@ function InstalledBoard({ factory, definition }: { factory: FactoryProject; defi
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
         <EmptyState
           as="h2"
-          iconSlot={<GithubIcon className="text-icon3 size-10" />}
+          iconSlot={<GitBranch className="text-icon3 size-10" />}
           titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
           descriptionSlot={
             review
-              ? 'Link a GitHub repository in Repository settings. Its pull requests will appear in Intake, ready to move through review.'
-              : 'Link a GitHub repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
+              ? 'Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.'
+              : 'Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
           }
           actionSlot={
             <Link
@@ -246,7 +245,10 @@ function BoardContent({
       if (item.id === targetItemId) return true;
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
+      if (intake.active === 'gitlab') return item.source === 'gitlab-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
+      if (intake.active === 'jira') return item.source === 'jira-issue';
+      if (intake.active === 'incidentio') return item.source === 'incidentio-follow-up';
       return false;
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
@@ -321,7 +323,7 @@ function BoardContent({
       )}
       <div className="[container-type:inline-size] min-h-0 flex-1 overflow-auto overscroll-x-contain [scrollbar-gutter:stable] lg:overscroll-x-auto">
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
-          <div className="from-surface2 via-surface2 z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
+          <div className="from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
             <div className="sticky left-0 flex w-[100cqw] flex-col items-stretch gap-3 px-5 pt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
               <BoardRelevanceFilters
                 kind={kind}
@@ -348,7 +350,7 @@ function BoardContent({
                 )}
               </div>
             </div>
-            <div className="from-surface2 via-surface2 sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
+            <div className="from-background via-background sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
               {stageViews.map(({ stage, loading, taskCount, composerOpen, collapsed }) => (
                 <BoardColumnHeader
                   phaseKind={stage.kind}
@@ -463,7 +465,6 @@ function BoardContent({
                           onRun={(move, prompt) =>
                             items.handleDrop(candidatePayload(candidate, prompt), move.stage, 'card_action')
                           }
-                          onFile={() => items.handleDrop(candidatePayload(candidate), candidate.column)}
                         />
                       )}
                     />
@@ -510,10 +511,10 @@ function IntakeSourceSwitch({
           aria-pressed={active === source.id}
           onClick={() => onSelect(source.id)}
           className={cn(
-            'rounded-full border px-2.5 py-0.5 text-ui-xs transition',
+            'rounded-full border px-2.5 py-0.5 text-meta transition',
             active === source.id
-              ? 'border-accent1 bg-surface4 text-icon6'
-              : 'border-border1 bg-transparent text-icon3 hover:text-icon5',
+              ? 'border-accent1 bg-fill text-icon6'
+              : 'border-border bg-transparent text-icon3 hover:text-icon5',
           )}
         >
           {source.label}

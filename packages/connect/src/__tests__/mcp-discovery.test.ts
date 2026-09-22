@@ -103,6 +103,16 @@ function createGatewayFetch(options: { connections?: Array<Record<string, unknow
         result: { content: [{ type: 'text', text: JSON.stringify({ updated: true }) }] },
       });
     }
+    if (body.id !== undefined) {
+      // A pre-2026-07-28 server answers unknown requests (including the
+      // client's server/discover probe) with method-not-found, which is what
+      // tells the client to negotiate the legacy initialize handshake.
+      return Response.json({
+        jsonrpc: '2.0',
+        id: body.id,
+        error: { code: -32601, message: `Method not found: ${String(method)}` },
+      });
+    }
     return new Response(null, { status: 202 });
   });
   return { fetchMock, protocolRequests, getInitializeCount: () => initializeCount };

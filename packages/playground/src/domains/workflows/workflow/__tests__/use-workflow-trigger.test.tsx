@@ -107,8 +107,14 @@ describe('useSuspendedSteps', () => {
 
 describe('useWaitingStepKey', () => {
   function WaitingProbe() {
+    const { result } = useContext(WorkflowRunContext);
     const stepKey = useWaitingStepKey();
-    return <div data-testid="waiting">{stepKey ?? 'none'}</div>;
+    return (
+      <>
+        <div data-testid="status">{result?.status}</div>
+        <div data-testid="waiting">{stepKey ?? 'none'}</div>
+      </>
+    );
   }
 
   describe('when the run is not paused', () => {
@@ -117,7 +123,8 @@ describe('useWaitingStepKey', () => {
 
       renderWithRun('two-step-workflow', successfulRunState.runId, <WaitingProbe />);
 
-      await waitFor(() => expect(screen.getByTestId('waiting').textContent).toBe('none'));
+      await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('success'));
+      expect(screen.getByTestId('waiting').textContent).toBe('none');
     });
   });
 
@@ -143,8 +150,6 @@ describe('useWaitingStepKey', () => {
 
   describe('when a paused run resolved a conditional branch', () => {
     it('skips the un-taken arm and waits on the join step', async () => {
-      // The conditional resolved to `long-text`, so `short-text` was never run and has no
-      // result. The waited step must jump past the never-taken arm to the join.
       serveWorkflowRun('branch-workflow', branchWorkflow, pausedRunBranchResolvedState);
 
       renderWithRun('branch-workflow', pausedRunBranchResolvedState.runId, <WaitingProbe />);

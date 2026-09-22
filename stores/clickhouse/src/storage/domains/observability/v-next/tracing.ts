@@ -37,6 +37,7 @@ import {
   TABLE_LOG_EVENTS,
   TABLE_METRIC_EVENTS,
   TABLE_SCORE_EVENTS,
+  TABLE_SCORE_EVENTS_CURRENT,
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_BRANCHES,
   TABLE_TRACE_BRANCHES_DELTA,
@@ -273,7 +274,13 @@ export async function batchDeleteTraces(
   }
 
   const tracingTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
-  const signalTables = [TABLE_METRIC_EVENTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS];
+  const signalTables = [
+    TABLE_METRIC_EVENTS,
+    TABLE_LOG_EVENTS,
+    TABLE_SCORE_EVENTS,
+    TABLE_SCORE_EVENTS_CURRENT,
+    TABLE_FEEDBACK_EVENTS,
+  ];
 
   // Wait for every replica to apply the lightweight delete mask before the
   // operation resolves. Physical byte removal is handled separately by the

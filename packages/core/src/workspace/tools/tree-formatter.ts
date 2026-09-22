@@ -22,7 +22,6 @@
  */
 
 import type { IMastraLogger } from '../../logger';
-import { pMap } from '../../utils/p-map';
 import { DirectoryNotFoundError, NotDirectoryError } from '../errors';
 import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
 import type { IgnoreFilter } from '../gitignore';
@@ -202,6 +201,7 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
 
   let frontier: Array<{ path: string; depth: number }> = !shouldWalk || prefetched ? [] : [{ path, depth: 0 }];
 
+  const pMap = (await import('p-map')).default;
   while (frontier.length > 0) {
     const results = await pMap(
       frontier,

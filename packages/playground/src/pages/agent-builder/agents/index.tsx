@@ -75,12 +75,16 @@ export default function AgentBuilderAgentsPage() {
       return (
         <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+            iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
             titleSlot="No agents yet"
             descriptionSlot="Start building your first agent with the Agent Builder."
             actionSlot={
               canWrite ? (
-                <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary" icon={<PlusIcon />}>
+                <Button
+                  render={<FrameworkLink href="/agent-builder/agents/create" />}
+                  variant="primary"
+                  icon={<PlusIcon />}
+                >
                   Create an agent
                 </Button>
               ) : undefined
@@ -106,8 +110,8 @@ export default function AgentBuilderAgentsPage() {
           {agents.length > 0 && canWrite && (
             <div className="w-full shrink-0 md:w-auto">
               <Button
-                as={FrameworkLink}
-                to="/agent-builder/agents/create"
+                render={<FrameworkLink href="/agent-builder/agents/create" />}
+
                 variant="primary"
                 className="w-full justify-center md:w-auto"
                 icon={<PlusIcon />}

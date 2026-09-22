@@ -38,3 +38,52 @@ export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) =
   } as WorkflowRunState;
   return { snapshot, runId, stepId };
 };
+
+/**
+ * A suspended snapshot carrying thread/resource memory info in one of the two
+ * real layouts (see `getSnapshotMemoryInfo` in @mastra/core):
+ *
+ * - `agentic-loop`: under a dynamic suspended-step key at
+ *   `context.<step>.suspendPayload.__streamState.messageList.memoryInfo`
+ * - `durable`: at the fixed path `context.input.messageListState.memoryInfo`
+ *   (durable suspend payloads carry no `__streamState`)
+ */
+export const createSampleSuspendedSnapshotWithThread = ({
+  threadId,
+  resourceId,
+  layout,
+}: {
+  threadId: string;
+  resourceId?: string;
+  layout: 'agentic-loop' | 'durable';
+}) => {
+  const runId = `run-${randomUUID()}`;
+  const stepId = `step-${randomUUID()}`;
+  const timestamp = new Date();
+  const memoryInfo = { threadId, ...(resourceId ? { resourceId } : {}) };
+  const suspendedStep = {
+    status: 'suspended',
+    payload: {},
+    startedAt: timestamp.getTime(),
+    suspendPayload:
+      layout === 'agentic-loop' ? { __streamState: { messageList: { memoryInfo } } } : { question: 'approve?' },
+  };
+  const snapshot = {
+    result: undefined,
+    value: {},
+    context: {
+      [stepId]: suspendedStep,
+      input: layout === 'durable' ? { messageListState: { memoryInfo } } : {},
+    },
+    serializedStepGraph: [],
+    activePaths: [],
+    suspendedPaths: { [stepId]: [0] },
+    resumeLabels: {},
+    waitingPaths: {},
+    runId,
+    timestamp: timestamp.getTime(),
+    activeStepsPath: {},
+    status: 'suspended',
+  } as unknown as WorkflowRunState;
+  return { snapshot, runId, stepId };
+};

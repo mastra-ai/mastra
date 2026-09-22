@@ -95,11 +95,11 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
         </PlanIntro>
         <PlanMain>
           {loading ? (
-            <p aria-label="Loading plan" className="text-ui-sm text-neutral3 my-2">
+            <p aria-label="Loading plan" className="text-caption text-neutral3 my-2">
               Loading plan…
             </p>
           ) : unavailable ? (
-            <p role="note" className="text-ui-sm text-neutral3 my-2">
+            <p role="note" className="text-caption text-neutral3 my-2">
               The plan could not be loaded from {path ?? 'its file'}. You can still respond below.
             </p>
           ) : (
@@ -107,8 +107,8 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
           )}
           {inline.feedback ? (
             <div role="note" aria-label="Plan feedback" className="border-accent1 mt-4 border-l-2 pl-3">
-              <p className="text-ui-xs text-neutral3 mb-1">Feedback</p>
-              <p className="text-ui-sm text-neutral5 whitespace-pre-wrap">{inline.feedback}</p>
+              <p className="text-meta text-neutral3 mb-1">Feedback</p>
+              <p className="text-caption text-neutral5 whitespace-pre-wrap">{inline.feedback}</p>
             </div>
           ) : null}
           {onRespond ? (

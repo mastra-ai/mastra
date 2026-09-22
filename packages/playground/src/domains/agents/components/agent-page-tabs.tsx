@@ -4,6 +4,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLink, GitBranch, MessageSquare } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
@@ -17,7 +19,6 @@ interface AgentPageTabsProps {
   activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
-  rightSlot?: React.ReactNode;
 }
 
 function DocsLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -26,7 +27,10 @@ function DocsLink({ href, children }: { href: string; children: React.ReactNode 
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-inherit underline hover:text-white"
+      className={cn(
+        'inline-flex items-center gap-1 text-inherit underline hover:text-foreground',
+        controlStateColorTransition,
+      )}
     >
       {children}
       <ExternalLink className="size-3" />
@@ -49,8 +53,8 @@ function AgentTab({
 }) {
   const tabContent = (
     <>
-      <Icon size="sm">{icon}</Icon>
-      <Txt variant="ui-sm" className="text-inherit">
+      <Icon size="xs">{icon}</Icon>
+      <Txt variant="caption" className="text-inherit">
         {label}
       </Txt>
     </>
@@ -79,7 +83,6 @@ export function AgentPageTabs({
   activeTab,
   showPlayground = false,
   showObservability = false,
-  rightSlot,
 }: AgentPageTabsProps) {
   const { navigate } = useLinkComponent();
 
@@ -102,7 +105,7 @@ export function AgentPageTabs({
   };
 
   return (
-    // Below lg the rightSlot buttons wrap onto their own line (right-aligned)
+    // Below lg the trailing buttons wrap onto their own line (right-aligned)
     // when the full tab list no longer fits, so the tabs keep the full row width.
     <div className="flex min-w-0 items-center gap-2 p-1.5 max-lg:flex-wrap">
       <Tabs
@@ -124,7 +127,6 @@ export function AgentPageTabs({
         </TabList>
       </Tabs>
       <div className="ml-auto flex items-center gap-2">
-        {rightSlot}
         {!showPlayground && (
           <Button
             variant="ghost"

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk-v0_3';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import { MessageList } from '../agent/message-list';
@@ -464,6 +463,7 @@ function createGenerateResult({
     },
     totalUsage: EMPTY_USAGE,
     object: undefined,
+    usedFallbackValue: false,
     error: undefined,
     tripwire: undefined,
     traceId: undefined,
@@ -548,7 +548,7 @@ export class A2AAgent implements SubAgent {
     this.#abortSignal = options.abortSignal;
     this.#timeoutMs = options.timeoutMs;
     this.#verifyAgentCard = options.verifyAgentCard;
-    this.id = options.id ?? `a2a-${randomUUID()}`;
+    this.id = options.id ?? `a2a-${globalThis.crypto.randomUUID()}`;
     this.name = options.name ?? options.description ?? 'A2A Agent';
   }
 
@@ -561,7 +561,9 @@ export class A2AAgent implements SubAgent {
   }
 
   getModel: SubAgent['getModel'] = async () =>
-    ({ specificationVersion: 'v2' }) as Awaited<ReturnType<SubAgent['getModel']>>;
+    ({
+      specificationVersion: 'v2',
+    }) as Awaited<ReturnType<SubAgent['getModel']>>;
 
   hasOwnMemory(): boolean {
     return Boolean(this.#memory);
@@ -597,7 +599,7 @@ export class A2AAgent implements SubAgent {
     options?: AgentExecutionOptionsBase<unknown>,
   ): Promise<A2AAgentGenerateResult> {
     const bootstrap = await this.#getBootstrap();
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? globalThis.crypto.randomUUID();
     const prompt = messagesToPrompt(messages, options);
     const memoryInfo = resolveMemoryInfo(options);
 
@@ -665,7 +667,7 @@ export class A2AAgent implements SubAgent {
     options?: AgentExecutionOptionsBase<unknown>,
   ): Promise<A2AAgentStreamResult> {
     const bootstrap = await this.#getBootstrap();
-    const runId = options?.runId ?? randomUUID();
+    const runId = options?.runId ?? globalThis.crypto.randomUUID();
     const prompt = messagesToPrompt(messages, options);
     const memoryInfo = resolveMemoryInfo(options);
 
@@ -794,7 +796,7 @@ export class A2AAgent implements SubAgent {
       signal,
       body: {
         jsonrpc: '2.0',
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         method: this.#compat.methods.sendMessage,
         params: this.#compat.createSendMessageParams({ prompt, data, contextId, taskId }),
       } satisfies JSONRPCRequestBody,
@@ -869,7 +871,7 @@ export class A2AAgent implements SubAgent {
       signal,
       body: {
         jsonrpc: '2.0',
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         method: this.#compat.methods.getTask,
         params: this.#compat.createGetTaskParams(taskId),
       } satisfies JSONRPCRequestBody,
@@ -1020,7 +1022,7 @@ export class A2AAgent implements SubAgent {
       stream: true,
       body: {
         jsonrpc: '2.0',
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         method: this.#compat.methods.streamMessage,
         params: this.#compat.createSendMessageParams({ prompt, data, contextId, taskId }),
       } satisfies JSONRPCRequestBody,
@@ -1059,7 +1061,7 @@ export class A2AAgent implements SubAgent {
       stream: true,
       body: {
         jsonrpc: '2.0',
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         method: this.#compat.methods.resubscribeTask,
         params: this.#compat.createResubscribeParams(taskId),
       } satisfies JSONRPCRequestBody,

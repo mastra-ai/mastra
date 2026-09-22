@@ -350,7 +350,7 @@ const result = await agent.stream('weather in vancouver?', {
 
 ## Handle errors
 
-When schema validation fails, you can control how errors are handled using `errorStrategy`. The default `strict` strategy throws an error, while `warn` logs a warning and continues. The `fallback` strategy returns the values provided using `fallbackValue`.
+When schema validation fails, or the separate structuring model fails, you can control how errors are handled using `errorStrategy`. The default `strict` strategy throws an error, while `warn` logs a warning and continues. The `fallback` strategy returns the values provided using `fallbackValue`, and the result then reports `usedFallbackValue: true` so you can tell a substituted object from a real answer.
 
 ```typescript
 const response = await testAgent.generate('Tell me about TypeScript.', {
@@ -368,4 +368,5 @@ const response = await testAgent.generate('Tell me about TypeScript.', {
 })
 
 console.log(response.object)
+console.log(response.usedFallbackValue) // true when the fallback value was substituted
 ```

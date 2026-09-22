@@ -32,7 +32,7 @@ export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsPr
     <RouteHeaderActions owner="agent-detail">
       <div className="flex items-center gap-2">
         {showEditButton && (
-          <Button variant="outline" size="sm" as={FrameworkLink} to={editPath} icon={<Pencil />}>
+          <Button variant="outline" size="sm" render={<FrameworkLink href={editPath} />} icon={<Pencil />}>
             Edit
           </Button>
         )}
