@@ -615,15 +615,9 @@ describe('TraceDataPanelView — downloading the trace', () => {
 });
 
 describe('TraceDataPanelView — what the timeline shows as selected', () => {
-  /** The timeline tints the selected span's own row; nothing else carries it. */
-  const isMarked = (name: string) => {
-    let node: HTMLElement | null = screen.getByText(name);
-    while (node) {
-      if (node.classList.contains('bg-surface4')) return true;
-      node = node.parentElement;
-    }
-    return false;
-  };
+  /** The timeline marks the selected span's own row; nothing else carries it. */
+  const isMarked = (name: string) =>
+    screen.getByLabelText(`View details for span ${name}`).getAttribute('aria-selected') === 'true';
 
   it('marks the span the URL asked for', () => {
     render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="child" />);
@@ -755,14 +749,8 @@ describe('TraceDataPanelView — following the spans it is given', () => {
 });
 
 describe('TraceDataPanelView — following the URL to another span', () => {
-  const isMarked = (name: string) => {
-    let node: HTMLElement | null = screen.getByText(name);
-    while (node) {
-      if (node.classList.contains('bg-surface4')) return true;
-      node = node.parentElement;
-    }
-    return false;
-  };
+  const isMarked = (name: string) =>
+    screen.getByLabelText(`View details for span ${name}`).getAttribute('aria-selected') === 'true';
 
   it('moves the mark when the URL names a different span', () => {
     const { rerender } = render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} initialSpanId="root" />);
@@ -917,7 +905,7 @@ describe('TraceDataPanelView — timeline view', () => {
     expect(onSpanSelect).toHaveBeenLastCalledWith('child');
 
     fireEvent.click(screen.getByRole('button', { name: 'Span tree' }));
-    expect(screen.getByLabelText('View details for span weather tool').className).toContain('bg-surface4');
+    expect(screen.getByLabelText('View details for span weather tool').getAttribute('aria-selected')).toBe('true');
   });
 });
 

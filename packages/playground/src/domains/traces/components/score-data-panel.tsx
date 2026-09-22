@@ -116,7 +116,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
               <div className="text-muted-foreground mb-6">
                 <div
                   className={cn(
-                    'text-placeholder text-ui-md flex gap-2 items-baseline',
+                    'text-placeholder text-body flex gap-2 items-baseline',
                     '[&>svg]:w-5 [&>svg]:h-5 [&>svg]:translate-y-1',
                   )}
                 >
@@ -124,7 +124,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                   <span className="">Score:</span>
                   <b className="text-muted-foreground font-mono">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
                 </div>
-                <div className="text-ui-smd mt-2 font-mono">
+                <div className="text-body-sm mt-2 font-mono">
                   {score.reason ||
                     (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
                 </div>

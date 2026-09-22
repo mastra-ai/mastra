@@ -12,7 +12,7 @@ import { normalizePromptIndentation } from './normalize-prompt-indentation';
 import { cn } from '@/lib/utils';
 
 const promptTabClassName =
-  'h-form-sm px-1 text-ui-sm font-medium underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+  'h-control-sm px-1 text-column underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';
 
 export function AgentSystemPrompt({ instructions, children }: { instructions: string; children?: ReactNode }) {
   const [activeTab, setActiveTab] = useState('read');
@@ -43,7 +43,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
       >
         {hasInstructions ? (
           <div className="group/prompt relative min-w-0 pointer-coarse:pt-12">
-            <div className="bg-surface2 absolute top-0 right-0 z-10 flex items-center gap-1 rounded-md opacity-0 group-focus-within/prompt:opacity-100 group-hover/prompt:opacity-100 pointer-coarse:opacity-100">
+            <div className="bg-background absolute top-0 right-0 z-10 flex items-center gap-1 rounded-md opacity-0 group-focus-within/prompt:opacity-100 group-hover/prompt:opacity-100 pointer-coarse:opacity-100">
               {activeTab === 'source' && (
                 <Button
                   variant="ghost"
@@ -51,7 +51,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                   aria-label="Wrap lines"
                   aria-pressed={wrapSource}
                   tooltip="Wrap lines"
-                  className="aria-pressed:bg-surface3 aria-pressed:text-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                  className="aria-pressed:bg-fill-hover aria-pressed:text-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                   onClick={() => setWrapSource(wrapped => !wrapped)}
                 >
                   <WrapText />
@@ -76,14 +76,16 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                 aria-label="System prompt source"
                 tabIndex={0}
                 className={cn(
-                  'text-ui-sm text-foreground min-w-0 overflow-x-auto font-mono leading-relaxed focus-visible:outline-neutral3 focus-visible:outline-1 focus-visible:outline-offset-2',
+                  'text-caption text-foreground min-w-0 overflow-x-auto font-mono leading-relaxed focus-visible:outline-border-focus focus-visible:outline-1 focus-visible:outline-offset-2',
                   wrapSource ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'whitespace-pre',
                 )}
               />
             </TabContent>
           </div>
         ) : (
-          <Txt variant="caption">No system prompt configured</Txt>
+          <Txt variant="caption" tone="muted">
+            No system prompt configured
+          </Txt>
         )}
         {children}
       </AgentMetadataSection>

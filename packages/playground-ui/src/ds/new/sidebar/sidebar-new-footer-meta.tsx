@@ -19,7 +19,7 @@ export const SidebarNewFooterMeta = forwardRef<HTMLDivElement, SidebarNewFooterM
       data-slot="sidebar-new-footer-meta"
       data-state={state}
       className={cn(
-        'grid min-h-10 grid-cols-[minmax(0,1fr)_auto_0fr] items-center border-t border-sidebar-divider px-2 py-1 text-ui-xs text-muted-foreground',
+        'grid min-h-10 grid-cols-[minmax(0,1fr)_auto_0fr] items-center border-t border-border px-2 py-1 text-meta text-muted-foreground',
         'transition-[grid-template-columns] duration-slow ease-out-custom motion-reduce:transition-none',
         state === 'collapsed' && 'grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] px-0',
         className,

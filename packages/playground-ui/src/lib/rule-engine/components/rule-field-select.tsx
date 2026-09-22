@@ -48,14 +48,14 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-surface4 text-foreground" size="sm">
+        <SelectTrigger className="bg-muted text-foreground" size="sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.map(option => (
             <SelectItem key={option.path} value={option.path}>
               <span className="flex items-center gap-2">
-                <Icon size="sm" className="text-muted-foreground">
+                <Icon size="xs" className="text-muted-foreground">
                   {getFieldTypeIcon(option.type)}
                 </Icon>
                 {option.label}
@@ -132,7 +132,7 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
   );
 
   if (selectors.length === 0) {
-    return <div className={cn('text-ui-md text-muted-foreground', className)}>No fields available</div>;
+    return <div className={cn('text-body text-muted-foreground', className)}>No fields available</div>;
   }
 
   return (

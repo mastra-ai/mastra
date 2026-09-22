@@ -34,6 +34,9 @@ import type {
   QueryTraceThreadsInput,
   QueryTraceThreadsResult,
   QueryTracesInput,
+  QueryTracesDeltaInput,
+  QueryTracesKeysetInput,
+  QueryTracesPaginatedInput,
 } from './resources/observability';
 import type {
   TraceRecord,
@@ -1117,6 +1120,10 @@ export class MastraClient extends BaseResource {
   }
 
   /** Queries completed logical traces using recursive trace and related-record predicates. */
+  queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
+  queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
+  queryTraces(params: QueryTracesKeysetInput): Promise<Extract<TraceQueryResponse, { page: unknown }>>;
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);
   }

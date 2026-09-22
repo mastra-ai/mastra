@@ -1,16 +1,19 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { ListFilterIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
+  TRACE_CUSTOM_COLUMN_LABELS,
   buildTraceListColumns,
   formatTraceMetadataValue,
   hasTraceColumn,
 } from '../trace-list-columns';
-import type { TraceColumnPreferences, TraceUsageSummary } from '../trace-list-columns';
+import type { TraceColumnPreferences, TraceCustomColumn, TraceUsageSummary } from '../trace-list-columns';
 import { formatSpanDuration, getInputPreview } from '../utils/span-utils';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
 import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { cn } from '@/lib/utils';
 
 export type TracesListViewTrace = {
@@ -23,6 +26,9 @@ export type TracesListViewTrace = {
   entityType?: string | null;
   entityId?: string | null;
   entityName?: string | null;
+  threadId?: string | null;
+  resourceId?: string | null;
+  environment?: string | null;
   status?: string | null;
   /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
   inputPreview?: string | null;
@@ -35,6 +41,27 @@ export type TracesListViewTrace = {
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
+/** Distinct values offered in a custom column's "filter by value" header menu. */
+const MAX_FILTER_VALUES = 20;
+
+function customColumnValue(trace: TracesListViewTrace, field: TraceCustomColumn): string | null | undefined {
+  return trace[field];
+}
+
+function distinctCustomColumnValues(traces: TracesListViewTrace[], field: TraceCustomColumn): string[] {
+  const values = new Set<string>();
+  for (const trace of traces) {
+    const value = trace[field];
+    if (typeof value === 'string' && value) values.add(value);
+    if (values.size >= MAX_FILTER_VALUES) break;
+  }
+  return [...values];
+}
+
+function sumTokens(usage: TraceUsageSummary | undefined): number | undefined {
+  if (usage?.inputTokens === undefined && usage?.outputTokens === undefined) return undefined;
+  return (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
+}
 
 export type TracesListViewProps = {
   traces: TracesListViewTrace[];
@@ -66,6 +93,8 @@ export type TracesListViewProps = {
   /** Current sort of the Created column. When `onSortChange` is provided the header becomes sortable. */
   createdSort?: DataListSort;
   onSortChange?: (direction: DataListSort, key: 'startedAt') => void;
+  /** When provided, custom column headers offer an `is <value>` filter for every value currently listed. */
+  onFilterByField?: (field: TraceCustomColumn, value: string) => void;
 };
 
 /**
@@ -88,6 +117,7 @@ export function TracesListView({
   onTraceClick,
   createdSort,
   onSortChange,
+  onFilterByField,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const columns = buildTraceListColumns(columnPreferences);
@@ -139,17 +169,21 @@ export function TracesListView({
       <TracesDataList.Top>
         {onSortChange ? (
           <TracesDataList.SortableTopCell sortKey="startedAt" sort={createdSort} onSortChange={onSortChange}>
-            Created
+            Start
           </TracesDataList.SortableTopCell>
         ) : (
-          <TracesDataList.TopCell>Created</TracesDataList.TopCell>
+          <TracesDataList.TopCell>Start</TracesDataList.TopCell>
         )}
+        {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Type</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
-        {hasTraceColumn(columnPreferences, 'entity') && <TracesDataList.TopCell>Entity</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
+        )}
+        {hasTraceColumn(columnPreferences, 'endTime') && <TracesDataList.TopCell>End</TracesDataList.TopCell>}
+        {hasTraceColumn(columnPreferences, 'environment') && (
+          <TracesDataList.TopCell>Environment</TracesDataList.TopCell>
         )}
         {hasTraceColumn(columnPreferences, 'inputTokens') && (
           <TracesDataList.TopCell className="justify-end text-right">Input tokens</TracesDataList.TopCell>
@@ -157,9 +191,44 @@ export function TracesListView({
         {hasTraceColumn(columnPreferences, 'outputTokens') && (
           <TracesDataList.TopCell className="justify-end text-right">Output tokens</TracesDataList.TopCell>
         )}
+        {hasTraceColumn(columnPreferences, 'totalTokens') && (
+          <TracesDataList.TopCell className="justify-end text-right">Total tokens</TracesDataList.TopCell>
+        )}
         {hasTraceColumn(columnPreferences, 'estimatedCost') && (
           <TracesDataList.TopCell className="justify-end text-right">Est. cost</TracesDataList.TopCell>
         )}
+        {columnPreferences.customColumns.map(field => {
+          const label = TRACE_CUSTOM_COLUMN_LABELS[field];
+          const filterValues = onFilterByField ? distinctCustomColumnValues(traces, field) : [];
+          if (!onFilterByField || filterValues.length === 0) {
+            return <TracesDataList.TopCell key={field}>{label}</TracesDataList.TopCell>;
+          }
+          return (
+            <TracesDataList.TopCell key={field} className="overflow-visible">
+              <DropdownMenu>
+                <DropdownMenu.Trigger
+                  render={
+                    <button
+                      type="button"
+                      className="focus-visible:outline-accent hover:text-foreground flex min-w-0 items-center gap-1 rounded-sm focus-visible:outline-2"
+                    >
+                      <span className="min-w-0 truncate">{label}</span>
+                      <ListFilterIcon aria-hidden className="size-[1.2em] shrink-0" />
+                    </button>
+                  }
+                />
+                <DropdownMenu.Content align="start">
+                  <DropdownMenu.Label>Filter by value</DropdownMenu.Label>
+                  {filterValues.map(value => (
+                    <DropdownMenu.Item key={value} onSelect={() => onFilterByField(field, value)}>
+                      <span className="min-w-0 truncate font-mono">{value}</span>
+                    </DropdownMenu.Item>
+                  ))}
+                </DropdownMenu.Content>
+              </DropdownMenu>
+            </TracesDataList.TopCell>
+          );
+        })}
         {columnPreferences.metadataKeys.map(key => (
           <TracesDataList.TopCellWithTooltip key={key} tooltip={key}>
             {key}
@@ -183,7 +252,6 @@ export function TracesListView({
             const rowKey = `${trace.traceId}:${trace.spanId ?? ''}`;
             const isRecentlyAdded = recentlyAddedKeys?.has(rowKey) ?? false;
             const displayDate = trace.startedAt ?? trace.createdAt;
-            const entityName = trace.entityName || trace.entityId;
             const usage = usageByTraceId?.get(trace.traceId);
 
             return (
@@ -197,6 +265,7 @@ export function TracesListView({
                 className={cn(isRecentlyAdded && 'animate-row-highlight')}
               >
                 <TracesDataList.CreatedCell timestamp={displayDate} />
+                {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TypeCell entityType={trace.entityType} />}
                 <TracesDataList.NameCell
                   name={trace.name}
                   parentSpanId={trace.parentSpanId}
@@ -205,12 +274,15 @@ export function TracesListView({
                 {hasTraceColumn(columnPreferences, 'input') && (
                   <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
                 )}
-                {hasTraceColumn(columnPreferences, 'entity') && (
-                  <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
-                )}
                 <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (
                   <DataList.NumberCell>{formatSpanDuration(trace.startedAt, trace.endedAt)}</DataList.NumberCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'endTime') && (
+                  <TracesDataList.CreatedCell timestamp={trace.endedAt ?? ''} />
+                )}
+                {hasTraceColumn(columnPreferences, 'environment') && (
+                  <DataList.TextCell>{trace.environment || '—'}</DataList.TextCell>
                 )}
                 {hasTraceColumn(columnPreferences, 'inputTokens') && (
                   <DataList.NumberCell>
@@ -222,11 +294,24 @@ export function TracesListView({
                     {usage?.outputTokens === undefined ? undefined : formatCompact(usage.outputTokens)}
                   </DataList.NumberCell>
                 )}
+                {hasTraceColumn(columnPreferences, 'totalTokens') && (
+                  <DataList.NumberCell>
+                    {(() => {
+                      const total = sumTokens(usage);
+                      return total === undefined ? undefined : formatCompact(total);
+                    })()}
+                  </DataList.NumberCell>
+                )}
                 {hasTraceColumn(columnPreferences, 'estimatedCost') && (
                   <DataList.NumberCell>
                     {usage?.estimatedCost === undefined ? undefined : formatCost(usage.estimatedCost, usage.costUnit)}
                   </DataList.NumberCell>
                 )}
+                {columnPreferences.customColumns.map(field => (
+                  <DataList.TextCell font="mono" key={field}>
+                    {customColumnValue(trace, field) ?? undefined}
+                  </DataList.TextCell>
+                ))}
                 {columnPreferences.metadataKeys.map(key => {
                   const value = formatTraceMetadataValue(trace.metadata, key);
                   return (

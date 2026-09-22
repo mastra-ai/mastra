@@ -122,10 +122,10 @@ describe('AgentBuilderSidebar', () => {
       renderSidebar('/agent-builder/library');
 
       const libraryLink = await screen.findByRole('link', { name: /Library/i });
-      expect(libraryLink.classList.contains('bg-selected')).toBe(true);
+      expect(libraryLink.getAttribute('aria-current')).toBe('page');
 
       const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-      expect(agentsLink.classList.contains('bg-selected')).toBe(false);
+      expect(agentsLink.getAttribute('aria-current')).toBe(null);
     });
   });
 
@@ -134,13 +134,13 @@ describe('AgentBuilderSidebar', () => {
       renderSidebar('/agent-builder/favorite');
 
       const favoritesLink = await screen.findByRole('link', { name: /Favorites/i });
-      expect(favoritesLink.classList.contains('bg-selected')).toBe(true);
+      expect(favoritesLink.getAttribute('aria-current')).toBe('page');
 
       const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-      expect(agentsLink.classList.contains('bg-selected')).toBe(false);
+      expect(agentsLink.getAttribute('aria-current')).toBe(null);
 
       const libraryLink = await screen.findByRole('link', { name: /Library/i });
-      expect(libraryLink.classList.contains('bg-selected')).toBe(false);
+      expect(libraryLink.getAttribute('aria-current')).toBe(null);
     });
   });
 });

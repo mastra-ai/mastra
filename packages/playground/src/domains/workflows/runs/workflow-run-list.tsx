@@ -54,7 +54,7 @@ function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resour
   if (timestamp === undefined && !resourceId) return null;
 
   return (
-    <span className="text-muted-foreground text-ui-xs flex w-full min-w-0 items-center gap-1.5">
+    <span className="text-muted-foreground text-meta flex w-full min-w-0 items-center gap-1.5">
       {timestamp !== undefined && (
         <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
           {formatDate(timestamp, 'MMM d, yyyy · h:mm a')}
@@ -102,11 +102,11 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="flex min-h-0 flex-col">
-        <CollapsibleTrigger className="text-ui-sm text-muted-foreground flex shrink-0 items-center gap-2 px-4 py-3 text-left">
+        <CollapsibleTrigger className="text-caption text-muted-foreground flex shrink-0 items-center gap-2 px-4 py-3 text-left">
           <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0 motion-reduce:transition-none" />
           <span>Recent runs</span>
           {!isLoading && !error && (
-            <span className="text-ui-xs text-muted-foreground">
+            <span className="text-meta text-muted-foreground">
               {runList.length}
               {hasNextPage ? '+' : ''}
             </span>
@@ -150,7 +150,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                              <span className="text-ui-sm flex w-full min-w-0 items-center gap-2">
+                              <span className="text-caption flex w-full min-w-0 items-center gap-2">
                                 <span className="text-foreground min-w-0 flex-1 truncate font-medium" title={run.runId}>
                                   {run.runId}
                                 </span>
@@ -160,7 +160,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                                 resourceId={getRunResourceId(run)}
                               />
                               {runInput && (
-                                <span className="text-muted-foreground text-ui-sm block w-full min-w-0 truncate">
+                                <span className="text-muted-foreground text-caption block w-full min-w-0 truncate">
                                   {runInput}
                                 </span>
                               )}

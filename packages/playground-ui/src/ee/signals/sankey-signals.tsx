@@ -290,7 +290,7 @@ export function SankeySignals({
 
   if (isFlowPending) {
     return (
-      <main className="min-w-0 space-y-5 p-4 lg:p-6">
+      <div className="min-w-0 space-y-5 p-4 lg:p-6">
         {dateRangePicker && <div className="flex justify-end">{dateRangePicker}</div>}
         <SnapshotTimeline
           snapshots={snapshots}
@@ -302,7 +302,7 @@ export function SankeySignals({
           onSnapshotChange={selectSnapshot}
         />
         <SignalsFrameLoadingSkeleton />
-      </main>
+      </div>
     );
   }
 
@@ -368,7 +368,7 @@ export function SankeySignals({
 
   return (
     <TraceIntelligenceContext.Provider value={traceIntelligenceContext}>
-      <main className="min-w-0 space-y-5 p-4 lg:p-6">
+      <div className="min-w-0 space-y-5 p-4 lg:p-6">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-4">
             <Tabs<SignalsViewMode>
@@ -387,7 +387,7 @@ export function SankeySignals({
           </div>
           {dateRangePicker}
         </div>
-        <p className="text-muted-foreground text-ui-sm">{viewDescription}</p>
+        <p className="text-muted-foreground text-caption">{viewDescription}</p>
         <PendingSignalProgress progress={progressQuery.data} signalCatalog={effectiveSignalCatalog} />
         {viewMode === 'compare' ? (
           <ThemeCompare
@@ -442,12 +442,12 @@ export function SankeySignals({
               />
             ) : null}
             {isDrilledEmpty ? (
-              <section className="border-border1 bg-surface2 text-muted-foreground text-ui-md rounded-lg border p-6">
+              <section className="border-border bg-background text-muted-foreground text-body rounded-lg border p-6">
                 This theme is not present in the selected snapshot. Use the clear filter action above to return to the
                 full flow.
               </section>
             ) : graphSummary.records.length === 0 ? (
-              <section className="border-border1 bg-surface2 text-muted-foreground text-ui-md rounded-lg border p-6">
+              <section className="border-border bg-background text-muted-foreground text-body rounded-lg border p-6">
                 No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
                 Pick another snapshot from the timeline below.
               </section>
@@ -466,12 +466,12 @@ export function SankeySignals({
               />
             )}
             {perspectiveMutation.isPending ? (
-              <p className="text-muted-foreground text-ui-sm font-mono" role="status">
+              <p className="text-muted-foreground text-caption font-mono" role="status">
                 Reloading snapshots for new trace signal perspective…
               </p>
             ) : null}
             {perspectiveMutation.isError ? (
-              <p className="text-ui-sm text-red-500" role="alert">
+              <p className="text-caption text-red-500" role="alert">
                 Unable to load that trace signal perspective. Try reordering the columns again.
               </p>
             ) : null}
@@ -498,7 +498,7 @@ export function SankeySignals({
           filteredStats={noiseStats}
           onClose={() => setNoiseSignalName(undefined)}
         />
-      </main>
+      </div>
     </TraceIntelligenceContext.Provider>
   );
 }

@@ -4,14 +4,19 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   applyTracePropertyFilterTokens,
   createTraceFilterBarFields,
+  filterBarExpressionToTraceFilters,
   filterBarItemsToTraceTokens,
   getPreservedTraceFilterParams,
+  getTraceFilterGroups,
   getTracePropertyFilterTokens,
   hasAnyTraceFilterParams,
   loadTraceFiltersFromStorage,
   saveTraceFiltersToStorage,
+  TRACE_FILTER_BAR_OPERATORS,
+  traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from './trace-filters';
+import type { TraceFilterGroup } from './trace-filters';
 
 const KEY = 'test:traces:saved-filters';
 
@@ -39,6 +44,33 @@ describe('saveTraceFiltersToStorage', () => {
 
     expect(loadTraceFiltersFromStorage(KEY)).toBeNull();
     expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('never persists an empty advanced filter group, since it is only editor state', () => {
+    const params = new URLSearchParams('status=error');
+    params.append('filterGroup', JSON.stringify({ id: 'g', logic: 'or', nodes: [] }));
+
+    saveTraceFiltersToStorage(params, KEY);
+
+    expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe('status=error');
+  });
+});
+
+describe('TRACE_FILTER_BAR_OPERATORS', () => {
+  it('labels every operator in plain English', () => {
+    const labels = Object.fromEntries(TRACE_FILTER_BAR_OPERATORS.map(o => [o.id, o.label]));
+    expect(labels).toEqual({
+      is: 'is',
+      isNot: 'is not',
+      in: 'is any of',
+      notIn: 'is none of',
+      exists: 'exists',
+      notExists: 'does not exist',
+      gt: 'greater than',
+      gte: 'at least',
+      lt: 'less than',
+      lte: 'at most',
+    });
   });
 });
 
@@ -104,6 +136,24 @@ describe('createTraceFilterBarFields', () => {
     ]);
     expect(byId('scores.score')?.type).toBe('number');
     expect(byId('feedback.value')?.type).toBe('number');
+  });
+
+  describe('when a field is not an identifier', () => {
+    it('offers a strict value list for the is operator', () => {
+      for (const id of ['environment', 'entityName', 'status', 'rootEntityType']) {
+        expect(byId(id)?.strict, id).toBe(true);
+        expect(Array.isArray(byId(id)?.suggestions), id).toBe(true);
+      }
+    });
+  });
+
+  describe('when a field is an identifier', () => {
+    it('stays free text with no value list', () => {
+      for (const id of ['traceId', 'threadId', 'resourceId', 'entityId']) {
+        expect(byId(id)?.strict, id).toBeUndefined();
+        expect(byId(id)?.suggestions, id).toBeUndefined();
+      }
+    });
   });
 
   it('offers only presence operators on presence fields', () => {
@@ -231,6 +281,98 @@ describe('metadata filter URL params', () => {
   it('counts a filterMetadata.<key> param as an existing filter so hydration does not re-append it', () => {
     expect(hasAnyTraceFilterParams(new URLSearchParams('filterMetadata.region=eu-west'))).toBe(true);
     expect(hasAnyTraceFilterParams(new URLSearchParams('page=2'))).toBe(false);
+  });
+});
+
+describe('filter group URL params', () => {
+  const group: TraceFilterGroup = {
+    id: 'g1',
+    logic: 'or',
+    nodes: [
+      { id: 'a', fieldId: 'status', operatorId: 'is', value: 'error' },
+      { id: 'b', fieldId: 'spans.model', operatorId: 'is', value: 'gpt-4o' },
+    ],
+  };
+
+  describe('when groups are written to the URL', () => {
+    it('round-trips them losslessly, ids included, after the flat tokens', () => {
+      const params = new URLSearchParams('filterGroup=stale&status=error');
+
+      applyTracePropertyFilterTokens(params, [{ fieldId: 'traceId', value: 'abc' }], [group]);
+
+      expect(getTraceFilterGroups(params)).toEqual([group]);
+      expect(params.getAll('filterGroup')).toHaveLength(1);
+      expect([...params.keys()].indexOf('filterGroup')).toBeGreaterThan([...params.keys()].indexOf('filterTraceId'));
+    });
+  });
+
+  describe('when a group has no nodes yet', () => {
+    it('round-trips the empty group so a freshly added advanced filter survives the URL', () => {
+      const params = new URLSearchParams();
+      const empty = { id: 'g-new', logic: 'or' as const, nodes: [] };
+
+      applyTracePropertyFilterTokens(params, [], [empty]);
+
+      expect(getTraceFilterGroups(params)).toEqual([empty]);
+    });
+  });
+
+  describe('when a filterGroup param is malformed', () => {
+    it('drops it instead of throwing', () => {
+      const params = new URLSearchParams();
+      params.append('filterGroup', '{not json');
+      params.append('filterGroup', JSON.stringify({ id: 'g', logic: 'xor', nodes: [] }));
+      params.append('filterGroup', JSON.stringify({ id: 'g', logic: 'or' }));
+
+      expect(getTraceFilterGroups(params)).toEqual([]);
+    });
+  });
+
+  describe('when a group holds a nested group next to an invalid node', () => {
+    it('keeps the valid nodes and the nested group', () => {
+      const params = new URLSearchParams();
+      params.append(
+        'filterGroup',
+        JSON.stringify({
+          id: 'g',
+          logic: 'or',
+          nodes: [
+            { id: 'a', fieldId: 'status', value: 'error' },
+            { id: 'bad', value: 'x' },
+            {
+              id: 'n',
+              logic: 'and',
+              nodes: [{ id: 'b', fieldId: 'spans.model', operatorId: 'isNot', value: 'gpt-4o' }],
+            },
+          ],
+        }),
+      );
+
+      expect(getTraceFilterGroups(params)).toEqual([
+        {
+          id: 'g',
+          logic: 'or',
+          nodes: [
+            { id: 'a', fieldId: 'status', value: 'error' },
+            {
+              id: 'n',
+              logic: 'and',
+              nodes: [{ id: 'b', fieldId: 'spans.model', operatorId: 'isNot', value: 'gpt-4o' }],
+            },
+          ],
+        },
+      ]);
+    });
+  });
+
+  describe('when filters are preserved for storage', () => {
+    it('keeps every filterGroup param and counts it as an applied filter', () => {
+      const params = new URLSearchParams('page=2');
+      params.append('filterGroup', JSON.stringify(group));
+
+      expect(getTraceFilterGroups(getPreservedTraceFilterParams(params))).toEqual([group]);
+      expect(hasAnyTraceFilterParams(params)).toBe(true);
+    });
   });
 });
 
@@ -409,5 +551,91 @@ describe('filterBarItemsToTraceTokens', () => {
       { fieldId: 'traceId', value: '42' },
       { fieldId: 'tags', value: ['1', 'true'] },
     ]);
+  });
+});
+
+describe('traceFiltersToFilterBarExpression', () => {
+  it('lifts root tokens to items and groups to group nodes, tokens first', () => {
+    const expression = traceFiltersToFilterBarExpression(
+      [{ fieldId: 'status', value: 'error' }],
+      [
+        {
+          id: 'g1',
+          logic: 'or',
+          nodes: [
+            { id: 'a', fieldId: 'spans.model', value: 'gpt-4o' },
+            { id: 'n', logic: 'and', nodes: [{ id: 'b', fieldId: 'threadId', operatorId: 'notExists', value: '' }] },
+          ],
+        },
+      ],
+    );
+
+    expect(expression).toEqual({
+      logic: 'and',
+      nodes: [
+        { id: 'status', fieldId: 'status', operatorId: 'is', value: 'error' },
+        {
+          id: 'g1',
+          kind: 'group',
+          logic: 'or',
+          nodes: [
+            { id: 'a', fieldId: 'spans.model', operatorId: 'is', value: 'gpt-4o' },
+            {
+              id: 'n',
+              kind: 'group',
+              logic: 'and',
+              nodes: [{ id: 'b', fieldId: 'threadId', operatorId: 'notExists', value: '' }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+});
+
+describe('filterBarExpressionToTraceFilters', () => {
+  it('splits root items into tokens and root groups into groups, keeping node ids only inside groups', () => {
+    expect(
+      filterBarExpressionToTraceFilters({
+        logic: 'and',
+        nodes: [
+          { id: 'status', fieldId: 'status', operatorId: 'is', value: 'error' },
+          {
+            id: 'g1',
+            kind: 'group',
+            logic: 'or',
+            nodes: [
+              { id: 'a', fieldId: 'spans.model', operatorId: 'isNot', value: 'gpt-4o' },
+              { id: 'b', fieldId: 'spans.durationMs', operatorId: 'gt', value: 100 },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      tokens: [{ fieldId: 'status', value: 'error' }],
+      groups: [
+        {
+          id: 'g1',
+          logic: 'or',
+          nodes: [
+            { id: 'a', fieldId: 'spans.model', operatorId: 'isNot', value: 'gpt-4o' },
+            { id: 'b', fieldId: 'spans.durationMs', operatorId: 'gt', value: '100' },
+          ],
+        },
+      ],
+    });
+  });
+
+  describe('when a group has no nodes', () => {
+    // "Advanced filter…" emits an empty group and opens its popover; the FilterBar prunes empties
+    // itself once the popover closes. Dropping it here would make the chip vanish before it can be filled.
+    it('keeps the empty group so the FilterBar can open its editor', () => {
+      expect(
+        filterBarExpressionToTraceFilters({
+          logic: 'and',
+          nodes: [{ id: 'g1', kind: 'group', logic: 'or', nodes: [] }],
+        }),
+      ).toEqual({ tokens: [], groups: [{ id: 'g1', logic: 'or', nodes: [] }] });
+    });
   });
 });
