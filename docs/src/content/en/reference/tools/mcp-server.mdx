@@ -1326,7 +1326,8 @@ The full `context.mcp.extra` object contains:
 | `authInfo` | Whatever you set on `req.auth` in your middleware |
 | `requestId` | The JSON-RPC id of the current request |
 | `signal` | AbortSignal for request cancellation |
-| `_meta` | Request metadata sent by the client: trace headers, log-level opt-in, progress token |
+| `_meta` | Request metadata sent by the client: W3C trace fields, the `io.modelcontextprotocol/logLevel` log-level opt-in, and `progressToken` |
+| `sendNotification`, `sendRequest` | Deprecated. The protocol has no server-initiated requests, so both throw with a message naming the replacement: `context.mcp.log()`, `context.mcp.progress()`, or `context.suspend()`. |
 
 ### Complete Example
 

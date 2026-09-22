@@ -137,7 +137,7 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     name: 'timeout',
     type: 'number',
     isOptional: true,
-    description: 'Server-specific timeout in milliseconds.',
+    description: 'Server-specific timeout in milliseconds. Falls back to the client-level `timeout` when omitted.',
   },
   {
     name: 'capabilities',
@@ -211,6 +211,14 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     isOptional: true,
     description:
       'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
+  },
+  {
+    name: 'onToolError',
+    type: "'throw' | 'return'",
+    isOptional: true,
+    defaultValue: "'throw'",
+    description:
+      "How to handle tool execution failures the server reports in-band with `isError: true`. `'throw'` raises a `MastraError` carrying the server's error text, so the failure reaches tool spans, stream chunks, scorers, and the model. `'return'` resolves with the raw result and ignores `isError`.",
   },
   {
     name: 'jsonSchemaValidator',
