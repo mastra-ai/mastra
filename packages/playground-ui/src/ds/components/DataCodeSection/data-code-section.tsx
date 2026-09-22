@@ -334,7 +334,7 @@ export function DataCodeSection({
         )}
       >
         {usePlainTextView ? (
-          <div className="text-muted-foreground font-mono break-all">
+          <div className="font-mono break-all text-muted-foreground">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
@@ -351,7 +351,7 @@ export function DataCodeSection({
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
         <DialogContent className="grid h-[calc(100vh-6rem)]! max-w-[90vw]! grid-rows-[auto_1fr] [&>.absolute]:hidden">
           <DialogHeader className="flex-row items-center justify-between">
-            <DialogTitle className="text-caption flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
+            <DialogTitle className="flex min-w-0 items-center gap-1.5 truncate text-caption [&>svg]:size-3.5">
               {dialogTitle ?? (
                 <>
                   {icon}
@@ -400,7 +400,7 @@ export function DataCodeSection({
                   'overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
                 )}
               >
-                <div className="text-muted-foreground font-mono break-all">
+                <div className="font-mono break-all text-muted-foreground">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>
               </div>

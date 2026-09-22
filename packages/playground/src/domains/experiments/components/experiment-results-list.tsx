@@ -162,12 +162,12 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="text-body-sm text-muted-foreground flex items-center gap-1.5 tracking-wide">
+                  <DataList.Cell className="flex items-center gap-1.5 text-body-sm tracking-wide text-muted-foreground">
                     <span>{result.itemId?.slice(0, 8) ?? ''}</span>
                     {hasError && (
                       <Tooltip>
                         <TooltipTrigger
-                          render={<AlertCircleIcon role="img" aria-label="Error" className="text-error size-3.5" />}
+                          render={<AlertCircleIcon role="img" aria-label="Error" className="size-3.5 text-error" />}
                         />
                         <TooltipContent>{errorMessage(result.error)}</TooltipContent>
                       </Tooltip>
@@ -217,7 +217,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} className="text-muted-foreground text-body-sm font-mono">
+                    <DataList.Cell key={scorerId} className="font-mono text-body-sm text-muted-foreground">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );

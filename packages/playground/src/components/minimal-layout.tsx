@@ -5,7 +5,7 @@ import { AuthRequired } from '@/domains/auth/components/auth-required';
 
 export const MinimalLayout = ({ children }: { children: React.ReactNode }) => {
   return (
-    <div className="bg-sidebar font-body h-screen">
+    <div className="h-screen bg-sidebar font-body">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>

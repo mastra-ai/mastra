@@ -140,7 +140,7 @@ function DatasetPage() {
               onAddItemClick={() => setAddItemDialogOpen(true)}
               belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
               leftSlot={
-                <span className="text-caption text-muted-foreground mr-3 whitespace-nowrap">
+                <span className="mr-3 text-caption whitespace-nowrap text-muted-foreground">
                   {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
                 </span>
               }

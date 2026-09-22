@@ -148,7 +148,7 @@ export function DataDetailsPanelCodeSection({
         )}
       >
         {usePlainTextView ? (
-          <div className="text-muted-foreground font-mono break-all">
+          <div className="font-mono break-all text-muted-foreground">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (

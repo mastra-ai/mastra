@@ -33,7 +33,7 @@ export function DashboardLineChart({
                 <span className="text-meta text-muted-foreground uppercase">{s.label}</span>
               </div>
               {aggregated && (
-                <p className="text-body text-muted-foreground pl-5">
+                <p className="pl-5 text-body text-muted-foreground">
                   {aggregated.value}
                   {aggregated.suffix && <span className="text-caption text-placeholder"> {aggregated.suffix}</span>}
                 </p>

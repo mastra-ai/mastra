@@ -39,7 +39,7 @@ function MobileNavbar() {
   };
 
   return (
-    <header className="border-border bg-sidebar sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b px-3 lg:hidden">
+    <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-sidebar px-3 lg:hidden">
       <div className="flex min-w-0 items-center gap-3">
         <SidebarNew.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
@@ -155,7 +155,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { Link } = useLinkComponent();
 
   return (
-    <div className="bg-sidebar font-body h-screen">
+    <div className="h-screen bg-sidebar font-body">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>

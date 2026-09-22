@@ -74,7 +74,7 @@ export function LogDetailsView({
 
       {!collapsed && (
         <DataDetailsPanel.Content>
-          <p className="text-body text-muted-foreground font-mono wrap-break-word whitespace-pre-wrap">{log.message}</p>
+          <p className="font-mono text-body wrap-break-word whitespace-pre-wrap text-muted-foreground">{log.message}</p>
 
           {(traceId || spanId) && (
             <div className={cn('my-8 grid gap-2', '[&>button]:justify-between [&>button]:overflow-hidden')}>
@@ -86,7 +86,7 @@ export function LogDetailsView({
                     onClick={() => onTraceClick?.(traceId)}
                   >
                     <span>Trace</span>
-                    <span className="text-caption text-placeholder ml-auto min-w-0 truncate"># {traceId}</span>
+                    <span className="ml-auto min-w-0 truncate text-caption text-placeholder"># {traceId}</span>
                   </Button>
                   <CopyButton content={traceId} tooltip="Copy Trace ID to clipboard" />
                 </ButtonsGroup>
@@ -100,7 +100,7 @@ export function LogDetailsView({
                     icon={<ArrowRightIcon />}
                   >
                     <span>Span</span>
-                    <span className="text-caption text-placeholder ml-auto min-w-0 truncate"># {spanId}</span>
+                    <span className="ml-auto min-w-0 truncate text-caption text-placeholder"># {spanId}</span>
                   </Button>
                   <CopyButton content={spanId} tooltip="Copy Span ID to clipboard" />
                 </ButtonsGroup>

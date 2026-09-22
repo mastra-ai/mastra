@@ -24,11 +24,11 @@ function TimingReading({
   dial: ReactNode;
 }) {
   return (
-    <span className="text-foreground mt-1 flex min-h-[108px] items-center justify-between gap-1">
+    <span className="mt-1 flex min-h-[108px] items-center justify-between gap-1 text-foreground">
       <span className="z-10 flex min-w-0 flex-col gap-2">
-        <span className="text-display flex items-baseline gap-1 leading-none tracking-tighter whitespace-nowrap tabular-nums">
+        <span className="flex items-baseline gap-1 text-display leading-none tracking-tighter whitespace-nowrap tabular-nums">
           {value}
-          <small className="text-meta text-muted-foreground tracking-normal">{unit}</small>
+          <small className="text-meta tracking-normal text-muted-foreground">{unit}</small>
         </span>
         <span className={captionClasses}>{caption}</span>
       </span>

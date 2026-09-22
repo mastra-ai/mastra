@@ -137,11 +137,11 @@ export default function AgentBuilderLibraryPage() {
             <ActionRow>
               <ActionRow.Start>
                 {features.skills && (
-                  <div className="border-border flex overflow-hidden rounded-lg border">
+                  <div className="flex overflow-hidden rounded-lg border border-border">
                     <button
                       onClick={() => setTab('agents')}
                       className={cn(
-                        'text-column px-3 py-1.5',
+                        'px-3 py-1.5 text-column',
                         controlStateColorTransition,
                         tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                       )}
@@ -151,7 +151,7 @@ export default function AgentBuilderLibraryPage() {
                     <button
                       onClick={() => setTab('skills')}
                       className={cn(
-                        'text-column px-3 py-1.5',
+                        'px-3 py-1.5 text-column',
                         controlStateColorTransition,
                         tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
                       )}
