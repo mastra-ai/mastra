@@ -1431,7 +1431,7 @@ function planPredicate(
         state,
       );
     }
-    const field = normalizePath(predicate.path);
+    const field = normalizeTraceQueryPath(predicate.path);
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
