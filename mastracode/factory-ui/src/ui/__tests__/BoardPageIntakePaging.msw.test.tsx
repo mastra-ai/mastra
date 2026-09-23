@@ -63,24 +63,36 @@ const triageIssuePages: Record<string, { issues: ReturnType<typeof issue>[]; nex
  */
 function stubIntersectionObserver(startsInView: boolean) {
   let inView = startsInView;
-  let notify: (entries: Array<{ isIntersecting: boolean }>) => void = () => {};
+  type Notify = (entries: Array<{ isIntersecting: boolean }>) => void;
+  const observed = new Map<Element, Notify>();
   vi.stubGlobal(
     'IntersectionObserver',
     class {
-      constructor(callback: typeof notify) {
-        notify = callback;
+      private readonly notify: Notify;
+
+      constructor(callback: Notify) {
+        this.notify = callback;
       }
-      observe() {
-        notify([{ isIntersecting: inView }]);
+      observe(element: Element) {
+        observed.set(element, this.notify);
+        this.notify([{ isIntersecting: inView }]);
       }
-      unobserve() {}
-      disconnect() {}
+      unobserve(element: Element) {
+        observed.delete(element);
+      }
+      disconnect() {
+        for (const [element, notify] of observed) {
+          if (notify === this.notify) observed.delete(element);
+        }
+      }
     },
   );
   return {
     scrollSentinel(nowInView: boolean) {
       inView = nowInView;
-      act(() => notify([{ isIntersecting: nowInView }]));
+      act(() => {
+        for (const notify of new Set(observed.values())) notify([{ isIntersecting: nowInView }]);
+      });
     },
   };
 }
@@ -207,8 +219,8 @@ function renderReviewBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-function renderWorkBoard() {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
+function renderWorkBoard(query = '') {
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work${query}`] });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
@@ -254,10 +266,11 @@ describe('Intake candidate paging', () => {
   it('scroll-loads a feed attached to a non-Intake column and shows card skeletons while it loads', async () => {
     const { scrollSentinel } = stubIntersectionObserver(false);
     const { requestedTriagePages, releaseSecondPage } = stubWorkBoard();
-    const { client } = renderWorkBoard();
+    const { client } = renderWorkBoard('?q=signup');
 
     const triage = await screen.findByTestId('board-column-triage');
-    await waitFor(() => expect(within(triage).getByText('Triage login')).toBeInTheDocument());
+    expect(await within(triage).findByRole('button', { name: 'Load more candidates' })).toBeInTheDocument();
+    expect(within(triage).queryByText('Triage login')).not.toBeInTheDocument();
     await waitForMutationsIdle(client);
     expect(requestedTriagePages).toEqual(['1']);
 
