@@ -15,7 +15,7 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
   if (status === 'saving') {
     return (
       <span
-        className="text-caption text-muted-foreground flex items-center gap-1.5"
+        className="flex items-center gap-1.5 text-caption text-muted-foreground"
         data-testid="agent-builder-autosave-saving"
       >
         <Spinner size="sm" />
@@ -27,7 +27,7 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
   if (status === 'saved') {
     return (
       <span
-        className="text-caption text-muted-foreground flex items-center gap-1.5"
+        className="flex items-center gap-1.5 text-caption text-muted-foreground"
         data-testid="agent-builder-autosave-saved"
       >
         <CheckIcon className="h-3.5 w-3.5" />
@@ -39,7 +39,7 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
   if (status === 'error') {
     return (
       <span
-        className="text-caption text-muted-foreground flex items-center gap-1.5"
+        className="flex items-center gap-1.5 text-caption text-muted-foreground"
         data-testid="agent-builder-autosave-error"
       >
         <span title={lastError?.message}>Failed to save</span>

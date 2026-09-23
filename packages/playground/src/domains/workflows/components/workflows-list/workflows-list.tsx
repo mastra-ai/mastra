@@ -46,8 +46,8 @@ function TreeConnector({ guides, isLastChild }: { guides: boolean[]; isLastChild
         <span key={index} className={cn('w-6', show && 'border-l border-border')} />
       ))}
       <span className="relative w-6">
-        <span className={cn('absolute left-0 top-0 border-l border-border', isLastChild ? 'h-1/2' : 'h-full')} />
-        <span className="border-border absolute top-1/2 left-0 w-3.5 border-b" />
+        <span className={cn('absolute top-0 left-0 border-l border-border', isLastChild ? 'h-1/2' : 'h-full')} />
+        <span className="absolute top-1/2 left-0 w-3.5 border-b border-border" />
       </span>
     </span>
   );
@@ -169,7 +169,7 @@ function WorkflowRow({
             {hasNested ? (
               <span
                 title={`Nested workflows: ${nestedIds.join(', ')}`}
-                className="text-body-sm text-muted-foreground inline-flex shrink-0 items-center gap-1"
+                className="inline-flex shrink-0 items-center gap-1 text-body-sm text-muted-foreground"
               >
                 <WorkflowIcon aria-hidden className="size-3.5" />
                 {nestedIds.length}
@@ -181,10 +181,10 @@ function WorkflowRow({
         <EntityList.TextCell className="text-center">
           {runningCount > 0 ? (
             <span
-              className="text-positive1 inline-flex items-center gap-1.5"
+              className="inline-flex items-center gap-1.5 text-positive1"
               aria-label={`${runningCount} run${runningCount === 1 ? '' : 's'} in progress`}
             >
-              <span aria-hidden className="bg-positive1 size-2 rounded-full motion-safe:animate-pulse" />
+              <span aria-hidden className="size-2 rounded-full bg-positive1 motion-safe:animate-pulse" />
               {runningCount}
             </span>
           ) : (
@@ -194,7 +194,7 @@ function WorkflowRow({
         <EntityList.TextCell className="text-center">
           {suspendedCount > 0 ? (
             <span
-              className="text-warning1 inline-flex items-center gap-1.5"
+              className="inline-flex items-center gap-1.5 text-warning1"
               aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
             >
               <PauseIcon aria-hidden className="size-3.5" />
@@ -306,7 +306,7 @@ export function WorkflowsList({ workflows, isLoading, search = '', sort, onSortC
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
                     <span
                       title="Nested workflow not registered standalone"
-                      className="text-body-sm text-muted-foreground shrink-0"
+                      className="shrink-0 text-body-sm text-muted-foreground"
                     >
                       inline
                     </span>

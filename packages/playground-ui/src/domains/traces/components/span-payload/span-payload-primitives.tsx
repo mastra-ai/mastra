@@ -6,7 +6,7 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 /** Small-caps label above a field of a rich payload. */
 export function SpanPayloadLabel({ children }: { children: ReactNode }) {
-  return <div className="text-meta text-placeholder tracking-widest uppercase">{children}</div>;
+  return <div className="text-meta tracking-widest text-placeholder uppercase">{children}</div>;
 }
 
 export function SpanPayloadField({ label, children }: { label: ReactNode; children: ReactNode }) {
@@ -38,7 +38,7 @@ export function SpanPayloadCollapsible({
 }) {
   return (
     <Collapsible defaultOpen={defaultOpen}>
-      <CollapsibleTrigger className="text-meta text-placeholder flex items-center gap-1 tracking-widest uppercase [&>svg]:size-3">
+      <CollapsibleTrigger className="flex items-center gap-1 text-meta tracking-widest text-placeholder uppercase [&>svg]:size-3">
         <ChevronRightIcon />
         {label}
       </CollapsibleTrigger>

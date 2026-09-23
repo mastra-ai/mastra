@@ -80,8 +80,8 @@ const ToolExecutorContent = ({
           className={cn(
             'w-full min-w-0 overflow-hidden lg:transition-[max-width,opacity,margin-left] lg:duration-300 lg:ease-in-out',
             hasResult
-              ? 'mt-5 max-w-3xl opacity-100 lg:ml-5 lg:mt-0'
-              : 'hidden lg:block lg:ml-0 lg:max-w-0 lg:opacity-0',
+              ? 'mt-5 max-w-3xl opacity-100 lg:mt-0 lg:ml-5'
+              : 'hidden lg:ml-0 lg:block lg:max-w-0 lg:opacity-0',
           )}
         >
           <CodeEditor value={errorString || code} language="json" editable={false} />

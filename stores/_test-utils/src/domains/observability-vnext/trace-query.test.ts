@@ -24,6 +24,15 @@ import {
 } from './trace-query';
 
 describe('trace-query reference evaluator', () => {
+  it('owns only trace expectations; grouped requests live in thread-query conformance', () => {
+    for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
+      expect(testCase.request.group, `${testCase.name} must not use deprecated grouping`).toBeUndefined();
+      for (const entry of testCase.expected) {
+        expect(Object.keys(entry)).toEqual(['traceId']);
+      }
+    }
+  });
+
   it('hands numbered pages to delta and detects completion without child re-emission', () => {
     const feature = 'observability-delta-polling';
     const enabled = coreFeatures.has(feature);
@@ -72,6 +81,7 @@ describe('trace-query reference evaluator', () => {
       if (!enabled) coreFeatures.delete(feature);
     }
   });
+
   for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
     it(testCase.name, () => {
       expect(

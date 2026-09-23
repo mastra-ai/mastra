@@ -19,7 +19,7 @@ export function LoginLayout({ title, description, errorBanner, children }: Login
     <div data-testid="login-page" className="w-full max-w-sm space-y-6 p-6">
       <div className="flex flex-col items-center space-y-2">
         <LogoWithoutText className="h-10 w-10" />
-        <h1 className="text-foreground text-heading">{title}</h1>
+        <h1 className="text-heading text-foreground">{title}</h1>
       </div>
 
       {description}

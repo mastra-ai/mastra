@@ -130,6 +130,8 @@ export type StreamInternal = {
   // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
   /** @deprecated Use `runScope.get(STEP_WORKSPACE_KEY)` from `loop/run-scope-keys`. */
   stepWorkspace?: Workspace;
+  /** @deprecated Use `runScope.get(TOOL_APPROVAL_VERDICTS_KEY)` from `loop/run-scope-keys`. */
+  toolApprovalVerdicts?: Map<string, boolean>;
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
   stepModelMessages?: ModelMessage[];
   // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop

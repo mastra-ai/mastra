@@ -92,7 +92,7 @@ export function ComposerPreview({
                 </SelectContent>
               </Select>
             ) : (
-              <ButtonsGroup aria-label="Input controls">
+              <ButtonsGroup size="sm" aria-label="Input controls">
                 <Button type="button" size="icon-sm" aria-label="Attach file" disabled={disabled}>
                   <Paperclip />
                 </Button>
@@ -100,7 +100,7 @@ export function ComposerPreview({
                   <Mic />
                 </Button>
                 <Select defaultValue="default" disabled={disabled}>
-                  <SelectTrigger size="sm" aria-label="Model" className="w-auto">
+                  <SelectTrigger aria-label="Model" className="w-auto">
                     Default model
                   </SelectTrigger>
                   <SelectContent>

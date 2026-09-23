@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
 import type { ReactNode } from 'react';
 import { Outlet, useMatch } from 'react-router';
 
@@ -14,13 +14,13 @@ import { supervisorSessionAddress } from '../supervisor/services/supervisor';
  */
 export default function Chat() {
   return (
-    <MainSidebarProvider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
+    <SidebarNew.Provider storageKey="mastracode-web" collapsedWidth={0} mobileBreakpoint={768}>
       <ChatSessionRouteProvider>
         <OverlaysProvider>
           <ChatShell />
         </OverlaysProvider>
       </ChatSessionRouteProvider>
-    </MainSidebarProvider>
+    </SidebarNew.Provider>
   );
 }
 

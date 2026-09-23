@@ -207,6 +207,7 @@ import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
+import { ProviderAuthRequiredError } from '../../auth/provider-auth-error.js';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { setCredentialStoreProvider } from '../credential-resolver.js';
@@ -508,6 +509,12 @@ describe('resolveModel', () => {
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
         'No usable openai credential is configured for this signed-in Factory account.',
       );
+      expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(ProviderAuthRequiredError);
+      try {
+        resolveModel('openai/gpt-4o', { requestContext });
+      } catch (error) {
+        expect((error as Error).name).toBe('ProviderAuthRequiredError');
+      }
     });
 
     it('passes controller headers to the OpenAI OAuth provider', () => {

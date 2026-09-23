@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import { createBackgroundTask } from '../../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../../background-tasks/resolve-config';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
@@ -16,6 +17,7 @@ import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
+import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -1095,6 +1097,12 @@ export function createDurableToolCallStep() {
         });
 
         if (bgResolved.runInBackground) {
+          let resolveReconciliation!: (value: { error?: unknown }) => void;
+          const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
+            resolveReconciliation = resolve;
+          });
+          let awaitingBackgroundTask = false;
+
           try {
             const bgTask = createBackgroundTask(bgManager, {
               toolName,
@@ -1109,19 +1117,39 @@ export function createDurableToolCallStep() {
               context: {
                 executor: {
                   execute: async (taskArgs: any, taskContext: any) => {
-                    return tool.execute!(taskArgs, {
-                      ...toolOptions,
-                      ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
-                      suspendedToolRunId: taskContext?.suspendedToolRunId,
-                      suspend: async (data?: unknown, options?: SuspendOptions) => {
-                        await toolOptions.suspend?.(data, options);
-                        return taskContext?.suspend?.(data, options);
-                      },
-                      outputWriter: async (chunk: any) => {
-                        await taskContext?.onProgress?.(chunk);
-                        return toolOptions.outputWriter?.(chunk);
-                      },
+                    const execution = await executeAdoptedBackgroundOperation({
+                      taskId: bgTask.task.id,
+                      disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                      abortSignal: taskContext?.abortSignal ?? toolOptions.abortSignal,
+                      onCancelError: error => logger?.warn('Failed to cancel adopted background operation', error),
+                      execute: background =>
+                        tool.execute!(taskArgs, {
+                          ...toolOptions,
+                          isBackgroundTask: true,
+                          background,
+                          ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                          suspendedToolRunId: taskContext?.suspendedToolRunId,
+                          suspend: async (data?: unknown, options?: SuspendOptions) => {
+                            await toolOptions.suspend?.(data, options);
+                            return taskContext?.suspend?.(data, options);
+                          },
+                          outputWriter: async (chunk: any) => {
+                            await taskContext?.onProgress?.(chunk);
+                            return toolOptions.outputWriter?.(chunk);
+                          },
+                          abortSignal: taskContext?.abortSignal ?? toolOptions.abortSignal,
+                        }),
                     });
+
+                    if (!execution.adopted) return execution.result;
+
+                    const outputValidation = validateToolOutput(
+                      resolveToolOutputValidationSchema(tool),
+                      execution.result,
+                      toolName,
+                      false,
+                    );
+                    return outputValidation.error ?? outputValidation.data;
                   },
                 },
                 onChunk: (chunk: any) => {
@@ -1173,57 +1201,79 @@ export function createDurableToolCallStep() {
                 },
 
                 onResult: async (params: any) => {
-                  if (!messageList) return;
+                  if (!messageList) {
+                    resolveReconciliation({});
+                    return;
+                  }
 
-                  const result =
-                    params.status === 'failed'
-                      ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
-                      : params.result;
+                  try {
+                    const result =
+                      params.status === 'failed'
+                        ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
+                        : params.result;
 
-                  const updated = messageList.updateToolInvocation(
-                    {
-                      type: 'tool-invocation',
-                      toolInvocation: {
-                        // A failed background task is recorded as `output-error` with the
-                        // message in `errorText`; a successful one keeps `state: 'result'`.
-                        ...(params.status === 'failed'
-                          ? { state: 'output-error' as const, errorText: result }
-                          : { state: 'result' as const, result }),
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args: cleanedArgs,
-                        // Preserve the approval decision for an approved approval-gated tool that
-                        // ran in the background so it round-trips on recall, matching the sync path.
-                        ...(approvalGrant ?? {}),
-                      },
-                    },
-                    {
-                      mode: 'stream',
-                      backgroundTasks: {
-                        [params.toolCallId]: {
-                          startedAt: params.startedAt,
-                          completedAt: params.completedAt,
-                          taskId: params.taskId,
+                    const updated = messageList.updateToolInvocation(
+                      {
+                        type: 'tool-invocation',
+                        toolInvocation: {
+                          // A failed background task is recorded as `output-error` with the
+                          // message in `errorText`; a successful one keeps `state: 'result'`.
+                          ...(params.status === 'failed'
+                            ? { state: 'output-error' as const, errorText: result }
+                            : { state: 'result' as const, result }),
+                          toolCallId: params.toolCallId,
+                          toolName: params.toolName,
+                          args: cleanedArgs,
+                          // Preserve the approval decision for an approved approval-gated tool that
+                          // ran in the background so it round-trips on recall, matching the sync path.
+                          ...(approvalGrant ?? {}),
                         },
                       },
-                    },
-                  );
+                      {
+                        mode: 'stream',
+                        backgroundTasks: {
+                          [params.toolCallId]: {
+                            startedAt: params.startedAt,
+                            completedAt: params.completedAt,
+                            taskId: params.taskId,
+                          },
+                        },
+                      },
+                    );
 
-                  if (!updated) {
-                    if (params.runId !== runId || (params.runId === runId && resumeData)) {
+                    if (!updated) {
+                      if (params.runId !== runId || (params.runId === runId && resumeData)) {
+                        messageList.add(
+                          [
+                            {
+                              role: 'tool' as const,
+                              type: 'tool-call',
+                              id: crypto.randomUUID(),
+                              createdAt: new Date(),
+                              content: [
+                                {
+                                  type: 'tool-call' as const,
+                                  toolCallId: params.toolCallId,
+                                  toolName: params.toolName,
+                                  args: cleanedArgs,
+                                },
+                              ],
+                            },
+                          ],
+                          'response',
+                        );
+                      }
                       messageList.add(
                         [
                           {
                             role: 'tool' as const,
-                            type: 'tool-call',
-                            id: crypto.randomUUID(),
-                            createdAt: new Date(),
                             content: [
                               {
-                                type: 'tool-call' as const,
+                                type: 'tool-result' as const,
                                 toolCallId: params.toolCallId,
                                 toolName: params.toolName,
-                                args: cleanedArgs,
+                                result,
+                                isError: params.status === 'failed',
                               },
                             ],
                           },
@@ -1231,27 +1281,14 @@ export function createDurableToolCallStep() {
                         'response',
                       );
                     }
-                    messageList.add(
-                      [
-                        {
-                          role: 'tool' as const,
-                          content: [
-                            {
-                              type: 'tool-result' as const,
-                              toolCallId: params.toolCallId,
-                              toolName: params.toolName,
-                              result,
-                              isError: params.status === 'failed',
-                            },
-                          ],
-                        },
-                      ],
-                      'response',
-                    );
-                  }
 
-                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+                    if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
+                      await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+                    }
+                    resolveReconciliation({});
+                  } catch (error) {
+                    resolveReconciliation({ error });
+                    throw error;
                   }
                 },
 
@@ -1283,6 +1320,23 @@ export function createDurableToolCallStep() {
               },
             });
 
+            const awaitAuthoritativeBackgroundResult = async () => {
+              awaitingBackgroundTask = true;
+              const completedTask = await bgTask.waitForCompletion({ abortSignal: toolOptions.abortSignal });
+              // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+              if (completedTask.status !== 'cancelled') {
+                const reconciliation = await reconciliationComplete;
+                if (reconciliation.error) throw reconciliation.error;
+              }
+              if (completedTask.status !== 'completed') {
+                throw new Error(
+                  completedTask.error?.message ??
+                    `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
+                );
+              }
+              return completedTask.result;
+            };
+
             // If the agent is resuming this tool call and a previously-suspended
             // bg task exists for this toolCallId+runId, resume the bg task with
             // the agent-resume payload instead of dispatching a fresh one.
@@ -1299,6 +1353,13 @@ export function createDurableToolCallStep() {
               });
               if (isSuspended) {
                 const task = await bgTask.resume(resumeData);
+                if (bgResolved.disposition === 'awaited') {
+                  return {
+                    ...typedInput,
+                    args: cleanedArgs,
+                    result: await awaitAuthoritativeBackgroundResult(),
+                  };
+                }
                 return {
                   ...typedInput,
                   args: cleanedArgs,
@@ -1318,6 +1379,13 @@ export function createDurableToolCallStep() {
 
             if (isPreviouslyRunning) {
               const task = await bgTask.restart();
+              if (bgResolved.disposition === 'awaited') {
+                return {
+                  ...typedInput,
+                  args: cleanedArgs,
+                  result: await awaitAuthoritativeBackgroundResult(),
+                };
+              }
               return {
                 ...typedInput,
                 args: cleanedArgs,
@@ -1328,6 +1396,7 @@ export function createDurableToolCallStep() {
             const { task, fallbackToSync } = await bgTask.dispatch();
 
             if (!fallbackToSync) {
+              awaitingBackgroundTask = true;
               // Emit background-task-started chunk via PubSub
               if (pubsub) {
                 await emitChunkEvent(pubsub, runId, {
@@ -1342,6 +1411,15 @@ export function createDurableToolCallStep() {
                 });
               }
 
+              if (bgResolved.disposition === 'awaited') {
+                return {
+                  ...typedInput,
+                  args: cleanedArgs,
+                  result: await awaitAuthoritativeBackgroundResult(),
+                  ...(approvalGrant ?? {}),
+                };
+              }
+
               // Return placeholder result so the LLM can continue
               return {
                 ...typedInput,
@@ -1352,6 +1430,7 @@ export function createDurableToolCallStep() {
             }
             // fallbackToSync: concurrency limit hit, fall through to synchronous execution
           } catch (bgError) {
+            if (awaitingBackgroundTask) throw bgError;
             logger?.debug?.(
               `[DurableAgent] Background task dispatch failed for ${toolName}, falling back to sync: ${bgError}`,
             );

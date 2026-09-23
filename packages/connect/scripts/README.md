@@ -40,7 +40,7 @@ Catalog entries show the number of action templates available; installed entries
 
 ```bash
 pnpm --filter @mastra/connect add-provider linear
-pnpm --filter @mastra/connect add-provider gitlab --as gitlab-group-token
+pnpm --filter @mastra/connect add-provider gitlab --as gitlab-self-managed
 ```
 
 `--as` changes the local integration ID, generated directory name, tool prefix, registry ID, and connection environment variable. It must not collide with another installed provider — collisions are a hard error.
@@ -60,6 +60,8 @@ Actions that need runtime helpers the platform proxy context doesn't implement, 
 Treat generated source as untrusted vendored code. Every template SHA update and generated diff requires security review before commit; passing automated checks is not sufficient.
 
 Provider responses that carry credentials an agent never needs, such as webhook signing secrets, are listed per action in `OUTPUT_SECRET_FIELDS` in `generate-provider.ts`. The generated tool removes those fields from its result and omits them from its output schema, and `src/__tests__/provider-actions.test.ts` covers the redaction.
+
+Templates that read `connection.credentials` get their `getConnection()` calls rewritten to `getConnectionWithCredentials()`, which fetches the raw credential from the platform's credential endpoint (the same one `credential()` uses). Every other exec receives a connection context without credentials, so only actions that genuinely need the secret ever see it.
 
 Generated code never references the upstream SDK: exec bodies receive a `platformProxy` context (`PlatformProxy` in `src/runtime/platform-proxy.ts`) that routes every request through the Mastra platform's `/v2/proxy` endpoint. Provider-specific generator overrides can also attach model-output adapters when raw provider output needs a safer model-facing representation, such as image data that should be sent as multimodal content instead of JSON text.
 
@@ -83,7 +85,7 @@ Generated action implementations are adapted from `NangoHQ/integration-templates
 
 ## Pending provider contributions
 
-Resend and incident.io are generated from the contribution branches under review in NangoHQ/integration-templates PRs [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Each has its own entry in `TEMPLATE_PIN_OVERRIDES`, so the shared pin stays on the upstream repository and every other provider is generated from it.
+Resend and incident.io are generated from the contribution branches under review in NangoHQ/integration-templates PRs [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot are generated from the head commit of [#677](https://github.com/NangoHQ/integration-templates/pull/677), which is upstream main plus agent-focused gap actions; they share one pin in `TEMPLATE_PIN_OVERRIDES`. That pin names the upstream repository directly — GitHub serves a PR's head commit from the base repository, so no fork remote is involved. The shared pin stays on the upstream repository and every other provider is generated from it.
 
 ```sh
 pnpm --filter @mastra/connect sync-templates resend

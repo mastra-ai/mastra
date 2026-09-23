@@ -414,10 +414,10 @@ export default function Workspace() {
                   <span className="flex-1 truncate text-left">
                     {selectedWorkspace?.name ?? 'Select workspace'}
                     {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
-                      <span className="text-muted-foreground ml-1">({selectedWorkspace.agentName})</span>
+                      <span className="ml-1 text-muted-foreground">({selectedWorkspace.agentName})</span>
                     )}
                   </span>
-                  <ChevronDown className="text-muted-foreground shrink-0" />
+                  <ChevronDown className="shrink-0 text-muted-foreground" />
                 </Button>
               }
             />
@@ -426,13 +426,13 @@ export default function Workspace() {
                 {workspaces.map(workspace => (
                   <DropdownMenu.RadioItem key={workspace.id} value={workspace.id} className="gap-3">
                     {workspace.source === 'agent' ? (
-                      <Bot className="text-accent1 shrink-0" />
+                      <Bot className="shrink-0 text-accent1" />
                     ) : (
                       <Server className="shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-foreground text-body-sm truncate">{workspace.name}</div>
-                      <div className="text-muted-foreground text-caption truncate">
+                      <div className="truncate text-body-sm text-foreground">{workspace.name}</div>
+                      <div className="truncate text-caption text-muted-foreground">
                         {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
                       </div>
                     </div>
@@ -454,9 +454,9 @@ export default function Workspace() {
         )}
 
         {workspaces.length === 1 && selectedWorkspace && (
-          <div className="text-muted-foreground text-body flex items-center gap-2">
+          <div className="flex items-center gap-2 text-body text-muted-foreground">
             {selectedWorkspace.source === 'agent' ? (
-              <Bot className="text-accent1 h-4 w-4" />
+              <Bot className="h-4 w-4 text-accent1" />
             ) : (
               <Server className="h-4 w-4" />
             )}
@@ -576,7 +576,7 @@ export default function Workspace() {
         )}
 
         {!hasFilesystem && !hasSkills && !isLoadingInfo && (
-          <div className="text-muted-foreground py-8 text-center">
+          <div className="py-8 text-center text-muted-foreground">
             <p>No workspace capabilities are configured.</p>
           </div>
         )}
@@ -627,15 +627,15 @@ function WorkspaceSearchPanel({
   const searchSkills = useSearchWorkspaceSkills();
 
   return (
-    <div className="border-border bg-fill-subtle space-y-4 rounded-lg border p-4">
+    <div className="space-y-4 rounded-lg border border-border bg-fill-subtle p-4">
       {canSearchFiles && (
         <div>
-          <h3 className="text-foreground text-subheading mb-3 flex items-center gap-2">
+          <h3 className="mb-3 flex items-center gap-2 text-subheading text-foreground">
             <FileText className="h-4 w-4" />
             Search Indexed Files
           </h3>
           {showInitWarning && (
-            <p className="text-caption mb-3 text-amber-400">
+            <p className="mb-3 text-caption text-amber-400">
               File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
               configured <code className="text-amber-300">autoIndexPaths</code>.
             </p>
@@ -660,7 +660,7 @@ function WorkspaceSearchPanel({
 
       {canSearchSkills && (
         <div>
-          <h3 className="text-foreground text-subheading mb-3 flex items-center gap-2">
+          <h3 className="mb-3 flex items-center gap-2 text-subheading text-foreground">
             <Wand2 className="h-4 w-4" />
             Search Skills
           </h3>

@@ -34,7 +34,7 @@ function EntityIndexCompactCard({
         href={getEntityHref(entity)}
         aria-label={`Open ${entity.entityId}`}
         aria-describedby={detailsId}
-        className="group-focus-within/entity:bg-fill-subtle group-hover/entity:bg-fill-subtle absolute inset-0"
+        className="absolute inset-0 group-focus-within/entity:bg-fill-subtle group-hover/entity:bg-fill-subtle"
       />
       <CardContent density="compact" className="pointer-events-none relative grid h-full min-w-0 gap-3">
         <div className="flex min-w-0 items-start justify-between gap-3">
@@ -76,7 +76,7 @@ export function EntityIndexCompactGrid({
   LinkComponent,
 }: EntityIndexCompactGridProps) {
   if (entities.length === 0 && hasSearch) {
-    return <p className="text-caption text-muted-foreground py-8 text-center">No entities match your search</p>;
+    return <p className="py-8 text-center text-caption text-muted-foreground">No entities match your search</p>;
   }
   return (
     <ScrollArea className="h-full">

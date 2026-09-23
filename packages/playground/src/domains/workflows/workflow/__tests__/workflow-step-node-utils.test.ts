@@ -16,6 +16,7 @@ describe('resolveWorkflowGraphStep', () => {
     [{ type: 'step', step: { ...step('map'), mapConfig: 'return input' } }, 'map-step'],
     [{ type: 'agent', id: 'writer', agentId: 'writer-agent' }, 'agent-step'],
     [{ type: 'tool', id: 'double', toolId: 'double-tool' }, 'tool-step'],
+    [{ type: 'classifier', id: 'router', classifierId: 'ticket-router' }, 'classifier-step'],
     [{ type: 'mapping', id: 'map-1', mapConfig: 'return input' }, 'map-step'],
     [{ type: 'foreach', step: stepEntry('each'), opts: { concurrency: 2 } }, 'foreach-step'],
     [{ type: 'parallel', steps: [stepEntry('a')] }, 'parallel-step'],
@@ -197,6 +198,18 @@ describe('resolveWorkflowGraphStep', () => {
     const data = stepNodes[0].data;
     expect(data.workflowStep.kind).toBe('nested-workflow-step');
     expect(data.stepGraph).toEqual(nestedFlow);
+  });
+
+  it('keeps an outgoing handle when the next step is a classifier', () => {
+    const { nodes } = constructNodesAndEdges({
+      stepGraph: [
+        { type: 'step', step: step('prepare') },
+        { type: 'classifier', id: 'route', classifierId: 'ticket-router' },
+      ],
+    });
+
+    const prepareNode = nodes.find(node => node.id === 'node-prepare');
+    expect(prepareNode?.data.withoutBottomHandle).toBe(false);
   });
 
   it('keeps workflow graph nodes on one React Flow node type with resolved step data', () => {

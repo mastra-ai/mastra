@@ -2,7 +2,7 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
+import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
@@ -97,7 +97,7 @@ export default function Evaluation() {
     >
       <h1 className="sr-only">Overview</h1>
       <div className="flex flex-col gap-4">
-        <MetricsFlexGrid>
+        <MetricsCardGroup>
           <EvaluationKpiCards
             scorers={scorers}
             datasets={datasets}
@@ -111,7 +111,7 @@ export default function Evaluation() {
             isLoadingScores={isLoadingScores}
             isLoadingReview={isLoadingReview}
           />
-        </MetricsFlexGrid>
+        </MetricsCardGroup>
         <ScoresOverTimeCard
           summaryData={scoreMetrics?.summaryData ?? []}
           overTimeData={scoreMetrics?.overTimeData ?? []}

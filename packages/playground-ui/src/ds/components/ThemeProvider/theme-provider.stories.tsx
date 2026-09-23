@@ -18,7 +18,7 @@ type Story = StoryObj<typeof ThemeProvider>;
 const Inspector = () => {
   const { theme, resolvedTheme, systemTheme } = useTheme();
   return (
-    <div className={`${raisedSurfaceStyle} text-foreground text-body grid gap-3 rounded-lg p-4`}>
+    <div className={`${raisedSurfaceStyle} grid gap-3 rounded-lg p-4 text-body text-foreground`}>
       <div className="grid grid-cols-[120px_1fr] gap-2">
         <span className="text-muted-foreground">theme</span>
         <span className="font-mono">{theme}</span>

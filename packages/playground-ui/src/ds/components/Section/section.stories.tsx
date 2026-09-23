@@ -67,8 +67,8 @@ export const Default: Story = {
       <Section.Header inset={inset}>
         <Section.Heading>Section Title</Section.Heading>
       </Section.Header>
-      <div className="border-border bg-background rounded-md border p-4">
-        <p className="text-foreground text-body">Section content goes here</p>
+      <div className="rounded-md border border-border bg-background p-4">
+        <p className="text-body text-foreground">Section content goes here</p>
       </div>
     </Section>
   ),
@@ -88,8 +88,8 @@ export const WithAction: Story = {
           Add Agent
         </Button>
       </Section.Header>
-      <div className="border-border bg-background rounded-md border p-4">
-        <p className="text-foreground text-body">List of agents would go here</p>
+      <div className="rounded-md border border-border bg-background p-4">
+        <p className="text-body text-foreground">List of agents would go here</p>
       </div>
     </Section>
   ),
@@ -108,18 +108,18 @@ export const ConfigurationSection: Story = {
           Edit
         </Button>
       </Section.Header>
-      <div className="border-border bg-background space-y-3 rounded-md border p-4">
+      <div className="space-y-3 rounded-md border border-border bg-background p-4">
         <div className="flex justify-between">
-          <span className="text-muted-foreground text-body">Model</span>
-          <span className="text-foreground text-body">GPT-4</span>
+          <span className="text-body text-muted-foreground">Model</span>
+          <span className="text-body text-foreground">GPT-4</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground text-body">Temperature</span>
-          <span className="text-foreground text-body">0.7</span>
+          <span className="text-body text-muted-foreground">Temperature</span>
+          <span className="text-body text-foreground">0.7</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground text-body">Max Tokens</span>
-          <span className="text-foreground text-body">4096</span>
+          <span className="text-body text-muted-foreground">Max Tokens</span>
+          <span className="text-body text-foreground">4096</span>
         </div>
       </div>
     </Section>
