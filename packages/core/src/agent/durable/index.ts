@@ -219,3 +219,8 @@ export type {
   IterationStateUpdateInput,
   StepRecord,
 } from './workflows/shared';
+
+// Deprecated pre-unification tool-execution helpers, kept so the public
+// surface stays additive at patch level. Removed in v2.
+export { executeDurableToolCalls } from './workflows/deprecated-tool-execution';
+export type { ToolExecutionContext, ToolExecutionError } from './workflows/deprecated-tool-execution';
