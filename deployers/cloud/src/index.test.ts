@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -13,7 +12,6 @@ vi.mock('fs-extra');
 vi.mock('fs-extra/esm', () => ({
   copy: vi.fn(async () => undefined),
   readJSON: vi.fn(async () => ({})),
-  remove: vi.fn(async () => undefined),
 }));
 vi.mock('./utils/file.js');
 vi.mock('./utils/deps.js');
@@ -241,17 +239,6 @@ describe('CloudDeployer', () => {
       expect(chdirSpy).toHaveBeenCalledWith(mastraDir);
       expect(chdirSpy).toHaveBeenCalledWith(originalCwd);
       expect(chdirSpy).toHaveBeenCalledTimes(2);
-    });
-
-    it('should strip the Factory SPA from the artifact after bundling', async () => {
-      // The Factory SPA is served from R2 upstream of the container in Mastra
-      // Cloud, so the ~4 MB SPA that copyPublic() places at
-      // <outputDirectory>/<outputDir>/factory/ is dead weight in the deploy
-      // artifact. bundle() must remove it after _bundle() finishes.
-      const outputDirectory = '/test/output';
-      await deployer.bundle('/test/project', outputDirectory);
-
-      expect(remove).toHaveBeenCalledWith(join(outputDirectory, 'output', 'factory'));
     });
   });
 

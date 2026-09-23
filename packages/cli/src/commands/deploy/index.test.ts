@@ -288,6 +288,9 @@ describe('deploy artifact', () => {
     writeFileSync(join(outputDir, 'node_modules', 'somedep', 'index.js'), 'x');
     mkdirSync(join(outputDir, 'node_modules', '.bin'), { recursive: true });
     writeFileSync(join(outputDir, 'node_modules', '.bin', 'tool'), '#!/bin/sh');
+    mkdirSync(join(outputDir, 'factory', 'static'), { recursive: true });
+    writeFileSync(join(outputDir, 'factory', 'index.html'), '<!doctype html>');
+    writeFileSync(join(outputDir, 'factory', 'static', 'app.js'), 'x');
   });
 
   afterEach(() => {
@@ -308,6 +311,10 @@ describe('deploy artifact', () => {
     expect(zip).not.toContain('workers-config.mjs');
     expect(zip).not.toContain('node_modules');
     expect(zip).not.toContain('.bin');
+    // Factory SPA is served by the platform edge-router from R2; excluded from the zip
+    // but left on disk for local `mastra start`.
+    expect(zip).not.toContain('output/factory/');
+    expect(readFileSync(join(outputDir, 'factory', 'index.html'), 'utf-8')).toContain('<!doctype html>');
   });
 
   it('omits workers.json from an in-process deploy without deleting reusable build metadata', async () => {

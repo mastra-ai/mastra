@@ -707,6 +707,10 @@ export async function zipOutput(
           'worker-manifest.mjs.map',
           'workers-config.mjs',
           'workers-config.mjs.map',
+          // Factory SPA is served by the platform edge-router from R2, so it does
+          // not need to ship in the deploy artifact. Left on disk for local
+          // `mastra start`; only excluded from the uploaded zip.
+          'factory/**',
           ...(options.includeWorkersManifest === false ? ['workers.json'] : []),
         ],
         dot: true,
