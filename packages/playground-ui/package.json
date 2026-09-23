@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "57.0.0-alpha.0",
+  "version": "57.0.0-alpha.3",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -199,7 +199,6 @@
     "@xyflow/react": "^12.10.1",
     "cmdk": "^1.1.1",
     "date-fns": "catalog:",
-    "framer-motion": "^13.4.0",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-to-markdown": "^2.1.2",
     "prettier": "^3.9.5",

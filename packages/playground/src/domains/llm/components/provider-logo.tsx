@@ -12,6 +12,17 @@ interface ProviderLogoProps {
   style?: CSSProperties;
 }
 
+const fallbackProviderIcons = new Map<string, keyof typeof providerMapToIcon>([
+  ['openai', 'openai.chat'],
+  ['anthropic', 'anthropic.messages'],
+  ['google', 'GOOGLE'],
+  ['xai', 'X_GROK'],
+  ['groq', 'GROQ'],
+  ['mistral', 'MISTRAL'],
+  ['netlify', 'netlify'],
+  ['mastra', 'mastra'],
+]);
+
 /**
  * Component to display provider logos from models.dev
  * Falls back to local icons if the logo fails to load
@@ -25,33 +36,14 @@ export const ProviderLogo = ({ providerId, className = '', size = 20, style }: P
   // Clean up provider ID for models.dev (remove special characters like slashes)
   const cleanProviderId = cleanedProviderId.replace(/\//g, '-').toLowerCase();
 
-  // Get fallback icon from our existing mapping
-  const getFallbackProviderIcon = (id: string): string => {
-    const iconMap: Record<string, string> = {
-      openai: 'openai.chat',
-      anthropic: 'anthropic.messages',
-      google: 'GOOGLE',
-      xai: 'X_GROK',
-      groq: 'GROQ',
-      deepseek: 'deepseek',
-      together: 'together',
-      mistral: 'mistral',
-      perplexity: 'perplexity',
-      fireworks_ai: 'fireworks',
-      openrouter: 'openrouter',
-      netlify: 'netlify',
-      mastra: 'mastra',
-    };
-    return iconMap[id] || 'DEFAULT';
-  };
-
-  const fallbackIcon = getFallbackProviderIcon(cleanedProviderId);
+  const fallbackIcon = fallbackProviderIcons.get(cleanedProviderId);
   const isGateway = ['netlify', 'mastra'].includes(cleanProviderId);
 
   // If we've already had an error or don't have a provider ID or this is a special gateway case, show fallback
   if (isGateway || imageError || !providerId) {
-    if (providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]) {
-      return <Icon>{providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]}</Icon>;
+    const fallback = fallbackIcon ? providerMapToIcon[fallbackIcon] : undefined;
+    if (fallback) {
+      return <Icon>{fallback}</Icon>;
     }
     return (
       <div

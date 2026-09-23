@@ -198,21 +198,44 @@ async function executeCommand(input: Record<string, any>, context: any) {
         : undefined,
     });
 
-    // Wire exit callback (fire-and-forget)
+    // Wire exit callback (fire-and-forget). The observer runs after this tool has
+    // already returned the PID, so any failure here has no live call frame to catch
+    // it. Own the detached promise: await the callback so both synchronous throws and
+    // rejected async callbacks land in the try/catch, and attach a terminal .catch()
+    // for a rejected wait(), routing all failures to the logger so
+    // neither escapes as a process-terminating unhandled rejection. Observation
+    // failures are logged distinctly and never synthesize a successful exit.
     if (bgConfig?.onExit) {
-      void handle.wait().then(result => {
-        bgConfig.onExit!({
-          pid: handle.pid,
-          exitCode: result.exitCode,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          stdoutTruncated: result.stdoutTruncated,
-          stderrTruncated: result.stderrTruncated,
-          stdoutDroppedBytes: result.stdoutDroppedBytes,
-          stderrDroppedBytes: result.stderrDroppedBytes,
-          toolCallId,
+      void handle
+        .wait()
+        .then(async result => {
+          try {
+            await bgConfig.onExit!({
+              pid: handle.pid,
+              exitCode: result.exitCode,
+              stdout: result.stdout,
+              stderr: result.stderr,
+              stdoutTruncated: result.stdoutTruncated,
+              stderrTruncated: result.stderrTruncated,
+              stdoutDroppedBytes: result.stdoutDroppedBytes,
+              stderrDroppedBytes: result.stderrDroppedBytes,
+              toolCallId,
+            });
+          } catch (callbackError) {
+            workspace.logger?.error('Background process onExit callback threw', {
+              error: callbackError,
+              pid: handle.pid,
+              toolCallId,
+            });
+          }
+        })
+        .catch(observeError => {
+          workspace.logger?.error('Failed to observe background process exit', {
+            error: observeError,
+            pid: handle.pid,
+            toolCallId,
+          });
         });
-      });
     }
 
     span.end({ success: true }, { pid: Number(handle.pid) || undefined });

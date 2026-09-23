@@ -793,6 +793,7 @@ export class SessionRunEngine {
         // Once it lands we finish the teardown, which stops the run rather than
         // letting the model continue past the denied call.
         const deferredAbort = this.#session.run.isAbortRequested();
+        const deferredAbortOrigin = deferredAbort ? this.#session.takeDeferredAbortOrigin() : undefined;
 
         if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({
@@ -816,7 +817,7 @@ export class SessionRunEngine {
           // display state shows the denied result instead of a call stuck
           // mid-flight.
           this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
-          this.#session.completeDeferredAbort();
+          this.#session.completeDeferredAbort(deferredAbortOrigin);
         }
         break;
       }

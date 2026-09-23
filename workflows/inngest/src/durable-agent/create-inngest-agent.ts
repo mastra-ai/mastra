@@ -66,6 +66,7 @@ import {
   mergeResumeRequestContext,
 } from '../durable-event-payload';
 import { InngestPubSub } from '../pubsub';
+import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
@@ -138,6 +139,12 @@ export interface CreateInngestAgentOptions {
    * policy — Mastra snapshots exist purely for human-in-the-loop resume.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+  /**
+   * Inngest function-level retries for the durable agent loop function. Inngest
+   * re-invokes the function when an SDK request fails (e.g. the process restarts
+   * mid-run), replaying memoized steps. Defaults to 0.
+   */
+  retries?: InngestFlowControlConfig['retries'];
 }
 
 /**
@@ -503,10 +510,33 @@ export interface InngestAgent<TOutput = undefined> {
   subscribeToThread: Agent<any, any, TOutput>['subscribeToThread'];
   /** Get the active run id for a thread. Forwarded to the underlying Agent. */
   getActiveThreadRunId: Agent<any, any, TOutput>['getActiveThreadRunId'];
-  /** Resume a streaming execution. Forwarded to the underlying Agent. */
-  resumeStream(...args: any[]): any;
-  /** Approve a pending tool call. Forwarded to the underlying Agent. */
-  approveToolCall(...args: any[]): any;
+  /**
+   * Resume a suspended durable run and return its streaming output. Routes
+   * through {@link InngestAgent.resume}; requires `runId` in `streamOptions`.
+   */
+  resumeStream(resumeData: any, streamOptions?: any): Promise<MastraModelOutput<TOutput>>;
+  /** Approve a pending tool call on a suspended durable run (via {@link InngestAgent.resumeStream}). */
+  approveToolCall(
+    options: { runId: string; toolCallId?: string } & Record<string, any>,
+  ): Promise<MastraModelOutput<TOutput>>;
+  /** Decline a pending tool call on a suspended durable run (via {@link InngestAgent.resumeStream}). */
+  declineToolCall(
+    options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
+  ): Promise<MastraModelOutput<TOutput>>;
+  /** Approve a pending tool call and drain the resumed run (via {@link InngestAgent.resumeGenerate}). */
+  approveToolCallGenerate(
+    options: { runId: string; toolCallId?: string } & Record<string, any>,
+  ): Promise<FullOutput<TOutput>>;
+  /** Decline a pending tool call and drain the resumed run (via {@link InngestAgent.resumeGenerate}). */
+  declineToolCallGenerate(
+    options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
+  ): Promise<FullOutput<TOutput>>;
+  /**
+   * @internal Fork the agent for per-request overrides (used by the editor).
+   * Returns a new InngestAgent wrapping a fork of the underlying Agent so the
+   * fork keeps durable Inngest execution.
+   */
+  __fork(): InngestAgent<TOutput>;
   /** @internal Update the agent's model. Forwarded to the underlying Agent. */
   __updateModel(...args: any[]): any;
   /** @internal Reset to original model. Forwarded to the underlying Agent. */
@@ -558,6 +588,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     cache,
     mastra: mastraOption,
     shouldPersistSnapshot,
+    retries,
   } = options;
 
   if (shouldPersistSnapshot) {
@@ -583,7 +614,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   // Create the durable workflow for this agent
   // Mastra's addWorkflow handles deduplication, so creating multiple times is fine
-  const workflow = createInngestDurableAgenticWorkflow({ inngest });
+  const workflow = createInngestDurableAgenticWorkflow({ inngest, retries });
 
   // Track whether user provided a custom cache (if not, we'll inherit from mastra)
   let _customCache = cache;
@@ -733,6 +764,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'observe'
     | 'generate'
     | 'resumeGenerate'
+    | 'resumeStream'
+    | 'approveToolCall'
+    | 'declineToolCall'
+    | 'approveToolCallGenerate'
+    | 'declineToolCallGenerate'
+    | '__fork'
     | 'getDurableWorkflows'
     | '__setMastra'
   > = {
@@ -1335,6 +1372,63 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           result.cleanup();
         }
       }
+    },
+
+    async resumeStream(resumeData, streamOptions) {
+      const runId = streamOptions?.runId;
+      if (!runId) {
+        throw new Error('resumeStream() on InngestAgent requires a runId in streamOptions.');
+      }
+      const { runId: _runId, ...resumeOptions } = streamOptions;
+      const result = await proxyRef!.resume(runId, resumeData, {
+        ...resumeOptions,
+        // Close the stream when the run re-suspends so callers' loops terminate.
+        [CLOSE_ON_SUSPEND]: true,
+      } as InngestAgentResumeOptions<TOutput>);
+      return result.output;
+    },
+
+    async approveToolCall(options) {
+      return proxyRef!.resumeStream({ approved: true }, options);
+    },
+
+    async declineToolCall(options) {
+      const { reason, ...resumeOptions } = options;
+      return proxyRef!.resumeStream({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
+    },
+
+    async approveToolCallGenerate(options) {
+      const { runId, ...resumeOptions } = options;
+      if (!runId) {
+        throw new Error('approveToolCallGenerate() on InngestAgent requires a runId.');
+      }
+      return proxyRef!.resumeGenerate(runId, { approved: true }, resumeOptions as InngestAgentResumeOptions<TOutput>);
+    },
+
+    async declineToolCallGenerate(options) {
+      const { runId, reason, ...resumeOptions } = options;
+      if (!runId) {
+        throw new Error('declineToolCallGenerate() on InngestAgent requires a runId.');
+      }
+      return proxyRef!.resumeGenerate(
+        runId,
+        { approved: false, ...(reason !== undefined ? { reason } : {}) },
+        resumeOptions as InngestAgentResumeOptions<TOutput>,
+      );
+    },
+
+    __fork() {
+      // Re-wrap a fork of the underlying agent so editor overrides keep
+      // durable execution (mirrors DurableAgent.__fork, see #18106).
+      // shouldPersistSnapshot is dropped: it is ignored and would only re-warn.
+      const { shouldPersistSnapshot: _ignored, ...forkOptions } = options;
+      return createInngestAgent<TOutput>({
+        ...forkOptions,
+        agent: agent.__fork(),
+        pubsub: innerPubsub,
+        cache: _customCache,
+        mastra,
+      });
     },
 
     getDurableWorkflows() {
