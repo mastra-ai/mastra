@@ -11,7 +11,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Studio adapters over the shared ChatSignal and ChatNotification components. `SignalBadge` maps a signal part to a card; `UserTextPartRenderer` parses `<system-reminder>` user text into the same card, folded. AI/Chat event documents the row and card presentations; AI/Chat assembles the full Studio and Factory conversations.',
+          'Studio adapters over the shared SignalActivity and NotificationActivity components. `SignalBadge` maps a signal part to a card; `UserTextPartRenderer` parses `<system-reminder>` user text into the same card, folded. AI/Activity/Presets documents the row and card presentations; AI/Chat assembles the full Studio and Factory conversations.',
       },
     },
   },

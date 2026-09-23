@@ -5,7 +5,7 @@ import { isRecord } from './transcript-shared';
 
 import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
 
-export { ChatSignal as SignalRow } from '@mastra/playground-ui/components/ai/chat-event';
+export { SignalActivity as SignalRow } from '@mastra/playground-ui/components/ai/activity';
 
 export function TimeGap({ text }: { text: string }) {
   const [phrase, timestamp] = text.split(' — ');

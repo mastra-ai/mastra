@@ -1,10 +1,10 @@
 import { Info, Layers } from 'lucide-react';
-import { chatEventPreview, chatEventPreviewShowsAll } from './chat-event-preview';
-import { ActivityItem } from '@/ds/components/ai/activity';
+import { ActivityItem } from '../activity';
+import { messagePreview, messagePreviewShowsAll } from './message-preview';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 
-export interface ChatSignalProps {
+export interface SignalActivityProps {
   kind: 'state' | 'reactive' | 'reminder';
   label: string;
   message: string;
@@ -29,15 +29,15 @@ const signalKinds = {
   },
 } as const;
 
-export function ChatSignal({ kind, label, message, detail, mode, defaultOpen }: ChatSignalProps) {
+export function SignalActivity({ kind, label, message, detail, mode, defaultOpen }: SignalActivityProps) {
   const { icon, body } = signalKinds[kind];
-  const lineHoldsMessage = detail === undefined && chatEventPreviewShowsAll(message);
+  const lineHoldsMessage = detail === undefined && messagePreviewShowsAll(message);
 
   return (
     <ActivityItem
       icon={icon}
       label={label}
-      detail={detail ?? chatEventPreview(message)}
+      detail={detail ?? messagePreview(message)}
       badges={mode ? <Badge size="xs">{mode}</Badge> : undefined}
       defaultOpen={defaultOpen}
       data-signal-kind={kind}

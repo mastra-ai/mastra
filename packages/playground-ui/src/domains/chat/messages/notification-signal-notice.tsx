@@ -1,6 +1,6 @@
 import { formatSignalValue, getNotificationMetadata, signalContentsToText } from './signal-data';
 import type { SignalData } from './signal-data';
-import { ChatNotification } from '@/ds/components/ai/chat-event';
+import { NotificationActivity } from '@/ds/components/ai/activity';
 
 export type NotificationSignalNoticeProps = {
   signal: SignalData;
@@ -23,7 +23,7 @@ export const NotificationSignalNotice = ({ signal }: NotificationSignalNoticePro
   const status = notification?.status ?? formatSignalValue(signal.attributes?.status);
   const text = signalContentsToText(signal.contents);
   return (
-    <ChatNotification
+    <NotificationActivity
       label={getNotificationTitle(signal)}
       message={text}
       priority={priority}

@@ -1,16 +1,16 @@
 import { BookOpen } from 'lucide-react';
-import { ActivityItem } from '@/ds/components/ai/activity';
+import { ActivityItem } from '../activity';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 
-export interface ChatSkillProps {
+export interface SkillActivityProps {
   name: string;
   arguments?: string;
   instructions: string;
   defaultOpen?: boolean;
 }
 
-export function ChatSkill({ name, arguments: args, instructions, defaultOpen }: ChatSkillProps) {
+export function SkillActivity({ name, arguments: args, instructions, defaultOpen }: SkillActivityProps) {
   return (
     <ActivityItem
       label="Skill"

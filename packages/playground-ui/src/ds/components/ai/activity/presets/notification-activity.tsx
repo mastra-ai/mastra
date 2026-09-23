@@ -1,12 +1,12 @@
 import { Bell, ExternalLink } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { chatEventPreview, chatEventPreviewShowsAll } from './chat-event-preview';
-import { ActivityItem } from '@/ds/components/ai/activity';
+import { ActivityItem } from '../activity';
+import { messagePreview, messagePreviewShowsAll } from './message-preview';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 
-export interface ChatNotificationProps {
+export interface NotificationActivityProps {
   label: string;
   message: string;
   state?: string;
@@ -24,7 +24,7 @@ const priorityBadgeVariants: Partial<Record<string, BadgeVariant>> = {
   medium: 'blue',
 };
 
-export function ChatNotification({
+export function NotificationActivity({
   label,
   message,
   state = 'notification',
@@ -34,14 +34,14 @@ export function ChatNotification({
   pending,
   link,
   defaultOpen,
-}: ChatNotificationProps) {
-  const lineHoldsMessage = chatEventPreviewShowsAll(message);
+}: NotificationActivityProps) {
+  const lineHoldsMessage = messagePreviewShowsAll(message);
   const hasBadges = Boolean(priority || status || pending);
 
   return (
     <ActivityItem
       label={label}
-      detail={chatEventPreview(message)}
+      detail={messagePreview(message)}
       detailFont="sans"
       icon={icon ?? <Bell className="text-warning1" aria-hidden />}
       badges={
@@ -71,7 +71,13 @@ export function ChatNotification({
   );
 }
 
-function NotificationLink({ link, message }: { link: NonNullable<ChatNotificationProps['link']>; message: string }) {
+function NotificationLink({
+  link,
+  message,
+}: {
+  link: NonNullable<NotificationActivityProps['link']>;
+  message: string;
+}) {
   return (
     <a
       href={link.href}

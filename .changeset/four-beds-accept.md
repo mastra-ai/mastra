@@ -42,16 +42,22 @@ import { Activity, ActivityTrigger, ActivityHeadline, ActivityContent } from '@m
 
 The screen-reader status text is now "Running" or "Failed" instead of "Tool call running" or "Tool call failed", because the line is no longer only for tools.
 
-**Signals and notifications have one presentation**
+**Signals, notifications and skills are `Activity` presets**
 
-The card presentation of `ChatSignal` and the notice presentation of `ChatNotification` are removed along with their `variant` prop. A notification's priority is now a coloured badge on the line: urgent is red, high is orange, medium is blue. Its status and pending count are badges beside it. A system reminder names its path as the detail of the line.
+`components/ai/chat-event` is removed. Its presets moved into `components/ai/activity` and are named after the line they draw: `ChatSignal` is now `SignalActivity`, `ChatNotification` is now `NotificationActivity` and `ChatSkill` is now `SkillActivity`. Each one picks the icon, badges and body for one kind of event over `ActivityItem`.
+
+The card presentation of signals and the notice presentation of notifications are removed along with their `variant` prop. A notification's priority is now a coloured badge on the line: urgent is red, high is orange, medium is blue. Its status and pending count are badges beside it. A system reminder names its path as the detail of the line.
 
 ```tsx
 // Before
+import { ChatNotification } from '@mastra/playground-ui/components/ai/chat-event';
+
 <ChatNotification variant="notice" label="github / issue-opened" message={message} priority="high" />;
 
 // After
-<ChatNotification label="github / issue-opened" message={message} priority="high" />;
+import { NotificationActivity } from '@mastra/playground-ui/components/ai/activity';
+
+<NotificationActivity label="github / issue-opened" message={message} priority="high" />;
 ```
 
 `ReasoningStreamingLine` is removed. `Reasoning` covers the waiting state itself: while it streams with no text yet, it shows a busy "Reasoning" line with no disclosure.
@@ -96,4 +102,4 @@ import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcrip
 <TranscriptDivider label="24 minutes later" title="Sep 17, 2026, 2:24 PM" />;
 ```
 
-`ChatSignal` and `ChatNotification` no longer set their own width or vertical margin, so the caller places them.
+`SignalActivity` and `NotificationActivity` no longer set their own width or vertical margin, so the caller places them.

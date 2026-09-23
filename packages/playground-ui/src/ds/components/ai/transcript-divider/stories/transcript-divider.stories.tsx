@@ -16,7 +16,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A rule across the transcript marking a boundary between two events. It is a `separator`, not a chat event: nothing folds, nothing is interactive, and it carries a label rather than a message.\n\nFactory renders one for the silence between turns. The elapsed time is the label; the timestamp goes in `title`, so the line stays readable and the full stamp is still there on hover. An empty label renders nothing, because a signal with no text must not leave a bare rule behind.\n\nSee it in a transcript in AI/Chat event → FactoryTranscript.',
+          'A rule across the transcript marking a boundary between two events. It is a `separator`, not a chat event: nothing folds, nothing is interactive, and it carries a label rather than a message.\n\nFactory renders one for the silence between turns. The elapsed time is the label; the timestamp goes in `title`, so the line stays readable and the full stamp is still there on hover. An empty label renders nothing, because a signal with no text must not leave a bare rule behind.\n\nSee it in a transcript in AI/Activity/Presets → FactoryTranscript.',
       },
     },
   },

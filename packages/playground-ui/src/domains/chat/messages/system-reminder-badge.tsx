@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { parseSystemReminder } from './system-reminder-utils';
-import { ChatSignal } from '@/ds/components/ai/chat-event';
+import { SignalActivity } from '@/ds/components/ai/activity';
 
 export interface SystemReminderBadgeProps {
   text: string;
@@ -14,7 +14,7 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
   }
 
   return (
-    <ChatSignal
+    <SignalActivity
       kind="reminder"
       label="System reminder"
       detail={reminder.path || reminder.type}
