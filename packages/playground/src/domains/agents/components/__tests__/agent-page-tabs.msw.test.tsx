@@ -118,6 +118,18 @@ describe('AgentLayout tool tabs', () => {
       expect(within(tooltip).getByText('Editor')).not.toBeNull();
       expect(tooltip.textContent).toContain('Add @mastra/editor');
     });
+
+    it('links to the Editor documentation from the tooltip', async () => {
+      server.use(...commonHandlers());
+      renderLayout();
+      const editor = await screen.findByRole('button', { name: 'Editor' });
+      if (editor.parentElement) fireEvent.focus(editor.parentElement);
+
+      const docsLink = within(await screen.findByRole('tooltip')).getByRole('link', { name: 'Learn more' });
+      expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/docs/editor/overview');
+      expect(docsLink.getAttribute('target')).toBe('_blank');
+      expect(docsLink.getAttribute('rel')).toBe('noopener noreferrer');
+    });
   });
 
   describe('when the editor is configured but observability is not', () => {
@@ -128,6 +140,17 @@ describe('AgentLayout tool tabs', () => {
       await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Editor']);
       expect(screen.getByRole('button', { name: 'Traces' }).hasAttribute('disabled')).toBe(true);
+    });
+
+    it('links to the observability documentation from the Traces tooltip', async () => {
+      server.use(...commonHandlers({ ...enabledPackages, observabilityEnabled: false }));
+      renderLayout();
+      const traces = await screen.findByRole('button', { name: 'Traces' });
+      if (traces.parentElement) fireEvent.focus(traces.parentElement);
+
+      const docsLink = within(await screen.findByRole('tooltip')).getByRole('link', { name: 'Learn more' });
+      expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/docs/observability/overview');
+      expect(docsLink.getAttribute('target')).toBe('_blank');
     });
   });
 

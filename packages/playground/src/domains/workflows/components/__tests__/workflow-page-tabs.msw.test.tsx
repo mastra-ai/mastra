@@ -145,6 +145,21 @@ describe('WorkflowPageTabs', () => {
       expect(within(tooltip).getByText('Schedules')).not.toBeNull();
       expect(tooltip.textContent).toContain('Configure a schedule');
     });
+
+    it('links to the scheduled workflows documentation from the tooltip', async () => {
+      server.use(...commonHandlers());
+      const { queryClient } = renderLayout();
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
+      );
+      const schedules = screen.getByRole('button', { name: 'Schedules' });
+      if (schedules.parentElement) fireEvent.focus(schedules.parentElement);
+
+      const docsLink = within(await screen.findByRole('tooltip')).getByRole('link', { name: 'Learn more' });
+      expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/docs/workflows/scheduled-workflows');
+      expect(docsLink.getAttribute('target')).toBe('_blank');
+      expect(docsLink.getAttribute('rel')).toBe('noopener noreferrer');
+    });
   });
 
   describe('when the schedules query is pending', () => {

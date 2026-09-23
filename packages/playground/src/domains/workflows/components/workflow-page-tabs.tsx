@@ -3,11 +3,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { CalendarClockIcon, ExternalLink } from 'lucide-react';
+import { CalendarClockIcon } from 'lucide-react';
 
-import { UnavailableToolButton } from '@/components/ui/unavailable-tool-button';
+import { DisabledFeatureButton } from '@/components/ui/disabled-feature-button';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -35,24 +33,6 @@ export function WorkflowPageTabs({ workflowId, activeTab, showObservability = fa
   const { navigate } = useLinkComponent();
   const { data: schedules, isSuccess: schedulesLoaded } = useSchedules({ workflowId });
   const scheduleCount = schedules?.length ?? 0;
-
-  const observabilityDisabledReason = (
-    <p>
-      Add <code>@mastra/observability</code> to enable this tab.{' '}
-      <a
-        href="https://mastra.ai/docs/observability/overview"
-        target="_blank"
-        rel="noopener noreferrer"
-        className={cn(
-          'inline-flex items-center gap-1 text-inherit underline hover:text-foreground',
-          controlStateColorTransition,
-        )}
-      >
-        Learn more
-        <ExternalLink className="size-3" />
-      </a>
-    </p>
-  );
 
   const encodedWorkflowId = encodeURIComponent(workflowId);
   const hrefMap: Record<WorkflowPageTab, string> = {
@@ -86,13 +66,23 @@ export function WorkflowPageTabs({ workflowId, activeTab, showObservability = fa
       {(!showObservability || schedulesDisabled) && (
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           {!showObservability && (
-            <UnavailableToolButton icon={<TraceIcon />} label="Traces" reason={observabilityDisabledReason} />
+            <DisabledFeatureButton
+              icon={<TraceIcon />}
+              label="Traces"
+              tooltipContent={
+                <>
+                  Add <code>@mastra/observability</code> to enable this tab.
+                </>
+              }
+              docsHref="https://mastra.ai/docs/observability/overview"
+            />
           )}
           {schedulesDisabled && (
-            <UnavailableToolButton
+            <DisabledFeatureButton
               icon={<CalendarClockIcon />}
               label="Schedules"
-              reason="Configure a schedule on this workflow to enable Schedules."
+              tooltipContent="Configure a schedule on this workflow to enable Schedules."
+              docsHref="https://mastra.ai/docs/workflows/scheduled-workflows"
             />
           )}
         </div>

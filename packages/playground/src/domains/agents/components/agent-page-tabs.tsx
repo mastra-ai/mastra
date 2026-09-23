@@ -2,11 +2,9 @@ import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLink, GitBranch, MessageSquare } from 'lucide-react';
+import { GitBranch, MessageSquare } from 'lucide-react';
 
-import { UnavailableToolButton } from '@/components/ui/unavailable-tool-button';
+import { DisabledFeatureButton } from '@/components/ui/disabled-feature-button';
 import { useLinkComponent } from '@/lib/framework';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
@@ -18,23 +16,6 @@ interface AgentPageTabsProps {
   activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
-}
-
-function DocsLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn(
-        'inline-flex items-center gap-1 text-inherit underline hover:text-foreground',
-        controlStateColorTransition,
-      )}
-    >
-      {children}
-      <ExternalLink className="size-3" />
-    </a>
-  );
 }
 
 function AgentTab({ value, icon, label }: { value: AgentPageTab; icon: React.ReactNode; label: string }) {
@@ -55,13 +36,6 @@ export function AgentPageTabs({
   showObservability = false,
 }: AgentPageTabsProps) {
   const { navigate } = useLinkComponent();
-
-  const observabilityDisabledReason = (
-    <p>
-      Add <code>@mastra/observability</code> to enable this tab.{' '}
-      <DocsLink href="https://mastra.ai/docs/observability/overview">Learn more</DocsLink>
-    </p>
-  );
 
   const hrefMap: Record<AgentPageTab, string> = {
     chat: `/agents/${agentId}/threads/new`,
@@ -86,13 +60,23 @@ export function AgentPageTabs({
       {(!showObservability || !showPlayground) && (
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           {!showObservability && (
-            <UnavailableToolButton icon={<TraceIcon />} label="Traces" reason={observabilityDisabledReason} />
+            <DisabledFeatureButton
+              icon={<TraceIcon />}
+              label="Traces"
+              tooltipContent={
+                <>
+                  Add <code>@mastra/observability</code> to enable this tab.
+                </>
+              }
+              docsHref="https://mastra.ai/docs/observability/overview"
+            />
           )}
           {!showPlayground && (
-            <UnavailableToolButton
+            <DisabledFeatureButton
               icon={<GitBranch />}
               label="Editor"
-              reason="Add @mastra/editor to enable the Editor."
+              tooltipContent="Add @mastra/editor to enable the Editor."
+              docsHref="https://mastra.ai/docs/editor/overview"
             />
           )}
         </div>
