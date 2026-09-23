@@ -35,21 +35,11 @@ export const Showcase: Story = {
   render: () => (
     <div className="flex w-105 flex-col gap-6">
       <Section title="Variants">
-        <Button variant="outline" onClick={() => toast('Default toast')}>
-          Default
-        </Button>
-        <Button variant="outline" onClick={() => toast.success('Operation completed successfully')}>
-          Success
-        </Button>
-        <Button variant="outline" onClick={() => toast.error('Something went wrong')}>
-          Error
-        </Button>
-        <Button variant="outline" onClick={() => toast.warning('Please review before continuing')}>
-          Warning
-        </Button>
-        <Button variant="outline" onClick={() => toast.info('New update available')}>
-          Info
-        </Button>
+        <Button onClick={() => toast('Default toast')}>Default</Button>
+        <Button onClick={() => toast.success('Operation completed successfully')}>Success</Button>
+        <Button onClick={() => toast.error('Something went wrong')}>Error</Button>
+        <Button onClick={() => toast.warning('Please review before continuing')}>Warning</Button>
+        <Button onClick={() => toast.info('New update available')}>Info</Button>
       </Section>
 
       <Section title="With description">
@@ -87,7 +77,6 @@ export const Showcase: Story = {
 
       <Section title="Async / loader">
         <Button
-          variant="outline"
           onClick={() =>
             toast.promise({
               myPromise: fakeRequest(false),
@@ -100,7 +89,6 @@ export const Showcase: Story = {
           Promise — resolves
         </Button>
         <Button
-          variant="outline"
           onClick={() =>
             toast.promise({
               myPromise: fakeRequest(true),
@@ -118,7 +106,6 @@ export const Showcase: Story = {
         {/* `dismissible: false` only disables swipe-to-dismiss — `closeButton: false` is required
             to hide sonner's native X button on this specific toast. */}
         <Button
-          variant="outline"
           onClick={() =>
             toast.warning('System maintenance in progress', {
               description: 'You will be redirected once it completes.',
@@ -132,7 +119,6 @@ export const Showcase: Story = {
         </Button>
         {/* duration: Infinity, default close button stays */}
         <Button
-          variant="outline"
           onClick={() =>
             toast.info('Connection restored', {
               description: 'This toast stays open until you close it.',
@@ -146,7 +132,6 @@ export const Showcase: Story = {
 
       <Section title="Action">
         <Button
-          variant="outline"
           onClick={() =>
             toast.success('Task archived', {
               description: 'You can restore it from the archive.',

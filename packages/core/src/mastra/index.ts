@@ -12,7 +12,7 @@ import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import { AgentChannels } from '../channels';
 import type { ChannelProvider } from '../channels';
-import type { Classifier } from '../classifier';
+import type { Classifier, ClassifierQuestions } from '../classifier';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -4798,15 +4798,15 @@ export class Mastra<
     if (!processor) {
       throw createUndefinedPrimitiveError('processor', processor, key);
     }
+    // Register Mastra with every processor instance, even when another processor already uses its key.
+    if (typeof processor.__registerMastra === 'function') {
+      processor.__registerMastra(this);
+    }
+
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
       return;
-    }
-
-    // Register Mastra with the processor if it supports it
-    if (typeof processor.__registerMastra === 'function') {
-      processor.__registerMastra(this);
     }
 
     processors[processorKey] = processor;
@@ -5210,6 +5210,83 @@ export class Mastra<
       tools[key] = schemas;
       tools[tool.id] = schemas;
     }
+    const classifiers: NonNullable<WorkflowRegistryIndex['classifiers']> = {};
+    for (const [key, classifier] of Object.entries(this.listClassifiers() ?? {})) {
+      const questions = classifier.questions
+        ? Object.fromEntries(
+            Object.entries(classifier.questions as ClassifierQuestions).map(([questionId, question]) => [
+              questionId,
+              question.type === 'choice'
+                ? { type: 'choice' as const, choices: Object.keys(question.criteria) }
+                : question.type === 'score'
+                  ? { type: 'score' as const, min: 0, max: question.criteria.length - 1 }
+                  : { type: 'boolean' as const },
+            ]),
+          )
+        : undefined;
+      const answerProperties = questions
+        ? Object.fromEntries(
+            Object.entries(questions).map(([questionId, question]) => [
+              questionId,
+              question.type === 'choice'
+                ? {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['choice'] },
+                      choice: { type: 'string', enum: question.choices },
+                      probabilities: {
+                        type: 'object',
+                        properties: Object.fromEntries(question.choices.map(choice => [choice, { type: 'number' }])),
+                        additionalProperties: false,
+                      },
+                    },
+                    required: ['type', 'choice'],
+                  }
+                : question.type === 'score'
+                  ? {
+                      type: 'object',
+                      properties: {
+                        type: { type: 'string', enum: ['score'] },
+                        score: { type: 'number', minimum: question.min, maximum: question.max },
+                        probabilities: {
+                          type: 'object',
+                          properties: Object.fromEntries(
+                            Array.from({ length: question.max - question.min + 1 }, (_, index) => [
+                              String(question.min + index),
+                              { type: 'number' },
+                            ]),
+                          ),
+                          additionalProperties: false,
+                        },
+                      },
+                      required: ['type', 'score'],
+                    }
+                  : {
+                      type: 'object',
+                      properties: {
+                        type: { type: 'string', enum: ['boolean'] },
+                        probability: { type: 'number', minimum: 0, maximum: 1 },
+                      },
+                      required: ['type', 'probability'],
+                    },
+            ]),
+          )
+        : {};
+      const schemas = {
+        inputSchema: {},
+        outputSchema: {
+          type: 'object',
+          properties: {
+            answers: { type: 'object', properties: answerProperties, required: Object.keys(answerProperties) },
+            usage: { type: 'object' },
+          },
+          required: ['answers', 'usage'],
+        },
+        questions,
+      };
+      classifiers[key] = schemas;
+      classifiers[classifier.id] = schemas;
+    }
     const workflows: Record<string, WorkflowRegistrySchemas> = {};
     for (const [key, workflow] of Object.entries(this.#workflows as Record<string, AnyWorkflow>)) {
       const schemas: WorkflowRegistrySchemas = {
@@ -5219,7 +5296,7 @@ export class Mastra<
       workflows[key] = schemas;
       workflows[workflow.id] = schemas;
     }
-    return { agents, tools, workflows };
+    return { agents, tools, classifiers, workflows };
   }
 
   /**

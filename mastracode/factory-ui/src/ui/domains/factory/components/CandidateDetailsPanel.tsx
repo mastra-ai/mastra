@@ -101,7 +101,6 @@ export function CandidateDetailsPanel({
                 <Button
                   ref={promptAnchorRef}
                   type="button"
-                  variant="outline"
                   size="sm"
                   data-card-morph="reveal"
                   onClick={() => setPromptOpen(true)}

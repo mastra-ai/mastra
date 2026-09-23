@@ -1,10 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 /**
- * Tests for auth action hooks (SSO login, logout).
+ * Tests for the logout action.
  *
  * Covers issue https://github.com/mastra-ai/mastra/issues/13901:
- * - useSSOLogin should use client.options.apiPrefix instead of hardcoded /api
  * - useLogout should use client.options.apiPrefix instead of hardcoded /api
  */
 
@@ -30,43 +29,6 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
     vi.restoreAllMocks();
   });
 
-  describe('SSO login URL construction', () => {
-    it('should use custom apiPrefix for SSO login URL', async () => {
-      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com/login' }));
-
-      // Extract the mutation function logic directly from the module
-      const { makeSSOLoginRequest } = await import('../use-auth-actions');
-      const mockClient = {
-        options: {
-          baseUrl: 'http://localhost:4000',
-          apiPrefix: '/mastra',
-        },
-      };
-
-      await makeSSOLoginRequest(mockClient as any, { redirectUri: 'http://localhost:4111/agents' });
-
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
-      expect(url).toContain('http://localhost:4000/mastra/auth/sso/login');
-    });
-
-    it('should default to /api for SSO login URL when no apiPrefix', async () => {
-      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com/login' }));
-
-      const { makeSSOLoginRequest } = await import('../use-auth-actions');
-      const mockClient = {
-        options: {
-          baseUrl: 'http://localhost:4000',
-        },
-      };
-
-      await makeSSOLoginRequest(mockClient as any, {});
-
-      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
-      expect(url).toContain('http://localhost:4000/api/auth/sso/login');
-    });
-  });
-
   describe('Logout URL construction', () => {
     it('should use custom apiPrefix for logout URL', async () => {
       mockFetch.mockResolvedValue(createMockResponse({ success: true }));
@@ -79,7 +41,7 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
         },
       };
 
-      await makeLogoutRequest(mockClient as any);
+      await makeLogoutRequest(mockClient);
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -96,7 +58,7 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
         },
       };
 
-      await makeLogoutRequest(mockClient as any);
+      await makeLogoutRequest(mockClient);
 
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(url).toBe('http://localhost:4000/api/auth/logout');
@@ -104,29 +66,6 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
   });
 
   describe('Client header forwarding', () => {
-    it('should forward client.options.headers on SSO login request', async () => {
-      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com/login' }));
-
-      const { makeSSOLoginRequest } = await import('../use-auth-actions');
-      const mockClient = {
-        options: {
-          baseUrl: 'http://localhost:4000',
-          headers: {
-            'x-tenant-id': 'tenant-123',
-            Authorization: 'Bearer dev-token',
-          },
-        },
-      };
-
-      await makeSSOLoginRequest(mockClient as any, {});
-
-      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-      expect(init.headers).toMatchObject({
-        'x-tenant-id': 'tenant-123',
-        Authorization: 'Bearer dev-token',
-      });
-    });
-
     it('should forward client.options.headers on logout request', async () => {
       mockFetch.mockResolvedValue(createMockResponse({ success: true }));
 
@@ -141,32 +80,13 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
         },
       };
 
-      await makeLogoutRequest(mockClient as any);
+      await makeLogoutRequest(mockClient);
 
       const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(init.headers).toMatchObject({
         'x-tenant-id': 'tenant-123',
         Authorization: 'Bearer dev-token',
       });
-    });
-
-    it('should not allow client headers to override Content-Type on SSO login', async () => {
-      mockFetch.mockResolvedValue(createMockResponse({ url: 'https://sso.example.com/login' }));
-
-      const { makeSSOLoginRequest } = await import('../use-auth-actions');
-      const mockClient = {
-        options: {
-          baseUrl: 'http://localhost:4000',
-          headers: {
-            'Content-Type': 'text/plain',
-          },
-        },
-      };
-
-      await makeSSOLoginRequest(mockClient as any, {});
-
-      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-      expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
     });
 
     it('should not allow client headers to override Content-Type on logout', async () => {
@@ -182,7 +102,7 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
         },
       };
 
-      await makeLogoutRequest(mockClient as any);
+      await makeLogoutRequest(mockClient);
 
       const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');

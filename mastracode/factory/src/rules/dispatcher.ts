@@ -12,6 +12,7 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { moveCardToBoard } from '../boards/relocate.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -39,7 +40,7 @@ import type {
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
+import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -373,23 +374,7 @@ function retryAt(now: Date, attempts: number): Date {
 }
 
 function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>) {
-  const [integrationId, type] =
-    decision.source === 'github-pr'
-      ? ['github', 'pull-request']
-      : decision.source === 'github-issue'
-        ? ['github', 'issue']
-        : decision.source === 'gitlab-pr'
-          ? ['gitlab', 'pull-request']
-          : decision.source === 'gitlab-issue'
-            ? ['gitlab', 'issue']
-            : decision.source === 'linear-issue'
-              ? ['linear', 'issue']
-              : decision.source === 'jira-issue'
-                ? ['jira', 'issue']
-                : decision.source === 'incidentio-follow-up'
-                  ? ['incidentio', 'issue']
-                  : ['factory', 'manual'];
-  return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
+  return externalSourceForWorkItem(decision.source, decision.sourceKey, decision.url ?? undefined);
 }
 
 function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor {
@@ -1119,6 +1104,10 @@ export class FactoryDecisionDispatcher {
       source: externalSourceForDecision(decision),
     });
     if (existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey) {
+      // Filing the card *was* the placement, so a retry of the same decision has
+      // nothing left to apply — and must not drag a card that has since moved
+      // back down to the stage this decision filed it at.
+      if (decision.skipRules === true) return;
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
           record.orgId,
@@ -1132,6 +1121,12 @@ export class FactoryDecisionDispatcher {
     const definition = this.#boards.get(decision.board);
     if (!definition) throw new Error('Factory decision target board is not installed.');
     const initialPhase = definition.initialPhase;
+    // `skipRules` files the card at the stage the decision names, as its first
+    // entry, and runs none of the board's phase rules. Without it the card
+    // enters through the board's initial phase and transitions from there, so
+    // arrival and destination-entry rules both run.
+    const skipRules = decision.skipRules === true;
+    const entryStage = skipRules ? decision.stage : initialPhase;
     const parentWorkItemId =
       record.workItemId ??
       (await this.#resolveLinkedWorkItemParentId?.({
@@ -1152,7 +1147,7 @@ export class FactoryDecisionDispatcher {
           parentWorkItemId,
           title: decision.title,
           board: decision.board,
-          stages: [initialPhase],
+          stages: [entryStage],
           sessions: {},
           metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
         },
@@ -1175,7 +1170,7 @@ export class FactoryDecisionDispatcher {
       if (claimed) result = { ...result, item: claimed };
     }
     const itemBoard = boardForWorkItem(result.item);
-    if (itemBoard !== decision.board) {
+    if (!skipRules && itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
     }
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
@@ -1190,7 +1185,10 @@ export class FactoryDecisionDispatcher {
       });
       if (item) result = { ...result, item };
     }
-    if (!result.created) {
+    // A `skipRules` decision is a placement and nothing else: the backfill would
+    // otherwise walk the arrival decision's facts back onto an existing card,
+    // restamping trust the sweep deliberately left unanswered.
+    if (!result.created && !skipRules) {
       // Backfill source facts (e.g. sourceCreatedAt) that older cards were filed
       // without. Fill-only: never overwrite, and never adopt the card as
       // materialized by this decision.
@@ -1208,6 +1206,23 @@ export class FactoryDecisionDispatcher {
         });
         if (filled) result = { ...result, item: filled.item };
       }
+    }
+    if (skipRules) {
+      // Creation already filed the card at `stage`. An existing card — a
+      // reconcile pass reacting to a label change, say — is placed there the
+      // same way, through the relocation the label routes use, so no phase rule
+      // runs for it and no transition is recorded.
+      if (!result.created) {
+        await moveCardToBoard({
+          workItems: this.#storage,
+          boardRegistry: this.#boards,
+          userId: 'factory-rule-dispatcher',
+          item: result.item,
+          targetBoard: decision.board,
+          targetStage: decision.stage,
+        });
+      }
+      return;
     }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
@@ -1230,7 +1245,8 @@ export class FactoryDecisionDispatcher {
         initialEntry: true,
       });
       if (initial.status === 'rejected') {
-        if (result.created) await this.#storage.delete({ orgId: record.orgId, id: result.item.id });
+        if (result.created)
+          await this.#storage.delete({ orgId: record.orgId, id: result.item.id, purgeRuleState: false });
         throw new Error(`${initial.code}: ${initial.reason}`);
       }
       expectedRevision = initial.revision;

@@ -6,7 +6,7 @@ import { Txt } from '../Txt';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'outline', 'ghost'];
+const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost'];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',

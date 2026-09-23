@@ -70,7 +70,7 @@ export function SkillsPage() {
           />
 
           {!readOnly && (
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)} icon={<Plus />}>
+            <Button size="sm" onClick={() => setDialogOpen(true)} icon={<Plus />}>
               Add a skill
             </Button>
           )}

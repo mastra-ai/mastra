@@ -186,6 +186,40 @@ describe('useFluidHover', () => {
     });
   });
 
+  describe('when a click lands on a widget that sits between the rows (a theme toggle)', () => {
+    it.each(['radio', 'checkbox', 'switch', 'tab'])('leaves a `%s` click to the widget', async role => {
+      const onRowClick = vi.fn();
+      render(
+        <List onRowClick={onRowClick}>
+          <span role={role} aria-checked="false" data-testid="widget" />
+        </List>,
+      );
+      await flushFrames();
+      await moveTo(1);
+
+      fireEvent.click(screen.getByTestId('widget'));
+
+      expect(onRowClick).not.toHaveBeenCalled();
+    });
+
+    it('leaves a click in the padding of a radio group to the group', async () => {
+      const onRowClick = vi.fn();
+      render(
+        <List onRowClick={onRowClick}>
+          <div role="radiogroup" aria-label="Theme" data-testid="group">
+            <span role="radio" aria-checked="true" />
+          </div>
+        </List>,
+      );
+      await flushFrames();
+      await moveTo(1);
+
+      fireEvent.click(screen.getByTestId('group'));
+
+      expect(onRowClick).not.toHaveBeenCalled();
+    });
+  });
+
   describe('when a portaled child (a submenu) bubbles events through React', () => {
     const submenu = () => createPortal(<div data-testid="submenu">Sub item</div>, document.body);
 

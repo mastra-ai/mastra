@@ -1,5 +1,32 @@
 # @mastra/inngest
 
+## 1.9.1
+
+### Patch Changes
+
+- Fixed InngestAgent losing durable execution in two cases (#24736). ([#24758](https://github.com/mastra-ai/mastra/pull/24758))
+
+  - **Editor overrides**: `__fork()` now returns an Inngest-backed agent, so agents with published editor overrides keep running on Inngest instead of silently running in-process.
+  - **Resuming suspended runs**: `resumeStream()`, `approveToolCall()`, `declineToolCall()`, `approveToolCallGenerate()` and `declineToolCallGenerate()` now resume the suspended Inngest run. Previously they threw `AGENT_RESUME_NO_SNAPSHOT_FOUND`, which broke `chatRoute` tool approval.
+
+- Inngest workflows and durable agents now accept a `retries` option, so a run can survive a process restart or redeploy. Before this change, every Inngest function was created with `retries: 0` and there was no way to change it. If a call to the application failed (for example, the process restarted mid-run), the whole run failed straight away. ([#24741](https://github.com/mastra-ai/mastra/pull/24741))
+
+  `retries` is passed to Inngest as its function-level retry count. When set, Inngest calls the function again after a failed request, skips the steps that already finished, and continues the run. Errors thrown by your own step code are still retried per step through `retryConfig` or `step.retries`, and are never retried again at the function level. The default is still `0`.
+
+  ```ts
+  const workflow = createWorkflow({
+    id: 'my-workflow',
+    inputSchema,
+    outputSchema,
+    retries: 3,
+  });
+
+  const durableAgent = createInngestAgent({ agent, inngest, retries: 3 });
+  ```
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0
+
 ## 1.9.1-alpha.0
 
 ### Patch Changes

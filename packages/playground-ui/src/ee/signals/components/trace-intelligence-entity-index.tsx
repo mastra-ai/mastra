@@ -10,15 +10,14 @@ import { EntityIndexCompactGrid } from './entity-index-compact-grid';
 import { EntityIndexList } from './entity-index-list';
 import { filterAndSortEntities } from './entity-index-model';
 import type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from './entity-index-model';
+import { PermissionDenied } from '@/domains/auth/components/permission-denied';
+import { SessionExpired } from '@/domains/auth/components/session-expired';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { ErrorState } from '@/ds/components/ErrorState';
 import { ListSearch } from '@/ds/components/ListSearch';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { SessionExpired } from '@/ds/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@/utils/errors';
 
 export type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from './entity-index-model';
@@ -54,7 +53,7 @@ function EntityIndexError({ error }: { error: Error }) {
   }
   return (
     <div className="flex h-full items-center justify-center">
-      <ErrorState title="Failed to load Trace Intelligence" message={error.message} />
+      <EmptyState tone="error" titleSlot="Failed to load Trace Intelligence" descriptionSlot={error.message} />
     </div>
   );
 }
@@ -98,7 +97,7 @@ function EntityIndexControls({
         <ButtonsGroup aria-label="Entities view">
           <Button
             type="button"
-            variant={view === 'list' ? 'primary' : 'outline'}
+            variant={view === 'list' ? 'primary' : 'default'}
             size="icon-md"
             tooltip="List view"
             aria-pressed={view === 'list'}
@@ -108,7 +107,7 @@ function EntityIndexControls({
           </Button>
           <Button
             type="button"
-            variant={view === 'compact' ? 'primary' : 'outline'}
+            variant={view === 'compact' ? 'primary' : 'default'}
             size="icon-md"
             tooltip="Compact view"
             aria-pressed={view === 'compact'}

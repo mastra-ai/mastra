@@ -407,43 +407,14 @@ export class MastraTUI {
       hookMgr.runSessionStart().catch(() => {});
     }
 
-    // Process initial message if provided (e.g. piped stdin content).
-    // Runs the same validation as interactive input: model check, prompt hooks.
+    // Initial message (--tui-initial-prompt / --tui-prompt and/or piped stdin) is
+    // submitted exactly like typed input, so slash commands and skills work too.
     if (this.state.options.initialMessage) {
-      const msg = this.state.options.initialMessage;
-
-      if (!this.state.session.model.hasSelection()) {
-        showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
+      const { resumeSkipNotice } = this.state.options;
+      if (resumeSkipNotice && (await this.resumedConversation())) {
+        showInfo(this.state, resumeSkipNotice);
       } else {
-        const messageId = `user-${Date.now()}`;
-        addUserMessage(this.state, {
-          id: messageId,
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: msg }] },
-          createdAt: new Date(),
-        });
-        flushRender(this.state);
-
-        const allowed = await this.runUserPromptHook(msg);
-        if (!allowed) {
-          const comp = this.state.messageComponentsById.get(messageId);
-          if (comp) {
-            this.state.chatContainer.removeChild(comp as never);
-            this.state.messageComponentsById.delete(messageId);
-            flushRender(this.state);
-          }
-        } else {
-          try {
-            if (this.state.pendingNewThread) {
-              await this.state.session.thread.create();
-              this.state.pendingNewThread = false;
-            }
-            this.fireMessage(msg);
-          } catch (error) {
-            this.state.pendingNewThread = false;
-            showError(this.state, error instanceof Error ? error.message : 'Failed to start thread');
-          }
-        }
+        await this.submitUserInput(this.state.options.initialMessage);
       }
     }
 
@@ -453,42 +424,58 @@ export class MastraTUI {
       const userInput = await this.getUserInput();
       // allow space as transparent continue (for recovering from api errors manually)
       if (!userInput.trim() && userInput !== ' ') continue;
+      await this.submitUserInput(userInput);
+    }
+  }
 
-      try {
-        const pendingNewThread = this.state.pendingNewThread;
+  /** Whether startup loaded a thread that already has messages. */
+  private async resumedConversation(): Promise<boolean> {
+    if (this.state.pendingNewThread) return false;
+    const threadId = this.state.session.thread.getId();
+    if (!threadId) return false;
+    const messages = await this.state.session.thread.listMessages({ threadId, limit: 1 });
+    return messages.length > 0;
+  }
 
-        // Handle slash commands
-        if (userInput.startsWith('/')) {
-          const handled = await this.handleSlashCommand(userInput);
-          if (handled) continue;
-        }
+  /**
+   * Handle one submitted input: slash command, shell passthrough, or a message
+   * to the agent (after the model check and prompt hooks).
+   */
+  private async submitUserInput(userInput: string): Promise<void> {
+    try {
+      const pendingNewThread = this.state.pendingNewThread;
 
-        // Handle shell passthrough (! prefix)
-        if (userInput.startsWith('!')) {
-          await handleShellPassthrough(this.state, userInput.slice(1).trim());
-          continue;
-        }
-
-        // Check if a model is selected (sync — fast, no reason to defer)
-        if (!this.state.session.model.hasSelection()) {
-          showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
-          continue;
-        }
-
-        const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
-        this.state.pendingImages = [];
-
-        const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
-        const allowed = await this.runUserPromptHook(userInput);
-        if (!allowed) {
-          this.removeOptimisticUserMessage(optimisticMessageId);
-          continue;
-        }
-
-        this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
-      } catch (error) {
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      // Handle slash commands
+      if (userInput.startsWith('/')) {
+        const handled = await this.handleSlashCommand(userInput);
+        if (handled) return;
       }
+
+      // Handle shell passthrough (! prefix)
+      if (userInput.startsWith('!')) {
+        await handleShellPassthrough(this.state, userInput.slice(1).trim());
+        return;
+      }
+
+      // Check if a model is selected (sync — fast, no reason to defer)
+      if (!this.state.session.model.hasSelection()) {
+        showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
+        return;
+      }
+
+      const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
+      this.state.pendingImages = [];
+
+      const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
+      const allowed = await this.runUserPromptHook(userInput);
+      if (!allowed) {
+        this.removeOptimisticUserMessage(optimisticMessageId);
+        return;
+      }
+
+      this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
+    } catch (error) {
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     }
   }
 

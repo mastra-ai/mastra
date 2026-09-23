@@ -243,8 +243,6 @@ export function MemorySidebarBody({
                     render={
                       <a href="https://mastra.ai/docs/memory/overview" target="_blank" rel="noopener noreferrer" />
                     }
-
-                    variant="outline"
                   >
                     View documentation
                   </Button>

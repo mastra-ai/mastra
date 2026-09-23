@@ -335,6 +335,7 @@ export interface SerializedSkill {
 
 export interface SerializedTool {
   id: string;
+  title?: string;
   description?: string;
   inputSchema?: string;
   outputSchema?: string;
