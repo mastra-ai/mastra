@@ -23,6 +23,12 @@ const meta: Meta<typeof Combobox> = {
     iconOnlyValue: {
       control: { type: 'boolean' },
     },
+    showChevron: {
+      control: { type: 'boolean' },
+    },
+    iconOnlyValue: {
+      control: { type: 'boolean' },
+    },
   },
 };
 
