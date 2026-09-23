@@ -37,6 +37,7 @@ const surfaceRoles: { token: ColorToken; note: string }[] = [
   { token: 'popover', note: 'Menu, dropdown, tooltip' },
   { token: 'dialog', note: 'Dialog, drawer, alert dialog' },
   { token: 'field', note: 'Text field fill, set by its surface' },
+  { token: 'field-disabled', note: 'Disabled field fill' },
   { token: 'muted', note: 'Quiet region inside a container' },
 ];
 
