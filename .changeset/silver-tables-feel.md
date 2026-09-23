@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Add shareable Factory board sorting for recently moved cards, cards moved by me, and Factory creation time.
+Add shareable sorting for filed Factory cards by recent movement, movement by the viewer, and time added to the board.

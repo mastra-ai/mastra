@@ -7,8 +7,8 @@ import { isBoardSort } from '../boardSort';
 const SORT_LABELS: Record<BoardSort, string> = {
   recent: 'Recently moved',
   'recent-mine': 'Recently moved by me',
-  'created-newest': 'Newest created',
-  'created-oldest': 'Oldest created',
+  'created-newest': 'Newest on board',
+  'created-oldest': 'Oldest on board',
 };
 
 export function BoardSortControl({
@@ -27,9 +27,9 @@ export function BoardSortControl({
         if (isBoardSort(next)) onChange(next);
       }}
     >
-      <SelectTrigger size="sm" aria-label="Sort board cards" className="w-auto shrink-0">
+      <SelectTrigger size="sm" aria-label="Sort filed cards" className="w-auto shrink-0">
         <ArrowUpDown aria-hidden />
-        {SORT_LABELS[value]}
+        Filed cards: {SORT_LABELS[value]}
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="recent">{SORT_LABELS.recent}</SelectItem>

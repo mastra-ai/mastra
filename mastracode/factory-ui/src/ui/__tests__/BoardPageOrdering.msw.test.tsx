@@ -1,4 +1,5 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -107,5 +108,31 @@ describe('Factory board ordering', () => {
 
     expect(titles[0]).toContain('Moved recently');
     expect(titles[1]).toContain('Created later');
+  });
+
+  it('updates the URL and rendered column order when the sort changes', async () => {
+    stubWorkBoard();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/work?sort=created-oldest`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    const triage = await screen.findByTestId('board-column-triage');
+    await within(triage).findByText('Moved recently');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Sort filed cards' }));
+    await user.click(await screen.findByRole('option', { name: 'Newest on board' }));
+
+    await waitFor(() => {
+      const titles = within(triage)
+        .getAllByTestId('work-item-card')
+        .map(card => card.textContent);
+      expect(titles[0]).toContain('Created later');
+      expect(titles[1]).toContain('Moved recently');
+    });
+    expect(router.state.location.search).toBe('?sort=created-newest');
+    expect(screen.getByRole('combobox', { name: 'Sort filed cards' })).toHaveTextContent(
+      'Filed cards: Newest on board',
+    );
   });
 });

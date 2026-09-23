@@ -167,9 +167,9 @@ function BoardContent({
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
   const filters = boardFiltersFromParams(searchParams, kind);
-  const sort = boardSortFromParams(searchParams);
 
   const auth = useFactoryAuth();
+  const sort = boardSortFromParams(searchParams, auth.data?.user?.userId);
   const items = useBoardItems({ factoryProjectId, kind, currentUserId: auth.data?.user?.userId });
   const intake = useBoardIntake({
     factoryProjectId,
@@ -434,6 +434,13 @@ function BoardContent({
                         />
                       )}
                     />
+                    {stageWorkItems.length > 0 && stageCandidates.length > 0 ? (
+                      <div role="separator" aria-label="New candidates" className="flex items-center gap-2 py-1">
+                        <span aria-hidden className="bg-border h-px flex-1" />
+                        <span className="text-meta text-muted-foreground">New candidates</span>
+                        <span aria-hidden className="bg-border h-px flex-1" />
+                      </div>
+                    ) : null}
                     <ColumnReveal
                       items={stageCandidates}
                       renderItem={candidate => (
