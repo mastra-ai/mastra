@@ -153,7 +153,7 @@ export const notificationSignalInterruptScenario = {
             const request = await (hostTools.agent_signal_send as any).execute(
               {
                 targetId: peerId,
-                summary: requestSummary,
+                message: requestSummary,
                 priority: 'medium',
                 expectsReply: true,
                 messageId: requestMessageId,
@@ -167,7 +167,7 @@ export const notificationSignalInterruptScenario = {
             const reply = await (peerTools.agent_signal_send as any).execute(
               {
                 targetId: hostPeerId,
-                summary: replySummary,
+                message: replySummary,
                 priority: 'high',
                 expectsReply: false,
                 messageId: replyMessageId,

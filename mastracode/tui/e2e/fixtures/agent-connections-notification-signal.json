@@ -50,7 +50,7 @@
             "name": "agent_signal_send",
             "arguments": {
               "targetId": "code-agent:mc-e2e-signal-peer-resource:mc-e2e-signal-peer-thread",
-              "summary": "Agent connection e2e signal: please review the handoff",
+              "message": "Agent connection e2e signal: please review the handoff",
               "priority": "high",
               "expectsReply": false
             }

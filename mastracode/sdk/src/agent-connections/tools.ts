@@ -304,7 +304,7 @@ The peer does not need to be currently advertised. Disconnecting is idempotent a
 The target must already be saved and freshly advertise the same exact thread endpoint at send time. Use expectsReply to declare whether the peer owes one signal back to this thread; false removes that obligation but does not prevent or forbid a reply. Signals routed to a notification summary cannot establish a reply obligation until the recipient opens the full notification, so use a priority that routes directly when a reply is required. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
     inputSchema: z.object({
       targetId: z.string().min(1).describe('Connected peer id.'),
-      summary: z
+      message: z
         .string()
         .min(1)
         .describe('Full message delivered to the peer. This is the only content the peer receives.'),
@@ -323,7 +323,7 @@ The target must already be saved and freshly advertise the same exact thread end
     }),
     outputSchema: signalResultSchema,
     execute: async (
-      { targetId, summary, priority = 'medium', expectsReply, messageId: inputMessageId, replyTo },
+      { targetId, message: summary, priority = 'medium', expectsReply, messageId: inputMessageId, replyTo },
       context,
     ): Promise<AgentSignalSendResult> => {
       const agentContext = context as AgentConnectionContext;
