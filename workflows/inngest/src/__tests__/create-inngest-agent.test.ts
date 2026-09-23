@@ -909,6 +909,29 @@ describe('InngestAgent parity surface', () => {
 
       sendSpy.mockRestore();
     });
+
+    it('approveToolCall on a forked agent dispatches the Inngest resume event', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-forked-approve', {
+        value: {},
+        context: {},
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+      });
+      const fork = (durableAgent as any).__fork();
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-forked-approve-run';
+
+      await fork.approveToolCall({ runId });
+      try {
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        const sentEvent = sendSpy.mock.calls[0]?.[0];
+        expect(sentEvent?.data.resume.steps).toEqual(['agentic-loop']);
+        expect(sentEvent?.data.resume.resumePayload).toEqual({ approved: true });
+      } finally {
+        globalRunRegistry.get(runId)?.cleanup?.();
+        sendSpy.mockRestore();
+      }
+    });
   });
 
   it('wakes an idle thread from sendSignal() through the durable stream, not the wrapped agent', async () => {
