@@ -173,6 +173,13 @@ async function writeTraceQueryFixture(
       attributes: span.attributes,
       metadata: span.metadata,
       error: span.error as CreateSpanRecord['error'],
+      inputTokens: span.inputTokens ?? null,
+      outputTokens: span.outputTokens ?? null,
+      totalTokens: span.totalTokens ?? null,
+      reasoningTokens: span.reasoningTokens ?? null,
+      cachedTokens: span.cachedTokens ?? null,
+      estimatedCost: span.estimatedCost ?? null,
+      costUnit: span.costUnit ?? null,
     }));
   for (const span of records) await storage.createSpan({ span });
 
@@ -3025,6 +3032,68 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
 
         const empty = await storage.getSpans({ traceId: 'no-such', spanIds: ['x'] });
         expect(empty.spans).toEqual([]);
+      });
+
+      it('persists span usage columns and returns null usage for spans written without them', async () => {
+        const usage = {
+          inputTokens: 120,
+          outputTokens: 30,
+          totalTokens: 150,
+          reasoningTokens: 10,
+          cachedTokens: 40,
+          estimatedCost: 0.00123,
+          costUnit: 'usd',
+        } as const;
+        const usageKeys = Object.keys(usage) as Array<keyof typeof usage>;
+
+        await storage.createSpan({
+          span: makeSpan({
+            traceId: 'usage-trace',
+            spanId: 'with-usage',
+            name: 'with-usage',
+            startedAt: new Date('2026-04-07T00:00:00Z'),
+            endedAt: new Date('2026-04-07T00:00:01Z'),
+            ...usage,
+          }),
+        });
+        await storage.createSpan({
+          span: makeSpan({
+            traceId: 'usage-trace',
+            spanId: 'without-usage',
+            parentSpanId: 'with-usage',
+            name: 'without-usage',
+            spanType: SpanType.TOOL_CALL,
+            startedAt: new Date('2026-04-07T00:00:00.500Z'),
+            endedAt: new Date('2026-04-07T00:00:00.800Z'),
+          }),
+        });
+
+        const withUsage = await waitFor(
+          () => storage.getSpan({ traceId: 'usage-trace', spanId: 'with-usage' }),
+          result => result !== null,
+        );
+        expect(withUsage).not.toBeNull();
+        for (const key of usageKeys) {
+          expect(withUsage!.span[key]).toBe(usage[key]);
+        }
+
+        const withoutUsage = await waitFor(
+          () => storage.getSpan({ traceId: 'usage-trace', spanId: 'without-usage' }),
+          result => result !== null,
+        );
+        expect(withoutUsage).not.toBeNull();
+        for (const key of usageKeys) {
+          expect(withoutUsage!.span[key] ?? null).toBeNull();
+        }
+
+        const trace = await waitFor(
+          () => storage.getTrace({ traceId: 'usage-trace' }),
+          result => (result?.spans.length ?? 0) === 2,
+        );
+        const traceSpan = trace!.spans.find(s => s.spanId === 'with-usage')!;
+        for (const key of usageKeys) {
+          expect(traceSpan[key]).toBe(usage[key]);
+        }
       });
     });
 

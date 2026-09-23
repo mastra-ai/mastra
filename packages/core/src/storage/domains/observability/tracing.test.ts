@@ -4,11 +4,63 @@ import {
   BATCH_DELETE_TRACES_MAX_IDS,
   batchDeleteTracesArgsSchema,
   buildInputPreview,
+  createSpanRecordSchema,
   extractBranchSpans,
   getTraceLightResponseSchema,
   INPUT_PREVIEW_MAX_LENGTH,
   lightSpanRecordSchema,
+  spanRecordSchema,
+  updateSpanRecordSchema,
 } from './tracing';
+
+describe('spanRecordSchema usage fields', () => {
+  const baseSpan = {
+    traceId: 'trace-usage',
+    spanId: 'span-usage',
+    name: 'model call',
+    spanType: SpanType.MODEL_GENERATION,
+    isEvent: false,
+    startedAt: new Date('2026-01-01T00:00:00Z'),
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: null,
+  };
+  const usage = {
+    inputTokens: 120,
+    outputTokens: 30,
+    totalTokens: 150,
+    reasoningTokens: 10,
+    cachedTokens: 40,
+    estimatedCost: 0.00123,
+    costUnit: 'usd',
+  };
+
+  it('parses a record carrying all seven usage fields', () => {
+    const result = spanRecordSchema.safeParse({ ...baseSpan, ...usage });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject(usage);
+  });
+
+  it('parses a record with no usage fields', () => {
+    const result = spanRecordSchema.safeParse(baseSpan);
+    expect(result.success).toBe(true);
+    for (const key of Object.keys(usage)) {
+      expect(result.data![key as keyof typeof usage]).toBeUndefined();
+    }
+  });
+
+  it('rejects negative or non-integer token counts', () => {
+    expect(spanRecordSchema.safeParse({ ...baseSpan, inputTokens: -1 }).success).toBe(false);
+    expect(spanRecordSchema.safeParse({ ...baseSpan, inputTokens: 1.5 }).success).toBe(false);
+    expect(spanRecordSchema.safeParse({ ...baseSpan, inputTokens: 0 }).success).toBe(true);
+  });
+
+  it('flows into create and update record schemas', () => {
+    const { createdAt: _c, updatedAt: _u, ...createSpan } = baseSpan;
+    expect(createSpanRecordSchema.safeParse({ ...createSpan, totalTokens: 5 }).success).toBe(true);
+    expect(updateSpanRecordSchema.partial().safeParse({ totalTokens: 5 }).success).toBe(true);
+    expect(updateSpanRecordSchema.partial().safeParse({ totalTokens: -5 }).success).toBe(false);
+  });
+});
 
 describe('batchDeleteTracesArgsSchema', () => {
   it('limits the number of trace IDs in a batch', () => {

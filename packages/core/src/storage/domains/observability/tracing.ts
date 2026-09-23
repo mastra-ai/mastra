@@ -136,6 +136,15 @@ export const spanRecordSchema = z
     endedAt: endedAtField.nullish(),
     requestContext: z.record(z.string(), z.unknown()).nullish().describe('Request context data'),
 
+    // Usage (Decision 10: promoted from span attributes to columns)
+    inputTokens: z.number().int().nonnegative().nullish().describe('Input tokens consumed by this span'),
+    outputTokens: z.number().int().nonnegative().nullish().describe('Output tokens produced by this span'),
+    totalTokens: z.number().int().nonnegative().nullish().describe('Total tokens for this span'),
+    reasoningTokens: z.number().int().nonnegative().nullish().describe('Reasoning tokens produced by this span'),
+    cachedTokens: z.number().int().nonnegative().nullish().describe('Cached input tokens read by this span'),
+    estimatedCost: z.number().nullish().describe('Estimated cost of this span'),
+    costUnit: z.string().nullish().describe('Unit of estimatedCost (e.g. "usd")'),
+
     // Database timestamps
     ...dbTimestamps,
   })

@@ -53,6 +53,13 @@ export interface RawTraceQuerySpan {
   environment: string | null;
   organizationId: string | null;
   tags: string[] | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+  reasoningTokens?: number | null;
+  cachedTokens?: number | null;
+  estimatedCost?: number | null;
+  costUnit?: string | null;
 }
 
 export interface RawTraceQueryScore {
