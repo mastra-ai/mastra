@@ -79,6 +79,12 @@ import { goalMaxRunsEndsGoalScenario } from './goal-max-runs-ends-goal.js';
 import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
+import {
+  initialPromptResumeScenario,
+  initialPromptScenario,
+  initialPromptSkillScenario,
+  tuiPromptResumeScenario,
+} from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
@@ -175,6 +181,7 @@ import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
 import { stateSignalReloadScenario } from './state-signal-reload.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
+import { statusFooterInlineStartScenario } from './status-footer-inline-start.js';
 import { steerDrainFailureRecoveryScenario } from './steer-drain-failure-recovery.js';
 import { storageFallbackHistoryReloadScenario } from './storage-fallback-history-reload.js';
 import { storageSettingsScenario } from './storage-settings.js';
@@ -287,6 +294,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-resume-single-render': goalResumeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
+  'initial-prompt': initialPromptScenario,
+  'initial-prompt-skill': initialPromptSkillScenario,
+  'initial-prompt-resume': initialPromptResumeScenario,
+  'tui-prompt-resume': tuiPromptResumeScenario,
   'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
@@ -383,6 +394,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'skill-tab-autocomplete': skillTabAutocompleteScenario,
   'skills-command-activation': skillsCommandActivationScenario,
   'skills-symlink-dedupe': skillsSymlinkDedupeScenario,
+  'status-footer-inline-start': statusFooterInlineStartScenario,
   'storage-fallback-history-reload': storageFallbackHistoryReloadScenario,
   'storage-settings': storageSettingsScenario,
   'storage-startup-pg-fallback': storageStartupPgFallbackScenario,

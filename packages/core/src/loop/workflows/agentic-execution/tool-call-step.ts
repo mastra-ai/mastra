@@ -16,8 +16,7 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import { getNeedsApprovalFn } from '../../../tools/toolchecks';
-import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
@@ -40,6 +39,7 @@ import {
   STEP_WORKSPACE_KEY,
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
+  TOOL_APPROVAL_VERDICTS_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
 import { dispatchBackgroundTool } from '../../shared/steps/background-dispatch-core';
@@ -51,6 +51,7 @@ import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-tran
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
+import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -380,58 +381,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Match the nullish fallback above: null/undefined use framework identity, while other falsy values are valid model payloads.
         const isResumeToolCall = resumeDataFromArgs != null;
 
-        // Check if approval is required.
-        //
-        // The global `requireToolApproval` option (boolean, or — new — a function evaluated per
-        // call so policies can inspect the tool name and args, e.g. regex allowlists) and the
-        // tool's own boolean `requireApproval` flag seed the decision: the call requires approval
-        // if either is truthy.
-        //
-        // A per-tool `needsApprovalFn` (from `createTool({ requireApproval: fn })` or an
-        // MCP-derived tool) is authoritative when present and OVERRIDES the seed — it may return
-        // `false` to allow a call the global policy/flag would otherwise gate. This preserves the
-        // long-standing precedence; the only new behavior is that the global may now be a function.
-        // Any policy that throws defaults to requiring approval, to be safe.
-        const buildApprovalContext = (): ToolApprovalContext => ({
-          toolName: inputData.toolName,
-          args,
-          // Exclude the internal approval hook so policies only see public request-context entries.
-          requestContext: requestContext
-            ? Object.fromEntries(
-                [...requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
-              )
-            : {},
-          workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
-        });
-
-        let globalRequiresApproval: boolean;
-        if (typeof requireToolApproval === 'function') {
-          try {
-            globalRequiresApproval = !!(await requireToolApproval(buildApprovalContext()));
-          } catch (error) {
-            logger?.error(`Error evaluating global requireToolApproval for tool ${inputData.toolName}:`, error);
-            // On error, default to requiring approval to be safe.
-            globalRequiresApproval = true;
-          }
-        } else {
-          globalRequiresApproval = !!requireToolApproval;
-        }
-
-        let toolRequiresApproval: boolean = globalRequiresApproval || !!(tool as any).requireApproval;
-
-        const needsApprovalFn = getNeedsApprovalFn(tool);
-        if (needsApprovalFn) {
-          // Per-tool needsApprovalFn overrides the seed (matches prior behavior).
-          try {
-            const { toolName: _toolName, ...needsApprovalCtx } = buildApprovalContext();
-            toolRequiresApproval = !!(await needsApprovalFn(args, needsApprovalCtx));
-          } catch (error) {
-            // Log error to help developers debug faulty needsApprovalFn implementations
-            logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
-            // On error, default to requiring approval to be safe
-            toolRequiresApproval = true;
-          }
-        }
+        // Reuse the called-strategy scheduling verdict when available so approval policies
+        // are evaluated exactly once per call. Other paths retain execution-time evaluation.
+        const approvalVerdicts = readScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts');
+        const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
+        approvalVerdicts?.delete(inputData.toolCallId);
+        const toolRequiresApproval =
+          cachedApprovalVerdict ??
+          (await resolveToolApprovalVerdict({
+            tool,
+            requireToolApproval,
+            context: buildToolApprovalContext({
+              toolName: inputData.toolName,
+              args,
+              requestContext,
+              workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
+            }),
+            logger,
+          }));
 
         // On resume, the live `requireToolApproval` policy may be gone: function-form
         // policies do not survive RequestContext serialization, and decline/approve
