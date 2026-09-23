@@ -111,7 +111,7 @@ describe('agent_signal_send rendering', () => {
     expect(previewText.replace(/\s+/g, '')).toBe(message.replace(/\s+/g, ''));
   });
 
-  it('truncates the message to the quiet preview line limit', () => {
+  it('shows the opening lines of the message up to the quiet preview line limit', () => {
     const component = new ToolExecutionComponentEnhanced(
       'agent_signal_send',
       args,
@@ -128,9 +128,9 @@ describe('agent_signal_send rendering', () => {
     expect(visible).toContain(args.targetId);
     expect(visible).toContain('high');
     expect(visible).toContain('reply expected');
-    expect(visible).not.toContain('Please review the auth refactor.');
+    expect(visible).toContain('Please review the auth refactor.');
     expect(visible).toContain('Focus on session renewal.');
-    expect(visible).toContain('Report any blocking issues.');
+    expect(visible).not.toContain('Report any blocking issues.');
     expect(visible).not.toContain('Delivered high signal to "Peer Reviewer" in run run-1');
   });
 });

@@ -480,11 +480,14 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       } else {
         const firstLineWidth = Math.max(10, maxLineWidth - 4);
         const continuationWidth = Math.max(10, maxLineWidth - 4);
-        const wrapped = (
+        // Signal messages lead with the request, so show their opening lines instead of the latest output.
+        const wrapped =
           this.toolName === MC_TOOLS.AGENT_SIGNAL_SEND
-            ? this.wrapAgentSignalMessageLines(preview, Math.max(1, firstLineWidth - 2))
-            : this.wrapPreviewLines(preview, firstLineWidth, continuationWidth)
-        ).slice(-this.quietPreviewLineLimit);
+            ? this.wrapAgentSignalMessageLines(preview, Math.max(1, firstLineWidth - 2)).slice(
+                0,
+                this.quietPreviewLineLimit,
+              )
+            : this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(-this.quietPreviewLineLimit);
 
         lines = wrapped.map(line => {
           const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
