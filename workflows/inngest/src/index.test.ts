@@ -3478,6 +3478,97 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
+    it('should report the original error stack to Inngest for failed steps', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const reportedStepErrors: any[] = [];
+
+      function readsThreadIdOfUndefined(input: any) {
+        return input.state.threadId;
+      }
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => readsThreadIdOfUndefined({}),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-error-stack-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-error-stack-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => {
+                const handler = inngestServe({ mastra, inngest, ...getDockerRegisterOptions() });
+                // Capture what the SDK reports to Inngest so we can assert on the StepFailed op.
+                return async (c: any) => {
+                  const res = await handler(c);
+                  const body = await res.clone().text();
+                  try {
+                    const parsed = JSON.parse(body);
+                    for (const op of Array.isArray(parsed) ? parsed : [parsed]) {
+                      if (op?.op === 'StepFailed' || op?.op === 'StepError') reportedStepErrors.push(op);
+                    }
+                  } catch {
+                    // Non-JSON responses (e.g. registration) are irrelevant here.
+                  }
+                  return res;
+                };
+              },
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      const stepResult = result.steps.step1;
+      expect(stepResult.status).toBe('failed');
+      expect((stepResult.error as Error).name).toBe('TypeError');
+
+      // The error reported to Inngest for the failed step keeps the original frame and type
+      const reported = reportedStepErrors.find(op => String(op.name).endsWith('.step.step1'));
+      expect(reported).toBeDefined();
+      expect(reported.error.message).toContain("reading 'threadId'");
+      expect(reported.error.stack).toMatch(/^TypeError: /);
+      expect(reported.error.stack).toContain('readsThreadIdOfUndefined');
+      expect(reported.error.cause.error.stack).toContain('readsThreadIdOfUndefined');
+
+      srv.close();
+    });
+
     it('should preserve error cause chains through Inngest serialization', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',

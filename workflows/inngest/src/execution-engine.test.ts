@@ -409,3 +409,47 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
     expect(logger.error.mock.calls[0]?.[0]).toContain('child blew up');
   });
 });
+
+describe('InngestExecutionEngine.wrapDurableOperation', () => {
+  async function captureWrapped(fn: () => Promise<unknown>): Promise<any> {
+    const engine = createEngine();
+    try {
+      await engine.wrapDurableOperation('op', fn);
+    } catch (e) {
+      return e;
+    }
+    throw new Error('expected wrapDurableOperation to throw');
+  }
+
+  it('reports the original error stack to Inngest', async () => {
+    function readsThreadIdOfUndefined(input: any) {
+      return input.state.threadId;
+    }
+
+    const err = await captureWrapped(async () => readsThreadIdOfUndefined({}));
+
+    expect(err.stack).toMatch(/^TypeError: /);
+    expect(err.stack).toContain('readsThreadIdOfUndefined');
+    const serializedCause = JSON.parse(JSON.stringify(err.cause.error));
+    expect(serializedCause.name).toBe('TypeError');
+    expect(serializedCause.stack).toContain('readsThreadIdOfUndefined');
+  });
+
+  it('keeps custom error properties in the cause', async () => {
+    const err = await captureWrapped(async () => {
+      throw Object.assign(new Error('rate limited'), { statusCode: 429 });
+    });
+
+    expect(err.message).toBe('rate limited');
+    expect(JSON.parse(JSON.stringify(err.cause.error)).statusCode).toBe(429);
+  });
+
+  it('flags non-retryable failures in the cause', async () => {
+    const err = await captureWrapped(async () => {
+      throw new NonRetriableError('permanent failure');
+    });
+
+    expect(err.cause.status).toBe('failed');
+    expect(err.cause.nonRetryable).toBe(true);
+  });
+});

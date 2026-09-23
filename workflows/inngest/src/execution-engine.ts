@@ -223,11 +223,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return fnResult;
       } catch (e) {
         const errorInstance = getErrorFromUnknown(e, {
-          serializeStack: false,
+          serializeStack: true,
           fallbackMessage: 'Unknown step execution error',
         });
         const isNonRetryable = isNonRetryableStepFailure(e);
-        throw new Error(errorInstance.message, {
+        const wrapped = new Error(errorInstance.message, {
           cause: {
             status: 'failed',
             error: errorInstance,
@@ -235,6 +235,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             ...(isNonRetryable && { nonRetryable: true as const }),
           },
         });
+        // Report the original failure site to Inngest instead of this wrapper frame. The stack's first
+        // line also carries the original error type, since Inngest derives `name` from the prototype.
+        if (errorInstance.stack) {
+          wrapped.stack = errorInstance.stack;
+        }
+        throw wrapped;
       }
     });
     return result as T;
