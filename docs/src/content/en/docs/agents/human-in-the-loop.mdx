@@ -125,7 +125,39 @@ const stream = await agent.stream('Clean up old records', {
 })
 ```
 
-A tool's own `requireApproval` setting takes precedence over the function above. Its rule decides whether that tool needs approval. If the function throws, the call requires approval as a fail-safe.
+The function can be asynchronous. For decisions that depend on the tool name and arguments, use a [classifier](/reference/classifier/classifier) to estimate whether the call needs human review:
+
+```typescript title="src/mastra/agents/run-with-approval.ts"
+import { Classifier } from '@mastra/core/classifier'
+import { model } from '../models/evaluation-model'
+import { agent } from './agent'
+
+const approvalClassifier = new Classifier({
+  id: 'tool-approval-classifier',
+  model,
+  questions: {
+    requiresApproval: {
+      type: 'boolean',
+      instructions:
+        'Does this tool call need human approval because it is destructive, irreversible, expensive, or handles sensitive data?',
+    },
+  },
+})
+
+const stream = await agent.stream('Clean up old records', {
+  requireToolApproval: async ({ toolName, args }) => {
+    const result = await approvalClassifier.evaluate({
+      state: { toolName, args },
+    })
+
+    return result.answers.requiresApproval.probability >= 0.7
+  },
+})
+```
+
+Returning `true` pauses the tool call for human approval. It doesn't approve or decline the call automatically. Choose a threshold that matches the risk of the tools available to the agent. If this `requireToolApproval` function throws, it defaults to requiring approval.
+
+The runtime then combines that result with the tool's `requireApproval` setting. A boolean `true` requires approval, while `false` doesn't disable approval required by `requireToolApproval`. A tool-level `requireApproval` function is authoritative and replaces the combined result for that tool.
 
 :::note
 
