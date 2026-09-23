@@ -18,7 +18,8 @@ const plan = planTraceAggregate(parseTraceAggregateRequest(request), {
 - `timeRange` and `where` are validated exactly like `queryTraces()`.
 - `groupBy` accepts only supported dimensions.
 - `countDistinct` accepts `traceId` or any field that `groupBy` accepts.
-- `having` and `orderBy` can only reference requested measures or dimensions. `orderBy` can always use `count`.
+- `having` can only reference requested measures.
+- `orderBy` can reference a requested measure, a requested dimension, or `count`.
 - The time range can be at most 365 days.
 - An `interval` can produce at most 1000 buckets.
 
