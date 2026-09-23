@@ -4644,15 +4644,15 @@ export class WorkflowsPG extends WorkflowsStorage {
 
     // Expression index backing the status filter in listWorkflowRuns(). Only valid on jsonb
     // columns — legacy json/text snapshot columns still go through the sanitizing regexp,
-    // which cannot use an index anyway. While the init snapshot is installed, read the
-    // column type from it. Falling through to information_schema fails the warm-init
-    // schema-snapshot suite.
+    // which cannot use an index anyway. Never ask information_schema: a warm init must
+    // stay inside the catalog snapshot, and a cold init already knows the declared type.
     const indexName = workflowSnapshotStatusIndexName(this.#schema);
     const snapshot = getSchemaSnapshot(this.#db.client, this.#schema);
-    const snapshotType = snapshot
-      ? snapshot.columnTypes.get(TABLE_WORKFLOW_SNAPSHOT)?.get('snapshot')
-      : await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
-    if (snapshot?.indexes.has(indexName) || snapshotType !== 'jsonb') return;
+    if (snapshot?.indexes.has(indexName)) return;
+    const recordedType = snapshot?.columnTypes.get(TABLE_WORKFLOW_SNAPSHOT)?.get('snapshot');
+    const declaredType = TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT]?.snapshot?.type;
+    const snapshotType = recordedType ?? declaredType;
+    if (snapshotType !== 'jsonb') return;
     try {
       await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema));
     } catch (error) {
