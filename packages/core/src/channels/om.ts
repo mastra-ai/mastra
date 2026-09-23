@@ -115,7 +115,7 @@ export interface DataOmBufferingFailedPart {
     /** Error message */
     error: string;
 
-    /** Resolved failure policy for this observation cycle. */
+    /** Resolved failure policy for this cycle. Treat a missing value as `'abort'` (markers written before this field existed). */
     failurePolicy?: 'abort' | 'continue';
 
     /** Machine-readable failure classification when the observer/provider call failed. */

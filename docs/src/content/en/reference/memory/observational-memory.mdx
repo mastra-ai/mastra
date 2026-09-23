@@ -185,7 +185,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'failurePolicy',
             type: "'abort' | 'continue'",
             description:
-              "Terminal policy once Observer retries are exhausted. `'abort'` aborts the agent turn. `'continue'` emits the existing failure diagnostic, keeps the failed input pending for a later cycle, and allows the main agent turn to continue. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. This setting doesn't prevent the underlying provider error or change `blockAfter` or attachment handling, and it has no backstop for a sustained outage: pending messages keep accruing in the main agent's context.",
+              "Terminal policy once Observer retries are exhausted. `'abort'` aborts the agent turn. `'continue'` emits the existing failure diagnostic, keeps the failed input pending for a later cycle, and allows the main agent turn to continue. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. This setting doesn't prevent the underlying provider error or change `blockAfter` or attachment handling, and it has no backstop for a sustained outage: pending messages keep accruing in the main agent's context until they reach the model's context limit.",
             isOptional: true,
             defaultValue: "'abort'",
           },
