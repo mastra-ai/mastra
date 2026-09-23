@@ -1,20 +1,29 @@
 import {
   encodeTraceQueryCursor,
   parseGetTraceQueryFieldsArgs,
+  parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
   planTraceQueryObservedFields,
+  planTraceQueryValues,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type {
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+  TrustedTraceQueryScalarPredicate,
+} from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DuckDBConnection } from '../../db/index';
 import {
   compileDuckDBThreadQuery,
   compileDuckDBTraceQuery,
+  compileDuckDBTraceQueryObservedFields,
+  compileDuckDBTraceQueryValues,
   getTraceQueryObservedFields,
   queryThreads,
   queryTraces,
@@ -43,6 +52,23 @@ describe('DuckDB advanced trace query', () => {
         message: 'The trace query exceeded its resource limit',
       }),
     );
+  });
+
+  it('rejects unconfigured trusted roots before compiling discovery SQL', () => {
+    const trusted = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+    const invalid = { ...trusted, structuredRoots: ['attributes'] } as unknown as TrustedTraceQueryObservedFieldsPlan;
+
+    expect(() => compileDuckDBTraceQueryObservedFields(invalid)).toThrowError('Unsupported structured discovery scope');
+  });
+
+  it('excludes scalar structured-root seed rows from field discovery', () => {
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    expect(compileDuckDBTraceQueryObservedFields(discoveryPlan).sql).toContain('WHERE len(segments) > 1');
   });
 
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
@@ -143,41 +169,125 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).not.toContain(key);
     expect(compiled.sql).not.toContain(value);
     expect(compiled.sql).toContain(
-      `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
+      `CASE WHEN json_type(r.metadata, ?) IN ('VARCHAR') THEN json_extract_string(r.metadata, ?) END`,
     );
+    expect(compiled.sql).not.toContain('trim(');
     expect(compiled.values).toEqual([
       TIME_RANGE.from,
       TIME_RANGE.to,
-      `$.${JSON.stringify(key)}`,
-      `$.${JSON.stringify(key)}`,
+      `/${key}`,
+      `/${key}`,
       value,
-      '$."actorRole"',
-      '$."actorRole"',
-      '$."actorRole"',
-      '$."actorRole"',
+      '/actorRole',
+      '/actorRole',
+      '/actorRole',
+      '/actorRole',
       'assistant',
       'tool',
-      '$."parentMessageId"',
-      '$."parentMessageId"',
+      '/parentMessageId',
+      '/parentMessageId',
       101,
     ]);
   });
 
-  it('keeps generic ordered metadata compiler bindings aligned without changing planner support', () => {
-    const key = ` latency'ms `;
-    const path = `$.${JSON.stringify(key)}`;
-    const trusted = plan({
-      where: { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: '10' } },
-    });
-    const ordered = {
-      ...trusted,
-      where: { type: 'comparison', field: `metadata.${key}`, operator: 'gt', value: '10' },
-    } as TrustedTraceQueryPlan;
+  it('binds exact dotted metadata segments without interpolating them into SQL', () => {
+    const path = ['metadata', "customer.id' OR TRUE --", 'profile'] as const;
+    const value = "admin' OR TRUE --";
+    const compiled = compileDuckDBTraceQuery(plan({ where: { op: 'eq', left: { path }, right: { literal: value } } }));
+    const jsonPointer = `/${path[1]}/${path[2]}`;
 
-    const compiled = compileDuckDBTraceQuery(ordered);
+    expect(compiled.sql).not.toContain(path[1]);
+    expect(compiled.sql).not.toContain(path[2]);
+    expect(compiled.sql).not.toContain(value);
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      `/${path[1]}`,
+      jsonPointer,
+      jsonPointer,
+      value,
+      101,
+    ]);
+  });
+
+  it('uses one parameterized JSON Pointer contract for every structured key shape', () => {
+    const path = [
+      'metadata',
+      'line\nbreak',
+      'tab\tkey',
+      'quote"key',
+      'back\\slash',
+      'slash/key',
+      'tilde~key',
+      'literal.dot',
+    ] as const;
+    const objectPointers = [
+      '/line\nbreak',
+      '/line\nbreak/tab\tkey',
+      '/line\nbreak/tab\tkey/quote"key',
+      '/line\nbreak/tab\tkey/quote"key/back\\slash',
+      '/line\nbreak/tab\tkey/quote"key/back\\slash/slash~1key',
+      '/line\nbreak/tab\tkey/quote"key/back\\slash/slash~1key/tilde~0key',
+    ];
+    const jsonPointer = `${objectPointers.at(-1)}/literal.dot`;
+    const predicate = compileDuckDBTraceQuery(
+      plan({ where: { op: 'eq', left: { path }, right: { literal: 'matched' } } }),
+    );
+    const valueDiscovery = compileDuckDBTraceQueryValues(
+      planTraceQueryValues(
+        parseGetTraceQueryValuesArgs({
+          timeRange: TIME_RANGE,
+          predicateScope: 'trace',
+          path,
+          limit: 100,
+        }),
+      ),
+    );
+
+    expect(predicate.sql).not.toContain(path[1]);
+    expect(predicate.sql).not.toContain(path[5]);
+    expect(predicate.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      ...objectPointers,
+      jsonPointer,
+      jsonPointer,
+      'matched',
+      101,
+    ]);
+    expect(valueDiscovery.sql).not.toContain(path[1]);
+    expect(valueDiscovery.sql).not.toContain(path[5]);
+    expect(valueDiscovery.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      ...objectPointers,
+      jsonPointer,
+      jsonPointer,
+      101,
+    ]);
+  });
+
+  it('rejects structured roots that are not configured for the predicate context', () => {
+    const trustedPlan = plan();
+    trustedPlan.where = {
+      type: 'comparison',
+      field: ['attributes', 'customer', 'id'],
+      operator: 'eq',
+      value: 'customer-123',
+    } as unknown as TrustedTraceQueryScalarPredicate;
+
+    expect(() => compileDuckDBTraceQuery(trustedPlan)).toThrowError('Unsupported structured trace-query field');
+  });
+
+  it('keeps numeric metadata compiler bindings aligned', () => {
+    const key = ` latency'ms `;
+    const path = `/${key}`;
+    const compiled = compileDuckDBTraceQuery(
+      plan({ where: { op: 'gt', left: { path: `metadata.${key}` }, right: { literal: 10 } } }),
+    );
 
     expect(compiled.sql).not.toContain(key);
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, '10', 101]);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, 10, 101]);
     expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
   });
 
@@ -385,8 +495,8 @@ describe('DuckDB advanced trace query', () => {
       TIME_RANGE.from,
       TIME_RANGE.to,
       'medication_lookup',
-      `$.${JSON.stringify(metadataKey)}`,
-      `$.${JSON.stringify(metadataKey)}`,
+      `/${metadataKey}`,
+      `/${metadataKey}`,
       metadataValue,
       0.6,
       'clinical-review',

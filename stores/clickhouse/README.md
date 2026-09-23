@@ -8,6 +8,10 @@ Clickhouse implementation for Mastra, providing efficient storage capabilities w
 npm install @mastra/clickhouse
 ```
 
+## Requirements
+
+Nested trace metadata field discovery requires ClickHouse 24.8 or later with `enable_analyzer=1`. Known-path trace filtering and value discovery use targeted JSON extraction and don't require recursive field enumeration.
+
 ## Usage
 
 ```typescript

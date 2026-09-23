@@ -3,18 +3,31 @@ import {
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   getTraceQueryDeltaWatermark,
+  parseGetTraceQueryFieldsArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryObservedFields,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TraceQueryResponse, TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type {
+  TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+} from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DbClient } from '../../../client';
-import { compilePostgresThreadQuery, compilePostgresTraceQuery, queryThreads, queryTraces } from './trace-query';
+import {
+  compilePostgresThreadQuery,
+  compilePostgresTraceQuery,
+  compilePostgresTraceQueryObservedFields,
+  queryThreads,
+  queryTraces,
+} from './trace-query';
 import { ObservabilityStoragePostgresVNext } from '.';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
@@ -37,6 +50,17 @@ describe('Postgres advanced trace query', () => {
     if (wasEnabled) coreFeatures.add('observability-delta-polling');
     vi.restoreAllMocks();
   });
+  it('rejects unconfigured trusted roots before compiling discovery SQL', () => {
+    const trusted = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+    const invalid = { ...trusted, structuredRoots: ['attributes'] } as unknown as TrustedTraceQueryObservedFieldsPlan;
+
+    expect(() => compilePostgresTraceQueryObservedFields('public', invalid)).toThrowError(
+      'Unsupported structured discovery scope',
+    );
+  });
+
   it('rejects invalid trace-query timeout configuration at construction', () => {
     expect(
       () =>
@@ -45,6 +69,16 @@ describe('Postgres advanced trace query', () => {
           traceQueryTimeoutMs: Number.POSITIVE_INFINITY,
         }),
     ).toThrow('traceQueryTimeoutMs must be an integer between');
+  });
+
+  it('excludes scalar structured-root seed rows from field discovery', () => {
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    expect(compilePostgresTraceQueryObservedFields('public', discoveryPlan).text).toContain(
+      'WHERE cardinality(segments) > 1',
+    );
   });
 
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
@@ -176,23 +210,52 @@ describe('Postgres advanced trace query', () => {
 
     expect(compiled.text).not.toContain(key);
     expect(compiled.text).not.toContain(value);
-    expect(compiled.text).toContain(`jsonb_typeof(r."metadataSearch" -> $3) = 'string'`);
-    expect(compiled.text).toContain(`r."metadataSearch" ->> $3`);
-    expect(compiled.text).toContain(`jsonb_typeof(r."metadataRaw" -> $3) = 'string'`);
-    expect(compiled.text).toContain(`NULLIF(btrim(r."metadataRaw" ->> $3), '')`);
+    expect(compiled.text).toContain(`jsonb_typeof((r."metadataRaw" #> $3::text[])) = 'string'`);
+    expect(compiled.text).toContain(`r."metadataRaw" #>> $3::text[]`);
+    expect(compiled.text).not.toContain('metadataSearch');
+    expect(compiled.text).not.toContain('btrim(');
     expect(compiled.text).toContain('IS NOT DISTINCT FROM $4');
     expect(compiled.text).toContain('IS NULL OR');
     expect(compiled.values).toEqual([
       TIME_RANGE.from,
       TIME_RANGE.to,
-      key,
+      [key],
       value,
-      'actorRole',
+      ['actorRole'],
       'assistant',
       'tool',
-      'parentMessageId',
+      ['parentMessageId'],
       101,
     ]);
+  });
+
+  it('binds exact dotted metadata segments as one text array', () => {
+    const path = ['metadata', "customer.id' OR TRUE --", 'profile'] as const;
+    const value = "admin' OR TRUE --";
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { op: 'eq', left: { path }, right: { literal: value } } }),
+    );
+
+    expect(compiled.text).not.toContain(path[1]);
+    expect(compiled.text).not.toContain(path[2]);
+    expect(compiled.text).not.toContain(value);
+    expect(compiled.text).toContain('r."metadataRaw" #> $3::text[]');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path.slice(1), value, 101]);
+  });
+
+  it('guards PostgreSQL numeric extraction to the finite Float64 range', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { op: 'gte', left: { path: 'metadata.retry.count' }, right: { literal: 3 } } }),
+    );
+
+    expect(compiled.text).toContain(`::numeric`);
+    expect(compiled.text).toContain(`4.9406564584124654e-324::numeric`);
+    expect(compiled.text).toContain(`1.7976931348623157e308::numeric`);
+    expect(compiled.text).toContain(`r."metadataRaw" #>> $3::text[]`);
+    expect(compiled.text).toContain(`::double precision END END`);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, ['retry', 'count'], 3, 101]);
   });
 
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {
@@ -436,7 +499,7 @@ describe('Postgres advanced trace query', () => {
       TIME_RANGE.from,
       TIME_RANGE.to,
       'medication_lookup',
-      metadataKey,
+      [metadataKey],
       metadataValue,
       0.6,
       'clinical-review',
@@ -469,6 +532,14 @@ describe('Postgres advanced trace query', () => {
     } as unknown as TrustedTraceQueryPlan;
 
     expect(() => compilePostgresTraceQuery('public', invalid)).toThrow('Unsupported trusted trace-query field');
+
+    const invalidStructured = {
+      ...trusted,
+      where: { type: 'comparison', field: ['attributes', 'customer', 'id'], operator: 'eq', value: 'x' },
+    } as unknown as TrustedTraceQueryPlan;
+    expect(() => compilePostgresTraceQuery('public', invalidStructured)).toThrow(
+      'Unsupported structured trace-query field',
+    );
 
     const thread = threadPlan({
       where: { traces: { some: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } } },

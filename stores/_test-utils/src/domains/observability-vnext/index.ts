@@ -18,11 +18,16 @@ import type {
   CreateScoreRecord,
   CreateSpanRecord,
   ObservabilityStorage,
+  TraceQueryPath,
   TraceQueryRequest,
 } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
-import { TRACE_QUERY_DISCOVERY_FIXTURE_DATA, TRACE_QUERY_DISCOVERY_TIME_RANGE } from './trace-query-discovery';
+import {
+  TRACE_QUERY_DISCOVERY_FIXTURE_DATA,
+  TRACE_QUERY_DISCOVERY_TIME_RANGE,
+  TRACE_QUERY_DISCOVERY_WIDE_FIXTURE_DATA,
+} from './trace-query-discovery';
 import {
   normalizeTraceQueryResponse,
   THREAD_QUERY_CONFORMANCE_CASES,
@@ -267,7 +272,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       };
       const values = async (args: {
         predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-        path: string;
+        path: TraceQueryPath;
         search?: string;
         limit?: number;
       }) => {
@@ -281,20 +286,41 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       const writeDiscoveryFixture = () =>
         writeTraceQueryFixture(storage, TRACE_QUERY_DISCOVERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
-      it('discovers only executable top-level string metadata fields from current qualified roots', async () => {
+      it('discovers executable scalar metadata fields from current qualified roots', async () => {
         await writeDiscoveryFixture();
-        await expect(observedFields({ predicateScope: 'trace' })).resolves.toEqual({
-          observedFields: [
-            expect.objectContaining({ path: 'metadata.customer', occurrences: 3 }),
-            expect.objectContaining({ path: 'metadata.region', occurrences: 3 }),
-            expect.objectContaining({ path: 'metadata.escapedValue', occurrences: 2 }),
-            expect.objectContaining({ path: 'metadata.literalPattern', occurrences: 2 }),
-            expect.objectContaining({ path: 'metadata.unicodeValue', occurrences: 2 }),
-            expect.objectContaining({ path: 'metadata.percent%key', occurrences: 1 }),
-            expect.objectContaining({ path: 'metadata.under_score', occurrences: 1 }),
-          ],
+        const result = await observedFields({ predicateScope: 'trace', limit: 100 });
+        expect(result).toEqual({
+          observedFields: expect.arrayContaining([
+            expect.objectContaining({ path: 'metadata.account.id', valueKind: 'string', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.booleanOnly', valueKind: 'boolean', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.customer', valueKind: 'string', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.mixedKind', valueKind: 'scalar', occurrences: 3 }),
+            expect.objectContaining({
+              path: 'metadata.numericOnly',
+              valueKind: 'number',
+              operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists', 'lt', 'lte', 'gt', 'gte'],
+              occurrences: 3,
+            }),
+            expect.objectContaining({ path: 'metadata.region', valueKind: 'string', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.emptyValue', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.line\nbreak', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.tab\tkey', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.quote"key', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.back\\slash', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.slash/key', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.tilde~key', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.nested.plan', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.retries', valueKind: 'number', occurrences: 1 }),
+            expect.objectContaining({ path: ['metadata', 'account.id'], valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({
+              path: ['metadata', 'exactNested', 'literal.key', 'value'],
+              valueKind: 'string',
+              occurrences: 1,
+            }),
+          ]),
           observedFieldsTruncated: false,
         });
+        expect(await observedFields({ predicateScope: 'trace', limit: 100 })).toEqual(result);
         await expect(observedFields({ predicateScope: 'trace', search: 'REGION' })).resolves.toEqual({
           observedFields: [expect.objectContaining({ path: 'metadata.region', occurrences: 3 })],
           observedFieldsTruncated: false,
@@ -309,14 +335,60 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
         await expect(observedFields({ predicateScope: 'trace', limit: 2 })).resolves.toEqual({
           observedFields: [
-            expect.objectContaining({ path: 'metadata.customer', occurrences: 3 }),
-            expect.objectContaining({ path: 'metadata.region', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.account.id', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.booleanOnly', occurrences: 3 }),
           ],
           observedFieldsTruncated: true,
         });
         await expect(observedFields({ predicateScope: 'spans' })).resolves.toEqual({
           observedFields: [],
           observedFieldsTruncated: false,
+        });
+      });
+
+      it('discovers typed metadata values without trimming or coercion', async () => {
+        await writeDiscoveryFixture();
+        for (const { path, value } of [
+          { path: 'metadata.nested.plan', value: 'pro' },
+          { path: 'metadata.active', value: true },
+          { path: 'metadata.retries', value: 2 },
+          { path: 'metadata.emptyValue', value: '' },
+          { path: 'metadata.whitespaceOnly', value: '   ' },
+          { path: ['metadata', 'dotted.key'], value: 'unsupported' },
+          { path: ['metadata', 'exactNested', 'literal.key', 'value'], value: 'exact-nested-a' },
+          { path: 'metadata.line\nbreak', value: 'newline-value' },
+          { path: 'metadata.tab\tkey', value: 'tab-value' },
+          { path: 'metadata.quote"key', value: 'quote-value' },
+          { path: 'metadata.back\\slash', value: 'backslash-value' },
+          { path: 'metadata.slash/key', value: 'slash-value' },
+          { path: 'metadata.tilde~key', value: 'tilde-value' },
+        ] satisfies Array<{ path: TraceQueryPath; value: string | number | boolean }>) {
+          await expect(values({ predicateScope: 'trace', path })).resolves.toEqual({
+            values: [{ value, count: 1 }],
+            valuesTruncated: false,
+          });
+        }
+        await expect(values({ predicateScope: 'trace', path: 'metadata.arrayValue' })).resolves.toEqual({
+          values: [],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'metadata.mixedKind' })).resolves.toEqual({
+          values: [
+            { value: 'string-kind', count: 1 },
+            { value: 2, count: 1 },
+            { value: true, count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+      });
+
+      it('discovers structured values using decoded strings for search', async () => {
+        await writeDiscoveryFixture();
+        await expect(
+          values({ predicateScope: 'trace', path: 'metadata.escapedValue', search: 'quote" and slash\\' }),
+        ).resolves.toEqual({
+          values: [{ value: 'quote" and slash\\ with 雪', count: 2 }],
+          valuesTruncated: false,
         });
       });
 
@@ -375,6 +447,19 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           values: [{ value: '%prod_', count: 1 }],
           valuesTruncated: false,
         });
+      });
+
+      it('bounds discovery for wide metadata without changing global ranking', async () => {
+        await writeTraceQueryFixture(
+          storage,
+          TRACE_QUERY_DISCOVERY_WIDE_FIXTURE_DATA,
+          capabilities.traceQuerySpanWriteModel,
+        );
+        const result = await observedFields({ predicateScope: 'trace', limit: 100 });
+        expect(result.observedFields).toHaveLength(100);
+        expect(result.observedFieldsTruncated).toBe(true);
+        expect(new Set(result.observedFields.map(field => JSON.stringify(field.path))).size).toBe(100);
+        expect(result.observedFields.every(field => field.occurrences === 1)).toBe(true);
       });
     }
 

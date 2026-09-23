@@ -12,7 +12,11 @@ import {
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type {
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+} from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL } from './ddl';
@@ -248,6 +252,25 @@ describe('ClickHouse advanced trace query', () => {
     await expect(storage.queryThreads(threadPlan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
   });
 
+  it('rejects unconfigured trusted roots before compiling discovery SQL', () => {
+    const trusted = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+    const invalid = { ...trusted, structuredRoots: ['attributes'] } as unknown as TrustedTraceQueryObservedFieldsPlan;
+
+    expect(() => compileClickHouseTraceQueryObservedFields(invalid)).toThrowError(
+      'Unsupported structured discovery scope',
+    );
+  });
+
+  it('excludes scalar structured-root seed rows from field discovery', () => {
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    expect(compileClickHouseTraceQueryObservedFields(discoveryPlan).query).toContain('WHERE length(segments) > 1');
+  });
+
   it('decodes each observed metadata value from the expanded JSON entry', () => {
     const compiled = compileClickHouseTraceQueryObservedFields(
       planTraceQueryObservedFields(
@@ -258,10 +281,12 @@ describe('ClickHouse advanced trace query', () => {
       ),
     );
 
-    expect(compiled.query).toContain('JSONExtractString(entry.2) AS value');
-    expect(compiled.query).toContain("JSONType(rawValue) = 'String'");
-    expect(compiled.query).toContain("trim(value) != ''");
-    expect(compiled.query).toContain('length(value) <= 4096');
+    expect(compiled.query).toContain('WITH RECURSIVE');
+    expect(compiled.query).toContain("JSONType(leaf) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool')");
+    expect(compiled.query).toContain("multiIf(JSONType(leaf) = 'String', 'string'");
+    expect(compiled.query).toContain("if(uniqExact(value_kind) = 1, min(value_kind), 'scalar')");
+    expect(compiled.query).toContain('length(JSONExtractString(leaf)) <= 4096');
+    expect(compiled.query).not.toContain('trim(');
     expect(compiled.query).not.toContain('JSONExtractString(r.metadataRaw, entry.1)');
   });
 
@@ -370,8 +395,10 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).not.toContain(key);
     expect(compiled.query).not.toContain(value);
     expect(compiled.query).toContain(
-      "coalesce(if(mapContains(r.metadataSearch, {trace_query_3:String}), r.metadataSearch[{trace_query_3:String}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, {trace_query_3:String})), ''))",
+      "if(JSONType(r.metadataRaw, {trace_query_3:String}) IN ('String'), JSONExtractString(r.metadataRaw, {trace_query_3:String}), NULL)",
     );
+    expect(compiled.query).not.toContain('metadataSearch');
+    expect(compiled.query).not.toContain('trim(');
     expect(compiled.query).toContain('ifNull(');
     expect(compiled.query_params).toMatchObject({
       trace_query_3: key,
@@ -381,6 +408,24 @@ describe('ClickHouse advanced trace query', () => {
       trace_query_7: 'tool',
       trace_query_8: 'parentMessageId',
       trace_query_9: 101,
+    });
+  });
+
+  it('binds every exact dotted metadata segment separately', () => {
+    const path = ['metadata', "customer.id' OR 1", 'profile'] as const;
+    const value = "admin' OR 1";
+    const compiled = compileClickHouseTraceQuery(
+      plan({ where: { op: 'eq', left: { path }, right: { literal: value } } }),
+    );
+
+    expect(compiled.query).not.toContain(path[1]);
+    expect(compiled.query).not.toContain(path[2]);
+    expect(compiled.query).not.toContain(value);
+    expect(compiled.query).toContain('{trace_query_3:String}, {trace_query_4:String}');
+    expect(compiled.query_params).toMatchObject({
+      trace_query_3: path[1],
+      trace_query_4: path[2],
+      trace_query_5: value,
     });
   });
 
@@ -660,6 +705,12 @@ describe('ClickHouse advanced trace query', () => {
     } as unknown as TrustedTraceQueryPlan;
 
     expect(() => compileClickHouseTraceQuery(invalid)).toThrow('Unsupported trusted trace-query field');
+
+    const invalidStructured = {
+      ...trusted,
+      where: { type: 'comparison', field: ['attributes', 'customer', 'id'], operator: 'eq', value: 'x' },
+    } as unknown as TrustedTraceQueryPlan;
+    expect(() => compileClickHouseTraceQuery(invalidStructured)).toThrow('Unsupported structured trace-query field');
 
     const thread = threadPlan({
       where: { traces: { some: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } } },
