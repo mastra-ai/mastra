@@ -144,6 +144,12 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
       expect(fs.existsSync(path.join(outDir, absentPath)), `${absentPath} must not ship`).toBe(false);
     }
 
+    const entrySource = fs.readFileSync(path.join(outDir, 'src/mastra/index.ts'), 'utf8');
+    for (const [, specifier] of entrySource.matchAll(/from '(\.\/[^']+)\.js'/g)) {
+      expect(fs.existsSync(path.join(outDir, 'src/mastra', `${specifier}.ts`)), `${specifier} must ship`).toBe(true);
+    }
+    expect(fs.readdirSync(path.join(outDir, 'src/mastra')).filter(file => file.endsWith('.test.ts'))).toEqual([]);
+
     const envExample = fs.readFileSync(path.join(outDir, '.env.example'), 'utf8');
     expect(envExample).not.toMatch(/^[A-Z][A-Z0-9_]*=\s*$/m);
 

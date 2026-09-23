@@ -6,7 +6,7 @@
  * dependencies.
  *
  * Source files:
- *   - src/mastra/index.ts
+ *   - src/mastra/*.ts, tests excluded
  *   - .env.schema
  *   - docker-compose.yml
  *
@@ -324,7 +324,11 @@ if (fs.existsSync(outDir)) {
   }
 }
 fs.mkdirSync(outDir, { recursive: true });
-copySourceFile('src/mastra/index.ts');
+for (const entry of fs.readdirSync(path.join(webRoot, 'src/mastra'), { withFileTypes: true })) {
+  if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
+    copySourceFile(`src/mastra/${entry.name}`);
+  }
+}
 copySourceFile('.env.schema');
 copySourceFile('docker-compose.yml');
 writePackageJson();
