@@ -68,3 +68,68 @@ describe('rowToSpanRecord jsonb payload round-trip', () => {
     expect(record.output).toBeUndefined();
   });
 });
+
+describe('span usage columns round-trip (OBS-381)', () => {
+  const base = {
+    traceId: 'trace-usage',
+    spanId: 'span-usage',
+    name: 'model call',
+    spanType: SpanType.MODEL_GENERATION,
+    isEvent: false,
+    startedAt: new Date('2026-01-01T00:00:00.000Z'),
+    endedAt: new Date('2026-01-01T00:00:01.000Z'),
+  };
+
+  it('writes usage fields to the row and coerces pg int8 strings back to numbers', () => {
+    const row = spanRecordToRow({
+      ...base,
+      inputTokens: 120,
+      outputTokens: 30,
+      totalTokens: 150,
+      reasoningTokens: 10,
+      cachedTokens: 0,
+      estimatedCost: 0.00123,
+      costUnit: 'usd',
+    }) as Record<string, any>;
+    expect(row).toMatchObject({ inputTokens: 120, cachedTokens: 0, estimatedCost: 0.00123, costUnit: 'usd' });
+
+    // Simulate the driver: bigint (int8) columns arrive as strings, double precision as numbers.
+    const driverRow = {
+      ...row,
+      inputTokens: '120',
+      outputTokens: '30',
+      totalTokens: '150',
+      reasoningTokens: '10',
+      cachedTokens: '0',
+      estimatedCost: 0.00123,
+    };
+    const record = rowToSpanRecord(driverRow);
+    expect(record).toMatchObject({
+      inputTokens: 120,
+      outputTokens: 30,
+      totalTokens: 150,
+      reasoningTokens: 10,
+      cachedTokens: 0,
+      estimatedCost: 0.00123,
+      costUnit: 'usd',
+    });
+    expect(typeof record.inputTokens).toBe('number');
+  });
+
+  it('writes and reads null usage when the span carries none', () => {
+    const row = spanRecordToRow(base) as Record<string, any>;
+    const record = rowToSpanRecord(row);
+    for (const key of [
+      'inputTokens',
+      'outputTokens',
+      'totalTokens',
+      'reasoningTokens',
+      'cachedTokens',
+      'estimatedCost',
+      'costUnit',
+    ] as const) {
+      expect(row[key]).toBeNull();
+      expect(record[key]).toBeNull();
+    }
+  });
+});

@@ -369,6 +369,8 @@ export function allTableDDL(schema: string, mode: TableDDLMode): string[] {
  * callers must check {@link columnExistsSQL} first and only run the statement
  * when the column is genuinely missing. On Postgres 11+ the non-volatile
  * default does not rewrite the table, and the ALTER cascades to partitions.
+ * The span usage columns are nullable with no default, so their ALTER is
+ * metadata-only and pre-existing rows read back as NULL.
  */
 export function additiveColumns(schema: string): { table: string; column: string; ddl: string }[] {
   return [
@@ -381,6 +383,42 @@ export function additiveColumns(schema: string): { table: string; column: string
       table: TABLE_FEEDBACK_EVENTS,
       column: 'reviewStatus',
       ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)} ADD COLUMN IF NOT EXISTS "reviewStatus" text NOT NULL DEFAULT 'needs-review'`,
+    },
+    // Span usage columns (OBS-381 / Decision 10).
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'inputTokens',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "inputTokens" bigint`,
+    },
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'outputTokens',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "outputTokens" bigint`,
+    },
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'totalTokens',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "totalTokens" bigint`,
+    },
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'reasoningTokens',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "reasoningTokens" bigint`,
+    },
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'cachedTokens',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "cachedTokens" bigint`,
+    },
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'estimatedCost',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "estimatedCost" double precision`,
+    },
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'costUnit',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "costUnit" text`,
     },
   ];
 }

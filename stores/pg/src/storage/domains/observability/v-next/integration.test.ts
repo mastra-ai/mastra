@@ -834,6 +834,109 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
+    it('adds span usage columns to a pre-usage schema on init() and does not re-issue the ALTER', async () => {
+      // OBS-381: a deployment created before the usage columns existed must gain
+      // them on the next init() via additiveColumns(), and a subsequent init()
+      // must not ALTER again (columnExistsSQL probe).
+      const USAGE_COLUMNS = [
+        'inputTokens',
+        'outputTokens',
+        'totalTokens',
+        'reasoningTokens',
+        'cachedTokens',
+        'estimatedCost',
+        'costUnit',
+      ];
+      const ddlStatements: string[] = [];
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_usage_migration',
+        wrapClient: client =>
+          wrapClient(client, {
+            none: async (query: string, values?: QueryValues) => {
+              ddlStatements.push(query.replace(/\s+/g, ' ').trim());
+              return client.none(query, values);
+            },
+          }),
+      });
+
+      const isUsageAlter = (sql: string) =>
+        sql.includes('ADD COLUMN IF NOT EXISTS') && USAGE_COLUMNS.some(column => sql.includes(`"${column}"`));
+
+      try {
+        const table = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
+        // Simulate a pre-change deployment: strip the usage columns.
+        await harness.baseClient.none(
+          `ALTER TABLE ${table} ${USAGE_COLUMNS.map(column => `DROP COLUMN "${column}"`).join(', ')}`,
+        );
+
+        ddlStatements.length = 0;
+        await harness.domain.init();
+        expect(ddlStatements.filter(isUsageAlter)).toHaveLength(USAGE_COLUMNS.length);
+
+        const columns = await harness.baseClient.manyOrNone<{
+          column_name: string;
+          data_type: string;
+          is_nullable: string;
+          column_default: string | null;
+        }>(
+          `SELECT column_name, data_type, is_nullable, column_default
+             FROM information_schema.columns
+            WHERE table_schema = $1 AND table_name = $2 AND column_name = ANY($3::text[])
+            ORDER BY column_name`,
+          [harness.schema, TABLE_SPAN_EVENTS, USAGE_COLUMNS],
+        );
+        expect(columns.map(column => column.column_name).sort()).toEqual([...USAGE_COLUMNS].sort());
+        for (const column of columns) {
+          expect(column.is_nullable).toBe('YES');
+          expect(column.column_default).toBeNull();
+        }
+        const dataTypes = Object.fromEntries(columns.map(column => [column.column_name, column.data_type]));
+        expect(dataTypes).toEqual({
+          inputTokens: 'bigint',
+          outputTokens: 'bigint',
+          totalTokens: 'bigint',
+          reasoningTokens: 'bigint',
+          cachedTokens: 'bigint',
+          estimatedCost: 'double precision',
+          costUnit: 'text',
+        });
+
+        ddlStatements.length = 0;
+        await harness.domain.init();
+        expect(ddlStatements.filter(isUsageAlter)).toEqual([]);
+
+        // The migrated table round-trips usage.
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'usage-migration-trace',
+            spanId: 'usage-migration-root',
+            inputTokens: 120,
+            outputTokens: 30,
+            totalTokens: 150,
+            reasoningTokens: 10,
+            cachedTokens: 40,
+            estimatedCost: 0.00123,
+            costUnit: 'usd',
+          }),
+        });
+        const result = await harness.domain.getSpan({
+          traceId: 'usage-migration-trace',
+          spanId: 'usage-migration-root',
+        });
+        expect(result?.span).toMatchObject({
+          inputTokens: 120,
+          outputTokens: 30,
+          totalTokens: 150,
+          reasoningTokens: 10,
+          cachedTokens: 40,
+          estimatedCost: 0.00123,
+          costUnit: 'usd',
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+
     it('init() does not take AccessExclusiveLock on signal parent tables', async () => {
       // Regression for partition-lock-mode (M1): CREATE TABLE ... PARTITION OF
       // takes AccessExclusiveLock on the parent, which blocks every concurrent

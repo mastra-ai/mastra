@@ -50,6 +50,11 @@ function nullableString(value: unknown): string | null {
   return String(value);
 }
 
+/** `pg` returns int8 (bigint) columns as strings; coerce back to a JS number. */
+function nullableNumber(value: unknown): number | null {
+  return value == null ? null : Number(value);
+}
+
 function nullableEntityType(value: unknown): EntityType | null {
   const normalized = nullableString(value);
   if (!normalized) return null;
@@ -256,6 +261,13 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     isPending,
     startedAt: toIsoOrDate(span.startedAt),
     endedAt: toIsoOrDate(endedAt),
+    inputTokens: span.inputTokens ?? null,
+    outputTokens: span.outputTokens ?? null,
+    totalTokens: span.totalTokens ?? null,
+    reasoningTokens: span.reasoningTokens ?? null,
+    cachedTokens: span.cachedTokens ?? null,
+    estimatedCost: span.estimatedCost ?? null,
+    costUnit: span.costUnit ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata as Record<string, unknown> | null),
     metadataRaw: jsonField(metadata),
@@ -297,6 +309,13 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     isEvent: Boolean(row.isEvent),
     startedAt,
     endedAt,
+    inputTokens: nullableNumber(row.inputTokens),
+    outputTokens: nullableNumber(row.outputTokens),
+    totalTokens: nullableNumber(row.totalTokens),
+    reasoningTokens: nullableNumber(row.reasoningTokens),
+    cachedTokens: nullableNumber(row.cachedTokens),
+    estimatedCost: nullableNumber(row.estimatedCost),
+    costUnit: nullableString(row.costUnit),
     tags: normalizeTags(row.tags),
     metadata: (parsedJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,

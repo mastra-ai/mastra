@@ -1,4 +1,13 @@
-type ColumnType = 'bigserial' | 'boolean' | 'double precision' | 'jsonb' | 'text' | 'text[]' | 'timestamptz' | 'xid8';
+type ColumnType =
+  | 'bigint'
+  | 'bigserial'
+  | 'boolean'
+  | 'double precision'
+  | 'jsonb'
+  | 'text'
+  | 'text[]'
+  | 'timestamptz'
+  | 'xid8';
 
 interface SignalColumn {
   name: string;
@@ -81,6 +90,15 @@ export const SPAN_EVENT_COLUMNS = [
   { name: 'isPending', type: 'boolean', defaultSql: 'false' },
   { name: 'startedAt', type: 'timestamptz' },
   { name: 'endedAt', type: 'timestamptz' },
+  // Usage (OBS-381 / Decision 10): promoted from span attributes to columns.
+  // Nullable on every row; the exporter populates them per span type.
+  { name: 'inputTokens', type: 'bigint', nullable: true },
+  { name: 'outputTokens', type: 'bigint', nullable: true },
+  { name: 'totalTokens', type: 'bigint', nullable: true },
+  { name: 'reasoningTokens', type: 'bigint', nullable: true },
+  { name: 'cachedTokens', type: 'bigint', nullable: true },
+  { name: 'estimatedCost', type: 'double precision', nullable: true },
+  { name: 'costUnit', type: 'text', nullable: true },
   { name: 'tags', type: 'text[]', defaultSql: "'{}'" },
   { name: 'metadataSearch', type: 'jsonb', defaultSql: "'{}'::jsonb" },
   { name: 'attributes', type: 'jsonb', nullable: true },
