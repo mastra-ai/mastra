@@ -160,6 +160,38 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
     }, 30_000);
   });
 
+  describe('trimTopic', () => {
+    it('drops entries published before the cutoff and keeps later ones for subscribers', async () => {
+      const ps = createPubSub();
+      const topic = `trim-${randomUUID()}`;
+      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
+      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
+      await new Promise(r => setTimeout(r, 20));
+      const cutoff = new Date();
+      await new Promise(r => setTimeout(r, 20));
+      await ps.publish(topic, makeEvent({ data: { n: 3 } }));
+
+      const inspector = await createInspector();
+      const streamKey = `mastra:topic:${topic}`;
+      expect(await inspector.xLen(streamKey)).toBe(3);
+
+      await ps.trimTopic(topic, { before: cutoff });
+      expect(await inspector.xLen(streamKey)).toBe(1);
+
+      const received: number[] = [];
+      await ps.subscribe(topic, (event, ack) => {
+        received.push((event.data as { n: number }).n);
+        void ack?.();
+      });
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([3]);
+    }, 15_000);
+
+    it('is a no-op for a topic that was never published to', async () => {
+      const ps = createPubSub();
+      await expect(ps.trimTopic(`never-${randomUUID()}`, { before: new Date() })).resolves.toBeUndefined();
+    }, 15_000);
+  });
+
   describe('clearTopic', () => {
     it('deletes the topic stream so finished runs release their memory', async () => {
       const ps = createPubSub();

@@ -234,6 +234,8 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   streamSeq: number;
   lifecycle: AgentThreadRunLifecycle;
   suspensions?: Map<string | undefined, AgentThreadRunSuspension>;
+  /** When the run first registered on the thread (ms epoch); bounds topic trimming. */
+  startedAt: number;
   /** When the record was parked as suspended (ms epoch); drives the TTL sweep. */
   suspendedAt?: number;
   threadId: string;
@@ -2223,6 +2225,7 @@ export class AgentThreadStreamRuntime {
       resourceId,
       streamOptions: {},
       createSubscriberStream,
+      startedAt: Date.now(),
     };
 
     state.threadRunsById.set(runId, record);
@@ -2428,6 +2431,7 @@ export class AgentThreadStreamRuntime {
       streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
+      startedAt: state.threadRunsById.get(output.runId)?.startedAt ?? Date.now(),
       broadcastFinished,
       continuation:
         registrationOptions?.continuation === 'across-suspension'
@@ -2535,6 +2539,7 @@ export class AgentThreadStreamRuntime {
       streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
+      startedAt: state.threadRunsById.get(output.runId)?.startedAt ?? Date.now(),
       broadcastFinished,
       continuation:
         registrationOptions.continuation === 'across-suspension'
@@ -2701,16 +2706,20 @@ export class AgentThreadStreamRuntime {
       // cleanup above stays immediate.
       void Promise.resolve(record.broadcastFinished).then(() => {
         if (isDisabled?.()) return;
-        this.#publish(pubsub, key, {
+        const persisted = record.output.status === 'success';
+        const trimBefore = persisted ? this.#retainedThreadHistoryStart(state, key) : undefined;
+        void this.#publishAndWait(pubsub, key, {
           type: 'run-completed',
           runId: record.runId,
           streamId: record.streamId,
           // Origin-side truth for replay filtering: only a successful run flushed
           // its messages to storage, so only its retained chunks are backed by a
           // persisted message and safe to replay to fresh subscribers.
-          persisted: record.output.status === 'success',
+          persisted,
           status: record.output.status,
-        });
+        })
+          .then(() => (persisted ? this.#trimPersistedThreadHistory(pubsub, key, record, trimBefore) : undefined))
+          .catch(() => {});
         if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
         } else {
@@ -2718,6 +2727,32 @@ export class AgentThreadStreamRuntime {
         }
       });
     });
+  }
+
+  /** Start of the oldest run on the thread that still has to stay in the topic, if any. */
+  #retainedThreadHistoryStart(state: AgentThreadRuntimeState, key: string): number | undefined {
+    let oldest: number | undefined;
+    for (const [runId, record] of state.threadRunsById) {
+      if (state.threadKeysByRunId.get(runId) !== key) continue;
+      oldest = oldest === undefined ? record.startedAt : Math.min(oldest, record.startedAt);
+    }
+    return oldest;
+  }
+
+  /**
+   * Trim a thread topic once a run's messages are in storage: everything before
+   * the oldest still-retained (active or suspended) run, or the whole backlog
+   * when the thread is idle. Without storage the topic is the only copy, so it stays.
+   */
+  async #trimPersistedThreadHistory(
+    pubsub: PubSub | undefined,
+    key: string,
+    record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions'>,
+    retainedStart: number | undefined,
+  ) {
+    const memory = await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext });
+    if (!memory) return;
+    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), { before: new Date(retainedStart ?? Date.now()) });
   }
 
   async #drainPendingSignals(
@@ -3488,6 +3523,7 @@ export class AgentThreadStreamRuntime {
         runId,
         streamId,
         streamSeq,
+        startedAt: Date.now(),
         lifecycle: 'running',
         threadId: options.threadId,
         resourceId: options.resourceId,

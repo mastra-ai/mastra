@@ -753,6 +753,25 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
+   * Remove entries published before `options.before` via `XTRIM MINID`. Stream
+   * IDs are Redis-server publish times, so the cutoff maps directly onto them.
+   * Consumer groups stay intact; readers simply never see the trimmed prefix.
+   */
+  async trimTopic(topic: string, options: { before: Date }): Promise<void> {
+    if (this.#closed) return;
+    const minId = `${Math.max(0, Math.floor(options.before.getTime()))}-0`;
+    try {
+      await this.#ensureWriterConnected();
+      await this.#writeClient.xTrim(this.#streamKey(topic), 'MINID', minId);
+    } catch (err) {
+      this.#logger?.warn?.('redis-streams: trimTopic failed', {
+        topic,
+        err: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  /**
    * Lease key used in Redis. Distinct prefix from streams so leases and
    * streams can't collide on key namespace.
    */
