@@ -167,7 +167,7 @@ describe('ModelSelectionProcessor', () => {
       });
       const processor = new ModelSelectionProcessor({
         classifier,
-        select: ({ complexity, sensitive }: any) => {
+        select: ({ complexity, sensitive }) => {
           // Sensitive requests stay on the configured model even when trivial.
           if (sensitive.probability >= 0.3) return undefined;
           return complexity.choice === 'trivial' ? 'openai/gpt-4o-mini' : undefined;
@@ -184,7 +184,7 @@ describe('ModelSelectionProcessor', () => {
       });
       const processor = new ModelSelectionProcessor({
         classifier,
-        select: ({ complexity, sensitive }: any) => {
+        select: ({ complexity, sensitive }) => {
           if (sensitive.probability >= 0.3) return undefined;
           return complexity.choice === 'trivial' ? 'openai/gpt-4o-mini' : undefined;
         },
@@ -379,8 +379,15 @@ describe('ModelSelectionProcessor', () => {
     const { classifier } = stubClassifier({ complexity: { choice: 'trivial' } });
     const processor = choicesFrom(classifier, {});
 
-    expect(await route(processor, 'what is 2+2', 0)).toEqual({ model: 'openai/gpt-4o-mini' });
-    expect(await route(processor, 'what is 2+2', 3)).toEqual({ model: 'openai/gpt-4o-mini' });
+    const state: Record<string, unknown> = {};
+    const configured = { modelId: 'configured' };
+    await processor.processInput({ messages: [userMessage('what is 2+2')], systemMessages: [], state } as any);
+    expect(processor.processInputStep({ stepNumber: 0, state, model: configured } as any)).toEqual({
+      model: 'openai/gpt-4o-mini',
+    });
+    expect(processor.processInputStep({ stepNumber: 3, state, model: configured } as any)).toEqual({
+      model: 'openai/gpt-4o-mini',
+    });
   });
 
   it("only swaps the opening call under scope 'first-step'", async () => {

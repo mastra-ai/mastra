@@ -83,10 +83,10 @@ By default the decision applies to every step of the run. Set `scope: 'first-ste
   },
   {
     name: 'model',
-    type: "ClassifierOptions['model']",
+    type: 'EvaluationModelV4',
     required: false,
     description:
-      'The evaluation model used to make the routing decision, with the same type as the Classifier model option. Required with choices, and unrelated to the models being routed to.',
+      'The evaluation model used to make the routing decision, the same type as the Classifier model option. A provider/model string is not supported. Required with choices, and unrelated to the models being routed to.',
   },
   {
     name: 'instructions',
@@ -169,7 +169,7 @@ new ModelSelectionProcessor({
 })
 ```
 
-The decision carries the model that was applied, the criterion that was chosen, the confidence in that choice, and, when no model was applied, why. With `select`, the decision reports only `model`, which is absent when `select` returns `undefined`:
+The decision carries the model that was applied, the criterion that was chosen, the confidence in that choice, and, when no model was applied, why. With `select`, the decision never includes `choice` or `probability`. It includes `abstained: 'no-text'` or `abstained: 'error'` in those cases, and has neither `model` nor `abstained` when `select` returns `undefined`:
 
 <PropertiesTable
   content={[
@@ -183,7 +183,7 @@ The decision carries the model that was applied, the criterion that was chosen, 
     name: 'choice',
     type: 'string',
     required: false,
-    description: 'The choice the classifier selected. Absent when the classifier failed and with select.',
+    description: 'The choice the classifier selected. Absent when the processor abstained and with select.',
   },
   {
     name: 'probability',
@@ -196,7 +196,7 @@ The decision carries the model that was applied, the criterion that was chosen, 
     name: 'abstained',
     type: "'below-threshold' | 'no-model-for-choice' | 'no-text' | 'error'",
     required: false,
-    description: 'Why no model was applied. Absent on a successful routing decision and with select.',
+    description: 'Why no model was applied. Absent on a successful routing decision and when select returns undefined.',
   },
 ]}
 />

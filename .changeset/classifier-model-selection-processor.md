@@ -2,14 +2,15 @@
 '@mastra/core': minor
 ---
 
-Add `ModelSelectionProcessor` for classifier-backed model routing. It classifies the incoming request once and overrides which model serves the run, so a capable model stays configured as the default while cheap requests get downgraded.
+Added `ModelSelectionProcessor`, which picks the model for each request with a classifier. Keep a capable model as the agent's default and let simple requests run on a cheaper one.
 
-Describe each model alongside the requests it should handle, and the processor builds the classifier for you:
+Describe each model and the requests it should handle. The processor builds the classifier for you:
 
 ```ts
 import { Agent } from '@mastra/core/agent';
 import { ModelSelectionProcessor } from '@mastra/core/processors';
 
+// `model` is the evaluation model that makes the decision (an AI SDK EvaluationModelV4, as used by Classifier).
 new Agent({
   name: 'support-agent',
   model: 'openai/gpt-5.6-sol',
@@ -20,14 +21,19 @@ new Agent({
         { model: 'openai/gpt-5-mini', criteria: 'Answerable in one or two sentences with no reasoning steps' },
         { model: 'openai/gpt-5.6-sol', criteria: 'Requires multi-step reasoning or careful judgment' },
       ],
-      onDecision: decision => logger.info('model routing', decision),
+      onDecision: decision => console.log('model selection', decision),
     }),
   ],
 });
 ```
 
-`onDecision` reports which model was chosen, the confidence behind it, and why the router abstained when it did.
+To use a `Classifier` you already have, pass it as `classifier` and map its typed answers to a model with `select`.
 
-Routing isn't guaranteed to save money. Prompt caches aren't shared between models, so switching models pays full price for the conversation again, and a cheaper model can take more steps. Measure total cost and quality on your own traffic before enabling it.
+Routing doesn't always save money. Models don't share prompt caches, and a cheaper model can take more steps. Measure cost and quality on your own traffic first.
 
-Pass a `classifier` you already own instead of `choices` to route on an existing `Classifier`, with `select` mapping its answers to a model. Routing applies to the whole run by default; `scope: 'first-step'` routes only the opening call. Routing fails open to the agent’s configured model on classifier error, agent fallback models still take over if the selected model fails, and `minProbability` fails closed when the evaluation model returns no distribution for a choice answer.
+**Behavior**
+
+- The chosen model serves the whole run. Set `scope: 'first-step'` to change only the first call.
+- If the classifier fails, the agent's configured model is used.
+- If the chosen model fails, the agent's fallback models take over.
+- With `minProbability` set, the configured model is used when the confidence is too low or missing.

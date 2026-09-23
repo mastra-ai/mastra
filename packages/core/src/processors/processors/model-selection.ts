@@ -51,9 +51,9 @@ interface ModelSelectionCommonOptions {
   /** Identifier used in errors and logs. Defaults to `model-selection`. */
   id?: string;
   /**
-   * Called once per request with the decision, including when the router abstains.
+   * Called once per request with the decision, including when the processor abstains.
    *
-   * The router is otherwise silent, so this is how a routing decision becomes visible to
+   * The processor is otherwise silent, so this is how a routing decision becomes visible to
    * logs and metrics. It must not throw; errors from it are swallowed so that logging
    * cannot fail a request.
    */
@@ -75,11 +75,6 @@ interface ModelSelectionCommonOptions {
    * steps to escape a wrong decision, and accept that it saves comparatively little.
    */
   scope?: 'run' | 'first-step';
-}
-
-interface ModelSelectionBaseOptions extends ModelSelectionCommonOptions {
-  /** A configured Classifier, or the id of one registered with Mastra. */
-  classifier: Classifier<any> | string;
 }
 
 /**
@@ -114,7 +109,7 @@ export interface ModelSelectionChoicesOptions extends ModelSelectionCommonOption
   /**
    * Minimum confidence in the selected choice before its model is applied.
    *
-   * Omit this to route on the selected choice alone. Set it and the router abstains when
+   * Omit this to route on the selected choice alone. Set it and the processor abstains when
    * confidence is below the threshold, and also when the evaluation model returns no
    * distribution at all, because a threshold that cannot be evaluated must not silently pass.
    */
@@ -126,15 +121,30 @@ export interface ModelSelectionChoicesOptions extends ModelSelectionCommonOption
 /**
  * Route on arbitrary policy across every configured question.
  */
-export interface ModelSelectionSelectOptions<Q extends ClassifierQuestions> extends ModelSelectionBaseOptions {
+export interface ModelSelectionSelectOptions<Q extends ClassifierQuestions> extends ModelSelectionCommonOptions {
+  /** A configured Classifier, or the id of one registered with Mastra. */
+  classifier: Classifier<Q> | string;
   /** Receives all typed answers from a single evaluation and returns a model, or `undefined` to abstain. */
   select: ModelSelectionSelect<Q>;
   minProbability?: never;
 }
 
+/** The `select` form with a `Classifier` instance, whose questions type the answers. */
+export interface ModelSelectionInstanceOptions<Q extends ClassifierQuestions> extends ModelSelectionSelectOptions<Q> {
+  classifier: Classifier<Q>;
+}
+
+/** The `select` form with the id of a classifier registered with Mastra. */
+export interface ModelSelectionRegisteredOptions<
+  Q extends ClassifierQuestions = ClassifierQuestions,
+> extends ModelSelectionSelectOptions<Q> {
+  classifier: string;
+}
+
 export type ModelSelectionProcessorOptions<Q extends ClassifierQuestions = ClassifierQuestions> =
   | ModelSelectionChoicesOptions
-  | ModelSelectionSelectOptions<Q>;
+  | ModelSelectionInstanceOptions<Q>
+  | ModelSelectionRegisteredOptions<Q>;
 
 /** The question name used by the classifier built from `choices`. */
 const CHOICES_QUESTION = 'model';
@@ -174,7 +184,7 @@ type SelectionState = {
  * Do not attach two model selection processors to the same agent. Both would return a model for the same
  * step and the last processor in the chain would silently win.
  */
-export class ModelSelectionProcessor<Q extends ClassifierQuestions = ClassifierQuestions> implements Processor {
+export class ModelSelectionProcessor<const Q extends ClassifierQuestions = ClassifierQuestions> implements Processor {
   readonly name = 'model-selection';
 
   readonly id: string;
@@ -189,6 +199,9 @@ export class ModelSelectionProcessor<Q extends ClassifierQuestions = ClassifierQ
   private select?: ModelSelectionSelect<Q>;
   private mastra?: Mastra;
 
+  constructor(options: ModelSelectionChoicesOptions);
+  constructor(options: ModelSelectionInstanceOptions<Q>);
+  constructor(options: ModelSelectionRegisteredOptions<Q>);
   constructor(options: ModelSelectionProcessorOptions<Q>) {
     this.id = options.id ?? 'model-selection';
     this.providerOptions = options.providerOptions;
