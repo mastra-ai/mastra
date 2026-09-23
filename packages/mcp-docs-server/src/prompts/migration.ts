@@ -1,4 +1,4 @@
-import type { MCPServerPrompts, Prompt, PromptMessage } from '@mastra/mcp';
+import type { Prompt, PromptMessage } from '@mastra/mcp';
 
 /**
  * Migration prompts provide guided workflows for upgrading Mastra versions.
@@ -26,12 +26,22 @@ const migrationPrompts: Prompt[] = [
 ];
 
 /**
- * Prompt messages callback that generates contextual migration guidance
+ * Prompt callbacks that generate contextual migration guidance.
+ *
+ * Typed by what the callbacks read rather than by one package's
+ * `MCPServerPrompts`, so the same object registers on both the 2026-07-28
+ * server and the legacy 1.x server.
  */
-export const migrationPromptMessages: MCPServerPrompts = {
-  listPrompts: async () => migrationPrompts,
+export const migrationPromptMessages = {
+  listPrompts: async (): Promise<Prompt[]> => migrationPrompts,
 
-  getPromptMessages: async ({ name, args }): Promise<PromptMessage[]> => {
+  getPromptMessages: async ({
+    name,
+    args,
+  }: {
+    name: string;
+    args?: Record<string, unknown>;
+  }): Promise<PromptMessage[]> => {
     const prompt = migrationPrompts.find(p => p.name === name);
     if (!prompt) {
       throw new Error(`Prompt not found: ${name}`);

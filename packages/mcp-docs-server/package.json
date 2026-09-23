@@ -34,6 +34,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
+    "@mastra/mcp-legacy": "npm:@mastra/mcp@^1.18.0",
     "local-pkg": "^1.1.2",
     "zod": "catalog:"
   },
