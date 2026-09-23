@@ -8,9 +8,15 @@ import { MastraWorker } from '../worker';
 import type { WorkerDeps, WorkerStopOptions } from '../worker';
 
 const DEFAULT_GROUP = 'mastra-orchestration';
+const DEFAULT_LEASE_RENEW_INTERVAL_MS = 10_000;
 
 export interface OrchestrationWorkerConfig {
   group?: string;
+  /**
+   * How often (in ms) to renew an in-flight event's delivery lease while it is
+   * being handled, for PubSub backends that support it. Defaults to 10000.
+   */
+  leaseRenewIntervalMs?: number;
 }
 
 /**
@@ -81,7 +87,7 @@ export class OrchestrationWorker extends MastraWorker {
     this.#transport = new PullTransport({ pubsub: this.deps.pubsub, group, logger: this.deps.logger });
 
     await this.#transport.start({
-      route: (event, ack, nack) => this.#processEvent(event, ack, nack),
+      route: (event, ack, nack, extend) => this.#processEvent(event, ack, nack, extend),
     });
 
     this.#running = true;
@@ -104,7 +110,12 @@ export class OrchestrationWorker extends MastraWorker {
     return this.#running;
   }
 
-  async #processEvent(event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>): Promise<void> {
+  async #processEvent(
+    event: Event,
+    ack?: () => Promise<void>,
+    nack?: () => Promise<void>,
+    extend?: () => Promise<void>,
+  ): Promise<void> {
     if (!this.#processor) {
       throw new Error('OrchestrationWorker not initialized');
     }
@@ -113,7 +124,21 @@ export class OrchestrationWorker extends MastraWorker {
     // because it carries the standalone-worker step-execution strategy
     // (HttpRemoteStrategy when MASTRA_STEP_EXECUTION_URL is set), which the
     // shared in-process handler doesn't have.
-    const result = await this.#processor.handle(event);
+    // Keep the delivery's lease alive while the handler runs so the broker
+    // does not redeliver a long-running step to another consumer (#24589).
+    const heartbeat = extend
+      ? setInterval(() => {
+          extend().catch(e => {
+            this.deps?.logger?.error('OrchestrationWorker: error extending event lease', { error: e });
+          });
+        }, this.#config.leaseRenewIntervalMs ?? DEFAULT_LEASE_RENEW_INTERVAL_MS)
+      : undefined;
+    let result: Awaited<ReturnType<WorkflowEventProcessor['handle']>>;
+    try {
+      result = await this.#processor.handle(event);
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+    }
     if (result.ok) {
       try {
         await ack?.();
