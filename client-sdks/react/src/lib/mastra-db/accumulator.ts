@@ -337,11 +337,15 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
-  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload ?? {};
+  // writer.custom events carry `data` and no payload: nothing to fold into a step.
+  const stepId = chunk.payload?.id;
+  if (stepId === undefined) return previous;
+
+  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload;
   const newSteps = {
     ...previous.steps,
-    [chunk.payload.id]: {
-      ...previous.steps[chunk.payload.id],
+    [stepId]: {
+      ...previous.steps[stepId],
       ...newPayload,
     },
   };
@@ -376,8 +380,8 @@ export const mapWorkflowStreamChunkToWatchResult = (
       ...previous,
       steps: {
         ...previous.steps,
-        [chunk.payload.id]: {
-          ...previous.steps[chunk.payload.id],
+        [stepId]: {
+          ...previous.steps[stepId],
           foreachProgress: {
             completedCount: chunk.payload.completedCount,
             totalCount: chunk.payload.totalCount,
