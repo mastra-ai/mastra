@@ -298,7 +298,7 @@ describe('QUERY_TRACES', () => {
   });
 
   it('preserves the shared canonical semantics and fixed response projections', async () => {
-    const { mastra, observabilityStore } = createHarness();
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-root-duration']);
     observabilityStore.queryTraces.mockImplementation(plan => evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, plan));
 
     for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
@@ -479,6 +479,72 @@ describe('QUERY_TRACES', () => {
     });
   });
 
+  it('returns 501 before calling an older store for root duration predicates', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query']);
+    const error = await captureHttpException(
+      QUERY_TRACES.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          where: {
+            op: 'not',
+            arg: {
+              op: 'or',
+              args: [
+                {
+                  op: 'and',
+                  args: [
+                    { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                    { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+                  ],
+                },
+                { spans: { some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } } },
+              ],
+            },
+          },
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'Root duration predicates are not supported by the configured observability store',
+    });
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
+  it('does not require the root duration capability for span duration predicates', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query']);
+
+    await QUERY_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: {
+          spans: {
+            some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+          },
+        },
+      }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledOnce();
+  });
+
+  it('passes root duration predicates to stores that advertise support', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-root-duration']);
+
+    await QUERY_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+      }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { type: 'comparison', field: 'durationMs', operator: 'gt', value: 5000 } }),
+    );
+  });
+
   it('returns 501 when the request-available store lacks trace-query support', async () => {
     const { mastra, observabilityStore } = createHarness([]);
     const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE })));
@@ -590,6 +656,49 @@ describe('trace-query discovery routes', () => {
       search: undefined,
       limit: 25,
     });
+  });
+
+  it('hides root duration discovery from stores without the capability', async () => {
+    const { mastra } = createHarness(['trace-query', 'trace-query-discovery']);
+    const request = getTraceQueryFieldsArgsSchema.parse({
+      timeRange: TIME_RANGE,
+      predicateScope: 'trace',
+      search: 'duration',
+    });
+
+    const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
+
+    expect(response.canonicalFields).not.toContainEqual(expect.objectContaining({ path: 'durationMs' }));
+  });
+
+  it('discovers root duration for stores that advertise the capability', async () => {
+    const { mastra } = createHarness(['trace-query', 'trace-query-discovery', 'trace-query-root-duration']);
+    const request = getTraceQueryFieldsArgsSchema.parse({
+      timeRange: TIME_RANGE,
+      predicateScope: 'trace',
+      search: 'duration',
+    });
+
+    const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
+
+    expect(response.canonicalFields).toContainEqual(
+      expect.objectContaining({ path: 'durationMs', valueKind: 'number', valueSuggestions: false }),
+    );
+  });
+
+  it('keeps span duration discovery independent of the root capability', async () => {
+    const { mastra } = createHarness(['trace-query', 'trace-query-discovery']);
+    const request = getTraceQueryFieldsArgsSchema.parse({
+      timeRange: TIME_RANGE,
+      predicateScope: 'spans',
+      search: 'duration',
+    });
+
+    const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
+
+    expect(response.canonicalFields).toContainEqual(
+      expect.objectContaining({ path: 'durationMs', valueKind: 'number' }),
+    );
   });
 
   it('returns empty discovery results successfully', async () => {

@@ -238,10 +238,25 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
-      return ['metrics', 'logs', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
+      return [
+        'metrics',
+        'logs',
+        'trace-query',
+        'trace-query-root-duration',
+        'trace-query-discovery',
+        'thread-query',
+      ] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
+    return [
+      'metrics',
+      'logs',
+      'delta-polling',
+      'trace-query',
+      'trace-query-root-duration',
+      'trace-query-discovery',
+      'thread-query',
+    ] as const;
   }
 
   // Tracing

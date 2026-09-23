@@ -116,6 +116,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'logs',
         'delta-polling',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
       ]);
@@ -126,6 +127,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'metrics',
         'logs',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
       ]);
@@ -151,6 +153,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'logs',
         'delta-polling',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
       ]);
@@ -160,6 +163,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'metrics',
         'logs',
         'trace-query',
+        'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
       ]);

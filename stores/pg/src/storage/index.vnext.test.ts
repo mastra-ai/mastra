@@ -108,6 +108,7 @@ describe('PostgresStoreVNext', () => {
           'logs',
           'delta-polling',
           'trace-query',
+          'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
         ]);
@@ -117,6 +118,7 @@ describe('PostgresStoreVNext', () => {
           'metrics',
           'logs',
           'trace-query',
+          'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
         ]);

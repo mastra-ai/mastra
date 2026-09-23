@@ -1,6 +1,11 @@
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
-import type { MastraCompositeStore, ObservabilityStorage, ScoresStorage } from '@mastra/core/storage';
+import type {
+  MastraCompositeStore,
+  ObservabilityStorage,
+  ScoresStorage,
+  TrustedTraceQueryPredicate,
+} from '@mastra/core/storage';
 import * as coreStorage from '@mastra/core/storage';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
@@ -17,6 +22,7 @@ export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling'
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
+const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 
@@ -90,6 +96,29 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
 
   throw new HTTPException(501, {
     message: 'Advanced trace queries are not supported by the configured observability store',
+  });
+}
+
+function usesRootDuration(predicate: TrustedTraceQueryPredicate | undefined): boolean {
+  if (!predicate) return false;
+  if (predicate.type === 'boolean') return predicate.args.some(usesRootDuration);
+  if (predicate.type === 'not') return usesRootDuration(predicate.arg);
+  if (predicate.type === 'relation') return false;
+  return predicate.field === 'durationMs';
+}
+
+export function supportsObservabilityTraceQueryRootDuration(observabilityStore: ObservabilityStorage) {
+  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE) === true;
+}
+
+export function assertObservabilityTraceQueryRootDurationSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryPredicate | undefined,
+) {
+  if (!usesRootDuration(predicate) || supportsObservabilityTraceQueryRootDuration(observabilityStore)) return;
+
+  throw new HTTPException(501, {
+    message: 'Root duration predicates are not supported by the configured observability store',
   });
 }
 
