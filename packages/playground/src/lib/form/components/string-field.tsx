@@ -4,7 +4,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import React from 'react';
 
 export const StringField: React.FC<AutoFormFieldProps> = ({ inputProps, error, field, id }) => {
-  const { key, className, ...props } = inputProps;
+  const { key: _key, className, ...props } = inputProps;
 
   return (
     <Textarea

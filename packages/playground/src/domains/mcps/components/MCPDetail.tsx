@@ -15,6 +15,7 @@ import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useEffect, useRef, useState } from 'react';
+import { z } from 'zod';
 import { useMCPServerTools } from '../hooks/useMCPServerTools';
 import { ToolIconMap } from '@/domains/tools';
 import { useLinkComponent } from '@/lib/framework';
@@ -186,12 +187,17 @@ const McpToolList = ({ server }: { server: McpServerInfo }) => {
 };
 
 /** Check if a tool has an MCP App UI resource */
-function hasAppUi(meta?: Record<string, unknown>): boolean {
-  if (!meta) return false;
-  const ui = meta.ui as { resourceUri?: string } | undefined;
-  if (typeof ui?.resourceUri === 'string' && ui.resourceUri.startsWith('ui://')) return true;
-  if (typeof meta['ui/resourceUri'] === 'string' && meta['ui/resourceUri'].startsWith('ui://')) return true;
-  return false;
+const appUiMetaSchema = z.object({
+  ui: z.object({ resourceUri: z.string().optional() }).optional(),
+  'ui/resourceUri': z.string().optional(),
+});
+
+function hasAppUi(meta: McpToolInfo['_meta']): boolean {
+  const result = appUiMetaSchema.safeParse(meta);
+  if (!result.success) return false;
+  return Boolean(
+    result.data.ui?.resourceUri?.startsWith('ui://') || result.data['ui/resourceUri']?.startsWith('ui://'),
+  );
 }
 
 const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) => {

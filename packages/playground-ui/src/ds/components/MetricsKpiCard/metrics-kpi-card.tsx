@@ -6,9 +6,11 @@ import { MetricsKpiCardNoChange } from './metrics-kpi-card-no-change';
 import { MetricsKpiCardNoData } from './metrics-kpi-card-no-data';
 import { MetricsKpiCardRoot } from './metrics-kpi-card-root';
 import { MetricsKpiCardValue } from './metrics-kpi-card-value';
+import { MetricsKpiCardValueRow } from './metrics-kpi-card-value-row';
 
 export const MetricsKpiCard = Object.assign(MetricsKpiCardRoot, {
   Label: MetricsKpiCardLabel,
+  ValueRow: MetricsKpiCardValueRow,
   Value: MetricsKpiCardValue,
   Change: MetricsKpiCardChange,
   NoChange: MetricsKpiCardNoChange,

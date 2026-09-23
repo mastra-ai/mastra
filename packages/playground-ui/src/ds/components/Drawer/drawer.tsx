@@ -177,8 +177,6 @@ const DrawerContext = React.createContext<DrawerContextValue>({
 
 const useDrawerContext = () => React.useContext(DrawerContext);
 
-export const useDrawerSide = () => useDrawerContext().side;
-
 const resolveDrawerViewportLayout = (
   variant: DrawerVariant,
   overlay: NonNullable<DrawerBackdropVariantsProps['overlay']>,
@@ -269,7 +267,6 @@ const DrawerProvider = DrawerPrimitive.Provider;
 const DrawerIndent = DrawerPrimitive.Indent;
 const DrawerIndentBackground = DrawerPrimitive.IndentBackground;
 const DrawerSwipeArea = DrawerPrimitive.SwipeArea;
-const createDrawerHandle = DrawerPrimitive.createHandle;
 // Inner region where pointer drags select text / scroll instead of swiping the drawer closed.
 const DrawerInteractive = DrawerPrimitive.Content;
 
@@ -492,7 +489,6 @@ export {
   DrawerIndentBackground,
   DrawerSwipeArea,
   DrawerInteractive,
-  createDrawerHandle,
 };
 
 export type {

@@ -909,6 +909,31 @@ describe('InngestAgent parity surface', () => {
 
       sendSpy.mockRestore();
     });
+
+    it('approveToolCall on a forked agent dispatches the Inngest resume event', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-forked-approve', {
+        value: {},
+        context: {},
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+      });
+      const fork = (durableAgent as any).__fork();
+      // The fork re-wraps the original InngestPubSub; isolate it like makeIsolatedAgent does.
+      (fork.pubsub as any).inner = new EventEmitterPubSub();
+      const sendSpy = stubInngestSend();
+      const runId = 'resume-forked-approve-run';
+
+      await fork.approveToolCall({ runId });
+      try {
+        expect(sendSpy).toHaveBeenCalledTimes(1);
+        const sentEvent = sendSpy.mock.calls[0]?.[0];
+        expect(sentEvent?.data.resume.steps).toEqual(['agentic-loop']);
+        expect(sentEvent?.data.resume.resumePayload).toEqual({ approved: true });
+      } finally {
+        globalRunRegistry.get(runId)?.cleanup?.();
+        sendSpy.mockRestore();
+      }
+    });
   });
 
   it('wakes an idle thread from sendSignal() through the durable stream, not the wrapped agent', async () => {
@@ -1250,6 +1275,119 @@ describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
       expect(persistenceWarnings).toHaveLength(0);
     } finally {
       warnSpy.mockRestore();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #24736: __fork, resumeStream and tool approval must stay on the durable path
+// ---------------------------------------------------------------------------
+describe('InngestAgent fork and resume overrides (#24736)', () => {
+  const inngest = new Inngest({
+    id: 'fork-resume-tests',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeDurable(id: string) {
+    const agent = new Agent({ id, name: id, instructions: 'Original', model: createMockModel() as any });
+    return createInngestAgent({ agent, inngest });
+  }
+
+  function spyResume(durableAgent: ReturnType<typeof makeDurable>) {
+    const output = { marker: 'output' };
+    const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
+    const resumeGenerateSpy = vi.spyOn(durableAgent, 'resumeGenerate').mockResolvedValue({ text: 'done' } as any);
+    return { output, resumeSpy, resumeGenerateSpy };
+  }
+
+  function closeOnSuspendSet(options: object) {
+    return Object.getOwnPropertySymbols(options).some(
+      sym => sym.description === 'mastra.durable.inngest.closeOnSuspend' && (options as any)[sym] === true,
+    );
+  }
+
+  it('resumeStream routes through resume() with close-on-suspend', async () => {
+    const durableAgent = makeDurable('resume-stream-route');
+    const { output, resumeSpy } = spyResume(durableAgent);
+
+    const result = await durableAgent.resumeStream({ approved: true }, { runId: 'r1', maxSteps: 3 });
+
+    expect(result).toBe(output);
+    expect(resumeSpy).toHaveBeenCalledTimes(1);
+    const [runId, data, opts] = resumeSpy.mock.calls[0]!;
+    expect(runId).toBe('r1');
+    expect(data).toEqual({ approved: true });
+    expect(opts).toMatchObject({ maxSteps: 3 });
+    expect(opts).not.toHaveProperty('runId');
+    expect(closeOnSuspendSet(opts as object)).toBe(true);
+  });
+
+  it('resumeStream throws without a runId', async () => {
+    const durableAgent = makeDurable('resume-stream-no-run');
+    await expect(durableAgent.resumeStream({ approved: true })).rejects.toThrow(/requires a runId/);
+  });
+
+  it('approveToolCall / declineToolCall resume the durable run', async () => {
+    const durableAgent = makeDurable('approve-decline-route');
+    const { resumeSpy } = spyResume(durableAgent);
+
+    await durableAgent.approveToolCall({ runId: 'r1', toolCallId: 't1' });
+    await durableAgent.declineToolCall({ runId: 'r2', toolCallId: 't2', reason: 'nope' });
+
+    expect(resumeSpy.mock.calls[0]![0]).toBe('r1');
+    expect(resumeSpy.mock.calls[0]![1]).toEqual({ approved: true });
+    expect(resumeSpy.mock.calls[0]![2]).toMatchObject({ toolCallId: 't1' });
+    expect(resumeSpy.mock.calls[1]![0]).toBe('r2');
+    expect(resumeSpy.mock.calls[1]![1]).toEqual({ approved: false, reason: 'nope' });
+    expect(resumeSpy.mock.calls[1]![2]).not.toHaveProperty('reason');
+  });
+
+  it('approveToolCallGenerate / declineToolCallGenerate route through resumeGenerate()', async () => {
+    const durableAgent = makeDurable('approve-decline-generate');
+    const { resumeGenerateSpy } = spyResume(durableAgent);
+
+    await durableAgent.approveToolCallGenerate({ runId: 'r1', toolCallId: 't1' });
+    await durableAgent.declineToolCallGenerate({ runId: 'r2', reason: 'no' });
+
+    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(1, 'r1', { approved: true }, { toolCallId: 't1' });
+    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(2, 'r2', { approved: false, reason: 'no' }, {});
+  });
+
+  it('__fork returns an independent InngestAgent', () => {
+    const durableAgent = makeDurable('fork-identity');
+    const fork = durableAgent.__fork();
+
+    expect(isInngestAgent(fork)).toBe(true);
+    expect(fork).not.toBe(durableAgent);
+    expect(fork.id).toBe(durableAgent.id);
+    expect(fork.agent).not.toBe(durableAgent.agent);
+
+    fork.__updateInstructions('Overridden');
+    expect(fork.agent.getInstructions()).toBe('Overridden');
+    expect(durableAgent.agent.getInstructions()).toBe('Original');
+  });
+
+  it('__fork keeps the registered Mastra instance and dispatches streams to Inngest', async () => {
+    const durableAgent = makeDurable('fork-dispatch');
+    const mastra = new Mastra({ agents: { forkDispatch: durableAgent as any }, logger: false });
+    void mastra;
+
+    const fork = durableAgent.__fork();
+    (fork.pubsub as any).inner = new EventEmitterPubSub();
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const doStream = (fork.agent as any).model?.doStream;
+
+    const result = await fork.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      const deadline = Date.now() + 1_000;
+      while (!sendSpy.mock.calls.length && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      expect(sendSpy).toHaveBeenCalled();
+      if (doStream) expect(doStream).not.toHaveBeenCalled();
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
     }
   });
 });

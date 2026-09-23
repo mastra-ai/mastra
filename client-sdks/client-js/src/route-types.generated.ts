@@ -13300,7 +13300,7 @@ export type GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_PathP
   workspaceId: string;
   /** Skill name identifier */
   skillName: string;
-  /** Reference file path (URL encoded) */
+  /** Reference file path */
   referencePath: string;
 };
 
