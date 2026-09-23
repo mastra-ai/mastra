@@ -589,7 +589,7 @@ describe('planTraceQuery', () => {
     );
   });
 
-  it('plans recursive top-level string metadata predicates', () => {
+  it('normalizes top-level and nested metadata dot paths to trusted segments', () => {
     const plan = planTraceQuery(
       parsed({
         ...baseRequest,
@@ -597,10 +597,10 @@ describe('planTraceQuery', () => {
           op: 'and',
           args: [
             { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal: 'message-1' } },
-            { op: 'ne', left: { path: 'metadata.actorRole' }, right: { literal: 'assistant' } },
-            { op: 'in', value: { path: 'metadata.protocolVersion' }, set: ['v1', 'v2'] },
+            { op: 'ne', left: { path: 'metadata.actor.role' }, right: { literal: 'assistant' } },
+            { op: 'in', value: { path: 'metadata.protocol.version' }, set: ['v1', 'v2'] },
             { op: 'notIn', value: { path: 'metadata.temporalRunId' }, set: ['run-2'] },
-            { op: 'exists', path: 'metadata.parentMessageId' },
+            { op: 'exists', path: 'metadata.parent.messageId' },
             { op: 'not', arg: { op: 'notExists', path: 'metadata.externalTraceId' } },
           ],
         },
@@ -611,17 +611,20 @@ describe('planTraceQuery', () => {
       type: 'boolean',
       operator: 'and',
       args: [
-        { type: 'comparison', field: 'metadata.messageId', operator: 'eq', value: 'message-1' },
-        { type: 'comparison', field: 'metadata.actorRole', operator: 'ne', value: 'assistant' },
-        { type: 'membership', field: 'metadata.protocolVersion', operator: 'in', values: ['v1', 'v2'] },
-        { type: 'membership', field: 'metadata.temporalRunId', operator: 'notIn', values: ['run-2'] },
-        { type: 'presence', field: 'metadata.parentMessageId', operator: 'exists' },
-        { type: 'not', arg: { type: 'presence', field: 'metadata.externalTraceId', operator: 'notExists' } },
+        { type: 'comparison', field: ['metadata', 'messageId'], operator: 'eq', value: 'message-1' },
+        { type: 'comparison', field: ['metadata', 'actor', 'role'], operator: 'ne', value: 'assistant' },
+        { type: 'membership', field: ['metadata', 'protocol', 'version'], operator: 'in', values: ['v1', 'v2'] },
+        { type: 'membership', field: ['metadata', 'temporalRunId'], operator: 'notIn', values: ['run-2'] },
+        { type: 'presence', field: ['metadata', 'parent', 'messageId'], operator: 'exists' },
+        {
+          type: 'not',
+          arg: { type: 'presence', field: ['metadata', 'externalTraceId'], operator: 'notExists' },
+        },
       ],
     });
   });
 
-  it('preserves leading and trailing whitespace in metadata keys', () => {
+  it('preserves leading and trailing whitespace in metadata path segments', () => {
     const direct = planTraceQuery(
       parsed({
         ...baseRequest,
@@ -630,7 +633,7 @@ describe('planTraceQuery', () => {
     );
     expect(direct.where).toEqual({
       type: 'comparison',
-      field: 'metadata. actorRole',
+      field: ['metadata', ' actorRole'],
       operator: 'eq',
       value: 'leading-key',
     });
@@ -643,9 +646,88 @@ describe('planTraceQuery', () => {
     );
     expect(templated.where).toEqual({
       type: 'comparison',
-      field: 'metadata.actorRole ',
+      field: ['metadata', 'actorRole '],
       operator: 'eq',
       value: 'trailing-key',
+    });
+  });
+
+  it.each(['', '   ', 0, false, true, 3.5])('preserves metadata scalar literal %j exactly', literal => {
+    const path = ['metadata', 'customer.id', 'profile'];
+    const plan = planTraceQuery(parsed({ ...baseRequest, where: { op: 'eq', left: { path }, right: { literal } } }));
+    expect(plan.where).toEqual({ type: 'comparison', field: path, operator: 'eq', value: literal });
+  });
+
+  it('keeps nested paths and literal dotted keys distinct in plans and cursor bindings', () => {
+    const plan = (path: string | string[]) => planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path } }));
+    const nested = plan('metadata.customer.id');
+    const literalDot = plan(['metadata', 'customer.id']);
+    expect(nested.where).toEqual({ type: 'presence', field: ['metadata', 'customer', 'id'], operator: 'exists' });
+    expect(literalDot.where).toEqual({ type: 'presence', field: ['metadata', 'customer.id'], operator: 'exists' });
+    expect(nested.binding).not.toBe(literalDot.binding);
+  });
+
+  it.each([
+    { path: ['metadata'], reason: 'missing child' },
+    { path: ['metadata', ''], reason: 'empty segment' },
+    { path: ['attributes', 'model.name'], reason: 'wrong root' },
+    { path: ['metadata', 'customer', 'id'], reason: 'redundant array' },
+    { path: ['metadata', 'x'.repeat(129) + '.key'], reason: 'oversized segment' },
+    { path: ['metadata', ...Array(11).fill('a'), 'literal.key'], reason: 'too many segments' },
+    { path: ['metadata', 'a\u0000b.c'], reason: 'NUL segment' },
+    { path: ['metadata', 0], reason: 'non-string segment' },
+  ])('rejects exact metadata path with $reason', ({ path }) => {
+    expect(() => parsed({ ...baseRequest, where: { op: 'exists', path } })).toThrow();
+  });
+
+  it.each([
+    'metadata.',
+    'metadata.customer..id',
+    `metadata.${'x'.repeat(120)}`,
+    `metadata.${'é'.repeat(60)}`,
+    `metadata.${'a.'.repeat(11)}value`,
+    'metadata.customer\u0000id',
+  ])('classifies malformed metadata dot path %j as invalid_metadata_key', path => {
+    const request = parsed({ ...baseRequest, where: { op: 'exists', path } });
+    const error = validationError(() => planTraceQuery(request));
+    expect(error.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_metadata_key', path: ['where', 'path'] }),
+    );
+  });
+
+  it('accepts metadata paths at the UTF-8 and segment-count boundaries', () => {
+    const byteBoundary = `metadata.${'é'.repeat(59)}a`;
+    const segmentBoundary = `metadata.${Array(11).fill('a').join('.')}`;
+    expect(planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: byteBoundary } })).where).toEqual({
+      type: 'presence',
+      field: ['metadata', 'é'.repeat(59) + 'a'],
+      operator: 'exists',
+    });
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: segmentBoundary } })),
+    ).not.toThrow();
+  });
+
+  it('validates scalar types, numeric ordering, and homogeneous membership sets', () => {
+    const path = 'metadata.nested.value';
+    for (const literal of [null, {}, [], '3', true, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, where: { op: 'gte', left: { path }, right: { literal } } })),
+      ).toThrow();
+    }
+    expect(
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'gte', left: { path }, right: { literal: 3 } } })).where,
+    ).toEqual({ type: 'comparison', field: ['metadata', 'nested', 'value'], operator: 'gte', value: 3 });
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'in', value: { path }, set: [1, '1'] } })),
+    ).toThrow();
+    expect(
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'in', value: { path }, set: [true, false] } })).where,
+    ).toEqual({
+      type: 'membership',
+      field: ['metadata', 'nested', 'value'],
+      operator: 'in',
+      values: [true, false],
     });
   });
 
@@ -653,63 +735,94 @@ describe('planTraceQuery', () => {
     for (const field of ['metadata.requestId', 'metadata.api_key']) {
       expect(planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: field } })).where).toEqual({
         type: 'presence',
-        field,
+        field: ['metadata', field.slice('metadata.'.length)],
         operator: 'exists',
       });
     }
   });
 
-  it('rejects invalid and non-string metadata predicates', () => {
-    for (const field of ['metadata.', 'metadata.message.id']) {
-      const error = validationError(() =>
-        planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: field } })),
-      );
-      expect(error.issues[0]).toMatchObject({ code: 'invalid_metadata_key', path: ['where', 'path'] });
+  it('accepts string, number, boolean, empty, and whitespace metadata equality', () => {
+    for (const literal of ['value', 42, true, false, '', '   ']) {
+      expect(
+        planTraceQuery(
+          parsed({
+            ...baseRequest,
+            where: { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal } },
+          }),
+        ).where,
+      ).toEqual({ type: 'comparison', field: ['metadata', 'messageId'], operator: 'eq', value: literal });
     }
+  });
 
-    for (const literal of [42, true, null, '', '   ']) {
-      const error = validationError(() =>
+  it('rejects object, array, and null metadata equality literals', () => {
+    for (const literal of [null, { nested: 'value' }, ['value']]) {
+      expect(() =>
         planTraceQuery(
           parsed({
             ...baseRequest,
             where: { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal } },
           }),
         ),
-      );
-      expect(error.issues[0]).toMatchObject({ code: 'invalid_literal', path: ['where', 'right', 'literal'] });
+      ).toThrow();
     }
+  });
 
-    for (const literal of [{ nested: 'value' }, ['value']]) {
-      const error = validationError(() =>
-        parsed({
-          ...baseRequest,
-          where: { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal } },
-        }),
-      );
-      expect(error.issues[0]).toMatchObject({ code: 'invalid_request', path: ['where'] });
+  it.each([
+    { kind: 'string', literal: 'value' },
+    { kind: 'number', literal: 3.5 },
+    { kind: 'boolean', literal: false },
+  ])('accepts equality, membership, and presence operators for $kind metadata', ({ literal }) => {
+    for (const op of ['eq', 'ne'] as const) {
+      expect(() =>
+        planTraceQuery(
+          parsed({
+            ...baseRequest,
+            where: { op, left: { path: 'metadata.scalar' }, right: { literal } },
+          }),
+        ),
+      ).not.toThrow();
     }
+    for (const op of ['in', 'notIn'] as const) {
+      expect(() =>
+        planTraceQuery(parsed({ ...baseRequest, where: { op, value: { path: 'metadata.scalar' }, set: [literal] } })),
+      ).not.toThrow();
+    }
+    for (const op of ['exists', 'notExists'] as const) {
+      expect(() => planTraceQuery(parsed({ ...baseRequest, where: { op, path: 'metadata.scalar' } }))).not.toThrow();
+    }
+  });
 
-    const ordered = validationError(() =>
+  it.each(['lt', 'lte', 'gt', 'gte'] as const)('accepts %s only with numeric metadata literals', op => {
+    expect(
       planTraceQuery(
-        parsed({
-          ...baseRequest,
-          where: { op: 'lt', left: { path: 'metadata.messageId' }, right: { literal: 'message-2' } },
-        }),
-      ),
-    );
-    expect(ordered.issues[0]).toMatchObject({ code: 'operator_not_allowed', path: ['where', 'op'] });
+        parsed({ ...baseRequest, where: { op, left: { path: 'metadata.number' }, right: { literal: -0.5 } } }),
+      ).where,
+    ).toEqual({ type: 'comparison', field: ['metadata', 'number'], operator: op, value: -0.5 });
+    for (const literal of ['-0.5', false]) {
+      expect(() =>
+        planTraceQuery(
+          parsed({ ...baseRequest, where: { op, left: { path: 'metadata.number' }, right: { literal } } }),
+        ),
+      ).toThrow();
+    }
   });
 
   it('does not allow metadata predicates inside related-record clauses', () => {
-    const error = validationError(() =>
-      planTraceQuery(
-        parsed({
-          ...baseRequest,
-          where: { spans: { some: { op: 'exists', path: 'metadata.messageId' } } },
-        }),
-      ),
-    );
-    expect(error.issues[0]).toMatchObject({ code: 'field_not_allowed', path: ['where', 'spans', 'some', 'path'] });
+    for (const [scope, path] of [
+      ['spans', 'metadata.message.id'],
+      ['scores', ['metadata', 'message.id']],
+      ['feedback', 'metadata.messageId'],
+    ] as const) {
+      const error = validationError(() =>
+        planTraceQuery(
+          parsed({
+            ...baseRequest,
+            where: { [scope]: { some: { op: 'exists', path } } },
+          }),
+        ),
+      );
+      expect(error.issues[0]).toMatchObject({ code: 'field_not_allowed', path: ['where', scope, 'some', 'path'] });
+    }
   });
 
   it('plans feedback predicates with typed values and field-specific semantics', () => {
@@ -1516,13 +1629,21 @@ describe('trace-query discovery contract', () => {
       limit: TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
     });
     expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: ' ${metadata.region} ' })).toMatchObject({
-      path: 'metadata.region',
+      path: ['metadata', 'region'],
     });
     expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: '${metadata.region }' })).toMatchObject({
-      path: 'metadata.region ',
+      path: ['metadata', 'region '],
     });
-    for (const path of ['traceId', 'startedAt', 'metadata', 'metadata.customer.plan']) {
-      expect(getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path }).success, path).toBe(false);
+    expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: 'metadata.customer.plan' })).toMatchObject({
+      path: ['metadata', 'customer', 'plan'],
+    });
+    expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: ['metadata', 'customer.plan'] })).toMatchObject({
+      path: ['metadata', 'customer.plan'],
+    });
+    for (const path of ['traceId', 'startedAt', 'metadata', ['metadata', 'customer', 'plan']]) {
+      expect(getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path }).success, JSON.stringify(path)).toBe(
+        false,
+      );
     }
     expect(
       getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, predicateScope: 'spans', path: 'environment' })
@@ -1543,14 +1664,23 @@ describe('trace-query discovery contract', () => {
     ).toEqual({
       timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
       predicateScope: 'scores',
+      structuredRoots: [],
       search: 'source',
       limit: 10,
     });
     expect(planTraceQueryValues(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: 'status' }))).toMatchObject({
       predicateScope: 'trace',
+      structuredRoots: ['metadata'],
       path: 'status',
       limit: TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
     });
+  });
+
+  it('derives structured roots from the predicate scope', () => {
+    for (const predicateScope of ['trace', 'spans', 'scores', 'feedback'] as const) {
+      const plan = planTraceQueryObservedFields(parseGetTraceQueryFieldsArgs({ ...baseRequest, predicateScope }));
+      expect(plan.structuredRoots).toEqual(predicateScope === 'trace' ? ['metadata'] : []);
+    }
   });
 
   it('returns only fields that the trace-query planner accepts in the same scope', () => {
@@ -1562,12 +1692,28 @@ describe('trace-query discovery contract', () => {
       }
     }
 
-    const observed = createTraceQueryObservedFieldDescriptor('metadata.region', 3);
-    expect(observed).toMatchObject({ valueKind: 'string', valueSuggestions: true, occurrences: 3 });
+    const observed = createTraceQueryObservedFieldDescriptor('metadata.customer.plan', 3, 'number');
+    expect(observed).toMatchObject({
+      path: 'metadata.customer.plan',
+      valueKind: 'number',
+      operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists', 'lt', 'lte', 'gt', 'gte'],
+      valueSuggestions: true,
+      occurrences: 3,
+    });
     expect(() =>
       planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: observed.path } })),
     ).not.toThrow();
-    expect(() => createTraceQueryObservedFieldDescriptor('metadata.customer.plan', 1)).toThrow();
+
+    expect(createTraceQueryObservedFieldDescriptor(['metadata', 'customer.plan'], 1, 'boolean')).toMatchObject({
+      path: ['metadata', 'customer.plan'],
+      valueKind: 'boolean',
+      operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'],
+    });
+    expect(createTraceQueryObservedFieldDescriptor('metadata.mixed', 2, 'scalar')).toMatchObject({
+      valueKind: 'scalar',
+      operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'],
+    });
+    expect(() => createTraceQueryObservedFieldDescriptor(['metadata', 'customer', 'plan'], 1)).toThrow();
   });
 });
 
