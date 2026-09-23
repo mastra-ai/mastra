@@ -1,6 +1,6 @@
 ---
 title: 'Reference: Storage retention (prune) | Storage'
-description: 'Configure age-based retention policies and call prune() to delete old rows in bounded, resumable batches.'
+description: 'prune() deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable).'
 packages:
   - '@mastra/clickhouse'
   - '@mastra/core'
@@ -245,7 +245,7 @@ Returns: `Promise<PruneResult[]>`
     type: 'RetentionConfig',
     isOptional: true,
     description:
-      "Replaces the store's configured retention policies for this call only, for example to skip a domain or prune more aggressively. The configured `retention` is unchanged.",
+      "Replaces the store's configured retention policies for this call only — e.g. to skip a domain or prune more aggressively. The configured `retention` is unchanged.",
   },
 ]}
 />
@@ -263,7 +263,7 @@ interface PruneResult {
 }
 ```
 
-## Run prune on a schedule
+## Running prune on a schedule
 
 `prune()` has no built-in scheduler, so you decide when it runs. A bounded call may leave eligible rows, indicated by any result with `done: false`. Call it again on the next tick. Short invocations let a large backlog drain over several runs.
 
@@ -320,7 +320,7 @@ MongoDB offers native [TTL (Time-To-Live) indexes](https://www.mongodb.com/docs/
 **Use MongoDB TTL indexes when:**
 
 - You want automated, zero-maintenance deletion
-- Your retention periods are fixed (for example, always 30 days)
+- Your retention periods are fixed (e.g., "always 30 days")
 - You prefer database-native solutions
 
 **Use `prune()` when:**

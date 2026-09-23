@@ -232,7 +232,7 @@ const result = await mastraClient.deleteTraces({
 console.log(result.success)
 ```
 
-Each request accepts up to 1,000 trace IDs. The route doesn't accept tenant scope fields. Signals that aren't linked to a trace are preserved. Traces created by experiments are deleted like any other trace.
+Each request accepts up to 1,000 trace IDs and no tenant scope fields. Signals that aren't linked to a trace are preserved. Traces created by experiments are deleted like any other trace.
 
 ## Scoring traces
 

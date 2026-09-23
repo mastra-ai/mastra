@@ -170,7 +170,7 @@ On ClickHouse, deletion uses lightweight deletes on the main feedback events tab
 
 ### `deleteScores(args)`
 
-Deletes up to 1,000 score records by id. It behaves like `deleteFeedback()` with `scoreIds` in place of `feedbackIds`. Unsupported adapters throw `OBSERVABILITY_STORAGE_DELETE_SCORES_NOT_IMPLEMENTED`.
+Deletes up to 1,000 score records by id. It behaves like `deleteFeedback()` with `scoreIds` in place of `feedbackIds`, and Oracle Database also implements it. Unsupported adapters throw `OBSERVABILITY_STORAGE_DELETE_SCORES_NOT_IMPLEMENTED`.
 
 ```typescript
 await mastraClient.deleteScores({
