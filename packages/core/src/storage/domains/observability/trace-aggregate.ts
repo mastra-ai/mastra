@@ -53,8 +53,10 @@ export function getTraceAggregateCountDistinctField(name: string): string | unde
 
 export const traceAggregateIntervalSchema = z.enum(TRACE_AGGREGATE_INTERVALS);
 
+// templateLiteral keeps the `countDistinct.${string}` shape in the inferred type; the refine
+// still enforces the non-empty field and the byte cap.
 const traceAggregateCountDistinctMeasureSchema = z
-  .string()
+  .templateLiteral([TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX, z.string()])
   .refine(name => isTraceAggregateCountDistinctMeasure(name), 'Invalid countDistinct measure');
 
 export const traceAggregateMeasureSchema = z.union([
