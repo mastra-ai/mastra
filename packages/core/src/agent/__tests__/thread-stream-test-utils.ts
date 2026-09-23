@@ -41,6 +41,15 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
   /** Delay each `stream-part` publish, like a remote round trip, so publishing lags production. */
   streamPartDelayMs = 0;
 
+  /** A fresh process on the same stream backend: retained events survive, subscribers and leases don't. */
+  restart(): LeasePubSub {
+    const next = new LeasePubSub();
+    next.retain = this.retain;
+    next.delayBacklog = this.delayBacklog;
+    next.#retained = this.#retained;
+    return next;
+  }
+
   async publish(topic: string, event: any): Promise<void> {
     if (this.failPublish.has(topic)) throw new Error(`publish to ${topic} failed`);
     if (this.streamPartDelayMs && event.data?.type === 'stream-part') {
