@@ -383,8 +383,27 @@ mastra.getClassifierById('safety')
 mastra.listClassifiers()
 ```
 
+## Using classifiers in workflows
+
+A classifier with constructor-configured questions can be added to a workflow with [`createStep(classifier)`](/reference/workflows/step) or [`.classifier()`](/reference/workflows/workflow-methods/classifier). Workflow output contains complete typed `answers` and normalized `usage`.
+
+```typescript
+const workflow = createWorkflow({
+  id: 'ticket-triage',
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.any(),
+})
+  .map({ message: { initData: true, path: 'message' } })
+  .classifier('safety')
+  .commit()
+```
+
+The workflow adapter doesn't include warnings, raw provider responses, headers, or provider metadata in step output. Use direct `evaluate()` calls or classifier observability when you need that provider-level detail.
+
 ## Related
 
+- [Workflow.classifier()](/reference/workflows/workflow-methods/classifier)
+- [Step class](/reference/workflows/step)
 - [getClassifier()](/reference/core/getClassifier)
 - [getClassifierById()](/reference/core/getClassifierById)
 - [listClassifiers()](/reference/core/listClassifiers)

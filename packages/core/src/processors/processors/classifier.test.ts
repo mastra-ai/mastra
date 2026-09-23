@@ -270,6 +270,7 @@ describe('ClassifierProcessor', () => {
       const processor = new ClassifierProcessor({
         classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(new Error('boom')))),
         onResult: noop,
+
       });
       const abort = abortThatThrows();
 
@@ -400,6 +401,7 @@ describe('ClassifierProcessor', () => {
       const processor = new ClassifierProcessor({
         classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(new Error('boom')))),
         onResult: noop,
+
       });
       const part = textDelta('text');
       const abort = abortThatThrows();
