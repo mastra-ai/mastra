@@ -341,6 +341,96 @@ describe('Extractor', () => {
     expect(result.values).toBeUndefined();
   });
 
+  describe('configured working memory schema', () => {
+    const preferencesSchema = z.strictObject({
+      preferredColor: z.enum(['blue', 'green']),
+      budget: z.number().nullable(),
+    });
+
+    function createSchemaMemory(schema: unknown) {
+      return {
+        getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema } })),
+        getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+        getWorkingMemory: vi.fn(async () => '{"preferredColor":"blue","budget":100}'),
+        updateWorkingMemory: vi.fn(async () => undefined),
+      } as any;
+    }
+
+    async function resolveWorkingMemoryExtractor(memory: any) {
+      const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+        source: 'observer',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        memory,
+      });
+      return resolved!;
+    }
+
+    async function applyWorkingMemoryValue(memory: any, value: unknown) {
+      const resolved = await resolveWorkingMemoryExtractor(memory);
+      return applyExtractorHooks({
+        source: 'observer',
+        extractors: [resolved],
+        values: { 'working-memory': value },
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        memory,
+      });
+    }
+
+    it('uses the configured schema as the structured extraction schema', async () => {
+      const resolved = await resolveWorkingMemoryExtractor(createSchemaMemory(preferencesSchema));
+      const jsonSchema = JSON.stringify(z.toJSONSchema(resolved.schema));
+
+      expect(jsonSchema).toContain('preferredColor');
+      expect(jsonSchema).toContain('"green"');
+      expect(resolved.schema.safeParse(null).success).toBe(true);
+    });
+
+    it('persists a valid document', async () => {
+      const memory = createSchemaMemory(preferencesSchema);
+      await applyWorkingMemoryValue(memory, { preferredColor: 'green', budget: 200 });
+
+      expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+        expect.objectContaining({ workingMemory: JSON.stringify({ preferredColor: 'green', budget: 200 }) }),
+      );
+    });
+
+    it.each([
+      ['an invalid enum value', { preferredColor: 'red', budget: 200 }],
+      ['a wrong field type', { preferredColor: 'green', budget: '200' }],
+      ['a missing required field', { preferredColor: 'green' }],
+      ['an unknown key', { preferredColor: 'green', budget: 200, mood: 'happy' }],
+    ])('rejects %s', async (_label, value) => {
+      const memory = createSchemaMemory(preferencesSchema);
+      const resolved = await resolveWorkingMemoryExtractor(memory);
+
+      expect(resolved.schema.safeParse(value).success).toBe(false);
+
+      await applyWorkingMemoryValue(memory, value);
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    });
+
+    it('enforces JSON Schema working memory configs', async () => {
+      const memory = createSchemaMemory({
+        type: 'object',
+        properties: { preferredColor: { type: 'string', enum: ['blue', 'green'] } },
+        required: ['preferredColor'],
+        additionalProperties: false,
+      });
+      const resolved = await resolveWorkingMemoryExtractor(memory);
+
+      expect(resolved.schema.safeParse({ preferredColor: 'red' }).success).toBe(false);
+      expect(resolved.schema.safeParse({ preferredColor: 'blue' }).success).toBe(true);
+
+      await applyWorkingMemoryValue(memory, { preferredColor: 'red' });
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+
+      await applyWorkingMemoryValue(memory, { preferredColor: 'blue' });
+      expect(memory.updateWorkingMemory).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('returns extractor failures when the structured extraction call fails', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const profile = new Extractor({

@@ -1,8 +1,34 @@
 import { parseMemoryRequestContext } from '@mastra/core/memory';
+import type { RequestContext } from '@mastra/core/request-context';
+import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
+import type { Memory } from '../..';
 
 import { Extractor } from './extractor';
 import type { ExtractorRuntimeContext } from './extractor';
+
+type WorkingMemoryConfigSchema = NonNullable<
+  NonNullable<ReturnType<Memory['getMergedThreadConfig']>['workingMemory']>['schema']
+>;
+
+function toZodSchema(schema: WorkingMemoryConfigSchema): z.ZodType<Record<string, unknown>> {
+  if (schema instanceof z.ZodType) {
+    return schema as z.ZodType<Record<string, unknown>>;
+  }
+  const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
+  const jsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' });
+  return z.fromJSONSchema(jsonSchema as Parameters<typeof z.fromJSONSchema>[0]) as z.ZodType<Record<string, unknown>>;
+}
+
+/** Resolves the configured working-memory schema as a nullable Zod schema, or undefined in Markdown mode. */
+function getWorkingMemoryDocumentSchema(
+  memory: Memory,
+  requestContext: RequestContext | undefined,
+): z.ZodType<Record<string, unknown> | null> | undefined {
+  const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
+  const schema = memory.getMergedThreadConfig(memoryConfig ?? {}).workingMemory?.schema;
+  return schema ? toZodSchema(schema).nullable() : undefined;
+}
 
 async function getWorkingMemoryDetails(context: ExtractorRuntimeContext): Promise<{
   template?: string;
@@ -68,14 +94,13 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
       instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
       schema: async context => {
         const details = await getWorkingMemoryDetails(context);
-        return details.usesSchema ? z.union([z.record(z.string(), z.unknown()), z.null()]) : undefined;
+        return details.usesSchema ? getWorkingMemoryDocumentSchema(context.memory!, context.requestContext) : undefined;
       },
       onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
         const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
-        const config = memory!.getMergedThreadConfig(memoryConfig ?? {});
-        const isSchemaWorkingMemory = Boolean(config.workingMemory?.schema);
+        const documentSchema = getWorkingMemoryDocumentSchema(memory!, requestContext);
 
-        if (isSchemaWorkingMemory && current === null) {
+        if (documentSchema && (current === null || !documentSchema.safeParse(current).success)) {
           return undefined;
         }
 
