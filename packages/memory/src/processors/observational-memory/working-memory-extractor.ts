@@ -47,7 +47,7 @@ async function validateWorkingMemoryDocument(
   value: unknown,
 ): Promise<{ value: unknown } | undefined> {
   if (schema instanceof z.ZodType) {
-    const result = schema.safeParse(value);
+    const result = await schema.safeParseAsync(value);
     return result.success ? { value: result.data } : undefined;
   }
   const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);

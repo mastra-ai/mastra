@@ -481,6 +481,25 @@ describe('Extractor', () => {
         expect.objectContaining({ workingMemory: JSON.stringify({ city: 'Toronto' }) }),
       );
     });
+
+    it('supports Zod schemas with async transforms and refinements', async () => {
+      const memory = createSchemaMemory(
+        z
+          .object({
+            city: z.string().transform(async city => city.trim()),
+            budget: z.number().refine(async budget => budget <= 100, 'budget too high'),
+          })
+          .strict(),
+      );
+      await applyWorkingMemoryValue(memory, { city: 'Toronto', budget: 500 });
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+
+      await applyWorkingMemoryValue(memory, { city: '  Toronto  ', budget: 50 });
+      expect(memory.updateWorkingMemory).toHaveBeenCalledTimes(1);
+      expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+        expect.objectContaining({ workingMemory: JSON.stringify({ city: 'Toronto', budget: 50 }) }),
+      );
+    });
   });
 
   it('returns extractor failures when the structured extraction call fails', async () => {
