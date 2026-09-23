@@ -1560,6 +1560,59 @@ describe('DockerSandbox', () => {
       }
     });
 
+    it('should keep wait() pending when close arrives before a timeout kill is confirmed', async () => {
+      // The timeout path records `_killed` before kill() confirms, so a 'close' can
+      // arrive while the confirmation is still in flight. Like 'end' and 'error',
+      // 'close' must wait for that confirmation before settling.
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100', { timeout: 50 });
+        const waitPromise = handle.wait();
+
+        // Gate the kill helper so it stays in flight while 'close' is delivered.
+        let releaseKillHelper!: () => void;
+        const killHelperGate = new Promise<void>(resolve => {
+          releaseKillHelper = resolve;
+        });
+        const killStream = { destroy: vi.fn() };
+        mockContainer.exec.mockImplementationOnce(async () => {
+          await killHelperGate;
+          return {
+            id: 'kill-exec',
+            start: vi.fn().mockResolvedValue(killStream),
+            inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+          };
+        });
+
+        // Fire the timeout, then deliver 'close' with the helper still unconfirmed.
+        await vi.advanceTimersByTimeAsync(50);
+
+        let settled = false;
+        void waitPromise.then(() => {
+          settled = true;
+        });
+
+        const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => Promise<void>;
+        const closePromise = closeHandler();
+
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(false);
+
+        releaseKillHelper();
+        await closePromise;
+
+        const result = await waitPromise;
+        expect(result.exitCode).toBe(137);
+        expect(result.killed).toBe(true);
+        expect(result.timedOut).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should preserve killed metadata when the stream errors while kill is still confirming', async () => {
       // Tearing the hijacked exec socket down can surface as ECONNRESET instead of
       // 'end'; the error path must await the in-flight confirmation for the same
