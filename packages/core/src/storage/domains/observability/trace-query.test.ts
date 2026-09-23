@@ -1660,14 +1660,23 @@ describe('trace-query discovery contract', () => {
     ).toEqual({
       timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
       predicateScope: 'scores',
+      structuredRoots: [],
       search: 'source',
       limit: 10,
     });
     expect(planTraceQueryValues(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: 'status' }))).toMatchObject({
       predicateScope: 'trace',
+      structuredRoots: ['metadata'],
       path: 'status',
       limit: TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
     });
+  });
+
+  it('derives structured roots from the predicate scope', () => {
+    for (const predicateScope of ['trace', 'spans', 'scores', 'feedback'] as const) {
+      const plan = planTraceQueryObservedFields(parseGetTraceQueryFieldsArgs({ ...baseRequest, predicateScope }));
+      expect(plan.structuredRoots).toEqual(predicateScope === 'trace' ? ['metadata'] : []);
+    }
   });
 
   it('returns only fields that the trace-query planner accepts in the same scope', () => {

@@ -663,6 +663,7 @@ describe('trace-query discovery routes', () => {
     expect(observabilityStore.getTraceQueryObservedFields).toHaveBeenCalledWith({
       timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' },
       predicateScope: 'trace',
+      structuredRoots: ['metadata'],
       search: undefined,
       limit: 25,
     });
@@ -700,6 +701,7 @@ describe('trace-query discovery routes', () => {
     expect(observabilityStore.getTraceQueryValues).toHaveBeenCalledWith({
       timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' },
       predicateScope: 'trace',
+      structuredRoots: ['metadata'],
       path: 'environment',
       search: '',
       limit: 25,

@@ -1,54 +1,24 @@
-export type TraceMetadataPath = string | ['metadata', string, ...string[]];
-export type TraceMetadataScalar = string | number | boolean;
+import {
+  decodeExactStructuredPath,
+  decodeStructuredScalar,
+  encodeExactStructuredPath,
+  encodeStructuredScalar,
+  formatStructuredScalar,
+  normalizeStructuredPath,
+} from './trace-structured-filter-codec';
+import type { StructuredPath, StructuredScalar } from './trace-structured-filter-codec';
+
+export type TraceMetadataPath = StructuredPath<'metadata'>;
+export type TraceMetadataScalar = StructuredScalar;
 
 const EXACT_FIELD_PREFIX = 'metadataExact.v1.';
 const LEGACY_FIELD_PREFIX = 'metadata.';
 const EXACT_PARAM_PREFIX = 'filterMetadataExact.v1.';
 const LEGACY_PARAM_PREFIX = 'filterMetadata.';
 const TYPED_VALUE_PREFIX = '~metadata-v1~';
-const MAX_PATH_SEGMENTS = 12;
-const MAX_PATH_BYTES = 128;
-const MAX_PATH_SEGMENT_BYTES = 128;
 
-const encodeJson = (value: unknown) => encodeURIComponent(JSON.stringify(value));
-
-const decodeJson = (value: string): unknown => {
-  try {
-    return JSON.parse(decodeURIComponent(value));
-  } catch {
-    return undefined;
-  }
-};
-
-const isStringArray = (value: unknown[]): value is string[] => value.every(item => typeof item === 'string');
-const utf8Length = (value: string) => new TextEncoder().encode(value).byteLength;
-
-const isValidMetadataPath = (segments: string[]) =>
-  segments.length >= 2 &&
-  segments.length <= MAX_PATH_SEGMENTS &&
-  segments[0] === 'metadata' &&
-  segments.every(
-    segment => segment.length > 0 && !segment.includes('\0') && utf8Length(segment) <= MAX_PATH_SEGMENT_BYTES,
-  ) &&
-  utf8Length(segments.join('.')) <= MAX_PATH_BYTES;
-
-export const normalizeTraceMetadataPath = (path: string | readonly string[]): TraceMetadataPath | undefined => {
-  if (typeof path === 'string') {
-    return isValidMetadataPath(path.split('.')) ? path : undefined;
-  }
-  const segments = [...path];
-  if (!isStringArray(segments) || !isValidMetadataPath(segments)) return undefined;
-  const [root, child, ...rest] = segments;
-  if (root !== 'metadata' || child === undefined || !segments.slice(1).some(segment => segment.includes('.'))) {
-    return undefined;
-  }
-  return ['metadata', child, ...rest];
-};
-
-const decodeExactPath = (value: string): TraceMetadataPath | undefined => {
-  const decoded = decodeJson(value);
-  return typeof decoded === 'string' || Array.isArray(decoded) ? normalizeTraceMetadataPath(decoded) : undefined;
-};
+export const normalizeTraceMetadataPath = (path: string | readonly string[]): TraceMetadataPath | undefined =>
+  normalizeStructuredPath(path, 'metadata');
 
 export const traceMetadataPathToField = (
   path: string | readonly string[],
@@ -60,7 +30,7 @@ export const traceMetadataPathToField = (
   }
 
   return {
-    id: EXACT_FIELD_PREFIX + encodeJson(normalized),
+    id: EXACT_FIELD_PREFIX + encodeExactStructuredPath(normalized),
     label: JSON.stringify(normalized.slice(1)),
     path: normalized,
   };
@@ -68,7 +38,7 @@ export const traceMetadataPathToField = (
 
 export const traceMetadataFieldIdToPath = (fieldId: string): TraceMetadataPath | undefined => {
   if (fieldId.startsWith(EXACT_FIELD_PREFIX)) {
-    return decodeExactPath(fieldId.slice(EXACT_FIELD_PREFIX.length));
+    return decodeExactStructuredPath(fieldId.slice(EXACT_FIELD_PREFIX.length), 'metadata');
   }
   if (fieldId.startsWith(LEGACY_FIELD_PREFIX)) {
     return normalizeTraceMetadataPath(fieldId);
@@ -101,19 +71,10 @@ export const traceMetadataParamToFieldId = (param: string): string | undefined =
 export const isTraceMetadataParam = (param: string) =>
   param.startsWith(EXACT_PARAM_PREFIX) || param.startsWith(LEGACY_PARAM_PREFIX);
 
-export const encodeTraceMetadataValue = (value: TraceMetadataScalar): string => {
-  if (typeof value === 'string' && value.length > 0 && !value.startsWith(TYPED_VALUE_PREFIX)) return value;
-  return TYPED_VALUE_PREFIX + encodeJson(value);
-};
+export const encodeTraceMetadataValue = (value: TraceMetadataScalar): string =>
+  encodeStructuredScalar(value, TYPED_VALUE_PREFIX);
 
-export const decodeTraceMetadataValue = (value: string): TraceMetadataScalar | undefined => {
-  if (!value.startsWith(TYPED_VALUE_PREFIX)) return value;
-  const decoded = decodeJson(value.slice(TYPED_VALUE_PREFIX.length));
-  if (typeof decoded === 'string' || typeof decoded === 'boolean') return decoded;
-  return typeof decoded === 'number' && Number.isFinite(decoded) ? decoded : undefined;
-};
+export const decodeTraceMetadataValue = (value: string): TraceMetadataScalar | undefined =>
+  decodeStructuredScalar(value, TYPED_VALUE_PREFIX);
 
-export const formatTraceMetadataValue = (value: TraceMetadataScalar): string => {
-  if (typeof value !== 'string') return String(value);
-  return value.length === 0 || value.trim().length === 0 ? JSON.stringify(value) : value;
-};
+export const formatTraceMetadataValue = formatStructuredScalar;

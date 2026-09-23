@@ -12,7 +12,11 @@ import {
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type {
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+} from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL } from './ddl';
@@ -246,6 +250,17 @@ describe('ClickHouse advanced trace query', () => {
 
     await expect(storage.queryTraces(plan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
     await expect(storage.queryThreads(threadPlan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+  });
+
+  it('rejects unconfigured trusted roots before compiling discovery SQL', () => {
+    const trusted = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+    const invalid = { ...trusted, structuredRoots: ['attributes'] } as unknown as TrustedTraceQueryObservedFieldsPlan;
+
+    expect(() => compileClickHouseTraceQueryObservedFields(invalid)).toThrowError(
+      'Unsupported structured discovery scope',
+    );
   });
 
   it('decodes each observed metadata value from the expanded JSON entry', () => {
@@ -682,6 +697,12 @@ describe('ClickHouse advanced trace query', () => {
     } as unknown as TrustedTraceQueryPlan;
 
     expect(() => compileClickHouseTraceQuery(invalid)).toThrow('Unsupported trusted trace-query field');
+
+    const invalidStructured = {
+      ...trusted,
+      where: { type: 'comparison', field: ['attributes', 'customer', 'id'], operator: 'eq', value: 'x' },
+    } as unknown as TrustedTraceQueryPlan;
+    expect(() => compileClickHouseTraceQuery(invalidStructured)).toThrow('Unsupported structured trace-query field');
 
     const thread = threadPlan({
       where: { traces: { some: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } } },

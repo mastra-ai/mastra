@@ -8,13 +8,19 @@ import {
   planTraceQueryObservedFields,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type {
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+  TrustedTraceQueryScalarPredicate,
+} from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DuckDBConnection } from '../../db/index';
 import {
   compileDuckDBThreadQuery,
   compileDuckDBTraceQuery,
+  compileDuckDBTraceQueryObservedFields,
   getTraceQueryObservedFields,
   queryThreads,
   queryTraces,
@@ -43,6 +49,15 @@ describe('DuckDB advanced trace query', () => {
         message: 'The trace query exceeded its resource limit',
       }),
     );
+  });
+
+  it('rejects unconfigured trusted roots before compiling discovery SQL', () => {
+    const trusted = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+    const invalid = { ...trusted, structuredRoots: ['attributes'] } as unknown as TrustedTraceQueryObservedFieldsPlan;
+
+    expect(() => compileDuckDBTraceQueryObservedFields(invalid)).toThrowError('Unsupported structured discovery scope');
   });
 
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
@@ -174,6 +189,18 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).not.toContain(path[2]);
     expect(compiled.sql).not.toContain(value);
     expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, jsonPath, jsonPath, value, 101]);
+  });
+
+  it('rejects structured roots that are not configured for the predicate context', () => {
+    const trustedPlan = plan();
+    trustedPlan.where = {
+      type: 'comparison',
+      field: ['attributes', 'customer', 'id'],
+      operator: 'eq',
+      value: 'customer-123',
+    } as unknown as TrustedTraceQueryScalarPredicate;
+
+    expect(() => compileDuckDBTraceQuery(trustedPlan)).toThrowError('Unsupported structured trace-query field');
   });
 
   it('keeps numeric metadata compiler bindings aligned', () => {

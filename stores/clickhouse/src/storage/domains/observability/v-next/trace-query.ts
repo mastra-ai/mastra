@@ -6,10 +6,12 @@ import type {
   TraceQueryCanonicalField,
   TraceQueryObservedFieldsResult,
   TraceQueryFeedbackField,
+  TraceQueryPredicateScope,
   TraceQueryField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TraceQueryStructuredRoot,
   TrustedThreadPredicate,
   TrustedThreadQueryPlan,
   TrustedTraceQueryObservedFieldsPlan,
@@ -29,6 +31,7 @@ import { currentScoresRelation } from './scores';
 type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
 type FieldDefinition = { sql: string; parameterType: ClickHouseParameterType };
 type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
+type StructuredRootExpressions = Partial<Record<TraceQueryStructuredRoot, string>>;
 type QueryParams = Record<string, string | number>;
 type SqlFragment = { sql: string; params: QueryParams };
 type RelatedCollection = 'spans' | 'scores' | 'feedback';
@@ -38,6 +41,7 @@ type TraceSelection = {
 };
 
 const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
+const TRACE_STRUCTURED_ROOTS = { metadata: 'r.metadataRaw' } satisfies StructuredRootExpressions;
 
 const TRACE_FIELDS = {
   traceId: { sql: 'r.traceId', parameterType: 'String' },
@@ -137,56 +141,62 @@ function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
+function compileStructuredScalarField(
+  jsonExpression: string,
+  segments: string[],
+  sample: string | number | boolean | undefined,
+  parameters: ParameterBuilder,
+): FieldDefinition {
+  const keys = segments.map(segment => parameters.add(segment, 'String')).join(', ');
+  const kind = typeof sample;
+  const types =
+    sample === undefined
+      ? "'String', 'Int64', 'UInt64', 'Double', 'Bool'"
+      : kind === 'number'
+        ? "'Int64', 'UInt64', 'Double'"
+        : kind === 'boolean'
+          ? "'Bool'"
+          : "'String'";
+  const extract =
+    sample === undefined
+      ? `JSONExtractRaw(${jsonExpression}, ${keys})`
+      : kind === 'number'
+        ? `JSONExtractFloat(${jsonExpression}, ${keys})`
+        : kind === 'boolean'
+          ? `JSONExtractBool(${jsonExpression}, ${keys})`
+          : `JSONExtractString(${jsonExpression}, ${keys})`;
+  return {
+    sql: `if(JSONType(${jsonExpression}, ${keys}) IN (${types}), ${extract}, NULL)`,
+    parameterType: kind === 'number' ? 'Float64' : kind === 'boolean' ? 'UInt64' : 'String',
+  };
+}
+
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
   parameters: ParameterBuilder,
-  allowMetadata = false,
+  structuredRoots: StructuredRootExpressions = {},
 ): string {
   if (predicate.type === 'boolean') {
-    const parts = predicate.args.map(arg => `(${compileScalarPredicate(arg, registry, parameters, allowMetadata)})`);
+    const parts = predicate.args.map(arg => `(${compileScalarPredicate(arg, registry, parameters, structuredRoots)})`);
     return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
   }
 
   if (predicate.type === 'not') {
-    return `NOT (${compileScalarPredicate(predicate.arg, registry, parameters, allowMetadata)})`;
+    return `NOT (${compileScalarPredicate(predicate.arg, registry, parameters, structuredRoots)})`;
   }
 
   const field: FieldDefinition = Array.isArray(predicate.field)
     ? (() => {
-        if (!allowMetadata || predicate.field[0] !== 'metadata')
-          throw new Error('Unsupported structured trace-query field');
-        const keys = predicate.field
-          .slice(1)
-          .map(segment => parameters.add(segment, 'String'))
-          .join(', ');
+        const jsonExpression = structuredRoots[predicate.field[0]];
+        if (!jsonExpression) throw new Error('Unsupported structured trace-query field');
         const sample =
           predicate.type === 'comparison'
             ? predicate.value
             : predicate.type === 'membership'
               ? predicate.values[0]
               : undefined;
-        const kind = typeof sample;
-        const types =
-          sample === undefined
-            ? "'String', 'Int64', 'UInt64', 'Double', 'Bool'"
-            : kind === 'number'
-              ? "'Int64', 'UInt64', 'Double'"
-              : kind === 'boolean'
-                ? "'Bool'"
-                : "'String'";
-        const extract =
-          sample === undefined
-            ? `JSONExtractRaw(r.metadataRaw, ${keys})`
-            : kind === 'number'
-              ? `JSONExtractFloat(r.metadataRaw, ${keys})`
-              : kind === 'boolean'
-                ? `JSONExtractBool(r.metadataRaw, ${keys})`
-                : `JSONExtractString(r.metadataRaw, ${keys})`;
-        return {
-          sql: `if(JSONType(r.metadataRaw, ${keys}) IN (${types}), ${extract}, NULL)`,
-          parameterType: kind === 'number' ? 'Float64' : kind === 'boolean' ? 'UInt64' : 'String',
-        };
+        return compileStructuredScalarField(jsonExpression, predicate.field.slice(1), sample, parameters);
       })()
     : fieldDefinition(registry, predicate.field);
   if (predicate.type === 'presence') {
@@ -289,7 +299,7 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: Par
   }
 
   if (predicate.type === 'not') return `NOT (${compilePredicate(predicate.arg, parameters)})`;
-  return compileScalarPredicate(predicate, TRACE_FIELDS, parameters, true);
+  return compileScalarPredicate(predicate, TRACE_FIELDS, parameters, TRACE_STRUCTURED_ROOTS);
 }
 
 function compileThreadPredicate(predicate: TrustedThreadPredicate, parameters: ParameterBuilder): string {
@@ -611,20 +621,56 @@ function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope
   return scope === 'trace' ? new Set() : new Set([scope]);
 }
 
+type StructuredDiscoveryRoot = {
+  root: TraceQueryStructuredRoot;
+  relation: string;
+  jsonExpression: string;
+};
+
+const STRUCTURED_DISCOVERY_ROOTS = {
+  trace: [{ root: 'metadata', relation: 'root_scope r', jsonExpression: 'r.metadataRaw' }],
+  spans: [],
+  scores: [],
+  feedback: [],
+} as const satisfies Record<TraceQueryPredicateScope, readonly StructuredDiscoveryRoot[]>;
+
+function structuredDiscoveryRoots(plan: TrustedTraceQueryObservedFieldsPlan): readonly StructuredDiscoveryRoot[] {
+  return STRUCTURED_DISCOVERY_ROOTS[plan.predicateScope].filter(descriptor =>
+    plan.structuredRoots.includes(descriptor.root),
+  );
+}
+
+function structuredDiscoveryRoot(
+  plan: TrustedTraceQueryValuesPlan,
+  root: TraceQueryStructuredRoot,
+): StructuredDiscoveryRoot {
+  const descriptor = structuredDiscoveryRoots(plan).find(candidate => candidate.root === root);
+  if (!descriptor) throw new Error('Unsupported structured discovery path');
+  return descriptor;
+}
+
 export function compileClickHouseTraceQueryObservedFields(
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledClickHouseTraceQuery {
+  const roots = structuredDiscoveryRoots(plan);
+  if (roots.length === 0) throw new Error('Unsupported structured discovery scope');
   const parameters = new ParameterBuilder();
-  const ctes = compileClickHouseTraceScope(plan, new Set(), parameters);
+  const ctes = compileClickHouseTraceScope(plan, discoveryCollections(plan.predicateScope), parameters);
   const search = plan.search
     ? `AND positionCaseInsensitiveUTF8(arrayStringConcat(segments, '.'), ${parameters.add(plan.search, 'String')}) > 0`
     : '';
   const limit = parameters.add(plan.limit + 1, 'UInt64');
-  ctes.push(`metadata_tree AS (
-    SELECT ['metadata'] AS segments, ifNull(r.metadataRaw, '{}') AS leaf, false AS requires_exact FROM root_scope r
+  const seeds = roots
+    .map(
+      descriptor =>
+        `SELECT ['${descriptor.root}'] AS segments, ifNull(${descriptor.jsonExpression}, '{}') AS leaf, false AS requires_exact FROM ${descriptor.relation}`,
+    )
+    .join('\n    UNION ALL\n    ');
+  ctes.push(`structured_tree AS (
+    ${seeds}
     UNION ALL
     SELECT arrayPushBack(segments, entry.1), entry.2, requires_exact OR position(entry.1, '.') > 0
-    FROM metadata_tree
+    FROM structured_tree
     ARRAY JOIN JSONExtractKeysAndValuesRaw(if(JSONType(leaf) = 'Object', leaf, '{}')) AS entry
     WHERE length(segments) < ${coreStorage.TRACE_QUERY_MAX_PATH_SEGMENTS}
       AND entry.1 != '' AND position(entry.1, char(0)) = 0
@@ -635,7 +681,7 @@ export function compileClickHouseTraceQueryObservedFields(
     SELECT segments,
       if(requires_exact, toJSONString(segments), arrayStringConcat(segments, '.')) AS path,
       multiIf(JSONType(leaf) = 'String', 'string', JSONType(leaf) = 'Bool', 'boolean', 'number') AS value_kind
-    FROM metadata_tree
+    FROM structured_tree
     WHERE JSONType(leaf) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool')
       AND (JSONType(leaf) != 'String' OR length(JSONExtractString(leaf)) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES})
   )`);
@@ -660,14 +706,15 @@ export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesP
   const parameters = new ParameterBuilder();
   const ctes = compileClickHouseTraceScope(plan, discoveryCollections(plan.predicateScope), parameters);
   let field: string;
+  let source = discoverySource(plan.predicateScope);
   if (Array.isArray(plan.path)) {
-    if (plan.predicateScope !== 'trace' || plan.path[0] !== 'metadata')
-      throw new Error('Unsupported structured discovery path');
+    const descriptor = structuredDiscoveryRoot(plan, plan.path[0]);
     const keys = plan.path
       .slice(1)
       .map(segment => parameters.add(segment, 'String'))
       .join(', ');
-    field = `if(JSONType(r.metadataRaw, ${keys}) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool'), JSONExtractRaw(r.metadataRaw, ${keys}), NULL)`;
+    field = `if(JSONType(${descriptor.jsonExpression}, ${keys}) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool'), JSONExtractRaw(${descriptor.jsonExpression}, ${keys}), NULL)`;
+    source = descriptor.relation;
   } else {
     field = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
   }
@@ -680,7 +727,7 @@ export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesP
   const limit = parameters.add(plan.limit + 1, 'UInt64');
   return {
     query: `WITH ${ctes.join(',\n')}, extracted AS (
-  SELECT toString(${field}) AS value FROM ${discoverySource(plan.predicateScope)}
+  SELECT toString(${field}) AS value FROM ${source}
 )
 SELECT value, count() AS count
 FROM extracted
@@ -748,7 +795,7 @@ export async function getTraceQueryObservedFields(
   plan: TrustedTraceQueryObservedFieldsPlan,
   limits: ClickHouseTraceQueryExecutionLimits,
 ): Promise<TraceQueryObservedFieldsResult> {
-  if (plan.predicateScope !== 'trace') return { observedFields: [], observedFieldsTruncated: false };
+  if (structuredDiscoveryRoots(plan).length === 0) return { observedFields: [], observedFieldsTruncated: false };
   const rows = await runWithClickHouseTraceQueryTimeout(
     client,
     limits,

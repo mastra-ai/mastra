@@ -39,18 +39,21 @@ const literalStringSchema = z
 const timestampLiteralSchema = z.string().datetime({ offset: true });
 export const TRACE_QUERY_MAX_PATH_SEGMENTS = 12;
 export const TRACE_QUERY_MAX_PATH_SEGMENT_BYTES = 128;
-const metadataPathSegmentSchema = z
+const STRUCTURED_PATH_ROOTS = ['metadata'] as const;
+const structuredPathSegmentSchema = z
   .string()
   .min(1)
   .refine(
     segment => !segment.includes('\0') && hasMaxUtf8Bytes(segment, TRACE_QUERY_MAX_PATH_SEGMENT_BYTES),
     'Invalid path segment',
   );
-const metadataPathSegmentsSchema = z
-  .tuple([z.literal('metadata'), metadataPathSegmentSchema])
-  .rest(metadataPathSegmentSchema)
-  .refine(segments => segments.length <= TRACE_QUERY_MAX_PATH_SEGMENTS, 'Metadata path has too many segments')
-  .refine(segments => hasMaxUtf8Bytes(segments.join('.'), TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large');
+const createStructuredPathSegmentsSchema = (root: (typeof STRUCTURED_PATH_ROOTS)[number]) =>
+  z
+    .tuple([z.literal(root), structuredPathSegmentSchema])
+    .rest(structuredPathSegmentSchema)
+    .refine(segments => segments.length <= TRACE_QUERY_MAX_PATH_SEGMENTS, 'Structured path has too many segments')
+    .refine(segments => hasMaxUtf8Bytes(segments.join('.'), TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large');
+const metadataPathSegmentsSchema = createStructuredPathSegmentsSchema('metadata');
 const exactMetadataPathSchema = metadataPathSegmentsSchema.refine(
   segments => segments.slice(1).some(segment => segment.includes('.')),
   'Segment-array metadata paths require a literal dotted segment',
@@ -61,11 +64,11 @@ const predicateStringPathSchema = z
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large')
   .superRefine((value, context) => {
     const normalized = normalizeStringPath(value);
-    if (!normalized.startsWith('metadata.')) return;
-    const segments = normalized.split('.');
-    const result = metadataPathSegmentsSchema.safeParse(segments);
+    const root = structuredRootFromPath(normalized);
+    if (!root) return;
+    const result = createStructuredPathSegmentsSchema(root).safeParse(normalized.split('.'));
     if (!result.success) {
-      context.addIssue({ code: 'custom', message: result.error.issues[0]?.message ?? 'Invalid metadata path' });
+      context.addIssue({ code: 'custom', message: result.error.issues[0]?.message ?? 'Invalid structured path' });
     }
   });
 const predicatePathSchema = z.union([predicateStringPathSchema, exactMetadataPathSchema]);
@@ -578,6 +581,16 @@ const METADATA_FIELD_RULE: FieldRule = {
   valueSuggestions: true,
 };
 
+export type TraceQueryStructuredRoot = (typeof STRUCTURED_PATH_ROOTS)[number];
+export type TraceQueryStructuredSegments = [TraceQueryStructuredRoot, string, ...string[]];
+
+const STRUCTURED_FIELD_RULES = {
+  trace: { metadata: METADATA_FIELD_RULE },
+  spans: {},
+  scores: {},
+  feedback: {},
+} as const satisfies Record<TraceQueryPredicateScope, Partial<Record<TraceQueryStructuredRoot, FieldRule>>>;
+
 export type TraceQueryField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['trace'];
 export type TraceQuerySpanField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['spans'];
 export type TraceQueryScoreField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['scores'];
@@ -589,7 +602,7 @@ export type TraceQueryCanonicalField =
   | TraceQueryFeedbackField;
 export type TraceQueryMetadataField = TraceQueryMetadataDotPath;
 export type TraceQueryMetadataSegments = ['metadata', string, ...string[]];
-export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMetadataSegments;
+export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryStructuredSegments;
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
@@ -706,12 +719,13 @@ export interface TrustedThreadQueryPlan {
 export interface TrustedTraceQueryObservedFieldsPlan {
   timeRange: { from: string; to: string };
   predicateScope: TraceQueryPredicateScope;
+  structuredRoots: TraceQueryStructuredRoot[];
   search?: string;
   limit: number;
 }
 
 export interface TrustedTraceQueryValuesPlan extends TrustedTraceQueryObservedFieldsPlan {
-  path: TraceQueryCanonicalField | TraceQueryMetadataSegments;
+  path: TraceQueryCanonicalField | TraceQueryStructuredSegments;
 }
 
 export interface TraceQueryObservedFieldsResult {
@@ -869,11 +883,19 @@ function findPredicateComplexityIssue(
   return undefined;
 }
 
+function structuredFieldRule(
+  scope: TraceQueryPredicateScope,
+  field: TraceQueryStructuredSegments,
+): FieldRule | undefined {
+  const registry: Partial<Record<TraceQueryStructuredRoot, FieldRule>> = STRUCTURED_FIELD_RULES[scope];
+  return Object.hasOwn(registry, field[0]) ? registry[field[0]] : undefined;
+}
+
 function getTraceQueryFieldRule(scope: TraceQueryPredicateScope, path: TraceQueryPath): FieldRule | undefined {
   const normalizedPath = normalizePath(path);
   if (Array.isArray(normalizedPath)) {
-    return scope === 'trace' && metadataPathSegmentsSchema.safeParse(normalizedPath).success
-      ? METADATA_FIELD_RULE
+    return metadataPathSegmentsSchema.safeParse(normalizedPath).success
+      ? structuredFieldRule(scope, normalizedPath)
       : undefined;
   }
   const registry: Record<string, FieldRule> = TRACE_QUERY_FIELD_REGISTRY[scope];
@@ -946,6 +968,9 @@ export function planTraceQueryObservedFields(
       to: new Date(args.timeRange.to).toISOString(),
     },
     predicateScope: args.predicateScope,
+    structuredRoots: STRUCTURED_PATH_ROOTS.filter(root =>
+      Object.hasOwn(STRUCTURED_FIELD_RULES[args.predicateScope], root),
+    ),
     search: args.search,
     limit: args.limit,
   };
@@ -1414,7 +1439,7 @@ function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
   return TRACE_QUERY_FIELD_REGISTRY[context];
 }
 
-function isMetadataPathArray(path: TraceQueryPath): path is TraceQueryExactMetadataPath {
+function isStructuredPathArray(path: TraceQueryPath): path is TraceQueryExactMetadataPath {
   return Array.isArray(path);
 }
 
@@ -1425,8 +1450,10 @@ function getRule(
   path: Array<string | number>,
   state: PlannerState,
 ): FieldRule | undefined {
-  if (isMetadataPathArray(field)) {
-    if (context === 'trace' && metadataPathSegmentsSchema.safeParse(field).success) return METADATA_FIELD_RULE;
+  if (isStructuredPathArray(field)) {
+    const normalized = normalizePath(field);
+    const rule = Array.isArray(normalized) ? structuredFieldRule(context, normalized) : undefined;
+    if (rule && metadataPathSegmentsSchema.safeParse(field).success) return rule;
     state.issues.push({ code: 'field_not_allowed', path, message: 'The predicate field is not allowed here' });
     return undefined;
   }
@@ -1450,27 +1477,34 @@ function addOperatorIssue(
   });
 }
 
+function structuredRootFromPath(path: string): TraceQueryStructuredRoot | undefined {
+  return STRUCTURED_PATH_ROOTS.find(root => path.startsWith(`${root}.`));
+}
+
 function normalizeStringPath(path: string): string {
   const match = /^\$\{([^}]+)\}$/.exec(path.trim());
   const unwrapped = match?.[1] ?? path;
   const normalized = unwrapped.trim();
-  if (normalized.startsWith('metadata.')) {
-    const prefixIndex = unwrapped.indexOf('metadata.');
-    return `metadata.${unwrapped.slice(prefixIndex + 'metadata.'.length)}`;
+  const root = structuredRootFromPath(normalized);
+  if (root) {
+    const prefix = `${root}.`;
+    const prefixIndex = unwrapped.indexOf(prefix);
+    return `${prefix}${unwrapped.slice(prefixIndex + prefix.length)}`;
   }
   return normalized;
 }
 
-function metadataDotPathToSegments(path: string): TraceQueryMetadataSegments | undefined {
+function structuredDotPathToSegments(path: string): TraceQueryStructuredSegments | undefined {
   const normalized = normalizeStringPath(path);
-  if (!normalized.startsWith('metadata.')) return undefined;
-  const result = metadataPathSegmentsSchema.safeParse(normalized.split('.'));
+  const root = structuredRootFromPath(normalized);
+  if (!root) return undefined;
+  const result = createStructuredPathSegmentsSchema(root).safeParse(normalized.split('.'));
   return result.success ? result.data : undefined;
 }
 
 function normalizePath(path: TraceQueryPath): TraceQueryPredicateField | string {
-  if (isMetadataPathArray(path)) return [path[0], path[1], ...path.slice(2)];
-  return metadataDotPathToSegments(path) ?? normalizeStringPath(path);
+  if (isStructuredPathArray(path)) return [path[0], path[1], ...path.slice(2)];
+  return structuredDotPathToSegments(path) ?? normalizeStringPath(path);
 }
 
 function toTrustedPredicateField(path: TraceQueryPath): TraceQueryPredicateField {
