@@ -109,6 +109,30 @@ case "$err" in
 esac
 `;
 
+/**
+ * Upper bound on how long an early stream 'end' waits for an in-flight kill
+ * confirmation before settling without termination metadata. The kill helper's
+ * own work is bounded (the KILL_SCRIPT polls for at most ~4s), so this only
+ * absorbs daemon round-trips; it exists so a wedged `inspect()` cannot leave
+ * wait() pending forever.
+ */
+const TERMINATION_CONFIRMATION_DEADLINE_MS = 10_000;
+
+/**
+ * Resolves when `termination` settles, or after
+ * TERMINATION_CONFIRMATION_DEADLINE_MS — whichever comes first. Never rejects.
+ */
+function waitForTermination(termination: Promise<boolean>): Promise<void> {
+  return new Promise<void>(resolve => {
+    const timer = setTimeout(resolve, TERMINATION_CONFIRMATION_DEADLINE_MS);
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    termination.then(done, done);
+  });
+}
+
 // =============================================================================
 // Docker Process Handle
 // =============================================================================
@@ -131,6 +155,12 @@ class DockerProcessHandle extends ProcessHandle {
   _killed = false;
   /** @internal Set by the timeout path to distinguish timeout kills from explicit kills */
   _timedOut = false;
+  /**
+   * @internal In-flight kill confirmation, set while kill() is verifying the
+   * process group is gone. An early stream 'end' awaits it (bounded) so
+   * termination metadata is not dropped when the target's stream closes first.
+   */
+  _terminationPromise: Promise<boolean> | null = null;
   private _waitPromise: Promise<CommandResult> | null = null;
   private _stdinStream: Duplex | null = null;
   private _execStream: NodeJS.ReadWriteStream | null = null;
@@ -192,6 +222,24 @@ class DockerProcessHandle extends ProcessHandle {
   async kill(): Promise<boolean> {
     if (this._exitCode !== undefined) return false;
 
+    // Publish the in-flight confirmation before awaiting it. Killing the target
+    // tears its own exec stream down, so an early stream 'end' may arrive while
+    // this is still running — it waits on this promise instead of settling as if
+    // the command had exited on its own.
+    const termination = this._runKillHelper();
+    this._terminationPromise = termination;
+    try {
+      return await termination;
+    } finally {
+      if (this._terminationPromise === termination) this._terminationPromise = null;
+    }
+  }
+
+  /**
+   * Runs the kill helper and verifies the process group is gone before reporting
+   * success, so a `true` result means the targets have actually stopped.
+   */
+  private async _runKillHelper(): Promise<boolean> {
     try {
       // Kill the process group inside the *container's* PID namespace. We must
       // not use exec.inspect().Pid here: that is the host/daemon-namespace PID
@@ -384,61 +432,75 @@ export class DockerProcessManager extends SandboxProcessManager {
         }
       });
 
+      // Every stream event settles through here and only the first one wins.
+      // Previously 'end' resolved first and 'close' — the only path that attached
+      // `killed`/`timedOut` — bailed out because the exit code was already set, so
+      // a kill that tore the stream down before confirming termination produced a
+      // result indistinguishable from a natural exit.
+      let settled = false;
+      const settle = (exitCode: number, metadata: Partial<CommandResult> = {}) => {
+        if (settled) return;
+        settled = true;
+        handle._setExitCode(exitCode);
+        resolve({
+          success: exitCode === 0,
+          exitCode,
+          stdout: handle.stdout,
+          stderr: handle.stderr,
+          executionTimeMs: Date.now() - startTime,
+          ...metadata,
+        });
+      };
+
+      // Termination metadata rides on whichever path settles first, so a killed
+      // process never looks like a natural exit. It is read from the handle, which
+      // only records termination once the kill helper confirmed it (or the timeout
+      // path forced the stream closed).
+      const settleTerminated = () => {
+        settle(137, { killed: true, timedOut: handle._timedOut }); // 137 = SIGKILL
+      };
+
       stream.on('end', async () => {
-        // Get exit code from exec inspect
+        // Killing the target tears its own exec stream down, so 'end' can arrive
+        // while kill() is still confirming the process group is gone. Wait for that
+        // confirmation (bounded) before settling: settling now would publish a
+        // termination-free result and disarm 'close', the only other path carrying
+        // `killed`. When termination is already recorded there is nothing to wait
+        // for.
+        if (!handle._killed && handle._terminationPromise) {
+          await waitForTermination(handle._terminationPromise);
+        }
+        if (settled) return;
+
+        if (handle._killed) {
+          settleTerminated();
+          return;
+        }
+
+        // Natural exit — get exit code from exec inspect
         try {
           const info = await exec.inspect();
-          const exitCode = info.ExitCode ?? 1;
-          handle._setExitCode(exitCode);
-          resolve({
-            success: exitCode === 0,
-            exitCode,
-            stdout: handle.stdout,
-            stderr: handle.stderr,
-            executionTimeMs: Date.now() - startTime,
-          });
+          settle(info.ExitCode ?? 1);
         } catch {
-          handle._setExitCode(1);
-          resolve({
-            success: false,
-            exitCode: 1,
-            stdout: handle.stdout,
-            stderr: handle.stderr,
-            executionTimeMs: Date.now() - startTime,
-          });
+          settle(1);
         }
       });
 
       // 'close' fires when stream.destroy() is called (e.g., from kill or timeout).
-      // Only resolve with SIGKILL exit code when the process was explicitly killed;
-      // natural stream close should be handled by the 'end' event above.
+      // Natural stream close should be handled by the 'end' event above.
       // Note: Docker multiplexed streams always emit 'end' before 'close' for
       // natural exits, so the !_killed guard won't silently drop natural closes.
       stream.on('close', () => {
-        if (handle.exitCode !== undefined) return; // Already resolved via 'end'
         if (!handle._killed) return; // Natural close — 'end' handles it
-        handle._setExitCode(137); // SIGKILL
-        resolve({
-          success: false,
-          exitCode: 137,
-          stdout: handle.stdout,
-          stderr: handle.stderr,
-          executionTimeMs: Date.now() - startTime,
-          killed: true,
-          timedOut: handle._timedOut,
-        });
+        settleTerminated();
       });
 
       stream.on('error', () => {
-        if (handle.exitCode !== undefined) return; // Already resolved
-        handle._setExitCode(1);
-        resolve({
-          success: false,
-          exitCode: 1,
-          stdout: handle.stdout,
-          stderr: handle.stderr || 'Stream error',
-          executionTimeMs: Date.now() - startTime,
-        });
+        if (handle._killed) {
+          settleTerminated();
+          return;
+        }
+        settle(1, { stderr: handle.stderr || 'Stream error' });
       });
     });
 

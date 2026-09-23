@@ -1403,6 +1403,110 @@ describe('DockerSandbox', () => {
       }
     });
 
+    it('should preserve killed metadata when the stream ends while kill is still confirming', async () => {
+      // Reproduction of the reported race: killing the target tears its own exec
+      // stream down, so 'end' can arrive while kill() is still verifying the
+      // process group is gone. The result must still report the termination
+      // instead of looking like a natural exit.
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const waitPromise = handle.wait();
+
+      // Gate the kill helper so it stays in flight while 'end' is delivered.
+      let releaseKillHelper!: () => void;
+      const killHelperGate = new Promise<void>(resolve => {
+        releaseKillHelper = resolve;
+      });
+      const killStream = { destroy: vi.fn() };
+      mockContainer.exec.mockImplementationOnce(async () => {
+        await killHelperGate;
+        return {
+          id: 'kill-exec',
+          start: vi.fn().mockResolvedValue(killStream),
+          inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+        };
+      });
+
+      // Not awaited: the helper is gated, so kill() is mid-confirmation here.
+      const killPromise = handle.kill();
+
+      const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
+      const endPromise = endHandler();
+
+      releaseKillHelper();
+      await endPromise;
+
+      const result = await waitPromise;
+      expect(await killPromise).toBe(true);
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(true);
+      expect(result.timedOut).toBe(false);
+    });
+
+    it('should preserve timedOut metadata when the stream ends during a timeout kill', async () => {
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100', { timeout: 50 });
+        const waitPromise = handle.wait();
+
+        // Fire the timeout so the handle is marked killed+timedOut and kill() runs.
+        await vi.advanceTimersByTimeAsync(50);
+
+        // 'end' arrives instead of 'close' — the metadata must survive it.
+        const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
+        await endHandler();
+
+        const result = await waitPromise;
+
+        expect(result.success).toBe(false);
+        expect(result.exitCode).toBe(137);
+        expect(result.killed).toBe(true);
+        expect(result.timedOut).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should settle when a kill confirmation never arrives instead of hanging wait()', async () => {
+      // If the daemon stops answering mid-kill, awaiting confirmation forever
+      // would leave wait() pending. Settlement is bounded, so wait() resolves —
+      // without claiming `killed`, since termination was never confirmed.
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100');
+        const waitPromise = handle.wait();
+
+        // The kill helper's exec never resolves: confirmation never arrives.
+        mockContainer.exec.mockImplementationOnce(() => new Promise(() => {}));
+        void handle.kill();
+
+        const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
+        const endPromise = endHandler();
+
+        // Comfortably past TERMINATION_CONFIRMATION_DEADLINE_MS.
+        await vi.advanceTimersByTimeAsync(60_000);
+        await endPromise;
+
+        const result = await waitPromise;
+
+        expect(result.exitCode).toBe(0);
+        expect(result.killed).toBeUndefined();
+        expect(result.timedOut).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should track spawned processes in list()', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();
