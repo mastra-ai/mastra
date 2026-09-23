@@ -22,7 +22,7 @@ function setup(withMemory: boolean) {
   } as unknown as Agent<any, any, any, any>;
   const options = { memory: { thread: 'trim-thread', resource: 'trim-user' } } as any;
 
-  const register = (runId: string, status: 'success' | 'failed' = 'success') => {
+  const register = (runId: string, status: 'success' | 'failed' | 'suspended' = 'success') => {
     let finish!: () => void;
     const finished = new Promise<void>(resolve => (finish = resolve));
     const output = {
@@ -75,5 +75,32 @@ describe('thread topic trim', () => {
     run.complete();
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(trim).not.toHaveBeenCalled();
+  });
+
+  it('keeps a run still in progress when a concurrent run completes', async () => {
+    const { trim, register } = setup(true);
+    const active = register('trim-run-active');
+    const activeStart = Date.now();
+    await active.registered;
+    const done = register('trim-run-done');
+    await done.registered;
+    done.complete();
+    await waitFor(() => trim.mock.calls.length === 1);
+    expect(trim.mock.calls[0]![1].before.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(trim.mock.calls[0]![1].before.getTime()).toBeGreaterThanOrEqual(activeStart);
+    const cutoff = trim.mock.calls[0]![1].before.getTime();
+    active.complete();
+    await waitFor(() => trim.mock.calls.length === 2);
+    expect(trim.mock.calls[1]![1].before.getTime()).toBeGreaterThan(cutoff - 1);
+  });
+
+  it('keeps a suspended run until it is answered', async () => {
+    const { trim, register } = setup(true);
+    const suspended = register('trim-run-suspended', 'suspended');
+    await suspended.registered;
+    const registeredBy = Date.now();
+    suspended.complete();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    for (const [, { before }] of trim.mock.calls) expect(before.getTime()).toBeLessThanOrEqual(registeredBy);
   });
 });

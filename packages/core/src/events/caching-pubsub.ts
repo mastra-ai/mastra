@@ -380,6 +380,15 @@ export class CachingPubSub extends PubSub {
     }
   }
 
+  /** Forward prefix trims to the inner transport; the per-process cache is left to its own bounds. */
+  override async trimTopic(topic: string, options: { before: Date }): Promise<void> {
+    try {
+      await this.inner.trimTopic(topic, options);
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to trim topic ${topic}`, error);
+    }
+  }
+
   /**
    * Get the inner PubSub instance.
    * Useful for accessing implementation-specific methods like close().

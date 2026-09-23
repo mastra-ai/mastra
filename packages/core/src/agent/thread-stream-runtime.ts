@@ -2706,8 +2706,11 @@ export class AgentThreadStreamRuntime {
       // cleanup above stays immediate.
       void Promise.resolve(record.broadcastFinished).then(() => {
         if (isDisabled?.()) return;
-        const persisted = record.output.status === 'success';
-        const trimBefore = persisted ? this.#retainedThreadHistoryStart(state, key) : undefined;
+        // Suspended runs save their messages too, so their parts are backed by
+        // storage; only a successful run leaves nothing actionable to trim.
+        const persisted = record.output.status === 'success' || record.output.status === 'suspended';
+        const trimmable = record.output.status === 'success';
+        const trimBefore = trimmable ? this.#retainedThreadHistoryStart(state, key) : undefined;
         void this.#publishAndWait(pubsub, key, {
           type: 'run-completed',
           runId: record.runId,
@@ -2718,7 +2721,7 @@ export class AgentThreadStreamRuntime {
           persisted,
           status: record.output.status,
         })
-          .then(() => (persisted ? this.#trimPersistedThreadHistory(pubsub, key, record, trimBefore) : undefined))
+          .then(() => (trimmable ? this.#trimPersistedThreadHistory(pubsub, key, record, trimBefore) : undefined))
           .catch(() => {});
         if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
@@ -2752,7 +2755,10 @@ export class AgentThreadStreamRuntime {
   ) {
     const memory = await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext });
     if (!memory) return;
-    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), { before: new Date(retainedStart ?? Date.now()) });
+    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), {
+      // Idle: include the current millisecond so the just-published run-completed goes too.
+      before: new Date(retainedStart ?? Date.now() + 1),
+    });
   }
 
   async #drainPendingSignals(
