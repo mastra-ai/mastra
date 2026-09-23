@@ -1,4 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -123,22 +122,15 @@ export function AgentPageTabs({
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />
-          {showPlayground && <AgentTab value="versions" icon={<GitBranch />} label="Editor" />}
+          <AgentTab
+            value="versions"
+            icon={<GitBranch />}
+            label="Editor"
+            disabled={!showPlayground}
+            disabledReason="Add @mastra/editor to enable the Editor."
+          />
         </TabList>
       </Tabs>
-      <div className="ml-auto flex items-center gap-2">
-        {!showPlayground && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Editor"
-            aria-disabled="true"
-            tooltip="Add @mastra/editor to enable the Editor."
-          >
-            <GitBranch />
-          </Button>
-        )}
-      </div>
     </div>
   );
 }

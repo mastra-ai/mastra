@@ -113,6 +113,8 @@ export function WorkflowPageTabs({ workflowId, activeTab, showObservability = fa
             value="schedules"
             icon={<CalendarClockIcon />}
             label={scheduleCount > 0 ? `Schedules (${scheduleCount})` : 'Schedules'}
+            disabled={scheduleCount === 0}
+            disabledReason="Configure a schedule on this workflow to enable Schedules."
           />
         </TabList>
       </Tabs>

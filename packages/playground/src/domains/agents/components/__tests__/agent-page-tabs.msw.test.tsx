@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -54,7 +54,7 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  return render(
+  const view = render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={navigateSpy} paths={noopPaths}>
@@ -76,10 +76,12 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
       </QueryClientProvider>
     </MastraReactProvider>,
   );
+  return { ...view, queryClient };
 }
 
 function commonHandlers(packagesResponse = systemPackages) {
   return [
+    http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json({ 'agent-1': v2Agent })),
     http.get(`${BASE_URL}/api/agents/agent-1`, () => HttpResponse.json(v2Agent)),
     http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesResponse)),
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
@@ -94,14 +96,25 @@ afterEach(() => {
 
 describe('AgentLayout tool tabs', () => {
   describe('when the editor is unavailable', () => {
-    it('omits the Editor tab', async () => {
+    it('keeps the Editor tab visible but disabled', async () => {
+      server.use(...commonHandlers());
+      const { queryClient } = renderLayout();
+      const editor = await screen.findByRole('tab', { name: 'Editor' });
+
+      await waitFor(() => expect(queryClient.getQueryState(['mastra-packages'])?.status).toBe('success'));
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Editor']);
+      expect(editor.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.click(editor);
+      expect(navigateSpy).not.toHaveBeenCalled();
+    });
+
+    it('explains how to enable the Editor when focused', async () => {
       server.use(...commonHandlers());
       renderLayout();
-      await screen.findByRole('tab', { name: 'Chat' });
-      expect(screen.queryByRole('tab', { name: 'Editor' })).toBeNull();
-      const editor = screen.getByRole('button', { name: 'Editor' });
-      expect(editor.textContent).toBe('');
-      expect(editor.getAttribute('aria-disabled')).toBe('true');
+      const editor = await screen.findByRole('tab', { name: 'Editor' });
+      if (editor.parentElement) fireEvent.focus(editor.parentElement);
+
+      expect((await screen.findByRole('tooltip')).textContent).toContain('Add @mastra/editor');
     });
   });
 
@@ -112,7 +125,22 @@ describe('AgentLayout tool tabs', () => {
       const editor = await screen.findByRole('tab', { name: 'Editor' });
       expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Editor']);
       expect(editor.getAttribute('aria-selected')).toBe('true');
-      expect(screen.queryByRole('button', { name: 'Editor' })).toBeNull();
+      await waitFor(() =>
+        expect(screen.getByRole('tab', { name: 'Editor' }).getAttribute('aria-disabled')).not.toBe('true'),
+      );
+    });
+
+    it('navigates to the Editor', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout();
+
+      const editor = await screen.findByRole('tab', { name: 'Editor' });
+      await waitFor(() =>
+        expect(screen.getByRole('tab', { name: 'Editor' }).getAttribute('aria-disabled')).not.toBe('true'),
+      );
+      fireEvent.click(screen.getByRole('tab', { name: 'Editor' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/editor');
     });
   });
 
