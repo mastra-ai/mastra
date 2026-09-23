@@ -4,8 +4,8 @@ import * as React from 'react';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Label } from '../Label';
+import { createDrawerHandle } from './create-drawer-handle';
 import {
-  createDrawerHandle,
   Drawer,
   DrawerBackdrop,
   DrawerBody,

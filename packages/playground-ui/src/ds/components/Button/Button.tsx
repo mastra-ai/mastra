@@ -3,7 +3,8 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Icon, iconSizeClasses, type IconSize } from '@/ds/icons/Icon';
+import { Icon } from '@/ds/icons/Icon';
+import { iconSizeClasses, type IconSize } from '@/ds/icons/icon-size-classes';
 import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,

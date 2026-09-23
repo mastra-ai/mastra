@@ -73,7 +73,7 @@ export const Fill: Story = {
     variant: 'fill',
   },
   render: args => (
-    <div className="h-[480px] border border-dashed border-border">
+    <div className="h-120 border border-dashed border-border">
       <EmptyState {...args} />
     </div>
   ),
