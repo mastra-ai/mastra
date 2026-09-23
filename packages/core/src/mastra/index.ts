@@ -5234,7 +5234,11 @@ export class Mastra<
                     properties: {
                       type: { type: 'string', enum: ['choice'] },
                       choice: { type: 'string', enum: question.choices },
-                      probabilities: { type: 'object', additionalProperties: { type: 'number' } },
+                      probabilities: {
+                        type: 'object',
+                        properties: Object.fromEntries(question.choices.map(choice => [choice, { type: 'number' }])),
+                        additionalProperties: false,
+                      },
                     },
                     required: ['type', 'choice'],
                   }
@@ -5244,7 +5248,16 @@ export class Mastra<
                       properties: {
                         type: { type: 'string', enum: ['score'] },
                         score: { type: 'number', minimum: question.min, maximum: question.max },
-                        probabilities: { type: 'object', additionalProperties: { type: 'number' } },
+                        probabilities: {
+                          type: 'object',
+                          properties: Object.fromEntries(
+                            Array.from({ length: question.max - question.min + 1 }, (_, index) => [
+                              String(question.min + index),
+                              { type: 'number' },
+                            ]),
+                          ),
+                          additionalProperties: false,
+                        },
                       },
                       required: ['type', 'score'],
                     }

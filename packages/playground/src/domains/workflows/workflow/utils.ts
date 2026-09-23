@@ -115,6 +115,7 @@ const getStepNodeAndEdge = ({
     nextStepFlow?.type === 'sleepUntil' ||
     nextStepFlow?.type === 'agent' ||
     nextStepFlow?.type === 'tool' ||
+    nextStepFlow?.type === 'classifier' ||
     nextStepFlow?.type === 'mapping' ||
     nextStepFlow?.type === 'workflow'
   ) {

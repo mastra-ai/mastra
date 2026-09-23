@@ -211,6 +211,22 @@ describe('classifier workflow construction', () => {
     ]);
   });
 
+  it.each([
+    { providerOptions: { invalid: undefined } },
+    { metadata: { invalid: () => 'value' } },
+    { metadata: { invalid: 1n } },
+  ])('rejects non-JSON classifier options during storage', options => {
+    const workflow = createWorkflow({
+      id: 'invalid-classifier-options',
+      inputSchema: z.string(),
+      outputSchema: z.any(),
+    })
+      .classifier('ticket-router', options)
+      .commit();
+
+    expect(() => toStorableGraph(workflow.stepGraph)).toThrow(/JSON-compatible/);
+  });
+
   it('passes mapped input and preserves classifier entries from createStep()', async () => {
     const states: unknown[] = [];
     const classifier = createClassifier(async options => {

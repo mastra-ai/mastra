@@ -200,6 +200,18 @@ describe('resolveWorkflowGraphStep', () => {
     expect(data.stepGraph).toEqual(nestedFlow);
   });
 
+  it('keeps an outgoing handle when the next step is a classifier', () => {
+    const { nodes } = constructNodesAndEdges({
+      stepGraph: [
+        { type: 'step', step: step('prepare') },
+        { type: 'classifier', id: 'route', classifierId: 'ticket-router' },
+      ],
+    });
+
+    const prepareNode = nodes.find(node => node.id === 'node-prepare');
+    expect(prepareNode?.data.withoutBottomHandle).toBe(false);
+  });
+
   it('keeps workflow graph nodes on one React Flow node type with resolved step data', () => {
     const { nodes, edges } = constructNodesAndEdges({
       stepGraph: [

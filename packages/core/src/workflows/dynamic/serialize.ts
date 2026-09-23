@@ -229,16 +229,38 @@ function stepDescriptor(step: any) {
   };
 }
 
+function assertJsonValue(value: unknown, path: string, seen = new Set<object>()): void {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError(`${path} must contain only finite numbers.`);
+    return;
+  }
+  if (typeof value !== 'object') throw new TypeError(`${path} must contain only JSON-compatible values.`);
+  if (seen.has(value)) throw new TypeError(`${path} must not contain circular references.`);
+
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertJsonValue(item, `${path}.${index}`, seen));
+  } else {
+    Object.entries(value).forEach(([key, item]) => assertJsonValue(item, `${path}.${key}`, seen));
+  }
+  seen.delete(value);
+}
+
 function pickSerializableClassifierStepOptions(options: any): SerializableClassifierStepOptions | undefined {
   if (!options || typeof options !== 'object') return undefined;
 
   const out: SerializableClassifierStepOptions = {};
   if (typeof options.maxRetries === 'number') out.maxRetries = options.maxRetries;
   if (options.providerOptions && typeof options.providerOptions === 'object') {
+    assertJsonValue(options.providerOptions, 'classifier options.providerOptions');
     out.providerOptions = options.providerOptions;
   }
   if (typeof options.retries === 'number') out.retries = options.retries;
-  if (options.metadata && typeof options.metadata === 'object') out.metadata = options.metadata;
+  if (options.metadata && typeof options.metadata === 'object') {
+    assertJsonValue(options.metadata, 'classifier options.metadata');
+    out.metadata = options.metadata;
+  }
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
