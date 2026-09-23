@@ -37,6 +37,7 @@ import type { ChannelIdentityStorage } from '../storage/domains/channel-identity
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-sync.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
+import type { IntegrationIdentityStorage } from '../storage/domains/integration-identity/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -125,6 +126,13 @@ export interface IntegrationContext {
      * right user's credentials.
      */
     channelIdentity: ChannelIdentityStorage;
+    /**
+     * Tenant → external accounts a Factory user has self-claimed on this or
+     * any other integration. Integrations use it (through the aggregation
+     * service) to power the `@me` filter; the settings UI writes to it when
+     * a user claims or unclaims an account.
+     */
+    integrationIdentity: IntegrationIdentityStorage;
   };
   /**
    * Factory runtime available when the work-item domain is ready.

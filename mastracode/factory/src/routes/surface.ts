@@ -33,6 +33,7 @@ import type { ModelCredentialsStorage } from '../storage/domains/credentials/bas
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
+import type { IntegrationIdentityStorage } from '../storage/domains/integration-identity/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
@@ -108,6 +109,7 @@ export interface FactoryApiRoutesDeps {
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
+    integrationIdentity: IntegrationIdentityStorage;
     comments: WorkItemCommentsStorage;
   };
   integrations?: IntegrationRegistration[];
@@ -329,7 +331,7 @@ export function buildIntegrationContext(
     feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
-      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
+      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'integrationIdentity' | 'memorySettings'
     >;
     /**
      * Stable id of the registered source-control-owning integration (today:
@@ -357,6 +359,7 @@ export function buildIntegrationContext(
       projects: deps.domains.projects,
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
+      integrationIdentity: deps.domains.integrationIdentity,
       memorySettings: deps.domains.memorySettings,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
