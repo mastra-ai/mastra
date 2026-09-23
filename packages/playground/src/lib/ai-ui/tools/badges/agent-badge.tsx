@@ -96,11 +96,11 @@ export const AgentBadge = ({
 
   const isError = status === 'error';
   const shouldCollapseContent = isComplete && !isError && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
-  const showsError = isError && Boolean(errorText);
+  const shownError = isError ? errorText : undefined;
   const hasBody =
     Boolean(onLoadPrevious) ||
     messages.length > 0 ||
-    showsError ||
+    Boolean(shownError) ||
     Boolean(suspendPayload) ||
     awaitsToolApproval({ toolApprovalMetadata, toolCalled });
 
@@ -177,9 +177,9 @@ export const AgentBadge = ({
             );
           })}
 
-          {showsError && (
-            <ToolCallMono copyText={errorText} data-testid="agent-error" className="text-error/90">
-              {errorText}
+          {shownError && (
+            <ToolCallMono copyText={shownError} data-testid="agent-error" className="text-error/90">
+              {shownError}
             </ToolCallMono>
           )}
 
