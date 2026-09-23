@@ -436,6 +436,29 @@ A repository maintainer with write or admin access can start a Factory review fr
 
 `@<factory-app> re-review` is also accepted. Factory resolves `<factory-app>` from its observed or configured GitHub App login (without the `[bot]` suffix), so commands are ignored until that identity is known. The command creates and starts a first Review pass for a missing or Intake card, restarts a completed card with `factory-rereview`, and is a no-op while the card is already Reviewing. Other prose, quoted mentions, edited comments, and comments from untrusted users do not trigger a run.
 
+### Identity claims and `@me` filter
+
+A signed-in user can claim which external accounts on each integration are theirs. Claims are persisted in the `integration_identity_claims` storage domain, keyed per `(orgId, userId, integrationId, externalUserId)`.
+
+The Connections settings page renders one panel per integration that implements the optional `identity` capability. Each panel shows candidate accounts (observed from work item comment authors on that platform) plus a manual-entry field for known external user ids that haven't been observed yet. The user checks the accounts that are theirs and saves.
+
+Once claimed, `@me` is recognized as a filter chip on the board and as a token in the Cmd+K search palette. `@me` resolves to the acting user's claim map (integrationId → set of externalUserIds) and matches records whose external author, assignees, requesters, or comment-author fields match any claimed id for that integration.
+
+An integration opts in by attaching an `identity` capability to its class:
+
+```typescript
+import { buildCommentAuthorsIdentity } from '@mastra/factory/integrations';
+
+export class MyIntegration implements FactoryIntegration {
+  identity = buildCommentAuthorsIdentity('my-platform');
+  // …
+}
+```
+
+`buildCommentAuthorsIdentity` returns an `IntegrationIdentityCapability` whose `listCandidateAccounts` reads distinct external authors observed on `work_item_comments` for the platform label. An integration can implement the capability directly if it has a different observed source or an API-listed roster.
+
+Claims and candidates are exposed over `GET /web/identity/integrations`, `GET /web/identity/claims`, `GET /web/identity/candidates/:integrationId`, `POST /web/identity/claims`, and `DELETE /web/identity/claims/:integrationId/:externalUserId`. All routes require a signed-in user and reject when the tenant has no org.
+
 ### Development
 
 Run focused package checks from the repository root:
