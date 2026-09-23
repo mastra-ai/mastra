@@ -59,7 +59,7 @@ export interface TraceSpanPanelProps {
   size?: TraceDataPanelViewProps['size'];
   /** Sibling-drawer elevation (see `DataPanel`). */
   depth?: TraceDataPanelViewProps['depth'];
-  /** Rendered inside the drawer above the trace header (e.g. inbox feedback context). */
+  /** Rendered inside the drawer above the trace header (e.g. feedback context). */
   headerSlot?: ReactNode;
   /** Accessible drawer name; defaults to the trace id. */
   title?: string;

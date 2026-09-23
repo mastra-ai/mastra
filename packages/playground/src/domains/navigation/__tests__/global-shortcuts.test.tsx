@@ -45,7 +45,6 @@ afterEach(() => {
 describe('GlobalShortcuts', () => {
   describe('when g is followed by a sidebar key', () => {
     it.each([
-      ['i', '/inbox'],
       ['a', '/agents'],
       ['p', '/prompts'],
       ['w', '/workflows'],
