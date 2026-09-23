@@ -39,7 +39,7 @@ const crumbs = (
   </Breadcrumb>
 );
 
-const headerActions = <Button variant="outline">Docs</Button>;
+const headerActions = <Button>Docs</Button>;
 
 const pageHeader = (
   <PageHeader>
