@@ -1340,54 +1340,99 @@ export interface ApprovalResponse {
   declineContext?: { reason?: string; message?: string };
 }
 
+/** A single parked interactive approval gate, scoped to the call that opened it. */
+interface ApprovalGate {
+  toolCallId: string;
+  toolName: string;
+  /** Thread that produced the gated call, when the producer knew it. */
+  threadId?: string;
+  /** Run that produced the gated call, when the producer knew it. */
+  runId?: string;
+  promise: Promise<ApprovalDecision>;
+  resolve: (decision: ApprovalDecision) => void;
+}
+
+/** Narrows which parked gate(s) an operation applies to. */
+interface ApprovalGateFilter {
+  toolCallId?: string;
+  threadId?: string;
+  runId?: string;
+}
+
 /**
- * Owns the session's interactive tool-approval gate: when a tool requires user
+ * Owns the session's interactive tool-approval gates: when a tool requires user
  * approval, the run parks on a promise here until the UI responds approve or
- * decline. Holds the pending resolver and the name of the tool being gated.
+ * decline.
  *
- * At most one approval is in flight at a time. The Session owns the gate
- * mechanics (arm / resolve / clear); the AgentController still maps a decision to its
- * effects (running vs declining the tool, and any "always allow" grant), since
- * those touch config-derived tool categories.
+ * Gates are keyed by `toolCallId` and each remembers the thread/run that opened
+ * it. More than one gate can be parked at once — a background/sub-agent run on a
+ * detached thread arms its own gate while the foreground run arms another — so
+ * arming never overwrites or strands an existing gate, and a response can only
+ * release the gate it names. Thread-scoped callers (abort, a user-message
+ * interjection) release only their own thread's gate, so one thread can never
+ * mutate another thread's approval authority.
+ *
+ * The Session owns the gate mechanics (arm / respond / cancel); the
+ * AgentController still maps a decision to its effects (running vs declining the
+ * tool, and any "always allow" grant), since those touch config-derived tool
+ * categories.
  */
 export class SessionApproval {
-  /** Resolver for the parked approval promise, or null when nothing is gated. */
-  #resolve: ((decision: ApprovalDecision) => void) | null = null;
-  /** Name of the tool currently awaiting approval, or null when none. */
-  #toolName: string | null = null;
-  /** Id of the tool call currently awaiting approval, or null when none. */
-  #toolCallId: string | null = null;
+  /** Parked gates keyed by the tool call that opened them. */
+  #gates = new Map<string, ApprovalGate>();
 
   /**
-   * Park a new approval for `toolName`/`toolCallId` and return a promise that
-   * resolves once {@link respond} is called with the user's decision. The caller
-   * awaits this while the run is suspended on the gate.
+   * Park an approval for `toolCallId` and return a promise that resolves once
+   * {@link respond} or {@link cancel} releases it. The caller awaits this while
+   * the run is suspended on the gate. Re-arming the same call returns the
+   * already-parked promise rather than replacing its resolver, so a duplicate
+   * arm can never strand the first waiter.
    */
-  arm({ toolName, toolCallId }: { toolName: string; toolCallId?: string }): Promise<ApprovalDecision> {
-    this.#toolName = toolName;
-    this.#toolCallId = toolCallId ?? null;
-    return new Promise<ApprovalDecision>(resolve => {
-      this.#resolve = resolve;
+  arm({
+    toolName,
+    toolCallId,
+    threadId,
+    runId,
+  }: {
+    toolName: string;
+    toolCallId: string;
+    threadId?: string;
+    runId?: string;
+  }): Promise<ApprovalDecision> {
+    const existing = this.#gates.get(toolCallId);
+    if (existing) return existing.promise;
+
+    let resolve!: (decision: ApprovalDecision) => void;
+    const promise = new Promise<ApprovalDecision>(r => {
+      resolve = r;
     });
-  }
-
-  /** Id of the tool call currently awaiting approval, or null when none. */
-  getToolCallId(): string | null {
-    return this.#toolCallId;
-  }
-
-  /** Whether an approval is currently parked awaiting a decision. */
-  isArmed(): boolean {
-    return this.#resolve !== null;
+    this.#gates.set(toolCallId, { toolCallId, toolName, threadId, runId, promise, resolve });
+    return promise;
   }
 
   /**
-   * Apply a user's {@link ApprovalResponse} to the parked gate. A no-op when
-   * nothing is armed. When `toolCallId` is supplied it must match the gated
-   * call; a mismatch is ignored so a stale/delayed response cannot resolve a
-   * different pending gate. `always_allow_category` runs `onAlwaysAllow` with the
-   * gated tool name (so the caller can grant the tool's category — a lookup that
-   * needs AgentController config) and then approves; `approve`/`decline` resolve as-is.
+   * Whether a gate is parked. With no filter this is true when *any* gate is
+   * parked; with a filter it is true only when a gate matches every supplied
+   * field, so callers can ask "is my thread/run parked?" without seeing another
+   * thread's gate.
+   */
+  isArmed(filter?: ApprovalGateFilter): boolean {
+    if (!filter) return this.#gates.size > 0;
+    return this.#matching(filter).length > 0;
+  }
+
+  /** Ids of the parked gates that match `filter` (or every gate when omitted). */
+  getToolCallIds(filter?: ApprovalGateFilter): string[] {
+    return (filter ? this.#matching(filter) : [...this.#gates.values()]).map(gate => gate.toolCallId);
+  }
+
+  /**
+   * Apply a user's {@link ApprovalResponse} to the gate named by `toolCallId`.
+   * A no-op for an id that is not parked, so a missing *or* stale id can never
+   * resolve a different pending gate. `always_allow_category` runs
+   * `onAlwaysAllow` with the gated tool name (so the caller can grant the tool's
+   * category — a lookup that needs AgentController config) and then approves;
+   * `approve`/`decline` resolve as-is.
    */
   respond({
     decision,
@@ -1395,42 +1440,54 @@ export class SessionApproval {
     requestContext,
     declineContext,
     onAlwaysAllow,
-  }: ApprovalResponse & { toolCallId?: string; onAlwaysAllow?: (toolName: string) => void }): void {
-    if (!this.isArmed()) return;
-    if (toolCallId !== undefined && this.#toolCallId !== null && toolCallId !== this.#toolCallId) return;
+  }: ApprovalResponse & { toolCallId: string; onAlwaysAllow?: (toolName: string) => void }): void {
+    const gate = this.#gates.get(toolCallId);
+    if (!gate) return;
 
-    if (decision === 'always_allow_category' && this.#toolName) {
-      onAlwaysAllow?.(this.#toolName);
+    if (decision === 'always_allow_category') {
+      onAlwaysAllow?.(gate.toolName);
     }
 
-    const resolved: ApprovalDecision = {
+    this.#gates.delete(toolCallId);
+    gate.resolve({
       decision: decision === 'decline' ? 'decline' : 'approve',
       requestContext,
       declineContext,
-    };
-    this.#resolve?.(resolved);
-    this.#resolve = null;
-    this.#toolName = null;
-    this.#toolCallId = null;
+    });
   }
 
   /**
-   * Release a parked gate without a user decision — used when the run is
-   * aborted. Resolves the awaiting producer as a `decline` so the gated tool is
-   * rejected (not run) and the run can finalize. A no-op when nothing is armed.
+   * Release parked gate(s) without a user decision — on abort, or when a user
+   * message interrupts a run. Each is resolved as a `decline` so the gated tool
+   * is rejected (not run) and the run can finalize. `filter` narrows the release
+   * to a specific call, thread, or run (so aborting one thread cannot decline
+   * another's gate); with no filter every gate is released. Returns the ids that
+   * were released.
    */
-  cancel(): void {
-    if (!this.isArmed()) return;
-    this.#resolve?.({ decision: 'decline' });
-    this.#resolve = null;
-    this.#toolName = null;
-    this.#toolCallId = null;
+  cancel(options: ApprovalGateFilter & { declineContext?: { reason?: string; message?: string } } = {}): string[] {
+    const gates = this.#matching(options);
+    for (const gate of gates) {
+      this.#gates.delete(gate.toolCallId);
+      gate.resolve({ decision: 'decline', declineContext: options.declineContext });
+    }
+    return gates.map(gate => gate.toolCallId);
   }
 
-  /** Clear the gated tool name/call id once a parked approval has been consumed. */
-  clearToolName(): void {
-    this.#toolName = null;
-    this.#toolCallId = null;
+  /**
+   * Parked gates matching every field supplied in `filter`. A gate that never
+   * recorded a field the filter names (the producer did not know its thread or
+   * run) is treated as matching: it cannot be attributed to a *different*
+   * thread, and stranding it would hang the run it belongs to.
+   */
+  #matching(filter: ApprovalGateFilter): ApprovalGate[] {
+    const matched: ApprovalGate[] = [];
+    for (const gate of this.#gates.values()) {
+      if (filter.toolCallId !== undefined && gate.toolCallId !== filter.toolCallId) continue;
+      if (filter.threadId !== undefined && gate.threadId !== undefined && gate.threadId !== filter.threadId) continue;
+      if (filter.runId !== undefined && gate.runId !== undefined && gate.runId !== filter.runId) continue;
+      matched.push(gate);
+    }
+    return matched;
   }
 }
 
@@ -2427,7 +2484,7 @@ export class SessionDisplayState {
     const ds = this.#state;
     ds.activeTools = new Map();
     ds.toolInputBuffers = new Map();
-    ds.pendingApproval = null;
+    ds.pendingApprovals = new Map();
     ds.pendingSuspensions = new Map();
     ds.activeSubagents = new Map();
     ds.currentMessage = null;
@@ -2439,6 +2496,17 @@ export class SessionDisplayState {
     ds.omProgress = defaultOMProgressState();
     ds.bufferingMessages = false;
     ds.bufferingObservations = false;
+  }
+
+  /**
+   * Drop the pending-approval display entries for the given tool calls. Called
+   * when a gate is answered (approve/decline) or released (abort / interjection)
+   * so the UI stops rendering approvals that can no longer be resolved.
+   */
+  clearPendingApprovals(toolCallIds: readonly string[]): void {
+    for (const toolCallId of toolCallIds) {
+      this.#state.pendingApprovals.delete(toolCallId);
+    }
   }
 
   /**
@@ -2456,7 +2524,10 @@ export class SessionDisplayState {
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
-        ds.pendingApproval = null;
+        // Parked approvals are deliberately NOT cleared here either: a run on
+        // another thread may still be waiting on one, and resuming a parked tool
+        // restarts the run (a fresh agent_start) whose own gate must stay armed
+        // until it is answered. Entries drop when a gate is answered or released.
         // Parked tool suspensions are intentionally NOT cleared here: resuming
         // one parked tool restarts the run (a fresh agent_start) and the other
         // parallel prompts must stay rendered until they are resolved.
@@ -2464,7 +2535,6 @@ export class SessionDisplayState {
 
       case 'agent_end':
         ds.isRunning = false;
-        ds.pendingApproval = null;
         // A suspended run keeps its pending tool suspensions alive so the UI can
         // still render the prompts (e.g. `ask_user`, which pauses via the native
         // tool-suspension primitive). When the run ends for any other reason the
@@ -2607,6 +2677,8 @@ export class SessionDisplayState {
             }
           }
         }
+        // A finished call can no longer be awaiting approval.
+        ds.pendingApprovals.delete(event.toolCallId);
         break;
       }
 
@@ -2619,11 +2691,15 @@ export class SessionDisplayState {
       }
 
       case 'tool_approval_required':
-        ds.pendingApproval = {
+        // Keyed by toolCallId and tagged with the producing thread so a gate
+        // parked on one thread can never shadow another thread's in the display
+        // state. The entry is dropped when the gate is answered or released.
+        ds.pendingApprovals.set(event.toolCallId, {
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           args: event.args,
-        };
+          threadId: event.threadId,
+        });
         break;
 
       case 'tool_suspended':
@@ -3358,20 +3434,24 @@ export class Session<TState = unknown> {
     // stream down first would make that decline fail with "could not find an
     // active or suspended run". Defer both the stream abort and the abort
     // signal to the engine, which fires them once the decline has landed.
-    const wasGated = this.approval.isArmed();
+    // Scope the lookup to this thread: a background run on a detached thread can
+    // be parked on its own approval, and aborting here must neither decline nor
+    // defer the abort for that other thread's gate.
+    const abortThreadId = this.thread.getId() ?? undefined;
+    const wasGated = this.approval.isArmed({ threadId: abortThreadId });
     if (wasGated) {
       this.run.requestAbort({ deferSignal: true });
       // The engine completes this teardown after its decline await; a rebind can
       // start a successor run in that window, so bind it to this binding too.
       this.#deferredAbortOrigin = { bindingGeneration: this.run.bindingGeneration(), localOnly: this.#localOnlyAbort };
       if (suspendedToolCalls.length === 0) {
-        this.approval.cancel();
+        this.#releaseApprovalGates({ threadId: abortThreadId });
         return;
       }
       void this.runEngine
         .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
         .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
-        .finally(() => this.approval.cancel());
+        .finally(() => this.#releaseApprovalGates({ threadId: abortThreadId }));
       return;
     }
 
@@ -3469,12 +3549,13 @@ export class Session<TState = unknown> {
   }
 
   /**
-   * Respond to the parked tool-approval gate with the user's decision. A no-op
-   * when nothing is awaiting approval or the run is already aborting.
-   * "always_allow_category" grants the gated tool's category for the rest of
-   * the session (resolved via the injected {@link setCategoryResolver}) and then
-   * approves; "approve"/"decline" release
-   * the run as-is.
+   * Respond to the parked tool-approval gate named by `toolCallId` with the
+   * user's decision. The id is required: a response can only release the gate it
+   * names, so a stale or id-less response can never resolve a different pending
+   * gate. A no-op when that gate is not parked or the run is already aborting.
+   * "always_allow_category" grants the gated tool's category for the rest of the
+   * session (resolved via the injected {@link setCategoryResolver}) and then
+   * approves; "approve"/"decline" release the run as-is.
    */
   respondToToolApproval({
     decision,
@@ -3483,7 +3564,7 @@ export class Session<TState = unknown> {
     declineContext,
   }: {
     decision: 'approve' | 'decline' | 'always_allow_category';
-    toolCallId?: string;
+    toolCallId: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
   }): void {
@@ -3498,6 +3579,25 @@ export class Session<TState = unknown> {
         if (category) this.grantCategory(category);
       },
     });
+    // The gate is gone; drop its display-state entry so the UI stops rendering it.
+    this.displayState.clearPendingApprovals([toolCallId]);
+  }
+
+  /**
+   * Decline every parked approval gate matching `filter` and drop the matching
+   * display entries. Used to release this thread's gate(s) on abort, or when a
+   * user message interrupts a run — never another thread's, so a background
+   * run's approval authority stays untouched.
+   */
+  #releaseApprovalGates(
+    filter: {
+      toolCallId?: string;
+      threadId?: string;
+      runId?: string;
+      declineContext?: { reason?: string; message?: string };
+    } = {},
+  ): void {
+    this.displayState.clearPendingApprovals(this.approval.cancel(filter));
   }
 
   // ===========================================================================
@@ -3759,8 +3859,8 @@ export class Session<TState = unknown> {
       // the message to a run that `completeDeferredAbort()` then terminates.
       if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
         if (signal.type === 'user') {
-          this.approval.respond({
-            decision: 'decline',
+          this.#releaseApprovalGates({
+            threadId,
             declineContext: {
               reason: 'interrupted_by_user_message',
               message: 'The pending tool approval was declined because the user sent a new message.',

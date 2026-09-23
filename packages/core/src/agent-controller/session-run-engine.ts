@@ -775,7 +775,12 @@ export class SessionRunEngine {
           break;
         }
 
-        const approvalPromise = this.#session.approval.arm({ toolName, toolCallId });
+        const approvalPromise = this.#session.approval.arm({
+          toolName,
+          toolCallId,
+          threadId: state.threadId,
+          runId: this.#session.run.getRunId() ?? undefined,
+        });
         this.#session.emit({
           type: 'tool_approval_required',
           threadId: state.threadId,
@@ -785,7 +790,6 @@ export class SessionRunEngine {
         });
 
         const approval = await approvalPromise;
-        this.#session.approval.clearToolName();
 
         // `session.abort()` releases a parked gate as a decline and defers the
         // stream/signal teardown to us, so the decline can still be driven

@@ -50,6 +50,7 @@ import type { EventHandlerContext } from './handlers/types.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
+import { isEventRoutedToCurrentThread } from './thread-routing.js';
 import { setCurrentThreadTitle } from './thread-title.js';
 
 /**
@@ -97,12 +98,9 @@ export async function dispatchEvent(
   ectx: EventHandlerContext,
   state: TUIState,
 ): Promise<void> {
-  if (
-    'toolCallId' in event &&
-    'threadId' in event &&
-    event.threadId &&
-    (state.pendingNewThread || event.threadId !== state.session.thread.getId())
-  ) {
+  // Tool events carry the thread that produced them; a call parked on a detached
+  // thread must not drive the current thread's UI.
+  if (!isEventRoutedToCurrentThread(event, state)) {
     return;
   }
 
@@ -200,7 +198,9 @@ export async function dispatchEvent(
     case 'tool_approval_required':
       trackInteractivePrompt(ectx, 'tool_approval_required', {
         toolName: event.toolName,
-        threadId: state.session.thread.getId(),
+        // The producer's thread id, not the session's: they only differ if the
+        // call belongs to a detached thread, which the routing guard drops.
+        threadId: event.threadId ?? state.session.thread.getId(),
         resourceId: state.session.identity.getResourceId(),
       });
       handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);

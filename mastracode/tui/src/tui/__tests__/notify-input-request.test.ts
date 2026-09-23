@@ -36,7 +36,9 @@ function createDeferred<T>() {
 function createHarness() {
   let listener: ((event: any) => Promise<void>) | undefined;
   const state = {
+    pendingNewThread: false,
     session: {
+      thread: { getId: vi.fn(() => 'thread-current') },
       state: { get: vi.fn(() => ({ notifications: 'off' })) },
       subscribe: vi.fn((handler: any) => {
         listener = handler;
@@ -300,6 +302,37 @@ describe('input-request notifications fire at event receipt (#20398)', () => {
       releaseBlocker.resolve();
     },
   );
+
+  it('notifies for a current-thread approval but not for a detached one', async () => {
+    const { listener, releaseBlocker } = createHarness();
+
+    const blocked = listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+
+    // An approval parked on a background thread is not the user's to answer:
+    // notifying for it would send them to a prompt they cannot act on.
+    void listener({
+      type: 'tool_approval_required',
+      toolCallId: 'call-background',
+      toolName: 'execute_command',
+      args: {},
+      threadId: 'thread-background',
+    });
+    expect(mocks.sendNotification).not.toHaveBeenCalled();
+
+    // The current thread's approval still pings.
+    void listener({
+      type: 'tool_approval_required',
+      toolCallId: 'call-current',
+      toolName: 'execute_command',
+      args: {},
+      threadId: 'thread-current',
+    });
+    expect(mocks.sendNotification).toHaveBeenCalledTimes(1);
+
+    releaseBlocker.resolve();
+    await blocked;
+  });
 
   it('keeps delivering events when notification state access throws', async () => {
     let listener: ((event: any) => Promise<void>) | undefined;

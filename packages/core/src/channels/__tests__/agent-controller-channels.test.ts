@@ -671,7 +671,7 @@ describe('AgentControllerChannels', () => {
       );
       const session = (await controller.getSessionByResource('channel:chan-1:t-live-hook'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
-      const toolCallId = session.approval.getToolCallId()!;
+      const toolCallId = session.approval.getToolCallIds()[0]!;
 
       await simulateAction(channels, adapter, 'chan-1:t-live-hook', `tool_approve:${toolCallId}`);
       await waitFor(() => !session.approval.isArmed(), { what: 'gate resolved' });
@@ -841,7 +841,7 @@ describe('AgentControllerChannels', () => {
       await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'approval card posted' });
       expect(executeSpy).not.toHaveBeenCalled();
 
-      const toolCallId = session.approval.getToolCallId()!;
+      const toolCallId = session.approval.getToolCallIds()[0]!;
       await simulateAction(channels, adapter, 'chan-1:t-appr', `tool_approve:${toolCallId}`);
 
       // The engine (parked at the gate) drives the resume: tool executes,
@@ -873,7 +873,7 @@ describe('AgentControllerChannels', () => {
       const session = (await controller.getSessionByResource('channel:chan-1:t-deny'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
 
-      const toolCallId = session.approval.getToolCallId()!;
+      const toolCallId = session.approval.getToolCallIds()[0]!;
       await simulateAction(channels, adapter, 'chan-1:t-deny', `tool_deny:${toolCallId}`);
 
       await waitFor(() => !session.approval.isArmed(), { what: 'gate resolved as decline' });
