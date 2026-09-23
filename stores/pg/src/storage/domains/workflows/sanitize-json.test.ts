@@ -39,6 +39,28 @@ describe('PostgreSQL JSON serialization', () => {
     expect(() => toPgJson(circular)).toThrow(TypeError);
   });
 
+  it('preserves native JSON serialization for boxed values, getters, and custom toJSON', () => {
+    const value = {
+      number: new Number(4),
+      boolean: new Boolean(true),
+      string: new String('hello'),
+      nested: { toJSON: () => ({ text: 'normal' }) },
+      get computed() {
+        return this.string.toString();
+      },
+    };
+    expect(toPgJson(value)).toBe(JSON.stringify(value));
+    expect(toPgJson(JSON.rawJSON('3'))).toBe(JSON.stringify(JSON.rawJSON('3')));
+  });
+
+  it('rejects keys that collide after repair rather than silently overwriting values', () => {
+    expect(() => toPgJson({ ab: 1, 'a\0b': 2 })).toThrow('JSON keys collide');
+  });
+
+  it('preserves native behavior for top-level values without JSON output', () => {
+    expect(toPgJson(undefined)).toBe(JSON.stringify(undefined));
+  });
+
   it('still accepts already serialized JSON', () => {
     expect(sanitizeJsonForPg('"before\\u0000after"')).toBe('"beforeafter"');
     expect(JSON.parse(sanitizeJsonForPg('"before\\uD800after"'))).toBe('before�after');
