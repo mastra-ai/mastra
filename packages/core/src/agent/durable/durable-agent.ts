@@ -591,6 +591,12 @@ export class DurableAgent<
   /** The durable workflow for agent execution */
   #workflow: ReturnType<typeof createDurableAgenticWorkflow> | null = null;
 
+  /**
+   * The engine the workflow instance actually runs on, resolved on first use
+   * (see {@link DurableAgent.resolveWorkflowEngine}). `null` until resolved.
+   */
+  #resolvedWorkflowEngine: 'default' | 'evented' | null = null;
+
   /** Maximum steps for the agentic loop */
   readonly #maxSteps?: number;
 
@@ -1739,6 +1745,38 @@ export class DurableAgent<
   }
 
   /**
+   * Resolve the engine this agent's workflow instance actually runs on.
+   *
+   * An evented agent without a Mastra host cannot execute evented runs — the
+   * evented engine's `createRun` requires the host's registries, storage, and
+   * event workers. Before the evented engine was re-enabled, a hostless
+   * EventedAgent silently streamed on the default in-process engine; that is
+   * released behavior, so we preserve it here as a fallback (with a warning)
+   * instead of throwing.
+   *
+   * The result is memoized: `getWorkflow()` caches the created workflow, so
+   * an agent that first streamed hostless keeps its default-engine workflow
+   * even if it is registered on a Mastra instance afterwards — identical to
+   * the previously shipped behavior. The cache is deliberately not
+   * invalidated.
+   *
+   * @internal
+   */
+  protected resolveWorkflowEngine(): 'default' | 'evented' {
+    if (this.#resolvedWorkflowEngine) return this.#resolvedWorkflowEngine;
+    let engine = this.workflowEngine;
+    if (engine === 'evented' && !this.#mastra) {
+      engine = 'default';
+      this.logger.warn(
+        `EventedAgent '${this.id}' has no Mastra host; running on the default in-process engine. ` +
+          `Register the agent on a Mastra instance (with storage) to get evented execution.`,
+      );
+    }
+    this.#resolvedWorkflowEngine = engine;
+    return engine;
+  }
+
+  /**
    * Evented-engine runs execute via pubsub events consumed by in-process
    * workers — without them `run.start()`/`resume()`/`restart()` never
    * resolve (they wait on the `workflows-finish` topic). No-op on the
@@ -1746,7 +1784,7 @@ export class DurableAgent<
    * @internal
    */
   protected async ensureEngineWorkersStarted(): Promise<void> {
-    if (this.workflowEngine === 'evented') {
+    if (this.resolveWorkflowEngine() === 'evented') {
       await this.#mastra?.__ensureExecutionWorkersStarted();
     }
   }
@@ -1809,7 +1847,9 @@ export class DurableAgent<
   protected createWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
     return createDurableAgenticWorkflow({
       maxSteps: this.#maxSteps,
-      engine: this.workflowEngine,
+      // Resolved, not raw: a hostless evented agent falls back to the default
+      // in-process engine (see resolveWorkflowEngine).
+      engine: this.resolveWorkflowEngine(),
       shouldPersistSnapshot: this.resolveShouldPersistSnapshot(),
     });
   }
@@ -3806,8 +3846,9 @@ export class DurableAgent<
         // from Mastra's registries, so the loop workflow must be discoverable
         // there. Register it as an (unscoped) internal workflow — it's a
         // per-agent singleton. Without this, every run's events would be
-        // unresolvable and the run would hang.
-        if (this.workflowEngine === 'evented') {
+        // unresolvable and the run would hang. Uses the resolved engine so
+        // this stays consistent with the workflow instance just created.
+        if (this.resolveWorkflowEngine() === 'evented') {
           this.#mastra.__registerInternalWorkflow(this.#workflow);
         }
       }

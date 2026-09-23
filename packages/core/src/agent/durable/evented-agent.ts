@@ -48,11 +48,13 @@ export interface EventedAgentConfig<
  *   suspend/resume, and finish events work even when the agent was constructed
  *   with its own pubsub.
  *
- * An EventedAgent must be registered on a `Mastra` instance (with storage)
- * before use — the evented engine needs the host's pubsub, storage, and event
- * workers. Without one, the run fails loudly with a `MastraError` ("requires a
- * Mastra host") surfaced as an error event on the stream, and recovery entry
- * points (`recover`, `listActiveRuns`, `recoverActiveRuns`) throw directly.
+ * Register the EventedAgent on a `Mastra` instance (with storage) to get
+ * evented execution — the evented engine needs the host's pubsub, storage,
+ * and event workers. Without a host, the agent falls back to the default
+ * in-process engine (with a warning), preserving the released behavior of a
+ * standalone evented agent. Recovery entry points (`recover`,
+ * `listActiveRuns`, `recoverActiveRuns`) still require a host and throw
+ * directly without one.
  *
  * @example
  * ```typescript
@@ -68,7 +70,8 @@ export interface EventedAgentConfig<
  *
  * const eventedAgent = new EventedAgent({ agent });
  *
- * // Required: the evented engine runs on the Mastra host's pubsub + storage.
+ * // Register on a Mastra host to get evented execution (a hostless agent
+ * // falls back to the default in-process engine).
  * const mastra = new Mastra({
  *   agents: { myAgent: eventedAgent },
  *   storage: new LibSQLStore({ url: 'file:mastra.db' }),
@@ -167,9 +170,16 @@ export class EventedAgent<
       // worker in a fleet can execute a step. The agent's stream still sees
       // those events because its CachingPubSub follows `mastra.pubsub` as its
       // source (wired at registration; see #ensurePubsubInitialized).
+      //
+      // On the hostless fallback (default engine, see resolveWorkflowEngine)
+      // there is no `mastra.pubsub`: the default engine publishes on the
+      // pubsub handed to `createRun`, so pass the agent's own transport —
+      // otherwise the caller's stream never sees a single event and hangs.
+      // This mirrors the previously shipped standalone behavior.
       const run = await workflow.createRun({
         runId,
         resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
+        ...(this.resolveWorkflowEngine() === 'default' ? { pubsub: this.pubsubInternal } : {}),
       });
       // Fire and forget - don't await the run, so stream() returns immediately.
       // Pass the caller's requestContext (so config selectors pick the same observability
