@@ -4,6 +4,7 @@ import type {
   MastraCompositeStore,
   ObservabilityStorage,
   ScoresStorage,
+  TrustedThreadPredicate,
   TrustedTraceQueryPredicate,
 } from '@mastra/core/storage';
 import * as coreStorage from '@mastra/core/storage';
@@ -99,11 +100,13 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
   });
 }
 
-function usesRootDuration(predicate: TrustedTraceQueryPredicate | undefined): boolean {
+function usesRootDuration(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
   if (!predicate) return false;
   if (predicate.type === 'boolean') return predicate.args.some(usesRootDuration);
   if (predicate.type === 'not') return usesRootDuration(predicate.arg);
-  if (predicate.type === 'relation') return false;
+  if (predicate.type === 'relation') {
+    return predicate.collection === 'traces' && usesRootDuration(predicate.predicate);
+  }
   return predicate.field === 'durationMs';
 }
 
@@ -113,7 +116,7 @@ export function supportsObservabilityTraceQueryRootDuration(observabilityStore: 
 
 export function assertObservabilityTraceQueryRootDurationSupported(
   observabilityStore: ObservabilityStorage,
-  predicate: TrustedTraceQueryPredicate | undefined,
+  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
 ) {
   if (!usesRootDuration(predicate) || supportsObservabilityTraceQueryRootDuration(observabilityStore)) return;
 

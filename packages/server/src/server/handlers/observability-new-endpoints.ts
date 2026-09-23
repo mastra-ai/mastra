@@ -509,6 +509,7 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityThreadQuerySupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
+      assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
         throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
