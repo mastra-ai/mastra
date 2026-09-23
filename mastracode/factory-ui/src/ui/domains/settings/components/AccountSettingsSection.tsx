@@ -10,6 +10,7 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
+import { IdentityClaimsSection } from './IdentityClaimsSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
 const AUTH_PROVIDER_LABELS: Record<string, string> = {
@@ -122,6 +123,13 @@ export function AccountSettingsSection() {
             </SettingsRow>
           )}
         </SettingsContainer>
+      </SettingsSubsection>
+      <SettingsSubsection
+        scope="personal"
+        title="Identity"
+        description="Claim which external accounts on each integration are yours. Used by the board and Cmd+K @me filters."
+      >
+        <IdentityClaimsSection />
       </SettingsSubsection>
       <SettingsSubsection scope="personal" title="Session">
         <SettingsContainer>

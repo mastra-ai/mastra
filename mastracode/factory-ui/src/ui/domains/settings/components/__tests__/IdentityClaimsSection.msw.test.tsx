@@ -115,11 +115,10 @@ describe('IdentityClaimsSection', () => {
     const expander = await screen.findByRole('button', { name: /GitHub/ });
     await userEvent.click(expander);
 
-    const octocatLabel = await screen.findByText('The Octocat');
-    // Row DOM shape: <li><input><label>{label}...</label></li> — the checkbox is the label's list-item sibling.
-    const octocatCheckbox = octocatLabel.closest('li')?.querySelector('input[type="checkbox"]');
-    expect(octocatCheckbox).not.toBeNull();
-    await userEvent.click(octocatCheckbox as HTMLInputElement);
+    await screen.findByText('The Octocat');
+    const octocatCheckbox = screen.getByRole('checkbox', { name: 'The Octocat' });
+    expect(octocatCheckbox.getAttribute('aria-checked')).toBe('false');
+    await userEvent.click(octocatCheckbox);
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -150,10 +149,10 @@ describe('IdentityClaimsSection', () => {
     renderWithProviders(<IdentityClaimsSection />);
 
     // Expander opens by default when claims exist — no click needed.
-    const octocatLabel = await screen.findByText('The Octocat');
-    const octocatCheckbox = octocatLabel.closest('li')?.querySelector('input[type="checkbox"]');
-    expect((octocatCheckbox as HTMLInputElement).checked).toBe(true);
-    await userEvent.click(octocatCheckbox as HTMLInputElement);
+    await screen.findByText('The Octocat');
+    const octocatCheckbox = screen.getByRole('checkbox', { name: 'The Octocat' });
+    expect(octocatCheckbox.getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(octocatCheckbox);
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -203,15 +202,15 @@ describe('IdentityClaimsSection', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Linear/ }));
 
     // Compose an unsaved edit on Linear: check Alice.
-    const alice = await screen.findByText('Alice Linear');
-    const aliceCheckbox = alice.closest('li')?.querySelector('input[type="checkbox"]');
-    await userEvent.click(aliceCheckbox as HTMLInputElement);
-    expect((aliceCheckbox as HTMLInputElement).checked).toBe(true);
+    await screen.findByText('Alice Linear');
+    const aliceCheckbox = screen.getByRole('checkbox', { name: 'Alice Linear' });
+    await userEvent.click(aliceCheckbox);
+    expect(aliceCheckbox.getAttribute('aria-checked')).toBe('true');
 
     // Save GitHub — this invalidates the shared claims query.
-    const octocatLabel = await screen.findByText('The Octocat');
-    const octocatCheckbox = octocatLabel.closest('li')?.querySelector('input[type="checkbox"]');
-    await userEvent.click(octocatCheckbox as HTMLInputElement);
+    await screen.findByText('The Octocat');
+    const octocatCheckbox = screen.getByRole('checkbox', { name: 'The Octocat' });
+    await userEvent.click(octocatCheckbox);
     // Two Save buttons — GitHub's is the enabled one first (Linear's is
     // enabled too since Alice is checked). Grab both, click GitHub's.
     const saveButtons = screen.getAllByRole('button', { name: 'Save' });
@@ -224,9 +223,8 @@ describe('IdentityClaimsSection', () => {
     // Linear's Alice checkbox must still be checked — the shared claims
     // invalidation from the GitHub save must not clobber Linear's unsaved
     // edits.
-    const aliceAfter = screen.getByText('Alice Linear');
-    const aliceCheckboxAfter = aliceAfter.closest('li')?.querySelector('input[type="checkbox"]');
-    expect((aliceCheckboxAfter as HTMLInputElement).checked).toBe(true);
+    const aliceCheckboxAfter = screen.getByRole('checkbox', { name: 'Alice Linear' });
+    expect(aliceCheckboxAfter.getAttribute('aria-checked')).toBe('true');
   });
 
   it('given an integration with no observed candidates, when opened, then it explains and offers manual entry', async () => {
@@ -264,9 +262,9 @@ describe('IdentityClaimsSection', () => {
 
     // Row appears as a checked candidate — Save is now enabled but no
     // POST has landed yet.
-    const octocatLabel = await screen.findByText('The Octocat');
-    const octocatCheckbox = octocatLabel.closest('li')?.querySelector('input[type="checkbox"]');
-    expect((octocatCheckbox as HTMLInputElement).checked).toBe(true);
+    await screen.findByText('The Octocat');
+    const octocatCheckbox = screen.getByRole('checkbox', { name: 'The Octocat' });
+    expect(octocatCheckbox.getAttribute('aria-checked')).toBe('true');
     expect(calls.posts).toHaveLength(0);
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -294,9 +292,9 @@ describe('IdentityClaimsSection', () => {
     await userEvent.click(await screen.findByRole('button', { name: /GitHub/ }));
 
     // Check the observed candidate.
-    const monalisaLabel = await screen.findByText('Mona Lisa');
-    const monalisaCheckbox = monalisaLabel.closest('li')?.querySelector('input[type="checkbox"]');
-    await userEvent.click(monalisaCheckbox as HTMLInputElement);
+    await screen.findByText('Mona Lisa');
+    const monalisaCheckbox = screen.getByRole('checkbox', { name: 'Mona Lisa' });
+    await userEvent.click(monalisaCheckbox);
 
     // Add a manual id.
     await userEvent.type(screen.getByLabelText('GitHub id'), 'octocat');

@@ -137,9 +137,8 @@ describe('IdentityClaimsSection ↔ useResolvedMe roundtrip', () => {
 
     // Expander is closed on load (no claims) — open it.
     await userEvent.click(await screen.findByRole('button', { name: /GitHub/ }));
-    const label = await screen.findByText('The Octocat');
-    const checkbox = label.closest('li')?.querySelector('input[type="checkbox"]');
-    await userEvent.click(checkbox as HTMLInputElement);
+    await screen.findByText('The Octocat');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'The Octocat' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(readout).toHaveTextContent('github:octocat'));
@@ -168,9 +167,8 @@ describe('IdentityClaimsSection ↔ useResolvedMe roundtrip', () => {
 
     // Claim octocat via the settings section.
     await userEvent.click(await screen.findByRole('button', { name: /GitHub/ }));
-    const label = await screen.findByText('The Octocat');
-    const checkbox = label.closest('li')?.querySelector('input[type="checkbox"]');
-    await userEvent.click(checkbox as HTMLInputElement);
+    await screen.findByText('The Octocat');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'The Octocat' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     // The board `@me` predicate now matches. This is the settings →
