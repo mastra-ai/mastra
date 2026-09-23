@@ -12,9 +12,7 @@ export function collectInngestFunctions({
 }) {
   const workflows = [
     ...Object.values(mastra.listWorkflows()),
-    ...Object.values(mastra.listAgents()).flatMap(agent =>
-      isInngestAgent(agent) ? agent.getDurableWorkflows() : [],
-    ),
+    ...Object.values(mastra.listAgents()).flatMap(agent => (isInngestAgent(agent) ? agent.getDurableWorkflows() : [])),
   ];
   const workflowFunctions = new Map<string, InngestFunction.Like>();
 
