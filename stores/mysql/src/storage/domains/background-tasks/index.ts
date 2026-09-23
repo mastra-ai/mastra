@@ -4,6 +4,7 @@ import type {
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { CreateIndexOptions } from '@mastra/core/storage';
@@ -51,6 +52,8 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     startedAt: parseDateTime(row.startedAt),
     suspendedAt: parseDateTime(row.suspendedAt),
     completedAt: parseDateTime(row.completedAt),
+    ownerId: row.ownerId != null ? String(row.ownerId) : undefined,
+    leaseExpiresAt: parseDateTime(row.leaseExpiresAt),
   };
 }
 
@@ -86,6 +89,12 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
     await this.operations.createTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+    });
+    // Backfill columns added after the initial schema shipped.
+    await this.operations.alterTable({
+      tableName: TABLE_BACKGROUND_TASKS as any,
+      schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -157,7 +166,7 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
 
   async createTask(task: BackgroundTask): Promise<void> {
     await this.pool.execute(
-      `INSERT INTO ${formatTableName(TABLE_BACKGROUND_TASKS)} (${quoteIdentifier('id', 'column name')}, ${quoteIdentifier('tool_call_id', 'column name')}, ${quoteIdentifier('tool_name', 'column name')}, ${quoteIdentifier('agent_id', 'column name')}, ${quoteIdentifier('thread_id', 'column name')}, ${quoteIdentifier('resource_id', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('status', 'column name')}, ${quoteIdentifier('args', 'column name')}, ${quoteIdentifier('result', 'column name')}, ${quoteIdentifier('error', 'column name')}, ${quoteIdentifier('suspend_payload', 'column name')}, ${quoteIdentifier('retry_count', 'column name')}, ${quoteIdentifier('max_retries', 'column name')}, ${quoteIdentifier('timeout_ms', 'column name')}, ${quoteIdentifier('createdAt', 'column name')}, ${quoteIdentifier('startedAt', 'column name')}, ${quoteIdentifier('suspendedAt', 'column name')}, ${quoteIdentifier('completedAt', 'column name')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ${formatTableName(TABLE_BACKGROUND_TASKS)} (${quoteIdentifier('id', 'column name')}, ${quoteIdentifier('tool_call_id', 'column name')}, ${quoteIdentifier('tool_name', 'column name')}, ${quoteIdentifier('agent_id', 'column name')}, ${quoteIdentifier('thread_id', 'column name')}, ${quoteIdentifier('resource_id', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('status', 'column name')}, ${quoteIdentifier('args', 'column name')}, ${quoteIdentifier('result', 'column name')}, ${quoteIdentifier('error', 'column name')}, ${quoteIdentifier('suspend_payload', 'column name')}, ${quoteIdentifier('retry_count', 'column name')}, ${quoteIdentifier('max_retries', 'column name')}, ${quoteIdentifier('timeout_ms', 'column name')}, ${quoteIdentifier('createdAt', 'column name')}, ${quoteIdentifier('startedAt', 'column name')}, ${quoteIdentifier('suspendedAt', 'column name')}, ${quoteIdentifier('completedAt', 'column name')}, ${quoteIdentifier('ownerId', 'column name')}, ${quoteIdentifier('leaseExpiresAt', 'column name')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.toolCallId,
@@ -178,6 +187,8 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
         transformToSqlValue(task.startedAt),
         transformToSqlValue(task.suspendedAt),
         transformToSqlValue(task.completedAt),
+        task.ownerId ?? null,
+        transformToSqlValue(task.leaseExpiresAt),
       ],
     );
   }
@@ -185,7 +196,7 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const setClauses: string[] = [];
     const params: (string | number | null)[] = [];
@@ -222,14 +233,42 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
       setClauses.push(`${quoteIdentifier('completedAt', 'column name')} = ?`);
       params.push(transformToSqlValue(update.completedAt));
     }
+    if ('ownerId' in update) {
+      setClauses.push(`${quoteIdentifier('ownerId', 'column name')} = ?`);
+      params.push(update.ownerId ?? null);
+    }
+    if ('leaseExpiresAt' in update) {
+      setClauses.push(`${quoteIdentifier('leaseExpiresAt', 'column name')} = ?`);
+      params.push(transformToSqlValue(update.leaseExpiresAt));
+    }
 
     if (setClauses.length === 0) return false;
 
     params.push(taskId);
-    const statusPredicate = options?.expectedStatus ? ` AND ${quoteIdentifier('status', 'column name')} = ?` : '';
-    if (options?.expectedStatus) params.push(options.expectedStatus);
+    const predicates: string[] = [];
+    if (options?.expectedStatus) {
+      predicates.push(`${quoteIdentifier('status', 'column name')} = ?`);
+      params.push(options.expectedStatus);
+    }
+    if (options?.expectedOwnerId !== undefined) {
+      if (options.expectedOwnerId === null) {
+        predicates.push(`${quoteIdentifier('ownerId', 'column name')} IS NULL`);
+      } else {
+        predicates.push(`${quoteIdentifier('ownerId', 'column name')} = ?`);
+        params.push(options.expectedOwnerId);
+      }
+    }
+    if (options?.expectedLeaseExpiresAt !== undefined) {
+      if (options.expectedLeaseExpiresAt === null) {
+        predicates.push(`${quoteIdentifier('leaseExpiresAt', 'column name')} IS NULL`);
+      } else {
+        predicates.push(`${quoteIdentifier('leaseExpiresAt', 'column name')} = ?`);
+        params.push(transformToSqlValue(options.expectedLeaseExpiresAt));
+      }
+    }
+    const predicateSql = predicates.length > 0 ? ` AND ${predicates.join(' AND ')}` : '';
     const [result] = await this.pool.execute<ResultSetHeader>(
-      `UPDATE ${formatTableName(TABLE_BACKGROUND_TASKS)} SET ${setClauses.join(', ')} WHERE ${quoteIdentifier('id', 'column name')} = ?${statusPredicate}`,
+      `UPDATE ${formatTableName(TABLE_BACKGROUND_TASKS)} SET ${setClauses.join(', ')} WHERE ${quoteIdentifier('id', 'column name')} = ?${predicateSql}`,
       params,
     );
     return result.affectedRows > 0;

@@ -1480,6 +1480,220 @@ describe('BackgroundTaskManager', () => {
         await m2.stopWorkers();
       }
     });
+
+    it('does not reclaim a running task whose lease is still valid', async () => {
+      // The previous process is still alive and renewing its lease, so its
+      // ownership is durable and startup recovery must leave the task alone.
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'leased-elsewhere',
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+        ownerId: 'other-worker',
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      });
+      // This process can run the task if it is (wrongly) reclaimed.
+      local.backgroundTaskManager!.registerTaskContext(
+        'leased-elsewhere',
+        ctx(async () => 'stolen'),
+      );
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('leased-elsewhere');
+        expect(task).toMatchObject({ status: 'running', ownerId: 'other-worker' });
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('reclaims a running task once its lease has expired', async () => {
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'expired-lease',
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 1_000),
+      });
+      local.backgroundTaskManager!.registerTaskContext(
+        'expired-lease',
+        ctx(async () => 'reclaimed'),
+      );
+      await local.startWorkers();
+
+      try {
+        const mgr = local.backgroundTaskManager!;
+
+        await tick(200);
+
+        const task = await mgr.getTask('expired-lease');
+        expect(task).toMatchObject({ status: 'completed', result: 'reclaimed' });
+        // Terminal writes release the lease so the row carries no stale owner.
+        expect(task!.ownerId).toBeUndefined();
+        expect(task!.leaseExpiresAt).toBeUndefined();
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('stamps an execution lease on dispatch and clears it when the task finishes', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 60_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'lease', args: {}, agentId: 'a1', runId: 'r-lease' },
+          ctx(async () => {
+            await gate;
+            return 'leased';
+          }),
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+
+        const running = await local.mgr.getTask(task.id);
+        expect(running!.ownerId).toBe(local.mgr.ownerId);
+        expect(running!.leaseExpiresAt!.getTime()).toBeGreaterThan(Date.now() + 30_000);
+
+        release();
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('completed'));
+
+        const completed = await local.mgr.getTask(task.id);
+        expect(completed!.ownerId).toBeUndefined();
+        expect(completed!.leaseExpiresAt).toBeUndefined();
+      } finally {
+        release();
+        await local.cleanup();
+      }
+    });
+
+    it('keeps renewing the lease of a task it is still running', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 3_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'heartbeat', args: {}, agentId: 'a1', runId: 'r-heartbeat' },
+          ctx(async () => {
+            await gate;
+            return 'ok';
+          }),
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+        const initialExpiry = (await local.mgr.getTask(task.id))!.leaseExpiresAt!.getTime();
+
+        // The heartbeat renews every leaseDurationMs / 3 (1s with a 3s lease).
+        await vi.waitFor(
+          async () => {
+            const renewed = (await local.mgr.getTask(task.id))!.leaseExpiresAt!.getTime();
+            expect(renewed).toBeGreaterThan(initialExpiry);
+          },
+          { timeout: 5_000, interval: 100 },
+        );
+      } finally {
+        release();
+        await local.cleanup();
+      }
+    });
+
+    it('does not let a superseded owner commit results', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 60_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'superseded', args: {}, agentId: 'a1', runId: 'r-superseded' },
+          ctx(async () => {
+            await gate;
+            return 'late result';
+          }),
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+
+        // Another worker takes the task over, as it would once this owner's
+        // lease lapsed, and becomes the recorded owner.
+        const bgStore = await testStorage.getStore('backgroundTasks');
+        await bgStore!.updateTask(task.id, {
+          ownerId: 'other-worker',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+
+        release();
+        // Give the original owner's workflow time to try — and fail — to
+        // commit its result.
+        await tick(300);
+
+        const afterTakeover = await local.mgr.getTask(task.id);
+        expect(afterTakeover).toMatchObject({ status: 'running', ownerId: 'other-worker' });
+        expect(afterTakeover!.result).toBeUndefined();
+      } finally {
+        release();
+        await local.cleanup();
+      }
+    });
   });
 
   describe('stream', () => {

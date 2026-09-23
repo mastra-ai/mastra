@@ -1,4 +1,10 @@
-import type { BackgroundTask, TaskFilter, TaskListResult, UpdateBackgroundTask } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
+} from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
@@ -23,6 +29,8 @@ type StoredTask = {
   startedAt: string | null;
   suspendedAt: string | null;
   completedAt: string | null;
+  ownerId?: string | null;
+  leaseExpiresAt?: string | null;
 };
 
 type StoredTaskPatch = Partial<Omit<StoredTask, 'id' | 'createdAt'>>;
@@ -57,6 +65,8 @@ function toStored(task: BackgroundTask): StoredTask {
     startedAt: task.startedAt?.toISOString() ?? null,
     suspendedAt: task.suspendedAt?.toISOString() ?? null,
     completedAt: task.completedAt?.toISOString() ?? null,
+    ownerId: task.ownerId ?? null,
+    leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
   };
 }
 
@@ -72,6 +82,8 @@ function toStoredPatch(update: UpdateBackgroundTask): StoredTaskPatch {
   if ('startedAt' in update) patch.startedAt = update.startedAt?.toISOString() ?? null;
   if ('suspendedAt' in update) patch.suspendedAt = update.suspendedAt?.toISOString() ?? null;
   if ('completedAt' in update) patch.completedAt = update.completedAt?.toISOString() ?? null;
+  if ('ownerId' in update) patch.ownerId = update.ownerId ?? null;
+  if ('leaseExpiresAt' in update) patch.leaseExpiresAt = update.leaseExpiresAt?.toISOString() ?? null;
   return patch;
 }
 
@@ -109,6 +121,8 @@ function fromStored(stored: StoredTask | Record<string, any>): BackgroundTask {
     startedAt: record.startedAt ? new Date(record.startedAt) : undefined,
     suspendedAt: record.suspendedAt ? new Date(record.suspendedAt) : undefined,
     completedAt: record.completedAt ? new Date(record.completedAt) : undefined,
+    ownerId: record.ownerId ?? undefined,
+    leaseExpiresAt: record.leaseExpiresAt ? new Date(record.leaseExpiresAt) : undefined,
   };
 }
 
@@ -146,16 +160,44 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const patch = toStoredPatch(update);
     if (Object.keys(patch).length === 0) return false;
+
+    const expected: Record<string, any> = {};
+    if (options?.expectedStatus) expected.status = options.expectedStatus;
+
+    if (options?.expectedOwnerId !== undefined || options?.expectedLeaseExpiresAt !== undefined) {
+      // Convex's patch compares expected fields with strict equality against the raw stored
+      // record, so rows written before ownership existed (missing keys) would never match a
+      // `null` expectation. Normalize missing-vs-null locally, then hand the raw stored values
+      // to the server so its compare-and-swap still guards against concurrent writers.
+      const stored = await this.#db.load<Record<string, any>>({
+        tableName: TABLE_BACKGROUND_TASKS,
+        keys: { id: taskId },
+      });
+      if (!stored) return false;
+
+      if (options.expectedOwnerId !== undefined && (stored.ownerId ?? null) !== options.expectedOwnerId) {
+        return false;
+      }
+      if (
+        options.expectedLeaseExpiresAt !== undefined &&
+        (stored.leaseExpiresAt ?? null) !== (options.expectedLeaseExpiresAt?.toISOString() ?? null)
+      ) {
+        return false;
+      }
+
+      if (options.expectedOwnerId !== undefined) expected.ownerId = stored.ownerId ?? null;
+      if (options.expectedLeaseExpiresAt !== undefined) expected.leaseExpiresAt = stored.leaseExpiresAt ?? null;
+    }
 
     return this.#db.patch({
       tableName: TABLE_BACKGROUND_TASKS,
       id: taskId,
       record: patch,
-      expected: options?.expectedStatus ? { status: options.expectedStatus } : undefined,
+      expected: Object.keys(expected).length > 0 ? expected : undefined,
     });
   }
   async getTask(taskId: string): Promise<BackgroundTask | null> {

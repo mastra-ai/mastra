@@ -696,6 +696,7 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     expect(updateTask).toHaveBeenLastCalledWith(task.id, expect.objectContaining({ status: 'failed' }), {
       expectedStatus: 'running',
+      expectedOwnerId: (manager as any).ownerId,
     });
     expect(publish).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'task.failed' }));
     expect(ack).toHaveBeenCalledOnce();
@@ -856,6 +857,8 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 0 }), {
       expectedStatus: 'pending',
+      expectedOwnerId: null,
+      expectedLeaseExpiresAt: null,
     });
     expect(ack).toHaveBeenCalled();
     await manager.shutdown();
@@ -897,6 +900,8 @@ describe('BackgroundTaskManager lifecycle', () => {
 
     expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({ status: 'running', retryCount: 1 }), {
       expectedStatus: 'running',
+      expectedOwnerId: null,
+      expectedLeaseExpiresAt: null,
     });
     expect(ack).toHaveBeenCalled();
     await manager.shutdown();
