@@ -11,6 +11,8 @@ Use the narrowest package build/test/lint/typecheck; run unit/integration before
 
 Features/new packages need docs. For docs, follow `docs/AGENTS.md` and styleguides. After code changes, read `@.mastracode/commands/changeset.md`.
 
+Security review bots (e.g. `superagent-security[bot]`) often misjudge trust boundaries; verify each finding before changing code. Name the untrusted actor and the entry point they control (HTTP request, model/tool output, third-party data, fork PR). If exploiting it requires in-process code, the developer's own config/env/files, or behavior already on the base branch, don't add hardening: reply on the finding thread explaining why it's a false positive. Fix findings that cross a real boundary (tenant isolation, redaction, auth fail-open).
+
 Architecture: `packages/core/src`; `mastra/` config/DI; `agent/`, `tools/`, `memory/`, `workflows/`, `storage/` are modular framework components.
 
 Read applicable `@.claude/commands/`: `changeset`, `commit`, `gh-new-pr`, `gh-pr-comments`, `make-moves`.

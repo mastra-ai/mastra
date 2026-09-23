@@ -10,6 +10,8 @@ For any comments from coderabbit: if they make sense implement them, if they don
 
 Anytime you make a comment, be sure to start it with "AI says: " and sign off with your name at the end as well (don't use a dash before the name, GH treats that as a bullet point list).
 
+For security bot findings (e.g. `superagent-security[bot]`): follow the trust-boundary check in `AGENTS.md` before implementing anything. Many findings treat trusted in-process callers or developer-owned config as attackers; for those, reply to the finding thread explaining why no untrusted actor can reach it instead of adding hardening.
+
 For any other comments: if they make sense implement them, if they don't or you want clarification, do the same as with coderabbit, however - first ask the user if it's ok to respond or if the user wants to do it.
 
 For the fixes you want to make in response to comments, make sure you make a todolist first and ask the user if the list looks good before proceeding!
