@@ -28,7 +28,10 @@ const useSystemPackagesFixture = (fixture: typeof renamedPostgresWithMetrics) =>
   server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(fixture)));
 };
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  delete (window as Partial<Window>).MASTRA_CLOUD_API_ENDPOINT;
+});
 
 describe('useObservabilityStorageCapabilities', () => {
   describe('when the server advertises metrics support for a renamed storage class', () => {
@@ -58,6 +61,31 @@ describe('useObservabilityStorageCapabilities', () => {
       const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
 
       await waitFor(() => expect(result.current.supportsMetrics).toBe(false));
+    });
+  });
+
+  describe('when running on the Mastra platform', () => {
+    // Observability reads are proxied by the edge router to the hosted
+    // ClickHouse query service, so metrics are supported regardless of the
+    // project's own storage.
+    it('reports metrics as available even when storage does not support them', () => {
+      window.MASTRA_CLOUD_API_ENDPOINT = 'https://api.mastra.cloud';
+      useSystemPackagesFixture(storageWithoutMetrics);
+
+      const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
+
+      expect(result.current.supportsMetrics).toBe(true);
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    it('does not surface the in-memory warning', async () => {
+      window.MASTRA_CLOUD_API_ENDPOINT = 'https://api.mastra.cloud';
+      useSystemPackagesFixture({ ...storageWithoutMetrics, observabilityStorageType: 'ObservabilityInMemory' });
+
+      const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isInMemory).toBe(false));
+      expect(result.current.supportsMetrics).toBe(true);
     });
   });
 });

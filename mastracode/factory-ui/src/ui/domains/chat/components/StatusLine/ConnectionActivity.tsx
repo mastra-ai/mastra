@@ -6,12 +6,12 @@ import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { useChatTranscript } from '../../context/useChatTranscript';
 import { usePreparingThreadId } from '../../hooks/usePreparingThreadId';
 
-const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
+const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
 
 export function ConnectionActivity() {
   const { status } = useChatConnection();
   const { workspacePending } = useChatSessionContext();
-  const { busy } = useChatTranscript();
+  const { phase } = useChatTranscript();
   const preparingThreadId = usePreparingThreadId();
 
   // A dropped stream makes every other status stale, the composer's working ring included.
@@ -40,7 +40,7 @@ export function ConnectionActivity() {
       </span>
     );
   // Spinning composer ring is the visible cue; this keeps the state announced.
-  if (busy)
+  if (phase === 'working')
     return (
       <span className="sr-only" role="status" aria-live="polite">
         Working…

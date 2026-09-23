@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workflow.tool() | Workflows"
-description: Documentation for the `Workflow.tool()` method in workflows, which adds a tool as a declarative step.
+description: "The .tool() method adds a tool as a declarative step. The tool's own input and output schemas apply, so the previous step's output must satisfy the tool's input schema."
 packages:
   - "@mastra/core"
 ---
@@ -13,8 +13,8 @@ Unlike wrapping a tool with `createStep()`, `.tool()` records a declarative entr
 
 ## Usage example
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
-workflow.tool(testTool).commit();
+```typescript filename="src/mastra/workflows/test-workflow.ts"
+workflow.tool(testTool).commit()
 ```
 
 ## Parameters
@@ -60,8 +60,8 @@ workflow.tool(testTool).commit();
 
 Pass a string to reference a registered tool without importing it. The tool must be registered on the Mastra instance when the workflow runs:
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
-workflow.tool("lookup-customer", { retries: 2 }).commit();
+```typescript filename="src/mastra/workflows/test-workflow.ts"
+workflow.tool('lookup-customer', { retries: 2 }).commit()
 ```
 
 ## Persisting tool steps

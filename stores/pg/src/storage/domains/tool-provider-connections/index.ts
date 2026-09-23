@@ -50,8 +50,8 @@ export class ToolProviderConnectionsPG extends ToolProviderConnectionsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx =>
@@ -143,7 +143,7 @@ export class ToolProviderConnectionsPG extends ToolProviderConnectionsStorage {
     });
 
     try {
-      const row = await this.#db.client.oneOrNone(
+      const row = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "authorId" = $1 AND "providerId" = $2 AND "connectionId" = $3 LIMIT 1`,
         [authorId, providerId, connectionId],
       );
@@ -250,7 +250,7 @@ export class ToolProviderConnectionsPG extends ToolProviderConnectionsStorage {
         clauses.push(`scope = $${args.length}`);
       }
       const whereClause = clauses.length > 0 ? ` WHERE ${clauses.join(' AND ')}` : '';
-      const rows = await this.#db.client.manyOrNone(`SELECT * FROM ${tableName}${whereClause}`, args);
+      const rows = await this.#db.readClient.manyOrNone(`SELECT * FROM ${tableName}${whereClause}`, args);
       return rows.map(row => rowToToolProviderConnection(row));
     } catch (error) {
       throw new MastraError(

@@ -197,6 +197,8 @@ export const PERMISSION_PATTERNS = {
   'datasets:write': 'datasets:write',
   /** View embedders */
   'embedders:read': 'embedders:read',
+  /** Delete experiments */
+  'experiments:delete': 'experiments:delete',
   /** View experiments */
   'experiments:read': 'experiments:read',
   /** View infrastructure */
@@ -217,6 +219,8 @@ export const PERMISSION_PATTERNS = {
   'memory:read': 'memory:read',
   /** Create and modify memory and threads */
   'memory:write': 'memory:write',
+  /** Delete traces and spans */
+  'observability:delete': 'observability:delete',
   /** View traces and spans */
   'observability:read': 'observability:read',
   /** Create and modify traces and spans */
@@ -374,6 +378,7 @@ export const PERMISSIONS = [
   'datasets:read',
   'datasets:write',
   'embedders:read',
+  'experiments:delete',
   'experiments:read',
   'infrastructure:read',
   'logs:read',
@@ -384,6 +389,7 @@ export const PERMISSIONS = [
   'memory:execute',
   'memory:read',
   'memory:write',
+  'observability:delete',
   'observability:read',
   'observability:write',
   'processor-providers:read',
@@ -494,6 +500,8 @@ export const MastraFGAPermissions = {
   DATASETS_WRITE: 'datasets:write',
   /** View embedders */
   EMBEDDERS_READ: 'embedders:read',
+  /** Delete experiments */
+  EXPERIMENTS_DELETE: 'experiments:delete',
   /** View experiments */
   EXPERIMENTS_READ: 'experiments:read',
   /** View infrastructure */
@@ -514,6 +522,8 @@ export const MastraFGAPermissions = {
   MEMORY_READ: 'memory:read',
   /** Create and modify memory and threads */
   MEMORY_WRITE: 'memory:write',
+  /** Delete traces and spans */
+  OBSERVABILITY_DELETE: 'observability:delete',
   /** View traces and spans */
   OBSERVABILITY_READ: 'observability:read',
   /** Create and modify traces and spans */

@@ -1,0 +1,68 @@
+---
+extends: existence
+message: "AI figurative noun: '%s'. Name the structure, format, size, or pattern it stands for. Disable this rule for geometry, graphics, or array-dimension prose."
+level: error
+nonword: true
+ignorecase: true
+# "Shape" as a stand-in for whichever concrete noun the writer skipped: a
+# data structure, a message format, a review's size, a regular
+# expression, a prose rhythm. "Ruff's own fires on the shape rather than
+# the provenance," "those two numbers pick the review shape," "the rules
+# that shape an analysis," "clusters repeated calls of the same shape,"
+# "the wrong shape," "code-shaped." A documentation-corpus census
+# (2026-09) ranked it the most frequent figurative noun in the corpus
+# with no rule reading it, and this package's own comments and README
+# rows used it the same way for every token pattern, so the sweep that
+# landed the rule reworded those too.
+#
+# The determiner-gated noun is the main token, with an optional modifier
+# and the modifiers that name a match ("the same shape," "the wrong
+# shape," "the expected shape") in the determiner slot. The modifier
+# refuses the Go compiler's "GC shape" and the turtle module's drawn
+# "turtle shape," and the trailing check refuses the generics
+# vocabulary the Go proposals attach to the word ("shape type," "shape
+# instantiation") and the geometric heads ("the shape of the curve").
+# The bare "shape of," the verb in its gerund and relative forms
+# ("shaping the direction of the API," "what shapes the output"), the
+# hyphenated compound ("code-shaped," "review-shaped") past the
+# literal geometry prefixes, and the gated plural round it out. The
+# sculptor with a determined subject ("the pass shapes the output")
+# stays with MotionMetaphors, which reads it already, and the bare
+# verb behind a relative pronoun ("the rules that shape an analysis")
+# reads through the noun token, since "that" sits in its determiner
+# list.
+#
+# The count is high and flagged on the maintainer's call: about
+# sixty-five hits across the seven pre-LLM corpora, most of them the
+# figure itself in argument prose ("the particular shape of the parse
+# trees," "the overall shape of the exception group," "the shape of the
+# portable SIMD API," "the semantic shape of a codebase"), plus the
+# array-dimension term of art the typing PEPs use ("generic in its
+# shape," "arrays of a fixed shape"), which no trailing check separates
+# from the figure, and the influence verb ("shaping the future of Go
+# education"). Prose about geometry, graphics, or array dimensions
+# disables the rule.
+tokens:
+  # --- The determiner-gated noun, with an optional modifier ("the
+  # shape," "the review shape," "its overall shape," "the same shape,"
+  # "the wrong shape," "a shape that").
+  - "\\b(?:the|a|an|its|their|this|that|each|every|one|any|some|no|another|same|wrong|right|expected|correct|different|general|overall|basic|final|new|old|current|exact|whole|familiar|common|usual|typical|natural|particular|concrete|rough|full) (?!(?:gc|turtle|compound|polygon|polygonal|geometric|geometrical|physical|circular|square|round|oval|triangular|rectangular) )(?:[a-z-]+ )?shape\\b(?! (?:type|types|argument|arguments|instantiation|instantiations|parameter|parameters|stenciling|file|files|library|libraries|of (?:the|a|an|its) (?:curve|curves|distribution|distributions|graph|glyph|glyphs|font|character|characters|window|screen|region|rect|rectangle|cursor|icon|image|figure|earth|world|surface|object|body|polygon|path|outline|border|shadow|beam|pulse|waveform|signal|lens|cell|cells|nucleus|letter|letters|symbol|blob|bezier|arc|spline|mesh|solid|cube|sphere|circle|ellipse|box|array|arrays|tensor|tensors|matrix|matrices))\\b)"
+
+  # --- The bare "shape of" with a determined complement ("concrete shape
+  # of the API," "shape of the parse trees"), same geometric refusals.
+  - "\\bshape of (?:the|a|an|its|their|this|that|each|every) (?!(?:curve|curves|distribution|distributions|graph|glyph|glyphs|font|character|characters|window|screen|region|rect|rectangle|cursor|icon|image|figure|earth|world|surface|object|body|polygon|path|outline|border|shadow|beam|pulse|waveform|signal|lens|cell|cells|nucleus|letter|letters|symbol|blob|bezier|arc|spline|mesh|solid|cube|sphere|circle|ellipse|box|array|arrays|tensor|tensors|matrix|matrices)\\b)"
+
+  # --- The verb without a determined subject: the gerund and the
+  # relative forms ("shaping the direction of the API," "what shapes
+  # the output"). The sculptor with a determined subject ("the pass
+  # shapes the output") stays with MotionMetaphors.
+  - "\\b(?:shaping|(?:what|which|whatever) shap(?:es|ed)) (?:the|a|an|its|their|this|that|each|every|how|our|your|my)\\b"
+
+  # --- The hyphenated compound ("code-shaped," "review-shaped,"
+  # "identically-shaped"), past the geometry and body prefixes that name
+  # a literal outline.
+  - "\\b(?!(?:slab|diamond|pointer|ptr|u|l|t|v|s|x|y|z|star|heart|ring|disc|disk|cone|egg|pear|bell|dome|bowl|box|crescent|wedge|fan|leaf|kidney|almond|tear|teardrop|horseshoe|arrow|cross|oval|oddly|ill|well|non|identically|similarly|differently|equally|regularly|irregularly)-)[a-z]+-shaped\\b"
+
+  # --- The gated plural ("the shapes agent prose builds," "both
+  # shapes"), refusing the prepositions that follow a literal outline.
+  - "\\b(?:the|these|those|both|its|their|two|three|four|five|several|many|all|other|same|different|new|old|kept|remaining) (?:[a-z-]+ )?shapes\\b(?! (?:of|in|on|drawn|painted|cut|carved)\\b)"

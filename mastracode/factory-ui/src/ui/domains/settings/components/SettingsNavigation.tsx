@@ -32,6 +32,7 @@ type SettingsNavItem = {
 type SettingsNavGroup = {
   id: string;
   label?: string;
+  ariaLabel?: string;
   items: SettingsNavItem[];
 };
 
@@ -50,36 +51,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.preferences,
         icon: Palette,
         searchText: 'preferences general theme appearance color scheme completion sound',
-      },
-      {
-        id: 'factory',
-        label: SETTINGS_SECTION_LABELS.factory,
-        icon: Building2,
-        searchText: 'factory project organization remove delete danger',
-      },
-    ],
-  },
-  {
-    id: 'sources',
-    label: 'Sources',
-    items: [
-      {
-        id: 'repositories',
-        label: SETTINGS_SECTION_LABELS.repositories,
-        icon: GitBranch,
-        searchText: 'repositories source control git branches remotes code worktrees setup github',
-      },
-      {
-        id: 'intake',
-        label: SETTINGS_SECTION_LABELS.intake,
-        icon: Inbox,
-        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
-      },
-      {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'connections connected accounts slack communication integrations',
       },
     ],
   },
@@ -114,6 +85,42 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
       },
     ],
   },
+  {
+    id: 'sources',
+    label: 'Sources',
+    items: [
+      {
+        id: 'repositories',
+        label: SETTINGS_SECTION_LABELS.repositories,
+        icon: GitBranch,
+        searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
+      },
+      {
+        id: 'intake',
+        label: SETTINGS_SECTION_LABELS.intake,
+        icon: Inbox,
+        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'connections connected accounts slack communication integrations',
+      },
+    ],
+  },
+  {
+    id: 'factory',
+    ariaLabel: SETTINGS_SECTION_LABELS.factory,
+    items: [
+      {
+        id: 'factory',
+        label: SETTINGS_SECTION_LABELS.factory,
+        icon: Building2,
+        searchText: 'factory project organization manage remove delete danger',
+      },
+    ],
+  },
 ];
 
 export function SettingsNavigation() {
@@ -134,7 +141,7 @@ export function SettingsNavigation() {
   return (
     <>
       <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild size="default" link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
             <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
@@ -143,7 +150,7 @@ export function SettingsNavigation() {
       </MainSidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <InputGroup variant="outline">
+          <InputGroup>
             <InputGroupAddon>
               <Search aria-hidden="true" />
             </InputGroupAddon>
@@ -164,7 +171,7 @@ export function SettingsNavigation() {
             <MainSidebar.NavSection
               key={group.id}
               aria-labelledby={headerId}
-              aria-label={headerId ? undefined : group.id}
+              aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
             >
               {group.label && <MainSidebar.NavHeader id={headerId}>{group.label}</MainSidebar.NavHeader>}
               <MainSidebar.NavList>
@@ -174,7 +181,6 @@ export function SettingsNavigation() {
                     <MainSidebar.NavLink
                       key={id}
                       asChild
-                      size="default"
                       isActive={isActive}
                       link={{ name: label, url: '#', icon: <Icon /> }}
                     >
@@ -195,7 +201,7 @@ export function SettingsNavigation() {
           );
         })
       ) : (
-        <Txt as="p" variant="ui-sm" role="status" className="px-3 py-2">
+        <Txt as="p" variant="caption" role="status" className="px-3 py-2">
           No settings found.
         </Txt>
       )}

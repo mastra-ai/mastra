@@ -5,8 +5,9 @@ import { pushBranch } from '../ui/domains/workspaces/services/github';
 import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 
 /**
- * Mutation hooks for the per-project git write operations
- * (`/web/github/projects/:id/{sessions,commit,push,pr}`).
+ * Mutation hooks for per-project session creation and GitHub write operations.
+ * Session creation uses `/web/source-control/projects/:id/sessions`; GitHub
+ * commit, push, and pull-request operations retain their provider route.
  *
  * Thin wrappers over the services: callers get `isPending`/`error` for UI
  * state, and failures surface as `GitOpError` (with `code`, `status`, and
@@ -20,7 +21,7 @@ export interface CreateUserSessionVariables {
   baseBranch?: string;
 }
 
-/** Create or reuse a Factory session. Its workspace is materialized by AgentController on session creation. */
+/** Create or reuse a Factory session. Creating one persists identity; the workspace is materialized when the session's sandbox first starts. */
 export function useCreateUserSessionMutation() {
   const { baseUrl } = useApiConfig();
   return useMutation({

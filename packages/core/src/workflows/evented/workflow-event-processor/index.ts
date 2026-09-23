@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import EventEmitter from 'node:events';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
+import { resolveExportedSpanId } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
@@ -63,6 +63,12 @@ export type ProcessorArgs = {
   };
   forEachIndex?: number;
   nestedRunId?: string; // runId of nested workflow when reporting back to parent
+  /**
+   * Resource the run is attributed to. Carried on the `workflow.start` event
+   * for schedule-fired runs (which have no pre-existing snapshot to derive it
+   * from) so the persisted run snapshot records the schedule's `resourceId`.
+   */
+  resourceId?: string;
 };
 
 export type ParentWorkflow = {
@@ -329,10 +335,17 @@ export class WorkflowEventProcessor extends EventProcessor {
     runId: string,
   ): { traceId?: string; spanId?: string; parentSpanId?: string } | undefined {
     const span = this.resolveRunTracingContext(runId)?.currentSpan as
-      | { id?: string; traceId?: string; getParentSpanId?: () => string | undefined }
+      | {
+          id?: string;
+          traceId?: string;
+          getParentSpanId?: () => string | undefined;
+          getExportedSpanId?: () => string | undefined;
+        }
       | undefined;
     if (!span) return undefined;
-    return { traceId: span.traceId, spanId: span.id, parentSpanId: span.getParentSpanId?.() };
+    // See default.ts: the persisted spanId becomes the resumed span's parentSpanId,
+    // so it must reference a span that actually reaches exporters.
+    return { traceId: span.traceId, spanId: resolveExportedSpanId(span), parentSpanId: span.getParentSpanId?.() };
   }
 
   /**
@@ -393,6 +406,49 @@ export class WorkflowEventProcessor extends EventProcessor {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Resolves the live, in-process workflow instance described by
+   * `{ workflowId, runId, parentWorkflow }`. Run-scoped internal registrations
+   * win (closure-bound instances like `agentic-loop`). When a parent
+   * descriptor exists the target is a *nested* workflow — possibly
+   * closure-bound and never publicly registered — so descent from the parent
+   * descriptor is authoritative: a miss propagates instead of degrading to an
+   * id lookup, because dispatch relies on failing loudly when a descriptor no
+   * longer matches this worker's topology (cf. the stale-build fence below).
+   * Only descriptors without a parent are resolved via the public registry.
+   *
+   * Misses come in two modes: `getNestedWorkflow` *throws* when the ancestor
+   * chain root isn't in any registry, and returns `null` when the chain
+   * resolves but the `executionPath` doesn't land on a workflow-bearing
+   * entry. Call sites that can degrade gracefully (see `processWorkflowEnd`)
+   * must handle both.
+   *
+   * Note: `parentWorkflow` must be the descriptor of the *parent* of the
+   * workflow being resolved — `getNestedWorkflow` descends one level from the
+   * descriptor it's given (and into the loop *body* for `loop`/`foreach`
+   * entries), so calling it on the target's own descriptor would resolve one
+   * level too deep. To resolve the workflow a `ParentWorkflow` descriptor
+   * itself refers to, pass the descriptor's fields (its `parentWorkflow` is
+   * the grandparent, whose descent lands back on the descriptor's workflow).
+   */
+  #resolveLiveWorkflow({
+    workflowId,
+    runId,
+    parentWorkflow,
+  }: {
+    workflowId: string;
+    runId: string;
+    parentWorkflow?: ParentWorkflow;
+  }): Workflow | null | undefined {
+    if (this.mastra.__hasInternalWorkflow(workflowId, runId)) {
+      return this.mastra.__getInternalWorkflow(workflowId, runId);
+    }
+    if (parentWorkflow) {
+      return getNestedWorkflow(this.mastra, parentWorkflow);
+    }
+    return this.#tryResolveWorkflow(workflowId);
   }
 
   /**
@@ -527,6 +583,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     state,
     outputOptions,
     forEachIndex,
+    resourceId: eventResourceId,
   }: ProcessorArgs & { initialState?: Record<string, any> }) {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     const initialState = (arguments[0] as any).initialState ?? state ?? {};
@@ -543,10 +600,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (parentWorkflow?.runId) {
       this.parentChildRelationships.set(runId, parentWorkflow.runId);
     }
-    // Preserve resourceId from existing snapshot if present
+    // Preserve resourceId from an existing snapshot if present (resume /
+    // timeTravel / restart keep their original attribution); otherwise fall
+    // back to the resourceId carried on the event, which is how schedule-fired
+    // runs — that have no pre-existing snapshot — get attributed.
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
-    const resourceId = existingRun?.resourceId;
+    const resourceId = existingRun?.resourceId ?? eventResourceId;
 
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',
@@ -751,8 +811,27 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // handle nested workflow
     if (parentWorkflow) {
-      // get the step from the parent workflow and process it if it's a loop
-      const step = parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
+      // get the step from the parent workflow and process it if it's a loop.
+      // `parentWorkflow` came over the pubsub wire: a serializing pubsub (Redis
+      // Streams etc.) strips the loop `condition` function from its stepGraph
+      // copy, so resolve the live loop-owning workflow from the registry and
+      // only fall back to the payload copy if it can't be found (#23111).
+      // When grandparent descent misses (either mode — see #resolveLiveWorkflow),
+      // degrade to a public-registry lookup by the loop owner's id: the same
+      // resolution the 2-level case (no grandparent) already uses, and strictly
+      // better than the function-stripped payload copy of last resort.
+      let liveParentWorkflow: Workflow | null | undefined;
+      try {
+        liveParentWorkflow = this.#resolveLiveWorkflow(parentWorkflow);
+      } catch {
+        // Registry lookups throw when the ancestor chain root isn't registered
+        // on this worker; fall through to resolving the loop owner by id.
+        liveParentWorkflow = undefined;
+      }
+      liveParentWorkflow ??= this.#tryResolveWorkflow(parentWorkflow.workflowId);
+      const step =
+        liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
+        parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
       if (step?.type === 'loop') {
         // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
         await processWorkflowLoop(
@@ -1502,7 +1581,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
-        const nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? randomUUID();
+        const nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -1556,7 +1635,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (restart && !!restart.activeStepsPath?.[leafId]) {
-        const nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? randomUUID();
+        const nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -1601,7 +1680,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else {
-        const nestedRunId = randomUUID();
+        const nestedRunId = globalThis.crypto.randomUUID();
         const shouldPersist =
           nestedWorkflow?.options?.shouldPersistSnapshot?.({
             stepResults: {},
@@ -2011,7 +2090,11 @@ export class WorkflowEventProcessor extends EventProcessor {
     state: Record<string, any>;
     outputOptions?: { includeState?: boolean; includeResumeLabels?: boolean };
   }) {
-    const currentState = resolveCurrentState({ stepResults, state });
+    const baseState = resolveCurrentState({ stepResults, state });
+    // Merge each branch's setState() delta key-by-key on top of the resolved
+    // state so sibling branches' updates aren't lost to last-writer-wins on
+    // full state snapshots (#22319).
+    const currentState = { ...baseState };
     const parentIdx = branchExecutionPath[0]!;
     const finishedBranchIdx = branchExecutionPath.length > 1 ? branchExecutionPath[1]! : undefined;
 
@@ -2029,6 +2112,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       const res = stepResults?.[branchId] as any;
       if (!res || !res.status) {
         return; // branch not finished yet
+      }
+      const stateDelta =
+        idx === finishedBranchIdx && (latestBranchResult as any)?.__stateDelta
+          ? (latestBranchResult as any).__stateDelta
+          : res.__stateDelta;
+      if (stateDelta) {
+        Object.assign(currentState, stateDelta);
       }
       if (res.status === 'success') {
         // For the branch that just completed, prefer its in-flight result so structured
@@ -2091,7 +2181,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath: branchExecutionPath,
           resumeSteps,
           parentWorkflow,
-          stepResults,
+          stepResults: { ...stepResults, __state: currentState },
           prevResult: { status: 'suspended' } as any,
           activeStepsPath,
           requestContext,
@@ -2104,6 +2194,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
+    // All branches finished: drop the internal per-branch deltas and forward the
+    // merged state so downstream steps resolve it from stepResults.__state.
+    const cleanedStepResults: Record<string, any> = { ...stepResults, __state: currentState };
+    for (const [key, res] of Object.entries(cleanedStepResults)) {
+      if (res && typeof res === 'object' && '__stateDelta' in res) {
+        const { __stateDelta: _removedDelta, ...cleanRes } = res;
+        cleanedStepResults[key] = cleanRes;
+      }
+    }
+
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.step.end',
       runId,
@@ -2113,7 +2213,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         executionPath: branchExecutionPath.slice(0, -1),
         resumeSteps,
-        stepResults,
+        stepResults: cleanedStepResults,
         prevResult: { status: 'success', output: allResults },
         activeStepsPath,
         requestContext,
@@ -2153,10 +2253,18 @@ export class WorkflowEventProcessor extends EventProcessor {
       : ((prevResult as any)?.__state ?? stepResults?.__state ?? state ?? {});
 
     // Create a clean version of prevResult without __state for storing
-    const { __state: _removedState, ...cleanPrevResult } = prevResult as any;
-    prevResult = cleanPrevResult as typeof prevResult;
+    const { __state: _removedState, __stateDelta: extractedStateDelta, ...cleanPrevResult } = prevResult as any;
 
     const rawStep = workflow.stepGraph[executionPath[0]!];
+
+    // For branches of a parallel/conditional entry, keep the setState() delta on
+    // the stored branch result so aggregateBranchResults can merge sibling
+    // updates key-by-key instead of last-writer-wins on full snapshots (#22319).
+    // For all other steps the delta is redundant with __state and is dropped.
+    const isParallelBranch =
+      (rawStep?.type === 'parallel' || rawStep?.type === 'conditional') && executionPath.length > 1;
+    const branchStateDelta = isParallelBranch ? (extractedStateDelta as Record<string, any> | undefined) : undefined;
+    prevResult = cleanPrevResult as typeof prevResult;
 
     // The just-finished entry. Keep it raw (declarative agent / tool / mapping
     // entries are not materialized); we only need its id and type here.
@@ -2555,11 +2663,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         };
       }
 
+      // For branches of a parallel/conditional entry, persist the setState()
+      // delta on the stored branch result so aggregateBranchResults can merge
+      // sibling updates key-by-key instead of last-writer-wins on full state
+      // snapshots (#22319). The delta is stripped again before results are
+      // surfaced to users.
+      const storedResult = branchStateDelta ? { ...prevResult, __stateDelta: branchStateDelta } : prevResult;
+
       const newStepResults = await workflowsStore?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
         stepId,
-        result: prevResult,
+        result: storedResult,
         requestContext,
       });
 
@@ -2570,7 +2685,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       // source of truth — merge prevResult into the inline stepResults instead
       // of treating it as a hard early-return.
       if (!newStepResults || Object.keys(newStepResults).length === 0) {
-        stepResults = { ...(stepResults ?? {}), [stepId]: prevResult };
+        stepResults = { ...(stepResults ?? {}), [stepId]: storedResult };
       } else {
         stepResults = newStepResults;
       }
@@ -3048,14 +3163,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    let workflow;
-    if (this.mastra.__hasInternalWorkflow(workflowData.workflowId, workflowData.runId)) {
-      workflow = this.mastra.__getInternalWorkflow(workflowData.workflowId, workflowData.runId);
-    } else if (workflowData.parentWorkflow) {
-      workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
-    } else {
-      workflow = this.#tryResolveWorkflow(workflowData.workflowId);
-    }
+    const workflow = this.#resolveLiveWorkflow(workflowData);
 
     if (!workflow) {
       // For terminal/cleanup events (`workflow.fail`, `workflow.end`,

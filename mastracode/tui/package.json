@@ -1,11 +1,10 @@
 {
   "name": "mastracode",
-  "version": "0.36.0-alpha.11",
+  "version": "0.41.1-alpha.2",
   "description": "",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {
@@ -129,7 +128,7 @@
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.17.5",
     "yaml": "^2.7.1",
-    "zod": "^4.3.6"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@copilotkit/aimock": "^1.29.0",
@@ -142,7 +141,7 @@
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"
   },

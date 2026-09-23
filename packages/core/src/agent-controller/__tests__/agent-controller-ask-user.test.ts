@@ -10,6 +10,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { askUserTool } from '../../tools/builtin/ask-user';
@@ -17,6 +18,7 @@ import { askUserTool } from '../../tools/builtin/ask-user';
 import { AgentController } from '../agent-controller';
 import { SessionApproval } from '../session';
 import { createMockWorkspace } from '../test-utils';
+import type { AgentControllerEvent } from '../types';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -60,7 +62,8 @@ function createTextStream() {
   });
 }
 
-async function buildController(id: string, input: string) {
+async function buildController(id: string, input: string, withMemory = false) {
+  const storage = new InMemoryStore();
   const agent = new Agent({
     id: `agent-${id}`,
     name: `Agent ${id}`,
@@ -75,9 +78,9 @@ async function buildController(id: string, input: string) {
       })(),
     }),
     tools: { ask_user: askUserTool },
+    memory: withMemory ? new MockMemory({ storage }) : undefined,
   });
 
-  const storage = new InMemoryStore();
   const mastra = new Mastra({ agents: { [`agent-${id}`]: agent }, logger: false, storage });
   const registeredAgent = mastra.getAgent(`agent-${id}`);
 
@@ -148,6 +151,36 @@ describe('AgentController: ask_user native suspension', () => {
     expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 
+  it('emits the resumed reply with its persisted message ID (#23150)', async () => {
+    const { session } = await buildController('resume-identity', JSON.stringify({ question: 'Your name?' }), true);
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(structuredClone(event)));
+
+    await session.sendMessage({ content: 'Ask my name' });
+    expect(events.some(event => event.type === 'tool_suspended')).toBe(true);
+    events.length = 0;
+    await session.respondToToolSuspension({ toolCallId: 'call-1', resumeData: 'Ada' });
+    await vi.waitFor(() => {
+      expect(events.find(event => event.type === 'agent_end')?.reason).toBe('complete');
+    });
+
+    const persisted = await session.thread.listMessages({ threadId: session.thread.requireId() });
+    const savedReplies = persisted.filter(
+      message =>
+        message.role === 'assistant' &&
+        message.content.parts.some(part => part.type === 'text' && part.text === 'Thanks!'),
+    );
+    const replies = events
+      .filter(event => event.type === 'message_end')
+      .filter(event => savedReplies.some(message => message.id === event.id));
+    expect(savedReplies).toHaveLength(1);
+    expect(replies).toHaveLength(1);
+    expect(replies[0]!.id).toBe(savedReplies[0]!.id);
+    expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-1')).toBe(true);
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
+    expect(events.some(event => event.type === 'error')).toBe(false);
+  });
+
   it('emits multi_select in the suspend payload when requested', async () => {
     const { session } = await buildController(
       'multi',
@@ -180,8 +213,10 @@ describe('AgentController: ask_user native suspension', () => {
     };
 
     const pending = session.suspensions;
-    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user' });
-    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user' });
+    const threadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user', threadId, resourceId });
+    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user', threadId, resourceId });
 
     // Explicit toolCallId resumes only that suspension; the other stays pending.
     await session.respondToToolSuspension({ toolCallId: 'call-b', resumeData: 'two' });
@@ -205,14 +240,16 @@ describe('AgentController: ask_user native suspension', () => {
     };
 
     const pending = session.suspensions;
-    pending.register({ toolCallId: 'call-only', runId: 'run-only', toolName: 'ask_user' });
+    const threadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    pending.register({ toolCallId: 'call-only', runId: 'run-only', toolName: 'ask_user', threadId, resourceId });
 
     await session.respondToToolSuspension({ resumeData: 'ok' });
     expect(resumed).toEqual(['call-only']);
 
     // With more than one pending and no toolCallId, the call is a no-op.
-    pending.register({ toolCallId: 'call-x', runId: 'run-x', toolName: 'ask_user' });
-    pending.register({ toolCallId: 'call-y', runId: 'run-y', toolName: 'ask_user' });
+    pending.register({ toolCallId: 'call-x', runId: 'run-x', toolName: 'ask_user', threadId, resourceId });
+    pending.register({ toolCallId: 'call-y', runId: 'run-y', toolName: 'ask_user', threadId, resourceId });
     await session.respondToToolSuspension({ resumeData: 'ambiguous' });
     expect(resumed).toEqual(['call-only']);
     expect(pending.has({ toolCallId: 'call-x' })).toBe(true);
@@ -231,8 +268,10 @@ describe('AgentController: ask_user native suspension', () => {
     };
 
     const pending = session.suspensions;
-    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user' });
-    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user' });
+    const threadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user', threadId, resourceId });
+    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user', threadId, resourceId });
     expect(session.suspensions.hasPending()).toBe(true);
 
     session.abort();
@@ -383,4 +422,63 @@ describe('AgentController: ask_user native suspension', () => {
 
     expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
+});
+
+describe('AgentController: Stop on a parked question frees the thread', () => {
+  async function buildRecording(id: string) {
+    const prompts: unknown[] = [];
+    const agent = new Agent({
+      id: `agent-${id}`,
+      name: `Agent ${id}`,
+      instructions: 'You ask the user questions.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async (options: any) => {
+          prompts.push(options?.prompt);
+          return {
+            stream:
+              prompts.length === 1
+                ? createAskUserToolCallStream(JSON.stringify({ question: 'Red or blue?' }))
+                : createTextStream(),
+          };
+        },
+      }),
+      tools: { ask_user: askUserTool },
+    });
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ agents: { [`agent-${id}`]: agent }, logger: false, storage });
+    const registeredAgent = mastra.getAgent(`agent-${id}`);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: `controller-${id}`,
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+      initialState: { yolo: true } as any,
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: `session-${id}`, ownerId: 'test-owner' });
+    await session.thread.create();
+    const ends: Array<string | undefined> = [];
+    session.subscribe(event => {
+      if (event.type === 'agent_end') ends.push(event.reason);
+    });
+    return { controller, session, prompts, ends };
+  }
+
+  it('answers a message sent after Stop on a parked question', async () => {
+    const { controller, session, prompts, ends } = await buildRecording('stop-then-send');
+    await session.sendMessage({ content: 'Ask me a color.' });
+    expect(ends).toEqual(['suspended']);
+
+    session.abort();
+    const next = session.sendMessage({ content: 'Forget the color and say hello.' });
+    void next.catch(() => {});
+
+    // The parked run no longer holds the thread: the new message starts its own run.
+    await vi.waitFor(() => expect(ends.at(-1)).toBe('complete'), { timeout: 10_000 });
+    await next;
+    expect(prompts).toHaveLength(2);
+    expect(JSON.stringify(prompts[1])).toContain('Forget the color and say hello.');
+    expect(session.displayState.get().isRunning).toBe(false);
+    expect(controller.listActiveThreadRuns()).toHaveLength(0);
+  }, 20_000);
 });

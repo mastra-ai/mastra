@@ -114,9 +114,9 @@ function withOMGuidance(typeHint: string | null, omModelId: string | undefined):
 function getErrorHint(errorType: string): string | null {
   switch (errorType) {
     case 'auth':
-      return 'Use /login to authenticate with a provider';
+      return 'Use /connect to authenticate with a provider';
     case 'model_not_found':
-      return 'Use /models to select a different model';
+      return 'Use /model to select a different model';
     case 'context_length':
       return 'Use /new to start a fresh conversation';
     case 'rate_limit':

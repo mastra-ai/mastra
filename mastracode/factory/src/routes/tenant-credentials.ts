@@ -17,9 +17,13 @@
  */
 
 import type { CredentialTenant as SdkCredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
-import { setCredentialStoreProvider } from '@mastra/code-sdk/agents/credential-resolver';
+import {
+  resolveTenantFromRequestContext,
+  setCredentialStoreProvider,
+} from '@mastra/code-sdk/agents/credential-resolver';
 import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
 import type { AuthCredential, CredentialStore } from '@mastra/code-sdk/auth/types';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import { isOAuthCredentialExpired } from '../storage/domains/credentials/base.js';
@@ -154,6 +158,7 @@ export class TenantCredentialStore implements CredentialStore {
 }
 
 const tenantStores = new Map<string, TenantCredentialStore>();
+let registeredCredentials: ModelCredentialsStorage | undefined;
 
 function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStorage): TenantCredentialStore {
   const orgId = tenantOrgId(tenant);
@@ -178,12 +183,26 @@ function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStor
  * the `loadStoredApiKeysIntoEnv` env side-channel.
  */
 export function registerTenantCredentialResolver(credentials: ModelCredentialsStorage): void {
+  registeredCredentials = credentials;
   setCredentialStoreProvider(tenant => storeFor(tenant, credentials));
+}
+
+/**
+ * Prime the tenant stores for a request context built outside the web layer,
+ * such as a webhook-triggered session run. The auth middleware does this for
+ * HTTP requests; a run that starts without one would otherwise resolve its
+ * model against an empty snapshot and fail closed. No-op before registration.
+ */
+export async function primeTenantCredentialsForRequestContext(requestContext: RequestContext): Promise<void> {
+  const tenant = resolveTenantFromRequestContext(requestContext);
+  if (!tenant || !registeredCredentials) return;
+  await primeTenantCredentials({ tenant, credentials: registeredCredentials });
 }
 
 /** Test hook: clear registration and cached tenant snapshots. */
 export function resetTenantCredentialResolverForTests(): void {
   setCredentialStoreProvider(undefined);
+  registeredCredentials = undefined;
   tenantStores.clear();
 }
 
@@ -205,10 +224,10 @@ export function invalidateTenantCredentialSnapshots(tenant: { orgId: string; use
 }
 
 /**
- * Middleware mounted after the web auth gate: primes the caller's credential
- * snapshot so the request's first model call sees their credentials without an
- * async seam in model resolution. Cheap when fresh (TTL check), best-effort
- * when not — a failed hydrate falls back to env vars, never blocks a request.
+ * Middleware mounted after the web auth gate: primes both credential precedence
+ * modes so the request's first model call can resolve user → organization when
+ * `orgFirst` is false or organization → user when `orgFirst` is true. Cheap when
+ * fresh because each store has a TTL.
  */
 export async function primeTenantCredentials({
   tenant,
@@ -217,7 +236,10 @@ export async function primeTenantCredentials({
   tenant: SdkCredentialTenant;
   credentials: ModelCredentialsStorage;
 }): Promise<void> {
-  await storeFor(tenant, credentials).ensureFresh();
+  await Promise.all([
+    storeFor({ ...tenant, orgFirst: false }, credentials).ensureFresh(),
+    storeFor({ ...tenant, orgFirst: true }, credentials).ensureFresh(),
+  ]);
 }
 
 export function createTenantCredentialPrimer({
@@ -231,9 +253,13 @@ export function createTenantCredentialPrimer({
     const tenant = auth.tenant(c);
     if (tenant) {
       try {
-        await storeFor(tenant, credentials).ensureFresh();
-      } catch {
-        // Fail open: model calls fall back to env credentials.
+        await primeTenantCredentials({ tenant, credentials });
+      } catch (error) {
+        console.warn('[factory] Failed to prime tenant model credentials', {
+          orgId: tenant.orgId,
+          userId: tenant.userId,
+          error,
+        });
       }
     }
     await next();

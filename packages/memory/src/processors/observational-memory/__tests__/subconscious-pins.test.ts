@@ -1,13 +1,7 @@
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import {
-  createKnowledgeWriteTools,
-  createPinnedTools,
-  listPinnedKnowledge,
-  PINNED_NODE_NAME,
-  Subconscious,
-} from '../subconscious';
+import { createPinnedTools, listPinnedKnowledge, PINNED_NODE_NAME, Subconscious } from '../subconscious';
 
 const resourceScope = ['org:acme', 'resource:user-42'];
 const threadScope = [...resourceScope, 'thread:alpha'];
@@ -42,17 +36,10 @@ describe('Subconscious pinned knowledge', () => {
     expect(new Subconscious({ pins: true }).resolved.pins).toEqual({
       maxPins: 20,
       maxCharacters: 2_000,
-      capturePinning: false,
     });
     expect(new Subconscious({ pins: { maxCharacters: 500, maxPins: 3 } }).resolved.pins).toEqual({
       maxPins: 3,
       maxCharacters: 500,
-      capturePinning: false,
-    });
-    expect(new Subconscious({ pins: { capturePinning: true } }).resolved.pins).toEqual({
-      maxPins: 20,
-      maxCharacters: 2_000,
-      capturePinning: true,
     });
     expect(() => new Subconscious({ pins: { maxCharacters: 100_000 } })).toThrow(/maxCharacters/);
     expect(() => new Subconscious({ pins: { maxCharacters: 0 } })).toThrow(/maxCharacters/);
@@ -196,28 +183,5 @@ describe('Subconscious pinned knowledge', () => {
     const { pins, nodeId } = await listPinnedKnowledge({ store, scope: threadScope });
     expect(nodeId).toBe(a.node);
     expect(pins).toHaveLength(2);
-  });
-
-  it('stores a mixed-case reserved page name canonically so the guard and readers agree', async () => {
-    const memory = createMemory();
-    const tools = createKnowledgeWriteTools(memory as any, {
-      scope: threadScope,
-      sourceThreadId: 'alpha',
-      defaultScope: 'resource',
-    });
-    await expect(
-      tools.knowledge_write_node_content!.execute!(
-        { name: 'Capture-Guidance', content: 'x'.repeat(8_001) } as any,
-        {} as any,
-      ),
-    ).rejects.toThrow(/capture-guidance is limited/);
-    const written = await tools.knowledge_write_node_content!.execute!(
-      { name: 'Capture-Guidance', content: 'be concise' } as any,
-      {} as any,
-    );
-    expect(written.name).toBe('capture-guidance');
-    const store = await getStore(memory);
-    const byCanonicalName = await store.resolveNode({ name: 'capture-guidance', scope: threadScope });
-    expect(byCanonicalName?.id).toBe(written.id);
   });
 });

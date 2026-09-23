@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
+import ts from 'typescript-classic';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import type * as z4 from 'zod/v4/core';

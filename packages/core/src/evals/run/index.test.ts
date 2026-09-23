@@ -1846,6 +1846,122 @@ describe('runEvals', () => {
       expect(result.turnResults![1]!.scores!['per-turn-length']).toBe(1.0);
     });
 
+    it('gives a trajectory-typed gate a WORKFLOW trajectory built from stepResults (#22632, CR-2)', async () => {
+      const stepOne = createStep({
+        id: 'first-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ inputData }) => ({ output: `one:${inputData.input}` }),
+      });
+      const stepTwo = createStep({
+        id: 'second-step',
+        inputSchema: z.object({ output: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ inputData }) => ({ output: `two:${inputData.output}` }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'trajectory-gate-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        // The workflow result is an ordinary object — NOT an iterable of agent messages.
+        outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
+      })
+        .then(stepOne)
+        .then(stepTwo)
+        .commit();
+
+      let seenOutput: any;
+      const trajectoryGate = createScorer({
+        id: 'workflow-trajectory-gate',
+        description: 'Reads the workflow trajectory it was handed',
+        type: 'trajectory',
+      }).generateScore(({ run }: any) => {
+        seenOutput = run.output;
+        return run.output.steps.length >= 2 ? 1.0 : 0.0;
+      });
+
+      // No Mastra instance is attached, so there is no trace storage: the gate path
+      // must fall back to the workflow step results, exactly as `scorers.trajectory` does.
+      const result = await runEvals({
+        data: [{ input: { input: 'go' } }],
+        gates: [trajectoryGate],
+        target: workflow,
+      } as any);
+
+      expect(seenOutput).toBeDefined();
+      expect(Array.isArray(seenOutput)).toBe(false);
+      expect(seenOutput.steps).toBeInstanceOf(Array);
+      // Built from stepResults, so both executed steps are present.
+      expect(seenOutput.steps.length).toBeGreaterThanOrEqual(2);
+      expect(result.gateResults![0]!.score).toBe(1.0);
+      expect(result.verdict).toBe('passed');
+    });
+
+    it('hands a trajectory-typed PER-TURN gate a Trajectory and threads expectedTrajectory (#22632)', async () => {
+      const agent = createTurnAgent('turnTrajectoryGateAgent');
+
+      const seen: Array<{ output: unknown; expected: unknown }> = [];
+      const perTurnTrajectoryGate = createScorer({
+        id: 'per-turn-trajectory-gate',
+        description: 'Records the shape a per-turn trajectory gate receives',
+        type: 'trajectory',
+      }).generateScore(({ run }: any) => {
+        seen.push({ output: run.output, expected: run.expectedTrajectory });
+        return 1.0;
+      });
+
+      const expectedTrajectory = { steps: [] };
+
+      const result = await runEvals({
+        data: [
+          {
+            expectedTrajectory,
+            turns: [{ input: 'Turn one', gates: [perTurnTrajectoryGate] }],
+          },
+        ],
+        target: agent,
+      } as any);
+
+      expect(seen).toHaveLength(1);
+      // Same contract as the top-level gate loop: a Trajectory, never the raw messages.
+      expect(Array.isArray(seen[0]!.output)).toBe(false);
+      expect((seen[0]!.output as { steps?: unknown }).steps).toBeInstanceOf(Array);
+      expect(seen[0]!.expected).toEqual(expectedTrajectory);
+      expect(result.turnResults![0]!.gateResults![0]!.passed).toBe(true);
+    });
+
+    it('logs the cause when a gate throws, while still scoring it 0 (#22632)', async () => {
+      const agent = createTurnAgent('gateThrowLoggingAgent');
+      const warn = vi.fn();
+      const mastra = new Mastra({
+        agents: { gateThrowLoggingAgent: agent },
+        logger: { warn, error: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any,
+      });
+
+      const throwingGate = createScorer({
+        id: 'throwing-gate-logged',
+        description: 'Always throws',
+      }).generateScore(() => {
+        throw new Error('gate boom');
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        gates: [throwingGate],
+        target: mastra.getAgent('gateThrowLoggingAgent'),
+      });
+
+      // The score-0 contract is deliberate and stays.
+      expect(result.gateResults![0]!.score).toBe(0);
+      expect(result.verdict).toBe('failed');
+      // ... but the cause is no longer discarded by a bare catch.
+      expect(warn).toHaveBeenCalled();
+      const logged = warn.mock.calls.map((c: unknown[]) => c.map(String).join(' ')).join(' | ');
+      expect(logged).toContain('throwing-gate-logged');
+      expect(logged).toContain('gate boom');
+    });
+
     it('fails the verdict when a per-turn gate fails on one turn (wrong turn cannot satisfy)', async () => {
       const agent = createTurnAgent('turnGateAgent');
 

@@ -115,6 +115,20 @@ describe('VercelSandboxProcessManager', () => {
     expect(params.env).toEqual({ BASE: '1', EXTRA: '2' });
   });
 
+  it('defaults cwd to the sandbox workingDirectory when no cwd is given', async () => {
+    const { command } = makeFakeCommand({ cmdId: 'cmd-wd', exitCode: 0 });
+    const runCommand = vi.fn().mockResolvedValue(command);
+
+    const pm = new VercelSandboxProcessManager();
+    const stub = makeSandboxStub(runCommand);
+    Object.defineProperty(stub, 'workingDirectory', { value: '/srv/app' });
+    pm.sandbox = stub;
+
+    await pm.spawn('pwd');
+    const params = runCommand.mock.calls[0]![0];
+    expect(params.cwd).toBe('/srv/app');
+  });
+
   it('lists tracked processes', async () => {
     const { command } = makeFakeCommand({ cmdId: 'cmd-5', exitCode: 0 });
     const runCommand = vi.fn().mockResolvedValue(command);

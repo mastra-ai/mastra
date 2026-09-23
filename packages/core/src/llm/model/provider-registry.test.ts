@@ -14,6 +14,24 @@ import {
   _resetCapabilityCaches,
 } from './provider-registry.js';
 
+/** Remove a model from OpenRouter's checked-in capability arrays (all, or one dimension). */
+function stripFromOpenRouterCapabilities(modelId: string, dimension?: string) {
+  const originalReadFileSync = fs.readFileSync;
+  vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
+    const content = originalReadFileSync(filePath as any, ...(rest as [any]));
+    if (typeof filePath === 'string' && path.basename(filePath) === 'openrouter.json' && typeof content === 'string') {
+      const data = JSON.parse(content);
+      for (const key of Object.keys(data)) {
+        if (Array.isArray(data[key]) && (!dimension || key === dimension)) {
+          data[key] = data[key].filter((id: string) => id !== modelId);
+        }
+      }
+      return JSON.stringify(data);
+    }
+    return content;
+  });
+}
+
 describe('modelSupportsAttachments', () => {
   afterEach(() => {
     _resetCapabilityCaches();
@@ -34,11 +52,88 @@ describe('modelSupportsAttachments', () => {
       return originalExistsSync(filePath);
     });
 
-    expect(modelSupportsAttachments('openrouter/deepseek-v4-flash')).toBe(false);
-    expect(modelSupportsAttachments('openrouter/deepseek/deepseek-v4-flash')).toBe(false);
-    expect(modelSupportsAttachments('mastra/openrouter/deepseek/deepseek-v4-flash')).toBe(false);
+    // gpt-oss-120b is open-weight and text-only in both the OpenRouter and
+    // OpenAI capability lists, so it stays false through the nested-provider fallback.
+    expect(modelSupportsAttachments('openrouter/gpt-oss-120b')).toBe(false);
+    expect(modelSupportsAttachments('openrouter/openai/gpt-oss-120b')).toBe(false);
+    expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-oss-120b')).toBe(false);
     expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
     expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-4o')).toBe(true);
+  });
+
+  it('does not fall back to the nested provider when the gateway lists the model without support', () => {
+    const originalReadFileSync = fs.readFileSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
+      const content = originalReadFileSync(filePath as any, ...(rest as [any]));
+      if (typeof filePath === 'string' && path.basename(filePath) === 'deepseek.json' && typeof content === 'string') {
+        // Simulate a gateway-synced DeepSeek file where the direct API gained vision.
+        const data = JSON.parse(content);
+        data.attachment = [...(data.attachment ?? []), 'deepseek-v4-flash'];
+        return JSON.stringify(data);
+      }
+      return content;
+    });
+
+    // DeepSeek direct supports it, but OpenRouter lists the model without attachment support.
+    expect(modelSupportsAttachments('deepseek/deepseek-v4-flash')).toBe(true);
+    expect(modelSupportsAttachments('openrouter/deepseek/deepseek-v4-flash')).toBe(false);
+  });
+
+  it('treats a gateway-listed model absent from every capability array as unsupported', () => {
+    // A model with no capabilities at all is in the gateway's model list but in
+    // none of its capability arrays; that must not trigger the nested fallback.
+    stripFromOpenRouterCapabilities('openai/gpt-4o');
+
+    expect(modelSupportsAttachments('openai/gpt-4o')).toBe(true);
+    expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(false);
+  });
+
+  it('falls back to the nested provider when the gateway does not list the model', () => {
+    const registry = GatewayRegistry.getInstance();
+    const originalGetModels = registry.getModels.bind(registry);
+    vi.spyOn(registry, 'getModels').mockImplementation(() => {
+      const models = originalGetModels();
+      return { ...models, openrouter: models.openrouter.filter(id => id !== 'openai/gpt-4o') };
+    });
+
+    expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
+  });
+
+  it('falls back to the nested provider when the gateway lists the model but publishes no capability data', () => {
+    // Netlify enumerates models but implements no capability getters, so no
+    // capabilities/netlify.json exists. Listing alone is not an answer.
+    expect(fs.existsSync(path.join(process.cwd(), 'src', 'llm', 'model', 'capabilities', 'netlify.json'))).toBe(false);
+    expect(GatewayRegistry.getInstance().getModels().netlify).toContain('openai/gpt-4o');
+
+    expect(modelSupportsAttachments('netlify/openai/gpt-4o')).toBe(true);
+    expect(modelSupportsAttachments('netlify/openai/gpt-oss-120b')).toBe(false);
+  });
+});
+
+describe('gateway capability precedence across dimensions', () => {
+  afterEach(() => {
+    _resetCapabilityCaches();
+    vi.restoreAllMocks();
+  });
+
+  it('honors the gateway false for temperature over the nested provider', () => {
+    stripFromOpenRouterCapabilities('openai/gpt-4o', 'temperature');
+
+    expect(modelSupportsTemperature('openai/gpt-4o')).toBe(true);
+    expect(modelSupportsTemperature('openrouter/openai/gpt-4o')).toBe(false);
+  });
+
+  it('honors the gateway false for structured output over the nested provider', () => {
+    stripFromOpenRouterCapabilities('openai/gpt-4o', 'structuredOutput');
+
+    expect(modelSupportsStructuredOutput('openai/gpt-4o')).toBe(true);
+    expect(modelSupportsStructuredOutput('openrouter/openai/gpt-4o')).toBe(false);
+  });
+
+  it('keeps the nested fallback for catalog-only gateways across dimensions', () => {
+    expect(modelSupportsTemperature('netlify/anthropic/claude-sonnet-4-6')).toBe(true);
+    expect(modelSupportsTemperature('netlify/anthropic/claude-sonnet-5')).toBe(false);
+    expect(modelSupportsStructuredOutput('netlify/openai/gpt-4o')).toBe(true);
   });
 });
 
@@ -68,6 +163,39 @@ describe('modelSupportsTemperature', () => {
     // openrouter/anthropic/claude-sonnet-4-6 should resolve via the nested provider fallback
     expect(modelSupportsTemperature('openrouter/anthropic/claude-sonnet-4-6')).toBe(true);
     expect(modelSupportsTemperature('openrouter/openai/gpt-5-pro')).toBe(false);
+  });
+});
+
+describe('modelSupportsTemperature — Bedrock resolution (issue #23319)', () => {
+  beforeEach(() => {
+    _resetCapabilityCaches();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('falls back to the underlying vendor for Bedrock router ids', () => {
+    // aws-bedrock has no capability file; claude-sonnet-5 must inherit anthropic's
+    // (unsupported) temperature fact, while claude-sonnet-4-6 stays supported.
+    expect(modelSupportsTemperature('aws-bedrock/claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('aws-bedrock/claude-sonnet-4-6')).toBe(true);
+  });
+
+  it('normalizes provider-instance ids (region + vendor prefixes)', () => {
+    // @ai-sdk/amazon-bedrock exposes provider `amazon-bedrock` and region/vendor-qualified ids.
+    expect(modelSupportsTemperature('amazon-bedrock/us.anthropic.claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/eu.anthropic.claude-sonnet-4-6')).toBe(true);
+    // Global and geographic (JP/AU) inference-profile prefixes resolve the same way.
+    expect(modelSupportsTemperature('amazon-bedrock/global.anthropic.claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/jp.anthropic.claude-sonnet-4-6')).toBe(true);
+    expect(modelSupportsTemperature('amazon-bedrock/au.anthropic.claude-sonnet-4-6')).toBe(true);
+  });
+
+  it('applies the Bedrock grok temperature override without affecting direct xai', () => {
+    // Bedrock-hosted grok-4.6 rejects temperature even though direct xai accepts it.
+    expect(modelSupportsTemperature('aws-bedrock/grok-4.6')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/us.xai.grok-4.6')).toBe(false);
+    expect(modelSupportsTemperature('xai/grok-4.6')).toBe(true);
   });
 });
 

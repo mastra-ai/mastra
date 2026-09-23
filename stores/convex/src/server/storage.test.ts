@@ -2212,3 +2212,134 @@ describe('mastraStorage bulk mutations', () => {
     expect(clearCtx.maxConcurrentDeletes).toBe(2);
   });
 });
+
+describe('mastraStorage upsert preserves workflow snapshot createdAt', () => {
+  function createUpsertCtx(existing: Record<string, unknown> | null) {
+    const patches: Array<{ id: GenericId<string>; data: Record<string, unknown> }> = [];
+    const inserts: Array<{ table: string; record: Record<string, unknown> }> = [];
+    const builder: TestQueryBuilder = {
+      eq: vi.fn((_field: string, _value: string) => builder),
+    };
+    const unique = vi.fn(async () => existing);
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      queryBuilder(builder);
+      return { unique };
+    });
+    const query = vi.fn(() => ({ withIndex }));
+    const patch = vi.fn(async (id: GenericId<string>, data: Record<string, unknown>) => {
+      patches.push({ id, data });
+    });
+    const insert = vi.fn(async (table: string, record: Record<string, unknown>) => {
+      inserts.push({ table, record });
+    });
+    const ctx = { db: { query, patch, insert } } as unknown as TypedOperationCtx;
+
+    return { ctx, patch, insert, patches, inserts };
+  }
+
+  const existingSnapshot = () => ({
+    _id: asConvexId('snapshot-doc'),
+    id: 'workflow-a-run-1',
+    workflow_name: 'workflow-a',
+    run_id: 'run-1',
+    snapshot: '{"status":"pending"}',
+    createdAt: '2026-05-15T00:00:00.000Z',
+    updatedAt: '2026-05-15T00:00:00.000Z',
+  });
+
+  const snapshotRecord = (overrides: Record<string, unknown> = {}) => ({
+    id: 'workflow-a-run-1',
+    workflow_name: 'workflow-a',
+    run_id: 'run-1',
+    snapshot: '{"status":"running"}',
+    createdAt: '2026-05-16T00:00:00.000Z',
+    updatedAt: '2026-05-16T00:00:00.000Z',
+    ...overrides,
+  });
+
+  it('does not overwrite createdAt when a stale writer resaves an existing snapshot', async () => {
+    const upsertCtx = createUpsertCtx(existingSnapshot());
+
+    const result = await handleTypedOperation(upsertCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'insert',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      record: snapshotRecord(),
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(upsertCtx.insert).not.toHaveBeenCalled();
+    expect(upsertCtx.patches).toHaveLength(1);
+    expect(upsertCtx.patches[0]!.data).not.toHaveProperty('createdAt');
+    expect(upsertCtx.patches[0]!.data).toMatchObject({
+      snapshot: '{"status":"running"}',
+      updatedAt: '2026-05-16T00:00:00.000Z',
+    });
+  });
+
+  it('writes createdAt from the record on the first snapshot insert', async () => {
+    const upsertCtx = createUpsertCtx(null);
+
+    await handleTypedOperation(upsertCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'insert',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      record: snapshotRecord(),
+    });
+
+    expect(upsertCtx.patch).not.toHaveBeenCalled();
+    expect(upsertCtx.inserts).toHaveLength(1);
+    expect(upsertCtx.inserts[0]!.record).toMatchObject({
+      id: 'workflow-a-run-1',
+      createdAt: '2026-05-16T00:00:00.000Z',
+    });
+  });
+
+  it('preserves createdAt for snapshots written through batchInsert', async () => {
+    const upsertCtx = createUpsertCtx(existingSnapshot());
+
+    await handleTypedOperation(upsertCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'batchInsert',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      records: [snapshotRecord()],
+    });
+
+    expect(upsertCtx.insert).not.toHaveBeenCalled();
+    expect(upsertCtx.patches).toHaveLength(1);
+    expect(upsertCtx.patches[0]!.data).not.toHaveProperty('createdAt');
+    expect(upsertCtx.patches[0]!.data).toMatchObject({ updatedAt: '2026-05-16T00:00:00.000Z' });
+  });
+
+  it('still writes the incoming createdAt when upserting other tables', async () => {
+    const upsertCtx = createUpsertCtx({
+      _id: asConvexId('thread-doc'),
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      createdAt: '2026-05-15T00:00:00.000Z',
+    });
+
+    await handleTypedOperation(upsertCtx.ctx, 'mastra_threads', {
+      op: 'insert',
+      tableName: TABLE_THREADS,
+      record: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'thread',
+        createdAt: '2026-05-16T00:00:00.000Z',
+        updatedAt: '2026-05-16T00:00:00.000Z',
+      },
+    });
+
+    expect(upsertCtx.patches).toHaveLength(1);
+    expect(upsertCtx.patches[0]!.data).toMatchObject({ createdAt: '2026-05-16T00:00:00.000Z' });
+  });
+
+  it('never includes id in the patch for either table', async () => {
+    const snapshotCtx = createUpsertCtx(existingSnapshot());
+    await handleTypedOperation(snapshotCtx.ctx, 'mastra_workflow_snapshots', {
+      op: 'insert',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      record: snapshotRecord(),
+    });
+
+    expect(snapshotCtx.patches[0]!.data).not.toHaveProperty('id');
+  });
+});

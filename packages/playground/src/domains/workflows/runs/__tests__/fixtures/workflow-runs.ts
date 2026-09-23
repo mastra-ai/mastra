@@ -40,6 +40,11 @@ export const oneSuccessfulRun: ListWorkflowRunsResponse = {
   total: 1,
 };
 
+export const runsWithResource: ListWorkflowRunsResponse = {
+  runs: [{ ...workflowRun('run-tenant', 'success'), resourceId: 'tenant-42' }, workflowRun('run-anonymous', 'success')],
+  total: 2,
+};
+
 const inputStep = {
   status: 'success',
   output: { city: 'Paris' },

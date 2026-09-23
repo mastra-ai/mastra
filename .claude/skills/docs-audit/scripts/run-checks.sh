@@ -1,33 +1,29 @@
 #!/usr/bin/env bash
-# Run deterministic docs-audit checks and capture raw output.
+# Run narrow deterministic checks for one or more audited Mastra docs files.
 #
-# Runs docs validation, repo-wide Remark/Vale checks, target-scoped
-# Remark/Vale checks, and a file-scoped oxfmt-mdx check for audited docs.
-# Outputs are written to $RUN_DIR/commands/.
-#
-# Run from anywhere; resolves paths relative to this script's location.
+# Run from anywhere; paths may be repository-relative or absolute.
 #
 # Usage:
-#   bash .claude/skills/docs-audit/scripts/run-checks.sh --run-dir "$RUN_DIR" --docs docs/src/content/en/reference/core/getAgentById.mdx
-#   bash .claude/skills/docs-audit/scripts/run-checks.sh --run-dir "$RUN_DIR" --docs docs/a.mdx docs/b.mdx
+#   bash .claude/skills/docs-audit/scripts/run-checks.sh --docs docs/src/content/en/docs/index.mdx
+#   bash .claude/skills/docs-audit/scripts/run-checks.sh --docs docs/a.mdx --docs docs/b.mdx
 #
 # Exit codes:
-#   0 — no failing check (warnings may be present)
-#   1 — at least one check failed
+#   0 — audited targets passed (warnings or proven unrelated validation failures may exist)
+#   1 — an audited target or checker execution failed
 #   2 — bad CLI usage
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-WORKTREE_ROOT="$(cd -- "${SKILL_ROOT}/../../.." && pwd)"
-DOCS_DIR="$WORKTREE_ROOT/docs"
-
-RUN_DIR=""
+DEFAULT_WORKTREE_ROOT="$(cd -- "${SKILL_ROOT}/../../.." && pwd)"
+WORKTREE_ROOT="${DOCS_AUDIT_WORKTREE_ROOT:-$DEFAULT_WORKTREE_ROOT}"
+DOCS_DIR="${DOCS_AUDIT_DOCS_DIR:-$WORKTREE_ROOT/docs}"
+TMP_PARENT="${DOCS_AUDIT_TMP_ROOT:-${TMPDIR:-/tmp}}"
 DOCS=()
 
 usage() {
-  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 resolve_doc_for_docs_cwd() {
@@ -65,82 +61,115 @@ resolve_doc_for_docs_cwd() {
   printf '%s\n' "$rel"
 }
 
-run_check() {
-  local name="$1"
-  local outfile="$2"
-  shift 2
-  local exit_code
-
-  printf '$ %s\n\n' "$*" > "$outfile"
+run_capture() {
+  local outfile="$1"
+  shift
   (
     cd "$DOCS_DIR" && "$@"
-  ) >> "$outfile" 2>&1
-  exit_code=$?
+  ) >"$outfile" 2>&1
+}
 
-  if [ $exit_code -eq 0 ]; then
-    printf '%s=pass\n' "$name"
-    return 0
+print_diagnostics() {
+  local name="$1"
+  local file="$2"
+  if [ -s "$file" ]; then
+    printf '%s diagnostics:\n' "$name"
+    sed 's/^/  /' "$file"
   fi
+}
 
-  printf '\n[docs-audit] command exited with code %s\n' "$exit_code" >> "$outfile"
-  printf '%s=fail\n' "$name"
+add_validation_tokens() {
+  local doc="$1"
+  local without_prefix="${doc#src/content/en/}"
+  local family="${without_prefix%%/*}"
+  local id="${without_prefix#*/}"
+  local route_id route
+
+  id="${id%.mdx}"
+  route_id="${id%/index}"
+  if [ "$route_id" = "index" ]; then route_id=""; fi
+  case "$family" in
+    docs) route="/docs${route_id:+/$route_id}" ;;
+    integrations) route="/integrations${route_id:+/$route_id}" ;;
+    reference) route="/reference${route_id:+/$route_id}" ;;
+    *) route="" ;;
+  esac
+
+  VALIDATION_TOKENS+=("$doc" "docs/$doc")
+  VALIDATION_ID_FAMILIES+=("$family")
+  VALIDATION_DOC_IDS+=("$id")
+  if [ -n "$route" ]; then VALIDATION_ROUTES+=("$route"); fi
+}
+
+validation_mentions_target() {
+  local file="$1"
+  local token route index family id
+  for token in "${VALIDATION_TOKENS[@]}"; do
+    if grep -F -q -- "$token" "$file"; then return 0; fi
+  done
+  for route in "${VALIDATION_ROUTES[@]}"; do
+    if awk -v route="$route" '
+      {
+        offset = 1
+        while (offset <= length($0)) {
+          match_at = index(substr($0, offset), route)
+          if (!match_at) break
+          match_at += offset - 1
+          before = match_at > 1 ? substr($0, match_at - 1, 1) : ""
+          after = substr($0, match_at + length(route), 1)
+          if (before !~ /[[:alnum:]_.@\/-]/ && after !~ /[[:alnum:]_.@\/-]/) found = 1
+          offset = match_at + length(route)
+        }
+      }
+      END { exit found ? 0 : 1 }
+    ' "$file"; then
+      return 0
+    fi
+  done
+  for index in "${!VALIDATION_DOC_IDS[@]}"; do
+    family="${VALIDATION_ID_FAMILIES[$index]}"
+    id="${VALIDATION_DOC_IDS[$index]}"
+    if awk -v family="$family" -v id="$id" '
+      $1 ~ /^(docs|integrations|reference)\/sidebars\.js$/ {
+        split($1, parts, "/")
+        current_family = parts[1]
+        next
+      }
+      NF == 0 { current_family = "" }
+      current_family == family && $1 == "-" && NF == 2 && $2 == id { found = 1 }
+      index($0, "src/content/en/" family "/sidebars.js") && index($0, "(" id ")") { found = 1 }
+      END { exit found ? 0 : 1 }
+    ' "$file"; then
+      return 0
+    fi
+  done
   return 1
 }
 
-count_target_hits() {
+validation_has_attributed_diagnostics() {
   local file="$1"
-  local count=0
-  local doc
-
-  if [ ! -f "$file" ]; then
-    printf '0\n'
-    return
+  if grep -E -q 'src/content/en/(docs|integrations|reference)/[^[:space:]]+\.mdx|src/content/en/(docs|integrations|reference)/sidebars\.js:[0-9]+.*\([[:alnum:]_.@/-]+\)|/(docs|integrations|reference)(/[[:alnum:]_.@/-]+)?([^[:alnum:]_.@/-]|$)' "$file"; then
+    return 0
   fi
-
-  for doc in "${DOCS_REL[@]}"; do
-    count=$((count + $(grep -F -- "$doc" "$file" | grep -F -v '$ ' | wc -l | tr -d ' ' || true)))
-  done
-  printf '%s\n' "$count"
-}
-
-validate_target_state() {
-  local validate_state="$1"
-  local file="$COMMANDS_DIR/validate.txt"
-  local doc base
-
-  if [ "$validate_state" = "pass" ]; then
-    printf 'pass\n'
-    return
-  fi
-
-  for doc in "${DOCS_REL[@]}"; do
-    base="$(basename -- "$doc")"
-    if grep -F -q -- "$doc" "$file" || grep -F -q -- "$base" "$file"; then
-      printf 'fail\n'
-      return
-    fi
-  done
-
-  printf 'pass\n'
+  awk '
+    $1 ~ /^(docs|integrations|reference)\/sidebars\.js$/ { in_family = 1; next }
+    NF == 0 { in_family = 0 }
+    in_family && $1 == "-" && NF == 2 { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$file"
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --run-dir)
-      if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
-        echo "run-checks: --run-dir requires a directory" >&2
-        exit 2
-      fi
-      RUN_DIR="$2"
-      shift 2
-      ;;
     --docs)
       shift
-      while [ $# -gt 0 ]; do
-        case "$1" in
-          --*) break ;;
-          *) DOCS+=("$1"); shift ;;
-        esac
+      if [ $# -eq 0 ] || [[ "$1" == --* ]]; then
+        echo "run-checks: --docs requires at least one doc path" >&2
+        exit 2
+      fi
+      while [ $# -gt 0 ] && [[ "$1" != --* ]]; do
+        DOCS+=("$1")
+        shift
       done
       ;;
     -h|--help)
@@ -155,114 +184,117 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-if [ -z "$RUN_DIR" ]; then
-  echo "run-checks: --run-dir is required" >&2
-  exit 2
-fi
-if [ ! -d "$RUN_DIR" ]; then
-  echo "run-checks: run directory does not exist: $RUN_DIR" >&2
+if [ ${#DOCS[@]} -eq 0 ]; then
+  echo "run-checks: --docs requires at least one doc path" >&2
   exit 2
 fi
 if [ ! -d "$DOCS_DIR" ]; then
   echo "run-checks: docs directory does not exist: $DOCS_DIR" >&2
   exit 1
 fi
-if [ ${#DOCS[@]} -eq 0 ]; then
-  echo "run-checks: --docs requires at least one doc path" >&2
-  exit 2
-fi
-
-COMMANDS_DIR="$RUN_DIR/commands"
-if ! mkdir -p "$COMMANDS_DIR"; then
-  echo "run-checks: failed to create commands directory: $COMMANDS_DIR" >&2
+if [ ! -d "$TMP_PARENT" ]; then
+  echo "run-checks: temporary root does not exist: $TMP_PARENT" >&2
   exit 1
 fi
+WORKTREE_ROOT="$(cd "$WORKTREE_ROOT" && pwd -P)"
+DOCS_DIR="$(cd "$DOCS_DIR" && pwd -P)"
+TMP_PARENT="$(cd "$TMP_PARENT" && pwd -P)"
+
+CHECK_DIR="$(mktemp -d "$TMP_PARENT/docs-audit-checks.XXXXXX")" || {
+  echo "run-checks: failed to create temporary directory" >&2
+  exit 1
+}
+cleanup() {
+  rm -rf "$CHECK_DIR"
+}
+trap cleanup EXIT
 
 DOCS_REL=()
+VALIDATION_TOKENS=()
+VALIDATION_ROUTES=()
+VALIDATION_ID_FAMILIES=()
+VALIDATION_DOC_IDS=()
 for doc in "${DOCS[@]}"; do
   rel="$(resolve_doc_for_docs_cwd "$doc")" || exit 2
   DOCS_REL+=("$rel")
+  add_validation_tokens "$rel"
 done
 
-overall=0
-repo_failures=()
-
-validate_state=pass
-run_check validate "$COMMANDS_DIR/validate.txt" pnpm validate || {
-  overall=1
-  validate_state=fail
-  repo_failures+=(validate)
-}
-
-remark_state=pass
-run_check lint-remark "$COMMANDS_DIR/lint-remark.txt" pnpm lint:remark || {
-  overall=1
-  remark_state=fail
-  repo_failures+=(remark)
-}
-
-remark_target_state=pass
-run_check remark-target "$COMMANDS_DIR/remark-target.txt" pnpm exec remark --no-stdout --frail --quiet --ext mdx "${DOCS_REL[@]}" || {
-  overall=1
-  remark_target_state=fail
-}
-
-vale_state=pass
-vale_target_state=pass
-vale_target_hits=0
-vale_out="$COMMANDS_DIR/lint-vale-ai.txt"
-vale_target_out="$COMMANDS_DIR/vale-target.txt"
-if [ ! -x "$DOCS_DIR/scripts/vale/bin/vale" ]; then
-  {
-    printf '$ pnpm lint:vale:ai\n\n'
-    printf 'warn — vale binary missing at docs/scripts/vale/bin/vale; run pnpm vale:download or pnpm vale:sync\n'
-  } > "$vale_out"
-  {
-    printf '$ scripts/vale/bin/vale --minAlertLevel=error --output=line %s\n\n' "${DOCS_REL[*]}"
-    printf 'warn — vale binary missing at docs/scripts/vale/bin/vale; run pnpm vale:download or pnpm vale:sync\n'
-  } > "$vale_target_out"
-  printf 'lint-vale-ai=warn\n'
-  printf 'vale-target=warn\n'
-  vale_state=warn
-  vale_target_state=warn
-else
-  run_check lint-vale-ai "$vale_out" pnpm lint:vale:ai || {
-    overall=1
-    vale_state=fail
-    repo_failures+=(vale)
-  }
-  run_check vale-target "$vale_target_out" scripts/vale/bin/vale --minAlertLevel=error --output=line "${DOCS_REL[@]}" || {
-    overall=1
-    vale_target_state=fail
-  }
-  vale_target_hits="$(count_target_hits "$vale_target_out")"
-fi
-
 format_state=pass
-run_check format-check "$COMMANDS_DIR/format-check.txt" pnpm exec oxfmt-mdx --check "${DOCS_REL[@]}" || {
-  overall=1
+remark_state=pass
+vale_state=pass
+validate_state=pass
+repo_wide_failures=none
+overall=0
+
+format_out="$CHECK_DIR/format.txt"
+run_capture "$format_out" pnpm exec oxfmt-mdx --check "${DOCS_REL[@]}"
+format_code=$?
+if [ "$format_code" -ne 0 ]; then
   format_state=fail
-}
-
-validate_target_state="$(validate_target_state "$validate_state")"
-
-repo_wide_failures="none"
-if [ ${#repo_failures[@]} -gt 0 ]; then
-  repo_wide_failures="$(IFS=,; printf '%s' "${repo_failures[*]}")"
+  overall=1
+  print_diagnostics format-target "$format_out"
+  if [ "$format_code" -eq 126 ] || [ "$format_code" -eq 127 ]; then
+    printf 'format-target checker execution failed with exit code %s\n' "$format_code" >&2
+  fi
 fi
 
-summary_out="$COMMANDS_DIR/summary.txt"
-{
-  printf 'format-target=%s\n' "$format_state"
-  printf 'remark-target=%s\n' "$remark_target_state"
-  printf 'vale-target=%s (%s hits)\n' "$vale_target_state" "$vale_target_hits"
-  printf 'validate-target=%s\n' "$validate_target_state"
-  printf 'repo-wide-failures=%s\n' "$repo_wide_failures"
-} > "$summary_out"
-
-printf 'summary written: %s\n' "$summary_out"
-
-if [ $overall -eq 0 ]; then
-  exit 0
+remark_out="$CHECK_DIR/remark.txt"
+run_capture "$remark_out" pnpm exec remark --no-stdout --frail --quiet --ext mdx "${DOCS_REL[@]}"
+remark_code=$?
+if [ "$remark_code" -ne 0 ]; then
+  remark_state=fail
+  overall=1
+  print_diagnostics remark-target "$remark_out"
+  if [ "$remark_code" -eq 126 ] || [ "$remark_code" -eq 127 ]; then
+    printf 'remark-target checker execution failed with exit code %s\n' "$remark_code" >&2
+  fi
 fi
-exit 1
+
+vale_out="$CHECK_DIR/vale.txt"
+if [ ! -x "$DOCS_DIR/scripts/vale/bin/vale" ]; then
+  vale_state=warn
+  printf 'vale-target diagnostics:\n  Vale binary missing at docs/scripts/vale/bin/vale; run pnpm vale:download or pnpm vale:sync\n'
+else
+  run_capture "$vale_out" scripts/vale/bin/vale --minAlertLevel=error --output=line "${DOCS_REL[@]}"
+  vale_code=$?
+  if [ "$vale_code" -ne 0 ]; then
+    vale_state=fail
+    overall=1
+    print_diagnostics vale-target "$vale_out"
+    if [ "$vale_code" -eq 126 ] || [ "$vale_code" -eq 127 ]; then
+      printf 'vale-target checker execution failed with exit code %s\n' "$vale_code" >&2
+    fi
+  fi
+fi
+
+validate_out="$CHECK_DIR/validate.txt"
+run_capture "$validate_out" pnpm validate
+validate_code=$?
+if [ "$validate_code" -ne 0 ]; then
+  if [ "$validate_code" -eq 126 ] || [ "$validate_code" -eq 127 ]; then
+    validate_state=fail
+    overall=1
+    print_diagnostics validate-target "$validate_out"
+    printf 'validate-target checker execution failed with exit code %s\n' "$validate_code" >&2
+  elif validation_mentions_target "$validate_out"; then
+    validate_state=fail
+    overall=1
+    print_diagnostics validate-target "$validate_out"
+  elif validation_has_attributed_diagnostics "$validate_out"; then
+    validate_state=pass
+    repo_wide_failures=validate
+  else
+    validate_state=warn
+    repo_wide_failures=validate-ambiguous
+    print_diagnostics validate-target "$validate_out"
+  fi
+fi
+
+printf 'format-target=%s\n' "$format_state"
+printf 'remark-target=%s\n' "$remark_state"
+printf 'vale-target=%s\n' "$vale_state"
+printf 'validate-target=%s\n' "$validate_state"
+printf 'repo-wide-failures=%s\n' "$repo_wide_failures"
+
+exit "$overall"

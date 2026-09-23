@@ -1,1 +1,1 @@
-export { DataCodeSection, type DataCodeSectionProps } from './data-code-section';
+export { DataCodeSection, type DataCodeSectionProps, type DataCodeSectionDiff } from './data-code-section';

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { Search } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ToolCall,
@@ -9,11 +10,14 @@ import {
   ToolCallHeader,
   ToolCallIcon,
   ToolCallLabel,
+  ToolCallPresentedHeader,
   ToolCallSpacer,
   ToolCallSummary,
   ToolCallTrailing,
   ToolCallTrigger,
 } from './tool-call';
+import { ArrivalScope } from '@/ds/components/Arrival';
+import { ARRIVING_CLASS } from '@/ds/tokens';
 
 const Example = ({
   open,
@@ -73,8 +77,8 @@ describe('ToolCall', () => {
     expect(screen.getByTestId('icon').className).toContain('size-4');
     expect(screen.getByTestId('icon').textContent).toBe('$');
     expect(screen.getByText('Ran command').className).toContain('truncate');
-    expect(screen.getByText('pnpm test').className).toContain('text-icon3 min-w-0 truncate');
-    expect(screen.getByText('pnpm test').className).toContain('font-mono');
+    expect(screen.getByText('pnpm test').classList).toContain('truncate');
+    expect(screen.getByText('pnpm test').classList).toContain('font-mono');
     expect(screen.getByText('2 files').className).toContain('items-center');
     expect(screen.getByText('Done').className).toContain('shrink-0');
     expect(screen.getByTestId('disclosure').firstElementChild?.className).toContain(
@@ -82,7 +86,6 @@ describe('ToolCall', () => {
     );
 
     const content = document.querySelector<HTMLDivElement>('.body-class');
-    expect(content?.className).toContain('before:bg-border1');
     expect(content?.textContent).toBe('Command output');
   });
 
@@ -165,15 +168,81 @@ describe('ToolCall', () => {
 
     expect(screen.getByRole('group', { name: 'Tool: custom' }).getAttribute('data-status')).toBe('idle');
     expect(screen.getByTestId('spacer').className).toContain('min-w-2 flex-1');
-    expect(screen.getByTestId('spacer').className).toContain('bg-border1');
     expect(screen.getByTestId('custom-disclosure').className).toContain('justify-center');
-    expect(screen.getByText('Toggle').className).toContain(
-      'text-icon3 flex shrink-0 items-center opacity-0 transition duration-150',
+    const toggleClasses = screen.getByText('Toggle').className.split(' ');
+    expect(toggleClasses).toEqual(
+      expect.arrayContaining(['flex', 'shrink-0', 'items-center', 'opacity-0', 'transition', 'duration-150']),
     );
     expect(screen.getByText('Toggle').textContent).toBe('Toggle');
   });
 
   it('rejects compounds rendered outside the root', () => {
     expect(() => render(<ToolCallDisclosure />)).toThrow('ToolCall compounds must be rendered within ToolCall');
+  });
+});
+
+describe('ToolCallPresentedHeader', () => {
+  const Presented = ({ status = 'idle', detail }: { status?: 'idle' | 'running' | 'error'; detail?: string }) => (
+    <ToolCall status={status}>
+      <ToolCallTrigger>
+        <ToolCallPresentedHeader icon={Search} label="Searched files" detail={detail} />
+      </ToolCallTrigger>
+      <ToolCallContent>body</ToolCallContent>
+    </ToolCall>
+  );
+
+  it('renders the presented label with its detail', () => {
+    render(<Presented detail="src/**/*.ts" />);
+
+    expect(screen.getByText('Searched files')).toBeTruthy();
+    expect(screen.getByText('src/**/*.ts')).toBeTruthy();
+    expect(screen.queryByRole('img', { name: 'Failed' })).toBeNull();
+  });
+
+  it('marks a failed call', () => {
+    render(<Presented status="error" />);
+
+    expect(screen.getByRole('img', { name: 'Failed' })).toBeTruthy();
+  });
+
+  it('seats a leading slot ahead of the label', () => {
+    render(
+      <ToolCall>
+        <ToolCallTrigger>
+          <ToolCallPresentedHeader icon={Search} label="Searched files" leading={<time>3:42:05 PM</time>} />
+        </ToolCallTrigger>
+      </ToolCall>,
+    );
+
+    const leading = screen.getByText('3:42:05 PM');
+    const label = screen.getByText('Searched files');
+    expect(leading.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('ToolCallDetail arrival', () => {
+  it('fades in a detail that lands after the reader was watching', () => {
+    const { rerender } = render(
+      <ArrivalScope>
+        <ToolCall>
+          <ToolCallHeader>
+            <ToolCallLabel>Ran command</ToolCallLabel>
+          </ToolCallHeader>
+        </ToolCall>
+      </ArrivalScope>,
+    );
+
+    rerender(
+      <ArrivalScope>
+        <ToolCall>
+          <ToolCallHeader>
+            <ToolCallLabel>Ran command</ToolCallLabel>
+            <ToolCallDetail>pnpm test</ToolCallDetail>
+          </ToolCallHeader>
+        </ToolCall>
+      </ArrivalScope>,
+    );
+
+    expect(screen.getByText('pnpm test').classList.contains(ARRIVING_CLASS)).toBe(true);
   });
 });

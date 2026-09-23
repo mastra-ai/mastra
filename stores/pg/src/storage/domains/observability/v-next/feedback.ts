@@ -6,10 +6,13 @@
  * over `valueNumber` only; string-valued feedback is excluded.
  */
 
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -20,6 +23,7 @@ import type {
   GetFeedbackTimeSeriesResponse,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
@@ -43,8 +47,17 @@ import {
   validatePercentiles,
 } from './olap';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
-import { FEEDBACK_TYPED_COLUMNS } from './signal-schema';
+import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
+import { FEEDBACK_EVENT_COLUMNS, FEEDBACK_TYPED_COLUMNS } from './signal-schema';
 import { buildInsert, FEEDBACK_SELECT_COLUMNS } from './sql';
+
+const FEEDBACK_CONFLICT_KEYS = new Set(['feedbackId', 'timestamp']);
+const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT ("feedbackId", "timestamp") DO UPDATE SET ${FEEDBACK_EVENT_COLUMNS.map(
+  column => column.name,
+)
+  .filter(column => !FEEDBACK_CONFLICT_KEYS.has(column))
+  .map(column => `"${column}" = EXCLUDED."${column}"`)
+  .join(', ')}`;
 
 // ---------------------------------------------------------------------------
 // Filter helpers specific to the feedback signal
@@ -63,6 +76,10 @@ function applyFeedbackFilters(
   if (filters?.feedbackUserId) {
     acc.conditions.push(`"feedbackUserId" = $${acc.next++}`);
     acc.params.push(filters.feedbackUserId);
+  }
+  if (filters?.reviewStatus) {
+    acc.conditions.push(`"reviewStatus" = $${acc.next++}`);
+    acc.params.push(filters.reviewStatus);
   }
 }
 
@@ -90,7 +107,7 @@ function pushFeedbackIdentity(
 
 export async function createFeedback(client: DbClient, schema: string, args: CreateFeedbackArgs): Promise<void> {
   const row = feedbackRecordToRow(args.feedback);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, [row]);
+  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, [row], FEEDBACK_UPSERT_CLAUSE);
   if (insert) await client.query(insert.text, insert.values);
 }
 
@@ -100,9 +117,61 @@ export async function batchCreateFeedback(
   args: BatchCreateFeedbackArgs,
 ): Promise<void> {
   if (args.feedbacks.length === 0) return;
-  const rows = args.feedbacks.map(feedbackRecordToRow);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows);
+  const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
+  const rows = [...currentFeedback.values()].map(feedbackRecordToRow);
+  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows, FEEDBACK_UPSERT_CLAUSE);
   if (insert) await client.query(insert.text, insert.values);
+}
+
+export async function updateFeedbackReviewStatus(
+  client: DbClient,
+  schema: string,
+  args: UpdateFeedbackReviewStatusArgs,
+): Promise<FeedbackRecord> {
+  const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
+  const row = await client.oneOrNone<Record<string, any>>(
+    `UPDATE ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)}
+     SET "reviewStatus" = $2
+     WHERE "feedbackId" = $1
+     RETURNING ${FEEDBACK_SELECT_COLUMNS}`,
+    [feedbackId, reviewStatus],
+  );
+  if (!row) {
+    throw new MastraError({
+      id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.USER,
+      text: 'Feedback record not found',
+      details: { feedbackId },
+    });
+  }
+  return rowToFeedbackRecord(row);
+}
+
+// ---------------------------------------------------------------------------
+// Deletes
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete feedback events by feedbackId. Optional `organizationId` and
+ * `resourceId` values are ANDed into the predicate to restrict deletion to
+ * records with matching scope fields.
+ */
+export async function deleteFeedback(client: DbClient, schema: string, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  const values: unknown[] = [...args.feedbackIds];
+  const placeholders = args.feedbackIds.map((_, i) => `$${i + 1}`).join(', ');
+  const conditions = [`"feedbackId" IN (${placeholders})`];
+  if (args.organizationId !== undefined) {
+    values.push(args.organizationId);
+    conditions.push(`"organizationId" = $${values.length}`);
+  }
+  if (args.resourceId !== undefined) {
+    values.push(args.resourceId);
+    conditions.push(`"resourceId" = $${values.length}`);
+  }
+  await client.query(`DELETE FROM ${table} WHERE ${conditions.join(' AND ')}`, values);
 }
 
 // ---------------------------------------------------------------------------

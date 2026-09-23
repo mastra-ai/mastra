@@ -4,16 +4,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { PanelRightIcon } from 'lucide-react';
 
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
-import { popoverSizeClass } from '../layout';
+import { cardRadiusClass, popoverSizeClass } from '../layout';
 import { WorkspaceFilesContent } from './WorkspaceFilesContent';
 
 export function WorkspaceFilesToggle() {
-  const { open, setOpen, workspacePath, expanded, setExpanded, canDock } = useWorkspacePanel();
+  const { open, setOpen, workspacePath, size, setSize, canDock } = useWorkspacePanel();
 
   if (!workspacePath) return null;
 
   const setPopoverOpen = (next: boolean) => {
-    if (next) setExpanded(false);
+    if (next) setSize('compact');
     setOpen(next);
   };
 
@@ -44,8 +44,9 @@ export function WorkspaceFilesToggle() {
         side="bottom"
         sideOffset={8}
         className={cn(
-          '[interpolate-size:allow-keywords] overflow-hidden p-0 transition-[width,height] duration-360 ease-out-custom motion-reduce:transition-none',
-          popoverSizeClass[expanded ? 'expanded' : 'compact'],
+          '[interpolate-size:allow-keywords] flex flex-col overflow-hidden p-0 transition-[width,height] duration-360 ease-out-custom motion-reduce:transition-none',
+          cardRadiusClass,
+          popoverSizeClass[size],
         )}
       >
         <WorkspaceFilesContent />

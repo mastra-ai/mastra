@@ -1,6 +1,6 @@
 ---
 title: "Reference: Configuration | Observability"
-description: Tracing configuration types and registry functions
+description: "Configure Mastra observability instances, tracing exporters, sampling, propagation, span filters, and the global observability registry."
 packages:
   - "@mastra/core"
 ---
@@ -138,13 +138,13 @@ interface ObservabilityInstanceConfig {
           {
             name: 'maxStringLength',
             type: 'number',
-            description: 'Maximum length for string values (default: 1024)',
+            description: 'Maximum length for string values (default: 131072)',
             isOptional: true,
           },
           {
             name: 'maxDepth',
             type: 'number',
-            description: 'Maximum depth for nested objects (default: 6)',
+            description: 'Maximum depth for nested objects (default: 8)',
             isOptional: true,
           },
           {
@@ -226,7 +226,7 @@ The Observability class provides methods for managing observability instances:
 
 ### `registerInstance`
 
-```typescript prettier:false
+```typescript oxfmt:false
 registerInstance(
   name: string,
   instance: ObservabilityInstance,
@@ -238,7 +238,7 @@ Registers an observability instance in the registry.
 
 ### `getInstance`
 
-```typescript prettier:false
+```typescript oxfmt:false
 getInstance(name: string): ObservabilityInstance | undefined;
 ```
 
@@ -246,7 +246,7 @@ Retrieves an observability instance by name.
 
 ### `getDefaultInstance`
 
-```typescript prettier:false
+```typescript oxfmt:false
 getDefaultInstance(): ObservabilityInstance | undefined;
 ```
 
@@ -254,7 +254,7 @@ Returns the default observability instance.
 
 ### `getSelectedInstance`
 
-```typescript prettier:false
+```typescript oxfmt:false
 getSelectedInstance(
   options: ConfigSelectorOptions
 ): ObservabilityInstance | undefined;
@@ -264,7 +264,7 @@ Returns the observability instance selected by the config selector or default.
 
 ### `listInstances`
 
-```typescript prettier:false
+```typescript oxfmt:false
 listInstances(): ReadonlyMap<string, ObservabilityInstance>;
 ```
 
@@ -272,7 +272,7 @@ Returns all registered observability instances.
 
 ### `hasInstance`
 
-```typescript prettier:false
+```typescript oxfmt:false
 hasInstance(name: string): boolean;
 ```
 
@@ -280,7 +280,7 @@ Checks if an observability instance exists.
 
 ### `setConfigSelector`
 
-```typescript prettier:false
+```typescript oxfmt:false
 setConfigSelector(selector: ConfigSelector): void;
 ```
 
@@ -288,7 +288,7 @@ Sets the config selector function.
 
 ### `unregisterInstance`
 
-```typescript prettier:false
+```typescript oxfmt:false
 unregisterInstance(name: string): boolean;
 ```
 
@@ -296,7 +296,7 @@ Removes an observability instance from the registry.
 
 ### clear
 
-```typescript prettier:false
+```typescript oxfmt:false
 clear(): void;
 ```
 
@@ -304,7 +304,7 @@ Clears all instances without shutdown.
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>;
 ```
 

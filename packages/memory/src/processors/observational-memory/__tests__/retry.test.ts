@@ -19,6 +19,7 @@ describe('isTransientLLMError', () => {
     expect(isTransientLLMError(new Error('socket hang up'))).toBe(true);
     expect(isTransientLLMError(new Error('connection closed'))).toBe(true);
     expect(isTransientLLMError(new Error('Request timeout'))).toBe(true);
+    expect(isTransientLLMError(new Error('Connection terminated due to connection timeout'))).toBe(true);
   });
 
   it('matches retryable HTTP statuses', () => {

@@ -1,0 +1,13 @@
+extends: existence
+message: "Replace '%s' with the concrete relationship or condition."
+level: error
+nonword: true
+ignorecase: true
+tokens:
+  - '\bsit(?:s|ting)? (?:squarely |firmly |neatly |cleanly |comfortably |uncomfortably |uneasily |awkwardly |snugly )?at the (?:nexus|crux|crossroads|confluence) of\b'
+  - '\bsit(?:s|ting)? (?:right|well|poorly|badly|wrong)\b'
+  - '\bsit(?:s|ting)? (?:heavy|heavily)\b'
+  - '\bsit(?:s|ting)? (?:at odds|in tension|in conflict|in opposition) (?:with|to)\b'
+  - '\bsit(?:s|ting)? in (?:limbo|purgatory|a holding pattern|the balance|a gr[ae]y area|no man.s land)\b'
+  - '\bsit(?:s|ting)? front and cent(?:er|re)\b'
+  - '\bsit(?:s|ting)? on the fence\b'

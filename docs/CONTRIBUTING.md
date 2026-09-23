@@ -56,18 +56,12 @@ Before submitting a PR, make sure to:
 
 4. **Verify code examples**: If you've added code examples, test them if possible to ensure they work.
 
-5. **Run linters**: Install Vale and `mdx2vast`, then run the linting and validation commands.
+5. **Run linters**: Install Vale, then run the linting and validation commands.
 
    Download Vale:
 
    ```bash
    pnpm run vale:download
-   ```
-
-   Install `mdx2vast` globally:
-
-   ```bash
-   npm install -g mdx2vast
    ```
 
    Run the validation scripts:

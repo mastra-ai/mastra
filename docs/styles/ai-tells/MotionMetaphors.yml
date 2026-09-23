@@ -1,0 +1,98 @@
+---
+extends: existence
+message: "AI motion metaphor: '%s'. Name the literal operation: is passed to, or depends on."
+level: error
+nonword: true
+ignorecase: true
+# Motion and force verbs applied to data or control flow: a pipeline that
+# "feeds" a stage, a row that "strands," extra rows that "swamp" an index,
+# a table that "dwarfs" the rest, a planner that "leans on" an index, a
+# step that "mints" an identifier, a default "baked in," a rule that
+# "crowds out" the rest, a config that "drives" the build, a pass that
+# "shapes" the output, a stage that "cracks open" a record. A
+# documentation-corpus audit (2026-09) counted sixty of these across
+# thirty verbs with no rule reading the class. The plain sentence names
+# the operation: the stage reads the pipeline's output, the row is left
+# without a parent, the index grows past its budget.
+#
+# The tokens gate each verb on the construction the audit saw, and every one
+# measured at zero to two across the Go and Python standard libraries
+# ("that variable feeds into an if/switch," "Go leans on stricter OS
+# limits," "GOEXPERIMENT is baked in," "dwarfed by the overhead of the
+# defer"), each the figure itself. The verbs measured out, and left to a
+# reader's own exceptions rather than a token: "comes from," "arrives,"
+# "routes," "flows," "brings," "passes through," "pulls out," "heads,"
+# "trails," "sinks," "seats," "fuses," "backs," "seeds," and "spends,"
+# each either ordinary English for the operation or a term of art (a
+# seeded generator, a routed packet, a fused instruction pair);
+# "squeezes" and "absorbs" belong to the sponge construction in the
+# crypto register, eight and two hits. "Stands up a service" and "fans
+# out" stay in FigurativeIdioms with the other fixed phrases. Fluid and
+# mechanical prose, where a pump feeds a line and a river strands a boat,
+# disables the rule.
+exceptions:
+  # Beings that literally feed and things that literally lean
+  - "(?i)people"
+  - "(?i)person"
+  - "(?i)m[ae]n"
+  - "(?i)wom[ae]n"
+  - "(?i)child(?:ren)?"
+  - "(?i)kids?"
+  - "(?i)bab(?:y|ies)"
+  - "(?i)parents?"
+  - "(?i)mothers?"
+  - "(?i)fathers?"
+  - "(?i)birds?"
+  - "(?i)cats?"
+  - "(?i)dogs?"
+  - "(?i)animals?"
+  - "(?i)ladders?"
+  - "(?i)walls?"
+tokens:
+  # --- Feeding: one stage as the mouth of the next ("the pipeline feeds
+  # the stage," "nothing upstream feeds the stage," "the output feeds into
+  # the ranker").
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no|nothing) (?:[a-z'-]+ )?[a-z]+ (?:then |also |never |still |only |always )?feeds? (?:the|a|an|its|their|this|that|these|those|each|every|into|both|all)\\b"
+  - "\\bfeeds? (?:directly |straight |back )?into (?:the|a|an|its|their|this|that|each|every)\\b"
+
+  # --- Stranding: a row or record as a shipwreck ("a row strands," "the
+  # stranded rows," "nothing strands there").
+  - "\\bstrand(?:s|ed|ing)\\b(?! (?:of|from)\\b)"
+
+  # --- Force and scale: the bigger thing as weather or crowd ("the extra
+  # rows swamp the index," "the big table dwarfs the rest," "the stage
+  # crowds out the rest").
+  - "\\bswamp(?:s|ed|ing)?\\b(?! (?:of|land|water|cooler|cabbage|thing)\\b)"
+  - "\\bdwarf(?:s|ed|ing)\\b"
+  - "\\b(?:crowds?|crowded|crowding) out\\b"
+
+  # --- Dependence as posture ("the planner leans on the index," "leans
+  # heavily on the cache").
+  - "\\blean(?:s|ed|ing)? (?:on|heavily on|hard on|entirely on) (?:the|a|an|its|their|this|that|each|every|one|[a-z]+)\\b(?! (?:wall|walls|fence|fences|railing|railings|counter|doorframe|post|posts|tree|trees|car|truck|desk|table|shoulder|shoulders|arm|arms)\\b)"
+
+  # --- Manufacture: an identifier as coinage, a default as pastry ("the
+  # step mints a new identifier," "the default is baked in," "bakes the
+  # path into the image").
+  - "\\bmint(?:s|ed|ing)? (?:a|an|the|its|this|that|new|fresh|one|two|every|each|another)\\b"
+  - "\\bbak(?:es?|ed|ing) (?:in|into)\\b(?! (?:the oven|a pan|an oven)\\b)"
+  - "\\bbak(?:es?|ed|ing) (?:the|a|an|its|this|that|every|each) (?:[a-z]+ )?[a-z]+ (?:in|into)\\b"
+
+  # --- Steering and sculpting: a value as the driver or the sculptor of
+  # what follows ("the config drives the build," "the pass shapes the
+  # output"). Determiner-gated on both sides, so "drives the car" and
+  # "shapes the clay" fire only with an artifact in the driver's seat.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no) (?:[a-z'-]+ )?[a-z]+ (?:then |also |never |still |only |always )?(?:drives?|drove|driven|shapes?|shaped) (?:the|a|an|its|their|this|that|these|those|each|every|both|all|what|which|how|whether)\\b"
+
+  # --- Breaking open and shedding ("the stage cracks open the record,"
+  # "the pass sheds the derived columns," "sheds light on").
+  - "\\bcrack(?:s|ed|ing)? open\\b"
+  - "\\bsheds? (?:the|a|an|its|this|that|every|each|most|all|any|some|those|these|light|weight)\\b"
+  - "\\bshed light\\b"
+
+  # --- Seating and trailing: a value placed like a passenger or lagging
+  # like a runner ("the loader seats the record in the cache," "the
+  # mirror trails the newest release"). A documentation-corpus census
+  # (2026-09) listed both among the verbs no rule read; each measures
+  # zero across the seven pre-LLM corpora.
+  - "\\bseat(?:s|ed|ing)? (?:the|a|an|its|their|this|that|each|every|it|them)\\b"
+  - "\\btrail(?:s|ed|ing)? (?:the|a|an|its|their|this|that) (?:[a-z]+ )?(?:value|version|release|tag|pin|newest|latest|head|tip|main)\\b"

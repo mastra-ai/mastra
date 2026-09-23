@@ -50,7 +50,7 @@ export function getEntryRetries(entry: SingleStepEntry, fallback?: number): numb
  * declarative variants have none.
  */
 export function getEntryComponent(entry: SingleStepEntry): string | undefined {
-  return entry.type === 'step' ? (entry.step as { component?: string }).component : undefined;
+  return entry.type === 'step' ? entry.step.component : undefined;
 }
 
 /**

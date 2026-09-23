@@ -134,12 +134,15 @@ export function generateSeatbeltProfile(workspacePath: string, config: NativeSan
   lines.push('');
 
   // Device files
+  // `file-ioctl` alone is not enough: opening a device node O_RDWR (as git,
+  // ssh, and shell redirections do) also needs `file-write-data`, which the
+  // default-deny profile otherwise withholds (write rules below are
+  // workspace/temp-scoped).
   lines.push('; Device files');
-  lines.push('(allow file-ioctl (literal "/dev/null"))');
-  lines.push('(allow file-ioctl (literal "/dev/zero"))');
-  lines.push('(allow file-ioctl (literal "/dev/random"))');
-  lines.push('(allow file-ioctl (literal "/dev/urandom"))');
-  lines.push('(allow file-ioctl (literal "/dev/tty"))');
+  for (const device of ['/dev/null', '/dev/zero', '/dev/random', '/dev/urandom', '/dev/tty']) {
+    lines.push(`(allow file-ioctl (literal "${device}"))`);
+    lines.push(`(allow file-write-data (literal "${device}"))`);
+  }
   lines.push('');
 
   // File read access - allow all reads (macOS limitation: can't use subpath without this)

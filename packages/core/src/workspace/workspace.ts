@@ -34,7 +34,6 @@ import * as path from 'node:path';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
-import { pMap, pMapSkip } from '../utils/p-map';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
@@ -60,7 +59,12 @@ import type {
 } from './search';
 import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
-import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
+import {
+  WorkspaceSkillsImpl,
+  ResolvedSourceWorkspaceSkills,
+  LocalSkillSource,
+  SKILL_SCOPE_DOCUMENT_PREFIX,
+} from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
 
@@ -529,6 +533,8 @@ export interface WorkspaceInfo {
  * (`batchReadFiles`).
  */
 const FS_READ_CONCURRENCY = 8;
+/** Mirrors SearchEngine.search default when no topK is supplied. */
+const DEFAULT_SEARCH_TOP_K = 10;
 
 /**
  * Parse the user-facing `bm25` config union into the `BM25SearchConfig` shape
@@ -552,10 +558,27 @@ function parseBM25Config(
 // =============================================================================
 
 /**
- * Workspace provides agents with filesystem and execution capabilities.
+ * Provides agents with filesystem and execution capabilities through configured providers.
  *
- * At minimum, a workspace has either a filesystem or a sandbox (or both).
- * Users pass instantiated provider objects to the constructor.
+ * Supply a filesystem, a sandbox, or both. File operations require a filesystem;
+ * command execution requires a sandbox.
+ *
+ * @example
+ * ```typescript
+ * import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+ *
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workspace documentation](https://mastra.ai/docs/workspace/overview)
+ * if packaged docs are unavailable.
  */
 export class Workspace<
   TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,
@@ -952,17 +975,37 @@ export class Workspace<
 
     // Lazy initialization
     if (!this._skills) {
-      // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
-      const source = this._config.skillSource ?? this._fs ?? new LocalSkillSource();
-
-      this._skills = new WorkspaceSkillsImpl({
-        source,
+      const baseConfig = {
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
         assertAvailable: () => this.assertSearchWritable(),
         checkSkillFileMtime: this._config.checkSkillFileMtime,
-      });
+      };
+
+      // Priority: explicit skillSource > resolved filesystem (per request) > static filesystem
+      //           > LocalSkillSource (read-only from local disk, only when no filesystem is configured)
+      if (!this._config.skillSource && this._filesystemResolver) {
+        this._skills = new ResolvedSourceWorkspaceSkills({
+          ...baseConfig,
+          source: async ({ requestContext }) => {
+            const fs = await this.resolveFilesystem({ requestContext: requestContext ?? new RequestContext() });
+            if (!fs) {
+              throw new WorkspaceError(
+                'Filesystem resolver returned no filesystem; cannot discover skills',
+                'FILESYSTEM_NOT_RESOLVED',
+                this.id,
+              );
+            }
+            return fs;
+          },
+        });
+      } else {
+        this._skills = new WorkspaceSkillsImpl({
+          ...baseConfig,
+          source: this._config.skillSource ?? this._fs ?? new LocalSkillSource(),
+        });
+      }
     }
 
     return this._skills;
@@ -1049,7 +1092,24 @@ export class Workspace<
       throw new SearchNotAvailableError();
     }
     this.lastAccessedAt = new Date();
-    return this._searchEngine.search(query, options);
+
+    // Documents tagged with `skillScope` belong to request-scoped skill views
+    // (dynamic paths or resolver-backed filesystems). They are only meaningful
+    // through `skills.getScoped(...).search()`; exposing them here would leak
+    // one request's skills into another's unscoped workspace search. Exclude
+    // them in the vector query so persisted records from previous processes do
+    // not consume topK before filtering. BM25 ignores the vector filter, so
+    // over-fetch its currently indexed scoped documents before post-filtering.
+    const scopedCount = this._searchEngine.countByPrefix(SKILL_SCOPE_DOCUMENT_PREFIX);
+    const topK = options?.topK ?? DEFAULT_SEARCH_TOP_K;
+    const unscopedFilter = { skillScope: { $exists: false } };
+    const filter = options?.filter ? { $and: [options.filter, unscopedFilter] } : unscopedFilter;
+    const results = await this._searchEngine.search(query, {
+      ...options,
+      topK: topK + scopedCount,
+      filter,
+    });
+    return results.filter(result => result.metadata?.skillScope === undefined).slice(0, topK);
   }
 
   /**
@@ -1123,9 +1183,10 @@ export class Workspace<
     }
 
     const fs = this._fs;
+    const { default: pMap, pMapSkip } = await import('p-map');
     return pMap(
       files,
-      async (filePath): Promise<{ filePath: string; docs: IndexDocument[] } | typeof pMapSkip> => {
+      async (filePath): Promise<{ filePath: string; docs: IndexDocument[] } | typeof import('p-map').pMapSkip> => {
         try {
           const content = (await fs.readFile(filePath, { encoding: 'utf-8' })) as string;
           const chunks = splitIntoChunks(content);
@@ -1140,7 +1201,7 @@ export class Workspace<
                 }));
           return { filePath, docs };
         } catch {
-          return pMapSkip;
+          return pMapSkip as typeof import('p-map').pMapSkip;
         }
       },
       { stopOnError: false, concurrency: FS_READ_CONCURRENCY },
@@ -1158,6 +1219,7 @@ export class Workspace<
     if (!engine) return [];
     try {
       const entries = await this.batchReadFiles(paths);
+      const pMap = (await import('p-map')).default;
       // Clear stale single-doc/chunked entries from previous indexing passes.
       await pMap(entries, ({ filePath }) => engine.removeSource(filePath), {
         concurrency: FS_READ_CONCURRENCY,
@@ -1656,6 +1718,11 @@ export class Workspace<
    * Called by Mastra when the logger is set.
    * @internal
    */
+  /** Logger set by Mastra, if any. */
+  get logger(): IMastraLogger | undefined {
+    return this._logger;
+  }
+
   __setLogger(logger: IMastraLogger): void {
     this._logger = logger;
 

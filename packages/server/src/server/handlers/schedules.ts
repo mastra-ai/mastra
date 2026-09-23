@@ -155,6 +155,7 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
         ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
         ...(body.initialState !== undefined ? { initialState: body.initialState } : {}),
         ...(body.requestContext ? { requestContext: body.requestContext } : {}),
+        ...(body.resourceId ? { resourceId: body.resourceId } : {}),
         ...(body.metadata ? { metadata: body.metadata } : {}),
       });
     }
@@ -193,7 +194,7 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
   responseSchema: scheduleSchema,
   summary: 'Update a schedule',
   description:
-    'Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. `threadId` and `resourceId` are part of an agent schedule identity and cannot be changed — to re-target, delete and recreate. Editing `cron` (or `timezone`) recomputes `nextFireAt`.',
+    "Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. An agent schedule's `threadId` and `resourceId` are part of its identity and cannot be changed — to re-target, delete and recreate. A workflow schedule's `resourceId` is run-attribution metadata and may be updated. Editing `cron` (or `timezone`) recomputes `nextFireAt`.",
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, scheduleId, ...body }) => {
@@ -214,6 +215,7 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
       ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
       ...(body.initialState !== undefined ? { initialState: body.initialState } : {}),
       ...(body.requestContext !== undefined ? { requestContext: body.requestContext } : {}),
+      ...(body.resourceId !== undefined ? { resourceId: body.resourceId } : {}),
     });
   },
 });
@@ -313,7 +315,7 @@ export const LIST_SCHEDULE_TRIGGERS_ROUTE = createRoute({
     if (!schedule?.workflowId) {
       return { triggers };
     }
-    const workflowName = (schedule as WorkflowSchedule).workflowId;
+    const workflowName = schedule.workflowId;
     const hydrated = await Promise.all(
       triggers.map(async trigger => {
         if (trigger.outcome !== 'published' || !trigger.runId) return trigger;

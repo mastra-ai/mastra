@@ -15,6 +15,62 @@ import {
   noToolErrors,
 } from './index';
 
+// ─── Native tool-failure fixtures ──────────────────────────────────────────────
+
+/**
+ * A message carrying a natively thrown tool call.
+ *
+ * Core persists a thrown call in `content.parts` as `state: 'output-error'` with
+ * `errorText`; the legacy `toolInvocations` array cannot represent that state, so
+ * these fixtures must use parts.
+ */
+function thrownToolMessage(toolName: string, toolCallId: string, errorText = 'Tool failed') {
+  return createTestMessage({
+    content: 'That failed.',
+    role: 'assistant',
+    id: `thrown-${toolCallId}`,
+    parts: [
+      { type: 'text', text: 'That failed.' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: createToolInvocation({ toolCallId, toolName, args: {}, state: 'output-error', errorText }),
+      },
+    ],
+  });
+}
+
+/**
+ * A message where one call succeeded and one threw, and the legacy array mirrors
+ * only the success — the mixed shape that hid the failure entirely.
+ */
+function mixedToolMessage(toolName: string) {
+  const good = createToolInvocation({
+    toolCallId: 'good',
+    toolName,
+    args: {},
+    result: { saved: true },
+    state: 'result',
+  });
+  const bad = createToolInvocation({
+    toolCallId: 'bad',
+    toolName,
+    args: {},
+    state: 'output-error',
+    errorText: 'Save failed',
+  });
+  return createTestMessage({
+    content: 'Partly done.',
+    role: 'assistant',
+    id: 'mixed',
+    toolInvocations: [good],
+    parts: [
+      { type: 'text', text: 'Partly done.' },
+      { type: 'tool-invocation', toolInvocation: good },
+      { type: 'tool-invocation', toolInvocation: bad },
+    ],
+  });
+}
+
 // ─── includes ─────────────────────────────────────────────────────────────────
 
 describe('checks.includes', () => {
@@ -329,6 +385,18 @@ describe('checks.calledTool', () => {
     expect(result.score).toBe(0);
   });
 
+  test('should score 1 when the tool was called but threw', async () => {
+    const scorer = checks.calledTool('save');
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Save this', role: 'user', id: 'i1' })],
+      output: [thrownToolMessage('save', 'bad', 'Save failed')],
+    });
+
+    const result = await scorer.run(run);
+    // The tool ran; a thrown call is still a call.
+    expect(result.score).toBe(1);
+  });
+
   test('named export matches namespace', () => {
     expect(calledTool).toBe(checks.calledTool);
   });
@@ -371,6 +439,18 @@ describe('checks.didNotCall', () => {
     });
 
     const result = await scorer.run(run);
+    expect(result.score).toBe(0);
+  });
+
+  test('should score 0 when the tool was called but threw', async () => {
+    const scorer = checks.didNotCall('save');
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Save this', role: 'user', id: 'i1' })],
+      output: [thrownToolMessage('save', 'bad', 'Save failed')],
+    });
+
+    const result = await scorer.run(run);
+    // A thrown call is still a call, so this must not pass.
     expect(result.score).toBe(0);
   });
 
@@ -466,6 +546,44 @@ describe('checks.toolOrder', () => {
     expect(result.score).toBe(0);
   });
 
+  test('should score 1 when a thrown call is part of the expected order', async () => {
+    const scorer = checks.toolOrder(['search', 'save']);
+    const good = createToolInvocation({
+      toolCallId: 's1',
+      toolName: 'search',
+      args: {},
+      result: { results: [] },
+      state: 'result',
+    });
+    const bad = createToolInvocation({
+      toolCallId: 's2',
+      toolName: 'save',
+      args: {},
+      state: 'output-error',
+      errorText: 'Save failed',
+    });
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Search then save', role: 'user', id: 'i1' })],
+      output: [
+        createTestMessage({
+          content: 'Done.',
+          role: 'assistant',
+          id: 'o1',
+          parts: [
+            { type: 'text', text: 'Done.' },
+            { type: 'tool-invocation', toolInvocation: good },
+            { type: 'tool-invocation', toolInvocation: bad },
+          ],
+        }),
+      ],
+    });
+
+    const result = await scorer.run(run);
+    // Dropping the thrown call would leave only ['search'] and break the sequence.
+    expect(result.score).toBe(1);
+    expect(result.preprocessStepResult?.actualTools).toEqual(['search', 'save']);
+  });
+
   test('named export matches namespace', () => {
     expect(toolOrder).toBe(checks.toolOrder);
   });
@@ -516,6 +634,19 @@ describe('checks.maxToolCalls', () => {
     expect(result.score).toBe(0);
   });
 
+  test('should score 0 when a hidden thrown call pushes the run over the limit', async () => {
+    const scorer = checks.maxToolCalls(1);
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Save these', role: 'user', id: 'i1' })],
+      // Two real calls, but the legacy array mirrors only the successful one.
+      output: [mixedToolMessage('save')],
+    });
+
+    const result = await scorer.run(run);
+    expect(result.score).toBe(0);
+    expect(result.preprocessStepResult?.count).toBe(2);
+  });
+
   test('named export matches namespace', () => {
     expect(maxToolCalls).toBe(checks.maxToolCalls);
   });
@@ -552,6 +683,18 @@ describe('checks.usedNoTools', () => {
     });
 
     const result = await scorer.run(run);
+    expect(result.score).toBe(0);
+  });
+
+  test('should score 0 when the only tool call threw', async () => {
+    const scorer = checks.usedNoTools();
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Save this', role: 'user', id: 'i1' })],
+      output: [thrownToolMessage('save', 'bad', 'Save failed')],
+    });
+
+    const result = await scorer.run(run);
+    // A thrown call is still tool use.
     expect(result.score).toBe(0);
   });
 
@@ -650,6 +793,64 @@ describe('checks.noToolErrors', () => {
 
     const result = await scorer.run(run);
     expect(result.score).toBe(1);
+  });
+
+  test('should score 0 when a tool call threw natively (state "output-error")', async () => {
+    const scorer = checks.noToolErrors();
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Save this', role: 'user', id: 'i1' })],
+      output: [thrownToolMessage('save', 'bad', 'Save failed')],
+    });
+
+    const result = await scorer.run(run);
+    expect(result.score).toBe(0);
+    expect(result.preprocessStepResult?.errorCount).toBe(1);
+    expect(result.preprocessStepResult?.totalCalls).toBe(1);
+  });
+
+  test('should score 0 and count both calls when only the failure lives in parts', async () => {
+    const scorer = checks.noToolErrors();
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Save these', role: 'user', id: 'i1' })],
+      output: [mixedToolMessage('save')],
+    });
+
+    const result = await scorer.run(run);
+    expect(result.score).toBe(0);
+    expect(result.preprocessStepResult?.errorCount).toBe(1);
+    expect(result.preprocessStepResult?.totalCalls).toBe(2);
+  });
+
+  test('should score 0 when a result is flagged isError without an error field', async () => {
+    const scorer = checks.noToolErrors();
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Save this', role: 'user', id: 'i1' })],
+      output: [
+        createTestMessage({
+          content: 'That failed.',
+          role: 'assistant',
+          id: 'o1',
+          parts: [
+            { type: 'text', text: 'That failed.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: createToolInvocation({
+                toolCallId: 'c1',
+                toolName: 'save',
+                args: {},
+                result: { saved: false },
+                state: 'result',
+                isError: true,
+              }),
+            },
+          ],
+        }),
+      ],
+    });
+
+    const result = await scorer.run(run);
+    expect(result.score).toBe(0);
+    expect(result.preprocessStepResult?.errorCount).toBe(1);
   });
 
   test('named export matches namespace', () => {

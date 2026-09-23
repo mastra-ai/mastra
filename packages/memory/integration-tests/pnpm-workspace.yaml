@@ -13,6 +13,8 @@ overrides:
   mastra: link:../../cli
   '@internal/llm-recorder': link:../../_llm-recorder
   '@internal/test-utils': link:../../_test-utils
+  '@internal/ai-v6': link:../../_vendored/ai_v6
+  '@mastra/schema-compat': link:../../schema-compat
 
 allowBuilds:
   esbuild: false

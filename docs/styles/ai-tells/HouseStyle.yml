@@ -1,0 +1,30 @@
+---
+extends: substitution
+# The "house" compound for a project's own conventions: the prose rules
+# become "the house style," a recurring phrase "a house tic," the
+# register "the house voice." Agent prose picks up the figure whenever
+# it writes about a repo's rules, this repository's own comments
+# included. The swap is mechanical (house -> project), and each value
+# must drop into the quoted span verbatim, because
+# fix-prose-replacements splices the first option without judgment;
+# keep every value number-agreeing with its key.
+#
+# The style keys carry a lookbehind so the hyphenated compound stays
+# quiet: "our in-house style guide" is in-house + style, not this
+# figure. Zero matches for any key across the Go and Python standard
+# libraries.
+message: "AI house compound: use %s instead of '%s'."
+level: error
+ignorecase: true
+action:
+  name: replace
+swap:
+  (?<!-)house style: project style
+  (?<!-)house styles: project styles
+  house tic: project tic
+  house tics: project tics
+  house formula: project formula
+  house formulas: project formulas
+  house voice: project voice
+  house idiom: project idiom
+  house idioms: project idioms

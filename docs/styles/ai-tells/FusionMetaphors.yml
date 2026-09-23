@@ -1,0 +1,41 @@
+---
+extends: existence
+message: "AI fusion metaphor: '%s'. Say merged, added, or combined, and name what went where. Disable this rule for physics or chemistry prose."
+level: error
+nonword: true
+ignorecase: true
+# Merging described as matter joining: a change "folds" a helper into the
+# caller, two rules "collapse into" one, a token "absorbs" a sibling, a
+# fix "fuses" two paths, a flag "couples" the cache to the writer. The
+# plain verbs are merged, combined, added, and joined, with both things
+# named. A documentation-corpus census (2026-09) counted these among the
+# verbs no rule read, "folds into" and "collapses to" first among them.
+#
+# Every token gates on the verb plus a determined object or a
+# destination, so the noun senses ("a fold," "the collapse," "tight
+# coupling") stay out. Across the seven pre-LLM corpora the family
+# measures nine: one "folding it directly into" in the Rust RFCs,
+# three collapses in the Go proposals and the Python sources ("the
+# time will collapse to wall time," "collapsed into a single"), and
+# five "absorbs the" in Go prose that mostly means it ("absorbing the
+# extra second," "absorbs the carry"). Each is the figure, flagged by
+# design; prose about
+# physics or chemistry, where things absorb and fuse literally,
+# disables the rule.
+tokens:
+  # --- Folding one thing into another ("folds the helper into the
+  # caller," "fold it into the main loop").
+  - "\\bfold(?:s|ed|ing)? (?:the|a|an|its|their|that|this|it|them|those|these|each|every|both) (?:[a-z-]+ )?into\\b"
+
+  # --- Collapsing a set to fewer ("the three rules collapse into one,"
+  # "collapses to a single call").
+  - "\\bcollaps(?:e|es|ed|ing) (?:to|into|down to|down into) (?:a|an|the|one|two|three|its|their|this|that|[a-z]+)\\b"
+
+  # --- Absorbing a sibling ("the new token absorbs the old one," "the
+  # parent absorbs its children").
+  - "\\babsorb(?:s|ed|ing)? (?:the|a|an|its|their|this|that|each|every|it|them)\\b"
+
+  # --- Fusing and coupling ("fuses the two passes," "couples the cache
+  # to the writer").
+  - "\\bfus(?:e|es|ed|ing) (?:the|a|an|its|their|this|that|it|them|two|both)\\b"
+  - "\\bcoupl(?:es|ed|ing) (?:the|a|an|its|their|this|that|it|them) (?:[a-z]+ )?(?:to|with)\\b"

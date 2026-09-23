@@ -36,6 +36,8 @@ export interface ListIntakeSourcesInput {
 export interface ListIntakeItemsInput extends ListIntakeSourcesInput {
   sourceIds: string[];
   cursor?: string;
+  /** Full source set used to resolve precedence when only a subset is fetched. */
+  attributionSourceIds?: string[];
 }
 
 /** Provider-neutral issue returned by every Intake integration. */
@@ -45,13 +47,19 @@ export interface IntakeIssue {
   title: string;
   url: string;
   author: string | null;
+  /** Stable provider login for access checks; `author` is a display name. */
+  authorUsername?: string | null;
   state: string | null;
   stateType: string | null;
   priority: string | null;
   assignee: string | null;
   assignees?: string[];
   source: string | null;
+  /** Provider source id the issue was read from (Linear project id); lets callers map issues back to intake bindings. */
+  sourceId?: string | null;
   labels: string[];
+  /** Provider label name to its display color, when supplied by the upstream API. */
+  labelColors?: Record<string, string>;
   commentCount: number | null;
   createdAt: string;
   updatedAt: string;
@@ -77,6 +85,8 @@ export interface ListIntakeIssuesInput {
   connection: IntegrationConnection;
   /** Provider-defined source ids: repositories for GitHub, projects for Linear. */
   sourceIds: string[];
+  /** Full source set used to resolve precedence when only a subset is fetched. */
+  attributionSourceIds?: string[];
   /** Provider label names used to filter the issue listing. */
   labels?: string[];
   cursor?: string;

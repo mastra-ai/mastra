@@ -2,9 +2,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
-import { Bundler } from '@mastra/deployer/bundler';
+import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
 import { copy } from 'fs-extra';
 import { shouldSkipDotenvLoading } from '../utils.js';
+import { getWorkerEntry } from '../worker/WorkerBundler.js';
 
 export class BuildBundler extends Bundler {
   private studio: boolean;
@@ -21,18 +22,14 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
-    const configuredExternals = Array.isArray(bundlerOptions.externals) ? bundlerOptions.externals : [];
 
-    if (bundlerOptions.externals === true || bundlerOptions.externals === false) {
+    if (!bundlerOptions[IS_DEFAULT] && bundlerOptions.externals !== undefined) {
       return bundlerOptions;
     }
-
-    const dynamicPackages = [...new Set([...(bundlerOptions.dynamicPackages ?? []), ...configuredExternals])];
 
     return {
       ...bundlerOptions,
       externals: true,
-      ...(dynamicPackages.length > 0 ? { dynamicPackages } : {}),
     };
   }
 
@@ -64,7 +61,13 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+    await this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+  }
+
+  protected getAdditionalEntries(): Record<string, string> {
+    return {
+      worker: getWorkerEntry(),
+    };
   }
 
   protected getEntry(): string {
@@ -81,9 +84,23 @@ export class BuildBundler extends Bundler {
     const storage = mastra.getStorage();
     if (storage) {
       if (!storage.disableInit) {
-        storage.init();
+        await storage.init();
       }
       mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+    }
+
+    try {
+      await mastra.restartAllActiveWorkflowRuns();
+    } catch (error) {
+      mastra.getLogger().error('Failed to restart active workflow runs during server startup', { error });
+    }
+
+    if (mastra.recoveryConfig?.durableAgents === 'auto') {
+      try {
+        await mastra.recoverAllDurableAgents();
+      } catch (error) {
+        mastra.getLogger().error('Failed to recover durable agent runs during server startup', { error });
+      }
     }
     `;
   }

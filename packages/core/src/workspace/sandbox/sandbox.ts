@@ -31,6 +31,7 @@ import type { SandboxLifecycle } from '../lifecycle';
 
 export type { SandboxStartOutcome, SandboxStartResult } from '../lifecycle';
 
+import { SandboxError, SandboxUnsupportedFeatureError } from './errors';
 import type { SandboxStartHook } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
@@ -64,6 +65,74 @@ export interface SandboxFileInput {
   path: string;
   /** File contents */
   content: string | Buffer;
+  /**
+   * Optional POSIX permission mode for the written file (e.g. `0o600`).
+   *
+   * Must be an integer in the range `0o001`–`0o777` (permission bits only; no
+   * setuid/setgid/sticky bits). A mode of `0` (no permissions) is rejected: it
+   * is not usefully provisionable and cannot be represented by every provider's
+   * upload transport. When omitted, the provider's default applies (Docker uses
+   * `0644`). Providers that cannot honor an explicit mode reject it rather than
+   * silently discarding it.
+   */
+  mode?: number;
+}
+
+/** Minimum permitted {@link SandboxFileInput.mode} value. */
+export const MIN_SANDBOX_FILE_MODE = 0o001;
+/** Maximum permitted {@link SandboxFileInput.mode} value (permission bits only). */
+export const MAX_SANDBOX_FILE_MODE = 0o777;
+
+/**
+ * Validate an explicit {@link SandboxFileInput.mode} value.
+ *
+ * @throws {SandboxError} with code `INVALID_ARGUMENT` if the mode is not an
+ *   integer in the range `0o001`–`0o777`.
+ */
+export function validateSandboxFileMode(mode: number): void {
+  if (!Number.isInteger(mode) || mode < MIN_SANDBOX_FILE_MODE || mode > MAX_SANDBOX_FILE_MODE) {
+    throw new SandboxError(
+      `Invalid file mode ${mode}: must be an integer between 0o001 (1) and 0o777 (${MAX_SANDBOX_FILE_MODE}).`,
+      'INVALID_ARGUMENT',
+      { mode },
+    );
+  }
+}
+
+/**
+ * Assert that no file in the list requests an explicit permission mode.
+ *
+ * Used by providers whose upload mechanism cannot honor a mode, so that an
+ * explicit mode is rejected rather than silently discarded.
+ *
+ * @throws {SandboxUnsupportedFeatureError} if any file specifies a `mode`.
+ */
+export function assertModesUnsupported(files: SandboxFileInput[], provider: string): void {
+  if (files.some(f => f.mode !== undefined)) {
+    throw new SandboxUnsupportedFeatureError(
+      `The ${provider} sandbox does not support per-file permission modes in writeFiles(). Omit 'mode' to use the provider default.`,
+      { provider },
+    );
+  }
+}
+
+/** Options for {@link WorkspaceSandbox.writeFiles}. */
+export interface WriteFilesOptions {
+  /**
+   * Abort signal to cancel the write.
+   *
+   * Observing the signal is provider-dependent. `DockerSandbox` terminates the
+   * in-flight upload when the signal aborts; providers that do not observe the
+   * signal run to completion. Providers that observe the signal reject an
+   * already-aborted write before archive creation or upload begins.
+   *
+   * Cancellation rejects with a {@link SandboxAbortError} (code `ABORTED`).
+   * Because upload and cancellation race, an upload that completes before the
+   * abort is observed resolves normally. Cancellation does not roll back writes:
+   * files transferred or extracted before the abort may remain in the sandbox,
+   * so callers are responsible for any cleanup or sandbox disposal.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -80,6 +149,126 @@ export function supportsNetworking(
   sandbox: WorkspaceSandbox,
 ): sandbox is WorkspaceSandbox & { networking: SandboxNetworking } {
   return typeof sandbox.networking?.getPortUrl === 'function';
+}
+
+// =============================================================================
+// Computer (Desktop) Capability
+// =============================================================================
+
+/** A screenshot of the sandbox's desktop display. */
+export interface ComputerScreenshot {
+  /** Raw image bytes */
+  data: Uint8Array;
+  /** Image media type (providers normalize to PNG) */
+  mediaType: 'image/png';
+}
+
+/** Screen dimensions in pixels. */
+export interface ComputerScreenSize {
+  width: number;
+  height: number;
+}
+
+/** A position on the sandbox's desktop display, in pixels from the top-left corner. */
+export interface ComputerPosition {
+  x: number;
+  y: number;
+}
+
+/**
+ * Optional computer-use (desktop) capability for sandboxes that run a GUI
+ * desktop environment.
+ *
+ * Providers with a controllable display (Daytona Computer Use, E2B Desktop,
+ * etc.) implement this to surface screenshot, mouse, and keyboard control
+ * through the abstraction. When present on a statically configured workspace
+ * sandbox, the workspace tools factory emits the
+ * `mastra_workspace_computer_*` tools automatically. Resolver-backed sandboxes
+ * do not register these tools because their capabilities are unavailable when
+ * the tool list is constructed.
+ *
+ * Coordinates are in pixels from the top-left corner of the display.
+ * Providers normalize their SDK semantics (key names, scroll units) onto
+ * this surface and may expose richer native APIs via their own accessors.
+ */
+export interface SandboxComputer {
+  /** Capture the current display as a PNG image. */
+  screenshot(): Promise<ComputerScreenshot>;
+
+  /** Left-click at the given coordinates. */
+  leftClick(x: number, y: number): Promise<void>;
+
+  /** Right-click at the given coordinates. */
+  rightClick(x: number, y: number): Promise<void>;
+
+  /** Double-click (left button) at the given coordinates. */
+  doubleClick(x: number, y: number): Promise<void>;
+
+  /** Move the mouse cursor to the given coordinates without clicking. */
+  moveMouse(x: number, y: number): Promise<void>;
+
+  /** Press the left button at `from`, drag to `to`, and release. */
+  drag(from: ComputerPosition, to: ComputerPosition): Promise<void>;
+
+  /**
+   * Scroll the display.
+   *
+   * @param direction - Scroll direction
+   * @param amount - Scroll amount in provider-normalized ticks (positive integer)
+   */
+  scroll(direction: 'up' | 'down', amount: number): Promise<void>;
+
+  /** Type text into the focused element using the keyboard. */
+  type(text: string): Promise<void>;
+
+  /**
+   * Press a key or key combination.
+   *
+   * A single string presses one key (e.g. `'Enter'`, `'Tab'`, `'a'`).
+   * An array presses a chord/hotkey (e.g. `['ctrl', 's']`).
+   */
+  press(key: string | string[]): Promise<void>;
+
+  /** Get the display dimensions. */
+  getScreenSize(): Promise<ComputerScreenSize>;
+
+  /** Get the current mouse cursor position. */
+  getCursorPosition(): Promise<ComputerPosition>;
+
+  /**
+   * Get a URL for a live view of the desktop (e.g. noVNC), or null when
+   * unavailable. Optional — not all providers expose a viewer.
+   */
+  streamUrl?(): Promise<string | null>;
+}
+
+/**
+ * Type guard: does this sandbox support the computer-use (desktop) capability?
+ *
+ * @example
+ * ```typescript
+ * if (supportsComputer(sandbox)) {
+ *   const { data } = await sandbox.computer.screenshot();
+ * }
+ * ```
+ */
+export function supportsComputer(
+  sandbox: WorkspaceSandbox,
+): sandbox is WorkspaceSandbox & { computer: SandboxComputer } {
+  const computer = sandbox.computer;
+  return (
+    typeof computer?.screenshot === 'function' &&
+    typeof computer.leftClick === 'function' &&
+    typeof computer.rightClick === 'function' &&
+    typeof computer.doubleClick === 'function' &&
+    typeof computer.moveMouse === 'function' &&
+    typeof computer.drag === 'function' &&
+    typeof computer.scroll === 'function' &&
+    typeof computer.type === 'function' &&
+    typeof computer.press === 'function' &&
+    typeof computer.getScreenSize === 'function' &&
+    typeof computer.getCursorPosition === 'function'
+  );
 }
 
 // =============================================================================
@@ -273,6 +462,23 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   readonly networking?: SandboxNetworking;
 
   // ---------------------------------------------------------------------------
+  // Computer Use (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Computer-use (desktop) capability for sandboxes with a GUI desktop.
+   * Optional - only available on providers with a controllable display.
+   * When present, workspace computer tools (screenshot/click/type/…) are
+   * emitted automatically.
+   *
+   * @example
+   * ```typescript
+   * const { data } = await sandbox.computer?.screenshot();
+   * ```
+   */
+  readonly computer?: SandboxComputer;
+
+  // ---------------------------------------------------------------------------
   // File Upload (Optional)
   // ---------------------------------------------------------------------------
 
@@ -285,8 +491,12 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * ```typescript
    * await sandbox.writeFiles?.([{ path: '/app/index.mjs', content: bundle }]);
    * ```
+   *
+   * Pass `options.abortSignal` to cancel the write. See {@link WriteFilesOptions}
+   * for the cancellation contract (provider-dependent observance, the
+   * completion-versus-cancellation race, and the partial-write boundary).
    */
-  writeFiles?(files: SandboxFileInput[]): Promise<void>;
+  writeFiles?(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void>;
 
   // ---------------------------------------------------------------------------
   // Process Management (Optional)

@@ -9,7 +9,10 @@ import { runAcpServer } from './server.js';
  * Entry point for ACP server mode.
  * Initializes mastracode and runs the ACP protocol over stdio.
  */
-export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Promise<void> {
+export async function acpMain(options?: {
+  dangerousAutoApprove?: boolean;
+  coAuthor?: { name?: string; email?: string };
+}): Promise<void> {
   if (options?.dangerousAutoApprove) {
     setAutoApprove(true);
   }
@@ -25,6 +28,7 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
 
   try {
     result = await createMastraCode({
+      coAuthor: options?.coAuthor,
       unixSocketPubSub: false,
       disableMcp: false,
       disableHooks: false,

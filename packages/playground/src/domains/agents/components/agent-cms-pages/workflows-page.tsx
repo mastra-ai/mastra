@@ -27,8 +27,8 @@ export function WorkflowsPage() {
     if (!workflows) return [];
     return Object.entries(workflows).map(([id, workflow]) => ({
       value: id,
-      label: (workflow as { name?: string }).name || id,
-      description: (workflow as { description?: string }).description || '',
+      label: workflow.name || id,
+      description: workflow.description || '',
     }));
   }, [workflows]);
 
@@ -86,7 +86,7 @@ export function WorkflowsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <SectionHeader
           title="Workflows"
           subtitle={`Select workflows this agent can trigger.${count > 0 ? ` (${count} selected)` : ''}`}
@@ -97,7 +97,7 @@ export function WorkflowsPage() {
             <SubSectionHeader title="Available Workflows" icon={<WorkflowIcon />} />
           </Section.Header>
 
-          <InputGroup variant="outline">
+          <InputGroup>
             <InputGroupAddon align="inline-start">
               <SearchIcon />
             </InputGroupAddon>
@@ -117,7 +117,7 @@ export function WorkflowsPage() {
                 const isDisabled = readOnly || !isSelected;
 
                 return (
-                  <Entity key={workflow.value} className="bg-surface2">
+                  <Entity key={workflow.value} className="bg-background">
                     <EntityContent>
                       <EntityName>{workflow.label}</EntityName>
                       <EntityDescription>
@@ -125,8 +125,8 @@ export function WorkflowsPage() {
                           type="text"
                           disabled={isDisabled}
                           className={cn(
-                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                            !isDisabled && 'border-border1 border-dashed ',
+                            'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                            !isDisabled && 'border-dashed border-border',
                           )}
                           value={
                             isSelected

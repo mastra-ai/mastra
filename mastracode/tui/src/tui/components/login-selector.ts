@@ -13,6 +13,8 @@ import { theme } from '../theme.js';
 export interface AuthProviderSource {
   getOAuthProviders(): OAuthProviderInterface[];
   isLoggedIn(providerId: string): boolean;
+  /** Number of registered accounts for the provider, when the source tracks them. */
+  countAccounts?(providerId: string): number;
 }
 
 export class LoginSelectorComponent extends Box {
@@ -70,9 +72,13 @@ export class LoginSelectorComponent extends Box {
 
       const isSelected = i === this.selectedIndex;
 
-      // Check if user is logged in for this provider
+      // Check if user has stored OAuth credentials for this provider.
       const isLoggedIn = this.authSource.isLoggedIn(provider.id);
-      const statusIndicator = isLoggedIn ? theme.fg('success', ' ✓ logged in') : '';
+      const accountCount = this.authSource.countAccounts?.(provider.id) ?? 0;
+      const accountSuffix =
+        accountCount > 0 ? theme.fg('muted', ` (${accountCount} account${accountCount === 1 ? '' : 's'})`) : '';
+      const statusIndicator =
+        (isLoggedIn ? theme.fg('success', ' ✓ stored') : theme.fg('muted', ' • unconfigured')) + accountSuffix;
 
       let line = '';
       if (isSelected) {
@@ -87,7 +93,7 @@ export class LoginSelectorComponent extends Box {
     // Show "no providers" if empty
     if (this.allProviders.length === 0) {
       const message =
-        this.mode === 'login' ? 'No OAuth providers available' : 'No OAuth providers logged in. Use /login first.';
+        this.mode === 'login' ? 'No OAuth providers available' : 'No OAuth providers logged in. Use /connect first.';
       this.listContainer.addChild(new Text(theme.fg('muted', message)));
     }
   }

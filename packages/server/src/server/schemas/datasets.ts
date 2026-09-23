@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { paginationInfoSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema } from './common';
 
 // ============================================================================
 // JSON Schema Types (for inputSchema/groundTruthSchema fields)
@@ -262,9 +262,65 @@ export const datasetAndItemIdPathParams = z.object({
 // Query Parameter Schemas
 // ============================================================================
 
-export const paginationQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
+export const paginationQuerySchema = createPagePaginationSchema(10);
+
+/**
+ * Order-by query param. Arrives either as a nested object or as a JSON string
+ * (bracket notation `orderBy[field]=x&orderBy[direction]=ASC` is reconstructed
+ * into a JSON string by `normalizeQueryParams`).
+ */
+const createOrderByQuerySchema = <const T extends readonly [string, ...string[]]>(fields: T) =>
+  z
+    .preprocess(
+      val => {
+        if (typeof val !== 'string') return val;
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Let the object schema reject it so the caller gets a 400.
+          return val;
+        }
+      },
+      z
+        .object({
+          field: z.enum(fields),
+          direction: z.enum(['ASC', 'DESC']),
+        })
+        .optional(),
+    )
+    .optional();
+
+export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
+  tags: z
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      // Blank values (`?tags=`) mean "no filter", not "match the empty tag".
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      const nonBlank = list.filter(tag => tag !== '');
+      return nonBlank.length > 0 ? nonBlank : undefined;
+    }, z.array(z.string()).optional())
+    .describe('Only return results that have all of these tags'),
+  orderBy: createOrderByQuerySchema(['startedAt', 'createdAt']),
+});
+
+const targetTypeQuerySchema = z
+  .enum(['agent', 'workflow', 'scorer', 'processor'])
+  .optional()
+  .describe('Only return records attached to targets of this type');
+
+export const listDatasetsQuerySchema = paginationQuerySchema.extend({
+  targetType: targetTypeQuerySchema,
+  targetIds: z
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      const nonBlank = list.filter(id => id !== '');
+      return nonBlank.length > 0 ? nonBlank : undefined;
+    }, z.array(z.string()).optional())
+    .describe('Only return datasets attached to at least one of these target IDs'),
+  orderBy: createOrderByQuerySchema(['createdAt', 'updatedAt', 'name']),
 });
 
 export const listExperimentsQuerySchema = paginationQuerySchema.extend({
@@ -272,6 +328,9 @@ export const listExperimentsQuerySchema = paginationQuerySchema.extend({
   comparisonId: z.string().optional(),
   variantId: z.string().optional(),
   trialIndex: z.coerce.number().int().min(0).optional(),
+  targetType: targetTypeQuerySchema,
+  targetId: z.string().optional().describe('Only return experiments run against this target ID'),
+  orderBy: createOrderByQuerySchema(['createdAt', 'status']),
 });
 
 export const tenancyQuerySchema = z.object({
@@ -279,11 +338,10 @@ export const tenancyQuerySchema = z.object({
   projectId: z.string().optional().describe('Restrict lookup to the given project'),
 });
 
-export const listItemsQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
+export const listItemsQuerySchema = createPagePaginationSchema(10).extend({
   version: z.coerce.number().int().optional(), // Optional version filter for snapshot semantics
   search: z.string().optional(),
+  orderBy: createOrderByQuerySchema(['createdAt', 'updatedAt']),
 });
 
 // ============================================================================
@@ -339,6 +397,14 @@ export const updateItemBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
 });
+
+export const updateExperimentBodySchema = z
+  .object({
+    name: z.string().optional().describe('New name of the experiment'),
+    description: z.string().optional().describe('New description of the experiment'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Replacement metadata for the experiment'),
+  })
+  .strict();
 
 export const triggerExperimentBodySchema = z.object({
   start: z
@@ -474,12 +540,12 @@ export const datasetItemResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  toolMocks: toolMocksSchema,
-  unmockedToolPolicy: unmockedToolPolicySchema,
-  scorerIds: z.array(z.string()).optional(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  source: datasetItemSourceSchema,
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  source: datasetItemSourceSchema.nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -577,6 +643,8 @@ export const runExperimentItemResponseSchema = z.object({
       score: z.number().nullable(),
       reason: z.string().nullable(),
       error: z.string().nullable(),
+      // Set when the scorer declared the item not scorable; `score` and `error` are null.
+      notScorable: z.object({ step: z.string(), reason: z.string().optional() }).optional(),
       failedStep: z.string().optional(),
       completedSteps: z.array(z.string()).optional(),
       targetScope: z.enum(['span', 'trajectory']).optional(),
@@ -707,10 +775,11 @@ export const itemVersionResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  toolMocks: toolMocksSchema,
-  unmockedToolPolicy: unmockedToolPolicySchema,
-  scorerIds: z.array(z.string()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
   createdAt: z.coerce.date(),

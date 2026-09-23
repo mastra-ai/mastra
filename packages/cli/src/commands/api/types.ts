@@ -11,6 +11,8 @@ export interface ApiCommandExample {
   command: string;
 }
 
+export type ApiRoutePlacement = 'api-prefix' | 'origin';
+
 export interface ApiCommandDescriptor {
   key: string;
   name: string;
@@ -24,6 +26,7 @@ export interface ApiCommandDescriptor {
   responseShape: ApiResponseShape;
   queryParams: string[];
   bodyParams: string[];
+  routePlacement?: ApiRoutePlacement;
   defaultTimeoutMs?: number;
   examples?: ApiCommandExample[];
   verbose?: Pick<ApiCommandDescriptor, 'path' | 'responseShape' | 'queryParams' | 'bodyParams'>;
@@ -37,6 +40,7 @@ export interface ApiCommandActionOptions {
   list?: boolean;
   positionals?: string[];
   pathParamsFromInput?: string[];
+  routePlacement?: ApiRoutePlacement;
   defaultTimeoutMs?: number;
   examples?: ApiCommandExample[];
   verboseRouteKey?: string;

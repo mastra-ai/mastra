@@ -5,7 +5,7 @@ Koa server adapter for Mastra, enabling you to run Mastra with the [Koa](https:/
 ## Installation
 
 ```bash
-npm install @mastra/koa koa koa-bodyparser
+npm install @mastra/koa
 ```
 
 ## Usage
@@ -28,49 +28,14 @@ app.listen(3000, () => {
 });
 ```
 
-## Adding Custom Routes
+## Documentation
 
-Add routes directly to the Koa app with access to Mastra context:
+- [Koa adapter reference](https://mastra.ai/reference/server/koa-adapter)
 
-```typescript
-// Routes added after init() have access to Mastra context via ctx.state
-app.use(async ctx => {
-  if (ctx.path === '/health' && ctx.method === 'GET') {
-    const mastraInstance = ctx.state.mastra;
-    const agents = Object.keys(mastraInstance.listAgents());
-    ctx.body = { status: 'ok', agents };
-  }
-});
-```
+## Changelog
 
-## Configuration Options
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/server-adapters/koa/CHANGELOG.md) for version history and release notes.
 
-```typescript
-const server = new MastraServer({
-  app,
-  mastra,
-  prefix: '/api/v2', // Route prefix
-  openapiPath: '/openapi.json', // OpenAPI spec endpoint
-  bodyLimitOptions: {
-    maxSize: 10 * 1024 * 1024, // 10MB
-    onError: err => ({ error: 'Payload too large' }),
-  },
-  streamOptions: { redact: true }, // Redact sensitive data from streams
-});
-```
+## Support
 
-## Context Variables
-
-Access these in route handlers via `ctx.state`:
-
-| Key              | Description                 |
-| ---------------- | --------------------------- |
-| `mastra`         | Mastra instance             |
-| `requestContext` | Request context map         |
-| `abortSignal`    | Request cancellation signal |
-| `tools`          | Available tools             |
-
-## Related Links
-
-- [Server Adapters Documentation](https://mastra.ai/docs/server/server-adapters)
-- [Koa Documentation](https://koajs.com)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

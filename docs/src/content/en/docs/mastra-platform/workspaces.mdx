@@ -1,6 +1,6 @@
 ---
 title: "Workspaces | Mastra platform"
-description: Give each Mastra platform environment a workspace with a shared bucket for filesystem storage and on-demand sandboxes for command execution. The platform provisions the resources your deploy needs.
+description: "Use Mastra platform workspaces to give each environment isolated bucket storage and on-demand sandboxes for filesystem access and command execution."
 ---
 
 # Workspaces
@@ -66,7 +66,7 @@ export const mastra = new Mastra({
 - `stop()` tears down the remote sandbox while preserving its recovery checkpoint when it has one.
 - `destroy()` also releases the recovery checkpoint associated with a caller-supplied recovery `id`.
 
-One statically configured `PlatformSandbox` is shared by every request and agent using that configuration. Requests and memory threads don't receive separate sandboxes automatically. `PlatformFilesystem` is also a separate provider: configuring both providers doesn't mount the environment bucket inside the sandbox.
+A statically configured `PlatformSandbox` is shared across every request and agent using that configuration rather than creating separate sandboxes for requests or memory threads. `PlatformFilesystem` is also a separate provider: configuring both providers doesn't mount the environment bucket inside the sandbox.
 
 When your agent needs another isolated environment, for example a per-task sandbox, a per-user tenant, or a background job that shouldn't touch shared shell state, construct another `PlatformSandbox`:
 

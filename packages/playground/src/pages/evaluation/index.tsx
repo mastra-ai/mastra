@@ -1,22 +1,27 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo, useState } from 'react';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetHealthCard } from '@/domains/datasets';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { EvaluationKpiCards } from '@/domains/evaluation/components/evaluation-kpi-cards';
 import { ExperimentStatusCard } from '@/domains/experiments';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { ReviewPipelineCard, useReviewSummary } from '@/domains/review';
 import { computeReviewTotals } from '@/domains/review/review-maps';
 import { useScoreMetrics, useScorers } from '@/domains/scores';
 import type { ScoreMetricsDateRange } from '@/domains/scores';
 import { ScoresOverTimeCard } from '@/domains/scores/components/scores-over-time-card';
+
+const crumbs = [navCrumb('/evaluation')];
 
 export default function Evaluation() {
   const [datePreset, setDatePreset] = useState<DateRangePreset>('all');
@@ -46,33 +51,37 @@ export default function Evaluation() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Overview</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="evaluation" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Overview</h1>
+        <PermissionDenied variant="fill" resource="evaluation" />
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load evaluation data" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Overview</h1>
+        <ErrorState variant="fill" title="Failed to load evaluation data" message={error.message} />
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout width="wide" height="full">
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
+        <ActionRow>
+          <ActionRow.Start>
             <DateTimeRangePicker
               preset={datePreset}
               onPresetChange={setDatePreset}
@@ -82,11 +91,13 @@ export default function Evaluation() {
                 setDateRange(current => (type === 'from' ? { ...current, start: value } : { ...current, end: value }))
               }
             />
-          </PageLayout.Column>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
-      <div className="flex flex-col gap-6">
-        <MetricsFlexGrid>
+          </ActionRow.Start>
+        </ActionRow>
+      }
+    >
+      <h1 className="sr-only">Overview</h1>
+      <div className="flex flex-col gap-4">
+        <MetricsCardGroup>
           <EvaluationKpiCards
             scorers={scorers}
             datasets={datasets}
@@ -100,7 +111,7 @@ export default function Evaluation() {
             isLoadingScores={isLoadingScores}
             isLoadingReview={isLoadingReview}
           />
-        </MetricsFlexGrid>
+        </MetricsCardGroup>
         <ScoresOverTimeCard
           summaryData={scoreMetrics?.summaryData ?? []}
           overTimeData={scoreMetrics?.overTimeData ?? []}
@@ -109,7 +120,7 @@ export default function Evaluation() {
           isLoading={isLoadingScores}
           isError={isErrorScores}
         />
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <DatasetHealthCard experiments={experiments} isLoading={isLoadingExperiments} isError={!!errorExperiments} />
           <ExperimentStatusCard
             experiments={experiments}

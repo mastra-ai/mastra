@@ -1,19 +1,11 @@
 # @mastra/voice-elevenlabs
 
-ElevenLabs Voice integration for Mastra, providing Text-to-Speech (TTS) capabilities using ElevenLabs' advanced AI voice technology.
+Add ElevenLabs text-to-speech and speech-to-text to Mastra with configurable voices, models, audio formats, synthesis, and transcription.
 
 ## Installation
 
 ```bash
 npm install @mastra/voice-elevenlabs
-```
-
-## Configuration
-
-The module requires the following environment variable:
-
-```bash
-ELEVENLABS_API_KEY=your_api_key
 ```
 
 ## Usage
@@ -45,62 +37,14 @@ const telephonyStream = await voice.speak('Hello from Mastra!', {
 });
 ```
 
-## Features
+## Documentation
 
-- High-fidelity Text-to-Speech synthesis
-- Configurable audio output formats (MP3, PCM, μ-law, A-law, WAV) for telephony and VoIP use cases
+- [ElevenLabs](https://mastra.ai/integrations/voice/elevenlabs)
 
-## Voice Options
+## Changelog
 
-ElevenLabs provides a variety of premium voices with different characteristics:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/elevenlabs/CHANGELOG.md) for version history and release notes.
 
-- Adam (Male)
-- Antoni (Male)
-- Arnold (Male)
-- Bella (Female)
-- Dorothy (Female)
-- Elli (Female)
-- Josh (Male)
-- Rachel (Female)
-- Sam (Male)
+## Support
 
-View the complete list of voices through the `getSpeakers()` method or in [ElevenLabs' documentation](https://docs.elevenlabs.io/api-reference/voices).
-
-## API Reference
-
-### Constructor
-
-```typescript
-new ElevenLabsVoice({
-  speechModel?: {
-    name?: ElevenLabsModel, // Default: 'eleven_multilingual_v2'
-    apiKey?: string,        // Optional, can use ELEVENLABS_API_KEY env var
-  },
-  speaker?: string         // Default speaker ID
-})
-```
-
-### Methods
-
-#### `getSpeakers()`
-
-Returns a list of available speakers with their details.
-
-#### `speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string; outputFormat?: ElevenLabsOutputFormat })`
-
-Converts text to speech. Returns a readable stream of audio data.
-
-**Options:**
-
-- `speaker?: string` - The ID of the speaker to use for the speech. If not provided, the default speaker will be used.
-- `outputFormat?: ElevenLabsOutputFormat` - The audio output format. Supported formats include:
-  - **MP3 formats**: `mp3_22050_32`, `mp3_44100_32`, `mp3_44100_64`, `mp3_44100_96`, `mp3_44100_128`, `mp3_44100_192`
-  - **PCM formats**: `pcm_8000`, `pcm_16000`, `pcm_22050`, `pcm_24000`, `pcm_44100`
-  - **Telephony formats**: `ulaw_8000`, `alaw_8000` (μ-law and A-law 8kHz for VoIP/telephony)
-  - **WAV formats**: `wav`, `wav_8000`, `wav_16000`
-
-If not provided, defaults to ElevenLabs' default format (typically `mp3_44100_128`).
-
-#### `listen()`
-
-Not supported - ElevenLabs does not provide speech recognition.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

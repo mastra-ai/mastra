@@ -1,6 +1,6 @@
 ---
 title: "Reference: MDocument | Document Processing | RAG"
-description: Documentation for the MDocument class in Mastra, which handles document processing and chunking.
+description: "The MDocument class processes documents for RAG applications. The main methods are .chunk() and .extractMetadata()."
 packages:
   - "@mastra/rag"
 ---
@@ -32,7 +32,7 @@ The MDocument class processes documents for RAG applications. The main methods a
 
 Creates a document from plain text content.
 
-```typescript prettier:false
+```typescript oxfmt:false
 static fromText(text: string, metadata?: Record<string, any>): MDocument
 ```
 
@@ -40,7 +40,7 @@ static fromText(text: string, metadata?: Record<string, any>): MDocument
 
 Creates a document from HTML content.
 
-```typescript prettier:false
+```typescript oxfmt:false
 static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 ```
 
@@ -48,7 +48,7 @@ static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 
 Creates a document from Markdown content.
 
-```typescript prettier:false
+```typescript oxfmt:false
 static fromMarkdown(markdown: string, metadata?: Record<string, any>): MDocument
 ```
 
@@ -56,7 +56,7 @@ static fromMarkdown(markdown: string, metadata?: Record<string, any>): MDocument
 
 Creates a document from JSON content.
 
-```typescript prettier:false
+```typescript oxfmt:false
 static fromJSON(json: string, metadata?: Record<string, any>): MDocument
 ```
 
@@ -66,7 +66,7 @@ static fromJSON(json: string, metadata?: Record<string, any>): MDocument
 
 Splits document into chunks and optionally extracts metadata.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async chunk(params?: ChunkParams): Promise<Chunk[]>
 ```
 
@@ -76,7 +76,7 @@ See [chunk() reference](./chunk) for detailed options.
 
 Returns array of processed document chunks.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getDocs(): Chunk[]
 ```
 
@@ -84,7 +84,7 @@ getDocs(): Chunk[]
 
 Returns array of text strings from chunks.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getText(): string[]
 ```
 
@@ -92,7 +92,7 @@ getText(): string[]
 
 Returns array of metadata objects from chunks.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getMetadata(): Record<string, any>[]
 ```
 
@@ -100,7 +100,7 @@ getMetadata(): Record<string, any>[]
 
 Extracts metadata using specified extractors. See [ExtractParams reference](./extract-params) for details.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async extractMetadata(params: ExtractParams): Promise<MDocument>
 ```
 

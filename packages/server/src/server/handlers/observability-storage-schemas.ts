@@ -54,9 +54,20 @@ const fallbackBranchArgs = z.object({
 });
 const fallbackSchema = z.unknown();
 
+// `batchDeleteTracesArgsSchema` predates the branches schemas, but
+// `batchDeleteTracesResponseSchema` is newer still — same shim treatment.
+// The args fallback pre-declares `traceIds` because the route `.pick()`s it
+// at module-eval time.
+const fallbackDeleteTracesArgs = z.object({
+  traceIds: z.array(z.string()).max(1000),
+});
+
 export const branchesFilterSchema: any = ns.branchesFilterSchema ?? fallbackEmptyObject;
 export const branchesOrderBySchema: any = ns.branchesOrderBySchema ?? fallbackEmptyObject;
 export const getBranchArgsSchema: any = ns.getBranchArgsSchema ?? fallbackBranchArgs;
 export const listBranchesResponseSchema: any = ns.listBranchesResponseSchema ?? fallbackSchema;
 export const getBranchResponseSchema: any = ns.getBranchResponseSchema ?? fallbackSchema;
 export const listTracesLightResponseSchema: any = ns.listTracesLightResponseSchema ?? fallbackSchema;
+export const batchDeleteTracesArgsSchema: any = ns.batchDeleteTracesArgsSchema ?? fallbackDeleteTracesArgs;
+export const batchDeleteTracesResponseSchema: any =
+  ns.batchDeleteTracesResponseSchema ?? z.object({ success: z.literal(true) });

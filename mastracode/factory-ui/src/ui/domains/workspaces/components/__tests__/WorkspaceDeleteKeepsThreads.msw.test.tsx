@@ -49,7 +49,6 @@ function renderSection() {
           resourceReady: true,
           sandboxReady: true,
           sandboxPreparing: false,
-          sandboxProgress: undefined,
           resourceEnabled: true,
           factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
           baseUrl: TEST_BASE_URL,
@@ -71,7 +70,7 @@ describe('Deleting a workspace', () => {
     const threadRequests: string[] = [];
 
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
         HttpResponse.json({ sessions }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ items: [] })),

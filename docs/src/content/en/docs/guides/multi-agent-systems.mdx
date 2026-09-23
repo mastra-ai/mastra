@@ -1,6 +1,6 @@
 ---
 title: "Multi-agent systems"
-description: "Learn what multi-agent systems are, why teams use them, and how common patterns map to Mastra."
+description: "Choose a Mastra multi-agent architecture by comparing handoffs, workflows, supervisors, and council patterns for delegation, control, and collaboration."
 packages:
   - "@mastra/core"
 ---
@@ -50,7 +50,7 @@ A supervisor pattern keeps one lead agent in control for the full task. The supe
 Use this pattern when the task is open-ended and the full sequence isn't known in advance. For example, a research task may require different lines of inquiry based on what earlier steps uncover. A supervisor can adapt as the task unfolds.
 The tradeoff is that the supervisor becomes the main coordination point. That makes the pattern flexible, but it also means the result depends heavily on good delegation behavior and clear subagent boundaries.
 
-In Mastra, this pattern maps directly to [supervisor agents](/docs/subagents). A supervisor agent defines subagents on the `agents` property and uses `stream()` or `generate()` to coordinate them. Mastra also provides delegation hooks, message filtering, and memory isolation to help control this pattern.
+In Mastra, this pattern maps directly to [supervisor agents](/docs/subagents). A supervisor defines subagents through the `agents` property, then coordinates them with `stream()` or `generate()`. Mastra helps control this pattern through delegation hooks and message filtering, with memory isolation between agents.
 
 :::tip
 

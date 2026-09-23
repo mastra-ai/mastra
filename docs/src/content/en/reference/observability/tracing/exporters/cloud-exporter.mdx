@@ -1,6 +1,6 @@
 ---
 title: "Reference: CloudExporter | Observability"
-description: API reference for the deprecated CloudExporter (replaced by MastraPlatformExporter)
+description: "Use the deprecated CloudExporter to send traces to Mastra Cloud in older releases, and migrate configuration to MastraPlatformExporter."
 packages:
   - "@mastra/observability"
 ---
@@ -13,7 +13,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 :::warning[Deprecated]
 
-`CloudExporter` is retained for backward compatibility and will be removed in a future major version. Use [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) for new projects. Both classes share the same constructor, environment variables, and runtime behavior. `CloudExporter` keeps its original `mastra-cloud-observability-exporter` exporter `name` and `CLOUD_EXPORTER_*` error IDs so monitoring rules built against it keep working.
+`CloudExporter` remains available for backward compatibility but will be removed in a future major version, so use [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) for new projects. The classes have identical constructors and share environment variables and runtime behavior. To preserve existing monitoring rules, `CloudExporter` retains its original `mastra-cloud-observability-exporter` exporter `name` and `CLOUD_EXPORTER_*` error IDs.
 
 :::
 
@@ -21,7 +21,7 @@ Sends tracing spans, logs, metrics, scores, and feedback to the Mastra platform 
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new CloudExporter(config?: CloudExporterConfig)
 ```
 
@@ -84,13 +84,15 @@ Extends `BaseExporterConfig`, which includes:
 
 The exporter reads these environment variables if not provided in config:
 
-- `MASTRA_PLATFORM_ACCESS_TOKEN` - Authentication token for `CloudExporter` requests
+- `MASTRA_CLOUD_ACCESS_TOKEN` - Authentication token for `CloudExporter` requests
 - `MASTRA_PROJECT_ID` - Project ID to use when deriving project-scoped collector routes such as `/projects/:projectId/ai/spans/publish`
-- `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` - Observability endpoint override. Pass either a base origin or a full traces publish URL. Defaults to `https://observability.mastra.ai` in `@mastra/observability@1.9.2` and later
+- `MASTRA_CLOUD_TRACES_ENDPOINT` - Traces endpoint override. Pass either a base origin or a full traces publish URL ending in `/spans/publish`. The other signal endpoints are derived from it. Defaults to `https://observability.mastra.ai`
+
+`CloudExporter` doesn't read `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT`. Use [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) for that variable.
 
 ## Properties
 
-```typescript prettier:false
+```typescript oxfmt:false
 readonly name = 'mastra-cloud-observability-exporter';
 ```
 
@@ -98,7 +100,7 @@ readonly name = 'mastra-cloud-observability-exporter';
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -121,7 +123,7 @@ Only `SPAN_ENDED` tracing events are exported. `SPAN_STARTED` and `SPAN_UPDATED`
 
 ### `onLogEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onLogEvent(event: LogEvent): Promise<void>
 ```
 
@@ -144,7 +146,7 @@ Every `LogEvent` passed to this handler is buffered and exported to the Cloud lo
 
 ### `onMetricEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onMetricEvent(event: MetricEvent): Promise<void>
 ```
 
@@ -167,7 +169,7 @@ Every `MetricEvent` passed to this handler is buffered and exported to the Cloud
 
 ### `onScoreEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onScoreEvent(event: ScoreEvent): Promise<void>
 ```
 
@@ -190,7 +192,7 @@ Every `ScoreEvent` passed to this handler is buffered and exported to the Cloud 
 
 ### `onFeedbackEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onFeedbackEvent(event: FeedbackEvent): Promise<void>
 ```
 
@@ -213,7 +215,7 @@ Every `FeedbackEvent` passed to this handler is buffered and exported to the Clo
 
 ### flush
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -221,7 +223,7 @@ Force flushes any buffered events to the Mastra platform without shutting down t
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 

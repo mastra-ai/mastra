@@ -64,7 +64,6 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetItemCompareLink: () => '',
   experimentLink: () => '',
 } as never;
 
@@ -123,10 +122,10 @@ describe('AgentBuilderSidebar', () => {
       renderSidebar('/agent-builder/library');
 
       const libraryLink = await screen.findByRole('link', { name: /Library/i });
-      expect(libraryLink.className).toMatch(/bg-sidebar-nav-active/);
+      expect(libraryLink.getAttribute('aria-current')).toBe('page');
 
       const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-      expect(agentsLink.className).not.toMatch(/bg-sidebar-nav-active/);
+      expect(agentsLink.getAttribute('aria-current')).toBe(null);
     });
   });
 
@@ -135,13 +134,13 @@ describe('AgentBuilderSidebar', () => {
       renderSidebar('/agent-builder/favorite');
 
       const favoritesLink = await screen.findByRole('link', { name: /Favorites/i });
-      expect(favoritesLink.className).toMatch(/bg-sidebar-nav-active/);
+      expect(favoritesLink.getAttribute('aria-current')).toBe('page');
 
       const agentsLink = await screen.findByRole('link', { name: /My agents/i });
-      expect(agentsLink.className).not.toMatch(/bg-sidebar-nav-active/);
+      expect(agentsLink.getAttribute('aria-current')).toBe(null);
 
       const libraryLink = await screen.findByRole('link', { name: /Library/i });
-      expect(libraryLink.className).not.toMatch(/bg-sidebar-nav-active/);
+      expect(libraryLink.getAttribute('aria-current')).toBe(null);
     });
   });
 });

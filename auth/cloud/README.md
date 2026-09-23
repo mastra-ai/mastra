@@ -1,67 +1,45 @@
 # @mastra/auth-cloud
 
-Mastra Cloud authentication provider with PKCE OAuth flow.
+`@mastra/auth-cloud` authenticates users through Mastra Cloud with a Proof Key for Code Exchange (PKCE) OAuth flow. Use it when a self-hosted Mastra server should delegate sign-in and session management to a Mastra Cloud project.
 
 ## Installation
 
 ```bash
-pnpm add @mastra/auth-cloud
+npm install @mastra/auth-cloud
 ```
 
 ## Usage
 
+Set `MASTRA_PROJECT_ID` before starting Mastra.
+
 ```typescript
+import { MastraCloudAuthProvider } from '@mastra/auth-cloud';
 import { Mastra } from '@mastra/core/mastra';
-import { MastraCloudAuth } from '@mastra/auth-cloud';
 
-const auth = new MastraCloudAuth({
-  projectId: process.env.MASTRA_PROJECT_ID!,
-  // Optional: defaults to https://cloud.mastra.ai
-  baseUrl: process.env.MASTRA_CLOUD_URL,
-  // Optional: defaults to /auth/callback
-  redirectPath: '/auth/callback',
-});
-
-const mastra = new Mastra({
+export const mastra = new Mastra({
   server: {
-    auth,
+    auth: new MastraCloudAuthProvider({
+      projectId: process.env.MASTRA_PROJECT_ID!,
+      cloudBaseUrl: 'https://cloud.mastra.ai',
+      callbackUrl: 'https://example.com/auth/callback',
+      isProduction: process.env.NODE_ENV === 'production',
+    }),
   },
 });
 ```
 
-## Configuration
+## Documentation
 
-| Option         | Required | Default                   | Description                     |
-| -------------- | -------- | ------------------------- | ------------------------------- |
-| `projectId`    | Yes      | -                         | Project ID from cloud.mastra.ai |
-| `baseUrl`      | No       | `https://cloud.mastra.ai` | Mastra Cloud base URL           |
-| `redirectPath` | No       | `/auth/callback`          | OAuth callback path             |
-| `cookieName`   | No       | `mastra_session`          | Session cookie name             |
+`MastraCloudAuthProvider` implements Mastra's user, single sign-on, and session provider interfaces. It sends users through Mastra Cloud's PKCE authorization flow, validates the resulting session cookie, and accepts bearer tokens for API clients that do not use browser cookies.
 
-## Authentication Flow
+The constructor requires the Mastra Cloud `projectId`, the `cloudBaseUrl`, and the absolute OAuth `callbackUrl` registered for the application. Set `isProduction` to add the `Secure` attribute to authentication cookies. The provider also accepts the common Mastra auth options for public and protected routes and custom user authorization.
 
-This package implements PKCE OAuth flow with Mastra Cloud:
+During sign-in, the provider creates a PKCE verifier and challenge, redirects the browser to Mastra Cloud, exchanges the returned authorization code, and stores the session in an HTTP-only cookie. It exposes the login, callback, logout, session validation, and session refresh behavior required by Mastra's server authentication middleware.
 
-1. User clicks login, redirected to Mastra Cloud with code challenge
-2. User authenticates via Mastra Cloud (GitHub OAuth)
-3. Mastra Cloud redirects back with authorization code
-4. Package exchanges code + verifier for session token
-5. Session token stored in HttpOnly cookie
+## Changelog
 
-## API
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/auth/cloud/CHANGELOG.md) for version history and release notes.
 
-### `MastraCloudAuth`
+## Support
 
-The main authentication provider class implementing `MastraAuthProvider`.
-
-### Methods
-
-- `getLoginUrl(state?)` - Get OAuth login URL with PKCE
-- `handleCallback(code, verifier)` - Exchange code for session
-- `verifyToken(token)` - Verify session and get user with role
-- `refreshSession(token)` - Refresh expiring session
-- `logout(token)` - Invalidate session
-
-## License
-
-Apache-2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

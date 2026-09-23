@@ -1,6 +1,6 @@
 ---
 title: "Reference: LeaseProvider | PubSub"
-description: "API reference for LeaseProvider, the distributed leasing contract Mastra's signals layer uses to elect a single owner across processes."
+description: "LeaseProvider is the distributed leasing contract, separate from event delivery (PubSub)."
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 `LeaseProvider` is the distributed leasing contract, separate from event delivery ([`PubSub`](/reference/pubsub/base)). Mastra's [signals layer](/docs/harness/signals) uses it to elect a single owner across multiple processes (for example, serverless invocations) for a resource, most commonly a thread key. The owner is the process that wakes and runs the agent stream, so other processes route follow-up work to it instead of starting a competing run.
 
-Leasing is a distinct concern from pub/sub. A backend implements `LeaseProvider` only when it can actually coordinate a lock, such as Redis via atomic `SET`/Lua, or an in-memory map for single-process. Backends that can't lease omit it; the signals runtime feature-detects the capability and falls back to a no-op provider, preserving single-process behavior.
+Leasing is separate from pub/sub. A `LeaseProvider` implementation needs actual lock coordination, whether through an atomic Redis operation such as `SET` or Lua or through an in-memory map for a single process. For backends that omit leasing, the signals runtime preserves single-process behavior with a no-op provider.
 
 The built-in [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) implements `LeaseProvider`, which is what enables signals to coordinate across instances in distributed and serverless deployments.
 
@@ -138,7 +138,7 @@ if (!transferred) {
 Returns: `Promise<boolean>`
 
 :::warning
-Backends that can't perform the transfer atomically must still implement it as a best-effort `releaseLease(fromOwner)` followed by `acquireLease(toOwner)`, and document that the swap is non-atomic, since a racing process can win the key in the gap. Keeping the method required means callers have a single code path and atomicity is an explicit per-backend decision.
+Backends that can't transfer a lease atomically must use a best-effort `releaseLease(fromOwner)` followed by `acquireLease(toOwner)`. They must document that the swap is non-atomic because another process can claim the key between those calls. Keeping the method required gives callers one code path while making atomicity an explicit per-backend decision.
 :::
 
 ## Capability detection

@@ -5,7 +5,6 @@ import { useLocation } from '@docusaurus/router'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import AnnouncementBar from '@theme/AnnouncementBar'
 import ErrorPageContent from '@theme/ErrorPageContent'
-import Footer from '@theme/Footer'
 import type { Props } from '@theme/Layout'
 import LayoutProvider from '@theme/Layout/Provider'
 import Navbar from '@theme/Navbar'
@@ -13,11 +12,11 @@ import SkipToContent from '@theme/SkipToContent'
 import clsx from 'clsx'
 import { type ReactNode } from 'react'
 import styles from './styles.module.css'
+import { normalizeSiteSectionRoot } from '@site/src/utils/canonical-url'
 
 export default function Layout(props: Props): ReactNode {
   const {
     children,
-    noFooter,
     wrapperClassName,
     // Not really layout-related, but kept for convenience/retro-compatibility
     title,
@@ -27,7 +26,8 @@ export default function Layout(props: Props): ReactNode {
   const location = useLocation()
   const { siteConfig } = useDocusaurusContext()
   const cleanPath = location.pathname.replace(/^\/ja(\/|$)/, '/')
-  const canonicalUrl = `${siteConfig.url}${cleanPath}`
+  const canonicalPath = normalizeSiteSectionRoot(cleanPath)
+  const canonicalUrl = `${siteConfig.url}${canonicalPath}`
 
   return (
     <LayoutProvider>
@@ -54,8 +54,6 @@ export default function Layout(props: Props): ReactNode {
       >
         <ErrorBoundary fallback={params => <ErrorPageContent {...params} />}>{children}</ErrorBoundary>
       </div>
-
-      {!noFooter && <Footer />}
     </LayoutProvider>
   )
 }

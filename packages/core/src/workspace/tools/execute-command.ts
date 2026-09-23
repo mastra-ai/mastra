@@ -3,6 +3,10 @@ import { browserCliHandler } from '../../browser/cli-handler';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
+import {
+  DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES,
+  RetainedOutputBuffer,
+} from '../sandbox/process-manager/process-handle';
 import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
@@ -21,7 +25,7 @@ export const executeCommandInputSchema = z.object({
     .describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
   cwd: z.string().nullish().describe('Working directory for the command'),
   tail: z
-    .preprocess(coerceNumericString, z.number())
+    .preprocess(coerceNumericString, z.number().int())
     .nullish()
     .describe(
       `For foreground commands: limit output to the last N lines, similar to tail -n. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,
@@ -182,6 +186,10 @@ async function executeCommand(input: Record<string, any>, context: any) {
       cwd: cwd ?? undefined,
       timeout: timeout ?? undefined,
       abortSignal: bgAbortSignal,
+      // A background process collects output rather than being driven over stdin,
+      // so close stdin at spawn. Otherwise `rg`/`grep`/`cat` with no path argument
+      // reads stdin and never exits.
+      stdinMode: 'ignore',
       onStdout: bgConfig?.onStdout
         ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId })
         : undefined,
@@ -190,21 +198,44 @@ async function executeCommand(input: Record<string, any>, context: any) {
         : undefined,
     });
 
-    // Wire exit callback (fire-and-forget)
+    // Wire exit callback (fire-and-forget). The observer runs after this tool has
+    // already returned the PID, so any failure here has no live call frame to catch
+    // it. Own the detached promise: await the callback so both synchronous throws and
+    // rejected async callbacks land in the try/catch, and attach a terminal .catch()
+    // for a rejected wait(), routing all failures to the logger so
+    // neither escapes as a process-terminating unhandled rejection. Observation
+    // failures are logged distinctly and never synthesize a successful exit.
     if (bgConfig?.onExit) {
-      void handle.wait().then(result => {
-        bgConfig.onExit!({
-          pid: handle.pid,
-          exitCode: result.exitCode,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          stdoutTruncated: result.stdoutTruncated,
-          stderrTruncated: result.stderrTruncated,
-          stdoutDroppedBytes: result.stdoutDroppedBytes,
-          stderrDroppedBytes: result.stderrDroppedBytes,
-          toolCallId,
+      void handle
+        .wait()
+        .then(async result => {
+          try {
+            await bgConfig.onExit!({
+              pid: handle.pid,
+              exitCode: result.exitCode,
+              stdout: result.stdout,
+              stderr: result.stderr,
+              stdoutTruncated: result.stdoutTruncated,
+              stderrTruncated: result.stderrTruncated,
+              stdoutDroppedBytes: result.stdoutDroppedBytes,
+              stderrDroppedBytes: result.stderrDroppedBytes,
+              toolCallId,
+            });
+          } catch (callbackError) {
+            workspace.logger?.error('Background process onExit callback threw', {
+              error: callbackError,
+              pid: handle.pid,
+              toolCallId,
+            });
+          }
+        })
+        .catch(observeError => {
+          workspace.logger?.error('Failed to observe background process exit', {
+            error: observeError,
+            pid: handle.pid,
+            toolCallId,
+          });
         });
-      });
     }
 
     span.end({ success: true }, { pid: Number(handle.pid) || undefined });
@@ -219,15 +250,17 @@ async function executeCommand(input: Record<string, any>, context: any) {
   }
 
   const startedAt = Date.now();
-  let stdout = '';
-  let stderr = '';
+  // Bounded copies used only on the error path, where the sandbox result is unavailable.
+  // Unbounded accumulation here crashes the process with RangeError on very large output.
+  const stdout = new RetainedOutputBuffer(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
+  const stderr = new RetainedOutputBuffer(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
   try {
     const result = await sandbox.executeCommand(command, [], {
       timeout: timeout ?? undefined,
       cwd: cwd ?? undefined,
       abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
       onStdout: async (data: string) => {
-        stdout += data;
+        stdout.append(data);
         await context?.writer?.custom({
           type: 'data-sandbox-stdout',
           data: { output: data, timestamp: Date.now(), toolCallId },
@@ -235,7 +268,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         });
       },
       onStderr: async (data: string) => {
-        stderr += data;
+        stderr.append(data);
         await context?.writer?.custom({
           type: 'data-sandbox-stderr',
           data: { output: data, timestamp: Date.now(), toolCallId },
@@ -250,6 +283,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
         exitCode: result.exitCode,
         success: result.success,
         executionTimeMs: result.executionTimeMs,
+        killed: result.killed,
+        timedOut: result.timedOut,
         toolCallId,
       },
     });
@@ -264,7 +299,12 @@ async function executeCommand(input: Record<string, any>, context: any) {
       return appendTerminalLine(parts, `Exit code: ${result.exitCode}`);
     }
 
-    return (await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom)) || '(no output)';
+    return (
+      formatCommandOutput(
+        await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
+        await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
+      ).join('\n') || '(no output)'
+    );
   } catch (error) {
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
@@ -277,8 +317,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
     });
     span.end({ success: false }, { exitCode: -1 });
     const parts = formatCommandOutput(
-      await truncateOutput(stdout, tail, tokenLimit, tokenFrom),
-      await truncateOutput(stderr, tail, tokenLimit, tokenFrom),
+      await truncateOutput(stdout.toString(), tail, tokenLimit, tokenFrom),
+      await truncateOutput(stderr.toString(), tail, tokenLimit, tokenFrom),
     );
     const errorMessage = error instanceof Error ? error.message : String(error);
     return appendTerminalLine(parts, `Error: ${errorMessage}`);
@@ -297,7 +337,7 @@ Usage:
 - Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
 - Use the timeout parameter (in seconds) to limit execution time. Behavior when omitted depends on the sandbox provider.
-- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.`;
+- Optionally use cwd to override the working directory. Commands run from the sandbox's configured workingDirectory (or the provider default) if omitted.`;
 
 /** Foreground-only tool (no background param in schema). */
 export const executeCommandTool = createTool({

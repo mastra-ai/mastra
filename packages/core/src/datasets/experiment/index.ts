@@ -285,12 +285,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         datasetVersion: v.datasetVersion,
         input: v.input,
         groundTruth: v.groundTruth,
-        expectedTrajectory: v.expectedTrajectory as TrajectoryExpectation | undefined,
-        requestContext: v.requestContext,
-        metadata: v.metadata,
-        toolMocks: v.toolMocks,
-        unmockedToolPolicy: v.unmockedToolPolicy,
-        scorerIds: v.scorerIds,
+        expectedTrajectory: (v.expectedTrajectory ?? undefined) as TrajectoryExpectation | undefined,
+        requestContext: v.requestContext ?? undefined,
+        metadata: v.metadata ?? undefined,
+        toolMocks: v.toolMocks ?? undefined,
+        unmockedToolPolicy: v.unmockedToolPolicy ?? undefined,
+        scorerIds: v.scorerIds ?? undefined,
       }));
     } else {
       throw new Error('No data source: provide datasetId or data');

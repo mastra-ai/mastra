@@ -1,0 +1,140 @@
+---
+extends: existence
+message: "AI negated subject: '%s'. Name who does what: 'you don't need to configure anything' instead of announcing an absence."
+level: error
+nonword: true
+# The passive sibling of NegatedObject: the object of the negated claim
+# promoted to subject, either with a copula ("No configuration is required,"
+# "No data is collected," "No breaking changes are introduced") or elliptical
+# ("No signup required," "No setup needed"). The reassurance register of a
+# marketing page or a compliance notice, and a construction AI prose leans on
+# for spec claims a human would state actively.
+#
+# Case matters, so no ignorecase: the same pattern in lowercase is the docs
+# conditional ("if no timeout is specified, the default applies"), which is
+# everywhere in pre-LLM prose and reads fine. The sentence-initial capital
+# "No" is the proxy for the declarative claim, the same positional gate
+# CataphoricForecasting uses for its cardinals. A mid-sentence declarative
+# ("and no configuration is required") escapes; ContrastiveNegation's
+# clause-final fragment token catches the comma-led share of those.
+#
+# The predicate list is empirical, measured against the same ~1.3M-line
+# Go+Python corpora as NegatedObject. Predicates that anchor standard docs
+# formulas even sentence-initially stay out: "returned" ("No error is
+# returned"), "raised" and "thrown" (exception contracts), "allowed" and
+# "permitted" ("No whitespace is allowed" is spec language), plus the
+# condition-frame participles "given," "specified," "set," "present,"
+# "found," "supplied," "passed," "defined," "included," "used," and "done."
+# What stays flags at ~43 corpus hits, led by the human caveat register
+# ("No other validation is performed," "No attempt is made"), which is the
+# same construction and flags on purpose.
+#
+# The first-word lookahead drops the degree and pronoun phrases ("no longer
+# needed," "no more than," "no one was harmed"). The elliptical token also
+# refuses a determiner or pronoun after its predicate, which is the active
+# past verb reading ("No law required them to file") rather than the
+# ellipsis. An optional adverb slot covers "No data is ever collected," and
+# a coordinated subject slot covers "No schema migration or manual backfill
+# comes with it."
+#
+# A documentation-corpus audit (2026-09) found three sibling constructions the
+# copula token never saw, each the same declarative absence-claim:
+#
+# - The "gets" auxiliary ("No row ever gets deleted here"), which measures
+#   zero across the corpora and joins the copula alternation.
+# - An adjective predicate ("No freeze is anonymous," "No field is
+#   optional") and an intransitive verb ("No operational driver appears in
+#   the code," "Nothing downloads"). Both take a curated list, because the
+#   open tokens flood on ordinary sentence-initial prose ("No go files
+#   found," "No loop was generated"); the kept adjectives show five corpus
+#   hits ("No modifier key is invalid," "No other expressions are valid
+#   statements") and the kept verbs five ("No lock needs to be held," "No
+#   chaining happens"), each the figure itself.
+# - The pronoun subjects "Nothing," "None of," and "Neither," which the
+#   capital-"No" gate never reached. They show about forty corpus hits
+#   between them ("Nothing changed," "None of the error codes make sense,"
+#   "Neither resolver was explicitly requested"), the same human caveat
+#   register the copula token already accepts. A plural pronoun subject
+#   with a base-form verb ("None of them delete per repo") stays
+#   uncovered: without a tag there is no way to tell that verb from a
+#   noun, and a lookbehind already has to refuse the plural noun a
+#   determiner fronts ("Nothing in these tables") so the verb slot means
+#   what it says.
+#
+# The same audit turned up the relative-clause negated subject, a construction
+# the corpora never showed ("a row whose key no root reaches," "every
+# derived row no live record references," "a file that no manifest
+# names"). It is lowercase by nature, so the token spells the lowercase
+# "no" itself and gates the word before it: a verb of possession or
+# clausal complement there ("a package with no test files," "the
+# requests have no query parameters," "indicates that no Go files") is
+# NegatedObject's territory or an ordinary condition, so those words are
+# refused, and the clause has to end in an inflected verb. One corpus
+# hit remains ("the dialog keeps no memory of previous state"), which
+# NegatedObject flags on its own.
+#
+# The maintainer then asked for the negation pair strengthened past the
+# audit's list, so the copula slot also takes the modal, perfect, and
+# progressive auxiliaries ("No data will be collected," "No changes have
+# been made," "No lock needs to be held"; seven corpus hits), the
+# intransitive verb takes a modal ("No warning should occur," "No writer
+# should block"; five), "Nothing" takes the copula construction with the same
+# curated predicates ("Nothing is collected," "Nothing else is required";
+# five), the "Zero" spelling joins with the curated predicates so "Zero
+# padding is allowed" stays quiet (zero), the intensified subject "Not a
+# single" and "Not one" join (zero), and the mid-sentence declarative
+# after "and," "but," and "because" joins in lowercase ("and no data is
+# lost," "and no allocation is made"; nine). "So no adjustment is needed"
+# stays out: with "so" the construction is the consequence idiom ten times over
+# in the corpora. "None is returned" stays out too, because in Python
+# prose "None" is the literal.
+tokens:
+  # --- Copula form: "No <subject> is/are/was/were/gets <participle>," with
+  # the modal, perfect, and progressive auxiliaries ("No data will be
+  # collected," "No changes have been made," "No lock needs to be held").
+  - "\\bNo (?!(?:one|longer|matter|more|less|fewer|doubt)\\b)(?:[A-Za-z][-A-Za-z']* ){1,3}(?:(?:or|and) (?:[A-Za-z][-A-Za-z']* ){1,3})?(?:is|are|was|were|gets?|got|will be|would be|can be|could be|should be|must be|may be|might be|shall be|has been|have been|had been|is being|are being|is ever|are ever|is now|are now|needs? to be|has to be|have to be) (?:[a-z]+ly |ever )?(?:required|needed|necessary|made|performed|provided|expected|involved|introduced|added|imposed|created|spawned|executed|invoked|collected|stored|logged|recorded|tracked|retained|shared|exposed|sent|transmitted|leaked|persisted|saved|installed|allocated|consumed|produced|generated|caused|triggered|touched|modified|changed|affected|broken|harmed|lost|wasted|kept|held|deleted|removed|dropped|skipped|written|read|copied|moved|rebuilt|rewritten|overwritten|replaced|reused|freed|closed|opened|recovered|restored|reverted|seen|noticed|missed)\\b"
+  # --- The "Zero" and "Not a single" spellings of the same claim ("Zero
+  # configuration is required," "Zero dependencies are added," "Not a
+  # single line is wasted," "Not one test was touched"). "Zero" takes the
+  # curated predicates only, so the digit ("Zero padding is allowed")
+  # stays quiet.
+  - "\\bZero (?:[A-Za-z][-A-Za-z']* ){1,3}(?:is|are|was|were|gets?|got|will be|has been|have been|can be) (?:[a-z]+ly |ever )?(?:required|needed|necessary|made|performed|provided|expected|involved|introduced|added|imposed|created|spawned|executed|invoked|collected|stored|logged|recorded|tracked|retained|shared|exposed|sent|transmitted|leaked|persisted|saved|installed|allocated|consumed|produced|generated|caused|triggered|touched|modified|changed|affected|broken|harmed|lost|wasted|kept|held|deleted|removed|dropped|skipped|written|copied|moved|rebuilt|rewritten|overwritten|replaced|reused|freed)\\b"
+  - "\\bZero (?:[A-Za-z][-A-Za-z']* ){1,2}(?:required|needed|necessary)\\b(?! (?:the|a|an|that|them|it|us|me|him|her|any)\\b)"
+  - "\\bNot (?:a single|one) (?:[A-Za-z][-A-Za-z']* ){1,3}(?:is|are|was|were|gets?|got|will be|has been|have been|can be|could be|would be) (?:[a-z]+ly |ever )?[a-z]+(?:ed|en)\\b"
+  - "\\bNot (?:a single|one) (?:[a-z][-a-z']* ){1,2}(?<!\\b(?:the|a|an|this|that|these|those|its|their|our|your|my|his|her|all|both|of|any|some|many|several|no|each|every|other|such) )[a-z]{3,}(?:s|ed)\\b"
+  # --- The mid-sentence declarative after a coordinating or causal
+  # conjunction ("and no data is lost," "but no relocation is created,"
+  # "because no networking is installed"). Lowercase by position; the
+  # conjunction set leaves the docs conditional ("if no timeout is
+  # specified") and the consequence idiom ("so no adjustment is needed")
+  # alone.
+  - "\\b(?:and|but|because|since|while|although|though|whereas|which means|meaning) no (?!(?:one|longer|matter|more|less|fewer|doubt|such)\\b)(?:[a-z][-a-z']* ){1,3}(?:is|are|was|were|gets?|got|will be|has been|have been|can be) (?:[a-z]+ly |ever )?(?:required|needed|necessary|made|performed|provided|expected|involved|introduced|added|imposed|created|spawned|executed|invoked|collected|stored|logged|recorded|tracked|retained|shared|exposed|sent|transmitted|leaked|persisted|saved|installed|allocated|consumed|produced|generated|caused|triggered|touched|modified|changed|affected|broken|harmed|lost|wasted|kept|held|deleted|removed|dropped|skipped|written|copied|moved|rebuilt|rewritten|overwritten|replaced|reused|freed)\\b"
+  # --- Adjective predicate: "No <subject> is <adjective>." ("No freeze is
+  # anonymous," "No field is optional," "No step is manual").
+  - "\\bNo (?!(?:one|longer|matter|more|less|fewer|doubt)\\b)(?:[A-Za-z][-A-Za-z']* ){1,3}(?:(?:or|and) (?:[A-Za-z][-A-Za-z']* ){1,3})?(?:is|are|was|were) (?:[a-z]+ly |ever )?(?:anonymous|optional|mandatory|safe|unsafe|free|empty|final|exact|unique|special|public|private|visible|invisible|permanent|durable|equal|identical|stable|complete|incomplete|live|fresh|stale|new|open|closed|different|missing|shared|exempt|immune|perfect|small|large|cheap|expensive|slow|fast|wrong|right|correct|incorrect|clean|dirty|active|inactive|current|valid|invalid|possible|impossible|reachable|unreachable|writable|readable|mutable|immutable|external|internal|manual|automatic|implicit|explicit|literal|figurative|local|remote|global|blocking|fatal|silent|hidden|redundant|ambiguous|arbitrary|hard-coded|hardcoded)\\b"
+  # --- Intransitive verb: "No <subject> <verb>s." ("No operational driver
+  # appears in the code," "No schema migration comes with it").
+  - "\\bNo (?!(?:one|longer|matter|more|less|fewer|doubt|such)\\b)(?:[A-Za-z][-A-Za-z']* ){1,3}(?:(?:or|and) (?:[A-Za-z][-A-Za-z']* ){1,3})?(?:ever |yet |still |then )?(?:appears|comes|exists|happens|arrives|remains|survives|runs|fires|matches|applies|follows|changes|occurs|results|emerges|goes|leaves|escapes|reaches|touches|writes|reads|ships|lands|persists|lingers|breaks|fails|blocks|waits|grows|shrinks|moves|flows|leaks|stays|depends|downloads|feeds|strands|marks|needs|holds|counts)\\b"
+  - "\\bNo (?!(?:one|longer|matter|more|less|fewer|doubt|such)\\b)(?:[A-Za-z][-A-Za-z']* ){1,3}(?:will|can|could|should|would|must|may|might|shall) (?:ever |then |also )?(?:appear|come|exist|happen|arrive|remain|survive|run|fire|match|apply|follow|change|occur|result|emerge|go|leave|escape|reach|touch|write|read|ship|land|persist|linger|break|fail|block|wait|grow|shrink|move|flow|leak|stay|depend|download|feed|strand|mark|need|hold|count)\\b"
+  # --- Elliptical form: "No <subject> required." with the copula dropped,
+  # the badge-copy variant ("No signup required," "No credit card needed").
+  - "\\bNo (?!(?:one|longer|matter|more|less|fewer|doubt)\\b)(?:[A-Za-z][-A-Za-z']* ){1,2}(?:required|needed|necessary)\\b(?! (?:the|a|an|that|them|it|us|me|him|her|any)\\b)"
+  # --- Pronoun subjects: "Nothing <verb>s," "None of these <verb>s,"
+  # "Neither <subject> <verb>s" ("Nothing upstream feeds the stage,"
+  # "Nothing downloads," "None of these writes a table," "Neither
+  # subcommand writes back"). The verb slot is a word ending in "s" or
+  # "ed" that no determiner fronts, so a plural noun in the subject
+  # ("Nothing in these tables") is not mistaken for the verb. The
+  # lookahead after "Nothing" drops the degree and comparison phrases
+  # ("nothing more than," "nothing but," "nothing short of").
+  - "\\bNothing (?!(?:but|more|less|short|like|that|which|to|new|special|wrong|good|bad|worse|better|about|of)\\b)(?:[a-z-]+ ){0,3}(?<!\\b(?:the|a|an|this|that|these|those|its|their|our|your|my|his|her|all|both|two|three|four|five|of|any|some|many|several|no|each|every|other|such) )[a-z]{3,}(?:s|ed)\\b"
+  - "\\bNothing (?:else |more |further |extra |additional |new |special )?(?:is|are|was|were|gets|got|will be|has been|needs to be|has to be) (?:[a-z]+ly |ever )?(?:required|needed|necessary|made|performed|provided|expected|involved|introduced|added|imposed|created|spawned|executed|invoked|collected|stored|logged|recorded|tracked|retained|shared|exposed|sent|transmitted|leaked|persisted|saved|installed|allocated|consumed|produced|generated|caused|triggered|touched|modified|changed|affected|broken|harmed|lost|wasted|kept|held|deleted|removed|dropped|skipped|written|copied|moved|rebuilt|rewritten|overwritten|replaced|reused|freed|hidden|hard-coded|hardcoded|assumed|inferred|guessed)\\b"
+  - "\\bNone of (?:these|those|them|us|it|which|the [a-z-]+(?: [a-z-]+)?|its [a-z-]+|their [a-z-]+|my [a-z-]+|our [a-z-]+|your [a-z-]+|this [a-z-]+|that [a-z-]+) (?:ever |yet |still |then |now )?[a-z]{3,}(?:s|ed)\\b"
+  - "\\bNeither (?!(?:[a-z-]+ ){1,3}nor\\b)(?:[a-z-]+ ){1,4}(?<!\\b(?:the|a|an|this|that|these|those|its|their|our|your|my|his|her|all|both|two|three|four|five|of|any|some|many|several|no|each|every|other|such) )[a-z]{3,}(?:s|ed)\\b"
+  # --- Relative-clause negated subject: "<det> <noun> (that|which|whose X)
+  # no <noun> <verb>s" ("a row whose key no root reaches," "every derived
+  # row no live record references," "a file that no manifest names").
+  # The word before "no" may not be a possession or clausal verb, a
+  # preposition, or a conjunction, which keeps NegatedObject's tokens and
+  # the docs conditional out; the clause has to end in an inflected verb.
+  - "\\b(?:[Aa]|[Aa]n|[Tt]he|[Ee]very|[Ee]ach|[Aa]ny) (?:[a-z-]+ )?(?!(?:with|has|have|had|having|contains|containing|contain|takes|taking|take|returns|returning|return|requires|require|needs|need|keeps|keep|kept|holds|hold|held|leaves|leave|left|and|or|but|if|when|of|for|in|on|at|to|by|is|are|was|were|be|been|being|almost|as|than|from|about|got|gets|get|gives|given|gave|give|show|shows|showed|there|indicates|indicate|means|mean|ensures|ensure|reports|report|says|say|said|assumes|assume|asserts|assert|checks|check|verifies|verify|so|notes|noting|implies|imply|suggests|suggest|guarantees|guarantee|expects|expect|expected|believes|believe|knows|know|proves|prove|where|because|since|while|although|though|whether|unless|until|that|which|whose|it|they|we|you|i|he|she|found|finds|find|see|sees|saw|seen|allow|allows|allowed|allowing|accept|accepts|accepted|use|uses|used|using|offer|offers|provide|provides|provided|produce|produces|produced|yield|yields|make|makes|made|do|does|did|done|match|matches|matched)\\b)[a-z]+ (?:that |which |whose [a-z]+ )?no (?!(?:one|longer|matter|more|less|fewer|doubt|such)\\b)(?:[a-z-]+ ){0,2}[a-z]+ (?!(?:is|was|has|does|exists|are|were|can|will|would|could|should|may|might|must|less|more|and|or)\\b)[a-z]{3,}(?:s|es|ed)\\b"

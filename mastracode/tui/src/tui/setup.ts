@@ -6,7 +6,6 @@ import { execFileSync } from 'node:child_process';
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
-import { getUserId } from '@mastra/code-sdk/utils/project';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
@@ -35,6 +34,8 @@ export function setupKeyboardShortcuts(
     exit?: (exitCode: number) => void;
     doubleCtrlCMs: number;
     queueFollowUpMessage: (text: string) => void;
+    openBackgroundActivityCenter?: () => void;
+    clearFinishedBackgroundActivities?: () => void;
   },
 ): void {
   // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
@@ -145,6 +146,13 @@ export function setupKeyboardShortcuts(
     }
     state.ui.requestRender();
   });
+
+  if (callbacks.openBackgroundActivityCenter) {
+    state.editor.onAction('openBackgroundActivityCenter', callbacks.openBackgroundActivityCenter);
+  }
+  if (callbacks.clearFinishedBackgroundActivities) {
+    state.editor.onAction('clearFinishedBackgroundActivities', callbacks.clearFinishedBackgroundActivities);
+  }
 
   // Shift+Tab - cycle controller modes
   state.editor.onAction('cycleMode', async () => {
@@ -257,7 +265,6 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
     `Resource ID: ${state.projectInfo.resourceId}`,
     state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
     state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
-    `User: ${getUserId(state.projectInfo.rootPath)}`,
   ]
     .filter(Boolean)
     .map(line => theme.fg('muted', line as string))
@@ -284,6 +291,9 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.taskProgress = new TaskProgressComponent();
   state.taskProgress.setQuietMode(state.quietMode);
   state.ui.addChild(state.taskProgress);
+  if (state.options.backgroundToolsEnabled) {
+    state.ui.addChild(state.globalBackgroundNoticeContainer);
+  }
   state.ui.addChild(state.editorContainer);
   state.idleCounter = new IdleCounterComponent();
   state.editorContainer.addChild(state.idleCounter);
@@ -366,13 +376,16 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'thread', description: 'Show current thread info' },
     { name: 'threads', description: 'Switch between threads' },
     { name: 'models', description: 'Switch model pack' },
+    { name: 'packs', description: 'Alias for /models' },
+    { name: 'model', description: 'Change the current mode model' },
     { name: 'custom-providers', description: 'Manage custom providers and models' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'memory', description: 'Configure Observational Memory' },
     { name: 'om', description: 'Alias for /memory' },
     ...(isSubconsciousEnabled() ? [{ name: 'knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
     THINK_COMMAND_DESCRIPTOR,
-    { name: 'login', description: 'Login with OAuth provider' },
+    { name: 'connect', description: 'Connect a provider account or API key' },
+    { name: 'login', description: 'Sign in with a provider account' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
@@ -654,6 +667,13 @@ export function setupKeyHandlers(
 
 export function subscribeToAgentController(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   let eventQueue = Promise.resolve();
+  const reportEventError = (event: { type: string }, err: unknown): void => {
+    // Log but don't crash — individual event errors shouldn't kill the process
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+    if (stack) process.stderr.write(stack + '\n');
+  };
   const listener: AgentControllerEventListener = event => {
     // Notify at receipt, before queueing: a pending prompt blocks the serial
     // queue until answered, which would starve any notification queued behind
@@ -663,29 +683,24 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
     // receipt too, before the event is chained onto the serial queue.
     runPermissionHooksForEvent(state, event);
     eventQueue = eventQueue.then(async () => {
+      if (state.options.backgroundToolsEnabled && event.type === 'tool_suspended') {
+        // Start interactive prompts in event order, but don't park the finite
+        // rendering queue on the user's response. Thread switches wait on this
+        // queue and must remain available while a prior thread awaits input.
+        void handleEvent(event).catch(err => reportEventError(event, err));
+        return;
+      }
+
       try {
         await handleEvent(event);
       } catch (err) {
-        // Log but don't crash — individual event errors shouldn't kill the process
-        const msg = err instanceof Error ? err.message : String(err);
-        const stack = err instanceof Error ? err.stack : undefined;
-        process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
-        if (stack) process.stderr.write(stack + '\n');
+        reportEventError(event, err);
       }
     });
     return eventQueue;
   };
+  state.waitForAgentControllerEvents = state.options.backgroundToolsEnabled ? () => eventQueue : undefined;
   state.unsubscribe = state.session.subscribe(listener);
-}
-
-// =============================================================================
-// Terminal Title
-// =============================================================================
-
-export function updateTerminalTitle(state: TUIState): void {
-  const appName = state.options.appName || 'Mastra Code';
-  const cwd = process.cwd().split('/').pop() || '';
-  state.ui.terminal.setTitle(`${appName} - ${cwd}`);
 }
 
 // =============================================================================

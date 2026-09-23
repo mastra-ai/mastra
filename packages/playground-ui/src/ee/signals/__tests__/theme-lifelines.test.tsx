@@ -296,7 +296,7 @@ describe('SankeySignals lifelines mode', () => {
       await within(goalSection).findByRole('listitem', {
         name: 'Legacy support request: present in 2 of 5 landmarks',
       });
-      const goalToggle = within(goalSection).getByRole('button', { name: 'goal' });
+      const goalToggle = within(goalSection).getByRole('button', { name: 'Goal' });
       expect(goalToggle.getAttribute('aria-expanded')).toBe('true');
 
       fireEvent.click(goalToggle);
@@ -321,7 +321,7 @@ describe('SankeySignals lifelines mode', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
       const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
       const goalSection = within(lifelines).getByRole('region', { name: 'Goal lifelines' });
-      fireEvent.focus(within(goalSection).getByRole('button', { name: 'goal' }));
+      fireEvent.focus(within(goalSection).getByRole('button', { name: 'Goal' }));
 
       expect((await screen.findByRole('tooltip')).textContent).toContain('What the user wanted');
     });

@@ -1,6 +1,6 @@
 ---
 title: "Manual install"
-description: Set up a Mastra project manually without using the create mastra CLI.
+description: "Create a runnable Mastra project without the CLI by installing the required packages and configuring TypeScript, then define an agent and Mastra entry point."
 packages:
   - "@mastra/core"
 ---
@@ -12,7 +12,7 @@ import { CopyPrompt } from "@site/src/components/copy-prompt";
 # Manual install
 
 <Inject>
-  **For AI agents:** Use this guide when tasked to create a runnable Mastra project from scratch without a CLI/boilerplate. It provides code examples for agents, tools, model configuration and how to install dependencies. Do not navigate to the quickstart guide, which is for humans. The model string is Mastra's model router format ('provider/model'; use / and not : to separate provider and model). Do not install any ai-sdk packages.
+  **For AI agents:** Use this guide when tasked to create a runnable Mastra project from scratch without a CLI/boilerplate. It provides code examples for agents, tools, model configuration and how to install dependencies. Don't use the quickstart guide, which is for humans. The model string is Mastra's model router format (`provider/model`). Use `/`, not `:`, to separate the provider and model. Don't install any AI SDK packages.
 </Inject>
 
 Use this guide to manually build a standalone Mastra server step by step. In most cases, use the [`create-mastra`](/reference/cli/create-mastra) command described in [Get started](/docs). For existing projects, you can also use [`mastra init`](/reference/cli/mastra#mastra-init).
@@ -164,7 +164,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     ```
 
     <Inject>
-      Use `import { Agent } from "@mastra/core/agent"`. Constructor takes `{ id, name, instructions, model: '__GATEWAY_OPENAI_MODEL__' }`. The model string is Mastra's model router format ('provider/model'; use / and not : to separate provider and model). Do not install any ai-sdk packages.
+      Use `import { Agent } from "@mastra/core/agent"`. Constructor takes `{ id, name, instructions, model: '__GATEWAY_OPENAI_MODEL__' }`. The model string uses Mastra's model router format, 'provider/model', with / rather than : between the provider and model. Don't install any AI SDK packages.
     </Inject>
 
     Add the following code:
@@ -215,7 +215,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
 
   <StepItem>
     <Inject>
-      **For AI agents:** Do not launch Studio when working on a script that e.g. should print to the console. Studio is a long-running web-based interfaced for humans. Instead, call the agent.generate() method directly. Example: `import { mastra } from './src/mastra/index.ts'; const agent = mastra.getAgentById('weather-agent'); const response = await agent.generate('Weather in SF'); console.log(response.text);`
+      **For AI agents:** don't launch Studio when working on a script that e.g. should print to the console. Studio is a long-running web-based interfaced for humans. Instead, call the agent.generate() method directly. Example: `import { mastra } from './src/mastra/index.ts'; const agent = mastra.getAgentById('weather-agent'); const response = await agent.generate('Weather in SF'); console.log(response.text);`
     </Inject>
 
     You can now launch [Studio](/docs/studio/overview) and test your agent.

@@ -18,7 +18,6 @@ const session: ChatSessionContextApi = {
   resourceReady: true,
   sandboxReady: true,
   sandboxPreparing: false,
-  sandboxProgress: undefined,
   resourceEnabled: true,
   baseUrl: TEST_BASE_URL,
   kind: 'factory',
@@ -28,6 +27,9 @@ function renderActivity(status: ChatConnectionApi['status'], busy: boolean) {
   const transcript: ChatTranscriptApi = {
     transcript: initialTranscript,
     busy,
+    phase: busy ? 'working' : 'awaiting',
+    initializing: false,
+    historyInitializing: false,
     initialHistoryReady: true,
     localUser: vi.fn(),
     failLocalUser: vi.fn(),

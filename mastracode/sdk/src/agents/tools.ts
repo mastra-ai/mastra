@@ -8,6 +8,7 @@ import type {
   ListDueNotificationsInput,
   ListNotificationsInput,
   UpdateNotificationInput,
+  UpdateNotificationsStatusInput,
 } from '@mastra/core/notifications';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
@@ -28,6 +29,43 @@ import { WORKFLOW_MANAGEMENT_TOOL_IDS } from '../tools/workflows/tool-ids.js';
 export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
+
+const BACKGROUND_ELIGIBLE_PLUGIN_TOOLS = new Set(['mastra_expert']);
+let alexandriaExecutionTail = Promise.resolve();
+
+async function executeAlexandriaSerially(tool: ToolLike, args: any[]): Promise<unknown> {
+  const previous = alexandriaExecutionTail;
+  let release!: () => void;
+  const current = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  alexandriaExecutionTail = previous.then(
+    () => current,
+    () => current,
+  );
+
+  await previous.catch(() => undefined);
+  try {
+    const abortSignal = args[1]?.abortSignal as AbortSignal | undefined;
+    abortSignal?.throwIfAborted();
+    return await tool.execute?.apply(tool, args);
+  } finally {
+    // The active tool receives the same abort signal and owns terminating its
+    // nested execution. Never release this slot until that execution settles.
+    release();
+  }
+}
+
+function configurePluginTool(name: string, tool: ToolLike, backgroundToolsEnabled: boolean): ToolLike {
+  if (!backgroundToolsEnabled || !BACKGROUND_ELIGIBLE_PLUGIN_TOOLS.has(name)) return tool;
+  return {
+    ...tool,
+    // Eligible for backgrounding, but the agent must opt in per call — a plain
+    // expert question should stay a normal awaited foreground call.
+    background: { enabled: true, defaultDisposition: 'foreground' as const },
+    execute: (...args: any[]) => executeAlexandriaSerially(tool, args),
+  };
+}
 
 export class LazyNotificationsStorage extends NotificationsStorage {
   constructor(private readonly storage: MastraCompositeStore) {
@@ -60,6 +98,10 @@ export class LazyNotificationsStorage extends NotificationsStorage {
 
   async updateNotification(input: UpdateNotificationInput) {
     return (await this.getNotificationsStorage()).updateNotification(input);
+  }
+
+  override async updateNotificationsStatus(input: UpdateNotificationsStatusInput) {
+    return (await this.getNotificationsStorage()).updateNotificationsStatus(input);
   }
 
   async dangerouslyClearAll() {
@@ -119,6 +161,7 @@ export function createDynamicTools(
   disabledTools?: string[],
   storage?: MastraCompositeStore,
   pluginTools?: Record<string, ToolLike>,
+  backgroundToolsEnabled = false,
 ) {
   return function getDynamicTools({
     requestContext,
@@ -181,7 +224,7 @@ export function createDynamicTools(
       if (pluginTools) {
         for (const [name, tool] of Object.entries(pluginTools)) {
           if (!(name in tools)) {
-            tools[name] = tool;
+            tools[name] = configurePluginTool(name, tool, backgroundToolsEnabled);
           }
         }
       }

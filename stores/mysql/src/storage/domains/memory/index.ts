@@ -634,6 +634,81 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
+  /**
+   * Atomically reassign a thread and all of its messages to a different resource.
+   *
+   * Runs inside a single transaction and takes a `SELECT ... FOR UPDATE` row lock on the
+   * thread, so overlapping transfers of the same thread serialize and can never interleave
+   * the thread update with the message update. Either both the thread and every message move
+   * to the new resource, or neither does — there is no split-ownership window. The thread's
+   * `createdAt` is preserved. Callers are responsible for authorizing the reassignment.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Lock the thread row for the duration of the transaction. Concurrent transfers of the
+      // same thread block here until this transaction commits, so they cannot interleave.
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT * FROM ${formatTableName(TABLE_THREADS)} WHERE ${quoteIdentifier('id', 'column name')} = ? FOR UPDATE`,
+        [threadId],
+      );
+      const row = rows[0];
+      if (!row) {
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_THREAD_RESOURCE_ID', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Thread "${threadId}" not found`,
+          details: { threadId },
+        });
+      }
+
+      const thread = this.mapThread(row as ThreadRow);
+
+      if (thread.resourceId === resourceId) {
+        await connection.commit();
+        return thread;
+      }
+
+      const updatedAt = new Date();
+      await connection.execute(
+        `UPDATE ${formatTableName(TABLE_THREADS)} SET ${quoteIdentifier('resourceId', 'column name')} = ?, ${quoteIdentifier('updatedAt', 'column name')} = ? WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [resourceId, transformToSqlValue(updatedAt), threadId],
+      );
+      await connection.execute(
+        `UPDATE ${formatTableName(TABLE_MESSAGES)} SET ${quoteIdentifier('resourceId', 'column name')} = ? WHERE ${quoteIdentifier('thread_id', 'column name')} = ?`,
+        [resourceId, threadId],
+      );
+
+      await connection.commit();
+      return { ...thread, resourceId, updatedAt };
+    } catch (error) {
+      await connection.rollback();
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    } finally {
+      connection.release();
+    }
+  }
+
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const { field, direction } = this.parseOrderBy(orderBy, 'DESC');
@@ -2146,6 +2221,10 @@ export class MemoryMySQL extends MemoryStorage {
         }
 
         const existingChunks = parseBufferedChunks(currentRows[0]!.bufferedObservationChunks);
+        if (existingChunks.some(existing => existing.cycleId === input.chunk.cycleId)) {
+          await connection.commit();
+          return;
+        }
 
         const newChunk: BufferedObservationChunk = {
           id: `ombuf-${randomUUID()}`,

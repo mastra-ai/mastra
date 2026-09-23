@@ -7,8 +7,10 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { onTestFinished } from 'vitest';
 
+import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
 import { AuditStorage } from './domains/audit/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
+import { WorkItemCommentsStorage } from './domains/comments/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
@@ -34,6 +36,7 @@ export interface FactoryStorageTestSeed {
   customProviders: CustomProvidersStorage;
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
+  comments: WorkItemCommentsStorage;
 }
 
 /**
@@ -46,6 +49,8 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const intake = storage.registerDomain(new IntakeStorage());
   const audit = storage.registerDomain(new AuditStorage());
   const workItems = storage.registerDomain(new WorkItemsStorage());
+  const boards = createBoardRegistry();
+  workItems.useTerminalPhasePredicate(item => workItemPhaseSemantics(boards, item)?.kind === 'terminal');
   const credentials = storage.registerDomain(new ModelCredentialsStorage());
   const integrations = storage.registerDomain(new IntegrationStorage());
   const projects = storage.registerDomain(new FactoryProjectsStorage());
@@ -55,6 +60,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
+  const comments = storage.registerDomain(new WorkItemCommentsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -71,5 +77,6 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     customProviders,
     queueHealth,
     channelIdentity,
+    comments,
   };
 }

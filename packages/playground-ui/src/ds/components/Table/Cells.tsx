@@ -12,7 +12,7 @@ export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> 
 
 export const Cell = ({ className, children, ...props }: CellProps) => {
   return (
-    <td className={cn('text-neutral5 first:pl-3 last:pr-3', className)} {...props}>
+    <td className={cn('text-foreground first:pl-3 last:pr-3', className)} {...props}>
       <div className={cn('flex size-full shrink-0 items-center')}>{children}</div>
     </td>
   );
@@ -21,7 +21,7 @@ export const Cell = ({ className, children, ...props }: CellProps) => {
 export const TxtCell = ({ className, children }: CellProps) => {
   return (
     <Cell className={className}>
-      <Txt as="span" variant="ui-md" className="w-full truncate">
+      <Txt as="span" variant="body-sm" className="w-full truncate">
         {children}
       </Txt>
     </Cell>
@@ -38,10 +38,10 @@ export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
   return (
     <Cell {...props}>
       <div className="shrink-0">
-        <Txt as="span" variant="ui-sm" className="text-neutral3">
+        <Txt as="span" variant="caption" tone="muted">
           {day}
         </Txt>{' '}
-        <Txt as="span" variant="ui-md">
+        <Txt as="span" variant="body">
           {time}
         </Txt>
       </div>
@@ -61,21 +61,17 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
     <Cell {...props}>
       <div className="flex items-center gap-3.5">
         {icon && (
-          <Icon size="lg" className="text-neutral5">
+          <Icon size="lg" className="text-foreground">
             {icon}
           </Icon>
         )}
 
         <div className="flex flex-col gap-0">
-          <Txt as="span" variant="ui-md" className="text-neutral6 !leading-tight">
+          <Txt as="span" variant="body" tone="ink">
             {name}
           </Txt>
           {description && (
-            <Txt
-              as="span"
-              variant="ui-xs"
-              className="max-w-dropdown-max-height text-neutral3 w-full truncate pt-1 !leading-tight"
-            >
+            <Txt as="span" variant="meta" tone="muted" className="w-full max-w-75 truncate pt-1">
               {description}
             </Txt>
           )}

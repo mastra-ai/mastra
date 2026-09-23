@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import type { InputProps } from '@/ds/components/Input';
+import { useKeydown } from '@/lib/keyboard';
 
 export type ListSearchProps = {
   onSearch: (search: string) => void;
@@ -15,7 +16,11 @@ export type ListSearchProps = {
    * (e.g. from a Reset button). If omitted, ListSearch manages its own state.
    */
   value?: string;
-  variant?: InputProps['variant'];
+  /**
+   * Opts out of the Cmd/Ctrl+Shift+F focus shortcut. Pass this on secondary
+   * instances so two search fields on the same page don't fight over focus.
+   */
+  shortcutDisabled?: boolean;
 };
 
 export const ListSearch = ({
@@ -25,10 +30,21 @@ export const ListSearch = ({
   debounceMs = 300,
   size,
   value: controlledValue,
-  variant = 'outline',
+  shortcutDisabled = false,
 }: ListSearchProps) => {
   const id = useId();
   const [internalValue, setInternalValue] = useState(controlledValue ?? '');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useKeydown(
+    {
+      'mod+shift+f': () => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      },
+    },
+    { enabled: !shortcutDisabled },
+  );
 
   const debouncedSearch = useDebouncedCallback((val: string) => {
     onSearch(val);
@@ -70,7 +86,7 @@ export const ListSearch = ({
       onChange={handleChange}
       onReset={handleReset}
       size={size}
-      variant={variant}
+      inputRef={inputRef}
       className="w-full max-w-120"
     />
   );

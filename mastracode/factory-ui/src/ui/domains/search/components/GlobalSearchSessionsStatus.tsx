@@ -16,7 +16,7 @@ function LoadingSessionsRow() {
         <Skeleton className="h-3 w-40" />
         <Skeleton className="h-2.5 w-64 max-w-full" />
       </div>
-      <Txt as="span" variant="ui-xs" className="sr-only">
+      <Txt as="span" variant="meta" className="sr-only">
         Loading sessions
       </Txt>
     </div>

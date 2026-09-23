@@ -6,11 +6,15 @@ import {
   connectInstallation,
   createFactoryProject,
   deleteFactoryProject,
+  isGitLabRepository,
   linkRepository,
   listFactoryProjects,
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
-import type { FactoryProject, GithubRepo } from '../ui/domains/workspaces/services/github';
+import type { FactoryProject, SourceControlRepository } from '../ui/domains/workspaces/services/github';
+import { registerGitLabRepository } from '../ui/domains/factory/services/gitlab';
+import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
+import { useSaveIntakeConfigMutation } from './useIntakeConfig';
 
 function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
@@ -57,15 +61,41 @@ export function useCreateFactoryMutation() {
 /** @deprecated Use useCreateFactoryMutation. */
 export const useAddFactoryMutation = useCreateFactoryMutation;
 
+/**
+ * Also feeds the org's issue intake. The link lands first, so the Factory list
+ * refreshes even when the intake write fails; the server link is idempotent, so retrying is safe.
+ */
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
+  const saveIntakeConfig = useSaveIntakeConfigMutation();
   return useMutation({
-    mutationFn: async ({ factoryProjectId, repo }: { factoryProjectId: string; repo: GithubRepo }) => {
-      const connectionId = await connectInstallation(baseUrl, factoryProjectId, repo.installationStorageId);
-      return linkRepository(baseUrl, factoryProjectId, connectionId, repo);
+    mutationFn: async ({ factoryProjectId, repo }: { factoryProjectId: string; repo: SourceControlRepository }) => {
+      const gitlab = isGitLabRepository(repo);
+      const linkableRepo = gitlab ? await registerGitLabRepository(baseUrl, repo.id) : repo;
+      const connectionId = await connectInstallation(
+        baseUrl,
+        factoryProjectId,
+        linkableRepo.installationStorageId,
+        gitlab ? 'gitlab' : 'github',
+      );
+      const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, linkableRepo);
+      try {
+        const config = await fetchIntakeConfig(baseUrl);
+        if (gitlab) {
+          const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
+          if (gitlabSelection !== config.gitlab)
+            await saveIntakeConfig.mutateAsync({ ...config, gitlab: gitlabSelection });
+        } else {
+          const githubSelection = selectIntakeSource(config.github, repo.fullName);
+          if (githubSelection !== config.github)
+            await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+        }
+      } finally {
+        invalidateFactories(queryClient);
+      }
+      return linked;
     },
-    onSuccess: () => invalidateFactories(queryClient),
   });
 }
 
@@ -84,7 +114,7 @@ export function useUnlinkRepositoryMutation() {
   });
 }
 
-export function useRemoveFactoryMutation() {
+export function useDeleteFactoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({

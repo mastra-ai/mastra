@@ -1,11 +1,12 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';
-import { LoadingBadge } from './loading-badge';
 import { resolveToChildMessages } from './resolve-child-messages';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 interface SubAgentToolResult {
   toolName: string;
@@ -27,6 +28,8 @@ interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
+  status?: ToolCallStatus;
+  errorText?: string;
 }
 
 export const AgentBadgeWrapper = ({
@@ -40,11 +43,13 @@ export const AgentBadgeWrapper = ({
   suspendPayload,
   toolCalled,
   isComplete,
+  status,
+  errorText,
 }: AgentBadgeWrapperProps) => {
   const shouldFetchAgentMessages = Boolean(
     result?.subAgentThreadId && !result.text && !result.subAgentToolResults?.length,
   );
-  const { data, isLoading } = useAgentMessages({
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useAgentMessages({
     threadId: shouldFetchAgentMessages ? result?.subAgentThreadId : undefined,
     agentId,
     memory: true,
@@ -80,8 +85,10 @@ export const AgentBadgeWrapper = ({
     childMessages = [{ type: 'text' as const, content: result.text }];
   }
 
+  let onLoadPrevious: (() => void) | undefined;
   if (!childMessages) {
     childMessages = resolveToChildMessages(convertedMessages) as AgentMessage[];
+    onLoadPrevious = hasNextPage ? fetchNextPage : undefined;
   }
 
   const hasStreamingChildMessages = Boolean(result && Object.prototype.hasOwnProperty.call(result, 'childMessages'));
@@ -99,6 +106,10 @@ export const AgentBadgeWrapper = ({
       suspendPayload={suspendPayload}
       toolCalled={toolCalled}
       isComplete={isComplete}
+      status={status}
+      errorText={errorText}
+      onLoadPrevious={onLoadPrevious}
+      isLoadingPrevious={isFetchingNextPage}
     />
   );
 };

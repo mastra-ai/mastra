@@ -65,7 +65,7 @@ export class MastraStateAdapter implements StateAdapter {
       metadata: {
         ...thread.metadata,
         channel_subscribed: 'true',
-        ...this.ownerStamp(thread.metadata as Record<string, unknown> | undefined),
+        ...this.ownerStamp(thread.metadata),
       },
     });
   }
@@ -76,9 +76,9 @@ export class MastraStateAdapter implements StateAdapter {
     await this.memoryStore.patchThread({
       id: thread.id,
       metadata: {
-        ...((thread.metadata ?? {}) as Record<string, unknown>),
+        ...(thread.metadata ?? {}),
         channel_subscribed: 'false',
-        ...this.ownerStamp(thread.metadata as Record<string, unknown> | undefined),
+        ...this.ownerStamp(thread.metadata),
       },
     });
   }
@@ -287,7 +287,7 @@ export class MastraStateAdapter implements StateAdapter {
     });
     return (
       candidates.find(candidate => {
-        const metadata = (candidate.metadata ?? {}) as Record<string, unknown>;
+        const metadata = candidate.metadata ?? {};
         return !('channel_ownerId' in metadata);
       }) ?? null
     );

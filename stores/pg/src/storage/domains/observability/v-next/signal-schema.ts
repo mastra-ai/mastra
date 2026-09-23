@@ -155,6 +155,7 @@ export const FEEDBACK_EVENT_COLUMNS = [
   { name: 'comment', type: 'text', nullable: true },
   { name: 'feedbackUserId', type: 'text', nullable: true },
   { name: 'sourceId', type: 'text', nullable: true },
+  { name: 'reviewStatus', type: 'text', defaultSql: "'needs-review'" },
   ...COMMON_CONTEXT_COLUMNS,
   { name: 'tags', type: 'text[]', defaultSql: "'{}'" },
   { name: 'metadata', type: 'jsonb', nullable: true },

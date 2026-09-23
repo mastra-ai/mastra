@@ -21,7 +21,14 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
-import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
+import {
+  qualifiedTable,
+  TABLE_FEEDBACK_EVENTS,
+  TABLE_LOG_EVENTS,
+  TABLE_METRIC_EVENTS,
+  TABLE_SCORE_EVENTS,
+  TABLE_SPAN_EVENTS,
+} from './ddl';
 import { rowToLightSpanRecord, rowToSpanRecord, spanRecordToRow } from './helpers';
 import {
   buildInsert,
@@ -151,11 +158,36 @@ export async function getTraceLight(
 // Deletes
 // ---------------------------------------------------------------------------
 
+/**
+ * Delete traces by traceId, cascading to trace-linked signal events
+ * (metrics, logs, scores, feedback). Signal rows with a NULL traceId are
+ * never affected. When the optional tenant scope (`organizationId` /
+ * `resourceId`) is set, every DELETE additionally requires the row's tenant
+ * columns to match.
+ */
 export async function batchDeleteTraces(client: DbClient, schema: string, args: BatchDeleteTracesArgs): Promise<void> {
   if (args.traceIds.length === 0) return;
-  const span = qualifiedTable(schema, TABLE_SPAN_EVENTS);
+
+  const params: unknown[] = [...args.traceIds];
   const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
-  await client.query(`DELETE FROM ${span} WHERE "traceId" IN (${placeholders})`, args.traceIds);
+
+  let scopeCondition = '';
+  if (args.organizationId !== undefined) {
+    params.push(args.organizationId);
+    scopeCondition += ` AND "organizationId" = $${params.length}`;
+  }
+  if (args.resourceId !== undefined) {
+    params.push(args.resourceId);
+    scopeCondition += ` AND "resourceId" = $${params.length}`;
+  }
+
+  const tables = [TABLE_SPAN_EVENTS, TABLE_METRIC_EVENTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS];
+  await client.tx(async t => {
+    for (const tableName of tables) {
+      const table = qualifiedTable(schema, tableName);
+      await t.query(`DELETE FROM ${table} WHERE "traceId" IN (${placeholders})${scopeCondition}`, params);
+    }
+  });
 }
 
 /** Truncate the span_events table. */

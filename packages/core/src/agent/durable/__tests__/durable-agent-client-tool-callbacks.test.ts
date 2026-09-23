@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
@@ -255,6 +256,9 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
 
   it('does not invoke onOutput when an input processor tripwires the request', async () => {
     const onOutputSpy = vi.fn();
+    const memory = new MockMemory();
+    const threadId = 'thread-client-tool-tripwire';
+    const resourceId = 'resource-client-tool-tripwire';
 
     const model = createStreamingToolInputModel('client-tool', ['{}']);
 
@@ -263,6 +267,7 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
       name: 'test-agent',
       instructions: 'You are a test agent',
       model,
+      memory,
       tools: {
         'client-tool': createTool({
           id: 'client-tool',
@@ -301,11 +306,13 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
           content: [{ type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { ok: true } }],
         },
       ] satisfies Parameters<typeof durableAgent.stream>[0],
-      { maxSteps: 2 },
+      { maxSteps: 2, memory: { thread: threadId, resource: resourceId } },
     );
 
     await output.consumeStream();
 
     expect(onOutputSpy).not.toHaveBeenCalled();
+    const { messages } = await memory.recall({ threadId, resourceId });
+    expect(messages.flatMap(message => message.content.parts ?? []).some(part => part.type === 'error')).toBe(false);
   });
 });

@@ -1,14 +1,20 @@
+import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
+import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
+import { isValid } from 'date-fns';
+
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
-export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
-export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 export const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-issue': 'Issue',
   'github-pr': 'PR Review',
+  'gitlab-issue': 'GitLab',
+  'gitlab-pr': 'MR Review',
   'linear-issue': 'Linear',
+  'jira-issue': 'Jira',
+  'incidentio-follow-up': 'incident.io',
   'slack-thread': 'Slack',
   manual: 'Manual',
 };
@@ -23,17 +29,77 @@ export function metadataLabels(metadata: Record<string, unknown>): string[] {
     : [];
 }
 
+export function metadataLabelColors(metadata: Record<string, unknown>): Record<string, string> {
+  if (!metadata.labelColors || typeof metadata.labelColors !== 'object' || Array.isArray(metadata.labelColors))
+    return {};
+  return Object.fromEntries(
+    Object.entries(metadata.labelColors).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === 'string' &&
+        (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(entry[1]) || /^[a-z]+$/i.test(entry[1])),
+    ),
+  );
+}
+
 export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>): number | undefined {
+  if (item.source !== 'github-issue' && item.source !== 'github-pr') return;
   const metadataKey = item.source === 'github-issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
   const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;
   if (typeof itemNumber !== 'number' || !Number.isInteger(itemNumber) || itemNumber <= 0) return;
   return itemNumber;
 }
 
+/** The change-request number a review card carries: a GitHub PR number or a GitLab MR iid. */
+export function changeRequestNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>): number | undefined {
+  if (item.source === 'github-pr') return githubNumberForItem(item);
+  if (item.source !== 'gitlab-pr') return;
+  const iid = item.metadata.gitlabMergeRequestIid;
+  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? iid : undefined;
+}
+
+export function gitlabIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source === 'gitlab-issue' && typeof item.metadata.identifier === 'string') return item.metadata.identifier;
+  if (item.source !== 'gitlab-pr') return;
+  const iid = item.metadata.gitlabMergeRequestIid;
+  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `!${iid}` : undefined;
+}
+
 /** The human issue key a Linear card carries (`ENG-123`), when it has one. */
 export function linearIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   if (item.source !== 'linear-issue' || typeof item.metadata.identifier !== 'string') return;
   return item.metadata.identifier;
+}
+/** The opaque Linear issue id a card carries, when it has one. */
+export function linearIssueIdForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'linear-issue' || typeof item.metadata.linearIssueId !== 'string') return;
+  return item.metadata.linearIssueId;
+}
+
+export function jiraIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'jira-issue' || typeof item.metadata.identifier !== 'string') return;
+  return item.metadata.identifier;
+}
+
+export function jiraIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'jira-issue') return;
+  return nonEmptyString(item.metadata.issueRef) ?? nonEmptyString(item.metadata.issueReference);
+}
+
+/** The human reference an incident.io follow-up card carries (`INC-42` or the item id), when it has one. */
+export function incidentioIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'incidentio-follow-up' || typeof item.metadata.identifier !== 'string') return;
+  return item.metadata.identifier;
+}
+
+/** The prefixed incident.io item reference a card carries, when it has one. */
+export function incidentioIssueRefForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'incidentio-follow-up') return;
+  return nonEmptyString(item.metadata.issueRef) ?? nonEmptyString(item.metadata.issueReference);
+}
+
+/** Legacy metadata may hold `issueRef: ''` beside a populated `issueReference`; skip empty values. */
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
 }
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
@@ -64,7 +130,10 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 
 /** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return 'Open in GitLab';
   if (source === 'linear-issue') return 'Open in Linear';
+  if (source === 'jira-issue') return 'Open in Jira';
+  if (source === 'incidentio-follow-up') return 'Open in incident.io';
   if (source === 'slack-thread') return 'Open in Slack';
   if (source === 'manual') return 'Open link';
   return 'Open in GitHub';
@@ -72,11 +141,23 @@ export function externalLinkLabel(source: WorkItemSource): string {
 
 export function workItemMeta(item: WorkItem): string {
   const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
-  const age = relativeTime(item.createdAt);
+  const assignee = typeof item.metadata.assignee === 'string' ? item.metadata.assignee : undefined;
+  // Prefer when the issue/PR was opened upstream; `item.createdAt` is only
+  // when the factory first saw it, which is "just now" for every backfilled card.
+  const sourceCreatedAt =
+    typeof item.metadata.sourceCreatedAt === 'string' && isValid(new Date(item.metadata.sourceCreatedAt))
+      ? item.metadata.sourceCreatedAt
+      : undefined;
+  const age = relativeTime(sourceCreatedAt ?? item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
-  const linearIdentifier = linearIdentifierForItem(item);
-  if (linearIdentifier !== undefined) return `${linearIdentifier}${author ? ` · ${author}` : ''} · ${age}`;
+  const issueIdentifier =
+    gitlabIdentifierForItem(item) ??
+    linearIdentifierForItem(item) ??
+    jiraIdentifierForItem(item) ??
+    incidentioIdentifierForItem(item);
+  const issueOwner = assignee ?? author;
+  if (issueIdentifier !== undefined) return `${issueIdentifier}${issueOwner ? ` · ${issueOwner}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
 }
 
@@ -85,9 +166,22 @@ export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | '
   const needle = query.trim().toLowerCase();
   if (needle === '') return true;
   const number = githubNumberForItem(card);
-  const identifier = linearIdentifierForItem(card);
+  const identifier =
+    gitlabIdentifierForItem(card) ??
+    linearIdentifierForItem(card) ??
+    jiraIdentifierForItem(card) ??
+    incidentioIdentifierForItem(card);
   const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
   return named.some(text => text.toLowerCase().includes(needle));
+}
+
+/**
+ * Branch + thread title for a card's session, shared with the server's runs
+ * (`workItemBranch`), so the title click and a later run converge on one
+ * worktree.
+ */
+export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: string } {
+  return { branch: workItemBranch(item), threadTitle: workItemThreadTitle(item) };
 }
 
 /**
@@ -110,12 +204,4 @@ export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<str
     if (candidateSourceKey) keys.add(candidateSourceKey);
   }
   return keys;
-}
-
-/** Session refs whose worktree was deleted are stale: their thread went with it. */
-export function liveSessions(
-  sessions: Record<string, WorkItemSessionRef>,
-  liveWorktreePaths: ReadonlySet<string>,
-): Record<string, WorkItemSessionRef> {
-  return Object.fromEntries(Object.entries(sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)));
 }

@@ -83,6 +83,7 @@
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["major", "minor", "patch", "digest"],
       "dependencyDashboardApproval": false,
+      "pinDigests": true,
       "automerge": true
     },
     {

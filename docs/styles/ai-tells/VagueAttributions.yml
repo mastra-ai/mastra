@@ -65,3 +65,16 @@ tokens:
   - the evidence suggests
   - the data suggests
   - the research suggests
+
+  # Candidate not yet implemented: the inverted attribution, where the claim
+  # rests on unnamed people failing to act rather than on unnamed people
+  # asserting something. The pattern is a noun trailed by a dismissive relative
+  # clause, as in a warning nobody reads, a version pin nobody maintains,
+  # results nobody verified, or an adoption nobody noticed. It does the same
+  # argumentative work as the tokens above while resting on nothing anyone
+  # checked, since the writer has not surveyed the readers of that warning.
+  #
+  # The gate has to separate that from the verifiable sense, where the clause
+  # names a real condition: a pull request nobody in the repository authored
+  # is a state a dependency bump produces, and it is checkable. Drafting
+  # tokens without that discriminator would flag both.

@@ -7,26 +7,6 @@ import { Thread } from '@/lib/ai-ui/thread';
 
 import type { ChatProps } from '@/types';
 
-interface AvailableSuggestedPromptsOptions {
-  suggestedPrompts?: string[];
-  isNewThread?: boolean;
-  isMessagesLoading: boolean;
-}
-
-/**
- * Keeps existing-thread prompts hidden until message history has loaded, so
- * they do not briefly appear before the conversation replaces the welcome UI.
- */
-const getAvailableSuggestedPrompts = ({
-  suggestedPrompts,
-  isNewThread,
-  isMessagesLoading,
-}: AvailableSuggestedPromptsOptions) => {
-  if (isNewThread) return suggestedPrompts;
-  if (isMessagesLoading) return undefined;
-  return suggestedPrompts;
-};
-
 export const AgentChat = ({
   agentId,
   agentName,
@@ -53,7 +33,13 @@ export const AgentChat = ({
   const { settings } = useAgentSettings();
   const requestContext = useMergedRequestContext();
 
-  const { data, isLoading: isMessagesLoading } = useAgentMessages({
+  const {
+    data,
+    isLoading: isMessagesLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useAgentMessages({
     agentId: agentId,
     threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
     memory: memory ?? false,
@@ -67,9 +53,9 @@ export const AgentChat = ({
         const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
         if (messageElement) {
           messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          messageElement.classList.add('bg-surface4');
+          messageElement.classList.add('bg-muted');
           setTimeout(() => {
-            messageElement.classList.remove('bg-surface4');
+            messageElement.classList.remove('bg-muted');
           }, 2000);
         }
       }, 100);
@@ -85,11 +71,10 @@ export const AgentChat = ({
   }
 
   const messages = data?.messages ?? emptyMessagesRef.current.messages;
-  const availableSuggestedPrompts = getAvailableSuggestedPrompts({
-    suggestedPrompts,
-    isNewThread,
-    isMessagesLoading,
-  });
+
+  const loadOlderMessages = () => {
+    if (!isFetchingNextPage) void fetchNextPage();
+  };
 
   return (
     <ChatProvider
@@ -108,11 +93,14 @@ export const AgentChat = ({
         agentName={agentName ?? ''}
         agentId={agentId}
         threadId={threadId}
-        suggestedPrompts={availableSuggestedPrompts}
+        suggestedPrompts={suggestedPrompts}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
         refreshThreadList={refreshThreadList}
         runOptionsSlot={runOptionsSlot}
+        isHistoryLoading={isMessagesLoading}
+        onLoadPrevious={hasNextPage ? loadOlderMessages : undefined}
+        isLoadingPrevious={isFetchingNextPage}
       />
     </ChatProvider>
   );

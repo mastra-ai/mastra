@@ -1,6 +1,6 @@
 ---
 title: "CopilotKit | Agentic UI"
-description: "Learn how to integrate CopilotKit with Mastra"
+description: "Connect CopilotKit to Mastra through AG-UI for generative UI, shared application state, frontend tools, human approval, and messaging channels."
 packages:
   - '@mastra/core'
 ---
@@ -139,7 +139,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Copilo
 
     Open the home route of the Next.js app (usually `app/page.tsx` or `src/app/page.tsx`) and replace the existing contents with the following code to set up a basic CopilotKit chat interface:
 
-    ```typescript title="app/page.tsx"
+    ```typescript title="app/page.tsx" oxfmt:false
     import { CopilotChat } from '@copilotkit/react-ui'
     import { CopilotKit } from '@copilotkit/react-core'
     import '@copilotkit/react-ui/styles.css'
@@ -183,7 +183,7 @@ Your CopilotKit frontend now communicates with a standalone Mastra agent server.
 
 Swap the component to change the surface. All three connect through the same `CopilotKit` provider:
 
-```typescript title="app/page.tsx"
+```typescript title="app/page.tsx" oxfmt:false
 import { CopilotSidebar } from '@copilotkit/react-ui'
 import { CopilotKit } from '@copilotkit/react-core'
 import '@copilotkit/react-ui/styles.css'

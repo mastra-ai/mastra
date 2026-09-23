@@ -22,30 +22,63 @@ import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { BaseExporter } from '@mastra/observability';
 import { getAttributes as getGenAIAttributes, getSpanName as getGenAISpanName } from '@mastra/otel-exporter';
+import type { GenAISemanticsOptions } from '@mastra/otel-exporter';
 import * as Sentry from '@sentry/node';
 
-const SPAN_TYPE_CONFIG: Partial<Record<SpanType, { opType: string; opName: string }>> = {
-  [SpanType.AGENT_RUN]: { opType: 'gen_ai.invoke_agent', opName: 'invoke_agent' },
-  [SpanType.MODEL_GENERATION]: { opType: 'gen_ai.chat', opName: 'chat' },
-  [SpanType.TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
-  [SpanType.MCP_TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
-  [SpanType.PROVIDER_TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
-  [SpanType.WORKFLOW_RUN]: { opType: 'workflow.run', opName: 'workflow' },
-  [SpanType.WORKFLOW_STEP]: { opType: 'workflow.step', opName: 'step' },
-  [SpanType.WORKFLOW_CONDITIONAL]: { opType: 'workflow.conditional', opName: 'step' },
-  [SpanType.WORKFLOW_CONDITIONAL_EVAL]: { opType: 'workflow.conditional', opName: 'step' },
-  [SpanType.WORKFLOW_PARALLEL]: { opType: 'workflow.parallel', opName: 'step' },
-  [SpanType.WORKFLOW_LOOP]: { opType: 'workflow.loop', opName: 'step' },
-  [SpanType.WORKFLOW_SLEEP]: { opType: 'workflow.sleep', opName: 'step' },
-  [SpanType.WORKFLOW_WAIT_EVENT]: { opType: 'workflow.wait', opName: 'step' },
-  [SpanType.PROCESSOR_RUN]: { opType: 'ai.processor', opName: 'step' },
-  [SpanType.GENERIC]: { opType: 'ai.span', opName: 'span' },
-  [SpanType.MODEL_STEP]: { opType: 'ai.span', opName: 'step' },
-  [SpanType.MODEL_CHUNK]: { opType: 'ai.span', opName: 'step' },
-  [SpanType.SCORER_RUN]: { opType: 'workflow.run', opName: 'eval' },
-  [SpanType.SCORER_STEP]: { opType: 'workflow.step', opName: 'step' },
-  [SpanType.MEMORY_OPERATION]: { opType: 'ai.memory', opName: 'memory' },
-};
+type SentrySpanOp = { opType: string; opName: string };
+
+/**
+ * Builds the span-type map, dropping any entry whose span type does not exist
+ * in the paired `@mastra/core`.
+ *
+ * The peer range admits a core older than the one that introduced a given
+ * `SpanType` member, where `SpanType.X` is `undefined` at runtime. As a plain
+ * object literal that lands in the map under a literal `"undefined"` key, which
+ * then matches any span whose type is undefined and mislabels it.
+ *
+ * @internal Exported for tests.
+ */
+export function buildSpanTypeConfig(
+  entries: Array<[SpanType | undefined, SentrySpanOp]>,
+): Partial<Record<SpanType, SentrySpanOp>> {
+  return Object.fromEntries(
+    entries.filter((entry): entry is [SpanType, SentrySpanOp] => entry[0] !== undefined),
+  ) as Partial<Record<SpanType, SentrySpanOp>>;
+}
+
+const SPAN_TYPE_CONFIG: Partial<Record<SpanType, SentrySpanOp>> = buildSpanTypeConfig([
+  [SpanType.AGENT_RUN, { opType: 'gen_ai.invoke_agent', opName: 'invoke_agent' }],
+  [SpanType.MODEL_GENERATION, { opType: 'gen_ai.chat', opName: 'chat' }],
+  [SpanType.TOOL_CALL, { opType: 'gen_ai.execute_tool', opName: 'execute_tool' }],
+  [SpanType.MCP_TOOL_CALL, { opType: 'gen_ai.execute_tool', opName: 'execute_tool' }],
+  [SpanType.PROVIDER_TOOL_CALL, { opType: 'gen_ai.execute_tool', opName: 'execute_tool' }],
+  [SpanType.WORKFLOW_RUN, { opType: 'workflow.run', opName: 'workflow' }],
+  [SpanType.WORKFLOW_STEP, { opType: 'workflow.step', opName: 'step' }],
+  [SpanType.WORKFLOW_CONDITIONAL, { opType: 'workflow.conditional', opName: 'step' }],
+  [SpanType.WORKFLOW_CONDITIONAL_EVAL, { opType: 'workflow.conditional', opName: 'step' }],
+  [SpanType.WORKFLOW_PARALLEL, { opType: 'workflow.parallel', opName: 'step' }],
+  [SpanType.WORKFLOW_LOOP, { opType: 'workflow.loop', opName: 'step' }],
+  [SpanType.WORKFLOW_SLEEP, { opType: 'workflow.sleep', opName: 'step' }],
+  [SpanType.WORKFLOW_WAIT_EVENT, { opType: 'workflow.wait', opName: 'step' }],
+  [SpanType.PROCESSOR_RUN, { opType: 'ai.processor', opName: 'step' }],
+  [SpanType.GENERIC, { opType: 'ai.span', opName: 'span' }],
+  [SpanType.MODEL_STEP, { opType: 'ai.span', opName: 'step' }],
+  [SpanType.MODEL_CHUNK, { opType: 'ai.span', opName: 'step' }],
+  [SpanType.SCORER_RUN, { opType: 'workflow.run', opName: 'eval' }],
+  [SpanType.SCORER_STEP, { opType: 'workflow.step', opName: 'step' }],
+  [SpanType.MEMORY_OPERATION, { opType: 'ai.memory', opName: 'memory' }],
+  // Skill and workspace spans come from two places: the tools the model calls,
+  // and the processors Mastra derives from agent config. A processor-flavoured
+  // op would mislabel the tool calls, so both map to their subsystem the way
+  // MEMORY_OPERATION already does. Without an entry they fall back to the
+  // catch-all 'ai.span'.
+  //
+  // Both arrived after this package's oldest supported core, so against an
+  // older one they read as `undefined`. `buildSpanTypeConfig` drops those
+  // entries rather than keying the map under an `undefined` member.
+  [SpanType.WORKSPACE_ACTION, { opType: 'ai.workspace', opName: 'workspace' }],
+  [SpanType.SKILL_ACTION, { opType: 'ai.skill', opName: 'skill' }],
+]);
 
 const ATTRIBUTE_KEYS = {
   SPAN_TYPE: 'ai.span.type',
@@ -168,11 +201,16 @@ export class SentryExporter extends BaseExporter {
       return;
     }
 
-    // Skip MODEL_CHUNK and MODEL_STEP spans to simplify trace hierarchy.
+    // Skip MODEL_CHUNK, MODEL_STEP and MODEL_INFERENCE spans to simplify trace
+    // hierarchy: MODEL_GENERATION is exported as the single `gen_ai.chat` span.
     // We store them in skippedSpans to preserve parent-child relationships:
     // when a child span references a skipped span as parent, resolveParentSpanId()
     // walks up the chain to find the first non-skipped ancestor.
-    if (exportedSpan.type === SpanType.MODEL_CHUNK || exportedSpan.type === SpanType.MODEL_STEP) {
+    if (
+      exportedSpan.type === SpanType.MODEL_CHUNK ||
+      exportedSpan.type === SpanType.MODEL_STEP ||
+      exportedSpan.type === SpanType.MODEL_INFERENCE
+    ) {
       if (type === TracingEventType.SPAN_STARTED) {
         this.skippedSpans.set(exportedSpan.id, exportedSpan.parentSpanId || '');
       } else if (type === TracingEventType.SPAN_ENDED) {
@@ -217,7 +255,7 @@ export class SentryExporter extends BaseExporter {
 
     const sentrySpan = Sentry.startInactiveSpan({
       op: this.getOperationType(span),
-      name: getGenAISpanName(span),
+      name: getGenAISpanName(span, this.genAIOptions(span)),
       startTime: span.startTime.getTime(),
       forceTransaction: span.isRootSpan,
       parentSpan: resolvedParentId ? this.spanMap.get(resolvedParentId)?.span : undefined,
@@ -335,13 +373,21 @@ export class SentryExporter extends BaseExporter {
     return currentParentId;
   }
 
+  /**
+   * MODEL_GENERATION is Sentry's `gen_ai.chat` span (steps and inference are
+   * skipped), so it always takes the model-call GenAI attributes.
+   */
+  private genAIOptions(span: AnyExportedSpan): GenAISemanticsOptions {
+    return { modelCall: span.type === SpanType.MODEL_GENERATION };
+  }
+
   private getOperationType(span: AnyExportedSpan): string {
     const config = SPAN_TYPE_CONFIG[span.type];
     return config ? config.opType : 'ai.span';
   }
 
   private buildSpanAttributes(span: AnyExportedSpan): Record<string, any> {
-    const attributes = getGenAIAttributes(span) as Record<string, any>;
+    const attributes = getGenAIAttributes(span, this.genAIOptions(span)) as Record<string, any>;
 
     attributes[ATTRIBUTE_KEYS.SPAN_TYPE] = span.type;
     attributes[ATTRIBUTE_KEYS.ORIGIN] = 'auto.ai.mastra';

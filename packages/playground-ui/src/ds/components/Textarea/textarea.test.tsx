@@ -10,20 +10,10 @@ afterEach(() => {
 });
 
 describe('Textarea', () => {
-  it('supports an outline variant without an initial filled background', () => {
-    render(<Textarea variant="outline" placeholder="Description" />);
-
-    const textarea = screen.getByPlaceholderText('Description');
-    expect(textarea.className).toContain('bg-transparent');
-    expect(textarea.className).toContain('rounded-xl');
-    expect(textarea.className).not.toContain('bg-surface-overlay-soft');
-  });
-
   it.each([
-    ['sm', 'text-ui-sm'],
-    ['md', 'text-ui-md'],
-    ['default', 'text-ui-md'],
-    ['lg', 'text-ui-lg'],
+    ['sm', 'text-caption'],
+    ['md', 'text-body-sm'],
+    ['lg', 'text-body'],
   ] as const)('reads at the %s size', (size, expected) => {
     render(<Textarea size={size} placeholder="Description" />);
 
@@ -33,7 +23,7 @@ describe('Textarea', () => {
   it('reads at the medium size by default', () => {
     render(<Textarea placeholder="Description" />);
 
-    expect(screen.getByPlaceholderText('Description').className).toContain('text-ui-md');
+    expect(screen.getByPlaceholderText('Description').className).toContain('text-body-sm');
   });
 
   it('drops its own chrome in the unstyled variant', () => {
@@ -42,18 +32,11 @@ describe('Textarea', () => {
     expect(screen.getByPlaceholderText('Description').className).not.toContain('rounded-xl');
   });
 
-  it('marks itself invalid and outlines the error', () => {
+  it('marks itself invalid', () => {
     render(<Textarea error placeholder="Description" />);
 
     const textarea = screen.getByPlaceholderText('Description');
     expect(textarea.getAttribute('aria-invalid')).toBe('true');
-    expect(textarea.className).toContain('border-error');
-  });
-
-  it('carries no error outline when it is valid', () => {
-    render(<Textarea placeholder="Description" />);
-
-    expect(screen.getByPlaceholderText('Description').className).not.toContain('border-error');
   });
 
   it('keeps a caller class alongside its own', () => {

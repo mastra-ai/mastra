@@ -49,6 +49,8 @@ export default defineConfig({
     'scorers/prebuilt/index': 'src/scorers/prebuilt/index.ts',
     'scorers/utils': 'src/scorers/utils.ts',
     checks: 'src/checks.ts',
+    'vitest/index': 'src/vitest/index.ts',
+    'vitest/setup': 'src/vitest/setup.ts',
   },
   format: ['esm', 'cjs'],
   fixedExtension: false,

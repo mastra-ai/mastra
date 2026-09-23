@@ -1,14 +1,16 @@
-import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
+import { injectJsonInstructionIntoMessages as injectJsonInstructionIntoMessagesV3 } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
-import { modelSupportsStructuredOutput } from '../../../llm/model/provider-registry';
+import { modelSupportsStructuredOutput, modelSupportsTemperature } from '../../../llm/model/provider-registry';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import {
   createTimeoutAbortSignal,
+  guardStreamUntilMatch,
   guardStreamWithAbort,
   isMastraTimeoutError,
   raceAgainstAbort,
@@ -31,6 +33,25 @@ type ResolvedJsonPromptInjection = Exclude<JsonPromptInjection, 'auto'>;
  */
 const RETRY_MIN_TIMEOUT_MS = 1_000;
 const RETRY_BACKOFF_FACTOR = 2;
+
+const CONTENT_CHUNK_TYPES = new Set([
+  'text-delta',
+  'reasoning-delta',
+  'tool-call',
+  'tool-call-delta',
+  'tool-input-delta',
+  'tool-result',
+  'object',
+  'object-result',
+  'file',
+  'source',
+]);
+
+function isContentChunk(chunk: unknown): boolean {
+  return (
+    typeof chunk === 'object' && chunk !== null && CONTENT_CHUNK_TYPES.has((chunk as { type?: string }).type ?? '')
+  );
+}
 
 /**
  * Whether a failed model call will be retried. Used by both `onFailedAttempt` and
@@ -56,18 +77,46 @@ export function resolveJsonPromptInjection(
   return capability === true ? undefined : 'inline';
 }
 
-function buildJsonInstruction(schema: unknown) {
+type InjectJsonInstructionArgs = Parameters<typeof injectJsonInstructionIntoMessagesV3>[0];
+
+/**
+ * Typed V2 wrapper for the `@ai-sdk/provider-utils-v6` helper, which only reads and rewrites the
+ * leading system message's string content — a shape shared by V2 and V3 prompts.
+ */
+function injectJsonInstructionIntoMessages(
+  args: Omit<InjectJsonInstructionArgs, 'messages'> & { messages: LanguageModelV2Prompt },
+): LanguageModelV2Prompt {
+  return injectJsonInstructionIntoMessagesV3({
+    ...args,
+    messages: args.messages as unknown as InjectJsonInstructionArgs['messages'],
+  }) as unknown as LanguageModelV2Prompt;
+}
+
+/**
+ * Caller-supplied `structuredOutput.instructions` replace the generated schema dump only when
+ * they carry actual text. Empty / whitespace-only values fall back to the generated instruction.
+ */
+function hasCompactInstructions(instructions: string | undefined): instructions is string {
+  return typeof instructions === 'string' && instructions.trim().length > 0;
+}
+
+function buildJsonInstruction(schema: unknown, instructions?: string) {
+  if (hasCompactInstructions(instructions)) {
+    return instructions;
+  }
   return `Return your response as JSON matching this schema:\n\n${JSON.stringify(schema)}\n\nReturn only valid JSON. Do not include markdown or explanatory text.`;
 }
 
 function injectJsonInstructionIntoLatestUserMessage({
   messages,
   schema,
+  instructions,
 }: {
   messages: LanguageModelV2Prompt;
   schema: unknown;
+  instructions?: string;
 }): LanguageModelV2Prompt {
-  const instruction = buildJsonInstruction(schema);
+  const instruction = buildJsonInstruction(schema, instructions);
   const prompt = messages.map(message => ({
     ...message,
     content: Array.isArray(message.content) ? [...message.content] : message.content,
@@ -187,15 +236,24 @@ export function execute<OUTPUT = undefined>({
 
   // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection
   if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && injectionMode) {
+    const compactInstructions = hasCompactInstructions(structuredOutput?.instructions)
+      ? structuredOutput.instructions
+      : undefined;
     prompt =
       injectionMode === 'inline'
         ? injectJsonInstructionIntoLatestUserMessage({
             messages: inputMessages,
             schema: responseFormat.schema,
+            instructions: compactInstructions,
           })
         : injectJsonInstructionIntoMessages({
             messages: inputMessages,
-            schema: responseFormat.schema,
+            // Compact instructions replace the schema dump entirely. Passing them in the
+            // `schemaSuffix` slot (with no schema) suppresses the AI SDK's default generic
+            // suffix, which would otherwise be appended when `schema` is nullish.
+            ...(compactInstructions
+              ? { schema: undefined, schemaPrefix: undefined, schemaSuffix: compactInstructions }
+              : { schema: responseFormat.schema }),
           });
   }
 
@@ -243,43 +301,68 @@ export function execute<OUTPUT = undefined>({
     onResult,
     createStream: async () => {
       try {
-        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'timeout']);
+        const timeout = validateModelTimeoutSettings(modelSettings?.timeout);
+        let filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'timeout']);
+
+        // Capability-gated stripping of sampling params for models that reject them
+        // (e.g. Claude Sonnet 5, reasoning models). The model router applies this for
+        // router-id models, but provider instances passed directly (e.g. @ai-sdk/anthropic,
+        // @ai-sdk/amazon-bedrock) never enter the router, so strip here on the shared path
+        // too. Only drop on an explicit `false`; leave `true`/`undefined` untouched.
+        if (modelSupportsTemperature(modelRoute) === false) {
+          filteredModelSettings = omit(filteredModelSettings, ['temperature', 'topP', 'topK']);
+        }
 
         // Bound this single model call by modelSettings.timeout.stepMs, composed with
         // whatever signal the run already carries. The budget stays armed until the
         // returned stream ends, so a provider that stalls mid-stream is caught too.
         const { signal: abortSignal, cleanup: cleanupStepTimeout } = createTimeoutAbortSignal({
           parentSignal: options?.abortSignal,
-          timeoutMs: modelSettings?.timeout?.stepMs,
+          timeoutMs: timeout?.stepMs,
           timeoutType: 'step',
         });
+        let callAbortSignal = abortSignal;
+        let cleanupFirstChunkTimeout = () => {};
 
         const pRetry = await import('p-retry');
         const retryResult = await pRetry
           .default(
             async () => {
-              const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
+              const firstChunkTimeout = createTimeoutAbortSignal({
+                parentSignal: abortSignal,
+                timeoutMs: methodType === 'stream' ? timeout?.firstChunkMs : undefined,
+                timeoutType: 'firstChunk',
+              });
+              callAbortSignal = firstChunkTimeout.signal;
+              cleanupFirstChunkTimeout = firstChunkTimeout.cleanup;
 
-              // Cast needed: V2 and V3 call options are structurally compatible but typed differently
-              // (e.g., tool types differ: V2 uses 'provider-defined', V3 uses 'provider')
-              // Raced rather than merely signalled: a provider that ignores `abortSignal`
-              // would otherwise hang straight past its budget.
-              const streamResult = await raceAgainstAbort(
-                (fn as Function)({
-                  ...toolsAndToolChoice,
-                  prompt,
-                  providerOptions: providerOptionsToUse,
-                  abortSignal,
-                  includeRawChunks,
-                  responseFormat: structuredOutputMode === 'direct' && !injectionMode ? responseFormat : undefined,
-                  ...filteredModelSettings,
-                  headers,
-                }),
-                abortSignal,
-              );
+              try {
+                const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
 
-              // We have to cast this because doStream is missing the warnings property in its return type even though it exists
-              return streamResult as unknown as LanguageModelV2StreamResult;
+                // Cast needed: V2 and V3 call options are structurally compatible but typed differently
+                // (e.g., tool types differ: V2 uses 'provider-defined', V3 uses 'provider')
+                // Raced rather than merely signalled: a provider that ignores `abortSignal`
+                // would otherwise hang straight past its budget.
+                const streamResult = await raceAgainstAbort(
+                  (fn as Function)({
+                    ...toolsAndToolChoice,
+                    prompt,
+                    providerOptions: providerOptionsToUse,
+                    abortSignal: callAbortSignal,
+                    includeRawChunks,
+                    responseFormat: structuredOutputMode === 'direct' && !injectionMode ? responseFormat : undefined,
+                    ...filteredModelSettings,
+                    headers,
+                  }),
+                  callAbortSignal,
+                );
+
+                // We have to cast this because doStream is missing the warnings property in its return type even though it exists
+                return streamResult as unknown as LanguageModelV2StreamResult;
+              } catch (error) {
+                cleanupFirstChunkTimeout();
+                throw error;
+              }
             },
             {
               retries: modelSettings?.maxRetries ?? 2,
@@ -311,18 +394,26 @@ export function execute<OUTPUT = undefined>({
             },
           )
           .catch(error => {
+            cleanupFirstChunkTimeout();
             cleanupStepTimeout();
             throw error;
           });
 
         if (!retryResult?.stream) {
+          cleanupFirstChunkTimeout();
           cleanupStepTimeout();
           return retryResult;
         }
 
+        const firstChunkGuardedStream = guardStreamUntilMatch(
+          retryResult.stream,
+          callAbortSignal,
+          isContentChunk,
+          cleanupFirstChunkTimeout,
+        );
         const guardedResult = {
           ...retryResult,
-          stream: guardStreamWithAbort(retryResult.stream, abortSignal, cleanupStepTimeout),
+          stream: guardStreamWithAbort(firstChunkGuardedStream, abortSignal, cleanupStepTimeout),
         } as unknown as LanguageModelV2StreamResult;
         // The router attaches its stream transport as a non-enumerable symbol,
         // which object spread drops. Re-attach it so transport handles survive

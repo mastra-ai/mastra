@@ -1,6 +1,6 @@
 ---
 title: 'Sandboxes'
-description: Give agents an isolated environment for working with files and running commands.
+description: "Run Mastra agents in isolated local or remote sandboxes with filesystem access, shell commands, code execution, and optional computer-use tools."
 packages:
   - '@mastra/core'
 ---
@@ -13,7 +13,7 @@ import { IntegrationGrid } from '@site/src/components/integrations/grid';
 
 A sandbox gives your agent an isolated environment where it can run commands, execute code, install dependencies, and manage processes. This lets agents perform work that would be risky, resource-intensive, or impractical to run directly inside your application.
 
-Sandboxes are often temporary, so files created inside them may disappear when the environment stops. A [filesystem](/docs/sandbox/filesystem) gives the agent a place to read, write, and [search](/docs/sandbox/search) files that can outlive the sandbox. You can use one to keep outputs between runs, seed a new sandbox with existing files, or give the agent documents it can search while working. Filesystems also work without a sandbox, for example when an agent only needs a knowledge base or access to files in a service such as Google Drive.
+Sandboxes are often temporary, so files created inside them may disappear when the environment stops. A [filesystem](/docs/sandbox/filesystem) gives the agent a place to read, write, and [search](/docs/sandbox/search) files that can outlive the sandbox. You can use one to keep outputs between runs, seed a new sandbox with existing files, or give the agent documents it can search while working. Filesystems also work without a sandbox, for example when an agent only needs a knowledge base or access to files in a service such as Google Drive. A real-world example is [Mastra Factory](https://factory.mastra.ai/) which uses sandboxes to give coding-agent sessions an environment for repository checkouts, dependencies, and commands.
 
 {/* vale ai-tells.VerbTricolon = YES */}
 
@@ -160,6 +160,10 @@ Mastra filesystems connect agents and sandboxes to provider-backed storage such 
 
 See [Filesystem](/docs/sandbox/filesystem) for providers, file tools, and mounts.
 
+## Computer use
+
+Supported desktop sandboxes give agents screenshot, mouse, and keyboard control. See [Computer](/docs/sandbox/computer) for supported sandboxes and configuration.
+
 ## Sandboxes per user or thread
 
 Use a **resolver** when each user, tenant, or thread needs a separate sandbox. Set `sandboxCacheKey` to the identity that owns the sandbox so later requests reuse the same live environment.
@@ -232,7 +236,7 @@ Your application owns sandboxes returned by a resolver. Destroy them and call `w
 
 With a static sandbox, Mastra knows which capabilities the backend supports and only gives the agent the corresponding tools. Application code should also check that an optional capability is available before using it.
 
-With a [resolver-backed sandbox](#sandboxes-per-user-or-thread), the backend isn't known until a request runs, so Mastra initially makes all sandbox tools available. If the resolved backend doesn't support the tool the agent calls, the call fails with `SandboxFeatureNotSupportedError`.
+Because a [resolver-backed sandbox](#sandboxes-per-user-or-thread) isn't known until request time, Mastra initially exposes every sandbox tool. Calling one unsupported by the resolved backend fails with `SandboxFeatureNotSupportedError`.
 
 ## Background processes
 
@@ -351,3 +355,4 @@ await sandbox.executeCommand('node', ['scripts/download-reports.js'], {
 - [`SandboxProcessManager` reference](/reference/workspace/process-manager)
 - [Sandbox provider interface](/reference/workspace/sandbox)
 - [Filesystem](/docs/sandbox/filesystem)
+- [Mastra Factory](https://factory.mastra.ai)

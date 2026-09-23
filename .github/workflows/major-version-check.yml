@@ -11,16 +11,21 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  # Keep PR updates and approval-comment updates from canceling each other.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || ((github.event.comment.body == '!allow-major' || github.event.changes.body.from == '!allow-major') && github.event.issue.number) || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   check-major-bump:
     runs-on: starsling-ubuntu-24.04-2
-    # Only run on canonical repo (secrets unavailable for forks) and for PR events or PR comments
+    # Only run for PR events or comments that can add/remove the approval command.
     if: |
       github.repository == 'mastra-ai/mastra' &&
-      (github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request))
+      (github.event_name == 'pull_request' || (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        (github.event.comment.body == '!allow-major' || github.event.changes.body.from == '!allow-major')
+      ))
     steps:
       - name: Check for major changesets
         id: check_major
@@ -150,9 +155,9 @@ jobs:
               issue_number: prNumber,
             });
 
-            // Filter to only approval comments first
+            // Use the same exact command matching as the issue_comment job gate.
             const approvalComments = comments.filter(
-              comment => comment.body.trim().toLowerCase() === '!allow-major'
+              comment => comment.body === '!allow-major'
             );
 
             if (approvalComments.length === 0) {

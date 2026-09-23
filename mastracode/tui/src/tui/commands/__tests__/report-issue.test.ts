@@ -36,7 +36,7 @@ describe('handleReportIssueCommand', () => {
     await handleReportIssueCommand(ctx, ['crash', 'on', 'startup']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      'No model selected. Use /models to select a model, or /login to authenticate.',
+      'No model selected. Use /model to select a model, or /connect to authenticate.',
     );
     expect(state.controller.session.thread.create).not.toHaveBeenCalled();
     expect(mocks.sendSlashCommandMessage).not.toHaveBeenCalled();

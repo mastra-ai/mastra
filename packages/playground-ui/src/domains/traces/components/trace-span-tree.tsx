@@ -1,0 +1,73 @@
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import type { UISpan } from '../types';
+import type { SpanRowContext } from './span-rows';
+import { SpanRows } from './span-rows';
+import { SpanTreeRow } from './span-tree-row';
+import { SpanTypeLegend } from './span-type-legend';
+import { TraceSpanTreeSkeleton } from './trace-span-tree-skeleton';
+import { cn } from '@/lib/utils';
+
+export type TraceSpanTreeProps = {
+  hierarchicalSpans: UISpan[];
+  onSpanClick: (id: string) => void;
+  selectedSpanId?: string;
+  isLoading?: boolean;
+  fadedTypes?: string[];
+  expandedSpanIds?: string[];
+  setExpandedSpanIds?: Dispatch<SetStateAction<string[]>>;
+  featuredSpanIds?: string[];
+  /** Row scrolled into view once it is mounted (ancestors auto-expand when the span is featured). */
+  revealSpanId?: string;
+  /** Rendered full-width above the span type legend row. */
+  leadingSlot?: ReactNode;
+  /** Optional end-of-row cell. By default rows have no trailing cell; the duration is shown under the span name. */
+  renderTrailing?: (ctx: SpanRowContext) => ReactNode;
+};
+
+export function TraceSpanTreeLoading() {
+  return <TraceSpanTreeSkeleton />;
+}
+
+const durationMeta = (ctx: SpanRowContext) => <>{(ctx.span.latency / 1000).toFixed(3)}&nbsp;s</>;
+
+/** Hierarchical span tree: expand toggle, name and duration per row, plus an optional trailing cell. */
+export function TraceSpanTree({
+  hierarchicalSpans = [],
+  onSpanClick,
+  selectedSpanId,
+  isLoading,
+  fadedTypes,
+  expandedSpanIds,
+  setExpandedSpanIds,
+  featuredSpanIds,
+  revealSpanId,
+  leadingSlot,
+  renderTrailing,
+}: TraceSpanTreeProps) {
+  if (isLoading) return <TraceSpanTreeLoading />;
+
+  return (
+    <>
+      {leadingSlot}
+      <SpanTypeLegend spans={hierarchicalSpans} />
+      <div
+        className={cn('grid content-start items-start gap-y-px overflow-hidden pb-1', {
+          'grid-cols-[minmax(0,1fr)]': !renderTrailing,
+          'grid-cols-[minmax(0,1fr)_auto]': !!renderTrailing,
+        })}
+      >
+        <SpanRows
+          spans={hierarchicalSpans}
+          onSpanClick={onSpanClick}
+          selectedSpanId={selectedSpanId}
+          revealSpanId={revealSpanId}
+          fadedTypes={fadedTypes}
+          featuredSpanIds={featuredSpanIds}
+          expandedSpanIds={expandedSpanIds}
+          setExpandedSpanIds={setExpandedSpanIds}
+          renderRow={ctx => <SpanTreeRow ctx={ctx} meta={durationMeta} trailing={renderTrailing} />}
+        />
+      </div>
+    </>
+  );
+}

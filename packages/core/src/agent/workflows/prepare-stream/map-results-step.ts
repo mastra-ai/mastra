@@ -8,6 +8,7 @@ import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
+import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { MessageList } from '../../message-list';
@@ -15,7 +16,7 @@ import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
-import { fireClientToolOutputHooks } from './client-tool-output-hooks';
+import { applyClientToolModelOutput, fireClientToolOutputHooks } from './client-tool-output-hooks';
 import type { PrepareStreamRunScope } from './run-scope';
 import {
   CONVERTED_TOOLS_KEY,
@@ -141,8 +142,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
           messageList,
         });
 
-        // End agent span with tripwire information after fallback completes
+        // End the whole tree with tripwire information; descendants close
+        // without inheriting the terminal output
         agentSpan?.end({
+          endTree: true,
           output: { tripwire: memoryData.tripwire },
           attributes: {
             tripwireAbort: {
@@ -156,10 +159,25 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
         return bail(modelOutput);
       } catch (error) {
-        // End agent span with error and tripwire context so failures aren't masked
+        // Record the error with tripwire context so failures aren't masked,
+        // then end the whole span tree. Rejections are not guaranteed to be
+        // Error instances; MastraError extracts a usable message from any
+        // cause shape.
+        const spanError =
+          error instanceof Error
+            ? error
+            : new MastraError(
+                {
+                  id: 'AGENT_TRIPWIRE_FALLBACK_FAILED',
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.SYSTEM,
+                  details: { runId },
+                },
+                error,
+              );
         agentSpan?.error({
-          error: error as Error,
-          endSpan: true,
+          error: spanError,
+          endTree: true,
           attributes: {
             tripwireAbort: {
               reason: memoryData.tripwire?.reason,
@@ -182,6 +200,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
       messages: options.messages,
       tools: convertedTools,
       abortSignal: options.abortSignal,
+      logger: capabilities.logger,
+    });
+
+    // Apply server-defined toModelOutput to those same client-executed results.
+    // This enriches the ingested MessageList parts (not options.messages — the
+    // list converted its own copies in prepare-memory) so prompt conversion
+    // restores the mapped output.
+    await applyClientToolModelOutput({
+      messageList,
+      tools: convertedTools,
       logger: capabilities.logger,
     });
 
@@ -262,9 +290,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
       providerOptions: result.providerOptions,
       includeRawChunks: options.includeRawChunks,
       experimentalTransform: options.experimentalTransform,
+      hideSignals: options.hideSignals,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
-        onFinish: async (payload: any) => {
+        onFinish: async (payload: any, context?: MastraOnFinishCallbackContext) => {
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
             const modelId = payload.model?.modelId;
@@ -306,15 +335,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
               });
             }
 
-            // End the AGENT_RUN span so the trace is exported.
-            // Without this, the span is orphaned and exporters that wait
-            // for the root span to end (e.g. Datadog) never emit the trace.
-            agentSpan?.error({ error, endSpan: true });
+            // Record the error, then end the whole span tree. Ending only the
+            // root would orphan still-open descendants, and exporters that wait
+            // for every span to finish (e.g. Datadog) retain the trace forever.
+            agentSpan?.error({ error, endTree: true });
             return;
           }
 
           if (payload.finishReason === 'suspended') {
             agentSpan?.end({
+              endTree: true,
               output: {
                 status: 'suspended',
                 reason: payload.suspendReason,
@@ -329,12 +359,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (aborted) {
             if (payload.finishReason === 'aborted') {
-              agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
+              agentSpan?.end({ endTree: true, output: { status: 'aborted', reason: 'abort' } });
               // The aborted finish payload is synthetic; the caller already received onAbort.
               return;
             }
 
-            agentSpan?.end();
+            agentSpan?.end({ endTree: true });
           } else {
             try {
               const outputText =
@@ -357,6 +387,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 threadExists: memoryData.threadExists || threadCreatedByStep,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
+                // Only streaming runs can deliver a `data-thread-title` chunk; `generate()` returns JSON.
+                writer: modelMethodType === 'stream' ? context?.writer : undefined,
+                abortSignal: options.abortSignal,
                 onTitleGenerated: options.memory?.onTitleGenerated,
                 waitUntil: options.serverless?.waitUntil,
               });
@@ -379,7 +412,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                       e,
                     );
 
-              agentSpan?.error({ error: spanError, endSpan: true });
+              agentSpan?.error({ error: spanError, endTree: true });
             }
           }
 

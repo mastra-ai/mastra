@@ -1,6 +1,6 @@
 ---
 title: "Reference: ToolProvider | Editor"
-description: "Documentation for the ToolProvider interface and the built-in Composio and Arcade implementations."
+description: "The ToolProvider interface defines how the editor discovers and resolves integration tools from external platforms."
 packages:
   - "@mastra/editor"
 ---
@@ -386,4 +386,4 @@ Arcade tools use `Toolkit.ToolName` format: `Github.GetRepository`, `Slack.SendM
 
 ### Authentication
 
-The legacy Arcade resolver uses `resourceId` from request context when available. It otherwise falls back to the supplied `userId`, then to a shared `default` identity. Use `default` only for intentionally shared integrations. In tenant-isolated deployments, provide a trusted, stable `resourceId` or explicit `userId`. Omitting both doesn't isolate callers.
+The legacy Arcade resolver uses `resourceId` from request context when available, falling back to the supplied `userId` and then to a shared `default` identity. Reserve `default` for intentionally shared integrations, and provide a trusted, stable `resourceId` or explicit `userId` in tenant-isolated deployments because omitting both doesn't isolate callers.

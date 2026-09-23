@@ -1,6 +1,6 @@
 ---
 title: "Reference: LanguageDetector | Processors"
-description: "Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses."
+description: "The LanguageDetector is an input processor that identifies the language of input text and optionally translates it to a target language for consistent processing."
 packages:
   - "@mastra/core"
 ---
@@ -41,6 +41,14 @@ const processor = new LanguageDetector({
             type: 'MastraModelConfig',
             description: 'Model configuration for the detection/translation agent',
             isOptional: false,
+          },
+          {
+            name: 'errorStrategy',
+            type: "'warn' | 'strict'",
+            description:
+              "How to handle failures from the internal model call. 'warn' is fail-open: it logs the failure and assumes the content uses a target language. 'strict' is fail-closed: it stops processing with a tripwire.",
+            isOptional: true,
+            default: "'warn'",
           },
           {
             name: 'targetLanguages',

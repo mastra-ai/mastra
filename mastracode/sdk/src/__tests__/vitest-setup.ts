@@ -12,6 +12,10 @@ vi.mock('@mastra/github-signals', () => ({
     id = 'github-signals';
     name = 'GitHub Signals';
     isConnected = false;
+    options: unknown;
+    constructor(options?: unknown) {
+      this.options = options;
+    }
     addAgent() {}
     connect() {
       this.isConnected = true;

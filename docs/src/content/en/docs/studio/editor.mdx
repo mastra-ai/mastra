@@ -1,6 +1,6 @@
 ---
 title: "Editor"
-description: Let collaborators update an agent in Studio, test their changes, and publish without editing code.
+description: "Use Mastra Studio Editor so collaborators can change agent instructions and tools without modifying source code, from draft testing through publication."
 packages:
   - "@mastra/core"
   - "@mastra/editor"
@@ -67,7 +67,7 @@ An instruction block can include values from the current request. For example, <
 
 ### Prompt blocks
 
-A prompt block is a saved piece of instruction text that can be used by more than one agent. Create one under **Prompts**, publish it, then open an agent's **Instructions** section and select **Add block**.
+A prompt block is a saved piece of instruction text that can be used by more than one agent. Create and publish one under **Prompts**. Then open an agent's **Instructions** section and select **Add block**.
 
 For example, agents for support, returns, and order status may all need the same refund policy. Save the policy as a prompt block and add it to each agent. When the policy changes, update and publish the block once instead of editing three agents.
 
@@ -306,7 +306,7 @@ See the [Editor versioning reference](/reference/editor/versioning) for version 
 
 ## Programmatic access
 
-Everything available in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor), the REST API, or the Client SDK. Use it to script bulk updates or seed stored configurations from code. It can also power automation that tunes agents based on [evaluation results](/docs/datasets/running-experiments).
+Everything available in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor), the REST API, or the Client SDK. Use it to script bulk updates or seed stored configurations from code. It can also power automation that tunes agents based on [evaluation results](/docs/evals/experiments).
 
 Call `mastra.getEditor()` when application code has access to the Mastra instance:
 

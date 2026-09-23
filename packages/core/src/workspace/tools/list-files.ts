@@ -90,6 +90,7 @@ To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
         extension: extension || undefined,
         pattern: normalizedPattern,
         respectGitignore,
+        logger: workspace.logger,
       });
 
       const output = await applyTokenLimit(

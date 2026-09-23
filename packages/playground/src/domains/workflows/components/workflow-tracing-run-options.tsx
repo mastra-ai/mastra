@@ -4,6 +4,7 @@ import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor'
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import CodeMirror from '@uiw/react-codemirror';
+import { Check } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 
@@ -78,7 +79,7 @@ export const WorkflowTracingRunOptions = ({
 
   return (
     <div className="space-y-2 px-5 py-2">
-      <Txt as="h3" variant="ui-md" className="text-neutral3">
+      <Txt as="h3" variant="body" tone="muted">
         Tracing Options
       </Txt>
 
@@ -87,11 +88,11 @@ export const WorkflowTracingRunOptions = ({
         onChange={handleChange}
         theme={theme}
         extensions={[jsonLanguage]}
-        className={cn('overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3', editorClassName)}
+        className={cn('overflow-hidden overflow-y-scroll rounded-lg bg-card p-3', editorClassName)}
       />
 
       <div className="flex items-center justify-end">
-        <Button type="button" onClick={handleSave}>
+        <Button icon={<Check />} type="button" onClick={handleSave}>
           Save
         </Button>
       </div>

@@ -1,6 +1,6 @@
 ---
 title: "Client SDK | v1 Migration Guide"
-description: "Learn how to migrate client SDK changes when upgrading to v1."
+description: "Client SDK changes align with server-side API updates, including utility renames, updated pagination, and type naming conventions."
 packages:
   - "@mastra/client-js"
   - "@mastra/ai-sdk"
@@ -96,7 +96,7 @@ The `useChat` hook internally passes the memory option when you provide a `threa
 
 The `memory` option also supports passing thread metadata when creating new threads:
 
-```typescript prettier:false
+```typescript oxfmt:false
 await agent.generate([...], {
   memory: {
     thread: {

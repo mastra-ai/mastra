@@ -1,6 +1,6 @@
 ---
 title: 'Reference: dataset.runExperimentItem() | Datasets'
-description: 'Documentation for the `dataset.runExperimentItem()` method, which executes one experiment item server-side with upsert semantics.'
+description: "Execute one experiment item server-side by running its target and resolved scorers, then upsert the result keyed by experimentId, itemId, and attempt."
 packages:
   - '@mastra/core'
 ---
@@ -98,4 +98,4 @@ Each call executes the item exactly once, with no internal retry loop. Calling i
 
 - [dataset.createExperiment()](/reference/datasets/createExperiment)
 - [dataset.finalizeExperiment()](/reference/datasets/finalizeExperiment)
-- [Running experiments](/docs/datasets/running-experiments#caller-driven-experiments)
+- [Running experiments](/docs/evals/experiments#caller-driven-experiments)

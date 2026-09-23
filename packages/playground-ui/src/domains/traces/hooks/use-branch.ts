@@ -1,9 +1,8 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
-
-const IMMUTABLE_CACHE_TIME = 1000 * 60 * 60 * 24 * 30; // 30 days, massive cache, span data is immutable
+import type { SearchableSpan } from '../types';
+import { selectSearchableSpans } from '../utils';
 
 export interface UseBranchArgs {
   traceId: string | null | undefined;
@@ -15,7 +14,7 @@ export function useBranch({
   traceId,
   spanId,
   depth,
-}: UseBranchArgs): UseQueryResult<{ traceId: string; spans: LightSpanRecord[] } | null> {
+}: UseBranchArgs): UseQueryResult<{ traceId: string; spans: SearchableSpan[] } | null> {
   const client = useMastraClient();
 
   return useQuery({
@@ -26,11 +25,10 @@ export function useBranch({
       }
       return client.getBranch({ traceId, spanId, depth });
     },
+    // Builds each span's search haystack once per fetch, cached with the query.
+    select: selectSearchableSpans,
     enabled: !!traceId && !!spanId,
-    staleTime: query => {
-      const data = query.state.data;
-      const isFinished = data?.spans.every(s => Boolean(s.endedAt));
-      return isFinished ? IMMUTABLE_CACHE_TIME : 0;
-    },
+    // A finished subtree can still gain spans from a resumed run or delayed export.
+    staleTime: 0,
   });
 }

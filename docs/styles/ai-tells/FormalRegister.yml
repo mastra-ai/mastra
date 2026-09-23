@@ -2,6 +2,7 @@
 extends: existence
 message: "AI formalism: '%s'. Use a plainer everyday word (e.g., 'use', 'help', 'start')."
 level: error
+ignorecase: true
 tokens:
   - utilize
   - utilizes
@@ -31,10 +32,6 @@ tokens:
   - endeavour
   - endeavours
   - endeavouring
-  - methodology
-  - methodologies
-  - framework
-  - frameworks
   - conceptualize
   - conceptualizes
   - conceptualizing

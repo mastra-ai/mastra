@@ -29,13 +29,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
   return (
     <div className="flex flex-col gap-2">
       {headers.length > 0 ? (
-        <DataList
-          columns={columns}
-          variant="lined"
-          className="border-border1 max-h-80 rounded-lg border"
-          mask={{ left: false }}
-          stickyHeaderBackground="tinted"
-        >
+        <DataList columns={columns} className="max-h-80" mask={{ left: false }}>
           <DataList.Top>
             {headers.map((header: string, index: number) => (
               <DataList.TopCell key={`${index}-${header}`} sticky={index === 0 ? 'start' : undefined}>
@@ -53,8 +47,8 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
                     return (
                       <DataList.RowHeaderCell
                         key={`${index}-${header}`}
-                        height="compact"
-                        className="text-ui-sm max-w-[14rem]"
+
+                        className="max-w-[14rem] text-caption"
                       >
                         {value}
                       </DataList.RowHeaderCell>
@@ -62,7 +56,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
                   }
 
                   return (
-                    <DataList.Cell key={`${index}-${header}`} height="compact" className="text-ui-sm max-w-[12rem]">
+                    <DataList.Cell key={`${index}-${header}`} className="max-w-[12rem] text-caption">
                       <span className="block truncate">{value}</span>
                     </DataList.Cell>
                   );
@@ -74,7 +68,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
       ) : null}
 
       {/* Row count indicator */}
-      <div className="text-neutral4 text-xs">
+      <div className="text-caption text-muted-foreground">
         {displayData.length < totalRows
           ? `Showing ${displayData.length} of ${totalRows} rows`
           : `${totalRows} row${totalRows !== 1 ? 's' : ''}`}

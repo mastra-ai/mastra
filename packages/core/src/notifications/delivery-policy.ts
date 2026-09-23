@@ -98,11 +98,13 @@ export async function resolveNotificationDeliveryDecision({
   const custom = await config?.decide?.(input);
   if (custom) return normalizeDecision(custom);
 
-  const sourceDecision = config?.sources?.[input.record.source];
-  if (sourceDecision) return normalizeDecision(sourceDecision);
+  if (config?.sources && Object.hasOwn(config.sources, input.record.source)) {
+    return normalizeDecision(config.sources[input.record.source]!);
+  }
 
-  const priorityDecision = config?.priorities?.[input.record.priority];
-  if (priorityDecision) return normalizeDecision(priorityDecision);
+  if (config?.priorities && Object.hasOwn(config.priorities, input.record.priority)) {
+    return normalizeDecision(config.priorities[input.record.priority]!);
+  }
 
   if (config?.default) return normalizeDecision(config.default);
 

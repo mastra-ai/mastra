@@ -20,6 +20,10 @@ function workItem(source: WorkItemSource, stages: string[]): WorkItem {
     stageHistory: [],
     sessions: {},
     metadata: {},
+    triageType: null,
+    acceptedAt: null,
+    commentCount: 0,
+    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',
@@ -49,11 +53,13 @@ describe('currentItemStageLabel', () => {
   it('ignores stages absent from the item board, which the board itself does not draw', () => {
     expect(currentItemStageLabel(workItem('manual', ['execute', 'obsolete']))).toBe('Building');
     expect(currentItemStageLabel(workItem('github-pr', ['execute', 'review']))).toBe('Reviewing');
+    expect(currentItemStageLabel(workItem('gitlab-pr', ['execute', 'review']))).toBe('Reviewing');
   });
 
   it('falls back to Intake when no stage belongs to the item board', () => {
     expect(currentItemStageLabel(workItem('manual', []))).toBe('Intake');
     expect(currentItemStageLabel(workItem('github-pr', ['execute']))).toBe('Intake');
+    expect(currentItemStageLabel(workItem('gitlab-pr', ['execute']))).toBe('Intake');
   });
 });
 

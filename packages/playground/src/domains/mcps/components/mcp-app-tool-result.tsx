@@ -9,6 +9,7 @@ interface McpAppToolResultProps {
   toolArgs?: Record<string, unknown>;
   toolResult?: unknown;
   onSendMessage?: (content: string) => void;
+  readOnly?: boolean;
 }
 
 /**
@@ -19,7 +20,7 @@ interface McpAppToolResultProps {
  * (ui/notifications/tool-input and ui/notifications/tool-result), enabling
  * the app to hydrate with data from the tool call.
  */
-export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage }: McpAppToolResultProps) {
+export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage, readOnly }: McpAppToolResultProps) {
   const client = useMastraClient();
 
   const { data: html, isLoading } = useQuery({
@@ -43,7 +44,7 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage 
 
   if (isLoading || !html) {
     return (
-      <div className="border-border1 bg-surface2 text-text2 rounded-md border p-4 text-sm">Loading MCP App UI…</div>
+      <div className="text-text2 rounded-md border border-border bg-background p-4 text-body">Loading MCP App UI…</div>
     );
   }
 
@@ -53,9 +54,9 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage 
       toolName={appInfo.toolName}
       toolInput={toolArgs}
       toolResult={toolResult}
-      onToolCall={handleToolCall}
-      onSendMessage={onSendMessage}
-      className="border-border1 rounded-md border"
+      onToolCall={readOnly ? undefined : handleToolCall}
+      onSendMessage={readOnly ? undefined : onSendMessage}
+      className="rounded-md border border-border"
     />
   );
 }

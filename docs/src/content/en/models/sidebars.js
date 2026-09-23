@@ -126,6 +126,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/above',
+          label: 'above.dev',
+        },
+        {
+          type: 'doc',
           id: 'providers/agentrouter',
           label: 'AgentRouter',
         },
@@ -146,8 +151,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ai21',
+          label: 'AI21 Labs',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
+        },
+        {
+          type: 'doc',
+          id: 'providers/ainetcafe',
+          label: 'ainetcafe',
+        },
+        {
+          type: 'doc',
+          id: 'providers/aixy',
+          label: 'Aixy',
         },
         {
           type: 'doc',
@@ -246,6 +266,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/bothub',
+          label: 'Bothub',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
@@ -298,6 +323,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/coralbricks',
           label: 'CoralBricks',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wandb',
+          label: 'CoreWeave',
         },
         {
           type: 'doc',
@@ -461,6 +491,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/inco',
+          label: 'Inco',
+        },
+        {
+          type: 'doc',
+          id: 'providers/infer',
+          label: 'Infer by Flow7',
+        },
+        {
+          type: 'doc',
           id: 'providers/inference',
           label: 'Inference',
         },
@@ -506,8 +546,18 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/kimi-for-coding',
-          label: 'Kimi For Coding',
+          id: 'providers/kimi-code-plan-global',
+          label: 'Kimi For Coding (kimi.ai)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kimi-code-plan-cn',
+          label: 'Kimi For Coding (kimi.com)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/klokintegration',
+          label: 'klokintegration.se',
         },
         {
           type: 'doc',
@@ -533,6 +583,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
+        },
+        {
+          type: 'doc',
+          id: 'providers/llmtech',
+          label: 'LLM Tech',
         },
         {
           type: 'doc',
@@ -566,8 +621,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/melious',
+          label: 'Melious',
+        },
+        {
+          type: 'doc',
           id: 'providers/meta',
           label: 'Meta',
+        },
+        {
+          type: 'doc',
+          id: 'providers/minimax-cn',
+          label: 'MiniMax (minimax.cn)',
         },
         {
           type: 'doc',
@@ -576,18 +641,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/minimax-cn',
-          label: 'MiniMax (minimaxi.com)',
+          id: 'providers/minimax-cn-coding-plan',
+          label: 'MiniMax Token Plan (minimax.cn)',
         },
         {
           type: 'doc',
           id: 'providers/minimax-coding-plan',
           label: 'MiniMax Token Plan (minimax.io)',
-        },
-        {
-          type: 'doc',
-          id: 'providers/minimax-cn-coding-plan',
-          label: 'MiniMax Token Plan (minimaxi.com)',
         },
         {
           type: 'doc',
@@ -636,6 +696,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/nan',
+          label: 'NaN',
+        },
+        {
+          type: 'doc',
           id: 'providers/nano-gpt',
           label: 'NanoGPT',
         },
@@ -676,6 +741,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/oci',
+          label: 'OCI Generative AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/ofox',
           label: 'Ofox',
         },
@@ -698,6 +768,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/opencode',
           label: 'OpenCode Zen',
+        },
+        {
+          type: 'doc',
+          id: 'providers/openreason',
+          label: 'OpenReason',
         },
         {
           type: 'doc',
@@ -811,6 +886,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/sensenova',
+          label: 'SenseNova (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/siliconflow',
           label: 'SiliconFlow',
         },
@@ -871,6 +951,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tempr',
+          label: 'Tempr',
+        },
+        {
+          type: 'doc',
           id: 'providers/tencent-coding-plan',
           label: 'Tencent Coding Plan (China)',
         },
@@ -911,6 +996,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tokengo',
+          label: 'TokenGo',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tokenrouter',
+          label: 'TokenRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/trustedrouter',
           label: 'TrustedRouter',
         },
@@ -936,8 +1031,28 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/vancine',
+          label: 'Vancine',
+        },
+        {
+          type: 'doc',
+          id: 'providers/vispark',
+          label: 'Vispark',
+        },
+        {
+          type: 'doc',
           id: 'providers/vivgrid',
           label: 'Vivgrid',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine',
+          label: 'Volcengine Ark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine-coding-plan',
+          label: 'Volcengine Ark Coding Plan',
         },
         {
           type: 'doc',
@@ -951,8 +1066,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/wandb',
-          label: 'Weights & Biases',
+          id: 'providers/wallaby',
+          label: 'Wallaby',
         },
         {
           type: 'doc',

@@ -794,7 +794,7 @@ describe('Scorer Utils', () => {
       });
     });
 
-    it('should prefer toolInvocations over content.parts when both are present', () => {
+    it('should keep calls from both toolInvocations and content.parts when both are present', () => {
       const output: ScorerRunOutputForAgent = [
         createTestMessage({
           content: 'Done.',
@@ -810,7 +810,8 @@ describe('Scorer Utils', () => {
           ],
         }),
       ];
-      // Inject an extra tool-invocation part that should be ignored
+      // A distinct call stored only in parts must stay visible. Dropping it is what
+      // hid thrown calls when a message carried both forms (issue #23460).
       (output[0]!.content as any).parts.push({
         type: 'tool-invocation',
         toolInvocation: {
@@ -824,8 +825,71 @@ describe('Scorer Utils', () => {
 
       const results = extractToolResults(output);
 
+      expect(results).toHaveLength(2);
+      // With no shared toolCallId anchoring them, legacy-only calls trail the parts
+      // they cannot be ordered against — same as core's `extractTrajectory`.
+      expect(results.map(r => r.toolName)).toEqual(['partsTool', 'legacyTool']);
+    });
+
+    it('should count a mirrored toolCallId once, taking the parts entry', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Done.',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'shared-call',
+              toolName: 'sharedTool',
+              args: {},
+              result: { source: 'legacy' },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+      (output[0]!.content as any).parts.push({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'shared-call',
+          toolName: 'sharedTool',
+          args: {},
+          result: { source: 'parts' },
+        },
+      });
+
+      const results = extractToolResults(output);
+
       expect(results).toHaveLength(1);
-      expect(results[0]?.toolName).toBe('legacyTool');
+      expect(results[0]?.result).toEqual({ source: 'parts' });
+    });
+
+    it('should not produce a result entry for a thrown call', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'That failed.',
+          role: 'assistant',
+          id: 'msg-1',
+          parts: [
+            { type: 'text', text: 'That failed.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: createToolInvocation({
+                toolCallId: 'bad',
+                toolName: 'save',
+                args: { value: 'x' },
+                state: 'output-error',
+                errorText: 'Save failed',
+              }),
+            },
+          ],
+        }),
+      ];
+
+      const results = extractToolResults(output);
+
+      // A thrown call carries errorText, not a result.
+      expect(results).toHaveLength(0);
     });
   });
 
@@ -896,6 +960,143 @@ describe('Scorer Utils', () => {
 
       expect(tools).toHaveLength(0);
       expect(toolCallInfos).toHaveLength(0);
+    });
+
+    it('should count a natively thrown call (state "output-error") as a real call', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'That failed.',
+          role: 'assistant',
+          id: 'msg-1',
+          parts: [
+            { type: 'text', text: 'That failed.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: createToolInvocation({
+                toolCallId: 'bad',
+                toolName: 'save',
+                args: { value: 'x' },
+                state: 'output-error',
+                errorText: 'Save failed',
+              }),
+            },
+          ],
+        }),
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['save']);
+      expect(toolCallInfos).toHaveLength(1);
+      expect(toolCallInfos[0]?.toolCallId).toBe('bad');
+    });
+
+    it('should see both calls when a failed call exists only in parts alongside a legacy array', () => {
+      const good = createToolInvocation({
+        toolCallId: 'good',
+        toolName: 'save',
+        args: {},
+        result: { saved: true },
+        state: 'result',
+      });
+      const bad = createToolInvocation({
+        toolCallId: 'bad',
+        toolName: 'save',
+        args: {},
+        state: 'output-error',
+        errorText: 'Save failed',
+      });
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Partly done.',
+          role: 'assistant',
+          id: 'msg-1',
+          // The legacy array mirrors only the successful call.
+          toolInvocations: [good],
+          parts: [
+            { type: 'text', text: 'Partly done.' },
+            { type: 'tool-invocation', toolInvocation: good },
+            { type: 'tool-invocation', toolInvocation: bad },
+          ],
+        }),
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['save', 'save']);
+      expect(toolCallInfos.map(i => i.toolCallId)).toEqual(['good', 'bad']);
+    });
+
+    it('should retain legacy-only calls that are absent from parts', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Done.',
+          role: 'assistant',
+          id: 'msg-1',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'legacy-only',
+              toolName: 'legacyTool',
+              args: {},
+              result: { ok: true },
+              state: 'result',
+            }),
+          ],
+          parts: [{ type: 'text', text: 'Done.' }],
+        }),
+      ];
+
+      const { tools } = extractToolCalls(output);
+
+      expect(tools).toEqual(['legacyTool']);
+    });
+
+    it('should preserve compatible call order when merging legacy-only and shared calls', () => {
+      const a = createToolInvocation({ toolCallId: 'a', toolName: 'toolA', args: {}, result: {}, state: 'result' });
+      const b = createToolInvocation({ toolCallId: 'b', toolName: 'toolB', args: {}, result: {}, state: 'result' });
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Done.',
+          role: 'assistant',
+          id: 'msg-1',
+          toolInvocations: [a, b],
+          // Parts only know about `b`; `a` must stay ahead of it rather than being appended.
+          parts: [
+            { type: 'text', text: 'Done.' },
+            { type: 'tool-invocation', toolInvocation: b },
+          ],
+        }),
+      ];
+
+      const { tools } = extractToolCalls(output);
+
+      expect(tools).toEqual(['toolA', 'toolB']);
+    });
+
+    it('should still exclude partial calls', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Streaming...',
+          role: 'assistant',
+          id: 'msg-1',
+          parts: [
+            { type: 'text', text: 'Streaming...' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: createToolInvocation({
+                toolCallId: 'partial',
+                toolName: 'save',
+                args: {},
+                state: 'partial-call',
+              }),
+            },
+          ],
+        }),
+      ];
+
+      const { tools } = extractToolCalls(output);
+
+      expect(tools).toHaveLength(0);
     });
   });
 
@@ -1585,6 +1786,173 @@ describe('Scorer Utils', () => {
   });
 
   describe('checkTrajectoryEfficiency', () => {
+    it.each([undefined, NaN, Infinity, -1])('rejects missing or invalid token counts: %s', count => {
+      for (const field of ['promptTokens', 'completionTokens'] as const) {
+        const trajectory: Trajectory = {
+          steps: [
+            { stepType: 'model_generation', name: 'model', promptTokens: 0, completionTokens: 0, [field]: count },
+          ],
+        };
+        expect(() => checkTrajectoryEfficiency(trajectory, { maxTotalTokens: 10 })).toThrow(/token/i);
+      }
+    });
+
+    it.each([{ steps: [] }, { steps: [{ stepType: 'tool_call' as const, name: 'search' }] }])(
+      'rejects a token budget without model-generation evidence',
+      ({ steps }) => {
+        expect(() => checkTrajectoryEfficiency({ steps }, { maxTotalTokens: 10 })).toThrow(/token/i);
+      },
+    );
+
+    it.each([undefined, NaN, Infinity, -1])('rejects missing or invalid duration: %s', duration => {
+      const steps: Trajectory['steps'] = [{ stepType: 'tool_call', name: 'search', durationMs: duration }];
+      expect(() => checkTrajectoryEfficiency({ steps }, { maxTotalDurationMs: 10 })).toThrow(/duration/i);
+      if (duration !== undefined) {
+        expect(() =>
+          checkTrajectoryEfficiency(
+            { steps: [{ ...steps[0]!, durationMs: 0 }], totalDurationMs: duration },
+            { maxTotalDurationMs: 10 },
+          ),
+        ).toThrow(/duration/i);
+      }
+    });
+
+    it('rejects empty or partially measured duration fallback', () => {
+      for (const steps of [
+        [],
+        [
+          { stepType: 'tool_call' as const, name: 'a', durationMs: 0 },
+          { stepType: 'tool_call' as const, name: 'b' },
+        ],
+      ]) {
+        expect(() => checkTrajectoryEfficiency({ steps }, { maxTotalDurationMs: 10 })).toThrow(/duration/i);
+      }
+    });
+
+    it('preserves measured zeros and checks positive usage against a zero budget', () => {
+      const trajectory: Trajectory = {
+        steps: [{ stepType: 'model_generation', name: 'model', promptTokens: 0, completionTokens: 0 }],
+        totalDurationMs: 0,
+      };
+      expect(checkTrajectoryEfficiency(trajectory, { maxTotalTokens: 0, maxTotalDurationMs: 0 }).score).toBe(1);
+      expect(checkTrajectoryEfficiency({ steps: [], totalDurationMs: 0 }, { maxTotalDurationMs: 0 }).score).toBe(1);
+      expect(
+        checkTrajectoryEfficiency(
+          {
+            steps: [{ stepType: 'model_generation', name: 'model', promptTokens: 1, completionTokens: 0 }],
+            totalDurationMs: 1,
+          },
+          { maxTotalTokens: 0, maxTotalDurationMs: 0, noRedundantCalls: false },
+        ).score,
+      ).toBe(0);
+    });
+
+    it('counts nested model generations once and rejects incomplete nested counts', () => {
+      const nested: Trajectory['steps'][number] = {
+        stepType: 'model_generation',
+        name: 'inner',
+        promptTokens: 20,
+        completionTokens: 30,
+      };
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'model_generation',
+            name: 'outer',
+            promptTokens: 2,
+            completionTokens: 3,
+            children: [
+              {
+                stepType: 'tool_call',
+                name: 'delegate',
+                children: [{ stepType: 'agent_run', name: 'agent', children: [nested] }],
+              },
+            ],
+          },
+        ],
+      };
+      expect(checkTrajectoryEfficiency(trajectory, { maxTotalTokens: 10 })).toMatchObject({
+        totalTokens: 55,
+        overTokenBudget: true,
+      });
+      nested.completionTokens = undefined;
+      expect(() => checkTrajectoryEfficiency(trajectory, { maxTotalTokens: 10 })).toThrow(/token/i);
+    });
+
+    it('uses top-level duration without adding nested durations', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent',
+            durationMs: 10,
+            children: [{ stepType: 'tool_call', name: 'search', durationMs: 8 }],
+          },
+          { stepType: 'tool_call', name: 'finish', durationMs: 2 },
+        ],
+      };
+      expect(checkTrajectoryEfficiency(trajectory, { maxTotalDurationMs: 12 }).totalDurationMs).toBe(12);
+      expect(
+        checkTrajectoryEfficiency({ ...trajectory, totalDurationMs: 5 }, { maxTotalDurationMs: 5 }).totalDurationMs,
+      ).toBe(5);
+    });
+
+    it('does not require measurements for unrelated checks', () => {
+      const unknown: Trajectory = { steps: [{ stepType: 'model_generation', name: 'model' }] };
+      expect(checkTrajectoryEfficiency(unknown, { maxSteps: 1 }).score).toBe(1);
+      expect(checkTrajectoryEfficiency(unknown).score).toBe(1);
+      expect(checkTrajectoryEfficiency({ ...unknown, totalDurationMs: 0 }, { maxTotalDurationMs: 0 }).score).toBe(1);
+      expect(
+        checkTrajectoryEfficiency(
+          { steps: [{ stepType: 'model_generation', name: 'model', promptTokens: 0, completionTokens: 0 }] },
+          { maxTotalTokens: 0 },
+        ).score,
+      ).toBe(1);
+    });
+
+    it.each([NaN, Infinity, -1])('rejects invalid configured limits: %s', limit => {
+      for (const field of ['maxSteps', 'maxTotalTokens', 'maxTotalDurationMs'] as const) {
+        expect(() =>
+          checkTrajectoryEfficiency(
+            {
+              steps: [{ stepType: 'model_generation', name: 'model', promptTokens: 0, completionTokens: 0 }],
+              totalDurationMs: 0,
+            },
+            { [field]: limit },
+          ),
+        ).toThrow(/budget/i);
+      }
+    });
+
+    it('rejects non-finite measurement totals', () => {
+      expect(() =>
+        checkTrajectoryEfficiency(
+          {
+            steps: [
+              {
+                stepType: 'model_generation',
+                name: 'model',
+                promptTokens: Number.MAX_VALUE,
+                completionTokens: Number.MAX_VALUE,
+              },
+            ],
+          },
+          { maxTotalTokens: 10 },
+        ),
+      ).toThrow(/token/i);
+      expect(() =>
+        checkTrajectoryEfficiency(
+          {
+            steps: [
+              { stepType: 'tool_call', name: 'a', durationMs: Number.MAX_VALUE },
+              { stepType: 'tool_call', name: 'b', durationMs: Number.MAX_VALUE },
+            ],
+          },
+          { maxTotalDurationMs: 10 },
+        ),
+      ).toThrow(/duration/i);
+    });
+
     it('should return score 1.0 when all budgets are met and no redundancy', () => {
       const trajectory: Trajectory = {
         steps: [

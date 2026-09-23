@@ -27,8 +27,8 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
     if (!workflows) return [];
     return Object.entries(workflows).map(([id, workflow]) => ({
       value: id,
-      label: (workflow as { name?: string }).name || id,
-      description: (workflow as { description?: string }).description || '',
+      label: workflow.name || id,
+      description: workflow.description || '',
     }));
   }, [workflows]);
 
@@ -38,16 +38,16 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
   };
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border">
+    <div className="rounded-md border border-border bg-background">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="bg-surface3 flex w-full items-center gap-1 p-3">
-          <ChevronRight className="text-neutral3 h-4 w-4" />
+        <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
           <SectionTitle icon={<WorkflowIcon className="text-accent3" />}>
-            Workflows{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+            Workflows{count > 0 && <span className="text-muted-foreground">({count})</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-border1 border-t p-3">
+          <div className="border-t border-border p-3">
             <Controller
               name="workflows"
               control={control}
@@ -82,6 +82,8 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
                   <div className="flex flex-col gap-2">
                     <Combobox
                       multiple
+                      name="workflows"
+                      aria-label="Workflows"
                       options={options}
                       value={selectedIds}
                       onValueChange={handleValueChange}

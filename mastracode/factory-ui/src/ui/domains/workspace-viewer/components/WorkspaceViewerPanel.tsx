@@ -1,6 +1,9 @@
 import { useState } from 'react';
 
 import { useWorkspaceChanges, useWorkspaceFile, useWorkspaceFiles } from '../../../../hooks/use-fs';
+import type { WorkspacePanelSize } from '../layout';
+import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
+import type { WorkItem } from '../../factory/services/workItems';
 import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
@@ -10,21 +13,26 @@ import { selectWorkspaceFilePreview } from './workspace-file-preview';
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
   threadId: string;
-  onExpandedChange?: (expanded: boolean) => void;
+  onSizeChange?: (size: WorkspacePanelSize) => void;
   visible?: boolean;
+  workItem?: WorkItem;
+  factoryProjectId?: string;
 }
 
 type WorkspacePanelView =
   | { type: 'overview' }
   | { type: 'files'; selectedPath?: string }
   | { type: 'file'; path: string }
-  | { type: 'changes' };
+  | { type: 'changes' }
+  | { type: 'feed' };
 
 export function WorkspaceViewerPanel({
   workspacePath,
   threadId,
-  onExpandedChange,
+  onSizeChange,
   visible = true,
+  workItem,
+  factoryProjectId,
 }: WorkspaceViewerPanelProps) {
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
@@ -38,12 +46,23 @@ export function WorkspaceViewerPanel({
 
   const showOverview = () => {
     setView({ type: 'overview' });
-    onExpandedChange?.(false);
+    onSizeChange?.('compact');
   };
   const showView = (type: 'files' | 'changes') => {
     setView({ type });
-    onExpandedChange?.(true);
+    onSizeChange?.('full');
   };
+  // The feed grows with the conversation, so an empty one is a composer rather than a void.
+  const showFeed = () => {
+    setView({ type: 'feed' });
+    onSizeChange?.('half');
+  };
+
+  if (view.type === 'feed' && workItem) {
+    return (
+      <WorkItemFeedPanel item={workItem} factoryProjectId={factoryProjectId} visible={visible} onBack={showOverview} />
+    );
+  }
 
   if (view.type === 'changes') {
     return (
@@ -101,6 +120,8 @@ export function WorkspaceViewerPanel({
       changesError={changes.error ?? undefined}
       onShowFiles={() => showView('files')}
       onShowChanges={() => showView('changes')}
+      commentCount={workItem?.commentCount}
+      onShowComments={workItem ? showFeed : undefined}
     />
   );
 }

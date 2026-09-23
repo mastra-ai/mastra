@@ -1,0 +1,145 @@
+---
+title: "E2B Desktop | Sandbox"
+description: "Run Mastra agents in E2B cloud desktops with screenshot, mouse, keyboard, command execution, live viewing, storage mounts, and computer-use tools."
+packages:
+  - "@mastra/e2b-desktop"
+---
+
+# E2B Desktop
+
+Runs a full Linux desktop environment in an isolated [E2B](https://e2b.dev) cloud sandbox with screenshot, mouse, and keyboard control. `E2BDesktopSandbox` extends [`E2BSandbox`](/integrations/sandboxes/e2b), so everything the base provider supports (command execution, background processes, file upload, pause/resume reconnection) works against the same desktop machine. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/e2b-desktop
+```
+
+Set your E2B API key with the `E2B_API_KEY` environment variable or the `apiKey` option.
+
+## Usage
+
+Add an `E2BDesktopSandbox` to a workspace and assign it to an agent. Because the sandbox supports the [computer capability](/docs/sandbox/computer), the workspace registers the `mastra_workspace_computer_*` tools alongside the shell and process tools:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { E2BDesktopSandbox } from '@mastra/e2b-desktop'
+
+const workspace = new Workspace({
+  sandbox: new E2BDesktopSandbox({
+    resolution: [1280, 720],
+  }),
+})
+
+const agent = new Agent({
+  id: 'desktop-agent',
+  name: 'Desktop Agent',
+  instructions: 'You can control a Linux desktop and run shell commands.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace,
+})
+
+const response = await agent.generate(
+  'Take a screenshot, then create /tmp/hello.txt with the text "hello" and cat it.',
+)
+```
+
+The agent can mix desktop actions (click, type, screenshot) with shell commands. Both surfaces operate on the same machine.
+
+### Direct desktop control
+
+Use the `computer` capability programmatically without an agent:
+
+```typescript
+const sandbox = new E2BDesktopSandbox()
+await sandbox.start()
+
+await sandbox.computer.leftClick(100, 200)
+await sandbox.computer.type('hello')
+const { data } = await sandbox.computer.screenshot() // PNG bytes
+
+const size = await sandbox.computer.getScreenSize()
+console.log(size) // { width: 1024, height: 768 }
+```
+
+### Live desktop view
+
+`streamUrl()` starts an authenticated noVNC stream inside the sandbox and returns a viewer URL. Open it in a browser to watch the agent work:
+
+```typescript
+const url = await sandbox.computer.streamUrl()
+// https://6080-<sandbox-id>.e2b.app/vnc.html?...&password=<auth-key>
+```
+
+### Desktop SDK escape hatch
+
+Desktop-only APIs such as `launch`, `open`, window helpers, and custom stream control are available on the underlying [`@e2b/desktop`](https://github.com/e2b-dev/desktop) sandbox:
+
+```typescript
+await sandbox.desktop.launch('xfce4-terminal')
+await sandbox.desktop.open('https://mastra.ai')
+```
+
+## Constructor parameters
+
+Accepts all [`E2BSandbox` options](/integrations/sandboxes/e2b#constructor-parameters) plus:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resolution',
+    type: '[number, number]',
+    description: 'Desktop display resolution as [width, height] in pixels. Applies to newly created sandboxes only.',
+    isOptional: true,
+  },
+  {
+    name: 'dpi',
+    type: 'number',
+    description: 'Desktop display DPI. Applies to newly created sandboxes only.',
+    isOptional: true,
+  },
+]}
+/>
+
+When no `template` is provided, the E2B-hosted `desktop` template is used instead of the base provider's mountable template.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'computer',
+    type: 'SandboxComputer',
+    description:
+      'Computer-use capability: screenshot, mouse, keyboard, and stream URL. See [SandboxComputer reference](/reference/workspace/sandbox#computer-capability).',
+  },
+  {
+    name: 'desktop',
+    type: 'Sandbox',
+    description:
+      'The underlying @e2b/desktop SDK sandbox for desktop-only APIs. Throws if the sandbox has not started.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('E2BDesktopSandbox')",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('e2b-desktop')",
+  },
+]}
+/>
+
+## Cloud storage mounting
+
+The default `desktop` template has no FUSE tooling, so [cloud storage mounting](/integrations/sandboxes/e2b#mounting-cloud-storage) requires a custom desktop template with `s3fs` or `gcsfuse` installed. Pass it with the `template` option.
+
+## Related
+
+- [Computer-use tools](/docs/sandbox/computer#computer-tools)
+- [`E2BSandbox` reference](/integrations/sandboxes/e2b)
+- [`WorkspaceSandbox` interface](/reference/workspace/sandbox)
+- [Sandbox](/docs/sandbox/overview)

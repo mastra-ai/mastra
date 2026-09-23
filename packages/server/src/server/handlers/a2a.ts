@@ -19,14 +19,16 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 import { signAgentCard } from '../a2a/agent-card-signing';
+import { createV1AgentCard, type AgentCardV1 } from '../a2a/agent-card-v1';
 import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
 import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
-import { applyUpdateToTask, loadOrCreateTask } from '../a2a/tasks';
+import { applyUpdateToTask, loadOrCreateTask, resolveTaskMemory } from '../a2a/tasks';
 import {
   a2aAgentIdPathParams,
+  a2aV1MethodMap,
   agentExecutionBodySchema,
   agentCardResponseSchema,
   agentExecutionResponseSchema,
@@ -144,8 +146,28 @@ function normalizeV1Part(part: Record<string, unknown>) {
   return { kind: 'data', data: part.data, metadata: part.metadata };
 }
 
-function normalizeV1Params(params: Record<string, any> | undefined): Record<string, any> | undefined {
-  if (!params?.message) {
+function normalizeV1Params(method: string, params: Record<string, any> | undefined): Record<string, any> | undefined {
+  if (!params) {
+    return params;
+  }
+
+  if (method === 'tasks/pushNotificationConfig/set' && !params.pushNotificationConfig) {
+    const { taskId, tenant: _tenant, ...pushNotificationConfig } = params;
+    return { taskId, pushNotificationConfig };
+  }
+
+  if (
+    (method === 'tasks/pushNotificationConfig/get' || method === 'tasks/pushNotificationConfig/delete') &&
+    params.taskId
+  ) {
+    return { id: params.taskId, pushNotificationConfigId: params.id };
+  }
+
+  if (method === 'tasks/pushNotificationConfig/list' && params.taskId) {
+    return { id: params.taskId, pageSize: params.pageSize, pageToken: params.pageToken };
+  }
+
+  if (!params.message) {
     return params;
   }
 
@@ -264,6 +286,40 @@ function toV1Result(result: any, method: string) {
   return result;
 }
 
+function toV1PushNotificationConfig(config: TaskPushNotificationConfig) {
+  return {
+    taskId: config.taskId,
+    ...config.pushNotificationConfig,
+  };
+}
+
+function convertV1PushNotificationResponse(response: any, method: string, params: Record<string, any> | undefined) {
+  if (!response || !('result' in response)) return response;
+
+  if (method === 'tasks/pushNotificationConfig/list') {
+    const configs = (response.result as TaskPushNotificationConfig[]).map(toV1PushNotificationConfig);
+    const requestedPageSize = params?.pageSize ?? 50;
+    const offset = params?.pageToken ? Number.parseInt(params.pageToken, 10) : 0;
+    const start = Number.isFinite(offset) && offset >= 0 ? offset : 0;
+    const page = configs.slice(start, start + requestedPageSize);
+    const nextOffset = start + page.length;
+
+    return {
+      ...response,
+      result: {
+        configs: page,
+        nextPageToken: nextOffset < configs.length ? String(nextOffset) : '',
+      },
+    };
+  }
+
+  if (method === 'tasks/pushNotificationConfig/delete') {
+    return response;
+  }
+
+  return { ...response, result: toV1PushNotificationConfig(response.result) };
+}
+
 function convertV1Response(response: any, method: string) {
   if (!response || !('result' in response)) return response;
   return { ...response, result: toV1Result(response.result, method) };
@@ -307,6 +363,19 @@ function createAgentCardDefaults({
   };
 }
 
+type AgentCardOptions = Context & {
+  requestContext: RequestContext;
+  agentId: string;
+  executionUrl?: string;
+  version?: string;
+  provider?: { organization: string; url: string };
+  pushNotifications?: boolean;
+  protocolVersion?: A2AProtocolVersion;
+};
+
+export function getAgentCardByIdHandler(options: AgentCardOptions & { protocolVersion: '1.0' }): Promise<AgentCardV1>;
+export function getAgentCardByIdHandler(options: AgentCardOptions & { protocolVersion?: '0.3' }): Promise<AgentCard>;
+export function getAgentCardByIdHandler(options: AgentCardOptions): Promise<AgentCard | AgentCardV1>;
 export async function getAgentCardByIdHandler({
   mastra,
   agentId,
@@ -318,18 +387,9 @@ export async function getAgentCardByIdHandler({
   version = '1.0',
   pushNotifications = false,
   requestContext,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: keyof ReturnType<typeof mastra.listAgents>;
-  executionUrl?: string;
-  version?: string;
-  provider?: {
-    organization: string;
-    url: string;
-  };
-  pushNotifications?: boolean;
-}): Promise<AgentCard> {
-  const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
+  protocolVersion = '0.3',
+}: AgentCardOptions): Promise<AgentCard | AgentCardV1> {
+  const agent = await getAgentFromSystem({ mastra, agentId });
 
   const [instructions, tools]: [
     Awaited<ReturnType<typeof agent.getInstructions>>,
@@ -338,7 +398,7 @@ export async function getAgentCardByIdHandler({
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
-    name: agent.id || (agentId as string),
+    name: agent.id || agentId,
     description: convertInstructionsToString(instructions),
     url: executionUrl,
     provider,
@@ -354,13 +414,14 @@ export async function getAgentCardByIdHandler({
     })),
   };
 
+  const card = protocolVersion === '1.0' ? createV1AgentCard(agentCard) : agentCard;
   const signing = mastra.getServer?.()?.a2a?.agentCardSigning;
   if (!signing) {
-    return agentCard;
+    return card;
   }
 
   return signAgentCard({
-    agentCard,
+    agentCard: card,
     signing,
   });
 }
@@ -388,7 +449,7 @@ function validateMessageSendParams(params: MessageSendParams) {
     messageSendParamsSchema.parse(params);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw MastraA2AError.invalidParams((error as z.ZodError).issues[0]!.message);
+      throw MastraA2AError.invalidParams(error.issues[0]!.message);
     }
 
     throw error;
@@ -1053,7 +1114,6 @@ function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task
 async function executeMessageSend({
   requestId,
   message,
-  metadata,
   currentData,
   taskStore,
   pushNotificationSender,
@@ -1065,7 +1125,6 @@ async function executeMessageSend({
 }: {
   requestId: number | string;
   message: MessageSendParams['message'];
-  metadata: MessageSendParams['metadata'];
   currentData: Task;
   taskStore: InMemoryTaskStore;
   pushNotificationSender: DefaultPushNotificationSender;
@@ -1075,12 +1134,11 @@ async function executeMessageSend({
   requestContext: RequestContext;
   resume?: ResumeClaim;
 }) {
-  const { contextId } = message;
-
   try {
-    // Pass contextId as threadId for memory persistence across A2A conversations
-    // Allow user to pass resourceId via metadata, fall back to agentId
-    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const memory = {
+      ...resolveTaskMemory({ task: currentData, agentId, requestContext }),
+      thread: currentData.contextId,
+    };
     const result = resume
       ? await agent.resumeGenerate(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
           runId: resume.runId,
@@ -1090,7 +1148,7 @@ async function executeMessageSend({
       : await agent.generate([convertToCoreMessage(message)], {
           runId: currentData.id,
           requestContext,
-          ...(contextId ? { threadId: contextId, resourceId } : {}),
+          memory,
         });
 
     const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
@@ -1236,6 +1294,7 @@ export async function handleMessageSend({
   if (message.taskId && !existingTask) {
     throw MastraA2AError.taskNotFound(message.taskId);
   }
+  resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
   if (params.configuration?.blocking === false && existingTask?.status.state === 'working') {
     return createSuccessResponse(requestId, existingTask);
   }
@@ -1270,6 +1329,7 @@ export async function handleMessageSend({
     message,
     contextId,
     metadata,
+    requestContext,
   });
 
   if (params.configuration?.pushNotificationConfig) {
@@ -1299,7 +1359,6 @@ export async function handleMessageSend({
   const execution = executeMessageSend({
     requestId,
     message,
-    metadata,
     currentData,
     taskStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -1563,9 +1622,11 @@ export async function* handleMessageStream({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
-  if (message.taskId && !taskStore.loadWithVersion({ agentId, taskId })) {
+  const existingTask = taskStore.loadWithVersion({ agentId, taskId })?.task;
+  if (message.taskId && !existingTask) {
     throw MastraA2AError.taskNotFound(message.taskId);
   }
+  resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
 
   // A follow-up message for an interrupted task resumes the suspended agent
   // run instead of starting a fresh generation (A2A HITL continuation).
@@ -1588,6 +1649,7 @@ export async function* handleMessageStream({
     message,
     contextId,
     metadata,
+    requestContext,
   });
 
   if (params.configuration?.pushNotificationConfig) {
@@ -1626,7 +1688,10 @@ export async function* handleMessageStream({
   try {
     yield createSuccessResponse(requestId, currentData);
 
-    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const memory = {
+      ...resolveTaskMemory({ task: currentData, agentId, requestContext }),
+      thread: currentData.contextId,
+    };
     const result = resume
       ? await agent.resumeStream(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
           runId: resume.runId,
@@ -1638,7 +1703,7 @@ export async function* handleMessageStream({
           runId: taskId,
           requestContext,
           abortSignal: taskAbortController.signal,
-          ...(contextId ? { threadId: contextId, resourceId } : {}),
+          memory,
         });
     let sawTextArtifact = false;
     let pendingTextChunk: string | undefined;
@@ -2182,7 +2247,7 @@ export async function getAgentExecutionHandler({
   protocolVersion?: A2AProtocolVersion;
 }): Promise<any> {
   const agent = await getAgentFromSystem({ mastra, agentId });
-  const protocolParams = protocolVersion === '1.0' ? normalizeV1Params(params) : params;
+  const protocolParams = protocolVersion === '1.0' ? normalizeV1Params(method, params) : params;
   const {
     pushNotificationStore: resolvedPushNotificationStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -2271,38 +2336,46 @@ export async function getAgentExecutionHandler({
         });
         return protocolVersion === '1.0' ? convertV1Stream(result, method) : result;
       }
-      case 'tasks/pushNotificationConfig/set':
-        return await handleSetTaskPushNotificationConfig({
+      case 'tasks/pushNotificationConfig/set': {
+        const result = await handleSetTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as unknown as TaskPushNotificationConfig,
+          params: protocolParams as unknown as TaskPushNotificationConfig,
         });
-      case 'tasks/pushNotificationConfig/get':
-        return await handleGetTaskPushNotificationConfig({
+        return protocolVersion === '1.0' ? convertV1PushNotificationResponse(result, method, protocolParams) : result;
+      }
+      case 'tasks/pushNotificationConfig/get': {
+        const result = await handleGetTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as GetTaskPushNotificationConfigParams,
+          params: protocolParams as GetTaskPushNotificationConfigParams,
         });
-      case 'tasks/pushNotificationConfig/list':
-        return await handleListTaskPushNotificationConfig({
+        return protocolVersion === '1.0' ? convertV1PushNotificationResponse(result, method, protocolParams) : result;
+      }
+      case 'tasks/pushNotificationConfig/list': {
+        const result = await handleListTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as ListTaskPushNotificationConfigParams,
+          params: protocolParams as ListTaskPushNotificationConfigParams,
         });
-      case 'tasks/pushNotificationConfig/delete':
-        return await handleDeleteTaskPushNotificationConfig({
+        return protocolVersion === '1.0' ? convertV1PushNotificationResponse(result, method, protocolParams) : result;
+      }
+      case 'tasks/pushNotificationConfig/delete': {
+        const result = await handleDeleteTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as DeleteTaskPushNotificationConfigParams,
+          params: protocolParams as DeleteTaskPushNotificationConfigParams,
         });
+        return protocolVersion === '1.0' ? convertV1PushNotificationResponse(result, method, protocolParams) : result;
+      }
       case 'agent/getAuthenticatedExtendedCard':
         throw MastraA2AError.extendedAgentCardNotConfigured();
       default:
@@ -2340,7 +2413,7 @@ export function resolveA2AProtocolVersion(request?: Request): A2AProtocolVersion
 export const GET_AGENT_CARD_ROUTE = createRoute({
   method: 'GET',
   path: '/.well-known/:agentId/agent-card.json',
-  responseType: 'json',
+  responseType: 'datastream-response',
   pathParamSchema: a2aAgentIdPathParams,
   responseSchema: agentCardResponseSchema,
   summary: 'Get agent card',
@@ -2349,20 +2422,34 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ctx => {
     const executionUrl = getA2AExecutionUrl({
-      agentId: ctx.agentId as string,
+      agentId: ctx.agentId,
       request: (ctx as typeof ctx & { request?: Request }).request,
       routePrefix: ctx.routePrefix,
     });
 
-    return getAgentCardByIdHandler({
-      mastra: ctx.mastra,
-      requestContext: ctx.requestContext,
-      agentId: ctx.agentId,
-      executionUrl,
-      pushNotifications: true,
-    });
+    const headers = { Vary: 'A2A-Version' };
+    try {
+      const card = await getAgentCardByIdHandler({
+        mastra: ctx.mastra,
+        requestContext: ctx.requestContext,
+        agentId: ctx.agentId,
+        executionUrl,
+        pushNotifications: true,
+        protocolVersion: resolveA2AProtocolVersion(ctx.request),
+      });
+      return Response.json(card, { headers });
+    } catch (error) {
+      if (error instanceof MastraA2AError) {
+        return Response.json(normalizeError(error, null), { status: 400, headers });
+      }
+      throw error;
+    }
   },
 });
+
+function isV1Method(method: string): method is keyof typeof a2aV1MethodMap {
+  return Object.hasOwn(a2aV1MethodMap, method);
+}
 
 export const AGENT_EXECUTION_ROUTE = createRoute({
   method: 'POST',
@@ -2376,12 +2463,19 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, request, ...bodyParams }) => {
-    const { id: requestId, method } = bodyParams;
+    const { id: requestId } = bodyParams;
+    let { method } = bodyParams;
     const params = 'params' in bodyParams ? bodyParams.params : undefined;
 
     let protocolVersion: A2AProtocolVersion;
     try {
       protocolVersion = resolveA2AProtocolVersion(request);
+      if (isV1Method(method)) {
+        if (protocolVersion !== '1.0') {
+          throw MastraA2AError.methodNotFound(method);
+        }
+        method = a2aV1MethodMap[method];
+      }
     } catch (error) {
       return createA2AJsonResponse(normalizeError(error, requestId));
     }
@@ -2389,7 +2483,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
     const result = await getAgentExecutionHandler({
       requestId,
       mastra,
-      agentId: agentId as string,
+      agentId: agentId,
       requestContext,
       method,
       params,

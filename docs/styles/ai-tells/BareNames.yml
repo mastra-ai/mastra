@@ -1,0 +1,104 @@
+---
+extends: existence
+message: "AI designation verb: '%s'. Say that it specifies or references the thing. Disable this rule for API reference prose."
+level: error
+nonword: true
+ignorecase: true
+# The designation verb with an inanimate subject: a file, a field, a
+# sentence, or a recipe that "names" a thing instead of specifying,
+# referencing, selecting, or defining it ("the manifest names the tag,"
+# "the field names the target," "the plain sentence names the step that
+# handles the record," "a recipe names a gate," "it names a kind of
+# file," "the rejections named figurative language," "an identifier
+# naming an object"). The verb reads as precise because Go and Python
+# documentation use it for what an identifier denotes ("IsDir reports
+# whether the path names a directory," "charset names the character set
+# to use"), which is why AnthropomorphicJustification left the family
+# alone and CommitFigurativeVerbs covered it only where a commit message
+# is the text. The maintainer then met it in every document that passed
+# under the package (2026-09), one designation after another, and asked
+# for the verb flagged wherever a thing names a thing.
+#
+# The subject slot is open behind a determiner, in the BareHolds mold,
+# with the pronoun and relative subjects ("it names," "which names," "a
+# file that names"), the bare plural ("recipes name the gate"), the
+# modal ("must name a file"), and the gerund ("a string naming a
+# character set") as companions. The object is gated on its own
+# determiner so the noun stays out: "the type names that appear" and
+# "intrinsic names that have duplicates" put "that" after the plural
+# noun, which is why "that" is the one object the verb token refuses.
+# Naming as the human act sits in the exceptions: the people and bodies
+# who literally give or publish a name (a team names a release, a
+# complaint names a defendant).
+#
+# The count is small for a bare-verb rule: about fifteen matches across
+# the Go and Python standard libraries ("if a pattern names a
+# directory," "an import path can also name a package," "a tuple naming
+# the attributes assigned directly"), every one the designation sense
+# and each flagged on the maintainer's call. The idiom is denser in API
+# reference prose, where a parameter names what a function opens, than
+# anywhere else; a project writing that register disables the rule per
+# file. "The named file" is the same designation as an adjective and
+# belongs to NamedAdjective.
+exceptions:
+  # People and bodies that literally give a name
+  - "(?i)people"
+  - "(?i)person"
+  - "(?i)m[ae]n"
+  - "(?i)wom[ae]n"
+  - "(?i)child(?:ren)?"
+  - "(?i)kids?"
+  - "(?i)parents?"
+  - "(?i)mothers?"
+  - "(?i)fathers?"
+  - "(?i)teams?"
+  - "(?i)authors?"
+  - "(?i)maintainers?"
+  - "(?i)reviewers?"
+  - "(?i)users?"
+  - "(?i)callers?"
+  - "(?i)developers?"
+  - "(?i)engineers?"
+  - "(?i)committees?"
+  - "(?i)boards?"
+  - "(?i)councils?"
+  - "(?i)sponsors?"
+  - "(?i)donors?"
+  # The legal and journalistic register, where naming is publication
+  - "(?i)complaints?"
+  - "(?i)lawsuits?"
+  - "(?i)indictments?"
+  - "(?i)suits?"
+  - "(?i)plaintiffs?"
+  - "(?i)prosecutors?"
+  - "(?i)witness(?:es)?"
+  - "(?i)courts?"
+  - "(?i)judges?"
+  - "(?i)polls?"
+  - "(?i)surveys?"
+tokens:
+  # --- Determiner-gated designation: any artifact naming a determined
+  # object ("the manifest names the tag," "the field names the target,"
+  # "the rejections named figurative language," "a string naming a
+  # character set"), with an optional modifier and an optional adverb
+  # inside the span. The object lookahead refuses "that," which follows
+  # the plural noun in a relative clause ("the type names that appear"),
+  # and "the same," which follows the participle ("a variable named the
+  # same as its type").
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no|only|most|whatever|which) (?:[a-z'-]+ )?[a-z]+ (?:also |only |then |now |never |always |still |already |actually |simply |merely |just |each |all |both )?(?:names|named|naming) (?!the (?:same|way)\\b)(?:a|an|the|its|their|this|these|those|every|each|all|any|some|no|zero|one|two|three|both|what|whatever|which|whichever|exactly|only|nothing)\\b"
+
+  # --- The pronoun and relative subject ("it names a kind of file,"
+  # "which names the target," "a file that names the gate," "each
+  # names one profile").
+  - "\\b(?:it|which|that|this|one|each|either|neither|none|nothing|something|everything|what) (?:also |only |then |now |never |always |still |already |actually |simply |merely |just )?(?:names|named) (?:a|an|the|its|their|this|these|those|every|each|all|any|some|no|zero|one|two|three|both|what|whatever|which|whichever|exactly|only|nothing)\\b"
+
+  # --- The bare plural subject ("recipes name the gate," "both files
+  # name a scope") and the modal or negated verb ("must name a file,"
+  # "an import path can also name a package," "never names the
+  # target").
+  - "\\b[a-z]+s (?:also |only |then |now |never |always |still |already |actually |simply |merely |just |each |all |both )?name (?:a|an|the|its|their|this|these|those|every|each|all|any|some|no|zero|one|two|three|both|what|whatever|which|whichever|exactly|only|nothing)\\b"
+  - "\\b(?:can|could|may|might|must|should|will|would|cannot|can't|won't|does not|doesn't|did not|didn't|do not|don't|never) (?:also |only |never |still |ever |actually |simply |just )?name (?:a|an|the|its|their|this|these|those|every|each|all|any|some|no|zero|one|two|three|both|what|whatever|which|whichever|exactly|only|nothing)\\b"
+
+  # --- A file as the subject, which the determiner gate never sees
+  # ("vendir.yml names the tag," "mise.toml names the pins").
+  - "\\b[a-z][a-z0-9_.-]*\\.[a-z]{1,5} (?:also |only |then |now |never |always |still |already |actually |simply |merely |just )?(?:names|named|naming) (?:a|an|the|its|their|this|these|those|every|each|all|any|some|no|zero|one|two|three|both|what|whatever|which|whichever|exactly|only|nothing)\\b"

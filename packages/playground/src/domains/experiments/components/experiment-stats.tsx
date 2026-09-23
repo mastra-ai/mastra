@@ -1,6 +1,8 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CheckIcon, ClockIcon, TimerIcon, XIcon } from 'lucide-react';
+import { CircleCheckIcon, CircleXIcon, ClockIcon } from 'lucide-react';
 
 export interface ExperimentStatsProps {
   experiment: DatasetExperiment;
@@ -9,12 +11,36 @@ export interface ExperimentStatsProps {
 
 type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 
-const statusIconMap: Record<RunStatus, React.ReactNode> = {
-  pending: <ClockIcon />,
-  running: <TimerIcon />,
-  completed: <CheckIcon />,
-  failed: <XIcon />,
+const statusIconMap: Record<RunStatus, { icon: React.ReactNode; label: string }> = {
+  pending: { icon: <ClockIcon className="size-4 text-warning1" />, label: 'Pending' },
+  running: { icon: <Spinner size="sm" />, label: 'Running' },
+  completed: { icon: <CircleCheckIcon className="size-4 text-muted-foreground" />, label: 'Completed' },
+  failed: { icon: <CircleXIcon className="size-4 text-error" />, label: 'Failed' },
 };
+
+/** Compact status indicator — a small icon with a tooltip describing the run state. */
+export function ExperimentStatusIcon({
+  status,
+  className,
+}: {
+  status: DatasetExperiment['status'];
+  className?: string;
+}) {
+  const config = statusIconMap[status as RunStatus] ?? statusIconMap.pending;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span tabIndex={0} className={cn('flex shrink-0 items-center', className)}>
+            {config.icon}
+          </span>
+        }
+      />
+      <TooltipContent>{config.label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function ExperimentStats({ experiment, className }: ExperimentStatsProps) {
   const status = experiment.status as RunStatus;
@@ -22,34 +48,21 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
 
   return (
     <div className={cn('grid justify-items-end gap-3', className)}>
-      <div className="text-ui-lg text-neutral4 bg-surface5 flex items-center gap-2 rounded-lg p-1 px-3 capitalize">
-        <span
-          className={cn('w-5 h-5 flex items-center justify-center rounded-full text-black', '[&>svg]:w-4 [&>svg]:h-4', {
-            'bg-green-700': status === 'completed',
-            'bg-red-700': status === 'failed',
-            'bg-cyan-600': status === 'running',
-            'bg-yellow-600': status === 'pending',
-          })}
-        >
-          {statusIconMap[status]}
-        </span>
-        {experiment.status}
-      </div>
       <div
         className={cn(
-          'flex items-center gap-3 text-neutral3 text-ui-md ',
-          '[&>span]:flex [&>span]:gap-1 [&>span]:items-center ',
-          '[&_b]:text-neutral4 [&_b]:font-semibold',
+          'flex items-center gap-3 text-caption text-muted-foreground',
+          '[&>span]:flex [&>span]:items-center [&>span]:gap-1',
+          '[&_b]:text-column [&_b]:text-muted-foreground',
         )}
       >
         <span>
           Total: <b>{experiment.totalItems}</b>
         </span>
         <span>
-          Succeeded: <b>{experiment.succeededCount}</b>
+          Processed: <b>{experiment.succeededCount}</b>
         </span>
         <span>
-          Failed: <b>{experiment.failedCount}</b>
+          Errored: <b>{experiment.failedCount}</b>
         </span>
         {(status === 'pending' || status === 'running') && (
           <span>
@@ -58,9 +71,9 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
         )}
       </div>
 
-      {/* <div className="flex items-center gap-1.5 text-ui text-neutral4">
-        <span className="text-neutral3">{experiment.targetType}:</span>
-        <span className="text-neutral5 font-mono">{experiment.targetId}</span>
+      {/* <div className="flex items-center gap-1.5 text-ui text-muted-foreground">
+        <span className="text-muted-foreground">{experiment.targetType}:</span>
+        <span className="text-foreground font-mono">{experiment.targetId}</span>
       </div> */}
     </div>
   );

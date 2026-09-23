@@ -1,6 +1,6 @@
 # @mastra/voice-xai-realtime
 
-xAI Grok Voice Agent API integration for Mastra. This package provides a realtime `MastraVoice` provider that connects to xAI's WebSocket API for bidirectional text and audio conversations.
+`@mastra/voice-xai-realtime` connects Mastra agents to xAI's Grok Voice Agent WebSocket API for low-latency, bidirectional text and audio conversations. Use it when an agent needs live speech, server-side turn detection, interruption handling, and realtime transcripts through a single voice provider.
 
 ## Installation
 
@@ -8,17 +8,9 @@ xAI Grok Voice Agent API integration for Mastra. This package provides a realtim
 npm install @mastra/voice-xai-realtime
 ```
 
-## Configuration
-
-Set an xAI API key for server-side use:
-
-```bash
-XAI_API_KEY=your_xai_api_key
-```
-
-This provider is built for Node.js server-side runtimes. If you already mint xAI ephemeral tokens on your server, you can pass one with `ephemeralToken`; the provider sends it through the WebSocket protocol as `xai-client-secret.<token>` instead of sending an authorization header. If both `apiKey` and `ephemeralToken` are configured, the provider uses the ephemeral token.
-
 ## Usage
+
+Set `XAI_API_KEY`. The Node.js microphone and speaker example also uses the separately published `@mastra/node-audio` package.
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
@@ -57,50 +49,14 @@ const microphoneStream = getMicrophoneStream();
 await agent.voice.send(microphoneStream);
 ```
 
-## Server-side tools
+## Documentation
 
-xAI executes `web_search`, `x_search`, `file_search`, and `mcp` tools server-side. Pass them through `serverTools` or `session.tools`; the provider merges both arrays into the initial `session.update`:
+- [@mastra/voice-xai-realtime documentation](https://mastra.ai/integrations/voice/xai)
 
-```typescript
-const voice = new XAIRealtimeVoice({
-  apiKey: process.env.XAI_API_KEY,
-  serverTools: [
-    { type: 'web_search' },
-    {
-      type: 'mcp',
-      server_url: 'https://mcp.example.com/mcp',
-      server_label: 'business-tools',
-      allowed_tools: ['lookup_order'],
-    },
-  ],
-});
-```
+## Changelog
 
-Mastra function tools added with `addTools()` are converted into xAI function tools. When xAI emits function call events, this provider executes the Mastra tools, sends `function_call_output` items, and waits for all parallel tool calls to finish before sending the continuation `response.create`.
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/xai-realtime-api/CHANGELOG.md) for version history and release notes.
 
-`send()` requires an open WebSocket connection. Call `connect()` first for live microphone streaming. Readable stream chunks must be binary audio chunks (`Buffer`, `ArrayBuffer`, or a typed array).
+## Support
 
-## Supported voices
-
-- `eve`
-- `ara`
-- `rex`
-- `sal`
-- `leo`
-
-Custom xAI voice IDs can also be used as the `speaker` value.
-
-## Audio
-
-The default input and output format is 24 kHz PCM16:
-
-```typescript
-const voice = new XAIRealtimeVoice({
-  audio: {
-    input: { format: { type: 'audio/pcm', rate: 24000 } },
-    output: { format: { type: 'audio/pcm', rate: 24000 } },
-  },
-});
-```
-
-The provider also supports `audio/pcmu` and `audio/pcma` for telephony use cases. Those G.711 codecs use 8 kHz audio.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

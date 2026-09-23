@@ -223,13 +223,29 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       }
     }
     const env = this.sandbox.buildEnv(options.env);
-    const wrapped = this.sandbox.wrapCommandForIsolation(command);
+    const invocation = options.originalInvocation;
+    // Preserve the script as one argument instead of letting cmd.exe interpret its operators.
+    const directShell =
+      isWindows &&
+      this.sandbox.isolation === 'none' &&
+      invocation !== undefined &&
+      /^(sh|sh\.exe)$/i.test(path.win32.basename(invocation.command)) &&
+      invocation.args[0] === '-c' &&
+      invocation.args.length >= 2;
+    const wrapped = directShell ? invocation : this.sandbox.wrapCommandForIsolation(command);
 
     // Base options shared across all platforms.
+    //
+    // `stdinMode: 'ignore'` closes the child's stdin at spawn so it sees EOF
+    // immediately. Without it, a stdin-reading command (e.g. `rg` with no path
+    // argument) blocks forever waiting for input nothing will ever send, and the
+    // caller hangs. Callers that need to drive the process's stdin (`spawn` for
+    // an LSP server) keep the default writable pipe.
+    const stdio = options.stdinMode === 'ignore' ? (['ignore', 'pipe', 'pipe'] as const) : ('pipe' as const);
     const baseOptions = {
       cwd,
       env,
-      stdio: 'pipe' as const,
+      stdio,
       // Don't throw on non-zero exit — we handle exit codes ourselves.
       reject: false,
       // Don't buffer output — we stream it via ProcessHandle callbacks.
@@ -251,7 +267,8 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       // Process tree killing uses `taskkill /T` instead of Unix process groups.
       execaOptions = {
         ...baseOptions,
-        shell: this.sandbox.isolation === 'none',
+        shell: !directShell && this.sandbox.isolation === 'none',
+        windowsHide: true,
       };
     } else {
       // On Unix, `detached: true` creates a new process group so we can kill the

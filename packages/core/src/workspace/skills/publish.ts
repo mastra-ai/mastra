@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import matter from 'gray-matter';
 import type { BlobStore } from '../../storage/domains/blobs/base';
 import type {
@@ -32,11 +31,11 @@ export interface SkillPublishResult {
 /**
  * Compute SHA-256 hex hash of content (string or Buffer).
  */
-function hashContent(content: string | Buffer): string {
-  if (Buffer.isBuffer(content)) {
-    return createHash('sha256').update(content).digest('hex');
-  }
-  return createHash('sha256').update(content, 'utf-8').digest('hex');
+async function hashContent(content: string | Buffer): Promise<string> {
+  const bytes = typeof content === 'string' ? new TextEncoder().encode(content) : content;
+  const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', data));
+  return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -183,7 +182,7 @@ function buildSkillFileNodes(files: WalkedFile[]): StorageSkillFileNode[] {
 
     const fileName = segments[segments.length - 1]!;
     const content = file.isBinary
-      ? (Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content as string)).toString('base64')
+      ? (Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content)).toString('base64')
       : (file.content as string);
     cursor.push({ name: fileName, type: 'file', content });
   }
@@ -268,12 +267,12 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
   const now = new Date();
 
   for (const file of files) {
-    const hash = hashContent(file.content);
+    const hash = await hashContent(file.content);
     const mimeType = detectMimeType(file.path);
 
     if (file.isBinary) {
       // Binary file: store as base64-encoded string
-      const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content as string);
+      const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
       const size = buf.length;
       const base64Content = buf.toString('base64');
 

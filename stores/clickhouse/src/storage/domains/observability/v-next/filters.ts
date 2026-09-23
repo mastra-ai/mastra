@@ -388,6 +388,7 @@ export function buildFeedbackFilterConditions(filters: FeedbackFilter | undefine
   addEq(col('feedbackUserId'), fbActor, 'feedbackUserId', 'String', out);
 
   addEq(col('feedbackSource'), filters.feedbackSource, 'feedbackSource', 'String', out);
+  addEq(col('reviewStatus'), filters.reviewStatus, 'reviewStatus', 'String', out);
 
   if (typeof filters.feedbackType === 'string') {
     addEq(col('feedbackType'), filters.feedbackType, 'feedbackType', 'String', out);

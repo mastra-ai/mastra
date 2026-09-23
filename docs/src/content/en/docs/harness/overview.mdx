@@ -1,6 +1,6 @@
 ---
 title: "Harness"
-description: "Start, continue, update, and preserve agent work beyond a single request."
+description: "Use the Mastra harness to start, continue, update, and preserve agent work beyond one request with durable execution, goals, schedules, and signals."
 packages:
   - "@mastra/core"
 ---
@@ -25,6 +25,5 @@ Choose a starting point based on what the agent needs. You may use one capabilit
 | Start work automatically at recurring times | [Schedules](/docs/harness/schedules) | Start isolated runs or send prompts into an existing thread on a cron schedule. |
 | Add context, redirect active work, or wake an idle thread | [Signals](/docs/harness/signals) | Deliver input now or hold it for the next turn. |
 | React to changes in GitHub, Slack, continuous integration, or another external system | [Signal Providers](/docs/harness/signal-providers) | Track subscriptions and forward matching events to agent threads. |
-| Build an interactive product with sessions, modes, state, approvals, and events | [AgentController](/docs/harness/agent-controller) | Host isolated sessions around a shared agent runtime. |
-| Let users steer, queue follow-up work, or stop an interactive run | [AgentController](/docs/harness/agent-controller) | Expose run controls through each session. |
+| Build an interactive product with sessions, modes, state, approvals, and events, or let users steer, queue follow-up work, and stop a run | [AgentController](/docs/harness/agent-controller) | Host isolated sessions around a shared agent runtime, each with its own run controls. |
 | Give an agent files, a shell, and the defaults a coding agent needs | [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) | Build a standard agent with a workspace, task tracking, and retries already configured. |

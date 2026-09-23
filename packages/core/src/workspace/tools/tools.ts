@@ -8,21 +8,34 @@
  */
 
 import { z } from 'zod/v4';
+import type { ToolBackgroundConfig } from '../../background-tasks/types';
 import { RequestContext } from '../../request-context';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
-import { InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
+import { deriveReadScope, InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
 import type { FileReadTracker, FileWriteLock, WorkspaceFilesystem } from '../filesystem';
 import type { WorkspaceSandbox } from '../sandbox';
+import { supportsComputer } from '../sandbox';
 import type { Workspace } from '../workspace';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
+import { computerClickTool } from './computer-click';
+import { computerDoubleClickTool } from './computer-double-click';
+import { computerDragTool } from './computer-drag';
+import { computerGetScreenInfoTool } from './computer-get-screen-info';
+import { computerMoveMouseTool } from './computer-move-mouse';
+import { computerPressKeyTool } from './computer-press-key';
+import { computerRightClickTool } from './computer-right-click';
+import { computerScreenshotTool } from './computer-screenshot';
+import { computerScrollTool } from './computer-scroll';
+import { computerTypeTool } from './computer-type';
+import { computerWaitTool } from './computer-wait';
 import { deleteFileTool } from './delete-file';
 import { editFileTool } from './edit-file';
 import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
 import { fileStatTool } from './file-stat';
 import { getProcessOutputTool } from './get-process-output';
-import { grepTool } from './grep';
+import { createGrepTool, type GrepToolOptions } from './grep';
 import { indexContentTool } from './index-content';
 import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
@@ -107,6 +120,7 @@ function toPlainRequestContext(requestContext: unknown): Record<string, unknown>
 export interface ResolvedToolConfig {
   enabled: boolean;
   requireApproval: DynamicToolConfigValue<ToolConfigWithArgsContext>;
+  background?: ToolBackgroundConfig;
   requireReadBeforeWrite?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
   maxOutputTokens?: number;
   name?: string;
@@ -132,6 +146,7 @@ export async function resolveToolConfig(
 ): Promise<ResolvedToolConfig> {
   let enabled: DynamicToolConfigValue = true;
   let requireApproval: DynamicToolConfigValue<ToolConfigWithArgsContext> = false;
+  let background: ToolBackgroundConfig | undefined;
   let requireReadBeforeWrite: DynamicToolConfigValue<ToolConfigWithArgsContext> | undefined;
   let maxOutputTokens: number | undefined;
   let name: string | undefined;
@@ -153,6 +168,9 @@ export async function resolveToolConfig(
       if (perToolConfig.requireApproval !== undefined) {
         requireApproval = perToolConfig.requireApproval;
       }
+      if (perToolConfig.background !== undefined) {
+        background = perToolConfig.background;
+      }
       if (perToolConfig.requireReadBeforeWrite !== undefined) {
         requireReadBeforeWrite = perToolConfig.requireReadBeforeWrite;
       }
@@ -168,7 +186,15 @@ export async function resolveToolConfig(
   // Resolve `enabled` now (tool-listing time) — safe default: false (fail-closed)
   const resolvedEnabled = await resolveDynamicValue(enabled, context, false);
 
-  return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name, hooks };
+  return {
+    enabled: resolvedEnabled,
+    requireApproval,
+    background,
+    requireReadBeforeWrite,
+    maxOutputTokens,
+    name,
+    hooks,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -255,15 +281,20 @@ function wrapWithReadTracker(
       });
       let enrichedContext: any = { ...context, workspace: effectiveWorkspace };
       const fs: WorkspaceFilesystem | undefined = effectiveWorkspace.filesystem;
+      // Filesystem resolution is dynamic (per request context), so the scope
+      // must be derived here from the resolved filesystem — read records only
+      // count for the filesystem they were read from.
+      const scope = fs ? deriveReadScope(fs) : undefined;
 
       // Pre-execution: enforce read-before-write policy and/or attach
       // optimistic-concurrency mtime for write tools.
       if (mode === 'write' && fs) {
         // Optimistic concurrency: attach the mtime from the last read
         // *before* stat so it's preserved even when the file has been
-        // deleted externally (stat throws FileNotFoundError).
-        const record = readTracker.getReadRecord(input.path);
-        if (record) {
+        // deleted externally (stat throws FileNotFoundError). Records from a
+        // different filesystem scope must not leak their mtime here.
+        const record = await readTracker.getReadRecord(input.path);
+        if (record && record.scope === scope) {
           enrichedContext = { ...enrichedContext, __expectedMtime: record.modifiedAtRead };
         }
 
@@ -280,7 +311,7 @@ function wrapWithReadTracker(
               true,
             );
             if (shouldRequireRead) {
-              const check = readTracker.needsReRead(input.path, stat.modifiedAt);
+              const check = await readTracker.needsReRead(input.path, stat.modifiedAt, scope);
               if (check.needsReRead) {
                 throw new FileReadRequiredError(input.path, check.reason!);
               }
@@ -302,12 +333,12 @@ function wrapWithReadTracker(
       if (mode === 'read' && fs) {
         try {
           const stat = await fs.stat(input.path);
-          readTracker.recordRead(input.path, stat.modifiedAt);
+          await readTracker.recordRead(input.path, stat.modifiedAt, scope);
         } catch {
           // Ignore stat errors for tracking
         }
       } else if (mode === 'write') {
-        readTracker.clearReadRecord(input.path);
+        await readTracker.clearReadRecord(input.path);
       }
 
       return result;
@@ -371,18 +402,32 @@ function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
  * Creates workspace tools that will be auto-injected into agents.
  *
  * @param workspace - The workspace instance to bind tools to
+ * @param configContext - Optional tool config context
+ * @param options - Optional tool construction options (e.g. grep strict mode)
  * @returns Record of workspace tools
  */
 export async function createWorkspaceTools(
   workspace: Workspace,
-  configContext?: Omit<ToolConfigContext, 'requestContext'> & { requestContext?: unknown },
+  configContext?: Omit<ToolConfigContext, 'requestContext'> & {
+    requestContext?: unknown;
+    readTracker?: FileReadTracker;
+  },
+  options?: { grep?: GrepToolOptions },
 ) {
   // Seed fallback context so dynamic enabled functions always get called,
   // even if the caller omits configContext.  Normalize requestContext so
   // user-provided functions always receive a plain Record, not a Map.
-  const effectiveConfigContext: ToolConfigContext = configContext
-    ? { ...configContext, requestContext: toPlainRequestContext(configContext.requestContext) }
-    : { requestContext: {}, workspace };
+  // readTracker is factory-internal (read-before-write tracking) and is not
+  // exposed to user dynamic-config functions.
+  let effectiveConfigContext: ToolConfigContext;
+  let contextReadTracker: FileReadTracker | undefined;
+  if (configContext) {
+    const { readTracker: providedReadTracker, ...rest } = configContext;
+    contextReadTracker = providedReadTracker;
+    effectiveConfigContext = { ...rest, requestContext: toPlainRequestContext(configContext.requestContext) };
+  } else {
+    effectiveConfigContext = { requestContext: {}, workspace };
+  }
   const tools: Record<string, any> = {};
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;
@@ -395,8 +440,11 @@ export async function createWorkspaceTools(
 
   // Shared read tracker — always active so optimistic concurrency (mtime
   // checking) works on every write, regardless of the requireReadBeforeWrite
-  // policy setting.
-  const readTracker: FileReadTracker = new InMemoryFileReadTracker();
+  // policy setting. The agent provides a thread-scoped, storage-backed
+  // tracker when it has thread identity and Mastra storage (records survive
+  // suspend/resume, later turns, and process restarts); otherwise tracking
+  // is per-run.
+  const readTracker: FileReadTracker = contextReadTracker ?? new InMemoryFileReadTracker();
 
   // Helper: add a tool with config-driven filtering
   const addTool = async (
@@ -440,6 +488,10 @@ export async function createWorkspaceTools(
       };
     } else {
       wrapped = { ...tool, requireApproval: config.requireApproval };
+    }
+
+    if (config.background) {
+      wrapped = { ...wrapped, background: config.background };
     }
 
     if (opts?.readTrackerMode) {
@@ -496,7 +548,7 @@ export async function createWorkspaceTools(
     });
     await addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool, { targets: { filesystem: true } });
     await addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true, targets: { filesystem: true } });
-    await addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool, { targets: { filesystem: true } });
+    await addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, createGrepTool(options?.grep), { targets: { filesystem: true } });
 
     // AST edit tool (only if @ast-grep/napi is available at runtime)
     if (isAstGrepAvailable()) {
@@ -543,6 +595,25 @@ export async function createWorkspaceTools(
     if (workspace.sandbox.processes) {
       await addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool, { targets: { sandbox: true } });
       await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool, { targets: { sandbox: true } });
+    }
+
+    // Computer (desktop) tools — only when the sandbox supports the computer
+    // capability. Not offered for dynamic sandbox resolvers (no static
+    // instance) since the capability can't be detected at tool-listing time.
+    if (supportsComputer(workspace.sandbox)) {
+      await addTool(WORKSPACE_TOOLS.COMPUTER.SCREENSHOT, computerScreenshotTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.CLICK, computerClickTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.DOUBLE_CLICK, computerDoubleClickTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.RIGHT_CLICK, computerRightClickTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.MOVE_MOUSE, computerMoveMouseTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.DRAG, computerDragTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.TYPE, computerTypeTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.PRESS_KEY, computerPressKeyTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.SCROLL, computerScrollTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.GET_SCREEN_INFO, computerGetScreenInfoTool, {
+        targets: { sandbox: true },
+      });
+      await addTool(WORKSPACE_TOOLS.COMPUTER.WAIT, computerWaitTool, { targets: { sandbox: true } });
     }
   } else if (hasSandboxConfig(workspace)) {
     await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, executeCommandWithBackgroundTool, {

@@ -915,6 +915,43 @@ describe('MastraPlatformExporter', () => {
       }
     });
 
+    it('ignores environment credentials and project id when resolveFromEnv is false', async () => {
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', createTestJWT({ teamId: 'env', projectId: 'env-project' }));
+      vi.stubEnv('MASTRA_PROJECT_ID', 'not a valid id');
+      vi.stubEnv('MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', 'https://attacker.example.com/some/path');
+
+      try {
+        // Would throw on the invalid env project id or malformed endpoint if env were consulted.
+        const exporter = new MastraPlatformExporter({ endpoint: 'http://localhost:3000', resolveFromEnv: false });
+        try {
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+          await exporter.flush();
+          expect(mockFetchWithRetry).not.toHaveBeenCalled();
+        } finally {
+          await exporter.shutdown();
+        }
+
+        const explicitToken = createTestJWT({ teamId: 'explicit', projectId: 'explicit-project' });
+        const explicit = new MastraPlatformExporter({
+          endpoint: 'http://localhost:3000',
+          accessToken: explicitToken,
+          projectId: 'proj_explicit',
+          resolveFromEnv: false,
+        });
+        try {
+          await explicit.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+          await explicit.flush();
+          const [url, requestOptions] = mockFetchWithRetry.mock.calls[0] as [string, RequestInit];
+          expect(url).toBe('http://localhost:3000/projects/proj_explicit/ai/spans/publish');
+          expect((requestOptions.headers as Record<string, string>).Authorization).toBe(`Bearer ${explicitToken}`);
+        } finally {
+          await explicit.shutdown();
+        }
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('should use MASTRA_PLATFORM_ACCESS_TOKEN from the environment', async () => {
       const envToken = createTestJWT({ teamId: 'platform-env-token', projectId: 'auth-project' });
       vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', envToken);
@@ -1346,6 +1383,175 @@ describe('MastraPlatformExporter', () => {
 
         expect(mockFetchWithRetry).toHaveBeenCalledWith(
           'https://collector.example.com/env/scores/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should resolve signal endpoints from a MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT base origin', async () => {
+      vi.stubEnv('MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', 'https://observability.eu.mastra.ai');
+
+      const derivedExporter = new MastraPlatformExporter({
+        accessToken: 'sk_org_api_key',
+        projectId: 'project-workos',
+      });
+
+      try {
+        await derivedExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await derivedExporter.onScoreEvent(getMockScoreEvent());
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://observability.eu.mastra.ai/projects/project-workos/ai/spans/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
+        );
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://observability.eu.mastra.ai/projects/project-workos/ai/scores/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should prefer MASTRA_CLOUD_TRACES_ENDPOINT over MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', async () => {
+      vi.stubEnv('MASTRA_CLOUD_TRACES_ENDPOINT', 'https://legacy.example.com/env/spans/publish');
+      vi.stubEnv('MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', 'https://observability.eu.mastra.ai');
+
+      const derivedExporter = new MastraPlatformExporter({
+        accessToken: testJWT,
+      });
+
+      try {
+        await derivedExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://legacy.example.com/env/spans/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should prefer config tracesEndpoint over MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', async () => {
+      vi.stubEnv('MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', 'https://observability.eu.mastra.ai');
+
+      const derivedExporter = new MastraPlatformExporter({
+        accessToken: testJWT,
+        tracesEndpoint: 'https://config.example.com/custom/spans/publish',
+      });
+
+      try {
+        await derivedExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://config.example.com/custom/spans/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should derive sibling signal endpoints from a full MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT publish URL', async () => {
+      // The CLI writes this form: <origin>/projects/:projectId/ai/spans/publish
+      vi.stubEnv('MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', 'http://localhost:8080/projects/proj_x/ai/spans/publish');
+
+      const derivedExporter = new MastraPlatformExporter({
+        accessToken: testJWT,
+      });
+
+      try {
+        await derivedExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await derivedExporter.onScoreEvent(getMockScoreEvent());
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'http://localhost:8080/projects/proj_x/ai/spans/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
+        );
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'http://localhost:8080/projects/proj_x/ai/scores/publish',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.any(String),
+          }),
+          3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
+        );
+      } finally {
+        await derivedExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should treat an empty MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT as unset', async () => {
+      vi.stubEnv('MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', '');
+
+      const derivedExporter = new MastraPlatformExporter({
+        accessToken: testJWT,
+      });
+
+      try {
+        await derivedExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await derivedExporter.flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledWith(
+          'https://observability.mastra.ai/ai/spans/publish',
           expect.objectContaining({
             method: 'POST',
             body: expect.any(String),

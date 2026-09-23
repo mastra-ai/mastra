@@ -60,7 +60,7 @@ export function getZodTypeName(schema: ZodTypeAny): string | undefined {
  */
 export function isZodArray(value: unknown): value is ZodArrayAny {
   if (!isZodType(value)) return false;
-  return getZodTypeName(value as ZodTypeAny) === 'ZodArray';
+  return getZodTypeName(value) === 'ZodArray';
 }
 
 /**
@@ -70,7 +70,7 @@ export function isZodArray(value: unknown): value is ZodArrayAny {
  */
 export function isZodObject(value: unknown): value is ZodObjectAny {
   if (!isZodType(value)) return false;
-  return getZodTypeName(value as ZodTypeAny) === 'ZodObject';
+  return getZodTypeName(value) === 'ZodObject';
 }
 
 /**

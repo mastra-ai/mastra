@@ -19,7 +19,7 @@ interface ActiveModelBadgeProps {
 const ActiveModelBadge = ({ provider, name }: ActiveModelBadgeProps) => {
   const providerId = cleanProviderId(provider);
   return (
-    <Badge variant="default">
+    <Badge>
       <ProviderLogo providerId={providerId} size={16} /> {providerId}/{name}
     </Badge>
   );

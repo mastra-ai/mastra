@@ -127,7 +127,9 @@ describe('@mastra/temporal transform exports', () => {
       ]);
     `);
 
-    expect(output).toContain('.parallel(["fetch-weather", "plan-activities"])');
+    expect(output).toContain('id: "fetch-weather"');
+    expect(output).toContain('id: "plan-activities"');
+    expect(output).not.toContain('.parallel(["fetch-weather", "plan-activities"])');
   });
 
   it('removes hoisted createStep declarations and their imports', async () => {
@@ -307,14 +309,6 @@ describe('@mastra/temporal activities module transform', () => {
 });
 
 describe('@mastra/temporal configureWorker activities', () => {
-  it('requires prebuild output before configureWorker', () => {
-    const plugin = new MastraPlugin({});
-
-    expect(() => plugin.configureWorker({ taskQueue: 'mastra' } as any)).toThrow(
-      'MastraPlugin.prebuild() must be called before use',
-    );
-  });
-
   it('compiles workflow activities and wires them into worker options by step id', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-worker-'));
     const entryPath = path.join(tempDir, 'src', 'index.ts');
@@ -383,14 +377,12 @@ describe('@mastra/temporal configureWorker activities', () => {
     const compiledWorkflowSource = 'export const unused = true;';
     const bundleSpy = mockCompiledBundle({ compiledEntrySource, compiledWorkflowSource });
 
-    const workerPlugin = new MastraPlugin({});
-    await workerPlugin.prebuild({ entryFile: entryPath });
+    const workerPlugin = new MastraPlugin(entryPath);
 
+    const workerOptions = await workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
     await expect(
       readFile(path.resolve(process.cwd(), 'node_modules/.mastra/activity-bindings.json'), 'utf8'),
     ).resolves.toContain('fetch-weather');
-
-    const workerOptions = workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
     const fetchWeather = (workerOptions.activities as Record<string, (...args: any[]) => Promise<unknown>>)[
       'fetch-weather'
     ];
@@ -434,10 +426,9 @@ describe('@mastra/temporal configureWorker activities', () => {
     const compiledWorkflowSource = `export const unused = true;`;
     mockCompiledBundle({ compiledEntrySource, compiledWorkflowSource });
 
-    const workerPlugin = new MastraPlugin({});
-    await workerPlugin.prebuild({ entryFile: entryPath });
+    const workerPlugin = new MastraPlugin(entryPath);
 
-    const workerOptions = workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
+    const workerOptions = await workerPlugin.configureWorker({ taskQueue: 'mastra' } as any);
     const fetchWeather = (workerOptions.activities as Record<string, (...args: any[]) => Promise<unknown>>)[
       'fetch-weather'
     ];

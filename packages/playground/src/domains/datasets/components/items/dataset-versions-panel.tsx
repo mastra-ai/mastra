@@ -11,7 +11,7 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
-import { GitCompareIcon, ArrowRightIcon } from 'lucide-react';
+import { GitCompareIcon, ArrowRightIcon, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
@@ -70,14 +70,14 @@ export function DatasetVersionsPanel({
   };
 
   return (
-    <div className="border-border1 grid w-64 grid-rows-[auto_1fr] gap-2 overflow-hidden border-l pt-3 pl-3">
+    <div className="grid w-64 grid-rows-[auto_1fr] gap-2 overflow-hidden border-l border-border pt-3 pl-3">
       <div className="flex items-center justify-between gap-2 pr-1 pl-2">
-        <Txt as="h2" variant="ui-md" className="text-neutral3">
+        <Txt as="h2" variant="body" tone="muted">
           Versions
         </Txt>
         {isSelectionActive ? (
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={handleCancelSelection}>
+            <Button icon={<X />} variant="ghost" size="sm" onClick={handleCancelSelection}>
               Cancel
             </Button>
             <Button
@@ -86,13 +86,14 @@ export function DatasetVersionsPanel({
               disabled={selectedKeys.size !== 2}
               onClick={handleExecuteCompare}
               tooltip={selectedKeys.size !== 2 ? 'Select two versions to enable comparison' : undefined}
+              icon={<ArrowRightIcon />}
             >
-              <ArrowRightIcon /> Compare
+              Compare
             </Button>
           </div>
         ) : (
-          <Button variant="ghost" size="sm" onClick={() => setIsSelectionActive(true)}>
-            <GitCompareIcon /> Compare
+          <Button variant="ghost" size="sm" onClick={() => setIsSelectionActive(true)} icon={<GitCompareIcon />}>
+            Compare
           </Button>
         )}
       </div>
@@ -134,14 +135,14 @@ export function DatasetVersionsPanel({
                           aria-hidden="true"
                         />
                       )}
-                      <span className="flex min-w-0 flex-1 items-center gap-2 text-xs">
-                        <span className="text-neutral5 shrink-0 font-medium">v.{item.version}</span>
+                      <span className="flex min-w-0 flex-1 items-center gap-2 text-caption">
+                        <span className="shrink-0 font-medium text-foreground">v.{item.version}</span>
                         {createdAtDate && (
-                          <span className="text-neutral3 min-w-0 flex-1 truncate">
+                          <span className="min-w-0 flex-1 truncate text-muted-foreground">
                             {format(createdAtDate, 'MMM d, yyyy HH:mm')}
                           </span>
                         )}
-                        {item.isCurrent && <span className="text-neutral3 shrink-0">latest</span>}
+                        {item.isCurrent && <span className="shrink-0 text-muted-foreground">latest</span>}
                       </span>
                     </span>
                   </ThreadListItem>
@@ -150,6 +151,7 @@ export function DatasetVersionsPanel({
               {hasNextPage && (
                 <li>
                   <Button
+                    icon={<ChevronDown />}
                     variant="ghost"
                     size="sm"
                     onClick={() => fetchNextPage()}

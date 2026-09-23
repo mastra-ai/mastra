@@ -9,6 +9,13 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { z } from 'zod';
+import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
+
+export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema>;
+export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
+export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
+
 import type {
   CustomProviderInfo,
   ModelPackInfo,

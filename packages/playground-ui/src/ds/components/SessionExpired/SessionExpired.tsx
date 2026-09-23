@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 import { Icon } from '../../icons/Icon';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
+import type { EmptyStateProps } from '../EmptyState';
 
 export interface SessionExpiredProps {
   /** Custom title override */
@@ -13,9 +14,10 @@ export interface SessionExpiredProps {
   description?: string;
   /** Additional CSS classes */
   className?: string;
+  variant?: EmptyStateProps['variant'];
 }
 
-export function SessionExpired({ title, description, className }: SessionExpiredProps) {
+export function SessionExpired({ title, description, className, variant }: SessionExpiredProps) {
   const [isPending, setIsPending] = useState(false);
   const client = useMastraClient();
 
@@ -45,15 +47,11 @@ export function SessionExpired({ title, description, className }: SessionExpired
   return (
     <EmptyState
       className={className}
-      iconSlot={
-        <Icon size="lg" className="text-neutral3">
-          <LogIn />
-        </Icon>
-      }
+      variant={variant}
       titleSlot={title ?? 'Session Expired'}
       descriptionSlot={description ?? 'Your session has expired. Please log in again to continue.'}
       actionSlot={
-        <Button variant="default" onClick={handleLogin} disabled={isPending}>
+        <Button icon={<LogIn />} variant="default" onClick={handleLogin} disabled={isPending}>
           {isPending ? 'Redirecting...' : 'Log in'}
         </Button>
       }

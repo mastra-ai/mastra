@@ -549,6 +549,25 @@ describe('PromptInjectionDetector', () => {
       consoleWarnSpy.mockRestore();
     });
 
+    it('should propagate the processor tripwire when strict model detection fails', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw new Error('provider failure');
+        },
+      });
+      const detector = new PromptInjectionDetector({ model, errorStrategy: 'strict' });
+      const tripwire = new TripWire('strict prompt injection failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+
+      await expect(
+        detector.processInput({ messages: [createTestMessage('Potentially malicious content')], abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('Prompt injection detection failed because the internal model call failed');
+    });
+
     it('should handle empty message array', async () => {
       const model = setupMockModel(createMockDetectionResult(false));
       const detector = new PromptInjectionDetector({

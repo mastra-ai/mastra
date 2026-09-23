@@ -33,6 +33,27 @@ function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
   return mockMessageList;
 }
 
+// Helper to create a mock tracing context whose createChildSpan returns a
+// capturable PROCESSOR_RUN mock span
+function createMockTracingContext() {
+  const mockSpan = {
+    end: vi.fn(),
+    error: vi.fn(),
+    update: vi.fn(),
+    createChildSpan: vi.fn(),
+    findParent: vi.fn(() => undefined),
+  };
+  mockSpan.createChildSpan.mockReturnValue(mockSpan);
+  const currentSpan = {
+    isValid: true,
+    isInternal: false,
+    parent: undefined,
+    createChildSpan: vi.fn(() => mockSpan),
+    findParent: vi.fn(() => undefined),
+  };
+  return { mockSpan, tracingContext: { currentSpan } };
+}
+
 describe('isProcessor', () => {
   it('should return true for object with processInput method', () => {
     const processor: Processor = {
@@ -343,6 +364,53 @@ describe('createStep with Processor', () => {
       expect(processInputStepMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
       expect(messages.some(message => message.role === 'signal')).toBe(true);
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+    });
+
+    it('should provide sendSignal when phase is toolResult without stamping a response boundary', async () => {
+      const processToolResultMock = vi.fn(async ({ messageList, sendSignal }) => {
+        await sendSignal?.({
+          type: 'reactive',
+          contents: 'Inspect the delegation result before acting again.',
+        });
+        return messageList;
+      });
+
+      const processor: Processor = {
+        id: 'signal-tool-result-processor',
+        processToolResult: processToolResultMock,
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+      const writer = vi.fn();
+      const inputData = {
+        phase: 'toolResult' as const,
+        messages: [{ id: '1', content: 'test' }],
+        messageList,
+        stepNumber: 1,
+        toolName: 'delegate',
+        toolCallId: 'call-1',
+        args: { task: 'task-1' },
+        toolResultValue: { delegated: 'task-1' },
+        providerExecuted: false,
+        systemMessages: [],
+        steps: [],
+        retryCount: 0,
+        // No rotateResponseMessageId — mirrors ProcessorRunner.runProcessToolResult,
+        // which never wires rotation for the toolResult phase (issue #21940).
+      };
+
+      await step.execute({ inputData, outputWriter: writer } as any);
+
+      expect(processToolResultMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
+      // The boundary stamp without a rotation blocks MessageMerger for the next
+      // same-id step add, which then destructively replaces the tool message.
+      expect(messageList.markResponseMessageBoundary).not.toHaveBeenCalled();
+      expect(messageList.addSignal).toHaveBeenCalled();
+      expect(writer).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'data-signal' }),
+        expect.objectContaining({ messageId: undefined }),
+      );
     });
 
     it('should preserve tagged system messages when processInput returns { messages, systemMessages }', async () => {
@@ -850,6 +918,101 @@ describe('createStep with Processor', () => {
         expect((error as TripWire).options?.retry).toBe(true);
         expect((error as TripWire).options?.metadata).toEqual({ tone: 'aggressive', score: 0.9 });
       }
+    });
+
+    it('should record TripWire on the processor span as an error with tripwireAbort attributes', async () => {
+      const processor: Processor = {
+        id: 'span-tripwire-processor',
+        processInput: async ({ abort }) => {
+          abort('PII detected', { retry: true, metadata: { type: 'pii' } });
+          return [];
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+      const { mockSpan, tracingContext } = createMockTracingContext();
+      const inputData = {
+        phase: 'input' as const,
+        messages: [{ id: '1', content: 'bad content' }],
+        messageList,
+      };
+
+      await expect(step.execute({ inputData, tracingContext } as any)).rejects.toThrow(TripWire);
+
+      expect(mockSpan.error).toHaveBeenCalledTimes(1);
+      expect(mockSpan.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endSpan: true,
+          attributes: {
+            tripwireAbort: {
+              reason: 'PII detected',
+              retry: true,
+              metadata: { type: 'pii' },
+            },
+          },
+        }),
+      );
+      expect(mockSpan.end).not.toHaveBeenCalled();
+    });
+
+    it('should record tripwireAbort with undefined retry when abort called without options', async () => {
+      const processor: Processor = {
+        id: 'span-plain-abort-processor',
+        processInput: async ({ abort }) => {
+          abort('Content violates policy');
+          return [];
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+      const { mockSpan, tracingContext } = createMockTracingContext();
+      const inputData = {
+        phase: 'input' as const,
+        messages: [{ id: '1', content: 'bad content' }],
+        messageList,
+      };
+
+      await expect(step.execute({ inputData, tracingContext } as any)).rejects.toThrow(TripWire);
+
+      expect(mockSpan.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endSpan: true,
+          attributes: {
+            tripwireAbort: {
+              reason: 'Content violates policy',
+              retry: undefined,
+              metadata: undefined,
+            },
+          },
+        }),
+      );
+    });
+
+    it('should record non-TripWire errors on the processor span without tripwireAbort', async () => {
+      const processor: Processor = {
+        id: 'span-error-processor',
+        processInput: async () => {
+          throw new Error('processor blew up');
+        },
+      };
+
+      const step = createStep(processor);
+      const messageList = createMockMessageList();
+      const { mockSpan, tracingContext } = createMockTracingContext();
+      const inputData = {
+        phase: 'input' as const,
+        messages: [{ id: '1', content: 'content' }],
+        messageList,
+      };
+
+      await expect(step.execute({ inputData, tracingContext } as any)).rejects.toThrow('processor blew up');
+
+      expect(mockSpan.error).toHaveBeenCalledTimes(1);
+      const errorArgs = (mockSpan.error as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+      expect(errorArgs?.attributes?.tripwireAbort).toBeUndefined();
+      expect(mockSpan.end).not.toHaveBeenCalled();
     });
 
     it('should re-throw non-TripWire errors', async () => {

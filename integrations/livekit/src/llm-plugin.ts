@@ -36,9 +36,10 @@ export interface MastraLLMOptions {
    * only messages new since the agent last spoke are sent each turn and Mastra Memory supplies
    * history. When omitted/false, the full LiveKit chat context is sent every turn.
    *
-   * NOTE: incompatible with the session's `preemptiveGeneration` option — a speculative turn that
-   * completes before being discarded pollutes the thread. Leave preemptive generation off when
-   * using `memory`.
+   * NOTE: incompatible with the session's `preemptiveGeneration` option — a speculative turn
+   * persists a partial user message and a partial reply before being discarded. Leave preemptive
+   * generation off when using `memory`, or set `memory.options.readOnly` and persist committed
+   * turns yourself from the session's conversation-item events.
    *
    * The plugin cannot detect the combination at runtime, so this stays a documented constraint
    * rather than a warning: the LLM interface never receives the session (so the option can't be

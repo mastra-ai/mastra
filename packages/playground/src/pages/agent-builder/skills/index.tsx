@@ -1,4 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
@@ -78,23 +79,23 @@ export default function AgentBuilderSkillsPage() {
 
     if (skills.length === 0) {
       return (
-        <div className="flex items-center justify-center pt-16">
+        <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<SparklesIcon className="text-neutral3 h-8 w-8" />}
             titleSlot="No skills yet"
             descriptionSlot="Create your first skill to give agents new capabilities."
             actionSlot={
               canWriteSkills ? (
                 <div className="flex items-center gap-2">
-                  <Button variant="primary" onClick={goToCreate}>
-                    <PlusIcon /> New skill
+                  <Button variant="primary" onClick={goToCreate} icon={<PlusIcon />}>
+                    New skill
                   </Button>
                   {enabledRegistry && (
                     <Button
                       variant="default"
                       onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
+                      icon={<DownloadIcon />}
                     >
-                      <DownloadIcon /> Browse registry
+                      Browse registry
                     </Button>
                   )}
                 </div>
@@ -110,37 +111,45 @@ export default function AgentBuilderSkillsPage() {
 
   return (
     <>
-      <PageLayout className="px-4 md:px-10">
-        <PageLayout.TopArea>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
-            <PageHeader>
-              <PageHeader.Title>
-                <SparklesIcon /> My skills
-              </PageHeader.Title>
-              <PageHeader.Description>Skills you've created.</PageHeader.Description>
-            </PageHeader>
-            {skills.length > 0 && canWriteSkills && (
-              <div className="flex w-full shrink-0 flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
-                {enabledRegistry && (
-                  <Button
-                    variant="default"
-                    className="w-full justify-center md:w-auto"
-                    onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
-                  >
-                    <DownloadIcon /> Browse registry
+      <PageLayout
+        actionRow={
+          <>
+            <ActionRow className="items-start">
+              <ActionRow.Start>
+                <PageHeader>
+                  <PageHeader.Title>
+                    <SparklesIcon /> My skills
+                  </PageHeader.Title>
+                  <PageHeader.Description>Skills you've created.</PageHeader.Description>
+                </PageHeader>
+              </ActionRow.Start>
+              {skills.length > 0 && canWriteSkills && (
+                <ActionRow.End>
+                  {enabledRegistry && (
+                    <Button
+                      variant="default"
+                      onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
+                      icon={<DownloadIcon />}
+                    >
+                      Browse registry
+                    </Button>
+                  )}
+                  <Button variant="primary" onClick={goToCreate} icon={<PlusIcon />}>
+                    New skill
                   </Button>
-                )}
-                <Button variant="primary" className="w-full justify-center md:w-auto" onClick={goToCreate}>
-                  <PlusIcon /> New skill
-                </Button>
-              </div>
-            )}
-          </div>
-          <div className="max-w-120">
-            <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
-          </div>
-        </PageLayout.TopArea>
-
+                </ActionRow.End>
+              )}
+            </ActionRow>
+            <ActionRow>
+              <ActionRow.Start>
+                <div className="max-w-120 flex-1">
+                  <ListSearch onSearch={setSearch} label="Filter skills" placeholder="Filter by name or description" />
+                </div>
+              </ActionRow.Start>
+            </ActionRow>
+          </>
+        }
+      >
         {body}
       </PageLayout>
 

@@ -2,7 +2,7 @@
   "$schema": "https://v2-9-16.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
-    "build": {
+    "build:lib": {
       "dependsOn": [
         "^build",
         "@mastra/core#build",
@@ -23,6 +23,11 @@
         "!**/*.spec.ts",
         "!**/__tests__/**"
       ],
+      "outputs": ["dist/**", "!dist/docs/**"]
+    },
+    "build": {
+      "dependsOn": ["^build", "build:lib"],
+      "inputs": ["package.json"],
       "outputs": ["dist/**", "!dist/docs/**"]
     }
   }

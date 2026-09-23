@@ -33,9 +33,27 @@ describe('SettingsNavigation', () => {
     );
   });
 
-  it('separates code repositories, work intake, and agent settings into named groups', () => {
+  it('orders personal, agent, source, and Factory management settings by task', () => {
     renderNavigation();
-    expect(screen.getByRole('link', { name: 'Factory' })).toHaveAttribute('href', '/factories/fp-1/settings/factory');
+
+    expect(screen.getByRole('link', { name: 'Manage Factory' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/factory',
+    );
+    expect(screen.getByRole('region', { name: 'Manage Factory' })).toBeInTheDocument();
+
+    expect(screen.getAllByRole('link').map(link => link.textContent)).toEqual([
+      'My account',
+      'Preferences',
+      'Models',
+      'Memory',
+      'Skills',
+      'Behavior',
+      'Repositories',
+      'Work Intake',
+      'Connections',
+      'Manage Factory',
+    ]);
 
     const sources = screen.getByRole('region', { name: 'Sources' });
     expect(within(sources).getByRole('link', { name: 'Connections' })).toHaveAttribute(

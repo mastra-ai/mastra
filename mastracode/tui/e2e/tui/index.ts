@@ -1,5 +1,11 @@
 import { abortFollowupScenario } from './abort-followup.js';
+import { accountRotationScenario } from './account-rotation.js';
+import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
+import { agentConnectionsExpectedReplyWatchdogScenario } from './agent-connections-expected-reply-watchdog.js';
+import { agentConnectionsNotificationSignalScenario } from './agent-connections-notification-signal.js';
+import { agentConnectionsToolFlowScenario } from './agent-connections-tool-flow.js';
+import { agentsMdAutoloadScenario } from './agents-md-autoload.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
@@ -7,7 +13,15 @@ import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
+import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
+import {
+  backgroundPlaceholderOptInScenario,
+  backgroundPlaceholderOptOutScenario,
+} from './background-placeholder-opt-out.js';
+import { backgroundSubagentsScenario } from './background-subagents.js';
+import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
+import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
 import { browserModelPickerScenario } from './browser-model-picker.js';
@@ -22,7 +36,9 @@ import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
+import { connectCommandScenario } from './connect-command.js';
 import { controllerApiConfigScenario } from './controller-api-config.js';
+import { crossAgentSettingsScenario } from './cross-agent-settings.js';
 import { ctrlfQueuedCustomSlashScenario } from './ctrlf-queued-custom-slash.js';
 import { ctrlfQueuedImageFollowupScenario } from './ctrlf-queued-image-followup.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
@@ -42,14 +58,19 @@ import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { firstRunOnboardingScenario } from './first-run-onboarding.js';
 import { githubSignalsCommandScenario } from './github-signals-command.js';
 import { githubSignalsIncrementalScenario } from './github-signals-incremental.js';
+import { githubSignalsLegacyUpgradeScenario } from './github-signals-legacy-upgrade.js';
+import { githubSignalsMultiSubscribeScenario } from './github-signals-multi-subscribe.js';
 import { githubSignalsNotificationReloadScenario } from './github-signals-notification-reload.js';
 import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbox.js';
+import { githubSignalsToolMultiSubscribeScenario } from './github-signals-tool-multi-subscribe.js';
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
 import { goalApiErrorStopsLoopScenario } from './goal-api-error-stops-loop.js';
 import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.js';
 import { goalFreshThreadPersistenceScenario } from './goal-fresh-thread-persistence.js';
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
+import { goalMaxRunsEndsGoalScenario } from './goal-max-runs-ends-goal.js';
+import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
 import { integrationCommandsScenario } from './integration-commands.js';
@@ -69,12 +90,16 @@ import { mcpSelectorReconnectScenario } from './mcp-selector-reconnect.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { mcpSkippedValidationScenario } from './mcp-skipped-validation.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
+import { modelSearchScenario } from './model-search.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
 import { modelSelectionCancelEnvScenario } from './model-selection-cancel-env.js';
 import { modelsPackActivationPersistenceScenario } from './models-pack-activation-persistence.js';
+import { modelsPackMemoryModelScenario } from './models-pack-memory-model.js';
+import { multiAccountLoginScenario } from './multi-account-login.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
 import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
+import { notificationSignalInterruptScenario } from './notification-signal-interrupt.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { notifyInputRequestHookScenario } from './notify-input-request-hook.js';
 import { omAttachmentObservationScenario } from './om-attachment-observation.js';
@@ -87,6 +112,7 @@ import { omStatusIndicatorScenario } from './om-status-indicator.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
+import { packFallbackScenario } from './pack-fallback.js';
 import { permissionRequestHookScenario } from './permission-request-hook.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
@@ -135,6 +161,7 @@ import { shellPassthroughDuringRunScenario } from './shell-passthrough-during-ru
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
 import { shellPassthroughLongOutputScenario } from './shell-passthrough-long-output.js';
 import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpersistent.js';
+import { skillTabAutocompleteScenario } from './skill-tab-autocomplete.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { skillsSymlinkDedupeScenario } from './skills-symlink-dedupe.js';
 import { startupScenario } from './startup.js';
@@ -152,6 +179,7 @@ import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
 import { subagentModelStartupRestoreScenario } from './subagent-model-startup-restore.js';
 import { subagentPlanExecuteToolsScenario } from './subagent-plan-execute-tools.js';
+import { subagentsCommandScenario } from './subagents-command.js';
 import { subconsciousActivityRenderingScenario } from './subconscious-activity-rendering.js';
 import { taskInlineTransitionsScenario } from './task-inline-transitions.js';
 import { taskPatchToolsScenario } from './task-patch-tools.js';
@@ -184,6 +212,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'abort-followup': abortFollowupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
+  'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,
+  'agent-connections-notification-signal': agentConnectionsNotificationSignalScenario,
+  'agent-connections-tool-flow': agentConnectionsToolFlowScenario,
+  'agents-md-autoload': agentsMdAutoloadScenario,
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,
   'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-multi-provider-delete': apiKeyMultiProviderDeleteScenario,
@@ -192,6 +224,11 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
+  'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
+  'background-placeholder-opt-in': backgroundPlaceholderOptInScenario,
+  'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
+  'background-subagents': backgroundSubagentsScenario,
+  'background-tools-settings': backgroundToolsSettingsScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
   'browser-model-picker': browserModelPickerScenario,
@@ -204,6 +241,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'browser-wizard-browserbase': browserWizardBrowserbaseScenario,
   'browser-wizard-export': browserWizardExportScenario,
   'clipboard-image-paste': clipboardImagePasteScenario,
+  'connect-command': connectCommandScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
   'custom-config-dir': customConfigDirScenario,
   'custom-pack-import-overwrite': customPackImportOverwriteScenario,
@@ -223,6 +261,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'file-autocomplete': fileAutocompleteScenario,
   'first-run-onboarding': firstRunOnboardingScenario,
   'github-signals-command': githubSignalsCommandScenario,
+  'github-signals-multi-subscribe': githubSignalsMultiSubscribeScenario,
+  'github-signals-legacy-upgrade': githubSignalsLegacyUpgradeScenario,
+  'github-signals-tool-multi-subscribe': githubSignalsToolMultiSubscribeScenario,
   'github-signals-incremental': githubSignalsIncrementalScenario,
   'github-signals-notification-reload': githubSignalsNotificationReloadScenario,
   'github-signals-polling-inbox': githubSignalsPollingInboxScenario,
@@ -232,6 +273,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-fresh-thread-persistence': goalFreshThreadPersistenceScenario,
   'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
+  'goal-max-runs-ends-goal': goalMaxRunsEndsGoalScenario,
+  'goal-resume-single-render': goalResumeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
@@ -252,12 +295,16 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'mcp-selector-reconnect': mcpSelectorReconnectScenario,
   'mcp-server-config': mcpServerConfigScenario,
   'mcp-skipped-validation': mcpSkippedValidationScenario,
+  'bedrock-model-discovery': bedrockModelDiscoveryScenario,
+  'model-search': modelSearchScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
+  'models-pack-memory-model': modelsPackMemoryModelScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
   'notification-inbox-reload': notificationInboxReloadScenario,
   'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
+  'notification-signal-interrupt': notificationSignalInterruptScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'notify-input-request-hook': notifyInputRequestHookScenario,
   'knowledge-browser': knowledgeBrowserScenario,
@@ -299,6 +346,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'profile-command': profileCommandScenario,
   'prune-command': pruneCommandScenario,
   'prune-render-state': pruneRenderStateScenario,
+  'cross-agent-settings': crossAgentSettingsScenario,
   'quiet-settings': quietSettingsScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,
   'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
@@ -322,14 +370,20 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'shell-passthrough-env-override': shellPassthroughEnvOverrideScenario,
   'shell-passthrough-long-output': shellPassthroughLongOutputScenario,
   'shell-passthrough-nonpersistent': shellPassthroughNonpersistentScenario,
+  'skill-tab-autocomplete': skillTabAutocompleteScenario,
   'skills-command-activation': skillsCommandActivationScenario,
   'skills-symlink-dedupe': skillsSymlinkDedupeScenario,
   'storage-fallback-history-reload': storageFallbackHistoryReloadScenario,
   'storage-settings': storageSettingsScenario,
   'storage-startup-pg-fallback': storageStartupPgFallbackScenario,
   'stream-error-retry': streamErrorRetryScenario,
+  'account-rotation': accountRotationScenario,
+  'account-routing-targeted': accountRoutingTargetedScenario,
+  'pack-fallback': packFallbackScenario,
+  'multi-account-login': multiAccountLoginScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,
+  'subagents-command': subagentsCommandScenario,
   'subagent-delegation': subagentDelegationScenario,
   'subagent-plan-execute-tools': subagentPlanExecuteToolsScenario,
   'subagent-model-startup-restore': subagentModelStartupRestoreScenario,

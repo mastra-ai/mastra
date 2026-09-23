@@ -55,7 +55,7 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
             const count = toolCountsByProvider[provider.id] ?? 0;
 
             return (
-              <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-surface2">
+              <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-background">
                 <div
                   className="flex size-11 shrink-0 items-center justify-center rounded-lg uppercase"
                   style={{ backgroundColor: bg, color: text }}
@@ -70,11 +70,11 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
 
                 <div className="flex items-center gap-2">
                   {count > 0 && (
-                    <Badge variant="default">
+                    <Badge>
                       {count} {count === 1 ? 'tool' : 'tools'}
                     </Badge>
                   )}
-                  <Badge variant="success">Available</Badge>
+                  <Badge variant="green">Available</Badge>
                 </div>
               </Entity>
             );

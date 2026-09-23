@@ -60,7 +60,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="skill-view-page">
       {/* Header */}
-      <div className="bg-surface1 flex min-w-0 items-center gap-2 px-3 py-2 md:px-6 md:py-3">
+      <div className="flex min-w-0 items-center gap-2 bg-sidebar px-3 py-2 md:px-4 md:py-2">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -72,7 +72,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="text-ui-md text-neutral6 min-w-0 truncate" data-testid="skill-view-title">
+          <div className="min-w-0 truncate text-body text-foreground" data-testid="skill-view-title">
             {skill.name}
           </div>
         </div>
@@ -90,8 +90,8 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
               size="md"
               onClick={() => setCopyOpen(true)}
               data-testid="skill-view-copy-button"
+              icon={<PlusIcon />}
             >
-              <PlusIcon />
               Copy to my skills
             </Button>
           )}
@@ -99,11 +99,11 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
       </div>
 
       {/* Body */}
-      <div className="bg-surface1 min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[80ch] px-4 pt-6 pb-10 md:px-10">
-          <h1 className="text-display-md text-neutral6">{skill.name}</h1>
+      <div className="min-h-0 flex-1 overflow-y-auto bg-sidebar">
+        <div className="mx-auto w-full max-w-[80ch] px-4 pt-4 pb-10 md:px-10">
+          <h1 className="text-heading text-foreground">{skill.name}</h1>
           {skill.description && (
-            <p className="text-ui-md text-neutral4 mt-2" data-testid="skill-view-description">
+            <p className="mt-2 text-body text-muted-foreground" data-testid="skill-view-description">
               {skill.description}
             </p>
           )}

@@ -1,6 +1,6 @@
-# Mastra Client
+# @mastra/client-js
 
-JavaScript/TypeScript client library for the [Mastra AI](https://mastra.ai) framework. This client provides a simple interface to interact with Mastra AI's APIs for agents, vectors, memory, tools, and workflows.
+`@mastra/client-js` is the typed JavaScript client for a running Mastra server. Use it from browser or server applications to call agents, workflows, tools, memory, and vector APIs without constructing HTTP requests directly.
 
 ## Installation
 
@@ -8,118 +8,28 @@ JavaScript/TypeScript client library for the [Mastra AI](https://mastra.ai) fram
 npm install @mastra/client-js
 ```
 
-## Quick Start
+## Usage
+
+Point the client at a running Mastra server.
 
 ```typescript
 import { MastraClient } from '@mastra/client-js';
 
-// Initialize the client
-const client = new MastraClient({
-  baseUrl: 'http://localhost:4111', // Your Mastra API endpoint
-});
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+const agent = client.getAgent('assistant');
 
-// Example: Working with an Agent
-async function main() {
-  // Get an agent instance
-  const agent = client.getAgent('your-agent-id');
-
-  // Generate a response
-  const response = await agent.generate([{ role: 'user', content: "What's the weather like today?" }]);
-
-  console.log(response);
-}
+const response = await agent.generate('Summarize my open support tickets.');
+console.log(response.text);
 ```
 
-## Client Configuration
+## Documentation
 
-The client can be configured with several options:
+- [@mastra/client-js documentation](https://mastra.ai/reference/client-js/mastra-client)
 
-```typescript
-const client = new MastraClient({
-    baseUrl: string;           // Base URL for the Mastra API
-    retries?: number;          // Number of retry attempts (default: 3)
-    backoffMs?: number;        // Initial backoff time in ms (default: 300)
-    maxBackoffMs?: number;     // Maximum backoff time in ms (default: 5000)
-    headers?: Record<string, string>; // Custom headers
-});
-```
+## Changelog
 
-## Available Methods
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/client-sdks/client-js/CHANGELOG.md) for version history and release notes.
 
-### Agents
+## Support
 
-- `listAgents()`: Get all available agents
-- `getAgent(agentId)`: Get a specific agent instance
-  - `agent.details()`: Get agent details
-- `agent.generate(params)`: Generate a response
-  - `agent.generateLegacy(params)`: Legacy API for generating a response (V1 models)
-  - `agent.stream(params)`: Stream a response
-  - `agent.streamLegacy(params)`: Legacy API for streaming a response (V1 models)
-  - `agent.getTool(toolId)`: Get agent tool details
-  - `agent.evals()`: Get agent evaluations
-  - `agent.liveEvals()`: Get live evaluations
-
-### Memory
-
-- `listMemoryThreads(params)`: Get memory threads
-- `createMemoryThread(params)`: Create a new memory thread
-- `getMemoryThread({ threadId, agentId })`: Get a memory thread instance
-- `saveMessageToMemory(params)`: Save messages to memory
-- `getMemoryStatus()`: Get memory system status
-- `getWorkingMemory({ agentId, threadId, resourceId? })`: Get working memory for a thread
-- `updateWorkingMemory({ agentId, threadId, workingMemory, resourceId? })`: Update working memory for a thread
-
-### Tools
-
-- `listTools()`: Get all available tools
-- `getTool(toolId)`: Get a tool instance
-  - `tool.details()`: Get tool details
-  - `tool.execute(params)`: Execute the tool
-
-### Workflows
-
-- `listWorkflows()`: Get all workflows
-- `getWorkflow(workflowId)`: Get a workflow instance
-  - `workflow.details()`: Get workflow details
-  - `workflow.createRun()`: Create workflow run
-  - `workflow.startAsync(params)`: Execute the workflow and wait for execution results
-  - `workflow.resumeAsync(params)`: Resume suspended workflow step async
-  - `workflow.start({runId, triggerData})`: Start a workflow run sync
-  - `workflow.resume(params)`: Resume the workflow run sync
-
-### Vectors
-
-- `getVector(vectorName)`: Get a vector instance
-  - `vector.details(indexName)`: Get vector index details
-  - `vector.delete(indexName)`: Delete a vector index
-  - `vector.getIndexes()`: Get all indexes
-  - `vector.createIndex(params)`: Create a new index
-  - `vector.upsert(params)`: Upsert vectors
-  - `vector.query(params)`: Query vectors
-
-### Logs
-
-- `listLogs(params)`: Get system logs
-- `getLog(params)`: Get specific log entry
-- `listLogTransports()`: Get configured Log transports
-
-### Telemetry
-
-- `getTelemetry(params)`: Get telemetry data
-
-## Error Handling
-
-The client includes built-in retry logic for failed requests:
-
-- Automatically retries failed requests with exponential backoff
-- Configurable retry count and backoff timing
-- Throws error after max retries reached
-
-## Internal Implementation
-
-The client uses the native `fetch` API internally for making HTTP requests. All requests are automatically handled with:
-
-- JSON serialization/deserialization
-- Retry logic with exponential backoff
-- Custom header management
-- Error handling
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

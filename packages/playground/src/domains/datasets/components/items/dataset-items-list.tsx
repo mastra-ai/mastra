@@ -1,10 +1,20 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { format, isThisYear, isToday } from 'date-fns';
-import { Plus, Upload, FileJson } from 'lucide-react';
+import { ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
+import { z } from 'zod';
+
+export type DatasetItemsSortKey = 'createdAt';
+
+export interface DatasetItemsColumn {
+  name: string;
+  label: string;
+  size: string;
+  sortKey?: DatasetItemsSortKey;
+}
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -16,8 +26,11 @@ export interface DatasetItemsListProps {
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
-  columns?: { name: string; label: string; size: string }[];
+  columns?: DatasetItemsColumn[];
   searchQuery?: string;
+  /** Server-side sort; a column header is sortable when it declares a `sortKey` and `onSortChange` is provided. */
+  sort?: ListSort<DatasetItemsSortKey>;
+  onSortChange?: (direction: 'asc' | 'desc', key: DatasetItemsSortKey) => void;
   // Selection props (owned by parent)
   isSelectionActive: boolean;
   selectedIds: Set<string>;
@@ -33,11 +46,19 @@ export interface DatasetItemsListProps {
 /**
  * Truncate a string to maxLength characters with ellipsis
  */
-function truncateValue(value: unknown, maxLength = 100): string {
+function truncateValue(value: DatasetItem['input'] | DatasetItem['groundTruth'], maxLength = 100): string {
   if (value === undefined || value === null) return '-';
-  const str = typeof value === 'string' ? value : JSON.stringify(value);
+  const parsedString = z.string().safeParse(value);
+  const str = parsedString.success ? parsedString.data : JSON.stringify(value);
   if (!str || str.length <= maxLength) return str || '-';
   return str.slice(0, maxLength) + '...';
+}
+
+const expectedTrajectorySchema = z.object({ steps: z.array(z.unknown()) });
+
+function formatExpectedTrajectory(value: DatasetItem['expectedTrajectory']): string {
+  const result = expectedTrajectorySchema.safeParse(value);
+  return result.success ? `${result.data.steps.length} steps` : 'Yes';
 }
 
 function formatDate(date: Date): string {
@@ -66,6 +87,8 @@ export function DatasetItemsList({
   onAddClick,
   onImportClick,
   onImportJsonClick,
+  sort,
+  onSortChange,
 }: DatasetItemsListProps) {
   const { containerRef, getRowProps } = useDataListKeyboard({
     count: items.length,
@@ -110,10 +133,24 @@ export function DatasetItemsList({
     onToggleSelection(id, shiftKey, allIds);
   };
 
+  const renderTopCell = (col: DatasetItemsColumn) =>
+    col.sortKey && onSortChange ? (
+      <DataList.SortableTopCell
+        key={col.name}
+        sortKey={col.sortKey}
+        sort={sort?.key === col.sortKey ? sort.direction : undefined}
+        onSortChange={onSortChange}
+      >
+        {col.label || col.name}
+      </DataList.SortableTopCell>
+    ) : (
+      <DataList.TopCell key={col.name}>{col.label || col.name}</DataList.TopCell>
+    );
+
   const gridColumns = [isSelectionActive ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
-    <DataList columns={gridColumns} scrollRef={containerRef}>
+    <DataList columns={gridColumns} scrollRef={containerRef} fit="container">
       <DataList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive && (
           <DataList.TopSelectCell
@@ -123,13 +160,9 @@ export function DatasetItemsList({
           />
         )}
         {isSelectionActive ? (
-          <DataList.TopCells colStart={2}>
-            {columns.map(col => (
-              <DataList.TopCell key={col.name}>{col.label || col.name}</DataList.TopCell>
-            ))}
-          </DataList.TopCells>
+          <DataList.TopCells colStart={2}>{columns.map(renderTopCell)}</DataList.TopCells>
         ) : (
-          columns.map(col => <DataList.TopCell key={col.name}>{col.label || col.name}</DataList.TopCell>)
+          columns.map(renderTopCell)
         )}
       </DataList.Top>
 
@@ -144,21 +177,21 @@ export function DatasetItemsList({
             const rowCells = (
               <>
                 <DataList.IdCell id={item.id} />
-                <DataList.MonoCell>{truncateValue(item.input, 150)}</DataList.MonoCell>
-                <DataList.MonoCell>{item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}</DataList.MonoCell>
-                <DataList.Cell height="compact" className="min-w-0">
+                <DataList.TextCell font="mono">{truncateValue(item.input, 150)}</DataList.TextCell>
+                <DataList.TextCell font="mono">
+                  {item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}
+                </DataList.TextCell>
+                <DataList.Cell className="min-w-0">
                   {item.expectedTrajectory ? (
-                    <span className="text-ui-smd text-neutral3">
-                      {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
-                        ? `${((item.expectedTrajectory as Record<string, unknown>).steps as unknown[]).length} steps`
-                        : 'Yes'}
+                    <span className="text-body-sm text-muted-foreground">
+                      {formatExpectedTrajectory(item.expectedTrajectory)}
                     </span>
                   ) : (
-                    <span className="text-neutral4">—</span>
+                    <span className="text-muted-foreground">—</span>
                   )}
                 </DataList.Cell>
-                <DataList.Cell height="compact" className="min-w-0">
-                  <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
+                <DataList.Cell className="min-w-0">
+                  <span className="block truncate text-body-sm text-placeholder">{formatDate(createdAtDate)}</span>
                 </DataList.Cell>
               </>
             );
@@ -185,7 +218,6 @@ export function DatasetItemsList({
                   aria-label={`Select item ${item.id}`}
                 />
                 <DataList.RowButton
-                  flushLeft
                   colStart={2}
                   featured={isFeatured}
                   data-selected={isFeatured || undefined}
@@ -216,32 +248,42 @@ interface EmptyDatasetItemListProps {
 
 function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
   return (
-    <div className="flex h-full items-center justify-center py-12">
-      <EmptyState
-        iconSlot={<Plus className="text-neutral3 h-8 w-8" />}
-        titleSlot="No items yet"
-        descriptionSlot="Add items to this dataset to use them in experiment runs."
-        actionSlot={
-          <ButtonsGroup>
-            <Button onClick={onAddClick} size="md">
-              <Plus />
-              Add Single Item
-            </Button>
+    <EmptyState
+      titleSlot="No items yet"
+      descriptionSlot={
+        <>
+          Add items to this dataset to use them <br />
+          in experiment runs.
+        </>
+      }
+      actionSlot={
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2">
+            <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
+              New item
+            </CreateButton>
             {onImportClick && (
-              <Button onClick={onImportClick} size="md">
-                <Upload />
+              <Button onClick={onImportClick} icon={<Upload />}>
                 Import CSV
               </Button>
             )}
             {onImportJsonClick && (
-              <Button onClick={onImportJsonClick} size="md">
-                <FileJson />
+              <Button onClick={onImportJsonClick} icon={<FileJson />}>
                 Import JSON
               </Button>
             )}
-          </ButtonsGroup>
-        }
-      />
-    </div>
+          </div>
+          <Button
+            variant="ghost"
+            render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
+
+            icon={<ExternalLinkIcon />}
+          >
+            Datasets Documentation
+          </Button>
+        </div>
+      }
+      variant="fill"
+    />
   );
 }

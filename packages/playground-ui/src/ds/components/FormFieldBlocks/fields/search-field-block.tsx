@@ -1,10 +1,11 @@
 import { SearchIcon, XIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { Button } from '../../Button';
 import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
+import { fieldErrorId } from '../block/field-error-id';
 import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {
@@ -24,14 +25,16 @@ export type SearchFieldBlockProps = {
   layout?: 'horizontal' | 'vertical';
   className?: string;
   size?: InputProps['size'];
-  variant?: InputProps['variant'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
+  /** Gives the caller access to the underlying input, e.g. to focus it from a keyboard shortcut. */
+  inputRef?: RefObject<HTMLInputElement | null>;
 };
 
 export function SearchFieldBlock({
   name,
   helpText,
+  error,
   errorMsg,
   required = false,
   disabled = false,
@@ -44,13 +47,16 @@ export function SearchFieldBlock({
   onReset,
   className,
   size,
-  variant,
   isMinimized,
   onMinimizedChange,
+  inputRef: externalInputRef,
 }: SearchFieldBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const buttonSize = size === 'default' ? 'lg' : size;
 
+  const setInputRef = (element: HTMLInputElement | null) => {
+    inputRef.current = element;
+    if (externalInputRef) externalInputRef.current = element;
+  };
   useEffect(() => {
     if (isMinimized === false) {
       inputRef.current?.focus();
@@ -62,7 +68,7 @@ export function SearchFieldBlock({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            size={buttonSize || 'sm'}
+            size={size || 'sm'}
             aria-label={label || 'Search'}
             disabled={disabled}
             onClick={() => onMinimizedChange?.(false)}
@@ -79,66 +85,67 @@ export function SearchFieldBlock({
     <FieldBlock.Layout layout={layout} className={className}>
       {layout === 'horizontal' ? (
         <FieldBlock.Column className={labelIsHidden ? 'sr-only' : undefined}>
-          <FieldBlock.Label name={name} required={required}>
+          <FieldBlock.Label name={name} required={required} disabled={disabled}>
             {label}
           </FieldBlock.Label>
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column className={layout === 'horizontal' && labelIsHidden ? 'col-span-full' : undefined}>
         {layout === 'vertical' && label ? (
-          <FieldBlock.Label name={name} required={required} className={labelIsHidden ? 'sr-only' : undefined}>
+          <FieldBlock.Label
+            name={name}
+            required={required}
+            disabled={disabled}
+            className={labelIsHidden ? 'sr-only' : undefined}
+          >
             {label}
           </FieldBlock.Label>
         ) : null}
-        <div className="group relative">
-          <Input
-            ref={inputRef}
-            id={`input-${name}`}
-            name={name}
-            disabled={disabled}
-            value={value}
-            placeholder={placeholder}
-            onChange={onChange}
-            size={size}
-            variant={variant}
-            className={cn(
-              size === 'sm' && 'px-8',
-              size === 'md' && 'px-9',
-              (!size || size === 'default') && 'px-10',
-              size === 'lg' && 'px-11',
+        <FieldBlock.Column className="gap-1">
+          <div className="group relative">
+            <Input
+              ref={setInputRef}
+              id={`input-${name}`}
+              name={name}
+              disabled={disabled}
+              value={value}
+              placeholder={placeholder}
+              onChange={onChange}
+              size={size}
+              error={error || Boolean(errorMsg)}
+              aria-describedby={errorMsg ? fieldErrorId(name) : undefined}
+              className={cn(size === 'sm' && 'px-8', (!size || size === 'md') && 'px-9', size === 'lg' && 'px-10')}
+            />
+            <SearchIcon
+              aria-hidden="true"
+              className={cn(
+                'absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground',
+                size === 'sm' && 'size-3.5',
+                (!size || size === 'md') && 'size-4',
+                size === 'lg' && 'size-[1.125rem]',
+              )}
+            />
+            {onReset && (value || isMinimized === false) && (
+              <Button
+                variant="ghost"
+                size={size || 'md'}
+                aria-label="Clear search"
+                onClick={() => {
+                  if (value) {
+                    onReset();
+                  }
+                  if (isMinimized === false) {
+                    onMinimizedChange?.(true);
+                  }
+                }}
+                className="absolute top-1/2 right-0 -translate-y-1/2"
+              >
+                <XIcon />
+              </Button>
             )}
-          />
-          <SearchIcon
-            aria-hidden="true"
-            className={cn(
-              'absolute top-1/2 left-3 -translate-y-1/2 text-neutral4 opacity-50 group-has-focus:opacity-100',
-              size === 'sm' && 'size-3.5',
-              size === 'md' && 'size-4',
-              (!size || size === 'default') && 'size-[1.125rem]',
-              size === 'lg' && 'size-5',
-            )}
-          />
-          {onReset && (value || isMinimized === false) && (
-            <Button
-              variant="ghost"
-              size={buttonSize || 'lg'}
-              aria-label="Clear search"
-              onClick={() => {
-                if (value) {
-                  onReset();
-                }
-                if (isMinimized === false) {
-                  onMinimizedChange?.(true);
-                }
-              }}
-              className="absolute top-1/2 right-0 -translate-y-1/2"
-            >
-              <XIcon />
-            </Button>
-          )}
-        </div>
-        {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
-        {errorMsg && <FieldBlock.ErrorMsg>{errorMsg}</FieldBlock.ErrorMsg>}
+          </div>
+          {helpText || errorMsg ? <FieldBlock.Message name={name} helpText={helpText} errorMsg={errorMsg} /> : null}
+        </FieldBlock.Column>
       </FieldBlock.Column>
     </FieldBlock.Layout>
   );

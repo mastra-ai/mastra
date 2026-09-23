@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import type { ButtonProps } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Tag, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -11,12 +11,14 @@ export function BulkTagPicker({
   onApplyTag,
   onRemoveTag,
   onNewTag,
+  size = 'sm',
 }: {
   selectedCount: number;
   vocabulary: string[];
   onApplyTag: (tag: string) => void;
   onRemoveTag: (tag: string) => void;
   onNewTag: (tag: string) => void;
+  size?: ButtonProps['size'];
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -27,10 +29,7 @@ export function BulkTagPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Icon size="sm">
-            <Tag />
-          </Icon>
+        <Button variant="outline" size={size} icon={<Tag />}>
           Tag {selectedCount} items
         </Button>
       </PopoverTrigger>
@@ -50,19 +49,22 @@ export function BulkTagPicker({
             }
           }}
           placeholder="Search or create tag..."
-          className="mb-1 h-7 text-xs"
+          className="mb-1 h-7 text-caption"
           autoFocus
         />
         <div className="max-h-40 space-y-0.5 overflow-y-auto">
           {filtered.map(tag => (
-            <div key={tag} className="hover:bg-surface3 flex items-center justify-between rounded px-2 py-1 text-xs">
-              <button type="button" onClick={() => onApplyTag(tag)} className="text-neutral4 flex-1 text-left">
+            <div
+              key={tag}
+              className="flex items-center justify-between rounded px-2 py-1 text-caption hover:bg-fill-subtle"
+            >
+              <button type="button" onClick={() => onApplyTag(tag)} className="flex-1 text-left text-muted-foreground">
                 {tag}
               </button>
               <button
                 type="button"
                 onClick={() => onRemoveTag(tag)}
-                className="text-neutral2 hover:text-negative1 ml-2"
+                className="ml-2 text-placeholder hover:text-negative1"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -75,7 +77,7 @@ export function BulkTagPicker({
                 onNewTag(search.trim());
                 setSearch('');
               }}
-              className="hover:bg-surface3 text-accent1 w-full rounded px-2 py-1 text-left text-xs"
+              className="w-full rounded px-2 py-1 text-left text-caption text-accent1 hover:bg-fill-subtle"
             >
               Create &amp; apply &quot;{search.trim()}&quot;
             </button>

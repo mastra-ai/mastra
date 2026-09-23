@@ -1,6 +1,6 @@
 ---
 title: "Auth | Studio"
-description: Secure your Studio deployment with login screens, role-based access control, and permission-based UI rendering.
+description: "Secure Mastra Studio and API routes with login flows, token forwarding, role-based access control, default roles, and permission-aware UI rendering."
 packages:
   - "@mastra/core"
 ---
@@ -10,6 +10,10 @@ packages:
 When you configure [authentication](/docs/auth/overview) on your Mastra server, Studio automatically displays a login screen and enforces access control. One configuration secures both the Studio UI and your API routes.
 
 Without authentication, Studio and all API routes are publicly accessible.
+
+:::note
+Studio deployed on Mastra platform works differently. By default, the platform injects its own auth so only your organization members can sign in, and your `server.auth` applies to API routes only. Set `MASTRA_PLATFORM_STUDIO_AUTH=disabled` to opt out. See [Authentication on Mastra platform](/docs/mastra-platform/studio#authentication).
+:::
 
 ## When to use Studio Auth
 

@@ -1,4 +1,3 @@
-import { generateSignalId } from '@mastra/core/observability';
 import type {
   AnyRecordedSpan,
   CorrelationContext,
@@ -12,6 +11,7 @@ import type {
   SpanTypeMap,
 } from '@mastra/core/observability';
 import type { GetTraceResponse, SpanRecord } from '@mastra/core/storage';
+import { generateSignalId } from './ids';
 
 type RecordedAnnotationEvent = ScoreEvent | FeedbackEvent;
 type EmitRecordedEvent = (event: RecordedAnnotationEvent) => void | Promise<void>;

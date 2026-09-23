@@ -1,6 +1,6 @@
 ---
 title: "Scheduled workflows | Workflows"
-description: "Run a workflow on a cron schedule by declaring a `schedule` field on the workflow definition."
+description: "Run Mastra workflows on one or more cron schedules, inspect trigger history in Studio, and pause or resume scheduled execution at runtime."
 packages:
   - "@mastra/core"
 ---
@@ -47,7 +47,7 @@ A separate "register schedule" call won't happen. The scheduler reads `schedule`
 
 A workflow that declares `schedule` is auto-promoted to the **evented execution engine**. The public API (`workflow.start()`, `workflow.startAsync()`, `streamLegacy()`, `resume()`) is unchanged, `EventedWorkflow extends Workflow` and overrides each method with matching signatures. From your code, scheduled fires and manual runs are indistinguishable.
 
-The promotion has one practical implication: evented runs require a storage adapter that supports concurrent updates, for example `@mastra/libsql`. If your adapter doesn't, `createRun()` throws a clear error pointing at the `schedule` field. Switch adapters or remove the schedule.
+The promotion means evented runs require a storage adapter with concurrent-update support, such as `@mastra/libsql`; otherwise, `createRun()` throws a clear error that points to the `schedule` field. Switch adapters or remove the schedule.
 
 ## Single schedule
 

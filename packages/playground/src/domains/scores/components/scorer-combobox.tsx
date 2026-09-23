@@ -14,6 +14,9 @@ export interface ScorerComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
+  'aria-label'?: string;
+  align?: ComboboxProps['align'];
 }
 
 export function ScorerCombobox({
@@ -25,6 +28,9 @@ export function ScorerCombobox({
   className,
   disabled = false,
   variant,
+  size,
+  'aria-label': ariaLabel,
+  align,
 }: ScorerComboboxProps) {
   const { data: scorers = {}, isLoading, isError, error } = useScorers();
   const { navigate, paths } = useLinkComponent();
@@ -60,7 +66,9 @@ export function ScorerCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
-      size={'md'}
+      size={size}
+      aria-label={ariaLabel}
+      align={align}
     />
   );
 }

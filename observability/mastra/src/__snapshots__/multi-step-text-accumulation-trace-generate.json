@@ -121,7 +121,18 @@
               "reasoning": [],
               "sources": [],
               "text": "Let me calculate that for you. The result of 5 + 3 is 8.",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-calc-1",
+                  "toolName": "calculator",
+                  "args": {
+                    "operation": "add",
+                    "a": 5,
+                    "b": 3
+                  }
+                }
+              ]
             }
           },
           "children": [
@@ -206,7 +217,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["calculator"],
                       "toolChoice": "auto",
                       "usage": {
@@ -439,7 +452,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["calculator"],
                       "toolChoice": "auto",
                       "usage": {

@@ -115,7 +115,16 @@
               "reasoning": [],
               "sources": [],
               "text": "Mock V2 stream response",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-child-span-1",
+                  "toolName": "childSpanTool",
+                  "args": {
+                    "input": "test-data"
+                  }
+                }
+              ]
             }
           },
           "children": [
@@ -197,7 +206,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["childSpanTool"],
                       "toolChoice": "auto",
                       "usage": {
@@ -422,7 +433,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["childSpanTool"],
                       "toolChoice": "auto",
                       "usage": {

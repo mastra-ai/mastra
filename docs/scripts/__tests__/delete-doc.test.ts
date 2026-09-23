@@ -274,14 +274,14 @@ describe('deleteDocument', () => {
   test('supports a replacement in another editable family', async () => {
     process.chdir(originalCwd)
     await fixture.cleanup()
-    fixture = await createFixture({ 'src/content/en/guides/replacement.mdx': '# Guide replacement\n' })
+    fixture = await createFixture({ 'src/content/en/reference/replacement.mdx': '# Guide replacement\n' })
     process.chdir(fixture.tempDir)
 
-    const result = await deleteDocument('/docs/old/page', '/guides/replacement#guide', { verbose: false })
+    const result = await deleteDocument('/docs/old/page', '/reference/replacement#guide', { verbose: false })
 
     expect(result.success).toBe(true)
-    expect(await fixture.read('src/content/en/docs/links.mdx')).toContain('[Absolute](/guides/replacement#guide)')
-    expect(await fixture.read('src/content/en/docs/links.mdx')).toContain('[Relative](../guides/replacement#guide)')
+    expect(await fixture.read('src/content/en/docs/links.mdx')).toContain('[Absolute](/reference/replacement#guide)')
+    expect(await fixture.read('src/content/en/docs/links.mdx')).toContain('[Relative](../reference/replacement#guide)')
   })
 
   test('supports a family-root index replacement with a hash', async () => {

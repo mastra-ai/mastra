@@ -1,6 +1,6 @@
 ---
 title: "Auth0 | Auth"
-description: "Documentation for the @mastra/auth-auth0 package, which authenticates Mastra applications using Auth0 authentication."
+description: "Authenticate Mastra servers with Auth0 JWTs, configure credentials and authorization, and connect client applications with authenticated requests."
 packages:
   - "@mastra/auth-auth0"
   - "@mastra/client-js"
@@ -113,7 +113,7 @@ First, install and configure the Auth0 React SDK in your application:
 npm install @auth0/auth0-react
 ```
 
-```typescript title="src/auth0-provider.tsx"
+```typescript title="src/auth0-provider.tsx" oxfmt:false
 import React from 'react'
 import { Auth0Provider } from '@auth0/auth0-react'
 

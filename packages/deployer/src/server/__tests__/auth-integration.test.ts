@@ -398,6 +398,48 @@ describe('auth middleware integration tests', () => {
     });
   });
 
+  describe('Studio control routes', () => {
+    const routes = [
+      { path: '/studio/refresh-events', method: 'GET' },
+      { path: '/studio/__refresh', method: 'POST' },
+      { path: '/studio/__hot-reload-status', method: 'GET' },
+    ];
+
+    it.each(routes)('protects $method $path in production', async ({ path, method }) => {
+      const mastra = new Mastra({
+        server: {
+          auth: authConfig,
+          studioBase: '/studio',
+        },
+      });
+      const app = await createHonoServer(mastra, { tools: {}, studio: true });
+
+      const unauthorizedResponse = await app.request(path, { method });
+      expect(unauthorizedResponse.status).toBe(401);
+
+      const authorizedResponse = await app.request(path, {
+        method,
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+      expect(authorizedResponse.status).toBe(200);
+      await authorizedResponse.body?.cancel();
+    });
+
+    it.each(routes)('keeps $method $path public in development', async ({ path, method }) => {
+      const mastra = new Mastra({
+        server: {
+          auth: authConfig,
+          studioBase: '/studio',
+        },
+      });
+      const app = await createHonoServer(mastra, { tools: {}, studio: true, isDev: true });
+
+      const response = await app.request(path, { method });
+      expect(response.status).toBe(200);
+      await response.body?.cancel();
+    });
+  });
+
   describe('Legacy Compatibility', () => {
     it('should still honor routes that manually set requiresAuth', async () => {
       const routes = [

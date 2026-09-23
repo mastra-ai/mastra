@@ -1,0 +1,283 @@
+---
+title: 'Datasets'
+description: 'Create versioned Mastra datasets, define item schemas, manage test data through code or Studio, and track experiments against agents and workflows.'
+packages:
+  - '@mastra/core'
+---
+
+# Datasets
+
+**Added in:** `@mastra/core@1.4.0`
+
+Datasets are collections of test cases that you run experiments against to measure how well your agents and workflows perform. Each mutation creates a new version, so you can reproduce past experiments exactly. Pair datasets with [scorers](/docs/evals/overview) to track quality across prompts, models, or code changes.
+
+<Inject>
+  **For AI agents:** Run `npx mastra api dataset create '{"name":"translation-pairs"}'` to create a dataset directly instead of opening Studio or writing a temporary script. The command requires a running Mastra server with a storage adapter that supports datasets; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api dataset create --schema` before adding different dataset fields. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+</Inject>
+
+## Usage
+
+### Configure storage
+
+Configure storage in your Mastra instance. Datasets require a storage adapter that provides the `datasets` domain:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'my-store',
+    url: 'file:./mastra.db',
+  }),
+})
+```
+
+### Accessing the datasets API
+
+All dataset operations are available through `mastra.datasets`:
+
+```typescript
+const datasets = mastra.datasets
+
+// Create a dataset
+const dataset = await datasets.create({ name: 'my-dataset' })
+
+// Retrieve an existing dataset
+const existing = await datasets.get({ id: 'dataset-id' })
+
+// List all datasets
+const { datasets: all } = await datasets.list()
+```
+
+Visit the [`DatasetsManager` reference](/reference/datasets/datasets-manager) for the full list of methods.
+
+## Studio
+
+You can also manage datasets in [Studio](/docs/studio/overview). After opening Studio, select **Datasets** from the sidebar to see all your available datasets or create a new one.
+
+To get started, select **Create Dataset** and set a name, description, and optional schemas. After confirming, you'll see the dataset details page with two tabs: **Items** and [**Experiments**](/docs/evals/experiments#run-experiments-in-studio).
+
+In the **Items** view you can add, update, and delete items, and view version history. Select **Add Item** to insert a new item with JSON editors for input and ground truth. From this view you can also import items in bulk from a CSV or JSON file. When importing, map each column to the corresponding dataset field.
+
+Select **Versions** to see the full history of changes to the dataset. After selecting **Compare Versions**, choose any two versions and select **Compare** to see a side-by-side diff of all items that were added, changed, or removed between those versions.
+
+## Creating a dataset
+
+Call [`create()`](/reference/datasets/create) with a name and optional description:
+
+```typescript title="src/mastra/datasets/create-dataset.ts"
+import { mastra } from '../index'
+
+const dataset = await mastra.datasets.create({
+  name: 'translation-pairs',
+  description: 'English to Spanish translation test cases',
+})
+
+console.log(dataset.id) // auto-generated UUID
+```
+
+### Defining schemas
+
+You can enforce the shape of `input` and `groundTruth` by passing a [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.) when creating the dataset:
+
+```typescript title="src/mastra/datasets/create-with-schema.ts"
+import { z } from 'zod'
+import { mastra } from '../index'
+
+const dataset = await mastra.datasets.create({
+  name: 'translation-pairs',
+  inputSchema: z.object({
+    text: z.string(),
+    sourceLang: z.string(),
+    targetLang: z.string(),
+  }),
+  groundTruthSchema: z.object({
+    translation: z.string(),
+  }),
+})
+```
+
+Items that don't match the schema are rejected at insert time.
+
+## Adding items
+
+Use [`addItem()`](/reference/datasets/addItem) for a single item or [`addItems()`](/reference/datasets/addItems) to insert in bulk:
+
+```typescript title="src/mastra/datasets/add-items.ts"
+// Single item
+await dataset.addItem({
+  input: { text: 'Hello', sourceLang: 'en', targetLang: 'es' },
+  groundTruth: { translation: 'Hola' },
+})
+
+// Bulk insert
+await dataset.addItems({
+  items: [
+    {
+      input: { text: 'Goodbye', sourceLang: 'en', targetLang: 'es' },
+      groundTruth: { translation: 'Adiós' },
+    },
+    {
+      input: { text: 'Thank you', sourceLang: 'en', targetLang: 'es' },
+      groundTruth: { translation: 'Gracias' },
+    },
+  ],
+})
+```
+
+## Validate snapshot artifacts
+
+Use `createDatasetSnapshot()` and `parseDatasetSnapshot()` from `@mastra/core/datasets` to create and validate a versioned JSON artifact. These are pure format utilities: they don't export from storage, import a dataset, allocate portable identities, or change Studio's JSON importer.
+
+```typescript title="src/mastra/datasets/snapshot.ts"
+import { createDatasetSnapshot, parseDatasetSnapshot } from '@mastra/core/datasets'
+
+const snapshot = createDatasetSnapshot({
+  formatVersion: 1,
+  datasetIdentity: '00000000-0000-4000-8000-000000000001',
+  configuration: { name: 'translation-pairs' },
+  items: [
+    {
+      itemIdentity: '00000000-0000-4000-8000-000000000002',
+      createdAt: '2026-09-01T09:00:00.123Z',
+      updatedAt: '2026-09-10T10:00:00.456Z',
+      payload: { input: 'Hello', groundTruth: 'Hola', scorerIds: [] },
+    },
+  ],
+  provenance: {
+    exportedAt: '2026-09-11T12:00:00Z',
+    sourceDatasetId: 'dev-translations',
+    itemVersion: 1,
+    configurationBasis: 'export-time',
+  },
+})
+
+const parsed = parseDatasetSnapshot(JSON.stringify(snapshot))
+console.log(parsed.digest === snapshot.digest) // true
+```
+
+The artifact includes configuration, complete authored item payloads, portable UUIDs, and provenance. Supply stable lowercase UUIDs rather than generating new identities on every serialization. Authored `externalId` values are separate from portable identity and remain unchanged. Absent, `null`, and empty overrides remain distinct. Omit optional properties rather than assigning `undefined`. Dataset descriptions also preserve absent, `null`, and string values.
+
+Each item requires `createdAt` and `updatedAt` as UTC ISO 8601 strings with millisecond precision, matching `Date.toISOString()` for four-digit years. Both timestamps are included in the integrity digest. They represent the item's actual dates, not transfer provenance: an importer must preserve them as the destination item's `createdAt` and `updatedAt`, rather than replacing them with import time. An importer records transfer time in a separate receipt, while later edits in the destination update `updatedAt` normally. Implementing storage import remains outside the scope of these format helpers.
+
+This preservation applies to the supplied artifact content. Storage adapters may already have normalized values before capture. Format validation neither recovers those distinctions nor guarantees that ordinary dataset CRUD operations can restore them.
+
+Both helpers throw a Zod validation error for invalid content or size options. `datasetSnapshotContentSchema.safeParse()` validates unsigned content and identity uniqueness, while `datasetSnapshotSchema.safeParse()` additionally checks the digest. These schemas don't enforce a byte limit. Use `parseDatasetSnapshot()` for untrusted text to enforce a size budget before parsing and reject duplicate JSON property names.
+
+The helpers default to a 4 MiB UTF-8 budget (`DATASET_SNAPSHOT_DEFAULT_MAX_BYTES`). Pass `{ maxBytes }` as the second argument to either helper to raise or lower it. The value must be a positive safe integer. This is an operational limit, not part of the v1 format or digest. For example, parse the snapshot above with an 8 MiB budget:
+
+```typescript
+const parsedWithLargerBudget = parseDatasetSnapshot(JSON.stringify(snapshot), {
+  maxBytes: 8 * 1024 * 1024,
+})
+```
+
+`createDatasetSnapshot()` measures the complete artifact's compact `JSON.stringify()` output, including the digest. `parseDatasetSnapshot()` measures the supplied text, including whitespace. Pretty-printing can exceed a budget that accepts the compact artifact. Neither helper truncates data. During creation, validation, cloning, and hashing happen before the byte-size check. Because shared references can expand during JSON serialization, the budget limits output size without bounding CPU time or peak memory. When adding a transport, configure HTTP request-body limits separately from this budget.
+
+Artifacts have a maximum nesting depth of 100, measured from the envelope root. They reject unknown structural fields, duplicate item identities or non-null `externalId` values, non-JSON values, and invalid Unicode. Programmatic content must use plain objects and standard arrays, not class instances or array subclasses. Arbitrary JSON inside authored payloads remains intact, including trajectory expectations. Dataset schemas are preserved as JSON objects, but these utilities don't compile them or validate items against them. Destination authorization, reference resolution, and storage support also require separate preflight checks.
+
+The digest is a lowercase hexadecimal SHA-256 hash of the RFC 8785 canonical JSON representation of the envelope without `digest`. Items are sorted by portable identity for hashing, while authored array order is preserved. Provenance is covered, so a new capture time changes the digest. A matching digest verifies integrity but doesn't establish authorship or approval. Review sensitive data before creating an artifact, as the utilities don't redact it.
+
+## Updating, deleting, and purging items
+
+[`updateItem()`](/reference/datasets/updateItem), [`deleteItem()`](/reference/datasets/deleteItem), and [`deleteItems()`](/reference/datasets/deleteItems) create new dataset versions as they modify or remove items:
+
+```typescript title="src/mastra/datasets/update-delete.ts"
+await dataset.updateItem({
+  itemId: 'item-abc-123',
+  groundTruth: { translation: '¡Hola!' },
+})
+
+await dataset.deleteItem({ itemId: 'item-abc-123' })
+
+await dataset.deleteItems({ itemIds: ['item-1', 'item-2'] })
+```
+
+Deleting an item hides it from the current dataset version but retains its content in historical rows and the deletion tombstone. Use [`purgeItem()`](/reference/datasets/purgeItem) to redact the item's stored content across its existing history:
+
+```typescript title="src/mastra/datasets/purge-item.ts"
+await dataset.purgeItem({ itemId: 'item-abc-123' })
+```
+
+Purging replaces content in every historical row and deletion tombstone with redacted values, and scrubs linked experiment-result payloads, tags, and comments. Later experiment-result submissions for the item are also stored with redacted content.
+
+Purge serializes or conflicts with concurrent dataset item writers without guaranteeing which operation completes first. If a mutating `updateItem()` call loses the race, it re-reads the purge marker and rejects with `DATASET_ITEM_PURGED`. `deleteItem()` remains idempotent, and any deletion tombstone created during the race stays redacted.
+
+Normal item mutations use Slowly Changing Dimension Type 2 (SCD-2) versioning. Permanent purge intentionally overrides historical immutability for erasure while preserving item identity and the dataset version timeline. It doesn't create a dataset version and can't be undone. Experiment counters and review status are also preserved. Avoid storing sensitive data in `externalId`, which remains unchanged as the item's identity key.
+
+MongoDB storage requires a replica set or sharded deployment with transaction support for this operation. Purging fails before changing data when MongoDB transactions aren't available.
+
+## Listing and searching items
+
+[`listItems()`](/reference/datasets/listItems) supports pagination and full-text search:
+
+```typescript title="src/mastra/datasets/list-items.ts"
+// Paginated list
+const { items, pagination } = await dataset.listItems({
+  page: 0,
+  perPage: 50,
+})
+
+// Full-text search
+const { items: matches } = await dataset.listItems({
+  search: 'Hello',
+})
+
+// Search and pagination can be combined with a specific version
+const { items: v2Matches } = await dataset.listItems({
+  version: 2,
+  search: 'Hello',
+  page: 0,
+  perPage: 50,
+})
+
+// Version-only snapshot returns a bare DatasetItem[]
+const v2Items = await dataset.listItems({ version: 2 })
+```
+
+## Versioning
+
+Adding, updating, or deleting dataset items bumps the dataset version. Purging an item's stored content with [`purgeItem()`](/reference/datasets/purgeItem) doesn't create a new version. This lets you pin experiments to a specific snapshot of the data while erasing sensitive content without changing the version history.
+
+### Listing versions
+
+Use [`listVersions()`](/reference/datasets/listVersions) to see the paginated history of versions:
+
+```typescript title="src/mastra/datasets/list-versions.ts"
+const { versions, pagination } = await dataset.listVersions()
+
+for (const v of versions) {
+  console.log(`Version ${v.version} — created ${v.createdAt}`)
+}
+```
+
+### Viewing item history
+
+See how a specific item changed across versions by calling [`getItemHistory()`](/reference/datasets/getItemHistory) with the `itemId`:
+
+```typescript title="src/mastra/datasets/item-history.ts"
+const history = await dataset.getItemHistory({ itemId: 'item-abc-123' })
+
+for (const row of history) {
+  console.log(`Version ${row.datasetVersion}`, row.input, row.groundTruth)
+}
+```
+
+### Pinning to a version
+
+Fetch the exact items that existed at a past version:
+
+```typescript title="src/mastra/datasets/pin-version.ts"
+const items = await dataset.listItems({ version: 2 })
+```
+
+You can also pin experiments to a version, see [running experiments](/docs/evals/experiments). Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
+
+## Related
+
+- [Experiments](/docs/evals/experiments)
+- [Scorers overview](/docs/evals/overview)
+- [DatasetsManager reference](/reference/datasets/datasets-manager)
+- [Dataset reference](/reference/datasets/dataset)
+- 📹 [Mastra evals, datasets, and experiments workshop](https://www.youtube.com/watch?v=Vla5LfmOOrM)

@@ -10,12 +10,13 @@ import {
   resolveGreetingText,
   resolveMemoryInstance,
   resolveSessionComponent,
+  resolveTurnDetection,
   runEndCall,
   speakGreeting,
   waitForAgentDoneSpeaking,
 } from './worker';
 import type { GreetingContext, ResolveMastraAgentArgs, VoiceCallContext } from './worker';
-import { workerSetupComplete } from './worker-setup';
+import { isEouMethodRequested, workerSetupComplete } from './worker-setup';
 
 function fakeMastra(overrides: Partial<Record<'getAgentById' | 'getAgent' | 'getLogger', unknown>> = {}): Mastra {
   return {
@@ -62,6 +63,20 @@ describe('createLiveKitWorker', () => {
     expect(runners).toContain('lk_end_of_utterance_multilingual');
     // The unused language model is pruned so the inference process doesn't demand its files.
     expect(runners).not.toContain('lk_end_of_utterance_en');
+  });
+
+  it('keeps both turn detector runners registered for a per-call turnDetection resolver', async () => {
+    createLiveKitWorker({
+      mastra: fakeMastra(),
+      vad: false,
+      configuration: { turnDetection: () => undefined },
+    });
+    await workerSetupComplete();
+    // The resolver builds its detector inside the job, so we can't know which model it wants:
+    // both runners are requested, so neither gets pruned. (The plugin import is module-cached
+    // after the previous test, so assert on the request set that drives pruning.)
+    expect(isEouMethodRequested('lk_end_of_utterance_multilingual')).toBe(true);
+    expect(isEouMethodRequested('lk_end_of_utterance_en')).toBe(true);
   });
 
   it('returns a LiveKit agent definition', () => {
@@ -326,6 +341,44 @@ describe('resolveSessionComponent', () => {
 
   it('uses the static option when there is no resolver', async () => {
     expect(await resolveSessionComponent(undefined, 'static', context)).toBe('static');
+  });
+});
+
+describe('resolveTurnDetection', () => {
+  const context: VoiceCallContext = {
+    metadata: { requestContext: { tenant: 'meridian' } },
+    roomName: 'room-1',
+    ctx: fakeJobContext(),
+  };
+  // Stands in for a LiveKit `TurnDetector` instance, which can only be constructed inside a job.
+  const detector = { unlikelyThreshold: () => 0.5 } as unknown as voice.AgentSessionOptions['turnDetection'] & object;
+
+  it('invokes the configuration resolver with the call context and uses its detector', async () => {
+    const resolver = vi.fn((_c: VoiceCallContext) => detector);
+    const resolved = await resolveTurnDetection(
+      { turnDetection: 'vad', configuration: { turnDetection: resolver } },
+      context,
+    );
+    expect(resolved).toBe(detector);
+    expect(resolver).toHaveBeenCalledWith(context);
+  });
+
+  it('awaits an async resolver', async () => {
+    const resolved = await resolveTurnDetection({ configuration: { turnDetection: async () => detector } }, context);
+    expect(resolved).toBe(detector);
+  });
+
+  it('falls back to the static option when the resolver returns undefined', async () => {
+    const resolved = await resolveTurnDetection(
+      { turnDetection: 'manual', configuration: { turnDetection: () => undefined } },
+      context,
+    );
+    expect(resolved).toBe('manual');
+  });
+
+  it('passes the static option through when there is no resolver', async () => {
+    expect(await resolveTurnDetection({ turnDetection: 'stt' }, context)).toBe('stt');
+    expect(await resolveTurnDetection({}, context)).toBeUndefined();
   });
 });
 

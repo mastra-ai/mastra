@@ -82,18 +82,11 @@ export function useOverlayControllerHandlers() {
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, () =>
       HttpResponse.json({ sessions: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
-    ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, () =>
-      HttpResponse.json({
-        resourceId: 'test-resource',
-        sandboxId: 'sandbox-overlay',
-        sandboxWorkdir: '/workspace/overlay',
-      }),
     ),
     http.post(`${API}/sessions`, async ({ request }) => {
       const resourceId = resourceIdFromRequestBody(await request.json());

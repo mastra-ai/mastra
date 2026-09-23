@@ -6,6 +6,7 @@ export { FileService } from '../services/fs';
 export { Deps } from '../services/deps';
 export { getServerOptions } from './serverOptions';
 export { getBundlerOptions } from './bundlerOptions';
+export { extractMastraOption } from './shared/extract-mastra-option';
 export { normalizeStudioBase, detectRuntime, injectStudioHtmlConfig, escapeStudioHtmlValue } from './utils';
 export type { RuntimePlatform, BundlerPlatform, StudioInjectionConfig } from './utils';
 export { discoverFsAgents, discoverFsSingleton, discoverFsWorkflows } from './fs-routing/discover';

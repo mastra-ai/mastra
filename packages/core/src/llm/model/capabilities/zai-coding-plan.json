@@ -1,4 +1,13 @@
 {
-  "temperature": ["glm-4.7", "glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3"],
-  "structuredOutput": ["glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3"]
+  "attachment": ["glm-5.3-flash"],
+  "temperature": [
+    "glm-4.7",
+    "glm-5-turbo",
+    "glm-5.2",
+    "glm-5.2-highspeed",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "glm-5.3-highspeed"
+  ],
+  "structuredOutput": ["glm-5-turbo", "glm-5.2", "glm-5.2-highspeed", "glm-5.3", "glm-5.3-flash", "glm-5.3-highspeed"]
 }

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { normalizePerPage, calculatePagination } from '../../base';
 import type {
   StorageSkillType,
@@ -70,7 +68,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
 
     // Create version 1 from the config
-    const versionId = randomUUID();
+    const versionId = globalThis.crypto.randomUUID();
     try {
       await this.createVersion({
         id: versionId,
@@ -181,7 +179,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
 
       // Only create a new version if something actually changed
       if (changedFields.length > 0) {
-        const newVersionId = randomUUID();
+        const newVersionId = globalThis.crypto.randomUUID();
         const newVersionNumber = latestVersion.versionNumber + 1;
 
         await this.createVersion({
@@ -224,6 +222,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     if (page < 0) {
       throw new Error('page must be >= 0');
@@ -293,8 +292,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
 
     // Deep clone to avoid mutation
     const clonedConfigs = sortedConfigs.map(config => this.deepCopyConfig(config));
-
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     return {
       skills: clonedConfigs.slice(offset, offset + perPage),

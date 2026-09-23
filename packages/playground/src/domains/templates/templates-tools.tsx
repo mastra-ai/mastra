@@ -34,8 +34,8 @@ export function TemplatesTools({
     return (
       <div
         className={cn(
-          'h-[6.5rem] flex items-center gap-8',
-          '[&>div]:bg-surface3 [&>div]:w-48 [&>div]:h-8 [&>div]:animate-pulse',
+          'flex h-[6.5rem] items-center gap-5',
+          '[&>div]:h-8 [&>div]:w-48 [&>div]:animate-pulse [&>div]:bg-card',
           className,
         )}
       >
@@ -45,7 +45,7 @@ export function TemplatesTools({
   }
 
   return (
-    <div className={cn('flex flex-wrap mx-auto sticky top-0 gap-4 bg-surface2 py-8', className)}>
+    <div className={cn('sticky top-0 mx-auto flex flex-wrap gap-4 bg-background py-5', className)}>
       <SearchFieldBlock
         name="search-templates"
         label="Search templates"
@@ -71,8 +71,8 @@ export function TemplatesTools({
         options={providerOptions}
       />
       {onReset && (
-        <Button onClick={onReset}>
-          Reset <XIcon />
+        <Button onClick={onReset} icon={<XIcon />}>
+          Reset
         </Button>
       )}
     </div>

@@ -375,7 +375,7 @@ describe('Agent-level skills wiring', () => {
       return { parent, children };
     }
 
-    it('opens one resolve-skills span per request and hands it to the resolver', async () => {
+    it('opens one skill resolve span per request and hands it to the resolver', async () => {
       initContextStorage();
       const { parent, children } = createRecordingSpan();
       const seenSpans: unknown[] = [];
@@ -401,9 +401,9 @@ describe('Agent-level skills wiring', () => {
 
       expect(parent.createChildSpan).toHaveBeenCalledTimes(1);
       expect(children[0]!.options).toMatchObject({
-        type: 'skill_resolution',
-        name: 'resolve-skills',
-        attributes: { agentId: 'skills-span' },
+        type: 'skill_action',
+        name: 'skill:resolve',
+        attributes: { operation: 'resolve', agentId: 'skills-span' },
       });
       expect(seenSpans).toEqual([children[0]!.span]);
       expect(children[0]!.ended).toBe(true);

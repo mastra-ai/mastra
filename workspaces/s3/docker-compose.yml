@@ -1,6 +1,9 @@
 services:
   minio:
-    image: minio/minio:latest
+    # MinIO's community images were pulled from Docker Hub/Quay (source-only
+    # since Oct 2025); Chainguard maintains free builds. Pinned by digest for
+    # reproducible CI — bump deliberately. Free tier publishes no version tags.
+    image: cgr.dev/chainguard/minio@sha256:039800e64ec7247d2fde7cff3697e964f6fe20b6d7d2c46aa7d82cc63355d512
     ports:
       - '9000:9000'
       - '9001:9001'
@@ -14,15 +17,18 @@ services:
       timeout: 5s
       retries: 5
 
-  # Create test bucket on MinIO startup
+  # Create test bucket on MinIO startup (distroless Chainguard images have no
+  # shell, so bucket creation uses aws-cli instead of minio/mc)
   minio-setup:
-    image: minio/mc:latest
+    image: amazon/aws-cli:2.36.44
     depends_on:
       minio:
         condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 minioadmin minioadmin;
-      mc mb local/test-bucket --ignore-existing;
-      exit 0;
+      aws --endpoint-url http://minio:9000 s3api head-bucket --bucket test-bucket ||
+      aws --endpoint-url http://minio:9000 s3 mb s3://test-bucket
       "

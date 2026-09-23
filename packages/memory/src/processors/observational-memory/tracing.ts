@@ -1,5 +1,6 @@
-import type { ObservabilityContext } from '@mastra/core/observability';
+import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/core/observability';
 import { createObservabilityContext, EntityType, getOrCreateSpan, SpanType } from '@mastra/core/observability';
+import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { ModelByInputTokens } from './model-by-input-tokens';
@@ -17,19 +18,25 @@ const PHASE_CONFIG: Record<
   {
     name: string;
     entityName: string;
+    operationType: NonNullable<MemoryOperationAttributes['operationType']>;
+    multiThread?: boolean;
   }
 > = {
   observer: {
-    name: 'om.observer',
+    name: 'memory: observe',
     entityName: 'Observer',
+    operationType: 'observe',
   },
   'observer-multi-thread': {
-    name: 'om.observer.multi-thread',
+    name: 'memory: observe.multi-thread',
     entityName: 'MultiThreadObserver',
+    operationType: 'observe',
+    multiThread: true,
   },
   reflector: {
-    name: 'om.reflector',
+    name: 'memory: reflect',
     entityName: 'Reflector',
+    operationType: 'reflect',
   },
 };
 
@@ -51,18 +58,45 @@ export async function withOmTracingSpan<T>({
   callback: (observabilityContext: ObservabilityContext) => Promise<T>;
 }): Promise<T> {
   const config = PHASE_CONFIG[phase];
-  const span = getOrCreateSpan({
-    type: SpanType.GENERIC,
+  const tracingContext = observabilityContext?.tracingContext ?? observabilityContext?.tracing;
+  const callerMetadata = tracingContext?.currentSpan?.metadata;
+  const inheritedCallerThreadId = callerMetadata?.__mastraObservationalMemoryCallerThreadId;
+  const callerThreadId = callerMetadata?.threadId;
+  const requestThreadId = requestContext?.get(MASTRA_THREAD_ID_KEY);
+  // Preserve caller identity separately from isolated execution threads. Exporters
+  // decide whether to use this reserved internal hint as a session fallback.
+  const omCallerThreadId =
+    typeof inheritedCallerThreadId === 'string' && inheritedCallerThreadId
+      ? inheritedCallerThreadId
+      : typeof callerThreadId === 'string' && callerThreadId
+        ? callerThreadId
+        : typeof requestThreadId === 'string' && requestThreadId
+          ? requestThreadId
+          : undefined;
+  // GENERIC is reserved for spans ingested from outside Mastra, where the shape
+  // is unknown. These are memory's own model passes, so they carry the memory
+  // operation type and its typed attributes rather than an untyped metadata bag.
+  //
+  // The entity type was previously OUTPUT_STEP_PROCESSOR, which these spans are
+  // not: they wrap the observer/reflector model calls made *inside* the
+  // observational-memory processor. Anything keying off a processor entity type
+  // counted these model-call durations as processor overhead.
+  const span = getOrCreateSpan<SpanType.MEMORY_OPERATION>({
+    type: SpanType.MEMORY_OPERATION,
     name: config.name,
-    entityType: EntityType.OUTPUT_STEP_PROCESSOR,
+    entityType: EntityType.MEMORY,
     entityName: config.entityName,
-    tracingContext: observabilityContext?.tracingContext ?? observabilityContext?.tracing,
-    metadata: {
-      omPhase: phase,
-      omInputTokens: inputTokens,
-      omSelectedModel: typeof model === 'string' ? model : '(dynamic-model)',
-      ...metadata,
+    tracingContext,
+    attributes: {
+      operationType: config.operationType,
+      inputTokens,
+      selectedModel: typeof model === 'string' ? model : '(dynamic-model)',
+      ...(config.multiThread ? { multiThread: true } : {}),
     },
+    metadata:
+      omCallerThreadId !== undefined
+        ? { ...metadata, __mastraObservationalMemoryCallerThreadId: omCallerThreadId }
+        : metadata,
     requestContext,
   });
   const childObservabilityContext = createObservabilityContext({ currentSpan: span });

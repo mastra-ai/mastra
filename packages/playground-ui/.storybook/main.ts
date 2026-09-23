@@ -1,6 +1,7 @@
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/react-vite';
+import { mergeConfig } from 'vite';
 
 const config: StorybookConfig = {
   stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
@@ -16,6 +17,27 @@ const config: StorybookConfig = {
   typescript: {
     reactDocgen: 'react-docgen-typescript',
   },
+  viteFinal: config =>
+    mergeConfig(
+      {
+        ...config,
+        // Components are TypeScript: keep their docgen plugin, but skip the JS
+        // fallback, which otherwise parses workspace dependencies' generated dist.
+        plugins: config.plugins?.filter(
+          plugin => !plugin || !('name' in plugin) || plugin.name !== 'storybook:react-docgen-plugin',
+        ),
+      },
+      {
+        resolve: {
+          alias: [
+            {
+              find: /^@mastra\/react$/,
+              replacement: fileURLToPath(new URL('./mocks/mastra-react.ts', import.meta.url)),
+            },
+          ],
+        },
+      },
+    ),
 };
 
 export default config;

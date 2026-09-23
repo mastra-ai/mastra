@@ -1,0 +1,10 @@
+extends: existence
+message: "Replace '%s' with the specific meaning, consequence, or responsibility."
+level: error
+nonword: true
+ignorecase: true
+tokens:
+  - '\bcarr(?:y|ies|ied|ying) (?:significant |real |extra |added |considerable |serious |enormous |heavy )?(?:weight|significance|meaning|implications?|connotations?|baggage|risks?|consequences|urgency|stigma)\b'
+  - '\bcarr(?:y|ies|ied|ying) (?:the same|as much|more|less|little|no|equal) weight\b'
+  - '\bcarr(?:y|ies|ied|ying) (?:a|an|the) (?:caveat|warning|cost|price|price tag|penalty|footnote|asterisk|catch|downside|tradeoff|trade-off)\b'
+  - '\bcarr(?:y|ies|ied|ying) the (?:day|team|torch|banner|mantle|conversation|narrative|argument|story)\b'

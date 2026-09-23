@@ -6,7 +6,7 @@ import { TraceStatus } from '@mastra/core/storage';
 type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;
 type MetricBreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
-type GetTraceLightResponse = Awaited<ReturnType<MastraClient['getTraceLight']>>;
+type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetBranchResponse = Awaited<ReturnType<MastraClient['getBranch']>>;
 type ListFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 
@@ -20,13 +20,13 @@ const baseSystemPackages: GetSystemPackagesResponse = {
 export const metricsCapableSystemPackages: GetSystemPackagesResponse = {
   ...baseSystemPackages,
   observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: true, logs: true },
+  observabilityStorageCapabilities: { metrics: true, logs: true, traceQueryDiscovery: false },
 };
 
 export const metricsUnavailableSystemPackages: GetSystemPackagesResponse = {
   ...baseSystemPackages,
   observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: false, logs: true },
+  observabilityStorageCapabilities: { metrics: false, logs: true, traceQueryDiscovery: false },
 };
 
 const trace = {
@@ -73,9 +73,15 @@ export const traceUsageBreakdown: MetricBreakdownResponse = {
   ],
 };
 
-export const traceLightSpans: GetTraceLightResponse = {
+export const traceSpans: GetTraceResponse = {
   traceId: 'trace-a',
   spans: [{ ...trace, parentSpanId: null }],
+};
+
+/** An agent trace that belongs to a memory thread: qualifies for the Messages column. */
+export const threadedTraceSpans: GetTraceResponse = {
+  traceId: 'trace-a',
+  spans: [{ ...trace, parentSpanId: null, threadId: 'thread-1' }],
 };
 
 export const rootBranchSpans: GetBranchResponse = {
@@ -134,3 +140,4 @@ export const emptyTags: Awaited<ReturnType<MastraClient['getTags']>> = { tags: [
 export const emptyEntityNames: Awaited<ReturnType<MastraClient['getEntityNames']>> = { entityNames: [] };
 export const emptyServiceNames: Awaited<ReturnType<MastraClient['getServiceNames']>> = { serviceNames: [] };
 export const emptyEnvironments: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: [] };
+export const environmentsWithProd: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: ['prod'] };

@@ -7,6 +7,8 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { GripVertical, X, ExternalLink, ChevronDown, TriangleAlert } from 'lucide-react';
@@ -98,11 +100,14 @@ const RefBlockContent = ({
   }, [storedAgentsData?.agents, block.promptBlockId]);
 
   return (
-    <div className="group hover:bg-surface2/50 relative rounded-md transition-colors duration-150">
+    <div className="group relative rounded-md hover:bg-fill-subtle">
       {/* Left gutter — drag handle (visible on hover/focus-within) */}
       {!readOnly && (
         <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
-          <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
+          <div
+            {...dragHandleProps}
+            className={cn('cursor-grab active:cursor-grabbing', quietTextHover, controlStateColorTransition)}
+          >
             <Tooltip>
               <TooltipTrigger asChild>
                 <Icon>
@@ -116,26 +121,26 @@ const RefBlockContent = ({
       )}
 
       {/* Content area with left accent border */}
-      <div className="border-accent3/30 border-l-2 pl-3">
+      <div className="border-l-2 border-accent3/30 pl-3">
         {isLoading ? (
-          <div className="text-neutral3 flex items-center gap-2 py-3">
+          <div className="flex items-center gap-2 py-3 text-muted-foreground">
             <Spinner className="h-4 w-4" />
-            <Txt variant="ui-sm">Loading prompt block...</Txt>
+            <Txt variant="caption">Loading prompt block...</Txt>
           </div>
         ) : promptBlock ? (
           <>
             {/* Sync-block header — always visible, with Popover on caret */}
             <div className="-ml-1 flex items-center gap-1.5 px-1 py-1">
-              <Txt variant="ui-xs" className="text-neutral3 truncate">
+              <Txt variant="meta" tone="muted" className="truncate">
                 {promptBlock.name}
               </Txt>
               {isDraft && (
-                <Badge size="xs" variant="warning" className="text-ui-2xs" aria-label="Draft prompt block">
+                <Badge size="xs" variant="yellow" aria-label="Draft prompt block">
                   Draft
                 </Badge>
               )}
               {hasUnpublishedEdits && (
-                <Badge size="xs" variant="warning" className="text-ui-2xs" aria-label="Unpublished prompt block edits">
+                <Badge size="xs" variant="yellow" aria-label="Unpublished prompt block edits">
                   Unpublished edits
                 </Badge>
               )}
@@ -145,7 +150,11 @@ const RefBlockContent = ({
                     <button
                       type="button"
                       aria-label={`Open actions for ${promptBlock.name}`}
-                      className="hover:bg-surface4/50 text-neutral3 hover:text-neutral5 ml-auto rounded p-0.5 transition-colors duration-150"
+                      className={cn(
+                        'ml-auto rounded p-0.5 hover:bg-fill-subtle',
+                        quietTextHover,
+                        controlStateColorTransition,
+                      )}
                     >
                       <Icon className="h-3! w-3!">
                         <ChevronDown />
@@ -153,12 +162,12 @@ const RefBlockContent = ({
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-[280px] p-0">
-                    <div className="border-border1 border-b p-3">
-                      <Txt variant="ui-sm" className="text-neutral6 font-medium">
+                    <div className="border-b border-border p-3">
+                      <Txt variant="column" tone="ink">
                         {promptBlock.name}
                       </Txt>
                       {promptBlock.description && (
-                        <Txt variant="ui-xs" className="text-neutral3 mt-0.5 line-clamp-2">
+                        <Txt variant="meta" tone="muted" className="mt-0.5 line-clamp-2">
                           {promptBlock.description}
                         </Txt>
                       )}
@@ -166,10 +175,10 @@ const RefBlockContent = ({
                     <div className="p-1">
                       <button
                         type="button"
-                        className="hover:bg-surface4/50 text-neutral5 text-ui-xs flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors"
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-foreground hover:bg-fill-subtle"
                         onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
                       >
-                        <Icon className="text-neutral3 h-3.5! w-3.5!">
+                        <Icon className="h-3.5! w-3.5! text-muted-foreground">
                           <ExternalLink />
                         </Icon>
                         Open original
@@ -177,13 +186,13 @@ const RefBlockContent = ({
                       {onDereference && (
                         <button
                           type="button"
-                          className="hover:bg-surface4/50 text-neutral5 text-ui-xs flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-foreground hover:bg-fill-subtle"
                           onClick={() => {
                             debouncedSave.flush();
                             onDereference(localContent);
                           }}
                         >
-                          <Icon className="text-neutral3 h-3.5! w-3.5!">
+                          <Icon className="h-3.5! w-3.5! text-muted-foreground">
                             <X />
                           </Icon>
                           De-reference block
@@ -192,7 +201,7 @@ const RefBlockContent = ({
                       {onDelete && (
                         <button
                           type="button"
-                          className="hover:bg-surface4/50 text-error text-ui-xs flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-error hover:bg-fill-subtle"
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
@@ -203,13 +212,13 @@ const RefBlockContent = ({
                       )}
                     </div>
                     {usedByAgents.length > 0 && (
-                      <div className="border-border1 border-t p-3">
-                        <Txt variant="ui-xs" className="text-neutral3 mb-1.5">
+                      <div className="border-t border-border p-3">
+                        <Txt variant="meta" tone="muted" className="mb-1.5">
                           Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
                         </Txt>
                         <div className="flex flex-col gap-1">
                           {usedByAgents.map(agent => (
-                            <Txt key={agent.id} variant="ui-xs" className="text-neutral5 truncate">
+                            <Txt key={agent.id} variant="meta" tone="ink" className="truncate">
                               {agent.name}
                             </Txt>
                           ))}
@@ -222,7 +231,7 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <div className="text-warning text-ui-xs flex items-start gap-1.5 px-1 pb-1">
+              <div className="text-warning flex items-start gap-1.5 px-1 pb-1 text-meta">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {isDraft
@@ -249,7 +258,7 @@ const RefBlockContent = ({
           </>
         ) : (
           <div className="text-warning flex items-center gap-2 py-3">
-            <Txt variant="ui-sm">Prompt block not found (ID: {block.promptBlockId})</Txt>
+            <Txt variant="caption">Prompt block not found (ID: {block.promptBlockId})</Txt>
           </div>
         )}
       </div>

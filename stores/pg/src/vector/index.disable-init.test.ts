@@ -48,6 +48,7 @@ vi.mock('@mastra/core/vector/filter', () => ({
 }));
 
 import type { PgVectorConfig } from '../shared/config';
+import { namespaceSchemaReadyResult } from './namespace-test-utils';
 import { PgVector } from '.';
 
 type QueryCall = { text: string; values?: any[] };
@@ -87,6 +88,9 @@ describe('PgVector disableInit', () => {
     mockClient.query.mockImplementation(async (text: any, values?: any[]) => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       queryHistory.push({ text: sql, values });
+      if (sql.includes('AS composite_index')) {
+        return namespaceSchemaReadyResult();
+      }
       return { rows: [] };
     });
     mockClient.release.mockReset();

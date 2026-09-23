@@ -1,24 +1,28 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon, Play } from 'lucide-react';
 
-export const NoScoresInfo = () => (
-  <div className="flex h-full items-center justify-center">
-    <EmptyState
-      iconSlot={<CircleSlashIcon />}
-      titleSlot="No scores yet"
-      descriptionSlot="Scores will appear here once a scorer evaluates agents or workflows. More info in the documentation."
-      actionSlot={
+export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void }) => (
+  <EmptyState
+    titleSlot="No scores yet"
+    descriptionSlot="Scores will appear here once a scorer evaluates agents or workflows. More info in the documentation."
+    actionSlot={
+      <div className="flex flex-col items-center gap-2">
+        {onRunExperiment && (
+          <Button variant="primary" onClick={onRunExperiment} icon={<Play />}>
+            Run Experiment
+          </Button>
+        )}
         <Button
           variant="ghost"
-          as="a"
-          href="https://mastra.ai/en/docs/evals/overview"
-          target="_blank"
-          rel="noopener noreferrer"
+          render={<a href="https://mastra.ai/en/docs/evals/overview" target="_blank" rel="noopener noreferrer" />}
+
+          icon={<ExternalLinkIcon />}
         >
-          Scorers Documentation <ExternalLinkIcon />
+          Scorers Documentation
         </Button>
-      }
-    />
-  </div>
+      </div>
+    }
+    variant="fill"
+  />
 );

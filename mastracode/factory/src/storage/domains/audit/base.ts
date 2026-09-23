@@ -2,42 +2,24 @@
  * Factory audit events domain — the append-only "who did what, when" trail
  * behind the software factory.
  *
- * One `audit_events` row records a single audited mutation (work-item change,
- * stage move, run start, worktree create/delete, git action, intake config
- * change). Rows are append-only: there is no update/delete API, and the table
- * is the local source of truth even when the WorkOS Audit Logs mirror is
- * unavailable.
+ * Rows are append-only: there is no update/delete API, and the table is the
+ * local source of truth even when the WorkOS Audit Logs mirror is unavailable.
+ * Tenancy is org-first, like `work_items`: `actor_id` records who acted but
+ * never scopes reads.
  *
- * Tenancy is **org-first**, like `work_items`: events are scoped by `org_id`
- * and (usually) `factory_project_id`; `actor_id` records who acted but never
- * scopes reads.
- *
- * v1 action taxonomy (register these in the WorkOS dashboard under
- * Audit Logs → Events for the export mirror to accept them):
- *   - factory.work_item.created
- *   - factory.work_item.updated
- *   - factory.work_item.stage_moved
- *   - factory.work_item.deleted
- *   - factory.run.started
- *   - factory.worktree.created
- *   - factory.worktree.deleted
- *   - factory.git.commit
- *   - factory.git.push
- *   - factory.git.pr_opened
- *   - factory.intake.config_updated
- *
- * v1.1 adds agent-level actions (also register these in WorkOS):
- *   - factory.agent.commit
- *   - factory.agent.push
- *   - factory.agent.pr_opened
+ * The actions the trail holds are listed in `./actions.ts`.
  *
  * Agent events carry `actor_type = 'agent'` with `actor_id = 'agent:<threadId>'`
  * and `metadata.startedBy = <userId>` chaining accountability back to the human
- * whose message drove the run.
+ * whose message drove the run. Rule-driven events carry `actor_type = 'system'`.
  */
 
-import { FactoryStorageDomain } from '@mastra/core/storage';
+import { createHash } from 'node:crypto';
+
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+
+import type { AuditActorType } from './actors.js';
 
 /** What an audit event acted on (WorkOS Audit Logs target shape). */
 export interface AuditTarget {
@@ -49,8 +31,28 @@ export interface AuditTarget {
   name?: string;
 }
 
-/** Who performed the audited action. */
-export type AuditActorType = 'human' | 'agent';
+export type { AuditActorType } from './actors.js';
+
+/** Display name and avatar of a human actor, stamped at record time because MastraAuthStudio cannot resolve users by id. */
+export interface AuditActorProfileInput {
+  name?: string;
+  avatarUrl?: string;
+}
+
+export const ACTOR_PROFILE_METADATA_KEY = '__actorProfile';
+
+export function auditAgentName(modeId: string): string {
+  return `${modeId} agent`;
+}
+
+export function auditActorProfile(
+  user: { name?: string; email?: string; avatarUrl?: string } | undefined,
+): AuditActorProfileInput | undefined {
+  const name = user?.name?.trim() || user?.email?.trim();
+  const avatarUrl = user?.avatarUrl?.trim();
+  if (!name && !avatarUrl) return undefined;
+  return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
+}
 
 /** Request context captured alongside the event. */
 export interface AuditContext {
@@ -84,13 +86,14 @@ export interface AuditEventRow {
   occurredAt: Date;
 }
 
-export interface RecordAuditEventInput {
+export interface RecordAuditEventInput<Action extends string = string> {
+  idempotencyKey?: string;
   orgId: string;
   actorId: string;
   /** Who performed the action; defaults to 'human'. */
   actorType?: AuditActorType;
-  /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
-  action: string;
+  actorProfile?: AuditActorProfileInput;
+  action: Action;
   targets: AuditTarget[];
   metadata?: Record<string, unknown>;
   factoryProjectId?: string;
@@ -233,13 +236,37 @@ export class AuditStorage extends FactoryStorageDomain {
 
   /** Append one audit event. Throws on failure — swallow-on-failure lives in the caller. */
   async record(input: RecordAuditEventInput): Promise<AuditEventRow> {
+    if (input.idempotencyKey) return (await this.recordOnce(input)).event;
+    return this.#insert(input);
+  }
+
+  async recordOnce(input: RecordAuditEventInput): Promise<{ event: AuditEventRow; created: boolean }> {
+    if (!input.idempotencyKey) throw new Error('An audit idempotency key is required');
+    const hash = createHash('sha256')
+      .update(JSON.stringify([input.orgId, input.factoryProjectId ?? null, input.action, input.idempotencyKey]))
+      .digest('hex');
+    const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+    try {
+      return { event: await this.#insert(input, id), created: true };
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      const existing = await this.#db.findOne<AuditEventDbRow>('audit_events', { id, org_id: input.orgId });
+      if (!existing) throw error;
+      return { event: toRow(existing), created: false };
+    }
+  }
+
+  async #insert(input: RecordAuditEventInput, id?: string): Promise<AuditEventRow> {
     const inserted = await this.#db.insertOne<AuditEventDbRow>('audit_events', {
+      ...(id ? { id } : {}),
       org_id: input.orgId,
       actor_id: input.actorId,
       actor_type: input.actorType ?? 'human',
       action: input.action,
       targets: input.targets,
-      metadata: boundAuditMetadata(input.metadata),
+      metadata: boundAuditMetadata(
+        input.actorProfile ? { ...input.metadata, [ACTOR_PROFILE_METADATA_KEY]: input.actorProfile } : input.metadata,
+      ),
       factory_project_id: input.factoryProjectId ?? null,
       project_repository_id: input.projectRepositoryId ?? null,
       context: input.context ?? {},

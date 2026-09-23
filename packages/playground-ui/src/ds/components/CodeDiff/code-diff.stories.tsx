@@ -39,6 +39,38 @@ export const Default: Story = {
   },
 };
 
+const addedRemovedChangedA = JSON.stringify(
+  {
+    input: { query: 'What is the capital of France?' },
+    groundTruth: { answer: 'Paris' },
+    toolMocks: { weather: { temp: 20 } },
+    scorerIds: ['exact-match'],
+    metadata: { difficulty: 'easy' },
+  },
+  null,
+  2,
+);
+
+const addedRemovedChangedB = JSON.stringify(
+  {
+    input: { query: 'What is the capital of France?' },
+    groundTruth: { answer: 'Paris, France' },
+    scorerIds: ['exact-match', 'llm-judge'],
+    requestContext: { locale: 'fr-FR' },
+    metadata: { difficulty: 'easy' },
+  },
+  null,
+  2,
+);
+
+/** Removed key (toolMocks), added key (requestContext), changed values. */
+export const AddedRemovedChanged: Story = {
+  args: {
+    codeA: addedRemovedChangedA,
+    codeB: addedRemovedChangedB,
+  },
+};
+
 export const Identical: Story = {
   args: {
     codeA: sampleA,

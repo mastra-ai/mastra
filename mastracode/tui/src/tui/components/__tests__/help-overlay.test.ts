@@ -14,7 +14,11 @@ describe('buildHelpText', () => {
     expect(text).toContain('/new');
     expect(text).toContain('/threads');
     expect(text).toContain('/settings');
-    expect(text).toContain('/models');
+    expect(text).toMatch(/\/model\s+Change the current mode model/);
+    expect(text).toMatch(/\/models\s+Switch model pack/);
+    expect(text).toMatch(/\/packs\s+Alias for \/models/);
+    expect(text).toMatch(/\/connect\s+Connect a provider account or API key/);
+    expect(text).toMatch(/\/login\s+Sign in with a provider account/);
     expect(text).toMatch(/\/profile\s+Control process memory diagnostics/);
     expect(text).toContain('/skill/<name>');
     expect(text).toMatch(/\/github\s+Subscribe in review\/working mode or sync GitHub PR signals/);

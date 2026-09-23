@@ -1,23 +1,42 @@
 import { Mastra } from '@mastra/core/mastra';
 import { ConsoleLogger } from '@mastra/core/logger';
-import { innerAgent } from '@/agents';
+import { innerAgent, browserAgent } from '@/agents';
 import { testRoute } from '@/api/route/test';
 import { createRouteRoute } from '@/api/route/create-route';
 import { allRoute } from '@/api/route/all';
 import { streamingRoute } from '@/api/route/streaming';
 import { shutdownDrainRoute } from '@/api/route/shutdown-drain';
+import { shutdownDrainWorkflowRoute } from '@/api/route/shutdown-drain-workflow';
+import { shutdownDrainWorkflow } from '@/workflows/shutdown-drain';
 import { transitiveWorkspaceRoute } from '@/api/route/transitive-workspace';
+import { protobufSubpathRoute } from '@/api/route/protobuf-subpath';
 import { myAgent } from '@inner/hello-world/agent';
+import { calculatorMcpServer } from '@/mcp';
 import 'nodemailer';
 
+if (process.env.NODE_ENV === 'development') {
+  void import('date-fns');
+}
+
 export const mastra = new Mastra({
-  agents: { innerAgent, myAgent },
+  agents: { innerAgent, myAgent, 'browser-agent': browserAgent },
+  workflows: { shutdownDrainWorkflow },
+  mcpServers: { calculator: calculatorMcpServer },
   server: {
     port: process.env.MASTRA_PORT ? parseInt(process.env.MASTRA_PORT) : 3000,
-    apiRoutes: [testRoute, createRouteRoute, allRoute, streamingRoute, shutdownDrainRoute, transitiveWorkspaceRoute],
+    apiRoutes: [
+      testRoute,
+      createRouteRoute,
+      allRoute,
+      streamingRoute,
+      shutdownDrainRoute,
+      shutdownDrainWorkflowRoute,
+      transitiveWorkspaceRoute,
+      protobufSubpathRoute,
+    ],
   },
   bundler: {
-    externals: ['bcrypt'],
+    externals: ['bcrypt', '@inner/subpath-only', 'unicorn-magic'],
   },
   logger: new ConsoleLogger({ level: 'info' }),
 });

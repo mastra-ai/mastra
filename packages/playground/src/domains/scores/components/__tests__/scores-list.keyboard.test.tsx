@@ -3,6 +3,7 @@ import { fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ScoresList } from '../scores-list';
+import { useScoresColumns } from '@/domains/scores/hooks/use-scores-columns';
 import { expectArrowNavigation, expectRovingTabindex, interactiveRows } from '@/test/keyboard';
 import { renderWithProviders } from '@/test/render';
 
@@ -22,8 +23,15 @@ const makeScore = (id: string): ClientScoreRowData => ({
 
 const scores = [makeScore('score-1'), makeScore('score-2'), makeScore('score-3')];
 
-const renderList = (props?: Partial<Parameters<typeof ScoresList>[0]>) =>
-  renderWithProviders(<ScoresList scores={scores} isLoading={false} {...props} />);
+type ListProps = Omit<Parameters<typeof ScoresList>[0], 'columnsState'>;
+
+function ListWithColumns(props: ListProps) {
+  const columnsState = useScoresColumns();
+  return <ScoresList {...props} columnsState={columnsState} />;
+}
+
+const renderList = (props?: Partial<ListProps>) =>
+  renderWithProviders(<ListWithColumns scores={scores} isLoading={false} {...props} />);
 
 describe('ScoresList keyboard navigation', () => {
   describe('when the list renders', () => {

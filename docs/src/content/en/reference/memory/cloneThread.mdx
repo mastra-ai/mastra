@@ -1,6 +1,6 @@
 ---
 title: "Reference: Memory.cloneThread() | Memory"
-description: "Documentation for the `Memory.cloneThread()` method in Mastra, which creates a copy of a conversation thread with all its messages."
+description: "The .cloneThread() method creates a copy of an existing conversation thread, including all its messages."
 packages:
   - "@mastra/memory"
 ---
@@ -8,6 +8,8 @@ packages:
 # Memory.cloneThread()
 
 The `.cloneThread()` method creates a copy of an existing conversation thread, including all its messages. It supports creating divergent conversation paths from a specific point in a conversation. When semantic recall is enabled, the method also creates vector embeddings for the cloned messages.
+
+`cloneThread()` loads the cloned messages to return them. If you only need the new thread ID, use [`copyThread()`](/reference/memory/copyThread), which copies the thread without loading message content into memory.
 
 ## Usage example
 

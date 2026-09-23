@@ -26,23 +26,26 @@ import { InMemoryWorkflowDefinitionsStorage } from './domains/workflow-definitio
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 import { InMemoryWorkspacesStorage } from './domains/workspaces/inmemory';
 /**
- * In-memory storage implementation for testing and development.
- *
- * All data is stored in memory and will be lost when the process ends.
- * Access domain-specific storage via `getStore()`:
+ * Provides in-memory storage for testing and development.
+ * Data is lost when the process ends. Access individual storage domains with `getStore()`.
  *
  * @example
  * ```typescript
- * const storage = new InMemoryStore();
+ * import { Mastra } from '@mastra/core/mastra';
+ * import { InMemoryStore } from '@mastra/core/storage';
  *
- * // Access memory domain
- * const memory = await storage.getStore('memory');
- * await memory?.saveThread({ thread });
- *
- * // Access workflows domain
- * const workflows = await storage.getStore('workflows');
- * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+ * const mastra = new Mastra({
+ *   storage: new InMemoryStore(),
+ * });
  * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Storage documentation](https://mastra.ai/docs/storage)
+ * if packaged docs are unavailable.
  */
 export class InMemoryStore extends MastraCompositeStore {
   stores: StorageDomains;

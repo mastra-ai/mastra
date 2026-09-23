@@ -23,8 +23,8 @@ const Header = () => (
 );
 
 describe('DataListRoot', () => {
-  describe('lined default variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {
-    it('uses lined styling when no variant is provided', () => {
+  describe('unified treatment — ScrollArea (overlay scrollbar + horizontal mask)', () => {
+    it('frames the list and separates its uniform rows', () => {
       const { container } = render(
         <DataList columns="1fr 1fr">
           <Header />
@@ -43,47 +43,24 @@ describe('DataListRoot', () => {
       expect(grid).not.toBeNull();
       expect(grid).not.toBe(container.firstElementChild);
       expect(grid?.className).not.toContain('overflow-auto');
+      expect(container.firstElementChild?.className).toContain('rounded-xl');
+      expect(container.firstElementChild?.className).toContain('self-start');
+      expect(container.firstElementChild?.className).toContain('max-h-full');
       expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:absolute');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:content-[""]');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:inset-x-2');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:-bottom-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:bg-neutral6/10');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:after:hidden');
+      expect(grid?.className).toContain('[&_.data-list-subheader+.data-list-row]:rounded-t-lg');
+      expect(grid?.className).toContain('[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg');
     });
 
-    it.each([
-      [
-        'tinted',
-        'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
-        'color-mix(in oklch, var(--surface1), var(--neutral6) 14%)',
-      ],
-      ['surface', 'var(--surface2)', 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)'],
-      ['transparent', 'transparent', 'transparent'],
-    ])('paints a %s sticky header with its own colour', (background, resting, hover) => {
+    it('keeps the variant prop off the DOM node in the light variant', () => {
       const { container } = render(
-        <DataList columns="1fr 1fr" stickyHeaderBackground={background as 'tinted' | 'surface' | 'transparent'}>
+        <DataList columns="1fr 1fr" variant="light">
           <Header />
         </DataList>,
       );
 
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe(resting);
-      expect(grid?.style.getPropertyValue('--data-list-sticky-header-hover-background')).toBe(hover);
-    });
-
-    it('paints a tinted sticky header unless the caller asks otherwise', () => {
-      const { container } = render(
-        <DataList columns="1fr 1fr">
-          <Header />
-        </DataList>,
-      );
-
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe(
-        'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
-      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.className).toContain('rounded-xl');
+      expect(root.getAttribute('variant')).toBeNull();
     });
 
     it('forwards scrollRef to the scrolling viewport that contains the grid', () => {
@@ -174,14 +151,24 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).toContain('max-h-[inherit]');
+      // The root is a flex column clamped by max-height (flex, unlike grid `1fr`,
+      // shrinks items against the clamped size); the viewport is the shrinkable item
+      // so short lists stay compact and long ones scroll.
+      const root = scrollRef.current?.parentElement;
+      expect(root?.className).toContain('flex-col');
+      // Consumer max-height overrides the default `max-h-full`.
+      expect(root?.className).toContain('max-h-80');
+      expect(root?.className).not.toContain('max-h-full');
+      expect(root?.className).not.toContain('size-full');
+      expect(scrollRef.current?.className).toContain('min-h-0');
+      expect(scrollRef.current?.className).toContain('flex-1');
     });
   });
 
-  describe('striped variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {
+  describe('ScrollArea ownership', () => {
     it('wraps the grid in a ScrollArea, which owns scrolling', () => {
       const { container } = render(
-        <DataList columns="1fr 1fr" variant="striped">
+        <DataList columns="1fr 1fr">
           <Header />
         </DataList>,
       );
@@ -193,83 +180,21 @@ describe('DataListRoot', () => {
       // the ScrollArea viewport owns scrolling, so the grid doesn't
       expect(grid?.className).not.toContain('overflow-auto');
       expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:hidden');
-      expect(grid?.className).toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:after:bg-neutral6/10');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:after:-bottom-px');
     });
   });
 
-  describe('lined variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {
-    it('wraps the grid in a ScrollArea, which owns scrolling', () => {
-      const { container } = render(
-        <DataList columns="1fr 1fr" variant="lined">
-          <Header />
-        </DataList>,
-      );
-
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid).not.toBeNull();
-      expect(grid).not.toBe(container.firstElementChild);
-      expect(grid?.className).not.toContain('overflow-auto');
-    });
-
-    it('uses subtle row separators instead of zebra row backgrounds', () => {
-      const { container } = render(
-        <DataList columns="1fr 1fr" variant="lined">
-          <Header />
-          <DataList.RowButton>
-            <DataList.Cell>one</DataList.Cell>
-            <DataList.Cell>first row</DataList.Cell>
-          </DataList.RowButton>
-          <DataList.RowButton>
-            <DataList.Cell>two</DataList.Cell>
-            <DataList.Cell>second row</DataList.Cell>
-          </DataList.RowButton>
-        </DataList>,
-      );
-
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:absolute');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:content-[""]');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:inset-x-2');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:-bottom-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:bg-neutral6/10');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:after:hidden');
-    });
-  });
-
-  describe('striped variant — virtualized (scrollRef forwarded to the viewport)', () => {
+  describe('virtualized (scrollRef forwarded to the viewport)', () => {
     it('points scrollRef at the scrolling viewport that contains the grid', () => {
       const scrollRef = createRef<HTMLDivElement>();
       const { container } = render(
-        <DataList columns="1fr 1fr" variant="striped" scrollRef={scrollRef}>
+        <DataList columns="1fr 1fr" scrollRef={scrollRef}>
           <Header />
         </DataList>,
       );
 
-      // scrollRef now resolves to the ScrollArea viewport (the scroll element the
+      // scrollRef resolves to the ScrollArea viewport (the scroll element the
       // virtualizer binds to via getScrollElement), not the grid — so the list
       // virtualizes against the overlay-scrollbar viewport.
-      expect(scrollRef.current).not.toBeNull();
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid).not.toBeNull();
-      expect(scrollRef.current).not.toBe(grid);
-      expect(scrollRef.current?.contains(grid)).toBe(true);
-    });
-  });
-
-  describe('lined variant — virtualized (scrollRef forwarded to the viewport)', () => {
-    it('points scrollRef at the scrolling viewport that contains the grid', () => {
-      const scrollRef = createRef<HTMLDivElement>();
-      const { container } = render(
-        <DataList columns="1fr 1fr" variant="lined" scrollRef={scrollRef}>
-          <Header />
-        </DataList>,
-      );
-
       expect(scrollRef.current).not.toBeNull();
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       expect(grid).not.toBeNull();
@@ -337,7 +262,7 @@ describe('DataListRoot', () => {
   });
 
   describe('per-row error variant', () => {
-    it('applies a destructive tint to error rows and nothing to default rows', () => {
+    it('exposes the error tone as data-variant', () => {
       const { container } = render(
         <DataList columns="1fr">
           <DataList.RowButton variant="error">
@@ -349,23 +274,20 @@ describe('DataListRoot', () => {
         </DataList>,
       );
       const [errorRow, defaultRow] = container.querySelectorAll<HTMLButtonElement>('.data-list-row');
-      expect(errorRow.className).toContain('bg-notice-destructive/10');
-      expect(defaultRow.className).not.toContain('bg-notice-destructive');
+      expect(errorRow.dataset.variant).toBe('error');
+      expect(defaultRow.dataset.variant).toBe('default');
     });
 
-    it('applies the selection fill as `!important` so it wins over borderless table styling', () => {
-      // Borderless table styling uses root descendant rules (higher specificity),
-      // so a plain `bg-surface4` would lose. The `!` keeps the selected row
-      // highlighted regardless of the root variant.
+    it('exposes featured rows as data-featured', () => {
       const { container } = render(
-        <DataList columns="1fr" variant="striped">
+        <DataList columns="1fr">
           <DataList.RowButton featured>
             <DataList.Cell>selected</DataList.Cell>
           </DataList.RowButton>
         </DataList>,
       );
       const row = container.querySelector<HTMLButtonElement>('.data-list-row');
-      expect(row?.className).toContain('bg-surface4!');
+      expect(row?.dataset.featured).toBe('true');
     });
 
     it('does not leak the variant prop onto the DOM element', () => {
@@ -378,6 +300,48 @@ describe('DataListRoot', () => {
       );
       const row = container.querySelector<HTMLButtonElement>('.data-list-row');
       expect(row?.getAttribute('variant')).toBeNull();
+    });
+  });
+
+  describe('SortableTopCell', () => {
+    it('starts ascending when unsorted and reverses the active sort, passing the column key', () => {
+      const onSortChange = vi.fn();
+      const { rerender } = render(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell sortKey="name" onSortChange={onSortChange}>
+              Name
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Name.*not sorted.*sort ascending/i }));
+      expect(onSortChange).toHaveBeenLastCalledWith('asc', 'name');
+
+      rerender(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell sortKey="name" sort="asc" onSortChange={onSortChange}>
+              Name
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: /Name.*sorted ascending.*sort descending/i }));
+      expect(onSortChange).toHaveBeenLastCalledWith('desc', 'name');
+
+      rerender(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell sortKey="name" sort="desc" onSortChange={onSortChange}>
+              Name
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: /Name.*sorted descending.*sort ascending/i }));
+      expect(onSortChange).toHaveBeenLastCalledWith('asc', 'name');
     });
   });
 });

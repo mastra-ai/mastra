@@ -3,11 +3,11 @@ import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
-import { PageLayout } from '../layouts/PageLayout';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
 import { isSettingsSection } from '../domains/settings/settingsSections';
+import { AppShell } from '../layouts/AppShell';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;
@@ -35,9 +35,9 @@ export function SettingsPageLayout({ children }: { children: ReactNode }) {
 
   if (!factoryId) {
     return (
-      <main className="bg-surface2 flex min-h-dvh flex-col">
+      <main className="bg-background flex min-h-dvh flex-col">
         {isMobile && (
-          <div className="bg-surface2 sticky top-0 z-2 shrink-0 px-3 py-2">
+          <div className="bg-background sticky top-0 z-2 shrink-0 px-3 py-2">
             <SettingsHeader autoFocus placement="mobile" />
           </div>
         )}
@@ -46,11 +46,12 @@ export function SettingsPageLayout({ children }: { children: ReactNode }) {
     );
   }
   return (
-    <PageLayout
+    <AppShell
+      scroll="document"
       sidebar={<Sidebar />}
       header={<ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />}
     >
       {children}
-    </PageLayout>
+    </AppShell>
   );
 }

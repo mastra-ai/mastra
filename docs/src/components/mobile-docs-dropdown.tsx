@@ -5,31 +5,32 @@ import { ChevronDown, Check } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown'
 import { Button } from './ui/button'
 import { cn } from '@site/src/lib/utils'
+import { SITE_SECTION_ROOTS } from '@site/src/utils/canonical-url'
 
 const docsTabs = [
   {
     id: 'Docs',
     label: 'Docs',
-    href: '/docs/',
-    basePath: '/docs',
+    href: SITE_SECTION_ROOTS.docs,
+    basePath: SITE_SECTION_ROOTS.docs,
   },
   {
     id: 'Models',
     label: 'Models',
-    href: '/models/',
-    basePath: '/models',
+    href: SITE_SECTION_ROOTS.models,
+    basePath: SITE_SECTION_ROOTS.models,
   },
   {
     id: 'Integrations',
     label: 'Integrations',
-    href: '/integrations/',
-    basePath: '/integrations',
+    href: SITE_SECTION_ROOTS.integrations,
+    basePath: SITE_SECTION_ROOTS.integrations,
   },
   {
     id: 'Reference',
     label: 'Reference',
-    href: '/reference/',
-    basePath: '/reference',
+    href: SITE_SECTION_ROOTS.reference,
+    basePath: SITE_SECTION_ROOTS.reference,
   },
   {
     id: 'Learn',

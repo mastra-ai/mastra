@@ -22,15 +22,15 @@ export interface MastraCodeState {
   factoryProjectId?: string;
   /** Authoritative organization id seeded by factory at session construction. */
   factoryOrgId?: string;
+  /**
+   * Factory owns this session but could not resolve its organization. Knowledge
+   * capture refuses rather than filing under a substituted identity; without the
+   * marker a projectless factory session is indistinguishable from a local one.
+   */
+  factoryOrgUnresolved?: boolean;
   /** Linked repository used by this session when source-control execution is required. */
   projectRepositoryId?: string;
-  /** Persisted sandbox id for reattaching the project's cloud workspace. */
-  sandboxId?: string;
-  /** Path inside the sandbox the repo is cloned into. */
-  sandboxWorkdir?: string;
-  /** Active git worktree path inside the sandbox for the current unit of work. */
-  worktreePath?: string;
-  /** Active feature branch checked out in the worktree. */
+  /** Active feature branch checked out in the session workdir. */
   branch?: string;
   /**
    * The session's checkout contains third-party content (e.g. a PR branch
@@ -62,6 +62,21 @@ export interface MastraCodeState {
   cavemanObservations: boolean;
   observeAttachments: 'auto' | boolean;
   omScope?: 'thread' | 'resource';
+  /** Explicit model-pack identity for the current thread. */
+  activeModelPackId?: string | null;
+  /**
+   * Pending pack hop written by the account-rotation processor on a cascade
+   * hop; cleared back to null once the TUI applies it. Declared here so
+   * consumers resolve it as a typed record instead of casting `unknown`.
+   */
+  mastracodePendingPackFallback?: {
+    fromPackId: string;
+    toPackId: string;
+    toModelId: string;
+    threadId?: string;
+    reason: 'pool-exhausted' | 'persistent-outage';
+    at: string;
+  } | null;
   /**
    * Session-level reasoning-effort override. When unset, the effective level is
    * resolved at request time from settings (`models.modeThinkingDefaults[mode]`
@@ -111,15 +126,14 @@ export const stateSchema = z.object({
   // seeded model and leave the controller with no model selected.
   currentModelId: z.string().optional(),
   modeId: z.string().optional(),
+  activeModelPackId: z.string().nullable().optional(),
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
   factoryProjectId: z.string().optional(),
   factoryOrgId: z.string().optional(),
+  factoryOrgUnresolved: z.boolean().optional(),
   projectRepositoryId: z.string().optional(),
-  sandboxId: z.string().optional(),
-  sandboxWorkdir: z.string().optional(),
-  worktreePath: z.string().optional(),
   branch: z.string().optional(),
   // Session operates on an untrusted checkout — suppress AGENTS.md ingestion.
   untrustedCheckout: z.boolean().optional(),
@@ -177,6 +191,19 @@ export const stateSchema = z.object({
     .default([]),
   // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
   sandboxAllowedPaths: z.array(z.string()).default([]),
+  // Pending pack hop written by the account-rotation processor on a cascade
+  // hop; the TUI consumes it on `state_changed` to apply thread stickiness,
+  // then clears it back to null. Must be declared — Zod strips unknown keys.
+  mastracodePendingPackFallback: z
+    .object({
+      fromPackId: z.string(),
+      toPackId: z.string(),
+      toModelId: z.string(),
+      threadId: z.string().optional(),
+      reason: z.enum(['pool-exhausted', 'persistent-outage']),
+      at: z.string(),
+    })
+    .nullish(),
   // Asset directories contributed by active plugins.
   pluginSkillPaths: z.array(z.string()).default([]),
   pluginCommandPaths: z.array(z.string()).default([]),

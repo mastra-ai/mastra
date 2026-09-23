@@ -54,7 +54,7 @@ export function buildMcpAuthInfoFromRequestContext(requestContext: RequestContex
   const userRecord = (hasUser ? user : {}) as Record<string, unknown>;
 
   return {
-    token: hasToken ? (token as string) : '',
+    token: hasToken ? token : '',
     clientId: resolveClientId(userRecord),
     scopes: normalizeScopes(userRecord.scopes ?? userRecord.scope ?? userRecord.permissions),
     ...(hasUser ? { extra: { user: userRecord } } : {}),

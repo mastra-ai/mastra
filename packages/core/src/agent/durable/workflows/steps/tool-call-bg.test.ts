@@ -11,7 +11,10 @@ vi.mock('../../../../background-tasks/resolve-config', () => ({
   resolveBackgroundConfig: vi.fn(),
 }));
 
-vi.mock('../../utils/resolve-runtime', () => ({
+vi.mock('../../utils/resolve-runtime', async () => ({
+  restoreRequestContext: (
+    await vi.importActual<typeof import('../../utils/resolve-runtime')>('../../utils/resolve-runtime')
+  ).restoreRequestContext,
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(false),
   rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),

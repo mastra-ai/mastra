@@ -4,18 +4,26 @@ message: "AI cliché: '%s'. Say what you mean directly."
 level: error
 ignorecase: true
 tokens:
-  # "Earning" family
-  - earns? its keep
-  - earns? its place
-  - earns? its spot
-  - earned its keep
-  - earned its place
-  - earned its spot
-  - more than earns?
-  # Bare grant: the artifact earns a reward beyond its keep ("earns a
-  # caveat," "earned the name"). The determiner plus a curated object
-  # keeps literal wages out.
-  - earn(?:s|ed)? (?:a|an|the) (?:caveat|mention|footnote|call-?out|closer look|second look|spot|place|slot|pass|nod|name|title|label|badge|crown|shout-?out|asterisk|gold star)
+  # Handing: an inanimate subject passes something to another as though
+  # across a counter ("the guard hands the merge a clean start"). Drafted
+  # from rejected commit messages and measured at zero matches across the
+  # Go and Python standard libraries.
+  - (?:a|an|the|this|that|these|those|its|their|both|all|every|each)\s+\w+\s+hands?\s+(?:the|a|it|them)\b
+
+  # Candidate not yet implemented: the occupational metaphor with no
+  # possessive anchor. Every idiom in the paying family gates itself on
+  # "its" or "itself" ("pays its rent", "pays for itself"), which is what
+  # keeps a person out of the subject slot; FigurativeEarns gave up that
+  # protection deliberately, on a corpus that never uses its verb.
+  # "Negates for a living" carries no such anchor and no such corpus
+  # silence, so a bare token would flag "she writes for a living" too,
+  # and that is ordinary English about a person with a job.
+  #
+  # Measured at zero across the Go and Python standard libraries, the
+  # markdown in the Go source tree, and this project's accepted commit
+  # history. That silence cuts both ways: it leaves the person-subject false
+  # positive unmeasured, so the gating problem has to be solved on other
+  # evidence before a token lands.
 
   # "Paying" family
   - pays? for itself
@@ -25,6 +33,8 @@ tokens:
   - paid for itself
   - paid dividends
   - paid its rent
+  - paying for itself
+  - paying dividends
   - paying its rent
 
   # "Weight" family
@@ -61,20 +71,49 @@ tokens:
   - does? most of the work
   - doing most of the work
 
-  # "Standing" family
+  # "Standing" family.
+  # Across the seven pre-LLM corpora (Go blog, Go proposals, Go stdlib,
+  # PEPs, Pro Git, Python stdlib, Rust RFCs) "stand on its own" and
+  # "stand on their own" match four times, each the self-sufficient
+  # sense: the Go stdlib's "the deprecation message should be able to
+  # stand on its own" and a PEP's "The changes in this PEP stand on
+  # their own merits." The verb phrase "stand alone" matches another
+  # four (a PEP's "the final PEP text stands alone with all required
+  # information," a Rust RFC's "the tuple notation stands alone"). The
+  # one adjective use, the Python stdlib's "a stand alone top-level
+  # window," is what the lookbehind on the bare-verb token excludes.
+  # "Stand by itself," "hold up on its own," "speak for themselves," and
+  # "carry" or "pull its own weight" match nowhere.
   - stands? on its own
   - standing on its own
+  - stands alone
+  - standing alone
+  - stood alone
+  - "(?<!\\b(?:a|an|the|any|each|every|one|this|that) )stand alone\\b"
+  - stands? by (?:itself|themselves)
+  - standing by (?:itself|themselves)
+  - stood by (?:itself|themselves)
+  - stands? on their own
+  - standing on their own
+  - stood on (?:its|their) own
   - holds? its own
   - holding its own
+  - holds? up on (?:its|their) own
+  - holding up on (?:its|their) own
+  - held up on (?:its|their) own
   - speaks? for itself
   - speaking for itself
+  - speaks? for themselves
+  - speaking for themselves
+  - carr(?:ies|y|ied|ying) (?:its|their) own weight
+  - pull(?:s|ed|ing)? (?:its|their) own weight
   - justifies? its existence
   - justify its existence
   - justifying its existence
 
   # "Deserving" family.
   # Treats abstractions and inanimate subjects as moral agents owed
-  # consideration. The gerund shape ("deserves noting", "deserves
+  # consideration. The gerund form ("deserves noting", "deserves
   # exploring") is the strongest AI tell — the older idiomatic
   # phrases ("deserves a closer look", "deserves mention") are
   # included for completeness.
@@ -124,9 +163,32 @@ tokens:
   - behaving itself
   - on its best behavior
   - on its best behaviour
+  # Reflexive agency: an operation performs a deliberate act on itself
+  # ("the query narrows itself," "the config tunes itself"). The
+  # self-directed verb is the tell. "Sorts itself out" and "resolves
+  # itself" ride along as the idiomatic cousins.
+  - (?:narrows?|scopes?|tunes?|optimi[sz]es?|tightens?|rewrites?|configures?|corrects?|prunes?|trims?) itself
+  - sorts? itself out
+  - resolves? itself
+  # Self-report: an artifact vouching for or exposing itself ("the line
+  # declares itself," "forgetting that announces itself," "the credential
+  # path proves itself"). The plural stays off "versions" because "the
+  # versions themselves" is an ordinary emphatic. Measured at zero across
+  # the Go and Python standard libraries.
+  - (?:declares?|announces?|proves?|reports?) (?:itself|themselves)
+  - versions itself
+  # Voice: a comparison or a gate that pipes up ("the check only speaks
+  # up after the push").
+  - speaks? up
+  - spoke up
   - pretend(?:s|ed|ing)? otherwise
   - pretend(?:s|ed|ing)? not to
   - cares? deeply
+  # Deliberation: a reader or a tool credited with a verdict-in-progress
+  # ("the reviewer forms an opinion," "the linter formed its own opinion")
+  # where judges or decides names the act. Measured at zero across the Go
+  # and Python standard libraries.
+  - form(?:s|ed|ing)? (?:an|its own|their own) opinion
   - deliver(?:s|ed|ing)? on (?:its|that|the|every) promise
   - keeps? (?:its|that) promise
   - breaks? (?:its|that) promise
@@ -136,12 +198,15 @@ tokens:
   - hinged (?:on|upon) (?:a single|(?:this |that )?one|whether)
 
   # "Adjudication" family.
-  # A fact or metric handed the gavel: "availability settles the
-  # question," "the benchmark decides the debate," "latency puts the
-  # matter to rest." State the conclusion and the evidence instead of
-  # letting the noun rule on it.
-  - settles? the (?:question|debate|matter|argument|issue|dispute)
-  - settled the (?:question|debate|matter|argument|issue|dispute)
+  # A fact or metric handed the gavel: "the benchmark decides the
+  # debate," "latency puts the matter to rest." State the conclusion
+  # and the evidence instead of letting the noun rule on it. The same
+  # gavel wielded through "settles" ("availability settles the
+  # question," "the reconfirmation settles it") lives in
+  # FigurativeSettles with the rest of that verb's figures, and the
+  # invoice tokens ("settled the cost," "settles up," "squares the
+  # ledger," "balances the books") live in FigurativePays with the
+  # other money figures.
   - decides? the (?:question|debate|matter|argument|issue|dispute)
   - decided the (?:question|debate|matter|argument|issue|dispute)
   - puts? the (?:question|debate|matter|argument|issue|dispute) to (?:rest|bed)
@@ -166,3 +231,27 @@ tokens:
   - causes? harm
   - causing harm
   - without causing harm
+
+  # "Naming" and "wanting" families, both left out of this rule. Both
+  # verbs take inanimate subjects the way the families above do, and both
+  # were rejected here on corpus evidence rather than by omission. "Wants"
+  # stays uncovered; "names" was reopened on the maintainer's ask.
+  #
+  # "Names" as an act of designation reads like a tell ("it names a kind of
+  # file", "the field names the target"), but it is ordinary Go and Python
+  # documentation style: "IsDir reports whether the path names a directory",
+  # "charset names the character set to use", "it names an importable
+  # package". Every instance found in the two standard libraries is the
+  # precise verb for what an identifier denotes, which kept it out of this
+  # rule and left it to CommitFigurativeVerbs, where a commit message is
+  # the text. The maintainer then met the verb in every document that
+  # passed under the package, so BareNames (2026-09) flags it in prose at
+  # its own corpus cost, the way BareHolds and BareReaches carry theirs,
+  # and NamedAdjective takes "the named file." Nothing here changed; the
+  # family has a rule of its own.
+  #
+  # "Wants" with an inanimate subject is more entrenched still: "gcc wants
+  # to 8-align int64s", "the package wants to make the data available", "the
+  # scheduler wants to preempt us". The same libraries reach for it freely
+  # with software subjects, and no complement or subject gate separates that
+  # register from the AI usage, so a rule here would flood.

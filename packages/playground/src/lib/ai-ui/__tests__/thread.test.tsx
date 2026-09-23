@@ -1,3 +1,4 @@
+import { MastraClient } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
 import { MastraReactProvider } from '@mastra/react';
@@ -10,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
-import { memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
+import { emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
+import { attachmentMessages } from './fixtures/attachment-messages';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -55,6 +57,7 @@ const workingMemoryResponse = () =>
   HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
 
 const baseHandlers = () => [
+  http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
@@ -105,10 +108,20 @@ interface RenderThreadOptions {
   hasModelList?: boolean;
   threadId?: string;
   suggestedPrompts?: string[];
+  isHistoryLoading?: boolean;
+  isLoadingPrevious?: boolean;
+  onLoadPrevious?: () => void | Promise<void>;
 }
 
 const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThreadOptions = {}) => {
-  const { hasModelList = true, threadId = 'thread-1', suggestedPrompts } = options;
+  const {
+    hasModelList = true,
+    threadId = 'thread-1',
+    suggestedPrompts,
+    isHistoryLoading,
+    isLoadingPrevious,
+    onLoadPrevious,
+  } = options;
 
   return (
     <Wrapper threadId={threadId}>
@@ -127,6 +140,9 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
             threadId={threadId}
             suggestedPrompts={suggestedPrompts}
             hasModelList={hasModelList}
+            isHistoryLoading={isHistoryLoading}
+            isLoadingPrevious={isLoadingPrevious}
+            onLoadPrevious={onLoadPrevious}
           />
         </ChatProvider>
       </ThreadInputProvider>
@@ -169,6 +185,41 @@ const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['m
   content: { format: 2, parts: [{ type: 'text', text }], metadata },
 });
 
+// Controllable browser SpeechRecognition stub: mocks the browser API only, not our hooks.
+interface FakeRecognitionEvent {
+  resultIndex: number;
+  results: Array<{ 0: { transcript: string }; isFinal: boolean }>;
+}
+
+let lastRecognition: {
+  onstart: (() => void) | null;
+  onresult: ((event: FakeRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+} | null = null;
+
+const installFakeSpeechRecognition = () => {
+  class FakeSpeechRecognition {
+    continuous = false;
+    lang = '';
+    onstart: (() => void) | null = null;
+    onresult: ((event: FakeRecognitionEvent) => void) | null = null;
+    onerror: ((event: unknown) => void) | null = null;
+    onend: (() => void) | null = null;
+    start = () => this.onstart?.();
+    stop = () => this.onend?.();
+    constructor() {
+      lastRecognition = this;
+    }
+  }
+  Object.assign(window, { SpeechRecognition: FakeSpeechRecognition, webkitSpeechRecognition: FakeSpeechRecognition });
+};
+
+const uninstallFakeSpeechRecognition = () => {
+  delete (window as { SpeechRecognition?: unknown }).SpeechRecognition;
+  delete (window as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+  lastRecognition = null;
+};
+
 afterEach(() => {
   delete window.MASTRA_AGENT_SIGNALS;
   cleanup();
@@ -178,6 +229,42 @@ describe('Thread', () => {
   beforeEach(() => {
     window.MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
+  });
+
+  describe('when the user dictates two phrases in one browser dictation session', () => {
+    beforeEach(() => installFakeSpeechRecognition());
+    afterEach(() => uninstallFakeSpeechRecognition());
+
+    it('keeps both phrases in the composer', async () => {
+      // `/voice/speakers` returns [] in baseHandlers, so the hook uses the browser path.
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([]);
+      });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Start dictation' }));
+      await screen.findByRole('button', { name: 'Stop dictation' });
+
+      const first = { 0: { transcript: 'Accept the newer address.' }, isFinal: true };
+      act(() => {
+        lastRecognition?.onresult?.({ resultIndex: 0, results: [first] });
+      });
+      act(() => {
+        lastRecognition?.onresult?.({
+          resultIndex: 1,
+          results: [first, { 0: { transcript: 'And note that Sentinel confirmed it.' }, isFinal: true }],
+        });
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }));
+
+      await waitFor(() =>
+        expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+          'Accept the newer address. And note that Sentinel confirmed it. ',
+        ),
+      );
+    });
   });
 
   describe('when no suggested prompts are provided for an empty thread', () => {
@@ -202,6 +289,97 @@ describe('Thread', () => {
 
     expect(screen.getByText('previous question', { selector: 'p' })).toBeTruthy();
     expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+  });
+
+  describe('Thread history loading', () => {
+    describe('when history is loading and there are no messages', () => {
+      it('shows the history skeleton instead of the welcome screen', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([], { isHistoryLoading: true });
+        });
+
+        expect(screen.getByTestId('thread-history-skeleton')).toBeTruthy();
+        expect(screen.queryByText('How can I help you today?')).toBeNull();
+      });
+
+      it('keeps the composer available', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([], { isHistoryLoading: true });
+        });
+
+        expect(screen.getByRole('textbox')).toBeTruthy();
+      });
+
+      it('does not render suggested prompts', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([], { isHistoryLoading: true, suggestedPrompts: ['Check the weather'] });
+        });
+
+        expect(screen.queryByRole('button', { name: 'Check the weather' })).toBeNull();
+      });
+    });
+
+    describe('when history is loading but live messages already exist', () => {
+      it('renders the messages and no skeleton', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([userMessage('live question')], { isHistoryLoading: true });
+        });
+
+        expect(screen.getByText('live question', { selector: 'p' })).toBeTruthy();
+        expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+        expect(screen.queryByText('How can I help you today?')).toBeNull();
+      });
+    });
+
+    describe('when history finished loading with no messages', () => {
+      it('shows the welcome screen with suggested prompts', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([], { isHistoryLoading: false, suggestedPrompts: ['Check the weather'] });
+        });
+
+        expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+        expect(screen.getByText('How can I help you today?')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
+      });
+    });
+  });
+
+  describe('Thread pagination (fetching older messages)', () => {
+    it('renders a loading skeleton at the top when fetching previous page', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([userMessage('live question')], { isLoadingPrevious: true, onLoadPrevious: vi.fn() });
+      });
+
+      // The live messages should still be visible
+      expect(screen.getByText('live question', { selector: 'p' })).toBeTruthy();
+
+      // The skeleton for fetching older messages should be rendered
+      const skeletonColumn = screen.getByLabelText('Loading older messages');
+      expect(skeletonColumn).toBeTruthy();
+      expect(skeletonColumn.getAttribute('aria-busy')).toBe('true');
+    });
+
+    it('does not render the skeleton when not fetching previous page', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([userMessage('live question')], { isLoadingPrevious: false });
+      });
+
+      expect(screen.queryByLabelText('Loading older messages')).toBeNull();
+    });
   });
 
   describe('when suggested prompts are provided for an empty thread', () => {
@@ -278,10 +456,6 @@ describe('Thread', () => {
       expect(screen.getByRole('navigation', { name: 'Conversation timeline' })).toBeTruthy();
       expect(screen.getAllByRole('button', { name: /Jump to/ })).toHaveLength(2);
       const rail = screen.getByTestId('thread-rail');
-      expect(screen.getByTestId('thread-rail-container').className).toContain('thread-rail-container');
-      expect(screen.getByTestId('thread-rail-layer').className).toContain('thread-rail-layer');
-      expect(screen.getByTestId('thread-rail-layer').className).toContain('left-4');
-      expect(screen.getByTestId('thread-rail-layer').className).not.toContain('xl:block');
       expect(screen.getByTestId('thread-rail-scroll-area')).toBeTruthy();
       expect(screen.getByTestId('thread-message-column').contains(rail)).toBe(false);
 
@@ -573,6 +747,102 @@ describe('Thread', () => {
     });
   });
 
+  describe('when multiple text files are uploaded and sent', () => {
+    it('sends their complete text and restores distinct named previews after a fresh history fetch', async () => {
+      let sentTexts: string[] = [];
+      server.use(
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          const body = await captureBody(request);
+          const messages = Array.isArray(body.messages) ? body.messages : [];
+          sentTexts = messages.flatMap(message => {
+            if (!isRecord(message)) return [];
+            if (typeof message.content === 'string') return [message.content];
+            if (!Array.isArray(message.content)) return [];
+            return message.content.flatMap(part =>
+              isRecord(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [],
+            );
+          });
+          return sseResponse();
+        }),
+        http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, () =>
+          HttpResponse.json(attachmentMessages(sentTexts)),
+        ),
+        ...baseHandlers(),
+      );
+      const csv = 'name,note\r\nZoë,"hello\nworld"\r\n';
+      const notes = 'Keep <attachment>literal</attachment> text.';
+      const files = [
+        new File([csv], 'leads.csv'),
+        new File([notes], 'settings.ini'),
+        new File(['discard'], 'discard.txt'),
+      ];
+      // JSDOM lacks Blob.text(); FileReader still reads the actual file bytes for sending.
+      Object.defineProperty(files[0], 'text', { value: async () => csv });
+      Object.defineProperty(files[1], 'text', { value: async () => notes });
+      Object.defineProperty(files[2], 'text', { value: async () => 'discard' });
+      const mounted = renderThread([]);
+      fireEvent.click(await screen.findByRole('button', { name: 'Add attachment' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
+      const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+      if (!input) throw new Error('File picker input is missing');
+      fireEvent.change(input, { target: { files } });
+      await screen.findByRole('button', { name: 'Preview settings.ini' });
+      await screen.findByRole('button', { name: 'Preview discard.txt' });
+      fireEvent.click(screen.getByRole('button', { name: 'Remove discard.txt' }));
+      expect(screen.queryByRole('button', { name: 'Preview discard.txt' })).toBeNull();
+      await waitFor(() => expect(screen.queryByLabelText('Public URL')).toBeNull());
+      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Read both files' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() =>
+        expect(sentTexts).toEqual([
+          'Read both files',
+          `<attachment name="leads.csv">${csv}</attachment>`,
+          `<attachment name="settings.ini">${notes}</attachment>`,
+        ]),
+      );
+      await waitFor(() => expect(screen.queryByTestId('composer-attachments')).toBeNull());
+      expect(screen.getByRole('button', { name: 'Preview leads.csv' })).toBeTruthy();
+      mounted.unmount();
+      const client = new MastraClient({ baseUrl: BASE_URL });
+      const restored = await client.getMemoryThread({ threadId: 'thread-1', agentId: 'agent-1' }).listMessages();
+      expect(restored.messages[0]?.content.parts).toEqual(sentTexts.map(text => ({ type: 'text', text })));
+      renderThread(restored.messages);
+      expect(await screen.findByText('Read both files')).toBeTruthy();
+      for (const [name, text] of [
+        ['leads.csv', csv],
+        ['settings.ini', notes],
+      ]) {
+        fireEvent.click(await screen.findByRole('button', { name: `Preview ${name}` }));
+        const dialog = screen.getByRole('dialog', { name });
+        expect(within(dialog).getByText(text, { normalizer: value => value }).textContent).toBe(text);
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+      }
+    });
+  });
+
+  describe('when a text attachment is added by URL', () => {
+    it('links to the original URL instead of offering an empty file preview', async () => {
+      const url = 'https://files.example.com/leads.csv';
+      server.use(
+        ...baseHandlers(),
+        http.head(url, () => new HttpResponse(null, { headers: { 'content-type': 'text/csv' } })),
+      );
+      await act(async () => {
+        renderThread([]);
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      const input = await screen.findByLabelText('Public URL');
+      fireEvent.change(input, { target: { value: url } });
+      const form = input.closest<HTMLFormElement>('form');
+      if (!form) throw new Error('Attachment form is missing');
+      fireEvent.submit(form);
+      const attachments = await screen.findByTestId('composer-attachments');
+      const link = await within(attachments).findByRole('link');
+      expect(link.getAttribute('href')).toBe(url);
+      expect(within(attachments).queryByRole('button', { name: `Preview ${url}` })).toBeNull();
+    });
+  });
+
   it('attaches a URL from the popover without sending the chat message', async () => {
     const captured: Captured[] = [];
     server.use(
@@ -609,7 +879,7 @@ describe('Thread', () => {
 
     // The attachment chip row appears and the popover closes.
     await waitFor(() => {
-      expect(document.querySelector('[data-attachments-row]')).toBeTruthy();
+      expect(screen.getByTestId('composer-attachments')).toBeTruthy();
     });
     await waitFor(() => {
       expect(screen.queryByLabelText('Public URL')).toBeFalsy();

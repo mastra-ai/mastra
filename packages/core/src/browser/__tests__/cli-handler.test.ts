@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { MastraBrowser } from '../browser';
@@ -8,6 +12,159 @@ describe('BrowserCliHandler', () => {
 
   beforeEach(() => {
     handler = new BrowserCliHandler();
+  });
+
+  describe('Browser Use stdin', () => {
+    it.each(['browser-use', 'browseruse', 'browser', 'bu'])('preserves %s stdin through a real shell', alias => {
+      const directory = mkdtempSync(join(tmpdir(), 'browser-use-'));
+      const payload = `print("a; b && c || d")\nprint('--cdp-url ws://external/browser')\nprint("$HOME $(echo unexpected) \\\"")\n`;
+      const cdpUrl = `ws://localhost/browser/a'b?x=$(echo unexpected)&y=1`;
+      try {
+        writeFileSync(
+          join(directory, alias),
+          '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$#" "$BU_CDP_WS" "$BU_NAME"\ncat\n',
+          { mode: 0o755 },
+        );
+        const command = `  ${alias} <<'PY'\n${payload}PY\n`;
+        const analysis = handler.analyzeCommand(command);
+        expect(analysis.parts).toEqual([command]);
+        expect(analysis.browserClis.map(cli => cli.name)).toEqual(['browser-use']);
+        expect(analysis.usingExternalCdp).toBe(false);
+        expect(analysis.externalCdpUrl).toBeNull();
+        const transformed = handler.injectCdpUrl(command, cdpUrl, `thread'; echo unexpected`);
+        const output = execFileSync('sh', ['-c', transformed], {
+          encoding: 'utf8',
+          env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+        });
+        const [argc, endpoint, name, ...stdin] = output.split('\n');
+        expect(argc).toBe('0');
+        expect(endpoint).toBe(cdpUrl);
+        expect(name).toMatch(/^mastra-[a-f0-9]{16}$/);
+        expect(stdin.join('\n')).toBe(payload);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    it.each([
+      'browser-use \\\n < script.py',
+      'true && \\\n browser-use \\\n > result.txt \\\n < script.py; cat result.txt',
+      "browser-use \\\n <<'PY'\nPAYLOADPY\n",
+      'true && browser-use < script.py',
+      'false || browser-use < script.py',
+      'true; browser-use > result.txt < script.py; cat result.txt',
+      'browser-use > result.txt < script.py; cat result.txt',
+      "true && browser-use <<'PY'\nPAYLOADPY\n",
+    ])('preserves stdin and environment for %s', template => {
+      const directory = mkdtempSync(join(tmpdir(), 'browser-use-chain-'));
+      const payload = 'print("a; b && c || d")\nprint("browser-use --cdp-url external")\n';
+      try {
+        writeFileSync(
+          join(directory, 'browser-use'),
+          '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$#" "$BU_CDP_WS" "$BU_NAME"\ncat\n',
+          { mode: 0o755 },
+        );
+        writeFileSync(join(directory, 'script.py'), payload);
+        const command = template.replace('PAYLOAD', payload);
+        expect(handler.analyzeCommand(command).usingExternalCdp).toBe(false);
+        const output = execFileSync('sh', ['-c', handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')], {
+          cwd: directory,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+        });
+        const [argc, endpoint, name, ...stdin] = output.split('\n');
+        expect(argc).toBe('0');
+        expect(endpoint).toBe('ws://localhost/browser');
+        expect(name).toMatch(/^mastra-[a-f0-9]{16}$/);
+        expect(stdin.join('\n')).toBe(payload);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    it.each([
+      'agent-browser open https://example.com && browser-use < script.py',
+      'browser-use < script.py && agent-browser open https://example.com',
+      'browser-use < script.py &&\nagent-browser open https://example.com',
+      'browser-use < script.py &&\n\nagent-browser open https://example.com',
+      'browser-use < script.py;\nagent-browser open https://example.com',
+      'browser-use < script.py;\n\nagent-browser open https://example.com',
+      'agent-browser open https://example.com;\nbrowser-use < script.py',
+      "agent-browser open https://example.com;\nbrowser-use <<'PY';\nPAYLOADPY\n",
+      "agent-browser open https://example.com; browser-use <<'PY';\nPAYLOADPY\n",
+      'browser-use < script.py && false ||\nagent-browser open https://example.com',
+      'agent-browser open https://example.com &&\nbrowser-use < script.py',
+      "agent-browser open https://example.com &&\nbrowser-use <<'PY'\nPAYLOADPY\n",
+      "agent-browser open https://example.com && browser-use <<'PY'\nPAYLOADPY\n",
+      "browser-use <<'PY' && agent-browser open https://example.com\nPAYLOADPY\n",
+    ])('retains both CLI transports and warmup for %s', template => {
+      const directory = mkdtempSync(join(tmpdir(), 'browser-use-mixed-'));
+      const payload = 'print("agent-browser --cdp ws://external; browser-use && bu")\n';
+      const endpoint = 'ws://localhost/managed';
+      try {
+        writeFileSync(join(directory, 'script.py'), payload);
+        writeFileSync(join(directory, 'agent-browser'), '#!/bin/sh\nprintf "%s\\n" "$@" > agent-args\n', {
+          mode: 0o755,
+        });
+        writeFileSync(
+          join(directory, 'browser-use'),
+          '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$#" "$BU_CDP_WS" "$BU_NAME"\ncat\n',
+          { mode: 0o755 },
+        );
+        const command = template.replace('PAYLOAD', payload);
+        const analysis = handler.analyzeCommand(command);
+        expect(analysis.browserClis.map(cli => cli.name).sort()).toEqual(['agent-browser', 'browser-use']);
+        expect(analysis.usingExternalCdp).toBe(false);
+        expect(handler.getWarmupCommands('browser', analysis.browserClis, endpoint, 'thread')).toEqual([
+          { cliName: 'agent-browser', command: `agent-browser --session thread connect ${endpoint}` },
+        ]);
+        const output = execFileSync('sh', ['-c', handler.injectCdpUrl(command, endpoint, 'thread')], {
+          cwd: directory,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+        });
+        const [argc, cdp, name, ...stdin] = output.split('\n');
+        expect(argc).toBe('0');
+        expect(cdp).toBe(endpoint);
+        expect(name).toMatch(/^mastra-[a-f0-9]{16}$/);
+        expect(stdin.join('\n')).toBe(payload);
+        expect(readFileSync(join(directory, 'agent-args'), 'utf8')).toBe(
+          `--cdp\n${endpoint}\n--session\nthread\nopen\nhttps://example.com\n`,
+        );
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    it.each(['browser-use', 'bu  ', 'browser< script.py', 'browseruse < script.py'])(
+      'uses environment transport for %s',
+      command => {
+        expect(handler.analyzeCommand(command).browserClis.map(cli => cli.name)).toEqual(['browser-use']);
+        const result = handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread');
+        expect(result).toMatch(/^BU_CDP_WS=/);
+        expect(result).not.toMatch(/--cdp-url|--session/);
+      },
+    );
+
+    it('isolates daemon names by thread and endpoint while keeping repeated calls stable', () => {
+      const name = (thread?: string, endpoint = 'ws://localhost/one') =>
+        handler.injectCdpUrl('bu', endpoint, thread).match(/BU_NAME=(\S+)/)?.[1];
+      expect(name('one')).toBe(name('one'));
+      expect(name('one')).not.toBe(name('two'));
+      expect(name('one')).not.toBe(name('one', 'ws://localhost/two'));
+      expect(name()).toBe(name('default'));
+    });
+
+    it.each([
+      'browser-use-extra',
+      'browser-use open https://example.com',
+      'true && browser-use open https://example.com',
+      'browser-use > result.txt open https://example.com',
+      'echo browser-use',
+      'echo "true && browser-use < script.py"',
+    ])('does not select stdin transport for %s', command => {
+      expect(handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')).not.toMatch(/^BU_CDP_WS=/);
+    });
   });
 
   describe('getBrowserCliConfig', () => {

@@ -89,6 +89,34 @@ describe('PosthogAnalytics distinct ids', () => {
   });
 });
 
+describe('PosthogAnalytics feature flags', () => {
+  it('uses an explicit platform user identity for flag evaluation', async () => {
+    let evaluation: Promise<boolean> | undefined;
+    const getFlag = vi.fn().mockReturnValue(true);
+    const evaluateFlags = vi.fn().mockResolvedValue({ getFlag });
+
+    withTempAnalyticsConfig(() => {
+      const analytics = new PosthogAnalytics({
+        version: 'test-version',
+        apiKey: 'test-key',
+        host: 'https://posthog.test',
+      });
+      (analytics as unknown as { client: { evaluateFlags: typeof evaluateFlags } }).client = { evaluateFlags };
+      evaluation = analytics.isFeatureEnabled('platform-workers', {
+        distinctId: 'user_123',
+        groups: { organization: 'org-1' },
+      });
+    });
+
+    await expect(evaluation).resolves.toBe(true);
+    expect(evaluateFlags).toHaveBeenCalledWith('user_123', {
+      groups: { organization: 'org-1' },
+      flagKeys: ['platform-workers'],
+    });
+    expect(getFlag).toHaveBeenCalledWith('platform-workers');
+  });
+});
+
 function withTempAnalyticsConfig(run: (configPath: string) => void): void {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'mastra-cli-analytics-'));
   const configPath = path.join(dir, 'analytics.json');

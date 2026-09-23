@@ -28,8 +28,8 @@ export const AgentProfileToolsStep = () => {
       description={
         <div className="flex items-center gap-2">
           Selected tools:{' '}
-          <Badge variant="default">
-            <strong className="text-neutral6 font-semibold">{selectedToolsCount}</strong>
+          <Badge>
+            <strong className="font-medium text-foreground">{selectedToolsCount}</strong>
           </Badge>
         </div>
       }

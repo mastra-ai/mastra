@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildCommandExamples, buildCommandUsage, getCommandSchema } from './schema.js';
+import { BUNDLED_ROUTE_SCHEMAS, buildCommandExamples, buildCommandUsage, getCommandSchema } from './schema.js';
 import { API_COMMANDS, registerApiCommand } from './index.js';
 
 const commands = (key: keyof typeof API_COMMANDS) =>
@@ -91,6 +91,27 @@ describe('buildCommandExamples', () => {
 describe('getCommandSchema', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('resolves bundled route schemas without fetching the target manifest', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const descriptor = API_COMMANDS.learningEntities;
+
+    expect(BUNDLED_ROUTE_SCHEMAS[`${descriptor.method} ${descriptor.path}`]).toBeDefined();
+    await expect(
+      getCommandSchema(descriptor, { baseUrl: 'https://example.com', headers: {}, timeoutMs: 1000 }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        path: '/learning/entities',
+        input: expect.objectContaining({
+          source: 'query',
+          schema: expect.objectContaining({ type: 'object' }),
+        }),
+      }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('fails clearly when the target returns an invalid manifest', async () => {

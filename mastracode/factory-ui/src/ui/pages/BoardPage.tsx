@@ -1,23 +1,24 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Plus } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router';
+import { GitBranch, Plus } from 'lucide-react';
+import { Link, useParams, useSearchParams } from 'react-router';
+import type { InstalledBoardInfo } from '../../api/types';
+import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
-import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
+import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
-import { BoardAutoRunToggle } from '../domains/factory/components/BoardAutoRunToggle';
+import { BoardAutomationSettings } from '../domains/factory/components/BoardAutomationSettings';
 import { BoardTooltipDelay } from '../domains/factory/components/BoardCardParts';
 import { BoardColumn, BoardColumnHeader } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
 import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
-import { BoardRelevanceFilters } from '../domains/factory/components/BoardRelevanceFilters';
+import { BoardFilters } from '../domains/factory/components/BoardFilters';
 import { CandidateCard } from '../domains/factory/components/CandidateCard';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
@@ -28,22 +29,21 @@ import { useBoardComposer } from '../domains/factory/hooks/useBoardComposer';
 import { useBoardDeepLink } from '../domains/factory/hooks/useBoardDeepLink';
 import { useBoardDecisions } from '../domains/factory/hooks/useBoardDecisions';
 import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
+import { useItemSessionStatuses } from '../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { isTerminalStage } from '../domains/factory/stages';
 import {
   boardLabels,
-  boardLabelsFromQuery,
-  boardLabelsQueryValues,
   boardParticipants,
-  boardRelevanceFromQuery,
-  boardRelevanceQueryValue,
   candidateMatchesLabels,
   candidateMatchesRelevance,
   workItemMatchesLabels,
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
-import type { BoardRelevanceType } from '../domains/factory/boardRelevance';
+import { boardFilterParams, boardFiltersActive, boardFiltersFromParams } from '../domains/factory/boardFilters';
+import type { BoardFilterState } from '../domains/factory/boardFilters';
+import { candidatePayload } from '../domains/factory/boardDrag';
 import { cardMatchesSearch } from '../domains/factory/boardItems';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
@@ -68,7 +68,22 @@ export function ReviewBoardPage() {
   return <FactoryPageShell bleed>{factory => <Board factory={factory} kind="review" />}</FactoryPageShell>;
 }
 
+export function CustomBoardPage() {
+  const { boardId } = useParams<{ boardId: string }>();
+  return <FactoryPageShell bleed>{factory => <Board factory={factory} kind={boardId ?? ''} />}</FactoryPageShell>;
+}
+
 function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {
+  const catalog = useBoardCatalog(factory.id);
+  if (catalog.isPending) return <p role="status">Loading boards…</p>;
+  if (catalog.isError) return <p role="alert">Unable to load boards.</p>;
+  const definition = catalog.data.find(board => board.id === kind);
+  if (!definition) return <p role="alert">Board unavailable: this board is not installed.</p>;
+  return <InstalledBoard factory={factory} definition={definition} />;
+}
+
+function InstalledBoard({ factory, definition }: { factory: FactoryProject; definition: InstalledBoardInfo }) {
+  const kind = definition.id;
   const repository = factory.repositories[0];
   const review = kind === 'review';
 
@@ -77,12 +92,12 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
         <EmptyState
           as="h2"
-          iconSlot={<GithubIcon className="text-icon3 size-10" />}
+          iconSlot={<GitBranch className="text-muted-foreground size-10" />}
           titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
           descriptionSlot={
             review
-              ? 'Link a GitHub repository in Repository settings. Its pull requests will appear in Intake, ready to move through review.'
-              : 'Link a GitHub repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
+              ? 'Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.'
+              : 'Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
           }
           actionSlot={
             <Link
@@ -97,40 +112,53 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
     );
   }
 
-  return <BoardContent factory={factory} repository={repository} kind={kind} />;
+  return <BoardContent factory={factory} repository={repository} kind={kind} definition={definition} />;
+}
+
+/** The open card and the comment it deep-links to are one selection: clear them together. */
+function clearOpenCard(params: URLSearchParams) {
+  params.delete('item');
+  params.delete('comment');
 }
 
 function BoardContent({
   factory,
   repository,
   kind,
+  definition,
 }: {
   factory: FactoryProject;
   repository: LinkedRepositoryPayload;
   kind: BoardKind;
+  definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
   const review = kind === 'review';
-  const stages = boardStages(kind);
+  const builtin = kind === 'work' || review;
+  const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
   const [searchParams, setSearchParams] = useSearchParams();
   const targetItemId = searchParams.get('item') || undefined;
-  const selectedParticipantId = searchParams.get('teammate') || undefined;
-  const search = searchParams.get('q') ?? '';
-  const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
-  const selectedLabels = boardLabelsFromQuery(searchParams.getAll('label'));
+  const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
+  const filters = boardFiltersFromParams(searchParams, kind);
 
   const auth = useFactoryAuth();
   const items = useBoardItems({ factoryProjectId, kind });
-  const intake = useBoardIntake({ factoryProjectId, repository, kind, knownSourceKeys: items.knownSourceKeys });
-  const runs = useBoardRuns({
+  const intake = useBoardIntake({
+    factoryProjectId,
+    repository,
+    definition,
+    knownSourceKeys: items.knownSourceKeys,
+    elsewhereSourceKeys: items.elsewhereSourceKeys,
+  });
+  const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
+  const relatedItemsFor = relatedWorkItemIndex(items.all);
+  const sessionStatuses = useItemSessionStatuses({
     factoryProjectId,
     projectRepositoryId: repository.projectRepositoryId,
-    workItems: items.all,
-    refetchItems: items.refetch,
+    items: items.all,
   });
-  const relatedItemsFor = relatedWorkItemIndex(items.all);
   const decisions = useBoardDecisions(factoryProjectId);
-  const composer = useBoardComposer(factoryProjectId);
+  const composer = useBoardComposer(factoryProjectId, definition);
   const activityProfileActorIds = [...new Set(items.all.flatMap(workItemHumanActorIds))];
   const activity = useRecentAuditEvents(factoryProjectId, `board-${kind}-activity`, 200, activityProfileActorIds);
   const activityPage = activity.data;
@@ -146,61 +174,19 @@ function BoardContent({
   const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
   const filteredCandidates = intake.candidates.filter(
     candidate =>
-      candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes) &&
-      candidateMatchesLabels(candidate, selectedLabels) &&
-      cardMatchesSearch(candidate, search),
+      candidateMatchesRelevance(candidate, filters.participantId, filters.relevanceTypes) &&
+      candidateMatchesLabels(candidate, filters.labels) &&
+      cardMatchesSearch(candidate, filters.search),
   );
-  const setSearch = (next: string) => {
-    const params = new URLSearchParams(searchParams);
-    params.delete('item');
-    if (next.trim()) params.set('q', next);
-    else params.delete('q');
+  const setFilters = (next: BoardFilterState) => {
+    const params = boardFilterParams(searchParams, next, kind);
+    clearOpenCard(params);
     setSearchParams(params, { replace: true });
-  };
-  const setParticipant = (participantId: string | undefined) => {
-    const next = new URLSearchParams(searchParams);
-    next.delete('item');
-    if (participantId) next.set('teammate', participantId);
-    else {
-      next.delete('teammate');
-      next.delete('relevance');
-    }
-    setSearchParams(next, { replace: true });
-  };
-  const setRelevanceType = (type: BoardRelevanceType, selected: boolean) => {
-    const nextTypes = new Set(selectedRelevanceTypes);
-    if (selected) nextTypes.add(type);
-    else nextTypes.delete(type);
-    const next = new URLSearchParams(searchParams);
-    next.delete('item');
-    const value = boardRelevanceQueryValue(nextTypes, kind);
-    if (value) next.set('relevance', value);
-    else next.delete('relevance');
-    setSearchParams(next, { replace: true });
-  };
-  const setLabel = (label: string, selected: boolean) => {
-    const nextLabels = new Set(selectedLabels);
-    if (selected) nextLabels.add(label);
-    else nextLabels.delete(label);
-    const next = new URLSearchParams(searchParams);
-    next.delete('item');
-    next.delete('label');
-    for (const value of boardLabelsQueryValues(nextLabels)) next.append('label', value);
-    setSearchParams(next, { replace: true });
-  };
-  const resetFilters = () => {
-    const next = new URLSearchParams(searchParams);
-    next.delete('teammate');
-    next.delete('relevance');
-    next.delete('label');
-    next.delete('q');
-    next.delete('item');
-    setSearchParams(next, { replace: true });
   };
   const setIntakeSource = (source: IntakeSource) => {
     if (targetItemId) {
       const next = new URLSearchParams(searchParams);
-      next.delete('item');
+      clearOpenCard(next);
       setSearchParams(next, { replace: true });
     }
     intake.select(source);
@@ -209,18 +195,21 @@ function BoardContent({
     items.visible.filter(item => {
       if (!itemAppearsInStage(item, stage, stages)) return false;
       if (item.id === targetItemId) return true;
-      if (stage !== 'intake' || review || item.source === 'manual') return true;
+      if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
+      if (intake.active === 'gitlab') return item.source === 'gitlab-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
+      if (intake.active === 'jira') return item.source === 'jira-issue';
+      if (intake.active === 'incidentio') return item.source === 'incidentio-follow-up';
       return false;
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
     unfilteredWorkItemsForStage(stage).filter(item => {
       const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
       return (
-        workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
-        workItemMatchesLabels(item, selectedLabels, liveCandidate) &&
-        cardMatchesSearch(item, search)
+        workItemMatchesRelevance(item, activityPage, filters.participantId, filters.relevanceTypes, liveCandidate) &&
+        workItemMatchesLabels(item, filters.labels, liveCandidate) &&
+        cardMatchesSearch(item, filters.search)
       );
     });
   const boardWorkItems = stages.flatMap(stage => workItemsForStage(stage.id));
@@ -250,7 +239,7 @@ function BoardContent({
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
-  const anyFilterActive = selectedParticipantId !== undefined || selectedLabels.size > 0 || search !== '';
+  const anyFilterActive = boardFiltersActive(filters, kind);
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
   const stageViews = stages.map(stage => {
@@ -270,7 +259,8 @@ function BoardContent({
       composerOpen,
       columnFeed,
       feedFailed,
-      collapsed: stage.id !== 'intake' && !loading && !composerOpen && !feedFailed && taskCount === 0,
+      collapsed:
+        builtin && stage.id !== definition.initialPhase && !loading && !composerOpen && !feedFailed && taskCount === 0,
     };
   });
 
@@ -283,32 +273,30 @@ function BoardContent({
           </Notice>
         </div>
       )}
-      <div className="[container-type:inline-size] min-h-0 flex-1 overflow-auto overscroll-x-contain lg:overscroll-x-auto">
+      <div className="[container-type:inline-size] min-h-0 flex-1 overflow-auto overscroll-x-contain [scrollbar-gutter:stable] lg:overscroll-x-auto">
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
-          <div className="from-surface2 via-surface2 z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
-            <div className="sticky left-0 flex w-[100cqw] flex-col items-stretch gap-3 px-5 pt-5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-2">
-              <BoardRelevanceFilters
+          <div className="from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
+            <div className="sticky left-0 flex w-[100cqw] flex-wrap items-center gap-x-4 gap-y-3 px-5 pt-5">
+              <BoardFilters
                 kind={kind}
                 participants={participants}
-                search={search}
-                onSearchChange={setSearch}
-                selectedParticipantId={selectedParticipantId}
-                selectedTypes={selectedRelevanceTypes}
                 availableLabels={availableLabels}
-                selectedLabels={selectedLabels}
                 currentUserId={auth.data?.user?.userId}
-                onParticipantChange={setParticipant}
-                onTypeChange={setRelevanceType}
-                onLabelChange={setLabel}
-                onReset={resetFilters}
+                filters={filters}
+                onFiltersChange={setFilters}
               />
-              <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
-                <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
-              </div>
+              {builtin && (
+                <BoardAutomationSettings
+                  factoryProjectId={factoryProjectId}
+                  autoRunEnabled={factory.autoRunEnabled ?? false}
+                  autoApprovePlans={factory.autoApprovePlans ?? false}
+                />
+              )}
             </div>
-            <div className="from-surface2 via-surface2 sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
+            <div className="from-background via-background sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
               {stageViews.map(({ stage, loading, taskCount, composerOpen, collapsed }) => (
                 <BoardColumnHeader
+                  phaseKind={stage.kind}
                   key={stage.id}
                   stage={stage.id}
                   label={stage.label}
@@ -319,7 +307,7 @@ function BoardContent({
                   headerAction={
                     !review &&
                     !loading &&
-                    !isTerminalStage(stage.id) &&
+                    stage.kind !== 'terminal' &&
                     (composer.stage === undefined || composerOpen) ? (
                       <Button
                         ref={composer.registerTrigger(stage.id)}
@@ -337,7 +325,7 @@ function BoardContent({
                     ) : undefined
                   }
                   headerExtras={
-                    stage.id === 'intake' && intake.showSwitch ? (
+                    stage.id === definition.initialPhase && intake.showSwitch ? (
                       <IntakeSourceSwitch
                         available={intake.available}
                         active={intake.active}
@@ -386,14 +374,13 @@ function BoardContent({
                           key={`${item.id}:${stage.id}`}
                           item={item}
                           deepLinkRef={registerDeepLinkedCard(item.id)}
+                          deepLinkCommentId={targetItemId === item.id ? targetCommentId : undefined}
                           highlighted={targetItemId === item.id}
                           columnStage={stage.id}
                           relatedItems={relatedItemsFor(item)}
+                          sessionStatus={sessionStatuses.get(item.id)}
                           projectRepositoryId={repository.projectRepositoryId}
                           activityPage={activityPage}
-                          liveWorktreePaths={runs.liveWorktreePaths}
-                          sessionLivenessResolved={runs.sessionLivenessResolved}
-                          runDisabled={runs.disabled}
                           preparing={runs.preparingFor(item.id)}
                           evaluatingStage={items.evaluatingStages.get(item.id)}
                           transitionReason={items.transitionReasons[item.id]}
@@ -404,11 +391,8 @@ function BoardContent({
                           onApproveProposal={decisions.approve}
                           onDismissProposal={decisions.dismiss}
                           onRetryDecision={decisions.retry}
-                          pendingRunRoles={runs.pendingRolesFor(item.id)}
-                          onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
-                          onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
-                          onRestartRun={(_spec, action) => void runs.restartRun(item, action.role)}
-                          onMove={toStage => items.move(item.id, toStage)}
+                          onCreateSession={() => void runs.openOrCreateSession(item)}
+                          onMove={(toStage, options) => items.move(item.id, toStage, options)}
                           onRemove={() => items.remove(item.id)}
                         />
                       )}
@@ -421,11 +405,9 @@ function BoardContent({
                           candidate={candidate}
                           projectRepositoryId={repository.projectRepositoryId}
                           factoryProjectId={factoryProjectId}
-                          pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
-                          preparing={runs.preparingForSource(candidate.sourceKey)}
-                          disabled={!runs.enabled}
-                          onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
-                          onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}
+                          onRun={(move, prompt) =>
+                            items.handleDrop(candidatePayload(candidate, prompt), move.stage, 'card_action')
+                          }
                         />
                       )}
                     />
@@ -438,10 +420,11 @@ function BoardContent({
                         kind={kind}
                         hasIntakeSource={intake.active !== undefined}
                         filtersExcludeAll={filtersExcludeAll}
+                        alreadyMaterialized={stage.id === definition.initialPhase ? intake.alreadyMaterialized : 0}
                       />
                     )}
                     {columnFeed && <IntakeFeedNotice source={intake.active} feed={columnFeed} />}
-                    {stage.id === 'intake' && <IntakeColumnExtras feed={columnFeed} />}
+                    {stage.id === definition.initialPhase && <IntakeColumnExtras feed={columnFeed} />}
                   </BoardColumn>
                 ),
               )}
@@ -471,10 +454,10 @@ function IntakeSourceSwitch({
           aria-pressed={active === source.id}
           onClick={() => onSelect(source.id)}
           className={cn(
-            'rounded-full border px-2.5 py-0.5 text-ui-xs transition',
+            'rounded-full border px-2.5 py-0.5 text-meta transition',
             active === source.id
-              ? 'border-accent1 bg-surface4 text-icon6'
-              : 'border-border1 bg-transparent text-icon3 hover:text-icon5',
+              ? 'border-accent1 bg-fill text-foreground'
+              : 'border-border bg-transparent text-muted-foreground hover:text-foreground',
           )}
         >
           {source.label}

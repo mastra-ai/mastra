@@ -1,30 +1,12 @@
 # @mastra/voice-azure
 
-Azure Voice integration for Mastra, providing both Text-to-Speech (TTS) and Speech-to-Text (STT) capabilities using Azure's Cognitive Services Speech SDK.
+Add text-to-speech and speech-to-text to Mastra with Azure Speech Services, configurable voices, audio formats, transcription, and credentials.
 
 ## Installation
 
 ```bash
 npm install @mastra/voice-azure
 ```
-
-## Configuration
-
-### Environment Variables
-
-The module requires Azure Speech Services credentials that can be provided through environment variables or directly in the configuration:
-
-```bash
-AZURE_API_KEY=your_speech_service_key
-AZURE_REGION=your_azure_region
-```
-
-To get these credentials:
-
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Create a "Speech Services" resource (NOT "OpenAI Services")
-3. Navigate to "Keys and Endpoint" section
-4. Copy your subscription key and region
 
 ## Usage
 
@@ -57,73 +39,14 @@ const audioStream = await voice.speak('Hello from Mastra!', {
 const text = await voice.listen(audioStream);
 ```
 
-## Features
+## Documentation
 
-- High-quality neural Text-to-Speech synthesis
-- Accurate Speech-to-Text recognition
-- 200+ neural voices across multiple languages
-- SSML support
-- Real-time audio streaming
-- Multiple audio format support
+- [Azure](https://mastra.ai/integrations/voice/azure)
 
-## Voice Options
+## Changelog
 
-Azure provides numerous neural voices across different languages. Here are some popular English voices:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/azure/CHANGELOG.md) for version history and release notes.
 
-- en-US-JennyNeural (Female)
-- en-US-GuyNeural (Male)
-- en-US-AriaNeural (Female)
-- en-US-DavisNeural (Male)
-- en-GB-SoniaNeural (Female)
-- en-GB-RyanNeural (Male)
-- en-AU-NatashaNeural (Female)
-- en-AU-WilliamNeural (Male)
+## Support
 
-Each voice ID follows the format: `{language}-{region}-{name}Neural`
-
-For a complete list of supported voices, you can:
-
-1. Call the `getSpeakers()` method
-2. View the [Azure Neural TTS documentation](https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts)
-
-## Common Mistakes to Avoid
-
-❌ **Don't use generic names:**
-
-```typescript
-voiceName: 'neural'; // WRONG - not a valid voice
-```
-
-✅ **Use specific voice IDs:**
-
-```typescript
-voiceName: 'en-US-AriaNeural'; // CORRECT
-```
-
-❌ **Don't use wrong property names:**
-
-```typescript
-listeningModel: {
-  voiceName: 'whisper'; // WRONG - use 'language' property instead
-}
-```
-
-✅ **Use correct properties:**
-
-```typescript
-listeningModel: {
-  language: 'en-US'; // CORRECT
-}
-```
-
-❌ **Don't use Azure OpenAI credentials:**
-
-```typescript
-apiKey: process.env.AZURE_OPENAI_API_KEY; // WRONG
-```
-
-✅ **Use Azure Speech Services credentials:**
-
-```typescript
-apiKey: process.env.AZURE_API_KEY; // CORRECT
-```
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

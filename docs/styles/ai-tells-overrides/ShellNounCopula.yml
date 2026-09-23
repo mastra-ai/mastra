@@ -1,0 +1,7 @@
+extends: existence
+message: "Consider removing '%s' and starting with the claim."
+level: suggestion
+nonword: true
+ignorecase: true
+tokens:
+  - '\b(?:the|a|an|one|another|its|their|our|my|this) (?:[a-z-]+ )?(?:thing|kicker|upshot) (?:here )?(?:is|was) (?:simply |just )?(?:that|whether)\b'

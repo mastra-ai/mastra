@@ -80,6 +80,118 @@ describe('CloudflareSandboxBridgeClient', () => {
     expect(bridge.requests.at(-1)?.url).toBe(`${BASE_URL}/v1/sandbox/${id}/file/workspace/a%20b.txt`);
   });
 
+  it('reads a file with GET /v1/sandbox/:id/file/* and returns raw bytes', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+    await client.writeFile(id, '/workspace/notes.txt', 'hello bytes');
+
+    const bytes = await client.readFile(id, '/workspace/notes.txt');
+
+    expect(Buffer.from(bytes).toString('utf8')).toBe('hello bytes');
+    expect(bridge.requests.at(-1)).toMatchObject({
+      method: 'GET',
+      url: `${BASE_URL}/v1/sandbox/${id}/file/workspace/notes.txt`,
+    });
+  });
+
+  it('throws a bridge error when reading a missing file', async () => {
+    const { client } = createClient();
+    const id = await client.createSandbox();
+
+    await expect(client.readFile(id, '/workspace/missing.txt')).rejects.toMatchObject({
+      name: 'CloudflareSandboxBridgeError',
+      status: 404,
+    });
+  });
+
+  it('persists /workspace with GET /persist, forwarding excludes', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+
+    const archive = await client.persistWorkspace(id, { excludes: ['node_modules', '.git'] });
+
+    expect(Buffer.from(archive).toString('utf8')).toBe('fake-tar-archive');
+    expect(bridge.persists.at(-1)).toBe('node_modules,.git');
+    expect(bridge.requests.at(-1)).toMatchObject({ method: 'GET' });
+    expect(bridge.requests.at(-1)?.url).toBe(`${BASE_URL}/v1/sandbox/${id}/persist?excludes=node_modules%2C.git`);
+  });
+
+  it('omits the excludes query when none are given', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+
+    await client.persistWorkspace(id);
+
+    expect(bridge.requests.at(-1)?.url).toBe(`${BASE_URL}/v1/sandbox/${id}/persist`);
+    expect(bridge.persists.at(-1)).toBeNull();
+  });
+
+  it('hydrates /workspace with POST /hydrate carrying the raw tar', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+    const tar = new Uint8Array([1, 2, 3, 4]);
+
+    await client.hydrateWorkspace(id, tar);
+
+    expect(bridge.requests.at(-1)).toMatchObject({ method: 'POST', url: `${BASE_URL}/v1/sandbox/${id}/hydrate` });
+    expect(Array.from(bridge.hydrations.at(-1)!)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('mounts a bucket with POST /mount', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+
+    await client.mountBucket(id, {
+      bucket: 'my-bucket',
+      mountPath: '/mnt/data',
+      options: { endpoint: 'https://acct.r2.cloudflarestorage.com', readOnly: true },
+    });
+
+    expect(bridge.requests.at(-1)).toMatchObject({ method: 'POST', url: `${BASE_URL}/v1/sandbox/${id}/mount` });
+    expect(bridge.mounts.at(-1)).toEqual({
+      bucket: 'my-bucket',
+      mountPath: '/mnt/data',
+      options: { endpoint: 'https://acct.r2.cloudflarestorage.com', readOnly: true },
+    });
+  });
+
+  it('unmounts a bucket with POST /unmount', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+
+    await client.unmountBucket(id, '/mnt/data');
+
+    expect(bridge.requests.at(-1)).toMatchObject({ method: 'POST', url: `${BASE_URL}/v1/sandbox/${id}/unmount` });
+    expect(bridge.unmounts.at(-1)).toEqual({ mountPath: '/mnt/data' });
+  });
+
+  it('creates a session with POST /session and returns its id', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+
+    const generated = await client.createSession(id, { cwd: '/workspace', env: { NODE_ENV: 'test' } });
+    expect(generated.id).toBe('sess-1');
+    expect(bridge.sessions.has('sess-1')).toBe(true);
+    expect(bridge.requests.at(-1)).toMatchObject({ method: 'POST', url: `${BASE_URL}/v1/sandbox/${id}/session` });
+
+    const chosen = await client.createSession(id, { sessionId: 'my-session' });
+    expect(chosen.id).toBe('my-session');
+  });
+
+  it('deletes a session with DELETE /session/:sid', async () => {
+    const { bridge, client } = createClient();
+    const id = await client.createSandbox();
+    const session = await client.createSession(id);
+
+    await client.deleteSession(id, session.id);
+
+    expect(bridge.sessions.has(session.id)).toBe(false);
+    expect(bridge.requests.at(-1)).toMatchObject({
+      method: 'DELETE',
+      url: `${BASE_URL}/v1/sandbox/${id}/session/${session.id}`,
+    });
+  });
+
   it('sends argv, timeout_ms and cwd to /exec', async () => {
     const { bridge, client } = createClient();
     const id = await client.createSandbox();

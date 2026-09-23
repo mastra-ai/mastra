@@ -1,6 +1,6 @@
 ---
 title: "Reference: Step class | Workflows"
-description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
+description: "The Step class defines individual units of work within a workflow, encapsulating execution logic, data validation, and input/output handling."
 packages:
   - "@mastra/core"
 ---
@@ -337,7 +337,7 @@ Each scorer receives the step's own `input` and `output`. Scoring runs asynchron
 
 The following example attaches a scorer to a retrieval step so every execution is scored:
 
-```typescript title="src/mastra/workflows/rag-workflow.ts" prettier:false
+```typescript title="src/mastra/workflows/rag-workflow.ts"
 import { createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
 import { retrievalRelevanceScorer } from '../scorers/retrieval-relevance'

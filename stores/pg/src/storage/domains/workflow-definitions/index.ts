@@ -9,7 +9,7 @@ import type {
 } from '@mastra/core/storage';
 
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
 function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
@@ -38,6 +38,8 @@ function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
   if (requestContextSchema !== undefined && requestContextSchema !== null) {
     def.requestContextSchema = requestContextSchema;
   }
+  const schedule = parseJsonResilient(row.schedule);
+  if (schedule !== undefined && schedule !== null) def.schedule = schedule as WorkflowDefinition['schedule'];
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;
 }
@@ -52,8 +54,8 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx =>
@@ -110,6 +112,11 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       tableName: TABLE_WORKFLOW_DEFINITIONS,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_DEFINITIONS],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_DEFINITIONS,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_DEFINITIONS],
+      ifNotExists: ['schedule'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -120,7 +127,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
 
   async upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition> {
     const now = new Date();
-    const existing = await this.get(input.id);
+    const existing = await this.#get(this.#db.client, input.id);
 
     if (!existing) {
       if (!('inputSchema' in input) || !input.inputSchema)
@@ -139,6 +146,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
         stateSchema: input.stateSchema ?? null,
         requestContextSchema: input.requestContextSchema ?? null,
         graph: input.graph,
+        schedule: 'schedule' in input ? (input.schedule ?? null) : null,
         status: 'active',
         source: 'storage',
         authorId: 'authorId' in input ? (input.authorId ?? null) : null,
@@ -150,10 +158,10 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       } catch (error) {
         // A concurrent upsert may have created the row after our existence
         // check; fall back to updating it so the upsert stays idempotent.
-        if (!(await this.get(input.id))) throw error;
+        if (!(await this.#get(this.#db.client, input.id))) throw error;
         return this.applyUpdate(input, now);
       }
-      const created = await this.get(input.id);
+      const created = await this.#get(this.#db.client, input.id);
       if (!created) throw new Error(`Failed to persist workflow definition "${input.id}".`);
       return created;
     }
@@ -174,21 +182,30 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
     if ('requestContextSchema' in input && input.requestContextSchema !== undefined)
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
+    if ('schedule' in input && input.schedule !== undefined) data.schedule = input.schedule;
     if ('status' in input && input.status !== undefined) data.status = input.status;
     if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 
     await this.#db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys: { id: input.id }, data });
-    const updated = await this.get(input.id);
+    const updated = await this.#get(this.#db.client, input.id);
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
     return updated;
   }
 
   async get(id: string): Promise<WorkflowDefinition | null> {
+    return this.#get(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #get(client: DbClient, id: string): Promise<WorkflowDefinition | null> {
     const tableName = getTableName({
       indexName: TABLE_WORKFLOW_DEFINITIONS,
       schemaName: getSchemaName(this.#schema),
     });
-    const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+    const row = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
     return row ? rowToDefinition(row as Record<string, unknown>) : null;
   }
 
@@ -208,7 +225,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       conditions.push(`"authorId" = $${params.length}`);
     }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const rows = await this.#db.client.manyOrNone(
+    const rows = await this.#db.readClient.manyOrNone(
       `SELECT * FROM ${tableName} ${where} ORDER BY "updatedAt" DESC`,
       params,
     );

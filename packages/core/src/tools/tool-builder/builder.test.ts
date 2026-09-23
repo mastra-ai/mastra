@@ -249,6 +249,7 @@ describe('MCP Tool Tracing', () => {
         attributes: {
           mcpServer: 'filesystem-server',
           serverVersion: '1.2.0',
+          toolType: 'tool',
           toolDescription: 'List files in a directory',
           toolCallId: 'test-call-id',
         },
@@ -352,6 +353,7 @@ describe('MCP Tool Tracing', () => {
     expect(spanArgs.attributes).toEqual({
       mcpServer: 'my-mcp-server',
       serverVersion: undefined,
+      toolType: 'tool',
       toolDescription: 'Read a resource',
       toolCallId: 'test-call-id',
     });
@@ -899,5 +901,119 @@ describe('CoreToolBuilder requestContext merge', () => {
     await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: execRC });
 
     expect(receivedCtx.requestContext).toBe(execRC);
+  });
+});
+
+describe('CoreToolBuilder execution failures', () => {
+  it('does not copy raw tool args into logs, error details, or exception metadata', async () => {
+    const marker = 'SENSITIVE_REPORT_CONTENT';
+    const testTool = createTool({
+      id: 'failing_tool',
+      description: 'Always throws',
+      inputSchema: z.object({ content: z.string() }),
+      execute: async () => {
+        throw new Error('boom');
+      },
+    });
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'failing_tool',
+        logger: logger as any,
+      },
+    });
+
+    const builtTool = builder.build();
+    let thrown: any;
+    try {
+      await builtTool.execute!({ content: marker }, { toolCallId: 'call-1', messages: [] });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown?.id).toBe('TOOL_EXECUTION_FAILED');
+    expect(thrown.details.argsJson).toBeUndefined();
+    expect(JSON.stringify(thrown.details)).not.toContain(marker);
+
+    expect(logger.trackException).toHaveBeenCalledTimes(1);
+    const metadata = logger.trackException.mock.calls[0]?.[1];
+    expect(metadata).not.toHaveProperty('args');
+    expect(JSON.stringify(metadata)).not.toContain(marker);
+
+    for (const level of ['debug', 'info', 'warn', 'error'] as const) {
+      for (const call of logger[level].mock.calls) {
+        expect(JSON.stringify(call)).not.toContain(marker);
+      }
+    }
+  });
+});
+
+describe('CoreToolBuilder skipToolSpan', () => {
+  it('creates no tool span and passes the caller span to the tool context', async () => {
+    let receivedSpan: unknown;
+    const testTool = createTool({
+      id: 'skip-span-tool',
+      description: 'A tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async (input, context) => {
+        receivedSpan = context?.tracingContext?.currentSpan;
+        return { value: input.value };
+      },
+    });
+
+    const mockRequestSpan = {
+      createChildSpan: vi.fn(),
+    } as unknown as AnySpan;
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: testTool,
+      options: { name: 'skip-span-tool', requestContext: new RequestContext() },
+    }).build();
+
+    const result = await builtTool.execute!(
+      { value: 'x' },
+      { toolCallId: 'call-1', messages: [], tracingContext: { currentSpan: mockRequestSpan }, skipToolSpan: true },
+    );
+
+    expect(result).toEqual({ value: 'x' });
+    expect(mockRequestSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(receivedSpan).toBe(mockRequestSpan);
+  });
+});
+
+describe('CoreToolBuilder execute without options', () => {
+  it('runs a Vercel tool when execute is called with arguments only', async () => {
+    // The Vercel branch only casts the options through, so a bare call has
+    // always been allowed there; the span lookup must not assume they exist.
+    const vercelTool = {
+      description: 'Doubles a number',
+      parameters: z.object({ n: z.number() }),
+      execute: async (args: any) => args.n * 2,
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: vercelTool as any,
+      options: {
+        name: 'double',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Doubles a number',
+      },
+    });
+
+    const builtTool = builder.build();
+    await expect(builtTool.execute!({ n: 2 })).resolves.toBe(4);
   });
 });

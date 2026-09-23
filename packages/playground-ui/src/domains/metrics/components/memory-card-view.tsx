@@ -114,7 +114,7 @@ export function MemoryCardView({
                     const href = getThreadRowHref?.(row);
                     const rowCells = (
                       <>
-                        <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                        <DataList.RowHeaderCell className="text-caption">
                           {shortId(row.threadId)}
                         </DataList.RowHeaderCell>
                         <DataList.NumberCell>{row.resourceId ? shortId(row.resourceId) : '—'}</DataList.NumberCell>
@@ -152,7 +152,7 @@ export function MemoryCardView({
                     const href = getResourceRowHref?.(row);
                     const rowCells = (
                       <>
-                        <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                        <DataList.RowHeaderCell className="text-caption">
                           {shortId(row.resourceId)}
                         </DataList.RowHeaderCell>
                         <DataList.NumberCell highlight>{row.threadCount.toLocaleString()}</DataList.NumberCell>

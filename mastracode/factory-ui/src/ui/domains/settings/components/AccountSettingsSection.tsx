@@ -8,7 +8,8 @@ import { LogOut } from 'lucide-react';
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { clearMastraCodeStorage, redirectToLogout } from '../../auth/services/auth';
-import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+
 import { SettingsSubsection } from './SettingsSubsection';
 
 const AUTH_PROVIDER_LABELS: Record<string, string> = {
@@ -30,7 +31,7 @@ function authProviderLabel(provider: string | undefined): string {
 
 function AccountValue({ children, mono = false }: { children: string; mono?: boolean }) {
   return (
-    <Txt as="span" variant="ui-sm" font={mono ? 'mono' : undefined} className="text-icon4 truncate">
+    <Txt as="span" variant="caption" font={mono ? 'mono' : undefined} className="text-muted-foreground truncate">
       {children}
     </Txt>
   );
@@ -40,14 +41,14 @@ function CopyableAccountValue({ value, label }: { value: string; label: string }
   return (
     <div className="flex min-w-0 items-center gap-1">
       <AccountValue mono>{value}</AccountValue>
-      <CopyButton content={value} size="icon-xs" variant="ghost" tooltip={`Copy ${label}`} />
+      <CopyButton content={value} size="icon-sm" variant="ghost" tooltip={`Copy ${label}`} />
     </div>
   );
 }
 
 function AccountSettingsSkeleton() {
   return (
-    <SettingsCard>
+    <SettingsContainer>
       <SettingsRow label="Name">
         <Skeleton className="h-4 w-28" />
       </SettingsRow>
@@ -57,7 +58,7 @@ function AccountSettingsSkeleton() {
       <SettingsRow label="Authentication">
         <Skeleton className="h-4 w-24" />
       </SettingsRow>
-    </SettingsCard>
+    </SettingsContainer>
   );
 }
 
@@ -67,7 +68,7 @@ export function AccountSettingsSection() {
 
   if (auth.isPending) {
     return (
-      <SettingsSubsection title="Profile">
+      <SettingsSubsection scope="personal" title="Profile">
         <AccountSettingsSkeleton />
       </SettingsSubsection>
     );
@@ -95,8 +96,12 @@ export function AccountSettingsSection() {
 
   return (
     <div className="flex flex-col gap-8">
-      <SettingsSubsection title="Profile" description="Your signed-in identity for this MastraCode deployment.">
-        <SettingsCard>
+      <SettingsSubsection
+        scope="personal"
+        title="Profile"
+        description="Your signed-in identity for this MastraCode deployment."
+      >
+        <SettingsContainer>
           <SettingsRow label="Name">
             <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
           </SettingsRow>
@@ -107,26 +112,26 @@ export function AccountSettingsSection() {
             <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
           </SettingsRow>
           {user?.userId && (
-            <SettingsRow label="Account ID" hint="Useful when contacting support.">
+            <SettingsRow label="Account ID" description="Useful when contacting support.">
               <CopyableAccountValue value={user.userId} label="account ID" />
             </SettingsRow>
           )}
           {user?.organizationId && (
-            <SettingsRow label="Organization ID" hint="The organization that owns this Factory.">
+            <SettingsRow label="Organization ID" description="The organization that owns this Factory.">
               <CopyableAccountValue value={user.organizationId} label="organization ID" />
             </SettingsRow>
           )}
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
-      <SettingsSubsection title="Session">
-        <SettingsCard>
-          <SettingsRow label="Log out" hint="End your MastraCode session on this device.">
+      <SettingsSubsection scope="personal" title="Session">
+        <SettingsContainer>
+          <SettingsRow label="Log out" description="End your MastraCode session on this device.">
             <Button type="button" variant="outline" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>
               <LogOut aria-hidden="true" />
               Log out
             </Button>
           </SettingsRow>
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
     </div>
   );

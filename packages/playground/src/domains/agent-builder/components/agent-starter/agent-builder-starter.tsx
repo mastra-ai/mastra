@@ -78,31 +78,28 @@ export const AgentBuilderStarter = () => {
   };
 
   return (
-    <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-6 py-24">
-      <div className="relative z-10 flex w-full max-w-3xl flex-col gap-12">
-        <h1
-          className="starter-heading text-neutral6 text-center font-serif"
-          style={{ fontSize: 'clamp(1.875rem, 3.5vw, 2.5rem)', lineHeight: 1.1, letterSpacing: '-0.015em' }}
-        >
+    <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-16">
+      <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
+        <h1 className="starter-heading text-center font-display text-title tracking-tight text-foreground md:text-display">
           What should we build today?
         </h1>
 
         <form
           onSubmit={handleSubmit}
-          className="starter-prompt border-border1 bg-surface2 duration-normal ease-out-custom focus-within:border-neutral3 rounded-2xl border transition-colors"
+          className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
             ref={textareaRef}
             testId="agent-builder-starter-input"
-            size="default"
+            size="md"
             variant="unstyled"
             placeholder="Describe the agent you want to build…"
             value={message}
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isCreating}
-            className="text-ui-md placeholder:text-neutral3 min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
+            className="min-h-[112px] resize-none px-5 py-4 text-body outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
             rows={3}
           />
 

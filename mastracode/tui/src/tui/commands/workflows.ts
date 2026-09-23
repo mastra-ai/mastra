@@ -27,7 +27,7 @@ function buildSessionRequestContext(ctx: SlashCommandContext): RequestContext | 
   if (!session) return undefined;
   // Mirror the canonical modelId fallback chain in mastracode/src/index.ts:471-505.
   // A session's model.get() returns '' unless the user has explicitly picked
-  // one via /models on this session — otherwise the effective model comes from
+  // one via /model on this session — otherwise the effective model comes from
   // the current mode's defaultModelId. Without this fallback, code-agent's
   // getDynamicModel throws "No model selected" when it runs inside a workflow.
   const modeId = session.mode?.get?.() ?? '';

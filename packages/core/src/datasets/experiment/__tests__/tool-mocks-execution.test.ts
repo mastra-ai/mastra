@@ -96,6 +96,9 @@ describe('executeTarget agent tool mocks', () => {
     expect(result.error?.code).toBe(TOOL_MOCK_MISMATCH);
     expect(liveExecutions).toEqual([]); // mocked tool must not run live on mismatch
     expect(result.toolMockReport?.failure?.code).toBe(TOOL_MOCK_MISMATCH);
+    const assignedTraceId = (agent.generate as ReturnType<typeof vi.fn>).mock.calls[0][1].tracingOptions.traceId;
+    expect(assignedTraceId).toMatch(/^[0-9a-f]{32}$/);
+    expect(result.traceId).toBe(assignedTraceId);
   });
 
   it('fails with TOOL_MOCK_EXHAUSTED when a mocked (tool,args) is called more times than provided', async () => {

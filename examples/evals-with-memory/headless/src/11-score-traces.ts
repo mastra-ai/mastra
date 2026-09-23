@@ -149,14 +149,18 @@ async function main() {
         console.log(`    FAILED  ${entry.traceId?.slice(0, 12) ?? ''}… ${String((entry as any).error).slice(0, 40)}`);
         continue;
       }
+      if ('notScorable' in entry) {
+        console.log(`    SKIPPED ${entry.traceId.slice(0, 12)}… ${entry.notScorable.reason ?? 'not scorable'}`);
+        continue;
+      }
       const question = extractQuestion(entry.score);
       const value = entry.score.score;
       console.log(`    ${(value == null ? '—' : value.toFixed(3)).padEnd(6)} ${question.slice(0, 52)}`);
     }
 
-    const ok = batch.results.filter((r: any) => r.ok);
+    const ok = batch.results.filter(r => r.ok && 'score' in r);
     if (ok.length) {
-      const mean = ok.reduce((a: number, r: any) => a + (r.score.score ?? 0), 0) / ok.length;
+      const mean = ok.reduce((a, r) => a + (r.score.score ?? 0), 0) / ok.length;
       console.log(`\n  mean ${mean.toFixed(3)} over traffic that was never evaluated at request time.`);
     }
 

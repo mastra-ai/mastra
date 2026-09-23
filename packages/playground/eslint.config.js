@@ -5,6 +5,29 @@ const reactHooks = (await import('eslint-plugin-react-hooks')).default;
 
 const config = await createConfig();
 
+// Typography must come from a DS text role (text-title, text-body, text-label…, or <Txt>).
+// Tailwind's own sizes stay defined as a safety net only; the roles live in playground-ui/theme/typography.css.
+const TYPOGRAPHY_CLASS_PATTERN = '(^|\\s|:)text-(xs|sm|base|lg|xl|\\dxl)(\\s|$)|text-\\[\\d[^\\]]*(px|rem)\\]';
+const TYPOGRAPHY_MESSAGE = 'Use a DS text role (text-title / text-body / text-label / text-caption…) — see Txt.';
+const restrictedTypographySelectors = [
+  { selector: `Literal[value=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
+  { selector: `TemplateElement[value.raw=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
+];
+
+// Ink on a `<Txt>` is the `tone` prop, not a class: three named tones against any
+// colour Tailwind can spell, and omitting tone inherits rather than restating ink.
+const TXT_TONE_MESSAGE = 'Set ink on <Txt> with tone="ink" | "muted" | "faint", not a text-* colour class.';
+// Anchored at class boundaries: a variant or an alpha (`hover:text-foreground`, `text-foreground/70`)
+// is something `tone` cannot express, so it stays a class.
+const TXT_TONE_PATTERN = '(^|\\s)text-(foreground|muted-foreground|placeholder)(?=\\s|$)';
+// `>` to the attribute: a descendant match would also flag a coloured child rendered inside a `<Txt>`.
+const txtToneSelector = (node, prop) =>
+  `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] ${node}[${prop}=/${TXT_TONE_PATTERN}/]`;
+const restrictedTxtToneSelectors = [
+  { selector: txtToneSelector('Literal', 'value'), message: TXT_TONE_MESSAGE },
+  { selector: txtToneSelector('TemplateElement', 'value.raw'), message: TXT_TONE_MESSAGE },
+];
+
 const PLAYGROUND_UI_BROAD_IMPORT_MESSAGE =
   'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.';
 
@@ -189,8 +212,8 @@ const restrictedTestMockSelectors = [
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
-  // Only Playwright spec files are linted under e2e (for BDD structure
-  // enforcement below). The kitchen-sink app, test utils, config, scripts,
+  // Playwright specs and their adjacent fixtures are linted under e2e.
+  // The kitchen-sink app, test utils, config, scripts,
   // and build output under e2e remain unlinted as before.
   {
     ignores: [
@@ -201,6 +224,7 @@ export default [
       'e2e/playwright.config.ts',
       'e2e/playwright.studio-base.config.ts',
       'e2e/tests/__utils__/**',
+      'vercel-preview/**',
     ],
   },
   ...config,
@@ -217,6 +241,18 @@ export default [
     },
   },
   {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedPlaygroundUiBroadImportSelectors,
+        ...restrictedTypographySelectors,
+        ...restrictedTxtToneSelectors,
+      ],
+    },
+  },
+  {
     files: ['src/**/*.{test,spec}.{ts,tsx}'],
     rules: {
       'no-restricted-syntax': ['error', ...restrictedPlaygroundUiBroadImportSelectors, ...restrictedTestMockSelectors],
@@ -225,9 +261,12 @@ export default [
   {
     // Playwright E2E specs: enforce the BDD structure described in the
     // e2e-tests-studio skill (every test()/it() nested in a describe('when …')).
-    // These files are not part of the type-aware tsconfig program, so disable
-    // the TypeScript project service here and only run the syntactic BDD rule.
-    files: ['e2e/{tests,studio-base-tests}/**/*.spec.{js,jsx,ts,tsx}'],
+    // Specs and their fixtures are outside the type-aware tsconfig program,
+    // so use syntax-only linting for both.
+    files: [
+      'e2e/{tests,studio-base-tests}/**/*.spec.{js,jsx,ts,tsx}',
+      'e2e/{tests,studio-base-tests}/**/__tests__/fixtures/**/*.{js,jsx,ts,tsx}',
+    ],
     languageOptions: {
       parserOptions: {
         projectService: false,

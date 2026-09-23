@@ -1,4 +1,3 @@
-import type { ReasoningPart } from '@ai-sdk/provider-utils-v5';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2CallWarning,
@@ -7,6 +6,7 @@ import type {
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
 import type {
+  ReasoningPart,
   StepResult,
   ModelMessage,
   LanguageModelUsage,

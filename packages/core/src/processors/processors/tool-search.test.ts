@@ -1526,4 +1526,95 @@ describe('ToolSearchProcessor', () => {
       }
     });
   });
+
+  describe('injectCatalog', () => {
+    async function collectSystemText(processor: ToolSearchProcessor, args: ProcessInputStepArgs): Promise<string> {
+      const messageList = new MessageList({});
+      messageList.startRecording();
+      args.messageList = messageList;
+      await processor.processInputStep(args);
+      const events = messageList.stopRecording();
+      return events
+        .filter(e => e.type === 'addSystem')
+        .map(e => (typeof e.message?.content === 'string' ? e.message.content : ''))
+        .join('\n');
+    }
+
+    it('does not inject the catalog by default', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+      });
+
+      const text = await collectSystemText(processor, createMockArgs('thread-1'));
+      expect(text).not.toContain('Available tools:');
+    });
+
+    it('injects tool names and descriptions when enabled', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+        injectCatalog: true,
+      });
+
+      const text = await collectSystemText(processor, createMockArgs('thread-1'));
+      expect(text).toContain('Available tools:');
+      expect(text).toContain('weather');
+      expect(text).toContain('Get weather');
+      expect(text).toContain('calendar');
+      expect(text).toContain('Manage calendar');
+    });
+
+    it('allows loading a tool without a prior search (load -> use)', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        injectCatalog: true,
+      });
+
+      const result = await processor.processInputStep(createMockArgs('thread-load'));
+      const loadResult = await result.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+      expect(loadResult.success).toBe(true);
+
+      const next = await processor.processInputStep(createMockArgs('thread-load'));
+      expect(next.tools?.weather).toBeDefined();
+    });
+
+    it('omits filtered-out tools from the injected catalog', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          secret: createMockTool('secret', 'Secret admin tool'),
+        },
+        injectCatalog: true,
+        filter: ({ toolName }) => toolName !== 'secret',
+      });
+
+      const text = await collectSystemText(processor, createMockArgs('thread-1'));
+      expect(text).toContain('weather');
+      expect(text).not.toContain('Secret admin tool');
+    });
+
+    it('includes request-resolved tools when includeResolvedTools is enabled', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        injectCatalog: true,
+        includeResolvedTools: true,
+      });
+
+      const args = createMockArgs('thread-1', {
+        dynamic_tool: createMockTool('dynamic_tool', 'A per-request resolved tool'),
+      });
+      const text = await collectSystemText(processor, args);
+      expect(text).toContain('dynamic_tool');
+      expect(text).toContain('A per-request resolved tool');
+    });
+  });
 });

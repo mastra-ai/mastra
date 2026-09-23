@@ -1,8 +1,45 @@
 ---
 extends: existence
-message: "AI restatement: '%s'. Delete it and trust your original phrasing."
+message: "AI restatement: '%s'. Delete it and trust your original phrasing. If a second case needs the point, name both cases in the sentence that makes it."
 level: error
 ignorecase: true
+# The restatement: a sentence whose content is the previous sentence
+# again. The formal openers ("In other words," "Simply put," "To be more
+# precise") were the first spelling and the flat tokens below take
+# them. The 2026-09 audit found the move surviving without them, in
+# three quieter spellings. The parallel restatement points at a second
+# case and says "same again" ("The same holds for writes," "The same is
+# true of the index," "The same applies to the reader," "The same goes
+# for every caller"). The framing opener promises a practical or net
+# reading of the claim just made and then repeats it ("In practice, the
+# index is one file"; "In effect, the join reverses"; "In the end, one
+# read"). The gloss opener restates under cover of explaining ("Put
+# another way," "Which is to say," and the sentence-initial "Meaning,
+# the cache is cold" or its fragment "Meaning the cache is cold").
+#
+# The plain form is the first sentence on its own. A second case that
+# needs the point goes into that sentence ("Reads and writes both take
+# the lock"), not into a sentence of its own.
+#
+# The framing openers gate on the capital and the comma, since
+# mid-sentence "in practice" and "in effect" are ordinary English (a
+# hundred and twenty hits across the Go and Python standard libraries).
+# Costs of the kept tokens across those corpora: the parallel
+# restatement ten ("The same is true for channel operations," "the same
+# goes for concatstring{3,4,5}"), "In practice," twenty-nine ("In
+# practice, this means that we make the fast path run through"), "In
+# effect," seven ("In effect, it is the inverse of [types.Info]"), "In
+# the end," zero, "Put another way" three, "Which is to say" nine, and
+# the sentence-initial "Meaning" zero. Every hit is the construction
+# itself and fires by design.
+#
+# "That is," measures out: at a hundred and sixty-four sentence-initial
+# hits ("That is, it reports whether GOFIPS140 is set") it is the Go
+# doc-comment house style for a gloss, and the lowercase spelling
+# doubles that. "That is to say," "Likewise," and "Similarly" stay in
+# FormalTransitions, which already fires on "Likewise for writes."
+# "Holds true" stays in FigurativeHolds, so "The same holds true" fires
+# there and the parallel token steps around it.
 tokens:
   - In other words
   - Simply put
@@ -31,6 +68,32 @@ tokens:
   - In plain English
   - In simpler terms
   - In simple terms
-  - To put it another way
   - To put it more simply
   - To put it more directly
+
+  # --- The gloss openers ("Put another way, the offsets come from the
+  # blob"; "which is to say, one read").
+  - Put another way
+  - Which is to say
+
+  # --- The parallel restatement ("The same holds for writes," "The same
+  # is true of the index," "The same applies to the reader," "The same
+  # goes for every caller"). "The same value" and every other noun stay
+  # quiet, since the verb is the gate.
+  - "the same (?:holds(?! true)|applies|goes|is true|is the case)"
+
+  # --- The framing openers, gated on the capital and the comma ("In
+  # practice, the index is one file"; "In effect, the join reverses";
+  # "In the end, one read"). The (?-i:) group turns the rule's ignorecase
+  # off for the opener, so "in practice tests" and a mid-sentence "in
+  # effect" never fire.
+  - "(?-i:In practice)(?=,)"
+  - "(?-i:In effect)(?=,)"
+  - "(?-i:In the end)(?=,)"
+
+  # --- The sentence-initial "Meaning" gloss, with its comma ("Meaning,
+  # the cache is cold") or as the bare fragment ("Meaning the cache is
+  # cold," "Meaning that one read suffices"). The capital plus the
+  # determiner or pronoun keeps the noun ("the meaning of the flag")
+  # out.
+  - "(?-i:Meaning)(?:(?=,)| (?:the|a|an|this|that|these|those|it|its|they|you|we|there|no|every|each|any|one|all|both|if|when|your|our|I)\\b)"

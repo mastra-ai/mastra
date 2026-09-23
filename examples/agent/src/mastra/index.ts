@@ -35,6 +35,7 @@ import {
   slackDemoAgent,
   billingAgent,
   balanceAgent,
+  computerUseAgent,
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
 import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
@@ -85,6 +86,7 @@ import {
   durableCryptoResearchAgent,
 } from './agents/model-v2-agent';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
+import { alternatingScorer, alwaysPassScorer } from './scorers/chef-model-v2-scorers';
 import { moderationProcessor } from './agents/model-v2-agent';
 import {
   moderatedAssistantAgent,
@@ -175,6 +177,7 @@ export const mastra = new Mastra({
     clinicDirectAgent,
     clinicSpecialistAgent,
     clinicSupervisorAgent,
+    computerUseAgent,
     'standup-note-normalizer': standupNoteNormalizerAgent,
     'standup-digest': standupDigestAgent,
     'standup-escalation': standupEscalationAgent,
@@ -184,6 +187,10 @@ export const mastra = new Mastra({
     'detect-blockers': detectBlockersTool,
     'format-standup-digest': formatDigestTool,
     'format-standup-digest-with-escalation': formatDigestWithEscalationTool,
+  },
+  scorers: {
+    alwaysPassScorer,
+    alternatingScorer,
   },
   processors: {
     moderationProcessor,

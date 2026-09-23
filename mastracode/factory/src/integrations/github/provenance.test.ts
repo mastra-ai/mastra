@@ -95,7 +95,7 @@ async function setup() {
 
 describe('recordFactoryPullRequestProvenance', () => {
   it('records only a verified gh pr create result for the exact bound Factory work item', async () => {
-    const { sourceControl, integrationStorage, workItems, github, pullsGet, input } = await setup();
+    const { sourceControl, integrationStorage, workItems, project, github, pullsGet, input } = await setup();
     await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, input);
 
     expect(pullsGet).toHaveBeenCalledWith({ owner: 'acme', repo: 'repo', pull_number: 17 });
@@ -104,6 +104,7 @@ describe('recordFactoryPullRequestProvenance', () => {
       data: {
         bindingId: 'binding-1',
         workItemId: input.item.id,
+        factoryProjectId: project.id,
         assistantMessageId: 'message-1',
         toolCallId: 'call-1',
       },

@@ -2,7 +2,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { CopyIcon, DownloadIcon, LockIcon, SearchIcon } from 'lucide-react';
+import { CopyIcon, DownloadIcon, LockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillFavoriteButton } from './skill-favorite-button';
 import { getSkillOrigin } from '@/domains/agent-builder/utils/skill-origin';
@@ -27,33 +27,29 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
 
   if (filtered.length === 0) {
     return (
-      <div className="flex items-center justify-center pt-10">
-        <EmptyState
-          iconSlot={<SearchIcon className="text-neutral3 h-8 w-8" />}
-          titleSlot="No skills match your search"
-          descriptionSlot="Try a different name or description."
-        />
+      <div className="flex items-center-safe justify-center-safe">
+        <EmptyState titleSlot="No skills match your search" descriptionSlot="Try a different name or description." />
       </div>
     );
   }
 
   return (
-    <div className="bg-surface2 border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
+    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-background">
       {filtered.map(skill => {
         const row = (
           <>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="text-ui-md text-neutral6 truncate">{skill.name}</div>
+                <div className="truncate text-body text-foreground">{skill.name}</div>
                 {skill.visibility === 'private' && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span
-                        className="text-neutral3 shrink-0"
+                        className="shrink-0 text-muted-foreground"
                         aria-label="Private skill"
                         data-testid="skill-builder-private-visibility-icon"
                       >
-                        <Icon size="sm">
+                        <Icon size="xs">
                           <LockIcon />
                         </Icon>
                       </span>
@@ -69,7 +65,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span
-                          className="bg-surface5 text-neutral4 inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                          className="inline-flex shrink-0 items-center gap-1 rounded bg-card px-1.5 py-0.5 text-meta text-muted-foreground"
                           aria-label={isCopy ? 'Copied skill' : 'Imported skill'}
                           data-testid="skill-builder-origin-badge"
                         >
@@ -89,7 +85,9 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                 })()}
               </div>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="text-ui-sm text-neutral3 line-clamp-1">{skill.description || 'No description'}</span>
+                <span className="line-clamp-1 text-caption text-muted-foreground">
+                  {skill.description || 'No description'}
+                </span>
               </div>
               {showFavorites && (
                 <div className="mt-2 md:hidden">
@@ -117,13 +115,13 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
         return onSkillClick ? (
           <button
             key={skill.id}
-            className="hover:bg-surface3/50 flex w-full items-start gap-4 px-6 py-5 text-left transition-colors md:items-center"
+            className="flex w-full items-start gap-4 px-4 py-3 text-left hover:bg-fill-subtle md:items-center"
             onClick={() => onSkillClick(skill)}
           >
             {row}
           </button>
         ) : (
-          <div key={skill.id} className="flex items-start gap-4 px-6 py-5 md:items-center">
+          <div key={skill.id} className="flex items-start gap-4 px-4 py-3 md:items-center">
             {row}
           </div>
         );
@@ -134,14 +132,14 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
 
 export function SkillBuilderListSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div className="bg-surface2 border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
+    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-background">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 px-6 py-5">
+        <div key={i} className="flex items-center gap-4 px-4 py-3">
           <div className="min-w-0 flex-1 space-y-2">
-            <div className="bg-surface3 h-3.5 w-48 animate-pulse rounded" />
-            <div className="bg-surface3 h-3 w-72 max-w-full animate-pulse rounded" />
+            <div className="h-3.5 w-48 animate-pulse rounded bg-card" />
+            <div className="h-3 w-72 max-w-full animate-pulse rounded bg-card" />
           </div>
-          <div className="bg-surface3 h-3 w-16 animate-pulse rounded" />
+          <div className="h-3 w-16 animate-pulse rounded bg-card" />
         </div>
       ))}
     </div>

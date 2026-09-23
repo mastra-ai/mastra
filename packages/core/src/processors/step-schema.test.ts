@@ -274,12 +274,13 @@ describe('ProcessorInputPhaseSchema', () => {
 });
 
 describe('ProcessorInputStepPhaseSchema', () => {
-  it('accepts valid inputStep phase with stepNumber', () =>
+  it('accepts valid inputStep phase with stepNumber and runId', () =>
     ok(ProcessorInputStepPhaseSchema, {
       phase: 'inputStep',
       messages: [baseMsg],
       messageList: fakeMessageList,
       stepNumber: 0,
+      runId: 'run-123',
     }));
   it('rejects missing stepNumber', () =>
     fail(ProcessorInputStepPhaseSchema, { phase: 'inputStep', messages: [], messageList: fakeMessageList }));

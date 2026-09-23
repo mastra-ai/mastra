@@ -1,30 +1,60 @@
 ---
 extends: existence
-message: "AI emphasis: '%s'. Remove the italics. Emphasizing a copula rarely adds meaning."
+message: "AI emphasis: '%s'. Remove the italics. Emphasizing a common word rarely adds meaning."
 level: error
 nonword: true
 scope: raw
 tokens:
+  # Every asterisk token is wrapped (?<!\*)\*(?!\*) ... (?<!\*)\*(?!\*) rather
+  # than a bare \*word\*. A bare pattern matches its middle two asterisks
+  # inside **word** (bold), because "**word**" contains the literal substring
+  # "*word*" once the outer asterisks are counted in. The lookaround requires
+  # each delimiting asterisk to be a single, unpaired one: not preceded or
+  # followed by another asterisk. That excludes **bold** (both delimiters are
+  # doubled) and ***bold+italic*** (tripled) along with plain **word**,
+  # leaving genuine single-asterisk _italic_-only emphasis as the only match.
+  # Underscore tokens don't need the same guard: __word__ (bold) never
+  # contains the literal substring " _word_" the space-prefixed pattern
+  # requires, because the run of underscores is unbroken.
+  #
   # Markdown italicized copula verbs - the "manufactured profundity" pattern
   # Note: underscore patterns require space prefix to avoid matching __dunder__ methods
-  - "\\*is\\*"
-  - ' _is_'
-  - "\\*are\\*"
-  - ' _are_'
-  - "\\*was\\*"
-  - ' _was_'
-  - "\\*were\\*"
-  - ' _were_'
+  - "(?<!\\*)\\*(?!\\*)is(?<!\\*)\\*(?!\\*)"
+  - " _is_"
+  - "(?<!\\*)\\*(?!\\*)are(?<!\\*)\\*(?!\\*)"
+  - " _are_"
+  - "(?<!\\*)\\*(?!\\*)was(?<!\\*)\\*(?!\\*)"
+  - " _was_"
+  - "(?<!\\*)\\*(?!\\*)were(?<!\\*)\\*(?!\\*)"
+  - " _were_"
 
   # Italicized "the" for false emphasis
-  - "\\*the\\*"
-  - ' _the_'
+  - "(?<!\\*)\\*(?!\\*)the(?<!\\*)\\*(?!\\*)"
+  - " _the_"
 
   # Italicized single conjunctions/prepositions for false drama
   # Note: underscore patterns require space prefix to avoid matching __dunder__ methods
-  - "\\*and\\*"
-  - ' _and_'
-  - "\\*not\\*"
-  - ' _not_'
-  - "\\*or\\*"
-  - ' _or_'
+  - "(?<!\\*)\\*(?!\\*)and(?<!\\*)\\*(?!\\*)"
+  - " _and_"
+  - "(?<!\\*)\\*(?!\\*)not(?<!\\*)\\*(?!\\*)"
+  - " _not_"
+  - "(?<!\\*)\\*(?!\\*)or(?<!\\*)\\*(?!\\*)"
+  - " _or_"
+
+  # Italicized intensifiers, where the italics do the work the sentence should
+  # ("It *actually* works"). Vale 3.17 added an `emphasis` scope that reads
+  # these without markup patterns, but it hard-fails on older Vale, so this
+  # rule stays on `raw` until the inline-scope package lands.
+  # Note: underscore patterns require space prefix to avoid matching __dunder__ methods
+  - "(?<!\\*)\\*(?!\\*)actually(?<!\\*)\\*(?!\\*)"
+  - " _actually_"
+  - "(?<!\\*)\\*(?!\\*)really(?<!\\*)\\*(?!\\*)"
+  - " _really_"
+  - "(?<!\\*)\\*(?!\\*)never(?<!\\*)\\*(?!\\*)"
+  - " _never_"
+  - "(?<!\\*)\\*(?!\\*)always(?<!\\*)\\*(?!\\*)"
+  - " _always_"
+  - "(?<!\\*)\\*(?!\\*)truly(?<!\\*)\\*(?!\\*)"
+  - " _truly_"
+  - "(?<!\\*)\\*(?!\\*)literally(?<!\\*)\\*(?!\\*)"
+  - " _literally_"

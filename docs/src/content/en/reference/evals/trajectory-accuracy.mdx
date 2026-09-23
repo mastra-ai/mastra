@@ -1,6 +1,6 @@
 ---
 title: "Reference: Trajectory accuracy scorers | Evals"
-description: Documentation for the Trajectory Accuracy Scorers in Mastra, which evaluate whether an agent or workflow follows the expected sequence of actions.
+description: "Use trajectory accuracy scorers to compare an agent or workflow's tool and step sequence with an expected execution path or ordered trajectory."
 packages:
   - "@mastra/evals"
   - "@mastra/core"
@@ -331,7 +331,7 @@ Allows extra steps. Expected steps must appear in the correct relative order. Th
 
 ### Code-based scorer results
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   preprocessStepResult: {
@@ -519,7 +519,7 @@ const guidedScorer = createTrajectoryAccuracyScorerLLM({
 
 ### LLM-based scorer results
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   preprocessStepResult: {
@@ -679,7 +679,7 @@ The final score is a weighted combination of active dimensions, normalized by wh
 
 ### Unified scorer results
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   preprocessStepResult: {

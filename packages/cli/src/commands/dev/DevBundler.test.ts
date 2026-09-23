@@ -19,7 +19,9 @@ vi.mock('commander', () => {
     addHelpText: any;
     action: any;
     argument: any;
+    addArgument: any;
     command: any;
+    alias: any;
     description: any;
     option: any;
     requiredOption: any;
@@ -32,7 +34,9 @@ vi.mock('commander', () => {
       this.addHelpText = vi.fn().mockReturnThis();
       this.action = vi.fn().mockReturnThis();
       this.argument = vi.fn().mockReturnThis();
+      this.addArgument = vi.fn().mockReturnThis();
       this.command = vi.fn().mockReturnThis();
+      this.alias = vi.fn().mockReturnThis();
       this.description = vi.fn().mockReturnThis();
       this.option = vi.fn().mockReturnThis();
       this.requiredOption = vi.fn().mockReturnThis();
@@ -41,8 +45,14 @@ vi.mock('commander', () => {
     }
   }
 
+  class ArgumentMock {
+    choices = vi.fn().mockReturnThis();
+    default = vi.fn().mockReturnThis();
+  }
+
   return {
     Command: CommandMock,
+    Argument: ArgumentMock,
   };
 });
 const getExistingFiles = vi.hoisted(() => vi.fn((files: string[]) => files));

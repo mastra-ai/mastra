@@ -13,6 +13,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { createTool } from '../../tools';
 import { createScorer } from '../base';
+import { notScorable } from '../not-scorable';
 import { runEvals } from '.';
 
 // ─── AIMock lifecycle ───────────────────────────────────────────────────────────
@@ -437,6 +438,95 @@ describe('Gates & Verdict — scenario tests via runEvals + AIMock', () => {
     });
   });
 
+  describe('trajectory-typed scorers used as gates (#22632)', () => {
+    it('hands a trajectory-typed gate a Trajectory, not the raw output messages', async () => {
+      const agent = toolCallingAgent(
+        { get_weather: weatherTool },
+        [{ name: 'get_weather', id: 'call_1', input: { city: 'Brooklyn' } }],
+        'Sunny and 72°F in Brooklyn.',
+      );
+
+      let seenOutput: unknown;
+      const trajectoryGate = createScorer({
+        id: 'trajectory-shape-gate',
+        description: 'Records the output shape it was handed',
+        name: 'Trajectory Shape Gate',
+        type: 'trajectory',
+      }).generateScore(({ run }) => {
+        seenOutput = run.output;
+        return 1;
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        gates: [trajectoryGate],
+        target: agent,
+      });
+
+      // `ScorerTypeShortcuts['trajectory']` declares `output: Trajectory`, and the
+      // `scorers.trajectory` path honours it. The gate path must too.
+      expect(Array.isArray(seenOutput)).toBe(false);
+      expect((seenOutput as { steps?: unknown } | undefined)?.steps).toBeInstanceOf(Array);
+      // The gate could actually run, so it scores 1 instead of failing closed.
+      expect(result.gateResults![0]!.score).toBe(1);
+    });
+
+    it('threads expectedTrajectory through to a trajectory-typed gate', async () => {
+      const agent = toolCallingAgent(
+        { get_weather: weatherTool },
+        [{ name: 'get_weather', id: 'call_2', input: { city: 'Brooklyn' } }],
+        'Sunny.',
+      );
+
+      let seenExpected: unknown = 'UNSET';
+      const expectationGate = createScorer({
+        id: 'expected-trajectory-gate',
+        description: 'Records expectedTrajectory',
+        name: 'Expected Trajectory Gate',
+        type: 'trajectory',
+      }).generateScore(({ run }) => {
+        seenExpected = (run as { expectedTrajectory?: unknown }).expectedTrajectory;
+        return 1;
+      });
+
+      const expectedTrajectory = { steps: [{ type: 'tool_call', toolName: 'get_weather' }] };
+
+      await runEvals({
+        data: [{ input: 'What is the weather?', expectedTrajectory }],
+        gates: [expectationGate],
+        target: agent,
+      });
+
+      expect(seenExpected).toEqual(expectedTrajectory);
+    });
+
+    it('leaves a non-trajectory gate on the agent-shaped payload', async () => {
+      const agent = textAgent('Plain response.');
+
+      let seenOutput: unknown;
+      let seenExpected: unknown = 'UNSET';
+      const plainGate = createScorer({
+        id: 'plain-shape-gate',
+        description: 'Records what a plain gate is handed',
+        name: 'Plain Shape Gate',
+      }).generateScore(({ run }: any) => {
+        seenOutput = run.output;
+        seenExpected = run.expectedTrajectory;
+        return 1;
+      });
+
+      await runEvals({
+        data: [{ input: 'Test', expectedTrajectory: { steps: [] } }],
+        gates: [plainGate],
+        target: agent,
+      });
+
+      // Unchanged behaviour for every gate that did not ask for a trajectory.
+      expect(Array.isArray(seenOutput)).toBe(true);
+      expect(seenExpected).toBeUndefined();
+    });
+  });
+
   describe('multi-item dataset verdict', () => {
     it('averages gate scores across items for verdict', async () => {
       const agent = textAgent('Consistent response.');
@@ -451,6 +541,129 @@ describe('Gates & Verdict — scenario tests via runEvals + AIMock', () => {
       expect(result.verdict).toBe('passed');
       expect(result.summary.totalItems).toBe(3);
       expect(result.gateResults![0]!.score).toBe(1);
+    });
+  });
+
+  describe('not-scorable runs', () => {
+    /** Scores 1 for inputs containing "refund"; declares every other run not scorable. */
+    function refundScorer(id: string) {
+      return createScorer({ id, description: 'Judges refund handling', name: id })
+        .preprocess(({ run }) =>
+          JSON.stringify(run.input).toLowerCase().includes('refund')
+            ? { refund: true }
+            : notScorable('no refund requested'),
+        )
+        .generateScore(() => 1);
+    }
+
+    it('leaves not-scorable items out of the scorer average and reports them in summary', async () => {
+      const agent = textAgent('Handled.');
+
+      const result = await runEvals({
+        data: [{ input: 'I want a refund' }, { input: 'What is the weather?' }, { input: 'Refund please' }],
+        scorers: [refundScorer('refund-quality'), fixedScorer('quality', 0.5)],
+        target: agent,
+      });
+
+      // Two refund items scored 1; the weather item was not scorable and does
+      // not drag the average down to 0.67.
+      expect(result.scores).toEqual({ 'refund-quality': 1, quality: 0.5 });
+      expect(result.summary).toEqual({ totalItems: 3, notScorable: { 'refund-quality': 1 } });
+    });
+
+    it('omits a scorer whose every run was not scorable instead of reporting 0', async () => {
+      const agent = textAgent('Handled.');
+
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }, { input: 'Tell me a joke' }],
+        scorers: [refundScorer('refund-quality'), fixedScorer('quality', 0.5)],
+        target: agent,
+      });
+
+      expect(result.scores).toEqual({ quality: 0.5 });
+      expect(result.summary.notScorable).toEqual({ 'refund-quality': 2 });
+    });
+
+    it('does not let a not-scorable gate run fail the verdict', async () => {
+      const agent = textAgent('Handled.');
+
+      const result = await runEvals({
+        data: [{ input: 'I want a refund' }, { input: 'What is the weather?' }],
+        scorers: [fixedScorer('quality', 0.9)],
+        gates: [refundScorer('refund-gate')],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.gateResults).toEqual([{ id: 'refund-gate', passed: true, score: 1 }]);
+      expect(result.summary.notScorable).toEqual({ 'refund-gate': 1 });
+    });
+
+    it('leaves a gate out of the verdict when every run was not scorable', async () => {
+      const agent = textAgent('Handled.');
+
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        scorers: [fixedScorer('quality', 0.9)],
+        gates: [refundScorer('refund-gate'), passingGate],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.gateResults).toEqual([{ id: 'always-pass-gate', passed: true, score: 1 }]);
+      expect(result.summary.notScorable).toEqual({ 'refund-gate': 1 });
+    });
+
+    it('excludes not-scorable runs from a threshold average', async () => {
+      const agent = textAgent('Handled.');
+
+      const result = await runEvals({
+        data: [{ input: 'I want a refund' }, { input: 'What is the weather?' }],
+        scorers: [{ scorer: refundScorer('refund-quality'), threshold: 0.9 }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.thresholdResults).toEqual([
+        { id: 'refund-quality', passed: true, averageScore: 1, threshold: 0.9 },
+      ]);
+      expect(result.summary.notScorable).toEqual({ 'refund-quality': 1 });
+    });
+
+    it('reports no notScorable summary when every run was scored', async () => {
+      const agent = textAgent('Handled.');
+
+      const result = await runEvals({
+        data: [{ input: 'I want a refund' }],
+        scorers: [refundScorer('refund-quality')],
+        target: agent,
+      });
+
+      expect(result.summary).toEqual({ totalItems: 1 });
+    });
+
+    it('omits the verdict when every top-level gate was not scorable', async () => {
+      const agent = textAgent('Handled.');
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        gates: [refundScorer('refund-gate')],
+        target: agent,
+      });
+      expect(result.verdict).toBeUndefined();
+      expect(result.gateResults).toBeUndefined();
+      expect(result.summary.notScorable).toEqual({ 'refund-gate': 1 });
+    });
+
+    it('omits the verdict when every top-level threshold was not scorable', async () => {
+      const agent = textAgent('Handled.');
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        scorers: [{ scorer: refundScorer('refund-quality'), threshold: 0.9 }],
+        target: agent,
+      });
+      expect(result.verdict).toBeUndefined();
+      expect(result.thresholdResults).toBeUndefined();
+      expect(result.summary.notScorable).toEqual({ 'refund-quality': 1 });
     });
   });
 });

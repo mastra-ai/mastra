@@ -10,11 +10,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
-import { InMemoryStore } from '../../storage';
+import { getSnapshotMemoryInfo, InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { WorkflowRunState } from '../../workflows/types';
 import { Agent } from '../agent';
 import { DurableStepIds } from '../durable/constants';
+import { createDurableAgent } from '../durable/create-durable-agent';
+import { globalRunRegistry } from '../durable/run-registry';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
 const mockFindUser = vi.fn().mockImplementation(async (data: { name: string }) => {
@@ -314,6 +316,30 @@ describe('suspended-run discovery', () => {
       );
     }, 30000);
 
+    it('pushes the threadId filter down to the storage query for both workflow names (#22627)', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId } = await suspendRun(agent, 'thread-1', 'resource-1');
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const listSpy = vi.spyOn(workflowsStore, 'listWorkflowRuns');
+
+      const { runs } = await agent.listSuspendedRuns({ threadId: 'thread-1' });
+      expect(runs.map(run => run.runId)).toEqual([runId]);
+
+      expect(listSpy).toHaveBeenCalledTimes(2);
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ workflowName: 'agentic-loop', status: 'suspended', threadId: 'thread-1' }),
+      );
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workflowName: DurableStepIds.AGENTIC_LOOP,
+          status: 'suspended',
+          threadId: 'thread-1',
+        }),
+      );
+    }, 30000);
+
     it('paginates with perPage/page while keeping total accurate', async () => {
       // The mock model only tool-calls on its first invocation, so suspend each
       // run from a fresh agent sharing the same storage.
@@ -337,6 +363,137 @@ describe('suspended-run discovery', () => {
 
       // Without both perPage and page, all matching runs are returned.
       expect((await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 2 })).runs).toHaveLength(3);
+    }, 30000);
+
+    it('scans bounded storage pages while filtering and counting across workflow names', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId } = await suspendRun(agent, 'thread-1', 'resource-1');
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const seedRun = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      expect(seedRun).not.toBeNull();
+      const seedSnapshot = seedRun!.snapshot as WorkflowRunState;
+      type StoredRun = Awaited<ReturnType<typeof workflowsStore.listWorkflowRuns>>['runs'][number];
+
+      let timestamp = 0;
+      const createRun = (runId: string, snapshot: WorkflowRunState | string, workflowName = 'agentic-loop') => {
+        const createdAt = new Date(timestamp++);
+        return {
+          runId,
+          workflowName,
+          resourceId: 'resource-1',
+          snapshot,
+          createdAt,
+          updatedAt: createdAt,
+        } satisfies StoredRun;
+      };
+      const snapshotForAgent = (agentId: string) => {
+        const snapshot = structuredClone(seedSnapshot);
+        for (const key in snapshot.context) {
+          const step = snapshot.context[key];
+          if (step?.status === 'suspended' && step.suspendPayload) {
+            step.suspendPayload.__agentId = agentId;
+          }
+        }
+        return snapshot;
+      };
+      const unrelatedRuns = Array.from({ length: 100 }, (_, index) =>
+        createRun(`other-${index}`, snapshotForAgent('other-agent')),
+      );
+      const runningSnapshot = structuredClone(seedSnapshot);
+      runningSnapshot.status = 'running';
+      const regularRuns = [
+        ...unrelatedRuns,
+        createRun('regular-first', structuredClone(seedSnapshot)),
+        createRun('regular-second', JSON.stringify(seedSnapshot)),
+        createRun('malformed', '{'),
+        createRun('not-suspended', runningSnapshot),
+        ...Array.from({ length: 96 }, (_, index) => createRun(`other-late-${index}`, snapshotForAgent('other-agent'))),
+        createRun('regular-third', structuredClone(seedSnapshot)),
+      ];
+      const durableSnapshot = structuredClone(seedSnapshot);
+      for (const step of Object.values(durableSnapshot.context)) {
+        if (step?.status === 'suspended' && step.suspendPayload) {
+          delete step.suspendPayload.__agentId;
+          delete step.suspendPayload.__streamState;
+        }
+      }
+      durableSnapshot.context.input = {
+        agentId: agent.id,
+        messageListState: { memoryInfo: { threadId: 'thread-1', resourceId: 'resource-1' } },
+      };
+      const durableRuns = [createRun('durable-first', durableSnapshot, DurableStepIds.AGENTIC_LOOP)];
+      const summaryReads = new Set<string>();
+      for (const run of [...regularRuns, ...durableRuns]) {
+        if (typeof run.snapshot === 'string') continue;
+        for (const step of Object.values(run.snapshot.context)) {
+          if (step?.status !== 'suspended' || !step.suspendPayload) continue;
+          const metadata = step.suspendPayload.__workflow_meta;
+          Object.defineProperty(step.suspendPayload, '__workflow_meta', {
+            get() {
+              summaryReads.add(run.runId);
+              return metadata;
+            },
+          });
+        }
+      }
+      const runsByWorkflow = new Map([
+        ['agentic-loop', regularRuns],
+        [DurableStepIds.AGENTIC_LOOP, durableRuns],
+      ]);
+      const listSpy = vi.spyOn(workflowsStore, 'listWorkflowRuns').mockImplementation(async args => {
+        const workflowRuns = runsByWorkflow.get(args?.workflowName!) ?? [];
+        const currentPage = args?.page ?? 0;
+        const currentPerPage = args?.perPage ?? workflowRuns.length;
+        if (typeof currentPerPage !== 'number') throw new Error('expected numeric storage page size');
+
+        return {
+          runs: workflowRuns.slice(currentPage * currentPerPage, (currentPage + 1) * currentPerPage),
+          total: workflowRuns.length,
+        };
+      });
+
+      const firstPage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 1, page: 0 });
+      expect(firstPage).toMatchObject({ total: 4, runs: [{ runId: 'regular-first' }] });
+      expect([...summaryReads]).toEqual(['regular-first']);
+      expect(listSpy.mock.calls.map(([args]) => [args?.workflowName, args?.page, args?.perPage])).toEqual([
+        ['agentic-loop', 0, 100],
+        ['agentic-loop', 1, 100],
+        ['agentic-loop', 2, 100],
+        [DurableStepIds.AGENTIC_LOOP, 0, 100],
+      ]);
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'suspended', resourceId: 'resource-1', perPage: 100 }),
+      );
+
+      listSpy.mockClear();
+      summaryReads.clear();
+      const secondPage = await agent.listSuspendedRuns({
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        perPage: 2,
+        page: 1,
+      });
+      expect(secondPage).toMatchObject({
+        total: 4,
+        runs: [{ runId: 'regular-third' }, { runId: 'durable-first', threadId: 'thread-1', resourceId: 'resource-1' }],
+      });
+      expect([...summaryReads]).toEqual(['regular-third', 'durable-first']);
+
+      runsByWorkflow.set(
+        'agentic-loop',
+        Array.from({ length: 100 }, (_, index) => createRun(`exact-multiple-${index}`, structuredClone(seedSnapshot))),
+      );
+      runsByWorkflow.set(DurableStepIds.AGENTIC_LOOP, []);
+      listSpy.mockClear();
+
+      const outOfRangePage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 10, page: 10 });
+      expect(outOfRangePage).toEqual({ runs: [], total: 100 });
+      expect(listSpy.mock.calls.map(([args]) => [args?.workflowName, args?.page, args?.perPage])).toEqual([
+        ['agentic-loop', 0, 100],
+        ['agentic-loop', 1, 100],
+        [DurableStepIds.AGENTIC_LOOP, 0, 100],
+      ]);
     }, 30000);
 
     it('only returns runs owned by the listing agent', async () => {
@@ -1124,4 +1281,94 @@ describe('suspended-run discovery', () => {
       ]);
     }, 30000);
   });
+});
+
+/**
+ * Drift guard for the threadId storage pushdown (#22627).
+ *
+ * The pg/libsql `listWorkflowRuns` threadId predicates are frozen SQL copies
+ * of `getSnapshotMemoryInfo()`'s extraction paths. These tests run real
+ * suspends through both loops and assert the memory info sits at exactly the
+ * two documented JSON paths — if a snapshot layout changes, this fails before
+ * the SQL predicates silently over-exclude rows.
+ */
+describe('snapshot path contract for threadId pushdown (#22627)', () => {
+  afterEach(() => {
+    globalRunRegistry.clear();
+  });
+
+  it('agentic-loop: memory info at context.<suspended step>.suspendPayload.__streamState.messageList.memoryInfo', async () => {
+    const storage = new InMemoryStore();
+    const { agent } = createSuspendedSetup({ storage });
+    const { runId } = await suspendRun(agent, 'thread-1', 'resource-1');
+
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+    expect(run).not.toBeNull();
+    const snapshot = run!.snapshot as WorkflowRunState;
+
+    // The exact path the pg/libsql predicates encode for the agentic loop.
+    const suspendedMemoryInfos = Object.values(snapshot.context)
+      .filter(step => step?.status === 'suspended')
+      .map((step: any) => step.suspendPayload?.__streamState?.messageList?.memoryInfo)
+      .filter(Boolean);
+    expect(suspendedMemoryInfos).toEqual([expect.objectContaining({ threadId: 'thread-1', resourceId: 'resource-1' })]);
+    expect(getSnapshotMemoryInfo(snapshot)).toEqual(
+      expect.objectContaining({ threadId: 'thread-1', resourceId: 'resource-1' }),
+    );
+  }, 30000);
+
+  it('durable loop: memory info at context.input.messageListState.memoryInfo', async () => {
+    const storage = new InMemoryStore();
+    const baseAgent = new Agent({
+      id: 'durable-user-agent',
+      name: 'Durable User Agent',
+      instructions: 'You find users.',
+      model: createMockModel(),
+      tools: { findUserTool: createFindUserTool() },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent });
+    new Mastra({ agents: { durableAgent: durableAgent as any }, logger: false, storage });
+
+    const result: any = await durableAgent.stream('Find the user with name - Dero Israel', {
+      memory: { thread: 'durable-thread-1', resource: 'durable-resource-1' },
+    });
+    let sawApproval = false;
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        sawApproval = true;
+        break;
+      }
+    }
+    expect(sawApproval).toBe(true);
+
+    // The suspended persist can lag the approval chunk.
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    let snapshot: WorkflowRunState | undefined;
+    await vi.waitFor(
+      async () => {
+        const run = await workflowsStore.getWorkflowRunById({
+          runId: result.runId,
+          workflowName: DurableStepIds.AGENTIC_LOOP,
+        });
+        expect(run).not.toBeNull();
+        expect((run!.snapshot as WorkflowRunState).status).toBe('suspended');
+        snapshot = run!.snapshot as WorkflowRunState;
+      },
+      { timeout: 30000 },
+    );
+
+    // Durable suspend payloads never carry __streamState, so the fixed input
+    // path is the branch of the SQL predicates that must match here.
+    for (const step of Object.values(snapshot!.context)) {
+      if ((step as any)?.status === 'suspended') {
+        expect((step as any).suspendPayload?.__streamState).toBeUndefined();
+      }
+    }
+    const inputMemoryInfo = (snapshot!.context as any).input?.messageListState?.memoryInfo;
+    expect(inputMemoryInfo).toEqual(
+      expect.objectContaining({ threadId: 'durable-thread-1', resourceId: 'durable-resource-1' }),
+    );
+    expect(getSnapshotMemoryInfo(snapshot)).toEqual(expect.objectContaining({ threadId: 'durable-thread-1' }));
+  }, 60000);
 });

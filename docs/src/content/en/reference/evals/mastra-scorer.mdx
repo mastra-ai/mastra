@@ -1,6 +1,6 @@
 ---
 title: "Reference: MastraScorer | Evals"
-description: Documentation for the MastraScorer base class in Mastra, which provides the foundation for all custom and built-in scorers.
+description: "Use the MastraScorer base class to understand the shared scorer contract, lifecycle, run inputs, outputs, tracing behavior, and custom scorer implementation."
 packages:
   - "@mastra/core"
 ---
@@ -92,7 +92,16 @@ const result = await scorer.run({
   {
     name: 'score',
     type: 'number',
-    description: 'Numerical score computed by the generateScore step.',
+    isOptional: true,
+    description:
+      'Numerical score computed by the generateScore step. Absent when a step returned notScorable(). Check notScorable first.',
+  },
+  {
+    name: 'notScorable',
+    type: 'NotScorableOutcome',
+    isOptional: true,
+    description:
+      'Present when a step returned notScorable(). Carries the step name and optional reason. Remaining steps are skipped and no score is produced. See the notScorable() reference (optional).',
   },
   {
     name: 'reason',

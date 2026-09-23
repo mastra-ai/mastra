@@ -8,7 +8,9 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { MaterializationSandbox, SandboxFleet } from '../sandbox/fleet.js';
+import { requireExec } from '../sandbox/materialization.js';
+import type { ExecutableSandbox } from '../sandbox/materialization.js';
+import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
@@ -132,12 +134,13 @@ const MAX_DIFF_BYTES = 512 * 1024;
 const WORKSPACE_NUMSTAT_SCRIPT = `
 set -e
 workdir=$1
+base=$2
 index_file=$(mktemp)
 untracked_file=$(mktemp)
 object_dir=$(mktemp -d)
 trap 'rm -f "$index_file" "$untracked_file"; rm -rf "$object_dir"' EXIT
 rm -f "$index_file"
-git -C "$workdir" diff --numstat -z --find-renames --no-ext-diff --no-textconv HEAD
+git -C "$workdir" diff --numstat -z --find-renames --no-ext-diff --no-textconv "$base"
 git -C "$workdir" ls-files --others --exclude-standard -z >"$untracked_file"
 git_dir=$(git -C "$workdir" rev-parse --absolute-git-dir)
 export GIT_INDEX_FILE="$index_file"
@@ -422,7 +425,6 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
 /** Dependencies for resolving a `workspacePath` that is a Factory session id. */
 export interface SessionFsDeps {
   auth: RouteAuth;
-  fleet: SandboxFleet;
   sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
   filesystem: Pick<FilesystemStorage, 'listFiles'>;
 }
@@ -472,54 +474,41 @@ export async function listSessionFilesystemFiles(
 }
 
 interface SessionSandboxHandle {
-  sandbox: MaterializationSandbox;
+  sandbox: ExecutableSandbox;
   filesystem: SandboxFilesystem;
   workdir: string;
 }
 
 /**
- * Reattach to the session's sandbox and wrap its workdir in a
- * `SandboxFilesystem`. Returns `null` when the session has no provisioned
- * sandbox yet (nothing materialized → nothing to list), or when the sandbox
- * can no longer be reattached (e.g. torn down by the provider's idle GC).
- * This is a passive read path, so it never re-provisions: the session's
- * filesystem is preserved in its provider checkpoint and comes back the next
- * time the workspace is actually opened (e.g. by sending a message).
+ * Resolve the session's sandbox from the per-process memo and wrap its
+ * workdir in a `SandboxFilesystem`. Returns `null` when the session has no
+ * sandbox in this process (never opened here, or evicted by retirement).
+ * This is a passive read path, so it never constructs or provisions: the
+ * session's files come back the next time the workspace is actually opened
+ * (e.g. by sending a message).
  */
-async function sessionSandbox(
-  fleet: SandboxFleet,
-  session: SourceControlSession,
-): Promise<SessionSandboxHandle | null> {
-  if (!fleet.enabled || !session.sandboxId || !session.sandboxWorkdir) return null;
-  let sandbox: Awaited<ReturnType<SandboxFleet['reattachSandbox']>>;
-  try {
-    sandbox = await fleet.reattachSandbox(session.sandboxId, {
-      workingDirectory: session.sandboxWorkdir,
-      actingUserId: session.userId,
-    });
-  } catch {
-    // Sandbox is gone (idle GC) or unreachable. Degrade to an empty view
-    // rather than surfacing a 500 from a file-viewer panel.
-    return null;
-  }
+async function sessionSandbox(session: SourceControlSession): Promise<SessionSandboxHandle | null> {
+  const entry = peekSessionSandbox(session.id);
+  // An unresolved workdir means the sandbox never started in this process —
+  // nothing is materialized, so there are no files to browse.
+  if (!entry?.workdir) return null;
+  const sandbox = requireExec(entry.sandbox);
   return {
     sandbox,
-    filesystem: new SandboxFilesystem({ sandbox, workdir: session.sandboxWorkdir }),
-    workdir: session.sandboxWorkdir,
+    filesystem: new SandboxFilesystem({ sandbox, workdir: entry.workdir }),
+    workdir: entry.workdir,
   };
 }
 
 /** List an approved rendered root inside a Factory session's sandbox workdir. */
 export async function listSessionRenderedPath(
-  fleet: SandboxFleet,
   session: SourceControlSession,
   renderedRoot: string,
 ): Promise<WorkspaceRenderedListing> {
   const safeRoot = assertApprovedRenderedRoot(renderedRoot);
-  const rootPath = posixPath.join(session.sandboxWorkdir ?? '', safeRoot);
+  const handle = await sessionSandbox(session);
+  const rootPath = posixPath.join(handle?.workdir ?? '', safeRoot);
   const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
-
-  const handle = await sessionSandbox(fleet, session);
   if (!handle) return empty;
 
   // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
@@ -557,7 +546,6 @@ export async function listSessionRenderedPath(
 
 /** Read a file inside a session's sandbox. Paths outside rendered roots require a persisted-file allowlist check in the route. */
 export async function readSessionWorkspaceFile(
-  fleet: SandboxFleet,
   session: SourceControlSession,
   path: string,
   options: { allowUnapprovedPath?: boolean } = {},
@@ -565,7 +553,7 @@ export async function readSessionWorkspaceFile(
   const safePath = assertRelativePath(path, 'path');
   if (!options.allowUnapprovedPath) assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
 
-  const handle = await sessionSandbox(fleet, session);
+  const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
   const { filesystem } = handle;
   const info = await filesystem.stat(safePath);
@@ -619,6 +607,24 @@ export function parseWorkspaceChanges(output: string): WorkspaceChange[] {
 
   return changes.toSorted((a, b) => a.path.localeCompare(b.path));
 }
+export function parseWorkspaceTrackedChanges(output: string): WorkspaceChange[] {
+  const records = output.split('\0');
+  const changes: WorkspaceChange[] = [];
+  for (let index = 0; index < records.length;) {
+    const code = records[index++];
+    if (!code) continue;
+    const status = changeStatus(code);
+    if (status === 'renamed' || status === 'copied') {
+      const previousPath = records[index++];
+      const path = records[index++];
+      if (path) changes.push({ path, previousPath: previousPath || undefined, status });
+      continue;
+    }
+    const path = records[index++];
+    if (path) changes.push({ path, status });
+  }
+  return changes.toSorted((a, b) => a.path.localeCompare(b.path));
+}
 
 export function parseWorkspaceChangeStats(output: string) {
   const records = output.split('\0');
@@ -659,26 +665,53 @@ function unavailableWorkspaceChanges(workspacePath: string): WorkspaceChanges {
   return { workspacePath, available: false, changes: [] };
 }
 
-export async function listSessionWorkspaceChanges(
-  fleet: SandboxFleet,
+async function resolveSessionComparisonBase(
   session: SourceControlSession,
-): Promise<WorkspaceChanges> {
-  const handle = await sessionSandbox(fleet, session);
-  if (!handle) return unavailableWorkspaceChanges(session.sessionId);
+  sandbox: ExecutableSandbox,
+  workdir: string,
+): Promise<string> {
+  const result = await sandbox.executeCommand(
+    'git',
+    ['-C', workdir, 'merge-base', 'HEAD', `origin/${session.baseBranch}`],
+    { timeout: 30_000 },
+  );
+  const sha = result.stdout.trim();
+  return result.exitCode === 0 && /^[0-9a-f]{40,64}$/i.test(sha) ? sha : 'HEAD';
+}
 
-  const [statusResult, statsResult] = await Promise.all([
+export async function listSessionWorkspaceChanges(session: SourceControlSession): Promise<WorkspaceChanges> {
+  const handle = await sessionSandbox(session);
+  if (!handle) return unavailableWorkspaceChanges(session.sessionId);
+  const comparisonBase = await resolveSessionComparisonBase(session, handle.sandbox, handle.workdir);
+
+  const [statusResult, trackedResult, statsResult] = await Promise.all([
     handle.sandbox.executeCommand(
       'git',
       ['-C', handle.workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
       { timeout: 30_000 },
     ),
-    handle.sandbox.executeCommand('sh', ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', handle.workdir], {
-      timeout: 30_000,
-    }),
+    handle.sandbox.executeCommand(
+      'git',
+      ['-C', handle.workdir, 'diff', '--name-status', '-z', '--find-renames', comparisonBase],
+      { timeout: 30_000 },
+    ),
+    handle.sandbox.executeCommand(
+      'sh',
+      ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', handle.workdir, comparisonBase],
+      { timeout: 30_000 },
+    ),
   ]);
   if (statusResult.exitCode !== 0) return unavailableWorkspaceChanges(session.sessionId);
 
-  const changes = parseWorkspaceChanges(statusResult.stdout);
+  const statusChanges = parseWorkspaceChanges(statusResult.stdout);
+  const trackedChanges = trackedResult.exitCode === 0 ? parseWorkspaceTrackedChanges(trackedResult.stdout) : [];
+  const changesByPath = new Map(trackedChanges.map(change => [change.path, change]));
+  for (const change of statusChanges) {
+    if (trackedResult.exitCode !== 0 || change.status === 'untracked' || change.status === 'conflicted') {
+      changesByPath.set(change.path, change);
+    }
+  }
+  const changes = [...changesByPath.values()].toSorted((a, b) => a.path.localeCompare(b.path));
   if (statsResult.exitCode !== 0) {
     return { workspacePath: session.sessionId, available: true, changes };
   }
@@ -696,7 +729,7 @@ export async function listSessionWorkspaceChanges(
   return { workspacePath: session.sessionId, available: true, changes: changesWithStats, additions, deletions };
 }
 
-async function executeBoundedGitDiff(sandbox: MaterializationSandbox, args: string[], allowExitOne = false) {
+async function executeBoundedGitDiff(sandbox: ExecutableSandbox, args: string[], allowExitOne = false) {
   return sandbox.executeCommand(
     'sh',
     ['-c', BOUNDED_GIT_DIFF_SCRIPT, 'mastracode-diff', allowExitOne ? '1' : '0', ...args],
@@ -712,15 +745,15 @@ function truncatePatch(patchBuffer: Buffer): string {
 }
 
 export async function readSessionWorkspaceDiff(
-  fleet: SandboxFleet,
   session: SourceControlSession,
   path: string,
   previousPath?: string,
 ): Promise<WorkspaceDiff> {
   const safePath = assertRelativePath(path, 'path');
   const safePreviousPath = previousPath ? assertRelativePath(previousPath, 'previousPath') : undefined;
-  const handle = await sessionSandbox(fleet, session);
+  const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
+  const comparisonBase = await resolveSessionComparisonBase(session, handle.sandbox, handle.workdir);
 
   const pathspecs = safePreviousPath ? [safePreviousPath, safePath] : [safePath];
   let result = await executeBoundedGitDiff(handle.sandbox, [
@@ -732,7 +765,7 @@ export async function readSessionWorkspaceDiff(
     '--no-ext-diff',
     '--no-color',
     '--unified=3',
-    'HEAD',
+    comparisonBase,
     '--',
     ...pathspecs,
   ]);
@@ -859,7 +892,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (session && sessionFs) {
-            return c.json(await listSessionRenderedPath(sessionFs.fleet, session, renderedRoot));
+            return c.json(await listSessionRenderedPath(session, renderedRoot));
           }
           return c.json(await listWorkspaceRenderedPath(root, workspacePath, renderedRoot));
         } catch (error) {
@@ -904,7 +937,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (!session || !sessionFs) return c.json(unavailableWorkspaceChanges(workspacePath));
-          return c.json(await listSessionWorkspaceChanges(sessionFs.fleet, session));
+          return c.json(await listSessionWorkspaceChanges(session));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return c.json({ error: message }, message.includes('not available') ? 403 : 500);
@@ -923,7 +956,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
-          return c.json(await readSessionWorkspaceDiff(sessionFs.fleet, session, path, previousPath));
+          return c.json(await readSessionWorkspaceDiff(session, path, previousPath));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const status =
@@ -956,11 +989,9 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
               if (!listing.files.some(file => file.path === safePath)) {
                 return c.json({ error: 'Path is not available for this thread' }, 404);
               }
-              return c.json(
-                await readSessionWorkspaceFile(sessionFs.fleet, session, safePath, { allowUnapprovedPath: true }),
-              );
+              return c.json(await readSessionWorkspaceFile(session, safePath, { allowUnapprovedPath: true }));
             }
-            return c.json(await readSessionWorkspaceFile(sessionFs.fleet, session, path));
+            return c.json(await readSessionWorkspaceFile(session, path));
           }
           if (threadId) return c.json({ error: 'Session workspace is not available' }, 403);
           return c.json(await readWorkspaceFile(root, workspacePath, path));

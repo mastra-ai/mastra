@@ -26,6 +26,7 @@ function docToDefinition(doc: Record<string, any>): WorkflowDefinition {
   if (doc.metadata != null) def.metadata = doc.metadata;
   if (doc.stateSchema != null) def.stateSchema = doc.stateSchema;
   if (doc.requestContextSchema != null) def.requestContextSchema = doc.requestContextSchema;
+  if (doc.schedule != null) def.schedule = doc.schedule;
   if (doc.authorId != null) def.authorId = doc.authorId;
   return def;
 }
@@ -113,6 +114,7 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
         stateSchema: input.stateSchema ?? null,
         requestContextSchema: input.requestContextSchema ?? null,
         graph: input.graph,
+        schedule: 'schedule' in input ? (input.schedule ?? null) : null,
         status: 'active',
         source: 'storage',
         authorId: 'authorId' in input ? (input.authorId ?? null) : null,
@@ -151,6 +153,7 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
     if ('requestContextSchema' in input && input.requestContextSchema !== undefined)
       update.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) update.graph = input.graph;
+    if ('schedule' in input && input.schedule !== undefined) update.schedule = input.schedule;
     if ('status' in input && input.status !== undefined) update.status = input.status;
     if ('authorId' in input && input.authorId !== undefined) update.authorId = input.authorId;
 

@@ -1,5 +1,5 @@
 {
-  "attachment": ["gemma-4-31b"],
-  "temperature": ["gemma-4-31b", "gpt-oss-120b"],
-  "structuredOutput": ["gemma-4-31b", "gpt-oss-120b"]
+  "attachment": ["qwen-3.8-27b"],
+  "temperature": ["gpt-oss-120b", "qwen-3.8-27b"],
+  "structuredOutput": ["gpt-oss-120b", "qwen-3.8-27b"]
 }

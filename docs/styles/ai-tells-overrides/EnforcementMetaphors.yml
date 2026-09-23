@@ -1,0 +1,19 @@
+extends: existence
+message: "Replace '%s' with the specific check, guarantee, or restriction."
+level: error
+nonword: true
+ignorecase: true
+tokens:
+  - '\bst(?:and|ands|anding|ood) down\b'
+  - '\bstand(?:s|ing)? (?:the|a|an|its|this|that) (?:[a-z]+ )?[a-z]+ down\b'
+  - '\b(?:keeps?|kept|keeping|has|have|had|having|grows?|grew|grown|loses?|lost|losing) (?:its|their) teeth\b'
+  - '\btoothless\b'
+  - '\bpolic(?:es|ed|ing) (?:the|a|an|its|that|this|every|each|what)\b'
+  - '\bfight(?:s|ing)? (?:the|a|an|its) [a-z]+ for\b'
+  - '\bke(?:eps?|eping|pt) (?:it|them|us|everyone|everybody) honest\b'
+  - '\bke(?:eps?|eping|pt) (?:the|a|an|its|every|each|this|that|these|those|all|both) (?:[a-z-]+ ){1,3}honest\b'
+  - '\b(?:an|the|its|their|this|that|each|every|one|no) (?:[a-z]+ )?honest (?:count|denominator|number|numbers|measure|measurement|comparison|baseline|signal|total|answer|accounting|picture|estimate|figure|figures|metric|metrics|result|results|score|scores|view|tally|report|summary|ledger|record|log|value|values|ratio|rate|rates|percentage|sample|test|check|run|diff|delta)\b'
+  - '\bstand(?:s|ing)? behind\b'
+  - '\bstood behind\b'
+  - '\bst(?:ands?|ood|anding) in the way\b'
+  - '\bleft standing\b'

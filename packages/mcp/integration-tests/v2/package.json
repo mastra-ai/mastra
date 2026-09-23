@@ -1,0 +1,18 @@
+{
+  "name": "mastra-packed-mcp-v2-consumer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "tsc --outDir dist --noEmit false && node dist/demo.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "7.0.2"
+  }
+}

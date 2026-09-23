@@ -1,6 +1,6 @@
 ---
 title: "Reference: Hono adapter | Server"
-description: "API reference for the @mastra/hono server adapter."
+description: "The @mastra/hono package provides a server adapter for running Mastra with Hono. For general adapter concepts (constructor options, initialization flow, etc.), see Server Adapters."
 packages:
   - "@mastra/hono"
 ---
@@ -101,9 +101,10 @@ export default app
   {
     name: 'mcpOptions',
     type: 'MCPOptions',
-    typeDescription: '{ serverless?: boolean, sessionIdGenerator?: () => string }',
+    typeDescription:
+      '{ setRequestAuth?: (req, requestContext) => void | Promise<void>, serverless?: boolean, sessionIdGenerator?: () => string }',
     description:
-      'MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.',
+      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`.',
     isOptional: true,
   },
 ]}

@@ -76,14 +76,14 @@ describe('workspaceDependencies', () => {
   });
 
   describe('collectTransitiveWorkspaceDependencies', () => {
-    it('should collect direct dependencies', () => {
+    it('should collect direct dependencies', async () => {
       const workspaceMap = new Map<
         string,
         { location: string; dependencies: Record<string, string> | undefined; version: string | undefined }
       >([['pkg-a', { location: '/pkg-a', dependencies: {}, version: '1.0.0' }]]);
       const initialDeps = new Set(['pkg-a']);
 
-      const result = collectTransitiveWorkspaceDependencies({
+      const result = await collectTransitiveWorkspaceDependencies({
         workspaceMap,
         initialDependencies: initialDeps,
         logger: mockLogger,
@@ -93,7 +93,7 @@ describe('workspaceDependencies', () => {
       expect(result.usedWorkspacePackages.has('pkg-a')).toBe(true);
     });
 
-    it('should collect transitive dependencies', () => {
+    it('should collect transitive dependencies', async () => {
       const workspaceMap = new Map<
         string,
         { location: string; dependencies: Record<string, string> | undefined; version: string | undefined }
@@ -103,7 +103,7 @@ describe('workspaceDependencies', () => {
       ]);
       const initialDeps = new Set(['pkg-a']);
 
-      const result = collectTransitiveWorkspaceDependencies({
+      const result = await collectTransitiveWorkspaceDependencies({
         workspaceMap,
         initialDependencies: initialDeps,
         logger: mockLogger,
@@ -114,7 +114,7 @@ describe('workspaceDependencies', () => {
       expect(result.usedWorkspacePackages.has('pkg-b')).toBe(true);
     });
 
-    it('should handle circular dependencies', () => {
+    it('should handle circular dependencies', async () => {
       const workspaceMap = new Map<
         string,
         { location: string; dependencies: Record<string, string> | undefined; version: string | undefined }
@@ -124,7 +124,7 @@ describe('workspaceDependencies', () => {
       ]);
       const initialDeps = new Set(['pkg-a']);
 
-      const result = collectTransitiveWorkspaceDependencies({
+      const result = await collectTransitiveWorkspaceDependencies({
         workspaceMap,
         initialDependencies: initialDeps,
         logger: mockLogger,
@@ -133,14 +133,14 @@ describe('workspaceDependencies', () => {
       expect(result.usedWorkspacePackages.size).toBe(2);
     });
 
-    it('should handle missing workspace packages', () => {
+    it('should handle missing workspace packages', async () => {
       const workspaceMap = new Map<
         string,
         { location: string; dependencies: Record<string, string> | undefined; version: string | undefined }
       >([['pkg-a', { location: '/pkg-a', dependencies: { 'pkg-missing': '1.0.0' }, version: '1.0.0' }]]);
       const initialDeps = new Set(['pkg-a']);
 
-      const result = collectTransitiveWorkspaceDependencies({
+      const result = await collectTransitiveWorkspaceDependencies({
         workspaceMap,
         initialDependencies: initialDeps,
         logger: mockLogger,

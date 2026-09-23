@@ -34,7 +34,7 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
-  it('uses the legacy Railway routes when SANDBOX_PROVIDER is unset', async () => {
+  it('uses E2B provider routes when SANDBOX_PROVIDER is unset', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', undefined);
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
@@ -46,8 +46,8 @@ describe('PlatformClient', () => {
 
     await client.request('/sandbox');
 
-    expect(client.sandboxProvider).toBe('railway');
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    expect(client.sandboxProvider).toBe('e2b');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
   });
 
   it('uses E2B provider routes when SANDBOX_PROVIDER is e2b', async () => {
@@ -63,6 +63,36 @@ describe('PlatformClient', () => {
     await client.request('/fs/bucket/path');
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/fs/bucket/path');
+  });
+
+  it('prefers an explicit sandboxProvider over SANDBOX_PROVIDER', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxProvider: 'e2b',
+      fetch: fetchMock,
+    });
+
+    await client.request('/sandbox');
+
+    expect(client.sandboxProvider).toBe('e2b');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
+  });
+
+  it('uses the default E2B provider for sandbox and template requests', async () => {
+    vi.stubEnv('SANDBOX_PROVIDER', undefined);
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({ accessToken: 'sk_test', projectId: 'proj_123', fetch: fetchMock });
+
+    await client.request('/sandbox');
+    await client.requestProvider('/templates/builds');
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/e2b/projects/proj_123/templates/builds');
   });
 
   it('rejects unsupported SANDBOX_PROVIDER values', () => {
@@ -133,8 +163,90 @@ describe('PlatformClient', () => {
     expect(resolvePlatformOptions({}).accessToken).toBe('platform_access_token');
   });
 
-  it('does not use MASTRA_PLATFORM_SECRET_KEY as an access token fallback', () => {
+  it('defaults the proxy URL to workspaces.mastra.ai', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.mastra.ai');
+  });
+
+  it('routes to the US regional replica when MASTRA_PLATFORM_REGION is us', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.us.mastra.ai');
+  });
+
+  it('routes to the EU regional replica when MASTRA_PLATFORM_REGION is EU (case-insensitive, trimmed)', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', '  EU  ');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.eu.mastra.ai');
+  });
+
+  it('falls back to the global default for unknown MASTRA_PLATFORM_REGION values', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'apac');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.mastra.ai');
+  });
+
+  it('prefers an explicit MASTRA_WORKSPACE_PROXY_URL over MASTRA_PLATFORM_REGION', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', '  https://staging.workspaces.example.com/  ');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://staging.workspaces.example.com');
+  });
+
+  it('ignores a whitespace-only MASTRA_WORKSPACE_PROXY_URL', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'eu');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', '   ');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.eu.mastra.ai');
+  });
+
+  it('authenticates with the local secret key when no access token is set', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', undefined);
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({ projectId: 'proj_env', fetch: fetchMock });
+
+    await client.request('/sandbox');
+
+    expect((fetchMock.mock.calls[0]![1].headers as Headers).get('authorization')).toBe('Bearer sk_secret');
+  });
+
+  it('prefers the deployed access token over the local secret key', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'jwt_platform');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+
+    expect(resolvePlatformOptions({ projectId: 'proj_env' }).accessToken).toBe('jwt_platform');
+  });
+
+  it('prefers an explicit credential over both environment credentials', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'jwt_platform');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+
+    expect(resolvePlatformOptions({ projectId: 'proj_env', accessToken: 'explicit' }).accessToken).toBe('explicit');
+  });
+
+  it('falls back to a trimmed secret key when the access token is whitespace', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '  ');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', ' sk_secret ');
+
+    expect(resolvePlatformOptions({ projectId: 'proj_env' }).accessToken).toBe('sk_secret');
+  });
+
+  it('requires a credential when both environment variables are blank', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', ' ');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', ' ');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
 
     expect(() => resolvePlatformOptions({})).toThrow('accessToken is required');

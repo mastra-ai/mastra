@@ -54,6 +54,8 @@ async function main() {
     console.log('── running baseline ──');
     const baseline = await dataset.startExperiment({
       name: 'baseline',
+      // Serialize writes to the local SQLite file throughout this exercise.
+      maxConcurrency: 1,
       scorers: [answerAccuracyScorer],
       task: async ({ input }) => ask(input),
     });
@@ -61,6 +63,7 @@ async function main() {
     console.log('── running candidate ──');
     const candidate = await dataset.startExperiment({
       name: 'candidate',
+      maxConcurrency: 1,
       scorers: [answerAccuracyScorer],
       task: async ({ input }) => {
         const text = await ask(input);
@@ -146,6 +149,7 @@ async function main() {
 
     const afterEdit = await dataset.startExperiment({
       name: 'after-edit',
+      maxConcurrency: 1,
       scorers: [answerAccuracyScorer],
       task: async ({ input }) => ask(input),
     });

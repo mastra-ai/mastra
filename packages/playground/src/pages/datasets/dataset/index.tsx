@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
@@ -9,34 +8,50 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns/format';
-import { ArrowLeft, Copy, DatabaseIcon, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Link, Outlet, useParams, useNavigate, useSearchParams } from 'react-router';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import {
-  DatasetPageTabs,
+  DatasetItemsView,
+  DatasetTagsEditor,
   DatasetVersions,
   DuplicateDatasetDialog,
   ExperimentTriggerDialog,
   AddItemDialog,
   DeleteDatasetDialog,
 } from '@/domains/datasets';
+import { DatasetItemDrawer } from '@/domains/datasets/components/items/dataset-item-drawer';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
-function DatasetPageShell({ children }: { children?: ReactNode }) {
+function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Dataset</h1>
       <div />
-      <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
+      <div className="flex h-full items-center justify-center">{children}</div>
     </PageLayout>
   );
 }
 
 function DatasetPage() {
-  const { datasetId } = useParams()! as { datasetId: string };
+  const { datasetId, itemId } = useParams()! as { datasetId: string; itemId?: string };
+  // The `to` link only renders on the nested items/:itemId route.
+  const crumbs: CrumbDef[] = [
+    navCrumb('/datasets'),
+    { ...datasetCrumb, to: `/datasets/${encodeURIComponent(datasetId)}` },
+    ...(itemId
+      ? [
+          { id: 'dataset-items', label: 'Items' },
+          { id: 'dataset-item', label: truncateItemIdCrumb(itemId) },
+        ]
+      : []),
+  ];
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion, handleVersionChange } = useDatasetItemsUrlState(searchParams, setSearchParams);
@@ -52,7 +67,7 @@ function DatasetPage() {
 
   // Unfiltered items query — used to disable the experiment trigger when the
   // dataset has no items. React Query dedupes this with the same call inside
-  // DatasetPageTabs.
+  // DatasetItemsView.
   const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems(
     datasetId,
     undefined,
@@ -60,11 +75,11 @@ function DatasetPage() {
   );
   const disableExperimentTrigger = !isUnfilteredLoading && unfilteredItems.length === 0;
 
-  if (isDatasetLoading) return null; // Let the DatasetPageTabs handle the loading state to avoid layout shift when loading the dataset for the edit dialog
+  if (isDatasetLoading) return null; // Let the DatasetItemsView handle the loading state to avoid layout shift when loading the dataset for the edit dialog
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <DatasetPageShell>
+      <DatasetPageShell crumbs={crumbs}>
         <SessionExpired />
       </DatasetPageShell>
     );
@@ -72,7 +87,7 @@ function DatasetPage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <DatasetPageShell>
+      <DatasetPageShell crumbs={crumbs}>
         <PermissionDenied resource="datasets" />
       </DatasetPageShell>
     );
@@ -80,14 +95,12 @@ function DatasetPage() {
 
   if ((error && is404NotFoundError(error)) || (!isDatasetLoading && !error && !dataset)) {
     return (
-      <DatasetPageShell>
+      <DatasetPageShell crumbs={crumbs}>
         <EmptyState
-          iconSlot={<DatabaseIcon />}
           titleSlot="Dataset not found"
           descriptionSlot={`No dataset with id "${datasetId}".`}
           actionSlot={
-            <Button as={Link} to="/datasets">
-              <ArrowLeft />
+            <Button render={<Link to="/datasets" />} icon={<ArrowLeft />}>
               Back to Datasets
             </Button>
           }
@@ -98,7 +111,7 @@ function DatasetPage() {
 
   if (error) {
     return (
-      <DatasetPageShell>
+      <DatasetPageShell crumbs={crumbs}>
         <ErrorState
           title="Failed to load dataset"
           message={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
@@ -118,17 +131,24 @@ function DatasetPage() {
 
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
-      <div className="relative h-full overflow-hidden">
-        <PageLayout height="full" className="grid-rows-[1fr] p-0">
-          <PageLayout.MainArea>
-            <DatasetPageTabs
+      <div className="h-full">
+        <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+          <h1 className="sr-only">{datasetId}</h1>
+          <div>
+            <DatasetItemsView
               datasetId={datasetId}
               onAddItemClick={() => setAddItemDialogOpen(true)}
+              belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
+              leftSlot={
+                <span className="mr-3 text-caption whitespace-nowrap text-muted-foreground">
+                  {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
+                </span>
+              }
               rightSlot={
-                <ButtonsGroup>
-                  <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
-                    {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
-                  </span>
+                <div className="flex items-center gap-2">
+                  <Button render={<Link to={`/experiments?dataset=${datasetId}`} />} icon={<FlaskConical />}>
+                    View experiments
+                  </Button>
                   <DatasetVersions
                     datasetId={datasetId}
                     value={activeVersion}
@@ -141,8 +161,7 @@ function DatasetPage() {
                       <TooltipTrigger asChild>
                         <span className="cursor-not-allowed">
                           <div className="pointer-events-none opacity-50" inert aria-disabled="true">
-                            <Button variant="primary">
-                              <Play />
+                            <Button variant="primary" icon={<Play />}>
                               Run Experiment
                             </Button>
                           </div>
@@ -151,8 +170,7 @@ function DatasetPage() {
                       <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
                     </Tooltip>
                   ) : (
-                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
-                      <Play />
+                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)} icon={<Play />}>
                       Run Experiment
                     </Button>
                   )}
@@ -177,14 +195,14 @@ function DatasetPage() {
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
                   </DropdownMenu>
-                </ButtonsGroup>
+                </div>
               }
             />
-          </PageLayout.MainArea>
+          </div>
         </PageLayout>
 
-        {/* Item detail sub-route renders here as an absolute overlay panel */}
-        <Outlet />
+        {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}
+        <DatasetItemDrawer />
       </div>
 
       <ExperimentTriggerDialog

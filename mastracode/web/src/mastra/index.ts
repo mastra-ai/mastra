@@ -20,19 +20,21 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
-import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
+import { LocalSandbox } from '@mastra/core/workspace';
+import { PlatformSandbox, createRepoTemplate as createPlatformRepoTemplate } from '@mastra/platform-workspace';
+import { E2BSandbox, createRepoTemplate as createE2BRepoTemplate } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
-import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
-import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
+import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
+import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -86,16 +88,6 @@ function credentialEncryption() {
       return { id, key: decodeCredentialEncryptionKey('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS', value) };
     }),
   });
-}
-
-function investigateIntakeIssue(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-triage`,
-    role: 'triage',
-    skillName: 'factory-triage',
-    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
-  } as const;
 }
 
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
@@ -179,6 +171,22 @@ const github =
       })
     : undefined;
 
+// Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
+// and Group Access Tokens use the same API/Git authentication; the explicit
+// type records the credential's reach for diagnostics and setup guidance.
+const gitlabAccessToken = process.env.GITLAB_ACCESS_TOKEN?.trim();
+const gitlabAccessTokenType = process.env.GITLAB_ACCESS_TOKEN_TYPE?.trim();
+const gitlab = gitlabAccessToken
+  ? new GitLabIntegration({
+      accessToken: gitlabAccessToken,
+      ...(gitlabAccessTokenType === 'personal' || gitlabAccessTokenType === 'group'
+        ? { accessTokenType: gitlabAccessTokenType }
+        : {}),
+      ...(process.env.GITLAB_BASE_URL?.trim() ? { baseUrl: process.env.GITLAB_BASE_URL.trim() } : {}),
+      ...(process.env.GITLAB_WEBHOOK_SECRET?.trim() ? { webhookSecret: process.env.GITLAB_WEBHOOK_SECRET.trim() } : {}),
+    })
+  : undefined;
+
 // Direct Linear OAuth fallback for self-hosted / local deploys. As with the
 // GitHub fallback, only a complete credential group enables the integration;
 // partial configuration remains available to the diagnostics routes.
@@ -191,6 +199,35 @@ const linear =
         clientSecret: linearClientSecret,
       })
     : undefined;
+
+// Jira Cloud intake. A complete direct Basic-auth credential group takes
+// precedence. Otherwise Platform credentials enable automatic discovery of
+// visible `jira` connections. Partial direct configuration falls back
+// to Platform Jira when Platform credentials are available.
+const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
+const jiraEmail = process.env.JIRA_EMAIL?.trim();
+const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
+const platformJiraConfigured = Boolean(
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
+);
+const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
+if (jiraDirectVars.some(Boolean) && !jiraDirectVars.every(Boolean)) {
+  // A partial group silently disables direct Jira (no /web/jira routes mount),
+  // so tell the operator which knob is missing instead of showing nothing.
+  console.warn(
+    'Direct Jira intake is disabled: JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN must all be set together.',
+  );
+}
+const jira =
+  jiraBaseUrl && jiraEmail && jiraApiToken
+    ? new JiraIntegration({
+        baseUrl: jiraBaseUrl,
+        email: jiraEmail,
+        apiToken: jiraApiToken,
+      })
+    : platformJiraConfigured
+      ? new PlatformJiraIntegration()
+      : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
@@ -220,36 +257,6 @@ function localSandboxEnv(): Record<string, string> {
   }
   return env;
 }
-
-const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'] as const;
-// MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects into
-// deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key written
-// by project scaffolding. `PlatformSandbox` only reads the former from env, so
-// whichever is present is passed to it explicitly as `accessToken`.
-const platformSandboxToken =
-  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
-const hasPlatformSandboxEnv =
-  Boolean(platformSandboxToken) && PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
-
-// Private-network exec: the workspace-proxy discovers each sandbox's private
-// IPv6 during `POST /v1/projects/:pid/sandbox` and returns it as an
-// `instanceUrl` field. `PlatformSandbox.start()` copies that field into this
-// in-process registry; `PlatformSandbox.executeCommand()` reads it on every
-// exec to dial the sidecar's `POST /exec` directly over Railway's private
-// network, falling back to the lease path when no address is registered or
-// a dial fails. Only constructed when `PlatformSandbox` is in play; a
-// `LocalSandbox` dev run has no sidecar and no need for the registry.
-const sandboxAddressRegistry = hasPlatformSandboxEnv ? new InProcessSandboxAddressRegistry() : undefined;
-
-// Use PlatformSandbox only when its complete identity is configured. Otherwise
-// fall back to LocalSandbox for single-user development.
-const sandbox = hasPlatformSandboxEnv
-  ? new PlatformSandbox({ accessToken: platformSandboxToken, addressRegistry: sandboxAddressRegistry })
-  : new LocalSandbox({
-      workingDirectory:
-        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-      env: localSandboxEnv(),
-    });
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `DATABASE_URL` set →
@@ -317,31 +324,47 @@ const slack = slackSigningSecret
     })
   : undefined;
 
-const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
+const integrations = [
+  ...(github ? [github] : []),
+  ...(gitlab ? [gitlab] : []),
+  ...(linear ? [linear] : []),
+  ...(jira ? [jira] : []),
+  ...(slack ? [slack] : []),
+];
 
-export const factoryRules = defaultFactoryRules({
-  version: 'mastracode-web-v1',
-  overrides: {
-    work: {
-      intake: {
-        issue: { onEnter: investigateIntakeIssue },
-      },
-    },
-  },
-});
+export const factoryConfigVersion = 'mastracode-web-v1';
 
+const hasPlatformSandboxEnv =
+  ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
+  ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
   integrations,
-  rules: factoryRules,
-  sandbox: {
-    machine: sandbox,
-    // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
-    // this in-sandbox path and uses its host workingDirectory instead.
-    workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
-    // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
-    maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
+  configVersion: factoryConfigVersion,
+  sandbox: ctx => {
+    const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
+    if (!useLocalSandbox && hasPlatformSandboxEnv) {
+      return new PlatformSandbox({
+        id: ctx.sessionId,
+        template: createPlatformRepoTemplate(ctx),
+      });
+    }
+
+    if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
+      return new E2BSandbox({
+        id: ctx.sessionId,
+        template: createE2BRepoTemplate(ctx),
+      });
+    }
+
+    return new LocalSandbox({
+      workingDirectory: join(
+        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+        ctx.sessionId,
+      ),
+      env: localSandboxEnv(),
+    });
   },
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
@@ -382,9 +405,13 @@ const preparedArgs = await factory.prepare();
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
-// `server` config (middleware + apiRoutes + cors).
+// `server` config (middleware + apiRoutes + cors). Keep the worker-relevant
+// properties explicit so deploy builds can statically detect the worker topology.
 export const mastra = new Mastra({
   ...preparedArgs,
+  storage: preparedArgs.storage,
+  pubsub: preparedArgs.pubsub,
+  workers: preparedArgs.workers,
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

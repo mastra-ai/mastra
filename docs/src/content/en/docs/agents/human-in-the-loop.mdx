@@ -1,6 +1,6 @@
 ---
 title: "Human-in-the-loop | Agents"
-description: Learn how to require approvals and suspend tool execution, plus automatically resume suspended tools while keeping humans in control of agent workflows.
+description: "Add human-in-the-loop controls to Mastra agents with tool approval and suspended execution, so people can provide input before a run resumes or stops."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -125,7 +125,44 @@ const stream = await agent.stream('Clean up old records', {
 })
 ```
 
-A tool's own `requireApproval` setting takes precedence over the function above. Its rule decides whether that tool needs approval. If the function throws, the call requires approval as a fail-safe.
+The function can be asynchronous. For decisions that depend on the tool name and arguments, use a [classifier](/reference/classifier/classifier) to estimate whether the call needs human review:
+
+```typescript title="src/mastra/agents/run-with-approval.ts"
+import { Classifier } from '@mastra/core/classifier'
+import { model } from '../models/evaluation-model'
+import { agent } from './agent'
+
+const approvalClassifier = new Classifier({
+  id: 'tool-approval-classifier',
+  model,
+  questions: {
+    requiresApproval: {
+      type: 'boolean',
+      instructions:
+        'Does this tool call need human approval because it is destructive, irreversible, expensive, or handles sensitive data?',
+    },
+  },
+})
+
+const stream = await agent.stream('Clean up old records', {
+  requireToolApproval: async ({ toolName, args }) => {
+    const result = await approvalClassifier.evaluate({
+      state: {
+        toolName,
+        argumentNames: Object.keys(args),
+      },
+    })
+
+    return result.answers.requiresApproval.probability >= 0.7
+  },
+})
+```
+
+The example sends argument names rather than values because the classifier forwards its state to the configured evaluation model. If the decision requires argument values, redact sensitive data first or use an evaluation model and provider that meet the protected tool's data-handling requirements.
+
+Returning `true` pauses the tool call for human approval. It doesn't approve or decline the call automatically. Choose a threshold that matches the risk of the tools available to the agent. If this `requireToolApproval` function throws, it defaults to requiring approval.
+
+The runtime then combines that result with the tool's `requireApproval` setting. A boolean `true` requires approval, while `false` doesn't disable approval required by `requireToolApproval`. A tool-level `requireApproval` function is authoritative and replaces the combined result for that tool.
 
 :::note
 
@@ -527,7 +564,7 @@ if (run && toolCall) {
 
 Each returned run includes the suspended tool calls (`toolCallId`, `toolName`, `args`, and `requiresApproval`). Approval suspensions (`requiresApproval: true`) are answered with `approveToolCall()` / `declineToolCall()`, while `suspend()`-based suspensions carry their `suspendPayload` and expect `resumeStream()` with resume data, so you can rebuild the right UI for either flow without keeping any state in memory.
 
-`sendToolApproval()` uses the same storage-backed discovery automatically: when no active run is found in memory for the thread, it looks up the suspended run in storage before failing. If several suspended runs match the thread, pass a `toolCallId` to disambiguate.
+`sendToolApproval()` automatically uses the same storage-backed discovery. If memory contains no active run for the thread, it searches storage for a suspended run before failing. Pass a `toolCallId` when several suspended runs match the thread.
 
 The same discovery is available over HTTP as `GET /agents/:agentId/suspended-runs` and in the client SDK as [`agent.listSuspendedRuns()`](/reference/client-js/agents#listsuspendedruns), so browser-based approval UIs can rediscover pending runs directly.
 

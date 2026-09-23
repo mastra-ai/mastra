@@ -7,8 +7,13 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import { applyStoredMemorySettings } from './memory-settings-hydration.js';
+import {
+  SourceControlConnectionNotFoundError,
+  type SourceControlSession,
+  type SourceControlStorageHandle,
+} from '../storage/domains/source-control/base.js';
+import { applyStoredMemorySettings, type OMConfigurableSession } from './memory-settings-hydration.js';
+import { seedSessionOrg } from './org-seed.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
 
@@ -27,6 +32,99 @@ export async function resolveFactoryDefaultModelId(
   } catch {
     return undefined;
   }
+}
+
+export interface SourceControlSessionLookup {
+  getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
+  getSourceControlBySessionId(sessionId: string): Promise<SourceControlStorageHandle | null>;
+  rename(args: { sessionId: string; title: string }): Promise<void>;
+  markFirstMessage(args: { sessionId: string }): Promise<void>;
+  markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
+}
+
+/**
+ * Read or update a session across every registered source-control partition.
+ * Session ids are globally generated, so more than one match is invalid and
+ * fails closed instead of mutating an arbitrary provider.
+ */
+export function createSourceControlSessionLookup(
+  sourceControls: readonly SourceControlStorageHandle[],
+): SourceControlSessionLookup {
+  const resolve = async (
+    sessionId: string,
+  ): Promise<{ sourceControl: SourceControlStorageHandle; session: SourceControlSession } | null> => {
+    const matches = (
+      await Promise.all(
+        sourceControls.map(async sourceControl => ({
+          sourceControl,
+          session: await sourceControl.sessions.getBySessionId(sessionId),
+        })),
+      )
+    ).filter(
+      (match): match is { sourceControl: SourceControlStorageHandle; session: SourceControlSession } =>
+        match.session !== null,
+    );
+    if (matches.length > 1) throw new Error('Factory session exists in multiple source-control providers.');
+    return matches[0] ?? null;
+  };
+
+  return {
+    getBySessionId: async sessionId => (await resolve(sessionId))?.session ?? null,
+    getSourceControlBySessionId: async sessionId => (await resolve(sessionId))?.sourceControl ?? null,
+    rename: async args => (await resolve(args.sessionId))?.sourceControl.sessions.rename(args),
+    markFirstMessage: async args => (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMessage(args),
+    markFirstMeaningfulExec: async args =>
+      (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMeaningfulExec(args),
+  };
+}
+
+/**
+ * Resolve the source-control provider from durable Factory repository links,
+ * never from the issue tracker that happened to create the work item.
+ */
+export async function resolveFactorySourceControl(args: {
+  sourceControls: readonly SourceControlStorageHandle[];
+  orgId: string;
+  factoryProjectId: string;
+  sessionId?: string;
+}): Promise<SourceControlStorageHandle | undefined> {
+  if (args.sessionId) {
+    const sessionMatches = (
+      await Promise.all(
+        args.sourceControls.map(async sourceControl => ({
+          sourceControl,
+          session: await sourceControl.sessions.getBySessionId(args.sessionId!),
+        })),
+      )
+    ).filter(match => match.session !== null);
+    if (sessionMatches.length > 1) throw new Error('Factory session exists in multiple source-control providers.');
+    if (sessionMatches[0]) return sessionMatches[0].sourceControl;
+  }
+
+  const linked = [];
+  for (const sourceControl of args.sourceControls) {
+    const connections = await sourceControl.connections.list({
+      orgId: args.orgId,
+      factoryProjectId: args.factoryProjectId,
+    });
+    let hasLinkedRepository = false;
+    for (const connection of connections) {
+      try {
+        if (
+          (await sourceControl.projectRepositories.list({ orgId: args.orgId, connectionId: connection.id })).length > 0
+        ) {
+          hasLinkedRepository = true;
+          break;
+        }
+      } catch (error) {
+        if (!(error instanceof SourceControlConnectionNotFoundError)) throw error;
+      }
+    }
+    if (hasLinkedRepository) linked.push(sourceControl);
+  }
+  if (linked.length > 1)
+    throw new Error('Factory project has repositories linked through multiple source-control providers.');
+  return linked[0];
 }
 
 export interface EnsureFactorySourceSessionArgs {
@@ -237,6 +335,9 @@ export interface HydrateFactorySessionArgs {
  * default it was created with, and the reason is logged.
  */
 export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
+  // The org rung knowledge curation scopes on. Seeded first so it lands even if
+  // a later best-effort step fails; an empty org marks the session unresolved.
+  await seedSessionOrg(session, args.orgId);
   try {
     const record =
       args.memorySettings && args.factoryProjectId
@@ -265,5 +366,45 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+}
+
+export interface RefreshFactorySessionMemorySettingsArgs {
+  orgId: string;
+  factoryProjectId: string;
+  projects: Pick<FactoryProjectsStorage, 'get'>;
+  memorySettings: Pick<MemorySettingsStorage, 'get'>;
+}
+
+/**
+ * Re-apply a factory project's stored observational-memory settings to an
+ * already-running session that automation is about to reuse. Session creation
+ * hydrates these settings once (`hydrateFactorySession`), but a reused binding
+ * keeps whatever observer/reflector models it was created with — so a project
+ * whose OM models changed since would keep observing with the stale (and
+ * possibly since-rejected) models. This reads the project's current row with the
+ * same provider-aware fallback as initial hydration and applies it, mirroring
+ * the `GET /web/config/om` refresh. Best-effort: a settings lookup failure must
+ * never sink an otherwise-ready run, so it is logged and swallowed.
+ */
+export async function refreshFactorySessionMemorySettings(
+  session: OMConfigurableSession,
+  args: RefreshFactorySessionMemorySettingsArgs,
+): Promise<void> {
+  try {
+    const record = await args.memorySettings.get({
+      orgId: args.orgId,
+      userId: factoryMemorySettingsUserId(args.factoryProjectId),
+    });
+    const project = await args.projects.get({ orgId: args.orgId, id: args.factoryProjectId });
+    const provider = project?.defaultModelId?.split('/')[0];
+    const fallbackOmModelId = provider
+      ? resolveProviderOMDefault(provider, project?.defaultModelId ?? undefined).modelId
+      : undefined;
+    await applyStoredMemorySettings(session, record, fallbackOmModelId);
+  } catch (error) {
+    console.warn('[Factory dispatch] Failed to reapply observational-memory settings on session reuse', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }

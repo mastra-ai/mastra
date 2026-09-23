@@ -3,6 +3,9 @@ import type { execa as execaType } from 'execa';
 let cached: typeof execaType | undefined;
 let loading: Promise<typeof execaType> | undefined;
 
+// Keep the specifier as a parameter so tsdown cannot fold it into a literal dynamic import.
+const importModule = (moduleName: string) => import(/* @vite-ignore */ /* webpackIgnore: true */ moduleName);
+
 /**
  * Lazily imports execa using a runtime-constructed module specifier.
  * This prevents bundlers (Vite/Rollup/esbuild) from resolving execa at build time,
@@ -16,8 +19,7 @@ export async function getExeca(): Promise<typeof execaType> {
   if (!loading) {
     loading = (async () => {
       try {
-        const mod = 'execa';
-        const execa = (await import(/* @vite-ignore */ /* webpackIgnore: true */ mod)).execa;
+        const execa = (await importModule('execa')).execa;
         cached = execa;
         return execa;
       } catch (err) {

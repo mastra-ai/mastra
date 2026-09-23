@@ -306,6 +306,11 @@ function tableIndexes(): IndexSpec[] {
       columns: '("entityType", "entityId", "timestamp" DESC)',
     },
     { name: 'mastra_score_events_tags_gin', table: TABLE_SCORE_EVENTS, columns: '("tags")', using: 'gin' },
+    {
+      name: 'mastra_score_events_scoreid_cursor_idx',
+      table: TABLE_SCORE_EVENTS,
+      columns: '("scoreId", "cursorId" DESC)',
+    },
     { name: 'mastra_score_events_cursor_idx', table: TABLE_SCORE_EVENTS, columns: '("xactId", "cursorId")' },
 
     // feedback_events
@@ -371,6 +376,11 @@ export function additiveColumns(schema: string): { table: string; column: string
       table: TABLE_SPAN_EVENTS,
       column: 'isPending',
       ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "isPending" boolean NOT NULL DEFAULT false`,
+    },
+    {
+      table: TABLE_FEEDBACK_EVENTS,
+      column: 'reviewStatus',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)} ADD COLUMN IF NOT EXISTS "reviewStatus" text NOT NULL DEFAULT 'needs-review'`,
     },
   ];
 }

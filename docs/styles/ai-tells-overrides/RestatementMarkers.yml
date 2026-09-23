@@ -1,0 +1,22 @@
+extends: existence
+message: "Check whether '%s' introduces useful clarification or only repeats the previous sentence."
+level: suggestion
+ignorecase: true
+tokens:
+  - In other words
+  - Simply put
+  - Put simply
+  - Put differently
+  - To put it simply
+  - To put it another way
+  - Said differently
+  - To state it plainly
+  - To state this plainly
+  - What I mean is
+  - What this means is
+  - What that means is
+  - To put it more simply
+  - To put it more directly
+  - Put another way
+  - Which is to say
+  - '(?-i:In the end)(?=,)'

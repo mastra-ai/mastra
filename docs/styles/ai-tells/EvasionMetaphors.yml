@@ -1,0 +1,54 @@
+---
+extends: existence
+message: "AI evasion metaphor: '%s'. Name what the check missed and why."
+level: error
+nonword: true
+ignorecase: true
+# A miss framed as an escape: a defect "slips through," a filter "lets it
+# through," a rule gets "routed around," a case "goes unnoticed." The
+# escape verbs personify the artifact as a fugitive and the check as a
+# porous fence, where the plain statement names what was missed and why.
+# The sibling tokens "dodges the" and "sails through" stay in
+# FigurativeIdioms, which owned them first.
+#
+# Costs across the Go and Python standard libraries: the slipping phrases
+# measure four ("flags slip in," "lowercase slips through"), letting
+# through measures five, sneaking two, sidestepping one, and the
+# going-unnoticed token five ("can go unanswered," "went unused"). Every
+# one is the figure itself rather than a literal sense, so they fire by
+# design. Clothing and mechanics prose, where things literally slip, and
+# networking prose, where traffic is literally routed around damage,
+# disable the rule.
+tokens:
+  # --- Slipping: the defect as an eel ("the form slipped through," "flags
+  # slip in," "slipped past unexamined").
+  - "\\bslip(?:s|ped|ping)? (?:through|past|by|in|into)\\b"
+
+  # --- Letting through: the check as a porous fence ("what the previous
+  # pin let through," "still lets it through," "lets violations into
+  # production," "lets a stale row past the sweep"). The preposition set
+  # grew from "through" alone after a documentation-corpus audit
+  # (2026-09) found "lets violations into production" escaping on the
+  # preposition; the added prepositions show three corpus hits, one of them a
+  # test fixture asking who let lolcatz into the suite. Bare "in" is
+  # admitted only at a clause end, because "let errors in ParseForm fall
+  # through" is an object with a prepositional phrase, not the fence.
+  - "\\blets? (?:it|them|that|this|one|anything|everything|[a-z]+) (?:through|into|past|by|out)\\b"
+  - "\\blets? (?:it|them|that|this|one|anything|everything|[a-z]+) in(?=[.,;:!?)]|$)"
+  - "\\blet (?:through|into|past|by|out)\\b"
+
+  # --- Going around: the path as a bypassed tollbooth ("cutting the
+  # release went around it," "a rule people route around"). The object
+  # set keeps "go around the loop," the iteration idiom, quiet.
+  - "\\brout(?:es?|ed|ing) around\\b"
+  - "\\b(?:go|goes|going|went) around (?:it|that|them|the (?:guard|gate|hook|check|preflight|confirmation|review|prompt)s?)\\b"
+
+  # --- Sneaking and sidestepping: the change as a burglar ("nothing snuck
+  # past typechecking," "to sidestep this problem").
+  - "\\bsneak(?:s|ed|ing)? (?:in|into|past|through|by)\\b"
+  - "\\bsnuck (?:in|into|past|through|by)\\b"
+  - "\\bsidestep(?:s|ped|ping)?\\b"
+
+  # --- Escaping notice: the miss narrated as invisibility ("the gap went
+  # unnoticed," "the failure goes unreported").
+  - "\\b(?:go|goes|going|went|gone) un(?:noticed|seen|asked|answered|challenged|checked|caught|counted|detected|examined|heeded|measured|mentioned|questioned|read|recorded|remarked|reported|reviewed|stated|tested|used|verified|addressed|covered|resolved)\\b"

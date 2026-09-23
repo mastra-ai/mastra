@@ -1,0 +1,109 @@
+diff --git a/dist/ast-helpers.cjs b/dist/ast-helpers.cjs
+index 1bdd32df51124cdb11382921233082017371ae9d..873c770954f3ab011b5815814202d67d4c106a6e 100644
+--- a/dist/ast-helpers.cjs
++++ b/dist/ast-helpers.cjs
+@@ -38,7 +38,7 @@ exports.createTypeAlias = createTypeAlias;
+ exports.printNode = printNode;
+ exports.getIdentifierOrStringLiteral = getIdentifierOrStringLiteral;
+ exports.addJsDocComment = addJsDocComment;
+-const typescript_1 = __importStar(require("typescript"));
++const typescript_1 = __importStar(require("typescript-classic"));
+ function createTypeReferenceFromString(identifier) {
+     return typescript_1.factory.createTypeReferenceNode(typescript_1.factory.createIdentifier(identifier));
+ }
+diff --git a/dist/ast-helpers.d.ts b/dist/ast-helpers.d.ts
+index 8193df599fe83ab98b26885482b06fc8e522c27e..4e0b7266ad53c5b7c03851713d0c81b3cb1518ce 100644
+--- a/dist/ast-helpers.d.ts
++++ b/dist/ast-helpers.d.ts
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from 'typescript-classic';
+ export declare function createTypeReferenceFromString(identifier: string): ts.TypeReferenceNode;
+ export declare function createTypeAlias(node: ts.TypeNode, identifier: string, comment?: string): ts.TypeAliasDeclaration;
+ export declare function printNode(node: ts.Node, printerOptions?: ts.PrinterOptions): string;
+diff --git a/dist/ast-helpers.js b/dist/ast-helpers.js
+index e0ccd884efb930c9085833f518290cc95222b0d1..39dabce26e2761585831a4cb4218fde1e43461fe 100644
+--- a/dist/ast-helpers.js
++++ b/dist/ast-helpers.js
+@@ -1,4 +1,4 @@
+-import ts, { factory as f } from 'typescript';
++import ts, { factory as f } from 'typescript-classic';
+ export function createTypeReferenceFromString(identifier) {
+     return f.createTypeReferenceNode(f.createIdentifier(identifier));
+ }
+diff --git a/dist/index.cjs b/dist/index.cjs
+index a8b068ed4f2de147d55c55ba600ccb51da4fdcbd..f7ecffab4d7b27552156c67c12dac82b470c0604 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.createAuxiliaryTypeStore = exports.printNode = exports.createTypeAlias = void 0;
+ exports.zodToTs = zodToTs;
+-const typescript_1 = __importStar(require("typescript"));
++const typescript_1 = __importStar(require("typescript-classic"));
+ const ast_helpers_1 = require("./ast-helpers.cjs");
+ const types_1 = require("./types.cjs");
+ const utils_1 = require("./utils.cjs");
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 7ce079f807a5cc6a8f3f1cba32fc362edf3c215f..c15d0883d9d550648d9b980f21a0ab3358a7f8f3 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from 'typescript-classic';
+ import type * as z4 from 'zod/v4/core';
+ import { type ZodToTsOptions } from "./types.js";
+ export declare function zodToTs(zod: z4.$ZodType, options: ZodToTsOptions): {
+diff --git a/dist/index.js b/dist/index.js
+index e12bc49fa098ffcc30c4c42057d6da1fc255872c..0241df52844ab381e77c44b272273b05ce97c1ac 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,4 +1,4 @@
+-import ts, { factory as f } from 'typescript';
++import ts, { factory as f } from 'typescript-classic';
+ import { addJsDocComment, createTypeReferenceFromString, getIdentifierOrStringLiteral, } from "./ast-helpers.js";
+ import { resolveOptions, } from "./types.js";
+ import { handleUnrepresentable, literalValueToLiteralType } from "./utils.js";
+diff --git a/dist/types.d.ts b/dist/types.d.ts
+index 6a78452c9e5a3de6353561c18dbcabe8396e09bf..f824e72b79d864a02cf7830c5c55fbf78405e230 100644
+--- a/dist/types.d.ts
++++ b/dist/types.d.ts
+@@ -1,4 +1,4 @@
+-import type ts from 'typescript';
++import type ts from 'typescript-classic';
+ import * as z4 from 'zod/v4/core';
+ /** A function which overrides the default Zod to TypeScript mapping.
+  * @param typescript TypeScript compiler interface for creating AST nodes
+diff --git a/dist/utils.cjs b/dist/utils.cjs
+index 7139b34b60214e1f30ccf9a0fea3d73e34a69216..da6a093cda06e277b99a7539513c17916c01ac4b 100644
+--- a/dist/utils.cjs
++++ b/dist/utils.cjs
+@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.handleUnrepresentable = handleUnrepresentable;
+ exports.createAuxiliaryTypeStore = createAuxiliaryTypeStore;
+ exports.literalValueToLiteralType = literalValueToLiteralType;
+-const typescript_1 = __importStar(require("typescript"));
++const typescript_1 = __importStar(require("typescript-classic"));
+ function handleUnrepresentable(unrepresentable, unrepresentableType) {
+     if (unrepresentable === 'any') {
+         return typescript_1.factory.createKeywordTypeNode(typescript_1.default.SyntaxKind.AnyKeyword);
+diff --git a/dist/utils.d.ts b/dist/utils.d.ts
+index bb05ac25b3d81e71a55e03305bb8ded8ebd3d915..46f73ce56ea326a2efdd943149ea54e1043437d2 100644
+--- a/dist/utils.d.ts
++++ b/dist/utils.d.ts
+@@ -1,4 +1,4 @@
+-import ts from 'typescript';
++import ts from 'typescript-classic';
+ import type * as z4 from 'zod/v4/core';
+ import type { AuxiliaryTypeStore, ZodToTsOptions } from "./types.js";
+ export declare function handleUnrepresentable(unrepresentable: ZodToTsOptions['unrepresentable'], unrepresentableType: string): ts.KeywordTypeNode<ts.SyntaxKind.AnyKeyword>;
+diff --git a/dist/utils.js b/dist/utils.js
+index 22ceba8f8b964af364bba8494cf31a30f820d373..c550ada170bba8e4d44983bdd92ace2afb906e6c 100644
+--- a/dist/utils.js
++++ b/dist/utils.js
+@@ -1,4 +1,4 @@
+-import ts, { factory as f } from 'typescript';
++import ts, { factory as f } from 'typescript-classic';
+ export function handleUnrepresentable(unrepresentable, unrepresentableType) {
+     if (unrepresentable === 'any') {
+         return f.createKeywordTypeNode(ts.SyntaxKind.AnyKeyword);

@@ -1,8 +1,9 @@
 import { json } from '@codemirror/lang-json';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { Chunk } from '@codemirror/merge';
 import { SearchCursor } from '@codemirror/search';
 import type { Extension } from '@codemirror/state';
-import { StateEffect, StateField, RangeSetBuilder } from '@codemirror/state';
+import { StateEffect, StateField, RangeSetBuilder, Text } from '@codemirror/state';
 import type { DecorationSet } from '@codemirror/view';
 import { Decoration, EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
@@ -25,6 +26,7 @@ import {
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // -- Search highlight extension -----------------------------------------------
@@ -66,13 +68,51 @@ function searchHighlightExtension(): Extension {
   return [searchHighlightField, searchHighlightTheme];
 }
 
+// -- Diff highlight extension -------------------------------------------------
+
+export interface DataCodeSectionDiff {
+  /** The other document to compare against. */
+  against: string;
+  /** `a` = this document is the "before" (changes in red), `b` = "after" (changes in green). */
+  side: 'a' | 'b';
+}
+
+// `EditorView.theme` (not baseTheme) so these win over the app theme's `.cm-activeLine { background: transparent }`.
+const diffLineTheme = EditorView.theme({
+  '.cm-line.cm-diff-removed, .cm-line.cm-diff-removed.cm-activeLine': {
+    backgroundColor: 'color-mix(in srgb, var(--accent2) 18%, transparent)',
+  },
+  '.cm-line.cm-diff-added, .cm-line.cm-diff-added.cm-activeLine': {
+    backgroundColor: 'color-mix(in srgb, var(--accent1) 18%, transparent)',
+  },
+});
+
+function diffHighlightExtension(doc: string, { against, side }: DataCodeSectionDiff): Extension {
+  const [a, b] = side === 'a' ? [doc, against] : [against, doc];
+  const text = Text.of(doc.split('\n'));
+  const line = Decoration.line({ class: side === 'a' ? 'cm-diff-removed' : 'cm-diff-added' });
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const chunk of Chunk.build(Text.of(a.split('\n')), Text.of(b.split('\n')))) {
+    const from = side === 'a' ? chunk.fromA : chunk.fromB;
+    const to = side === 'a' ? chunk.endA : chunk.endB;
+    if (from >= to) continue;
+    for (let pos = from; pos <= Math.min(to, text.length);) {
+      const l = text.lineAt(pos);
+      builder.add(l.from, l.from, line);
+      if (l.to >= to) break;
+      pos = l.to + 1;
+    }
+  }
+  return [EditorView.decorations.of(builder.finish()), diffLineTheme];
+}
+
 // -- Themes -------------------------------------------------------------------
 
 function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: '0.75rem',
+      fontSize: 'var(--text-caption)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -86,20 +126,20 @@ function buildLightTheme(): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
-      fontSize: '0.75rem',
+      color: 'var(--foreground)',
+      fontSize: 'var(--text-caption)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--foreground)',
+      caretColor: 'var(--foreground)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
@@ -108,12 +148,12 @@ function buildLightTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--foreground)',
     },
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
+    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
     { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
     { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
     { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
@@ -143,6 +183,10 @@ export interface DataCodeSectionProps {
   codeStr?: string;
   simplified?: boolean;
   className?: string;
+  /** Highlight lines that differ from another document. */
+  diff?: DataCodeSectionDiff;
+  /** Extra controls rendered in the header, before the built-in copy/expand buttons. */
+  actions?: React.ReactNode;
 }
 
 export function DataCodeSection({
@@ -152,8 +196,11 @@ export function DataCodeSection({
   icon,
   simplified = false,
   className,
+  diff,
+  actions,
 }: DataCodeSectionProps) {
   const theme = useCodemirrorTheme();
+  const diffExtension = useMemo(() => (diff ? diffHighlightExtension(codeStr, diff) : []), [codeStr, diff]);
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
   const [searchMinimized, setSearchMinimized] = useState(true);
   const [searchQuery, setSearchQueryState] = useState('');
@@ -247,6 +294,7 @@ export function DataCodeSection({
       <div className="flex items-center justify-between">
         <DataPanelSectionHeading icon={icon}>{title}</DataPanelSectionHeading>
         <div className="flex items-center gap-2">
+          {actions}
           {!usePlainTextView && (
             <SearchFieldBlock
               name="code-section-search"
@@ -261,11 +309,10 @@ export function DataCodeSection({
               onMinimizedChange={setSearchMinimized}
             />
           )}
-          <ButtonsGroup>
-            <CopyButton content={codeStr || 'No content'} size="sm" />
+          <ButtonsGroup size="sm">
+            <CopyButton content={codeStr || 'No content'} />
             {hasMultilineText && (
               <Button
-                size="sm"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 tooltip={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
@@ -273,22 +320,27 @@ export function DataCodeSection({
                 {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
               </Button>
             )}
-            <Button size="sm" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
+            <Button aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
               <ExpandIcon />
             </Button>
           </ButtonsGroup>
         </div>
       </div>
 
-      <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div
+        className={cn(
+          raisedSurfaceStyle,
+          'max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
+        )}
+      >
         {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
+          <div className="font-mono break-all text-muted-foreground">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
           <ReactCodeMirror
             ref={editorRef}
-            extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
+            extensions={[json(), EditorView.lineWrapping, searchHighlightExtension(), diffExtension]}
             theme={theme}
             value={codeStr}
             editable={false}
@@ -299,7 +351,7 @@ export function DataCodeSection({
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
         <DialogContent className="grid h-[calc(100vh-6rem)]! max-w-[90vw]! grid-rows-[auto_1fr] [&>.absolute]:hidden">
           <DialogHeader className="flex-row items-center justify-between">
-            <DialogTitle className="text-ui-sm flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
+            <DialogTitle className="flex min-w-0 items-center gap-1.5 truncate text-caption [&>svg]:size-3.5">
               {dialogTitle ?? (
                 <>
                   {icon}
@@ -321,11 +373,10 @@ export function DataCodeSection({
                   size="sm"
                 />
               )}
-              <ButtonsGroup>
-                <CopyButton content={codeStr || 'No content'} size="sm" />
+              <ButtonsGroup size="sm">
+                <CopyButton content={codeStr || 'No content'} />
                 {hasMultilineText && (
                   <Button
-                    size="sm"
                     aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                     tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                     onClick={() => setExpandedMultiline(v => !v)}
@@ -334,7 +385,7 @@ export function DataCodeSection({
                   </Button>
                 )}
                 <DialogClose asChild>
-                  <Button size="sm" aria-label="Close" tooltip="Close">
+                  <Button aria-label="Close" tooltip="Close">
                     <XIcon />
                   </Button>
                 </DialogClose>
@@ -343,15 +394,20 @@ export function DataCodeSection({
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
             {expandedMultiline ? (
-              <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
-                <div className="text-neutral4 font-mono break-all">
+              <div
+                className={cn(
+                  raisedSurfaceStyle,
+                  'overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
+                )}
+              >
+                <div className="font-mono break-all text-muted-foreground">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>
               </div>
             ) : (
               <ReactCodeMirror
                 ref={expandedEditorRef}
-                extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
+                extensions={[json(), EditorView.lineWrapping, searchHighlightExtension(), diffExtension]}
                 theme={theme}
                 value={codeStr}
                 editable={false}

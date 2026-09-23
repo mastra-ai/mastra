@@ -649,19 +649,43 @@ export function extractTrajectory(output: ScorerRunOutputForAgent): Trajectory {
   const steps: ToolCallStep[] = [];
 
   for (const message of output) {
-    // Prefer the legacy toolInvocations array when present; fall back to
-    // V2 content.parts for messages that only store tool calls there.
+    // Native parts retain thrown calls that the legacy array may omit.
+    // Merge by call ID while retaining compatible order from both forms.
     const legacy = message?.content?.toolInvocations;
-    const fromParts = legacy
-      ? undefined
-      : message?.content?.parts
-          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
-          .map(p => p.toolInvocation);
-    const toolInvocations = legacy ?? fromParts;
+    const fromParts =
+      message?.content?.parts
+        ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
+        .map(p => p.toolInvocation)
+        .filter(Boolean) ?? [];
+    const partCallIds = new Set(fromParts.map(invocation => invocation.toolCallId).filter(Boolean));
+    const legacyInvocations = legacy ?? [];
+    const legacyPositions = new Map(legacyInvocations.map((invocation, index) => [invocation?.toolCallId, index]));
+    const toolInvocations: typeof fromParts = [];
+    let legacyIndex = 0;
+    for (const invocation of fromParts) {
+      const sharedIndex = invocation.toolCallId ? legacyPositions.get(invocation.toolCallId) : undefined;
+      if (sharedIndex !== undefined && sharedIndex >= legacyIndex) {
+        // Retain legacy-only calls before their next shared anchor.
+        for (; legacyIndex < sharedIndex; legacyIndex++) {
+          const previous = legacyInvocations[legacyIndex];
+          if (previous && !partCallIds.has(previous.toolCallId)) toolInvocations.push(previous);
+        }
+        legacyIndex++;
+      }
+      toolInvocations.push(invocation);
+    }
+    for (; legacyIndex < legacyInvocations.length; legacyIndex++) {
+      const invocation = legacyInvocations[legacyIndex];
+      if (invocation && !partCallIds.has(invocation.toolCallId)) toolInvocations.push(invocation);
+    }
     if (!toolInvocations?.length) continue;
 
     for (const invocation of toolInvocations) {
-      if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
+      if (
+        invocation &&
+        invocation.toolName &&
+        (invocation.state === 'result' || invocation.state === 'call' || invocation.state === 'output-error')
+      ) {
         const toolArgs =
           invocation.args != null && typeof invocation.args === 'object' && !Array.isArray(invocation.args)
             ? (invocation.args as Record<string, unknown>)
@@ -682,7 +706,7 @@ export function extractTrajectory(output: ScorerRunOutputForAgent): Trajectory {
           name: invocation.toolName,
           toolArgs,
           toolResult,
-          success: invocation.state === 'result',
+          success: invocation.state === 'result' && invocation.isError !== true,
         });
       }
     }
@@ -781,6 +805,10 @@ const SKIPPED_SPAN_TYPES = new Set([
   SpanType.SCORER_RUN,
   SpanType.SCORER_STEP,
   SpanType.GENERIC,
+  // Retained for traces recorded before skill spans moved to SKILL_ACTION.
+  // SKILL_ACTION is deliberately NOT skipped: it now also covers the skill
+  // tools (activate/search/read), which are model-initiated trajectory steps
+  // and were never skipped when they were WORKSPACE_ACTION spans.
   SpanType.SKILL_RESOLUTION,
   SpanType.MODEL_STEP,
   SpanType.MODEL_INFERENCE,
@@ -829,6 +857,7 @@ function spanToTrajectorySteps(node: SpanTreeNode): TrajectoryStep[] {
         {
           ...base,
           stepType: 'tool_call' as const,
+          name: span.entityId ?? span.entityName ?? span.name,
           toolArgs,
           toolResult,
           success: typeof attrs.success === 'boolean' ? attrs.success : undefined,
@@ -843,6 +872,7 @@ function spanToTrajectorySteps(node: SpanTreeNode): TrajectoryStep[] {
         {
           ...base,
           stepType: 'mcp_tool_call' as const,
+          name: span.entityId ?? span.entityName ?? span.name,
           toolArgs,
           toolResult,
           mcpServer: typeof attrs.mcpServer === 'string' ? attrs.mcpServer : undefined,
@@ -858,6 +888,7 @@ function spanToTrajectorySteps(node: SpanTreeNode): TrajectoryStep[] {
         {
           ...base,
           stepType: 'provider_tool_call' as const,
+          name: span.entityId ?? span.entityName ?? span.name,
           toolArgs,
           toolResult,
           success: typeof attrs.success === 'boolean' ? attrs.success : undefined,

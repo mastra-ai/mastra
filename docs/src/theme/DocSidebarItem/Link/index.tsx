@@ -12,6 +12,7 @@ import { isPlainPrimaryClick } from '../../contextual-sidebar'
 import { useIsContextualSidebarPane } from '../../contextual-sidebar-context'
 import styles from './styles.module.css'
 import { getBadgeType } from '../utils'
+import { normalizeSiteSectionRoot } from '@site/src/utils/canonical-url'
 
 function LinkLabel({ label, item }: { label: string; item: any }) {
   // Get tags from customProps in sidebar config
@@ -38,8 +39,9 @@ export default function DocSidebarItemLink({
   ...props
 }: Props): ReactNode {
   const { href, label, className, autoAddBaseUrl } = item
-  const isActive = isActiveSidebarItem(item, activePath)
   const isInternalLink = isInternalUrl(href)
+  const linkHref = isInternalLink ? normalizeSiteSectionRoot(href) : href
+  const isActive = isActiveSidebarItem(item, activePath)
   const isContextualSidebarPane = useIsContextualSidebarPane()
 
   return (
@@ -58,7 +60,7 @@ export default function DocSidebarItemLink({
         })}
         autoAddBaseUrl={autoAddBaseUrl}
         aria-current={isActive ? 'page' : undefined}
-        to={href}
+        to={linkHref}
         {...(isInternalLink && {
           onClick: onItemClick
             ? event => {

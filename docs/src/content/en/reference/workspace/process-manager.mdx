@@ -1,6 +1,6 @@
 ---
 title: "Reference: SandboxProcessManager | Workspace"
-description: "API reference for SandboxProcessManager and ProcessHandle, the base classes for background process management in sandboxes."
+description: "Abstract base class for managing background processes in sandboxes. Provides methods to spawn processes, list them, get handles by PID, and kill them."
 packages:
   - "@mastra/core"
 ---
@@ -86,7 +86,8 @@ const handle = await sandbox.processes.spawn('npm run dev', {
           {
             name: 'cwd',
             type: 'string',
-            description: 'Working directory for the process.',
+            description:
+              "Working directory for the process. Defaults to the sandbox's configured `workingDirectory`, then the provider default.",
             isOptional: true,
           },
           {
@@ -105,6 +106,13 @@ const handle = await sandbox.processes.spawn('npm run dev', {
             name: 'abortSignal',
             type: 'AbortSignal',
             description: 'Signal to abort the process. When aborted, the process is killed.',
+            isOptional: true,
+          },
+          {
+            name: 'stdinMode',
+            type: "'pipe' | 'ignore'",
+            description:
+              "How stdin is wired. `'pipe'` (default) opens a writable stdin for `sendStdin()` and `writer`. `'ignore'` closes stdin so commands that read it see immediate EOF. Honored by the local, Docker, and E2B providers.",
             isOptional: true,
           },
         ],

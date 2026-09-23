@@ -42,7 +42,7 @@ export function toWorkOSEvent(event: AuditEventRow): {
   return {
     action: event.action,
     occurredAt: event.occurredAt,
-    actor: { type: event.actorType === 'agent' ? 'agent' : 'user', id: event.actorId },
+    actor: { type: event.actorType === 'human' ? 'user' : event.actorType, id: event.actorId },
     targets: event.targets.map(target => ({
       type: target.type,
       id: target.id,

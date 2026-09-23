@@ -11,7 +11,7 @@
  * - `attributes`: span metadata (category, workspaceId, provider, success)
  */
 
-import type { AnySpan, WorkspaceActionAttributes } from '../../observability/types/tracing';
+import type { AnySpan, SkillActionAttributes, WorkspaceActionAttributes } from '../../observability/types/tracing';
 import { SpanType } from '../../observability/types/tracing';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { Workspace } from '../workspace';
@@ -178,3 +178,73 @@ const noOpHandle: WorkspaceSpanHandle = {
   end() {},
   error() {},
 };
+
+/**
+ * Options for starting a skill action span.
+ */
+export interface SkillSpanOptions {
+  /** Which skill lifecycle operation this span covers */
+  operation: SkillActionAttributes['operation'];
+  /** Input data to record on the span (skill name, query, line range) */
+  input?: unknown;
+  /** Initial attributes */
+  attributes?: Partial<Omit<SkillActionAttributes, 'operation'>>;
+}
+
+/**
+ * Handle returned by startSkillSpan for ending the span.
+ */
+export interface SkillSpanHandle {
+  /** The underlying span (undefined when tracing is not active) */
+  span: AnySpan | undefined;
+  /** End the span with final attributes and output */
+  end(attrs?: Partial<SkillActionAttributes>, output?: unknown): void;
+  /** End the span with an error */
+  error(err: unknown, attrs?: Partial<SkillActionAttributes>): void;
+}
+
+/** No-op handle when tracing is not available */
+const noOpSkillHandle: SkillSpanHandle = {
+  span: undefined,
+  end() {},
+  error() {},
+};
+
+/**
+ * Start a SKILL_ACTION child span from the tool execution context.
+ *
+ * Skill operations were previously traced as `WORKSPACE_ACTION` with
+ * `category: 'skill'`, which only held while skills lived on a workspace.
+ * Agent-level skills have no workspace, so skills get their own span type and
+ * all five operations (resolve, inject, activate, search, read) share it.
+ *
+ * Returns a handle with `end()` and `error()`. With no parent span every
+ * operation is a safe no-op.
+ */
+export function startSkillSpan(context: ToolExecutionContext | undefined, options: SkillSpanOptions): SkillSpanHandle {
+  const currentSpan = context?.tracing?.currentSpan ?? context?.tracingContext?.currentSpan;
+
+  if (!currentSpan) {
+    return noOpSkillHandle;
+  }
+
+  const { operation, input, attributes } = options;
+
+  const span = currentSpan.createChildSpan<SpanType.SKILL_ACTION>({
+    type: SpanType.SKILL_ACTION,
+    name: `skill:${operation}`,
+    input: sanitizeWorkspaceTraceData(input),
+    attributes: { operation, ...attributes },
+  });
+
+  return {
+    span,
+    end(attrs?: Partial<SkillActionAttributes>, output?: unknown) {
+      span?.end({ output: sanitizeWorkspaceTraceData(output), attributes: { ...attrs } });
+    },
+    error(err: unknown, attrs?: Partial<SkillActionAttributes>) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      span?.error({ error, attributes: { success: false, ...attrs } });
+    },
+  };
+}

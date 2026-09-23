@@ -1,6 +1,6 @@
 ---
 title: "Reference: createVectorQueryTool() | Tools and MCP"
-description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
+description: "The createVectorQueryTool() function creates a tool for semantic search over vector stores."
 packages:
   - "@mastra/core"
   - "@mastra/pg"
@@ -261,8 +261,9 @@ The tool returns an object with:
   content={[
   {
     name: 'relevantContext',
-    type: 'string',
-    description: 'Combined text from the most relevant document chunks',
+    type: 'any[]',
+    description:
+      'Array of metadata objects for the most relevant chunks, in rank order (one entry per result). The chunk text is available at `relevantContext[i].text` when it was stored in metadata during ingestion.',
   },
   {
     name: 'sources',
@@ -275,7 +276,7 @@ The tool returns an object with:
 
 ### `QueryResult` object structure
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   id: string;         // Unique chunk/document identifier
   metadata: any;      // All metadata fields (document ID, etc.)
@@ -284,6 +285,8 @@ The tool returns an object with:
   document: string;   // Full chunk/document text (if available)
 }
 ```
+
+`document` is only populated by vector stores whose `query()` returns document content, such as Chroma, Elasticsearch, LanceDB, and MongoDB. For other stores, such as PgVector, it's an empty string. Read the chunk text from `sources[i].metadata.text` (or whichever metadata key you stored it under).
 
 ## Default tool description
 
@@ -312,7 +315,7 @@ With filtering enabled, the tool processes queries to construct metadata filters
 
 1. A user makes a query with specific filter requirements like "Find content where the 'version' field is greater than 2.0"
 1. The agent analyzes the query and constructs the appropriate filters:
-   ```typescript prettier:false
+   ```typescript oxfmt:false
    {
       "version": { "$gt": 2.0 }
    }
@@ -681,7 +684,7 @@ The tool is created with:
 
 - **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
 - **Input Schema**: Requires queryText and filter objects
-- **Output Schema**: Returns relevantContext string
+- **Output Schema**: Returns `relevantContext` (array of chunk metadata) and `sources` (array of `QueryResult`)
 
 ## Related
 

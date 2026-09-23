@@ -236,6 +236,9 @@ export class MessageMerger {
     anchorMap: Map<number, number>;
     partsToAdd: Map<number, MastraMessageContentV2['parts'][number]>;
   }): void {
+    let previousLeftAnchor = -1;
+    let insertionDrift = 0;
+
     // Walk through incomingMessage, inserting any part not present at the canonical position
     for (let i = 0; i < incomingMessage.content.parts.length; ++i) {
       const part = incomingMessage.content.parts[i];
@@ -256,8 +259,14 @@ export class MessageMerger {
         // Compute offset from anchor
         const offset = leftAnchorV2 === -1 ? i : i - leftAnchorV2;
 
-        // Insert at proportional position
-        const insertAt = leftAnchorLatest + offset;
+        // Shifted anchors already include insertions from earlier intervals.
+        if (leftAnchorV2 !== previousLeftAnchor) {
+          insertionDrift = 0;
+          previousLeftAnchor = leftAnchorV2;
+        }
+
+        // Insert at proportional position, accounting for synthetic step-starts.
+        const insertAt = leftAnchorLatest + offset + insertionDrift;
 
         const rightAnchorLatest =
           rightAnchorV2 !== -1 ? anchorMap.get(rightAnchorV2)! : latestMessage.content.parts.length;
@@ -269,15 +278,17 @@ export class MessageMerger {
             .slice(insertAt, rightAnchorLatest)
             .some(p => CacheKeyGenerator.fromDBParts([p]) === CacheKeyGenerator.fromDBParts([part]))
         ) {
-          MessageMerger.pushNewPart({
+          const insertedCount = MessageMerger.pushNewPart({
             latestMessage,
             newMessage: incomingMessage,
             part,
             insertAt,
           });
+          if (insertedCount === 0) continue;
+          insertionDrift += insertedCount - 1;
           for (const [v2Idx, latestIdx] of anchorMap.entries()) {
             if (latestIdx >= insertAt) {
-              anchorMap.set(v2Idx, latestIdx + 1);
+              anchorMap.set(v2Idx, latestIdx + insertedCount);
             }
           }
         }
@@ -304,7 +315,7 @@ export class MessageMerger {
     newMessage: MastraDBMessage;
     part: MastraMessageContentV2['parts'][number];
     insertAt?: number;
-  }): void {
+  }): number {
     const partKey = CacheKeyGenerator.fromDBParts([part]);
     const latestPartCount = latestMessage.content.parts.filter(
       p => CacheKeyGenerator.fromDBParts([p]) === partKey,
@@ -345,6 +356,8 @@ export class MessageMerger {
         }
         latestMessage.content.parts.push(part);
       }
+      return needsStepStart ? 2 : 1;
     }
+    return 0;
   }
 }

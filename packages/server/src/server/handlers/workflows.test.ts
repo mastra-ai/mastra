@@ -636,6 +636,16 @@ describe('vNext Workflow Handlers', () => {
   });
 
   describe('GET_WORKFLOW_RUN_BY_ID_ROUTE', () => {
+    it('should describe a fields example that the query schema accepts', () => {
+      const example = GET_WORKFLOW_RUN_BY_ID_ROUTE.openapi?.description?.match(/\?fields=([\w,]+)/)?.[1];
+      expect(example).toBeDefined();
+      expect(GET_WORKFLOW_RUN_BY_ID_ROUTE.queryParamSchema!.safeParse({ fields: example }).success).toBe(true);
+      // status and metadata are always included and are not selectable fields
+      expect(
+        GET_WORKFLOW_RUN_BY_ID_ROUTE.queryParamSchema!.safeParse({ fields: 'status,result,metadata' }).success,
+      ).toBe(false);
+    });
+
     it('should throw error when workflowId is not provided', async () => {
       await expect(
         GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({

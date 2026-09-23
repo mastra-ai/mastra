@@ -15,6 +15,7 @@ export const observabilityRuntimeStrategySchema = z.enum([
 export const observabilityStorageCapabilitiesSchema = z.object({
   metrics: z.boolean(),
   logs: z.boolean(),
+  traceQueryDiscovery: z.boolean(),
 });
 
 export const editorSourceSchema = z.enum(['code', 'db']);
@@ -37,6 +38,8 @@ export const systemPackagesResponseSchema = z.object({
   packages: z.array(mastraPackageSchema),
   isDev: z.boolean(),
   cmsEnabled: z.boolean(),
+  /** Whether the default LiveKit connection-details route is registered — not whether credentials or a worker exist. */
+  liveKitConnectionRouteEnabled: z.boolean(),
   /**
    * The editor's configured source, when set. `'code'` swaps Studio's
    * Save/Publish UI for Download JSON + Open PR. `'db'` keeps the standard

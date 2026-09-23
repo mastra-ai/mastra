@@ -6,10 +6,12 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { useDownloadTraceJson } from '../use-download-trace-json';
+import { useTraceSpans } from '../use-trace-spans';
+import { resumedTrace, suspendedTrace } from './fixtures/trace-spans';
 
 // jsdom's Blob exposes no `.text()`, and the global `Response` doesn't recognize it.
 function readBlobText(blob: Blob): Promise<string> {
@@ -42,7 +44,6 @@ vi.mock('@/lib/toast', () => ({
 
 const BASE_URL = 'http://localhost:4111';
 const TRACE_ID = '566f00c7d2e2';
-const server = setupServer();
 
 // Minimal full-trace payload. The download serializes whatever `getTrace` returns, so the
 // downloaded bytes must equal this fixture — including the heavy input/output fields that the
@@ -81,8 +82,6 @@ function makeWrapper() {
 let createObjectURL: ReturnType<typeof vi.spyOn>;
 let clickedDownloadAttr: string | undefined;
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-
 beforeEach(() => {
   toastCalls.length = 0;
   clickedDownloadAttr = undefined;
@@ -99,9 +98,33 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-afterAll(() => server.close());
-
 describe('useDownloadTraceJson', () => {
+  describe('when downloading a trace that has gained spans', () => {
+    it('updates the displayed trace to match the download', async () => {
+      let response = suspendedTrace;
+      const requested = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/observability/traces/${suspendedTrace.traceId}`, () => {
+          requested();
+          return HttpResponse.json(response);
+        }),
+      );
+      const { result } = renderHook(
+        () => ({
+          trace: useTraceSpans(suspendedTrace.traceId),
+          download: useDownloadTraceJson(),
+        }),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(result.current.trace.data?.spans).toHaveLength(1));
+      response = resumedTrace;
+      act(() => result.current.download.download(suspendedTrace.traceId));
+      await waitFor(() => expect(result.current.download.isPending).toBe(false));
+      await waitFor(() => expect(result.current.trace.data?.spans).toHaveLength(2));
+      expect(requested).toHaveBeenCalledTimes(2);
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+    });
+  });
   it('fetches the full trace and downloads it as trace-<id>.json', async () => {
     server.use(http.get(`${BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceFixture)));
 

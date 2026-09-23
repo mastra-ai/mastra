@@ -6,5 +6,6 @@ export * from './logs';
 export * from './metrics';
 export * from './scores';
 export * from './record-builders';
+export * from './trace-query';
 export * from './tracing';
 export * from './types';

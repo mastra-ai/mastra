@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z as z3 } from 'zod/v3';
 import { z as z4 } from 'zod/v4';
 import { RequestContext } from '../../request-context';
-import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '../../schema';
+import { toStandardSchema } from '../../schema';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
 
@@ -18,6 +18,10 @@ import { CoreToolBuilder } from './builder';
 function baseOptions() {
   return {
     name: 'test-tool',
+    // Opt the tool in at the tool level: since issue #22724, `_background` is
+    // only injected for tools that are actually background-eligible, not for
+    // every tool whenever the manager is enabled.
+    backgroundConfig: { enabled: true },
     logger: {
       debug: vi.fn(),
       warn: vi.fn(),
@@ -28,13 +32,15 @@ function baseOptions() {
   };
 }
 
-function extractJsonProperties(tool: { inputSchema?: unknown }) {
-  const schema = tool.inputSchema;
-  expect(schema).toBeDefined();
-  expect(isStandardSchemaWithJSON(schema)).toBe(true);
-  const json = standardSchemaToJSONSchema(schema as any, { io: 'input' });
-  expect(json && typeof json === 'object' && (json as any).type === 'object').toBe(true);
-  return (json as any).properties as Record<string, any>;
+// The spliced schema now lives on the builder (not on the user's shared tool
+// object), so assertions read the built tool's model-facing `parameters`.
+function extractJsonProperties(builder: CoreToolBuilder) {
+  const built = builder.build();
+  const parameters = built.parameters as { jsonSchema?: { type?: string; properties?: Record<string, any> } };
+  expect(parameters?.jsonSchema).toBeDefined();
+  const json = parameters.jsonSchema!;
+  expect(json && typeof json === 'object' && json.type === 'object').toBe(true);
+  return json.properties!;
 }
 
 describe('CoreToolBuilder background override injection', () => {
@@ -75,15 +81,16 @@ describe('CoreToolBuilder background override injection', () => {
         execute: vi.fn(),
       });
 
-      new CoreToolBuilder({
+      const builder = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
         backgroundTaskEnabled: true,
       });
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(builder);
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
+      expect(properties._background.properties.disposition.enum).toEqual(['foreground', 'deferred', 'awaited']);
     });
 
     // The JSON Schema fallback used to replace the original Zod v3 schema with
@@ -137,17 +144,17 @@ describe('CoreToolBuilder background override injection', () => {
         execute,
       });
 
-      new CoreToolBuilder({
+      const built = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
         backgroundTaskEnabled: true,
-      });
+      }).build();
 
-      const schema = tool.inputSchema as any;
-      const result = schema['~standard'].validate({ query: 'ok', _background: { enabled: 'yes' } });
-      const resolved = result && typeof result.then === 'function' ? await result : result;
-      expect(resolved).toHaveProperty('issues');
-      expect((resolved as { issues: readonly unknown[] }).issues.length).toBeGreaterThan(0);
+      const parameters = built.parameters as { validate?: (value: unknown) => unknown };
+      expect(typeof parameters.validate).toBe('function');
+      const result = parameters.validate!({ query: 'ok', _background: { enabled: 'yes' } });
+      const resolved = result && typeof (result as Promise<unknown>).then === 'function' ? await result : result;
+      expect(resolved).toHaveProperty('success', false);
     });
   });
 
@@ -171,14 +178,13 @@ describe('CoreToolBuilder background override injection', () => {
         backgroundTaskEnabled: true,
       });
 
-      expect(isStandardSchemaWithJSON(tool.inputSchema)).toBe(true);
-      const json = standardSchemaToJSONSchema(tool.inputSchema as any, { io: 'input' });
-      expect(json.properties).toMatchObject({
+      const built = builder.build();
+      const json = (built.parameters as { jsonSchema?: { properties?: Record<string, unknown> } }).jsonSchema;
+      expect(json?.properties).toMatchObject({
         query: expect.anything(),
         _background: expect.anything(),
       });
 
-      const built = builder.build();
       const result = await built.execute!(
         { query: 'docs', _background: { enabled: 'yes' } },
         { toolCallId: 'call-1', messages: [] },
@@ -210,9 +216,10 @@ describe('CoreToolBuilder background override injection', () => {
         ok: true,
       });
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(builder);
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
+      expect(properties._background.properties.disposition.enum).toEqual(['foreground', 'deferred', 'awaited']);
     });
   });
 
@@ -241,14 +248,15 @@ describe('CoreToolBuilder background override injection', () => {
         ok: true,
       });
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(builder);
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
+      expect(properties._background.properties.disposition.enum).toEqual(['foreground', 'deferred', 'awaited']);
     });
   });
 
   describe('Resumable tools (agent-/workflow- prefixed ids)', () => {
-    it('injects suspendedToolRunId and resumeData for agent- tools', () => {
+    it('injects suspendedToolCallId, suspendedToolRunId, and resumeData for agent- tools', () => {
       const tool = createTool({
         id: 'agent-foo',
         description: 'Agent-as-tool',
@@ -256,18 +264,21 @@ describe('CoreToolBuilder background override injection', () => {
         execute: vi.fn(),
       });
 
-      new CoreToolBuilder({
+      const builder = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
       });
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(builder);
       expect(properties).toHaveProperty('message');
+      expect(properties).toHaveProperty('suspendedToolCallId');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
 
-      // The injected JSON Schema must match the pre-PR shape so existing
-      // provider-compat layers and LLM-recording hashes stay stable.
+      expect(properties.suspendedToolCallId).toEqual({
+        type: ['string', 'null'],
+        description: 'The toolCallId of the suspended tool to resume',
+      });
       expect(properties.suspendedToolRunId).toEqual({
         type: ['string', 'null'],
         description: 'The runId of the suspended tool',
@@ -285,14 +296,49 @@ describe('CoreToolBuilder background override injection', () => {
         execute: vi.fn(),
       });
 
-      new CoreToolBuilder({
+      const builder = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
       });
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(builder);
+      expect(properties).toHaveProperty('suspendedToolCallId');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
+    });
+
+    it('rejects malformed suspendedToolRunId when resuming a workflow tool', async () => {
+      const execute = vi.fn().mockResolvedValue({ done: true });
+      const tool = createTool({
+        id: 'workflow-child',
+        description: 'Workflow as a tool',
+        inputSchema: z4.object({ message: z4.string() }),
+        execute,
+      });
+
+      const built = new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          name: 'workflow-child',
+          agentName: 'parent-agent',
+          agentId: 'parent-agent',
+          runId: 'parent-run',
+          backgroundConfig: undefined,
+        },
+      }).build();
+
+      const result = await built.execute!({ message: 'hi', suspendedToolRunId: 123 } as any, {
+        toolCallId: 'call-1',
+        messages: [],
+        resumeData: { approved: true },
+      });
+
+      expect(result).toMatchObject({
+        error: true,
+        message: expect.stringContaining('Tool input validation failed'),
+      });
+      expect(execute).not.toHaveBeenCalled();
     });
 
     // Both gates can fire at once: a resumable id AND backgroundTaskEnabled.
@@ -306,17 +352,101 @@ describe('CoreToolBuilder background override injection', () => {
         execute: vi.fn(),
       });
 
-      new CoreToolBuilder({
+      const builder = new CoreToolBuilder({
         originalTool: tool,
         options: baseOptions(),
         backgroundTaskEnabled: true,
       });
 
-      const properties = extractJsonProperties(tool);
+      const properties = extractJsonProperties(builder);
       expect(properties).toHaveProperty('message');
       expect(properties).toHaveProperty('_background');
+      expect(properties).toHaveProperty('suspendedToolCallId');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
+    });
+  });
+
+  // Regression coverage for https://github.com/mastra-ai/mastra/issues/22724:
+  // `backgroundTaskEnabled` (the manager-level flag) must not inject
+  // `_background` into every tool — only tools opted in at the agent or tool
+  // layer are advertised, matching `resolveBackgroundConfig`'s dispatch logic.
+  describe('Per-tool eligibility (issue #22724)', () => {
+    function makeTool(id = 'plain-tool') {
+      return createTool({
+        id,
+        description: 'A plain tool',
+        inputSchema: z4.object({ query: z4.string() }),
+        execute: vi.fn(),
+      });
+    }
+
+    it('does NOT inject _background when the manager is enabled but the tool has no opt-in', () => {
+      const tool = makeTool();
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), backgroundConfig: undefined },
+        backgroundTaskEnabled: true,
+      });
+      const properties = extractJsonProperties(builder);
+      expect(properties).toHaveProperty('query');
+      expect(properties).not.toHaveProperty('_background');
+    });
+
+    it('injects _background when the agent config whitelists the tool', () => {
+      const tool = makeTool();
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          backgroundConfig: undefined,
+          agentBackgroundConfig: { tools: { 'test-tool': true } },
+        },
+        backgroundTaskEnabled: true,
+      });
+      const properties = extractJsonProperties(builder);
+      expect(properties).toHaveProperty('_background');
+    });
+
+    it('resolves agent whitelist entries for agent- prefixed tool names', () => {
+      const tool = makeTool('agent-biExecutor');
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          name: 'agent-biExecutor',
+          backgroundConfig: undefined,
+          agentBackgroundConfig: { tools: { biExecutor: { enabled: true } } },
+        },
+        backgroundTaskEnabled: true,
+      });
+      const properties = extractJsonProperties(builder);
+      expect(properties).toHaveProperty('_background');
+    });
+
+    it('does NOT inject _background when the agent whitelists other tools only', () => {
+      const tool = makeTool();
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          backgroundConfig: undefined,
+          agentBackgroundConfig: { tools: { research: true } },
+        },
+        backgroundTaskEnabled: true,
+      });
+      const properties = extractJsonProperties(builder);
+      expect(properties).not.toHaveProperty('_background');
+    });
+
+    it('does NOT inject _background when the tool opted in but the manager is disabled', () => {
+      const tool = makeTool();
+      const originalSchema = tool.inputSchema;
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: baseOptions(),
+      });
+      expect(tool.inputSchema).toBe(originalSchema);
     });
   });
 
@@ -337,6 +467,148 @@ describe('CoreToolBuilder background override injection', () => {
 
       // No injection => the builder should not have replaced inputSchema.
       expect(tool.inputSchema).toBe(originalSchema);
+    });
+  });
+
+  // Regression coverage for https://github.com/mastra-ai/mastra/issues/22843:
+  // `createTool()` results are typically module-level singletons registered on
+  // several agents, but `_background` eligibility is resolved per agent. The
+  // builder used to write the spliced schema back onto the shared tool object,
+  // so whichever agent converted first decided whether every other agent's
+  // model-facing parameters advertised `_background`.
+  describe('Shared tool instance across agents (issue #22843)', () => {
+    function makeSharedTool() {
+      return createTool({
+        id: 'search',
+        description: 'Search the web',
+        inputSchema: z4.object({ query: z4.string() }),
+        execute: vi.fn().mockResolvedValue({ ok: true }),
+      });
+    }
+
+    it('does not leak _background to an agent that did not opt in (eligible agent converts first)', () => {
+      const tool = makeSharedTool();
+      const before = tool.inputSchema;
+
+      const propertiesForA = extractJsonProperties(
+        new CoreToolBuilder({ originalTool: tool, options: baseOptions(), backgroundTaskEnabled: true }),
+      );
+      const propertiesForB = extractJsonProperties(
+        new CoreToolBuilder({
+          originalTool: tool,
+          options: { ...baseOptions(), backgroundConfig: undefined },
+          backgroundTaskEnabled: true,
+        }),
+      );
+
+      expect(propertiesForA).toHaveProperty('_background');
+      expect(propertiesForB).not.toHaveProperty('_background');
+      // The shared user object must not be mutated by the conversion.
+      expect(tool.inputSchema).toBe(before);
+    });
+
+    it('is order-independent when the opted-out agent converts first', () => {
+      const tool = makeSharedTool();
+
+      const propertiesForB = extractJsonProperties(
+        new CoreToolBuilder({
+          originalTool: tool,
+          options: { ...baseOptions(), backgroundConfig: undefined },
+          backgroundTaskEnabled: true,
+        }),
+      );
+      const propertiesForA = extractJsonProperties(
+        new CoreToolBuilder({ originalTool: tool, options: baseOptions(), backgroundTaskEnabled: true }),
+      );
+
+      expect(propertiesForB).not.toHaveProperty('_background');
+      expect(propertiesForA).toHaveProperty('_background');
+    });
+
+    it('does not re-wrap the schema on repeated conversions of the same tool (zod v3 fallback)', () => {
+      const tool = createTool({
+        id: 'v3-shared-tool',
+        description: 'Zod v3 tool shared across agents',
+        inputSchema: z3.object({ query: z3.string() }),
+        execute: vi.fn(),
+      });
+      const before = tool.inputSchema;
+
+      new CoreToolBuilder({ originalTool: tool, options: baseOptions(), backgroundTaskEnabled: true }).build();
+      new CoreToolBuilder({ originalTool: tool, options: baseOptions(), backgroundTaskEnabled: true }).build();
+
+      expect(tool.inputSchema).toBe(before);
+    });
+
+    it.each([
+      ['zod v4', z4.object({ message: z4.string() })],
+      ['zod v3 fallback', z3.object({ message: z3.string() })],
+    ])('strips model-authored resume identity before agent- tool execution (%s)', async (_label, inputSchema) => {
+      const execute = vi.fn().mockResolvedValue({ done: true });
+      const tool = createTool({
+        id: 'agent-child',
+        description: 'Sub-agent as a tool',
+        inputSchema,
+        execute,
+      });
+
+      const built = new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), name: 'agent-child', backgroundConfig: undefined },
+      }).build();
+
+      await built.execute!(
+        {
+          message: 'hi',
+          suspendedToolCallId: 'model-authored-call',
+          suspendedToolRunId: 'model-authored-run',
+        } as any,
+        {
+          toolCallId: 'call-1',
+          messages: [],
+        },
+      );
+
+      expect(execute).toHaveBeenCalledWith(
+        { message: 'hi' },
+        expect.objectContaining({ agent: expect.objectContaining({ suspendedToolRunId: undefined }) }),
+      );
+    });
+
+    it.each([
+      ['zod v4', z4.object({ message: z4.string() })],
+      ['zod v3 fallback', z3.object({ message: z3.string() })],
+    ])('delivers only the trusted suspendedToolRunId to agent- tool execution (%s)', async (_label, inputSchema) => {
+      const execute = vi.fn().mockResolvedValue({ done: true });
+      const tool = createTool({
+        id: 'agent-child',
+        description: 'Sub-agent as a tool',
+        inputSchema,
+        execute,
+      });
+
+      const built = new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), name: 'agent-child', backgroundConfig: undefined },
+      }).build();
+
+      await built.execute!(
+        {
+          message: 'hi',
+          suspendedToolCallId: 'model-authored-call',
+          suspendedToolRunId: 'model-authored-run',
+        } as any,
+        {
+          toolCallId: 'call-1',
+          messages: [],
+          suspendedToolRunId: 'framework-run',
+        },
+      );
+
+      expect(execute).toHaveBeenCalledWith(
+        { message: 'hi', suspendedToolRunId: 'framework-run' },
+        expect.objectContaining({ agent: expect.objectContaining({ suspendedToolRunId: 'framework-run' }) }),
+      );
     });
   });
 });

@@ -74,6 +74,17 @@
                       "input": {
                         "type": ["string", "number", "integer", "boolean", "object", "null"]
                       },
+                      "suspendedToolCallId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "description": "The toolCallId of the suspended tool to resume"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "suspendedToolRunId": {
                         "anyOf": [
                           {
@@ -138,7 +149,19 @@
               "reasoning": [],
               "sources": [],
               "text": "Mock V2 generate response",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-workflow-1",
+                  "toolName": "workflowExecutor",
+                  "args": {
+                    "workflowId": "simpleWorkflow",
+                    "input": {
+                      "input": "test input"
+                    }
+                  }
+                }
+              ]
             }
           },
           "children": [
@@ -226,7 +249,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["workflowExecutor"],
                       "toolChoice": "auto",
                       "usage": {
@@ -511,7 +536,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["workflowExecutor"],
                       "toolChoice": "auto",
                       "usage": {

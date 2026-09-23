@@ -341,7 +341,17 @@ export const LLM_API_HOSTS = [
 /**
  * Headers to skip when storing (sensitive + compression)
  */
-const SKIP_HEADERS = ['authorization', 'x-api-key', 'api-key', 'content-encoding', 'transfer-encoding', 'set-cookie'];
+const SKIP_HEADERS = [
+  'authorization',
+  'x-api-key',
+  'api-key',
+  'content-encoding',
+  'transfer-encoding',
+  'set-cookie',
+  // Account metadata that should not end up in committed fixtures
+  'openai-organization',
+  'openai-project',
+];
 
 /**
  * Module-scoped active recorder instance.

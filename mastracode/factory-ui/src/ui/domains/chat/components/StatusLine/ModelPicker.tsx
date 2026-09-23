@@ -140,7 +140,7 @@ export function ModelPicker() {
   if (!switchable || (!showPacks && !modelsQuery.data?.length)) {
     return (
       <span
-        className={notConfigured ? 'text-accent2' : 'text-neutral3'}
+        className={notConfigured ? 'text-accent2' : 'text-muted-foreground'}
         aria-label={notConfigured ? `${label} is not configured` : undefined}
         title={selectedModelId}
       >
@@ -181,8 +181,8 @@ export function ModelPicker() {
         aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
         aria-busy={busy}
         className={cn(
-          buttonVariants({ variant: 'ghost', size: 'xs' }),
-          notConfigured ? 'text-accent2' : 'text-neutral3',
+          buttonVariants({ variant: 'ghost', size: 'sm' }),
+          notConfigured ? 'text-accent2' : 'text-muted-foreground',
         )}
         title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}
       >
@@ -212,12 +212,12 @@ export function ModelPicker() {
                       <span className="inline-flex items-center gap-1.5">
                         <span className="truncate">{pack.name}</span>
                         {pack.id === defaultModelPackId ? (
-                          <Badge variant="info" size="xs">
+                          <Badge variant="blue" size="xs">
                             Default
                           </Badge>
                         ) : null}
                       </span>
-                      <span className="text-ui-xs text-neutral3 truncate">{packSummary(pack)}</span>
+                      <span className="text-meta text-muted-foreground truncate">{packSummary(pack)}</span>
                     </div>
                     {pack.id === selectedPackId && !packModelDeviates ? (
                       <Check aria-hidden className="ml-auto shrink-0" />
@@ -232,7 +232,7 @@ export function ModelPicker() {
                 heading={provider}
                 // Providers are a soft grouping inside the models list, not a
                 // top-level section: mute the loud uppercase heading styling.
-                className="**:[[cmdk-group-heading]]:text-neutral2 **:[[cmdk-group-heading]]:font-normal **:[[cmdk-group-heading]]:tracking-normal **:[[cmdk-group-heading]]:normal-case"
+                className="**:[[cmdk-group-heading]]:text-placeholder **:[[cmdk-group-heading]]:font-normal **:[[cmdk-group-heading]]:tracking-normal **:[[cmdk-group-heading]]:normal-case"
               >
                 {models.map(model => (
                   <CommandItem
@@ -278,7 +278,7 @@ export function ModelPicker() {
             ) : null}
           </CommandList>
           {modeKey ? (
-            <p className="text-ui-xs text-neutral3 border-border1 border-t px-3 py-2">
+            <p className="text-meta text-muted-foreground border-border border-t px-3 py-2">
               Model choices apply to {titleCase(modeKey)} mode only.
               {showPacks ? ' Packs set all three modes.' : ''}
             </p>

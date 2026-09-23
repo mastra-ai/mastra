@@ -23,6 +23,7 @@ import { getMaxThreshold } from '../thresholds';
 
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { resolveThreadTitleUpdate } from './thread-title';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class ResourceScopedObservationStrategy extends ObservationStrategy {
@@ -264,6 +265,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.requestContext,
           this.priorMetadataByThread,
           this.opts.observabilityContext,
+          undefined,
+          { resourceId: this.opts.resourceId, trigger: this.opts.trigger },
         );
       }),
     );
@@ -417,8 +420,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         const thread = await this.storage.getThreadById({ threadId: update.threadId });
         if (thread) {
           const oldTitle = thread.title?.trim();
-          const newTitle = update.threadTitle?.trim();
-          const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+          const newTitle = resolveThreadTitleUpdate(thread, update.threadTitle);
+          const shouldUpdateThreadTitle = newTitle !== undefined;
           const previousOmMetadata = getThreadOMMetadata(thread.metadata);
           const metadataUpdate = buildThreadMetadataFromExtractedValues(
             update.extractors ?? this.observationConfig.extractors,
@@ -517,7 +520,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           operationType: 'observation',
           startedAt: this.startedAt,
           tokensAttempted,
-          error: error instanceof Error ? error.message : String(error),
+          error,
           recordId: this.opts.record.id,
           threadId,
         });

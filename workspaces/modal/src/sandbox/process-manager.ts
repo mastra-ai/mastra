@@ -189,7 +189,7 @@ export class ModalProcessManager extends SandboxProcessManager<ModalSandbox> {
 
       const proc = await sb.exec(argv, {
         env: Object.keys(env).length > 0 ? env : undefined,
-        workdir: options.cwd,
+        workdir: options.cwd ?? this.sandbox.workingDirectory,
         timeoutMs: options.timeout,
       });
 

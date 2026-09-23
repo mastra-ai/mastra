@@ -1,6 +1,6 @@
 {
   "name": "@mastra/elysia",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.9-alpha.2",
   "description": "Mastra Elysia adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -35,7 +35,7 @@
     "@elysiajs/cors": "^1.4.1",
     "@elysiajs/openapi": "^1.4.14",
     "@internal/lint": "workspace:*",
-    "@internal/server-adapter-test-utils": "workspace:*",
+    "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
@@ -54,15 +54,14 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.50.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.58.0-0 <2.0.0-0",
     "elysia": "^1.4.25"
   },
   "engines": {
     "node": ">=22.13.0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

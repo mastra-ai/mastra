@@ -10,45 +10,63 @@ ignorecase: true
 # (prices, temperature, night, people, rain), so the complement after the
 # verb is the discriminator, in the FigurativeSits mold. Each token curates
 # a figurative sense, so "the price fell sharply" and "night falls" stay
-# quiet. The past-tense "things fell into place" stays in NarrativePivots;
-# the tokens here keep to the present so the two rules never double-flag.
+# quiet. The past tenses joined after "had fallen behind" walked through
+# the present-only tokens; every past form measured zero across the Go and
+# Python standard libraries. The one deliberate omission is "fell into
+# place," which stays in NarrativePivots so the two rules never
+# double-flag.
+#
+# A documentation-corpus audit (2026-09) asked for four more membership
+# tokens. Three joined: the bare category sort ("falls into one of three
+# dispositions," "falls into this category," five corpus hits, the figure
+# itself), the bounded placement ("falls within the range," "falls
+# outside the window," four hits), and the numeric floor ("fell under
+# the floor," zero). "Falls back to" stays out with 219 corpus hits: the
+# fallback is what both standard libraries call a second choice, so that
+# phrase is docs English rather than the figure, however often agent
+# prose reaches for it. The counted sort ("falls into three categories")
+# stays in CataphoricForecasting.
 tokens:
   # --- Shortcoming: the artifact misses the mark or disintegrates ("falls
-  # short," "falls flat," "falls apart," "falls through"). "Falls short"
-  # can be literal in archery or ballistics; disable the rule there.
-  - "\\bfall(?:s|ing)? short\\b"
-  - "\\bfall(?:s|ing)? flat\\b"
-  - "\\bfall(?:s|ing)? apart\\b"
-  - "\\bfall(?:s|ing)? to pieces\\b"
-  - "\\bfall(?:s|ing)? through(?:\\b|$)"
-  - "\\bfall(?:s|ing)? behind\\b"
+  # short," "fell flat," "falls apart," "had fallen behind"). "Falls
+  # short" can be literal in archery or ballistics; disable the rule
+  # there.
+  - "\\bf(?:all(?:s|ing)?|ell|allen) short\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) flat\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) apart\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) to pieces\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) through(?:\\b|$)"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) behind\\b"
 
   # --- Membership and placement: a case sorted into a bin by falling
-  # ("falls under," "falls within scope," "falls outside the remit,"
+  # ("falls under," "fell within scope," "falls outside the remit,"
   # "falls into place," "falls into the trap of"). The grouping-by-cardinal
-  # shape ("falls into three categories") stays in CataphoricForecasting.
-  - "\\bfall(?:s|ing)? under (?:the (?:category|heading|umbrella|banner|purview|remit|scope|rubric)|\\w+ jurisdiction)\\b"
-  - "\\bfall(?:s|ing)? (?:squarely |neatly |cleanly |broadly )?within (?:the )?(?:scope|remit|purview|bounds|category|realm|domain|ambit)\\b"
-  - "\\bfall(?:s|ing)? outside (?:the )?(?:scope|remit|purview|bounds|category|realm|domain)\\b"
+  # token ("falls into three categories") stays in CataphoricForecasting.
+  - "\\bf(?:all(?:s|ing)?|ell|allen) under (?:the (?:category|heading|umbrella|banner|purview|remit|scope|rubric)|\\w+ jurisdiction)\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) (?:squarely |neatly |cleanly |broadly )?(?:within|inside) (?:the )?(?:scope|remit|purview|bounds|category|realm|domain|ambit)\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) outside (?:the )?(?:scope|remit|purview|bounds|category|realm|domain)\\b"
   - "\\bfall(?:s|ing)? into place\\b"
-  - "\\bfall(?:s|ing)? into line\\b"
-  - "\\bfall(?:s|ing)? into the (?:trap|habit|pattern|category) of\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) into line\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) into the (?:trap|habit|pattern|category) of\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) into (?:one of|a|an|this|that|its|their|several|both|either|any|some|one)\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) (?:in|inside|outside|within) (?:a|an|the|this|that|its|their|one|two|three|several|both|either|any|some) (?:[a-z-]+ )?(?:window|band|range|bucket|tier|bin|group|class|set|category|boundary|budget|zone|region|interval|span|slot|bracket)s?\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) (?:under|below|beneath) (?:the|a|an|its|their|this|that|our|any|some) (?:[a-z-]+ )?(?:floor|threshold|bar|line|limit|minimum|cutoff|ceiling|cap|budget|target|quota|watermark|mark)\\b"
 
   # --- Duty assignment: a burden lands on someone by falling. The curated
   # abstract subject is the gate, so "the ball falls to the floor" and
   # "prices fall to a new low" stay quiet.
-  - "\\b(?:responsibility|responsibilities|the task|the job|the duty|the burden|the onus|the decision|the choice|the call|the blame|the work|it all) falls? (?:to|on|upon)\\b"
+  - "\\b(?:responsibility|responsibilities|the task|the job|the duty|the burden|the onus|the decision|the choice|the call|the blame|the work|it all) f(?:alls?|ell) (?:to|on|upon)\\b"
 
   # --- Neglect: the artifact slips out of care ("falls by the wayside,"
-  # "falls through the cracks," "falls on deaf ears," "falls out of favor,"
+  # "fell through the cracks," "falls on deaf ears," "fell out of favor,"
   # "falls off the radar").
-  - "\\bfall(?:s|ing)? by the wayside\\b"
-  - "\\bfall(?:s|ing)? through the cracks\\b"
-  - "\\bfall(?:s|ing)? on deaf ears\\b"
-  - "\\bfall(?:s|ing)? out of (?:favor|favour|use|fashion|style)\\b"
-  - "\\bfall(?:s|ing)? off (?:the|a) (?:radar|cliff|map|table|rails)\\b"
-  - "\\bfall(?:s|ing)? into (?:disrepair|disuse|obscurity|oblivion|neglect)\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) by the wayside\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) through the cracks\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) on deaf ears\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) out of (?:favor|favour|use|fashion|style)\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) off (?:the|a) (?:radar|cliff|map|table|rails)\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) into (?:disrepair|disuse|obscurity|oblivion|neglect)\\b"
 
-  # --- Prey and capitulation ("falls victim to," "falls prey to," "falls
+  # --- Prey and capitulation ("falls victim to," "fell prey to," "falls
   # by the sword").
-  - "\\bfall(?:s|ing)? (?:victim|prey) to\\b"
+  - "\\bf(?:all(?:s|ing)?|ell|allen) (?:victim|prey) to\\b"

@@ -1,6 +1,6 @@
 ---
 title: "Deployment | Studio"
-description: Learn how to deploy Studio on your own infrastructure or on Mastra platform
+description: "Deploy Mastra Studio on Mastra platform, alongside your API, or as a static SPA on your own infrastructure or content delivery network."
 packages:
   - "@mastra/core"
 ---
@@ -37,7 +37,7 @@ Run the `mastra studio` command:
 mastra studio
 ```
 
-Open [localhost:3000](http://localhost:3000) in your browser to see the Studio UI. By default, it will attempt to connect to a Mastra server running at `http://localhost:4111`. If it doesn't find one there, you'll see a form where you can enter your Mastra instance URL and API prefix.
+Open [localhost:3000](http://localhost:3000) in your browser to see the Studio UI. By default, it connects to a Mastra server at `http://localhost:4111`; when no server is available, the UI displays a form for entering your Mastra instance URL and API prefix.
 
 The command uses Node's built-in `http` module and [`serve-handler`](https://www.npmjs.com/package/serve-handler) to serve the static files.
 

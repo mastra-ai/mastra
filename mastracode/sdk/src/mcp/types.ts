@@ -33,21 +33,33 @@ export interface McpHttpServerConfig {
  * OAuth client configuration for an HTTP MCP server.
  */
 export interface McpHttpOAuthConfig {
-  /** Redirect URL for OAuth callbacks. Defaults to DEFAULT_OAUTH_REDIRECT_URL when omitted. */
+  /**
+   * Redirect URL for OAuth callbacks. Defaults to DEFAULT_OAUTH_REDIRECT_URL
+   * when omitted. Without a `clientId`, Mastra Code's hosted Client ID
+   * Metadata Document only lists the default URL and its port fallbacks, so
+   * a custom value works only with authorization servers that ignore the
+   * loopback port (RFC 8252 §7.3); otherwise set `clientId` too.
+   */
   redirectUrl?: string;
   /**
    * Shorthand for a loopback redirect URL: synthesizes
    * `http://localhost:<callbackPort>/callback`, matching the convention
    * Claude Code and Codex use. Config files reject entries that set both
    * `callbackPort` and `redirectUrl`; for programmatically registered
-   * servers, `callbackPort` takes precedence over `redirectUrl`.
+   * servers, `callbackPort` takes precedence over `redirectUrl`. The same
+   * `clientId` caveat as `redirectUrl` applies.
    */
   callbackPort?: number;
   /** Human-readable OAuth client name */
   clientName?: string;
   /** Optional scopes requested during OAuth */
   scopes?: string[];
-  /** Optional pre-registered OAuth client ID */
+  /**
+   * Optional pre-registered OAuth client ID. When omitted, Mastra Code
+   * identifies itself with its Client ID Metadata Document URL, which
+   * authorization servers supporting URL-based client IDs accept without
+   * any registration step.
+   */
   clientId?: string;
   /** Optional pre-registered OAuth client secret */
   clientSecret?: string;
@@ -117,10 +129,15 @@ export interface McpServerStatus {
    */
   disabled?: boolean;
   /**
-   * Where the disable state comes from when `disabled` is true. `global`
-   * means the server (or all of MCP) is disabled across every project and
-   * must be re-enabled globally; `project` means only this project disabled
-   * it. Global takes precedence when both apply.
+   * Where the effective disable state comes from when `disabled` is true.
+   * `global` means the global all-MCP kill switch or inherited global default
+   * applies; `project` means this project explicitly disabled the server.
    */
   disabledScope?: 'project' | 'global';
+  /** This project's explicit server override, or undefined when inheriting the global default. */
+  projectOverride?: 'enabled' | 'disabled';
+  /** The per-server global default before applying a project override or the global kill switch. */
+  globalDefault?: 'enabled' | 'disabled';
+  /** Whether the global all-MCP kill switch currently overrides every server and project setting. */
+  globalKillSwitch?: boolean;
 }

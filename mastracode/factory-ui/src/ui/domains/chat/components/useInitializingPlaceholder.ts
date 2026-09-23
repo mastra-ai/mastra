@@ -9,8 +9,8 @@ function getReducedMotionQuery(): MediaQueryList | undefined {
   return window.matchMedia(REDUCED_MOTION_QUERY);
 }
 
-export function useInitializingPlaceholder(sandboxPreparing: boolean, isEmpty: boolean): string | undefined {
-  const active = sandboxPreparing && isEmpty;
+export function useInitializingPlaceholder(initializing: boolean, isEmpty: boolean): string | undefined {
+  const active = initializing && isEmpty;
   const [tick, setTick] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(() => getReducedMotionQuery()?.matches ?? false);
 

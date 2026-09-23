@@ -26,6 +26,7 @@
 
 import type { MastraServerCache } from '../../cache/base';
 import type { PubSub } from '../../events/pubsub';
+import type { ShouldPersistSnapshotFn } from '../../workflows/types';
 import type { Agent } from '../agent';
 
 import { EventedAgent } from './evented-agent';
@@ -61,6 +62,27 @@ export interface CreateEventedAgentOptions<
 
   /** Maximum steps for agentic loop */
   maxSteps?: number;
+
+  /**
+   * Per-topic opt-out of the replay cache.
+   *
+   * Return `false` to publish a topic straight through to the underlying
+   * PubSub without recording it in the cache. Subscribers of that topic then
+   * receive live events only and cannot resume from an offset. Use this to
+   * trade replay for minimum publish latency on hot topics when the cache is
+   * remote (e.g. cross-region Redis). Run-local topics are always excluded,
+   * regardless of this option.
+   */
+  shouldCache?: (topic: string) => boolean;
+
+  /**
+   * Accepted for API symmetry with `createDurableAgent`, but **ignored** by
+   * EventedAgent (a warning is logged if set). The evented engine requires
+   * the full snapshot set (`pending | paused | suspended | running`): the
+   * initial `running` write creates the base row that suspend-merges and
+   * multi-worker coordination build on.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 }
 
 /**
@@ -92,13 +114,15 @@ export function createEventedAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateEventedAgentOptions<TAgentId, TTools, TOutput>): EventedAgent<TAgentId, TTools, TOutput> {
-  const { agent, pubsub, cache, maxSteps } = options;
+  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot } = options;
 
   return new EventedAgent({
     agent,
     pubsub,
     cache,
     maxSteps,
+    shouldCache,
+    shouldPersistSnapshot,
   } as EventedAgentConfig<TAgentId, TTools, TOutput>);
 }
 

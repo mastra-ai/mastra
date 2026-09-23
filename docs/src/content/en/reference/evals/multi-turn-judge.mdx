@@ -1,6 +1,6 @@
 ---
 title: "Reference: Multi-turn Judge scorer | Evals"
-description: Documentation for the Multi-turn Judge Scorer in Mastra. An LLM-as-judge scorer that grades every assistant turn of a conversation against a plain-English criterion and returns a binary verdict.
+description: "The createMultiTurnJudgeScorer() function creates an LLM-as-judge scorer that grades a whole conversation against a single plain-English criterion."
 packages:
   - "@mastra/evals"
 ---
@@ -137,7 +137,7 @@ See [Score persistence](/docs/evals/overview#score-persistence) for the full req
 
 The scorer runs in two phases:
 
-1. **Grade**: Every assistant message in `run.output` is collected in order and rendered as a numbered transcript, then the judge decides whether the conversation as a whole satisfies the criterion. Assistant messages with no text (a turn that only carried tool calls, for example) are skipped.
+1. **Grade**: The assistant messages in `run.output` form a numbered transcript that the judge evaluates as a whole against the criterion. Turns containing only tool calls or otherwise lacking text are skipped.
 1. **Score**: A `satisfied` verdict scores `1` and anything else scores `0`, multiplied by `scale`.
 
 The judge only sees what the assistant said. The user's turns and any tool results aren't included, so write criteria in terms of the agent's responses. This keeps the graded text limited to the agent's own output, but it also means a reply that only makes sense next to the question that prompted it ("Yes, bring one.") can't be judged on its own. For criteria that depend on the user's turns, grade each turn with `turns[].scorers` or write a [custom scorer](/docs/evals/multi-turn) that renders both roles.

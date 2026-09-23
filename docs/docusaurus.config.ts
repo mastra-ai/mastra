@@ -3,9 +3,10 @@ import prismMastraDark from './src/theme/prism-mastra-dark.js'
 import prismMastraLight from './src/theme/prism-mastra-light.js'
 import remarkModelTokens from './src/plugins/remark-model-tokens'
 import type { Config } from '@docusaurus/types'
-import type { ThemeConfig } from '@docusaurus/preset-classic'
+import type { Options as PresetOptions, ThemeConfig } from '@docusaurus/preset-classic'
 import type { AlgoliaPluginOptions } from '@mastra/docusaurus-plugin-algolia'
 import type { KapaPluginOptions } from '@mastra/docusaurus-plugin-kapa'
+import { normalizeSiteSectionRoot, SITE_SECTION_ROOTS } from './src/utils/canonical-url'
 
 const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
 const SHARED_REMARK_PLUGINS = [
@@ -86,7 +87,7 @@ const config: Config = {
       {
         id: 'integrations',
         path: 'src/content/en/integrations',
-        routeBasePath: 'integrations',
+        routeBasePath: SITE_SECTION_ROOTS.integrations.slice(1),
         sidebarPath: './src/content/en/integrations/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
@@ -98,7 +99,7 @@ const config: Config = {
       {
         id: 'models',
         path: 'src/content/en/models',
-        routeBasePath: 'models',
+        routeBasePath: SITE_SECTION_ROOTS.models.slice(1),
         sidebarPath: './src/content/en/models/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
@@ -110,7 +111,7 @@ const config: Config = {
       {
         id: 'reference',
         path: 'src/content/en/reference',
-        routeBasePath: 'reference',
+        routeBasePath: SITE_SECTION_ROOTS.reference.slice(1),
         sidebarPath: './src/content/en/reference/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
@@ -136,7 +137,7 @@ const config: Config = {
           {
             label: 'Quickstart',
             description: 'Get up and running with Mastra',
-            link: '/docs',
+            link: SITE_SECTION_ROOTS.docs,
           },
           { label: 'Studio', description: 'Test your agents, workflows, and tools', link: '/docs/studio/overview' },
           {
@@ -178,7 +179,7 @@ const config: Config = {
       {
         docs: {
           path: 'src/content/en/docs',
-          routeBasePath: 'docs',
+          routeBasePath: SITE_SECTION_ROOTS.docs.slice(1),
           sidebarPath: './src/content/en/docs/sidebars.js',
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
@@ -196,7 +197,12 @@ const config: Config = {
           priority: 0.5,
           ignorePatterns: ['/tags/**'],
           filename: 'sitemap.xml',
-        },
+          createSitemapItems: async params => {
+            const items = await params.defaultCreateSitemapItems(params)
+
+            return items.map(item => ({ ...item, url: normalizeSiteSectionRoot(item.url) }))
+          },
+        } satisfies PresetOptions['sitemap'],
       },
     ],
   ],
@@ -214,6 +220,58 @@ const config: Config = {
     },
     mermaid: {
       theme: { light: 'base', dark: 'base' },
+    },
+    footer: {
+      links: [
+        {
+          title: 'Product',
+          items: [
+            { label: 'Framework', href: 'https://mastra.ai/ai-agent-framework' },
+            { label: 'Observability', href: 'https://mastra.ai/platform-observability' },
+            { label: 'Studio', href: 'https://mastra.ai/studio' },
+            { label: 'Factory', href: 'https://mastra.ai/factory' },
+            { label: 'Agent Builder', href: 'https://mastra.ai/agent-builder' },
+          ],
+        },
+        {
+          title: 'Documentation',
+          items: [
+            { label: 'Mastra', to: '/docs' },
+            { label: 'Factory', href: 'https://factory.mastra.ai' },
+            { label: 'Mastra Code', href: 'https://code.mastra.ai' },
+            { label: 'Agent Builder', href: 'https://agent-builder.mastra.ai' },
+          ],
+        },
+        {
+          title: 'Resources',
+          items: [
+            { label: 'Blog', href: 'https://mastra.ai/blog' },
+            { label: 'Changelog', href: 'https://github.com/mastra-ai/mastra/releases' },
+            { label: 'Research', href: 'https://mastra.ai/research' },
+            { label: 'Podcast · Agent Hour', href: 'https://mastra.ai/podcasts' },
+            { label: 'License', to: '/docs/license' },
+          ],
+        },
+        {
+          title: 'Company',
+          items: [
+            { label: 'About', href: 'https://mastra.ai/about' },
+            { label: 'Customers', href: 'https://mastra.ai/customers' },
+            { label: 'Careers', href: 'https://mastra.ai/careers' },
+            { label: 'Newsletter', href: 'https://mastra.ai/newsletter' },
+          ],
+        },
+        {
+          title: 'Connect',
+          items: [
+            { label: 'Contact Us', href: 'https://mastra.ai/contact' },
+            { label: 'GitHub', href: 'https://github.com/mastra-ai/mastra' },
+            { label: 'Discord', href: 'https://discord.gg/mastra-ai' },
+            { label: 'YouTube', href: 'https://www.youtube.com/@mastra-ai' },
+            { label: 'X (Twitter)', href: 'https://x.com/@mastra' },
+          ],
+        },
+      ],
     },
   } satisfies ThemeConfig,
 }

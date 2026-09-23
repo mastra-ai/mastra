@@ -6,14 +6,9 @@ import { useFactoryProjectQuery, useSetFactoryDefaultModelMutation } from '../..
 import { useParams } from 'react-router';
 
 import { ModelCombobox } from './ModelCombobox';
-import { SettingsRow } from './SettingsCard';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { SharedCredentialNotice } from './SharedCredentialNotice';
 
-/**
- * Factory default model. Persisted on the Factory project itself; Factory
- * runs use it, and new chats fall back to it when the user has no default
- * model pack. The setting is mandatory and can be changed but not cleared.
- */
 export function FactoryDefaultModelSection({ models }: { models: AvailableModelOption[] }) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const projectQuery = useFactoryProjectQuery(factoryId);
@@ -27,14 +22,14 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   return (
     <SettingsRow
       label="Factory default model"
-      hint={
+      description={
         <>
           <span>
             Factory runs (triage, board work items) start on this model and use the Factory observational-memory
             settings below — your personal defaults don&apos;t apply to them.
           </span>
           {error && (
-            <Txt as="span" variant="ui-xs" className="text-notice-destructive-fg">
+            <Txt as="span" variant="meta" className="text-notice-destructive-fg">
               {error instanceof Error ? error.message : String(error)}
             </Txt>
           )}
@@ -44,7 +39,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
     >
       <div className="flex w-full max-w-72 items-center gap-2">
         {setDefaultModel.isPending && (
-          <Spinner size="sm" aria-label="Saving default model" className="text-icon3 shrink-0" />
+          <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
         )}
         <label className="min-w-0 flex-1">
           <span className="sr-only">Factory default model</span>

@@ -11,8 +11,26 @@ export type DragPayload =
   | { kind: 'work-item'; id: string; fromStage: string }
   | {
       kind: 'candidate';
-      candidate: Pick<BoardCandidate, 'source' | 'sourceKey' | 'title' | 'url' | 'metadata'>;
+      candidate: Pick<BoardCandidate, 'source' | 'sourceKey' | 'title' | 'url' | 'metadata'> & {
+        /** Typed guidance for this run; posted as the card's first comment. Dragging carries none. */
+        customPrompt?: string;
+      };
     };
+
+/** The candidate as the board files it; the run already knows which issue or PR it is about, so typed guidance travels alone. */
+export function candidatePayload(candidate: BoardCandidate, guidance?: string): DragPayload {
+  return {
+    kind: 'candidate',
+    candidate: {
+      source: candidate.source,
+      sourceKey: candidate.sourceKey,
+      title: candidate.title,
+      url: candidate.url,
+      metadata: candidate.metadata,
+      ...(guidance === undefined ? {} : { customPrompt: `Guidance for this run: ${guidance}` }),
+    },
+  };
+}
 
 export function setDragPayload(event: DragEvent, payload: DragPayload) {
   event.dataTransfer.setData(CARD_MIME, JSON.stringify(payload));

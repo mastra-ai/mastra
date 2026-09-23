@@ -13,7 +13,8 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-import { postRepositoryGitOp, readJsonOrThrow } from './http';
+import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
+import type { GitLabRepository } from '../../factory/services/gitlab';
 
 export interface GithubInstallation {
   installationId: number;
@@ -21,13 +22,20 @@ export interface GithubInstallation {
   accountType: string | null;
 }
 
-/** Reason the GitHub feature is in its current state, returned by the server. */
+/**
+ * Reason the GitHub feature is in its current state. Every value but
+ * `unavailable` comes from the server; `unavailable` is set by the browser
+ * when the status endpoint could not be reached or answered with an error,
+ * so consumers can tell a transient failure from a deliberately disabled
+ * feature.
+ */
 export type GithubStatusReason =
   | 'missing_config'
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
-  | 'ready';
+  | 'ready'
+  | 'unavailable';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
@@ -78,17 +86,23 @@ export interface GithubRepo {
   installationId: number;
   /** Storage UUID of the installation row backing this repo. */
   installationStorageId: string;
-  /** Storage UUID of the repository row backing this repo. */
-  repositoryStorageId: string;
   sandboxProvider: string;
   sandboxWorkdir: string;
 }
 
+export type SourceControlRepository = GithubRepo | GitLabRepository;
+
+export function isGitLabRepository(repo: SourceControlRepository): repo is GitLabRepository {
+  return 'provider' in repo && repo.provider === 'gitlab';
+}
+
 /**
- * Read GitHub feature/connection status. Resolves to a disabled status on 404,
- * a network error, or when the feature is off, so the SPA can cleanly hide the
- * feature. A 401 is reported distinctly via `authRequired` so the SPA can prompt
- * re-login instead of treating the feature as disabled.
+ * Read GitHub feature/connection status. Never throws: a 401 is reported via
+ * `authRequired` so the SPA can prompt re-login, and any other failed response
+ * or network error resolves to a disabled status with `reason: 'unavailable'`
+ * so the SPA can offer a retry instead of reporting the feature as
+ * unconfigured. A server that has the feature off answers 200 with
+ * `enabled: false` and its own reason.
  */
 export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> {
   try {
@@ -99,11 +113,20 @@ export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> 
     if (res.status === 401) {
       return { enabled: false, connected: false, installations: [], authRequired: true, reason: 'auth_required' };
     }
-    if (!res.ok) return { enabled: false, connected: false, installations: [] };
+    if (!res.ok) return unavailableStatus();
     return (await res.json()) as GithubStatus;
   } catch {
-    return { enabled: false, connected: false, installations: [] };
+    return unavailableStatus();
   }
+}
+
+/**
+ * Status used when the endpoint failed or could not be reached. It is not a
+ * `missing_config` answer: the server never said the feature is off, so the
+ * UI should offer a retry rather than report the feature as unconfigured.
+ */
+function unavailableStatus(): GithubStatus {
+  return { enabled: false, connected: false, installations: [], reason: 'unavailable' };
 }
 
 function currentPageRedirectTo(): string {
@@ -205,6 +228,8 @@ export interface FactoryProjectPayload {
   slackWorkItemsEnabled?: boolean;
   /** Whether Factory rules may start agent runs without someone asking for them. */
   autoRunEnabled?: boolean;
+  /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
+  autoApprovePlans?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -218,6 +243,7 @@ interface ProjectRepositoryPayload {
 /** A source-control connection (with linked repos) from the Factory project routes. */
 interface ProjectConnectionPayload {
   id: string;
+  integrationId?: string;
   installationId: string;
   repositories: ProjectRepositoryPayload[];
 }
@@ -225,6 +251,7 @@ interface ProjectConnectionPayload {
 /** Browser-shaped view of a repository linked to a Factory project. */
 export interface LinkedRepositoryPayload {
   projectRepositoryId: string;
+  provider?: 'github' | 'gitlab';
   slug: string;
   gitBranch?: string;
   sandboxWorkdir?: string;
@@ -240,9 +267,11 @@ export type FactoryProject = FactoryProjectSnapshot;
 function toLinkedRepositoryPayload(
   project: FactoryProjectPayload,
   link: ProjectRepositoryPayload,
+  integrationId?: string,
 ): LinkedRepositoryPayload {
   return {
     projectRepositoryId: link.id,
+    provider: integrationId === 'gitlab' ? 'gitlab' : 'github',
     slug: link.repository?.slug ?? project.name,
     gitBranch: link.branch ?? link.repository?.defaultBranch,
     sandboxWorkdir: link.sandboxWorkdir,
@@ -280,7 +309,7 @@ export async function listFactoryProjects(baseUrl: string): Promise<FactoryProje
       return {
         ...project,
         repositories: connections.flatMap(connection =>
-          connection.repositories.map(link => toLinkedRepositoryPayload(project, link)),
+          connection.repositories.map(link => toLinkedRepositoryPayload(project, link, connection.integrationId)),
         ),
       };
     }),
@@ -332,19 +361,19 @@ export async function updateFactoryDefaultModel(
   return project;
 }
 
-/** Enable or disable rule-started agent runs (review, triage, planning) for this Factory. */
-export async function updateFactoryAutoRun(
+/** Toggle a Factory's automation settings: rule-started runs, plan approval. */
+export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  autoRunEnabled: boolean,
+  patch: { autoRunEnabled?: boolean; autoApprovePlans?: boolean },
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ autoRunEnabled }),
+    body: JSON.stringify(patch),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automatic runs');
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
   return project;
 }
 
@@ -376,6 +405,7 @@ export async function connectInstallation(
   baseUrl: string,
   factoryProjectId: string,
   installationId: string,
+  integrationId: 'github' | 'gitlab' = GITHUB_INTEGRATION_ID,
 ): Promise<string> {
   const connections = await listProjectConnections(baseUrl, factoryProjectId);
   const existing = connections.find(connection => connection.installationId === installationId);
@@ -387,12 +417,12 @@ export async function connectInstallation(
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ integrationId: GITHUB_INTEGRATION_ID, installationId }),
+      body: JSON.stringify({ integrationId, installationId }),
     },
   );
   const { connection } = await readJsonOrThrow<{ connection: { id: string } }>(
     res,
-    'Failed to connect GitHub installation',
+    `Failed to connect ${integrationId === 'gitlab' ? 'GitLab' : 'GitHub'} installation`,
   );
   return connection.id;
 }
@@ -405,8 +435,9 @@ export async function linkRepository(
   baseUrl: string,
   factoryProjectId: string,
   connectionId: string,
-  repo: GithubRepo,
+  repo: SourceControlRepository,
 ): Promise<LinkedRepositoryPayload> {
+  const gitlab = isGitLabRepository(repo);
   const res = await fetch(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/source-control-connections/${encodeURIComponent(connectionId)}/repositories`,
     {
@@ -414,7 +445,7 @@ export async function linkRepository(
       credentials: 'include',
       headers: { 'content-type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
-        repositoryId: repo.repositoryStorageId,
+        repository: { externalId: gitlab ? repo.externalId : String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
         sandboxProvider: repo.sandboxProvider,
         sandboxWorkdir: repo.sandboxWorkdir,
@@ -423,9 +454,13 @@ export async function linkRepository(
   );
   const { projectRepository } = await readJsonOrThrow<{ projectRepository: ProjectRepositoryPayload }>(
     res,
-    'Failed to link GitHub repository',
+    `Failed to link ${gitlab ? 'GitLab' : 'GitHub'} repository`,
   );
-  return toLinkedRepositoryPayload({ id: factoryProjectId, name: repo.fullName }, projectRepository);
+  return toLinkedRepositoryPayload(
+    { id: factoryProjectId, name: repo.fullName },
+    projectRepository,
+    gitlab ? 'gitlab' : 'github',
+  );
 }
 
 /**
@@ -456,120 +491,6 @@ export async function deleteFactoryProject(baseUrl: string, factoryProjectId: st
     headers: { Accept: 'application/json' },
   });
   if (!res.ok && res.status !== 404) throw new Error(`Failed to delete Factory (${res.status})`);
-}
-
-export interface MaterializeResult {
-  resourceId: string;
-  factoryProjectId: string;
-  projectRepositoryId: string;
-  sandboxId: string;
-  sandboxWorkdir: string;
-}
-
-/** A coarse-grained step of the server-side sandbox preparation. */
-export interface PrepareProgress {
-  phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
-  message: string;
-}
-
-/**
- * Materialize a GitHub project into its cloud sandbox: provision/reattach the
- * sandbox and clone/pull the repo inside it. Streams live server-side progress
- * via SSE, invoking `onProgress` for each step so the UI can show the user what
- * is happening. Returns the resourceId used to open the project. Throws an Error
- * whose message carries the server's error code so the UI can surface
- * "sandbox not configured" distinctly.
- */
-export async function ensureRepoMaterialized(
-  baseUrl: string,
-  projectRepositoryId: string,
-  onProgress?: (event: PrepareProgress) => void,
-): Promise<MaterializeResult> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/ensure`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'text/event-stream' },
-  });
-
-  // Non-2xx responses are sent as plain JSON (auth gate, 503, 404, etc.) rather
-  // than as an SSE stream, so handle those before reading the event stream.
-  if (!res.ok) {
-    throw await ensureError(res);
-  }
-
-  const contentType = res.headers.get('content-type') ?? '';
-  if (!contentType.includes('text/event-stream') || !res.body) {
-    // Server fell back to a single JSON response — read it directly.
-    return (await res.json()) as MaterializeResult;
-  }
-
-  let result: MaterializeResult | undefined;
-  let failure: (Error & { code?: string }) | undefined;
-
-  await readSSE(res.body, (event, data) => {
-    if (event === 'progress') {
-      onProgress?.(JSON.parse(data) as PrepareProgress);
-    } else if (event === 'done') {
-      result = JSON.parse(data) as MaterializeResult;
-    } else if (event === 'error') {
-      const body = JSON.parse(data) as { error?: string; message?: string };
-      failure = new Error(body.message ?? 'Failed to prepare repository') as Error & { code?: string };
-      failure.code = body.error;
-    }
-  });
-
-  if (failure) throw failure;
-  if (!result) throw new Error('Sandbox preparation ended without a result.');
-  return result;
-}
-
-/** Build an Error carrying the server's error code from a non-OK JSON response. */
-async function ensureError(res: Response): Promise<Error & { code?: string }> {
-  let code = `http_${res.status}`;
-  let message = `Failed to prepare repository (${res.status})`;
-  try {
-    const body = (await res.json()) as { error?: string; message?: string };
-    if (body.error) code = body.error;
-    if (body.message) message = body.message;
-  } catch {
-    /* ignore non-JSON */
-  }
-  const err = new Error(message) as Error & { code?: string };
-  err.code = code;
-  return err;
-}
-
-/**
- * Minimal SSE reader over a fetch ReadableStream. Parses `event:`/`data:` frames
- * separated by blank lines and invokes `onEvent` for each. Defaults the event
- * name to `message` per the SSE spec.
- */
-async function readSSE(
-  body: ReadableStream<Uint8Array>,
-  onEvent: (event: string, data: string) => void,
-): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    // Normalize CRLF/CR to LF so frame and line splitting work regardless of
-    // how the server terminates SSE lines (the spec allows \r\n, \r, or \n).
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, '\n');
-    let sep: number;
-    while ((sep = buffer.indexOf('\n\n')) !== -1) {
-      const frame = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      let event = 'message';
-      const dataLines: string[] = [];
-      for (const line of frame.split('\n')) {
-        if (line.startsWith('event:')) event = line.slice(6).trim();
-        else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
-      }
-      if (dataLines.length > 0) onEvent(event, dataLines.join('\n'));
-    }
-  }
 }
 
 export interface CommitResult {
@@ -637,10 +558,13 @@ export async function fetchRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,
 ): Promise<RepositorySettings> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/settings`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
+  const res = await fetch(
+    `${baseUrl}/web/source-control/projects/${encodeURIComponent(projectRepositoryId)}/settings`,
+    {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    },
+  );
   if (!res.ok) throw new Error(`Failed to load repository settings (${res.status})`);
   return (await res.json()) as RepositorySettings;
 }
@@ -651,5 +575,5 @@ export async function saveRepositorySettings(
   projectRepositoryId: string,
   settings: RepositorySettings,
 ): Promise<RepositorySettings> {
-  return postRepositoryGitOp<RepositorySettings>(baseUrl, projectRepositoryId, 'settings', settings);
+  return postSourceControlRepositoryOp<RepositorySettings>(baseUrl, projectRepositoryId, 'settings', settings);
 }

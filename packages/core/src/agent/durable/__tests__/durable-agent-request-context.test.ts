@@ -276,6 +276,9 @@ describe('DurableAgent RequestContext reserved keys', () => {
 
       const requestContext = new RequestContext();
       requestContext.set('userId', 'user-123');
+      // A delegated/caller context can still carry the parent's framework-managed
+      // memory entry before preparation installs or clears this run's own value.
+      requestContext.set('MastraMemory', { thread: { id: 'parent-thread' }, resourceId: 'parent-resource' });
       // Non-JSON values are dropped from the snapshot.
       requestContext.set('liveHandle', () => 'not-serializable');
 
@@ -289,9 +292,11 @@ describe('DurableAgent RequestContext reserved keys', () => {
       // to scorers. The full RequestContext (which can hold live handles) is
       // not serialized — it stays on the run registry.
       //
-      // The snapshot is taken *before* preparation mutates the request context
-      // (e.g. adding MASTRA_VERSIONS_KEY / MastraMemory), so persisted
-      // customContext must reflect only caller-provided entries.
+      // The snapshot is taken *after* input processors run (so their writes
+      // reach the durable run, #23904), while framework-internal prep keys
+      // (MASTRA_VERSIONS_KEY / MastraMemory / auth token) are excluded by key,
+      // so persisted customContext still reflects only caller and processor
+      // entries.
       const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
         .requestContextEntries;
       expect(entries).toEqual({ userId: 'user-123' });

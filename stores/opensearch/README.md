@@ -1,11 +1,11 @@
 # @mastra/opensearch
 
-Vector store implementation for OpenSearch using the official @opensearch-project/opensearch SDK
+The OpenSearchVector class provides vector search using OpenSearch, an open-source search and analytics engine.
 
 ## Installation
 
 ```bash
-pnpm add @mastra/opensearch
+npm install @mastra/opensearch
 ```
 
 ## Usage
@@ -16,58 +16,34 @@ import { OpenSearchVector } from '@mastra/opensearch';
 const vectorStore = new OpenSearchVector('http://localhost:9200');
 
 // Create an index
-await vectorStore.createIndex({ indexName: 'my-collection', dimension: 1536, metric: 'cosine' });
+await vectorStore.createIndex({ indexName: 'my-collection', dimension: 3, metric: 'cosine' });
 
 // Add vectors with documents
-const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const vectors = [
+  [0.1, 0.2, 0.3],
+  [0.3, 0.4, 0.5],
+];
 const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
 const ids = await vectorStore.upsert({ indexName: 'my-collection', vectors, metadata });
 
 // Query vectors with document filtering
 const results = await vectorStore.query({
   indexName: 'my-collection',
-  queryVector: [0.1, 0.2, ...],
+  queryVector: [0.1, 0.2, 0.3],
   topK: 10, // topK
   filter: { text: { $eq: 'doc1' } }, // metadata filter
   includeVector: false, // includeVector
 });
 ```
 
-## Configuration
+## Documentation
 
-Required:
+- [Reference: OpenSearch vector store](https://mastra.ai/reference/vectors/opensearch)
 
-- `url`: URL of your OpenSearch instance
+## Changelog
 
-## Features
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/opensearch/CHANGELOG.md) for version history and release notes.
 
-- Vector similarity search with Cosine, Euclidean, and Dot Product metrics
-- Metadata filtering
-- Optional vector inclusion in query results
-- Automatic UUID generation for vectors
-- Built on top of @opensearch-project/opensearch SDK
+## Support
 
-## Distance Metrics
-
-The following distance metrics are supported:
-
-- `cosine` → Cosine distance
-- `euclidean` → Euclidean distance
-- `dotproduct` → Dot product
-
-## Methods
-
-- `createIndex({ indexName, dimension, metric? })`: Create a new collection
-- `upsert({ indexName, vectors, metadata?, ids? })`: Add or update vectors
-- `query({ indexName, queryVector, topK?, filter?, includeVector? })`: Search for similar vectors
-- `updateVector({ indexName, id?, filter?, update })`: Update a single vector by ID or metadata filter
-- `deleteVector({ indexName, id })`: Delete a single vector by ID
-- `deleteVectors({ indexName, ids?, filter? })`: Delete multiple vectors by IDs or metadata filter
-- `listIndexes()`: List all collections
-- `describeIndex(indexName)`: Get collection statistics
-- `deleteIndex(indexName)`: Delete a collection
-
-## Related Links
-
-- [OpenSearch Documentation](https://opensearch.org/docs/latest/about/)
-- [OpenSearch REST API Reference](https://opensearch.org/docs/latest/api-reference/)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

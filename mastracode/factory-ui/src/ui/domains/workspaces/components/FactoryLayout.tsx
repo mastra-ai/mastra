@@ -3,8 +3,9 @@ import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
+import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
-import { WorkspaceAttentionObserver } from './WorkspaceAttentionObserver';
+import { SessionRunObserver } from './SessionRunObserver';
 
 /**
  * Route element for `factories/:factoryId`. Validates the route param against
@@ -18,7 +19,7 @@ export function FactoryLayout() {
 
   if (isError) {
     return (
-      <div className="bg-surface1 grid h-dvh w-full place-items-center px-4">
+      <div className="bg-sidebar grid h-dvh w-full place-items-center px-4">
         <Notice variant="destructive" className="w-full max-w-md">
           Could not load factories. Check the server connection and reload.
         </Notice>
@@ -35,14 +36,16 @@ export function FactoryLayout() {
 
   return (
     <>
-      {factory.repositories.map(repository => (
-        <WorkspaceAttentionObserver
-          key={repository.projectRepositoryId}
-          projectRepositoryId={repository.projectRepositoryId}
-        />
-      ))}
       <GitHubAppCallbackHandler />
-      <Outlet />
+      <FeedEventsProvider factoryProjectId={factory.id}>
+        {factory.repositories.map(repository => (
+          <SessionRunObserver
+            key={repository.projectRepositoryId}
+            projectRepositoryId={repository.projectRepositoryId}
+          />
+        ))}
+        <Outlet />
+      </FeedEventsProvider>
     </>
   );
 }

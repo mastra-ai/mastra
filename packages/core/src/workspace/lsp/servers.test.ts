@@ -665,16 +665,16 @@ describe('buildServerDefs', () => {
   });
 
   describe('searchPaths', () => {
-    it('finds typescript/lib/tsserver.js from searchPaths for module resolution', () => {
+    it('finds typescript/bin/tsc from searchPaths for module resolution', () => {
       // Use a root dir that does NOT contain typescript so resolution can only succeed via searchPaths.
       const emptyRoot = join(tempDir, 'empty-root');
       mkdirSync(emptyRoot, { recursive: true });
 
       // searchPaths points to cwd (monorepo root) which has typescript installed.
       const defs = buildServerDefs({ searchPaths: [process.cwd()] });
-      const init = defs.typescript!.initialization!(emptyRoot);
-      expect(init).toBeDefined();
-      expect((init as { tsserver: { path: string } }).tsserver.path).toContain('tsserver.js');
+      const command = defs.typescript!.command(emptyRoot);
+      const tsc = realpathSync(join(process.cwd(), 'node_modules', 'typescript', 'bin', 'tsc'));
+      expect(command).toBe(`node ${tsc} --lsp --stdio`);
     });
 
     it('finds binary in searchPaths node_modules/.bin', () => {

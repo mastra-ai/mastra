@@ -27,18 +27,25 @@ interface AddApiKeyDialogProps {
    * narrow a shared key.
    */
   defaultScope?: 'user' | 'org';
+  fixedScope?: 'user' | 'org';
   onClose: () => void;
 }
 
 /** Dialog for adding or updating a provider API key, with an org/user scope choice when auth is enabled. */
-export function AddApiKeyDialog({ provider, authEnabled, defaultScope = 'user', onClose }: AddApiKeyDialogProps) {
+export function AddApiKeyDialog({
+  provider,
+  authEnabled,
+  defaultScope = 'user',
+  fixedScope,
+  onClose,
+}: AddApiKeyDialogProps) {
   const displayName = providerDisplayName(provider.provider);
   const saveKeyMutation = useSaveProviderKey();
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
   const preferredScope = provider.source === 'stored-org' ? 'org' : defaultScope;
   const [keyDraft, setKeyDraft] = useState('');
-  const [scope, setScope] = useState<'user' | 'org'>(canWriteOrgKey ? preferredScope : 'user');
+  const [scope, setScope] = useState<'user' | 'org'>(fixedScope ?? (canWriteOrgKey ? preferredScope : 'user'));
 
   const error = saveKeyMutation.error instanceof Error ? saveKeyMutation.error.message : undefined;
   // A shared context wanted an org-wide key but this caller can't write one —
@@ -85,12 +92,12 @@ export function AddApiKeyDialog({ provider, authEnabled, defaultScope = 'user', 
               if (event.key === 'Escape') close();
             }}
           />
-          {authEnabled && (
+          {authEnabled && !fixedScope && (
             <div className="flex items-center justify-between gap-4">
-              <Txt as="span" variant="ui-sm" className="text-icon4">
+              <Txt as="span" variant="caption" className="text-muted-foreground">
                 Who can use this key
               </Txt>
-              <ButtonsGroup spacing="close" role="group" aria-label="API key access">
+              <ButtonsGroup size="sm" role="group" aria-label="API key access">
                 {(
                   [
                     { value: 'user', label: 'Just me' },
@@ -100,7 +107,6 @@ export function AddApiKeyDialog({ provider, authEnabled, defaultScope = 'user', 
                   <Button
                     key={option.value}
                     variant={scope === option.value ? 'primary' : 'outline'}
-                    size="sm"
                     aria-pressed={scope === option.value}
                     disabled={saveKeyMutation.isPending || (option.value === 'org' && !canWriteOrgKey)}
                     title={
@@ -117,13 +123,13 @@ export function AddApiKeyDialog({ provider, authEnabled, defaultScope = 'user', 
             </div>
           )}
           {personalOnlyWarning && (
-            <Txt as="p" variant="ui-sm" className="text-icon4" role="note">
+            <Txt as="p" variant="caption" className="text-muted-foreground" role="note">
               Only you will be able to use this key. Ask an org admin to add a shared {displayName} key so teammates can
               use it too.
             </Txt>
           )}
           {error && (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+            <Txt as="p" variant="caption" className="text-notice-destructive-fg">
               {error}
             </Txt>
           )}

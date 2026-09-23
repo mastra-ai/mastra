@@ -1,28 +1,10 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
-import type { ScoreRowData } from '@mastra/core/evals';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ScoresDataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Columns3Icon } from 'lucide-react';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ScoresColumnsState } from '@/domains/scores/hooks/use-scores-columns';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
-
-type ToggleableColumn = 'input' | 'entity';
-
-const TOGGLEABLE_COLUMNS: ToggleableColumn[] = ['input', 'entity'];
-
-const COLUMN_LABELS: Record<ToggleableColumn, string> = {
-  input: 'Input',
-  entity: 'Entity',
-};
-
-function buildColumns(visible: Set<ToggleableColumn>): string {
-  const parts: string[] = ['auto', 'auto', 'minmax(0, 10rem)'];
-  if (visible.has('entity')) parts.push('minmax(0, 14rem)');
-  if (visible.has('input')) parts.push('minmax(0, 40rem)');
-  return parts.join(' ');
-}
 
 type ScoresListProps = {
   selectedScoreId?: string;
@@ -33,15 +15,12 @@ type ScoresListProps = {
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   errorMsg?: string;
+  columnsState: ScoresColumnsState;
+  sort?: ListSort<ScoresSortKey>;
+  onSortChange?: (sort: DataListSort, key: string) => void;
 };
 
-function mapScore(score: ClientScoreRowData): ScoreRowData {
-  return {
-    ...score,
-    createdAt: new Date(score.createdAt),
-    updatedAt: new Date(score.updatedAt),
-  };
-}
+export type ScoresSortKey = 'date' | 'score';
 
 export function ScoresList({
   scores,
@@ -52,25 +31,12 @@ export function ScoresList({
   hasNextPage,
   setEndOfListElement,
   selectedScoreId: controlledSelectedId,
+  columnsState: { visibleColumns, columns },
+  sort,
+  onSortChange,
 }: ScoresListProps) {
   const [internalSelectedId, setInternalSelectedId] = useState<string | undefined>(controlledSelectedId);
   const selectedScoreId = controlledSelectedId ?? internalSelectedId;
-
-  const [hiddenColumns, setHiddenColumns] = useState<Set<ToggleableColumn>>(new Set());
-  const visibleColumns = useMemo(
-    () => new Set<ToggleableColumn>(TOGGLEABLE_COLUMNS.filter(c => !hiddenColumns.has(c))),
-    [hiddenColumns],
-  );
-  const columns = useMemo(() => buildColumns(visibleColumns), [visibleColumns]);
-
-  const toggleColumn = useCallback((col: ToggleableColumn) => {
-    setHiddenColumns(prev => {
-      const next = new Set(prev);
-      if (next.has(col)) next.delete(col);
-      else next.add(col);
-      return next;
-    });
-  }, []);
 
   // Sync internal selection when parent updates the controlled prop
   useEffect(() => {
@@ -128,9 +94,29 @@ export function ScoresList({
 
   const header = (
     <ScoresDataList.Top>
-      <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
+      {onSortChange ? (
+        <ScoresDataList.SortableTopCell
+          sortKey="date"
+          sort={sort?.key === 'date' ? sort.direction : undefined}
+          onSortChange={onSortChange}
+        >
+          Date
+        </ScoresDataList.SortableTopCell>
+      ) : (
+        <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
+      )}
       <ScoresDataList.TopCell>Time</ScoresDataList.TopCell>
-      <ScoresDataList.TopCell>Score</ScoresDataList.TopCell>
+      {onSortChange ? (
+        <ScoresDataList.SortableTopCell
+          sortKey="score"
+          sort={sort?.key === 'score' ? sort.direction : undefined}
+          onSortChange={onSortChange}
+        >
+          Score
+        </ScoresDataList.SortableTopCell>
+      ) : (
+        <ScoresDataList.TopCell>Score</ScoresDataList.TopCell>
+      )}
       {visibleColumns.has('entity') && <ScoresDataList.TopCell>Entity</ScoresDataList.TopCell>}
       {visibleColumns.has('input') && <ScoresDataList.TopCell>Input</ScoresDataList.TopCell>}
     </ScoresDataList.Top>
@@ -149,44 +135,17 @@ export function ScoresList({
     return null;
   }
 
-  const hasSidePanel = !!selectedScore;
-
   return (
-    <div
-      className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
-    >
-      <div className="flex h-full min-h-0 min-w-0 flex-col gap-0">
-        <div className="flex shrink-0 items-center justify-end pb-2">
-          <DropdownMenu>
-            <DropdownMenu.Trigger asChild>
-              <Button variant="outline" size="sm">
-                <Columns3Icon className="size-3.5" />
-                Columns
-              </Button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end">
-              <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>
-              {TOGGLEABLE_COLUMNS.map(col => (
-                <DropdownMenu.CheckboxItem
-                  key={col}
-                  checked={visibleColumns.has(col)}
-                  onClick={() => toggleColumn(col)}
-                >
-                  {COLUMN_LABELS[col]}
-                </DropdownMenu.CheckboxItem>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu>
-        </div>
-
-        <ScoresDataList columns={columns} className="min-h-0 flex-1" scrollRef={containerRef}>
+    <>
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
+        <ScoresDataList columns={columns} className="min-h-0" scrollRef={containerRef}>
           {header}
 
           {scores.map((score, index) => (
             <ScoresDataList.RowButton
               key={score.id}
               onClick={() => handleScoreClick(score.id)}
-              className={selectedScoreId === score.id ? 'bg-surface4' : ''}
+              className={selectedScoreId === score.id ? 'bg-fill-hover' : ''}
               {...getRowProps(index)}
             >
               <ScoresDataList.DateCell timestamp={score.createdAt} />
@@ -205,14 +164,7 @@ export function ScoresList({
         </ScoresDataList>
       </div>
 
-      {selectedScore && (
-        <ScoreDataPanel
-          score={mapScore(selectedScore)}
-          onClose={handleClose}
-          onPrevious={handlePrevious}
-          onNext={handleNext}
-        />
-      )}
-    </div>
+      <ScoreDataPanel score={selectedScore} onClose={handleClose} onPrevious={handlePrevious} onNext={handleNext} />
+    </>
   );
 }

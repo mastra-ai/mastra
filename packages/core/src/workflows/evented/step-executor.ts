@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
@@ -146,6 +145,10 @@ export class StepExecutor extends MastraBase {
     // This matches the default engine's behavior where setState captures
     // the update and applies it AFTER the step completes
     let stateUpdate: Record<string, any> | undefined;
+    // Track only the keys explicitly written via setState() so parallel branch
+    // aggregation can merge sibling updates key-by-key instead of clobbering
+    // each other with full snapshots (#22319)
+    let stateDelta: Record<string, any> | undefined;
 
     // The evented engine, unlike the default engine, has no per-step span.
     // Emit the WORKFLOW_STEP span here so the step's child spans nest under it
@@ -168,7 +171,7 @@ export class StepExecutor extends MastraBase {
         throw validationError;
       }
 
-      const callId = randomUUID();
+      const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
       const stepOutput = await executeWithContext({
@@ -187,6 +190,7 @@ export class StepExecutor extends MastraBase {
                 // This matches default engine behavior where state changes
                 // are applied AFTER the step completes, not during execution
                 stateUpdate = { ...(stateUpdate ?? params.state), ...newState };
+                stateDelta = { ...stateDelta, ...newState };
               },
               retryCount,
               resumeData: params.resumeData,
@@ -277,7 +281,10 @@ export class StepExecutor extends MastraBase {
       const finalState = stateUpdate ?? params.state;
 
       const baseStepInfo = omitPriorSuspensionFields(stepInfo) as typeof stepInfo;
-      let finalResult: StepResult<any, any, any, any> & { __state?: Record<string, any> };
+      let finalResult: StepResult<any, any, any, any> & {
+        __state?: Record<string, any>;
+        __stateDelta?: Record<string, any>;
+      };
       if (suspended) {
         finalResult = {
           ...baseStepInfo,
@@ -313,6 +320,10 @@ export class StepExecutor extends MastraBase {
           output: stepOutput,
           __state: finalState,
         };
+      }
+
+      if (stateDelta) {
+        finalResult.__stateDelta = stateDelta;
       }
 
       if (finalResult.status === 'success') {
@@ -442,7 +453,7 @@ export class StepExecutor extends MastraBase {
     retryCount?: number;
     iterationCount: number;
   }): Promise<boolean> {
-    const callId = randomUUID();
+    const callId = globalThis.crypto.randomUUID();
     const outputWriter = this.createOutputWriter(runId);
 
     return condition(
@@ -516,7 +527,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      const callId = randomUUID();
+      const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
       return await step.fn(
@@ -599,7 +610,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      const callId = randomUUID();
+      const callId = globalThis.crypto.randomUUID();
       const outputWriter = this.createOutputWriter(runId);
 
       const result = await step.fn(

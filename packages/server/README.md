@@ -1,8 +1,6 @@
 # @mastra/server
 
-Typed HTTP handlers and utilities for exposing a `Mastra` instance over HTTP.
-This package powers `mastra dev` and can be added to your own server to provide
-REST and streaming endpoints for agents, workflows, telemetry and more.
+Typed, framework-agnostic HTTP route definitions, handlers, schemas, and adapter utilities for exposing a `Mastra` instance over HTTP. This package powers Mastra's development server and the framework-specific server adapters.
 
 ## Installation
 
@@ -12,56 +10,52 @@ npm install @mastra/server
 
 ## Usage
 
-The handlers are framework agnostic functions which accept a `Mastra` instance
-and a request context. They are typically mounted under a URL prefix within your
-web framework of choice:
+The handlers are framework-agnostic functions that accept a `Mastra` instance and request context. Import them from `@mastra/server/handlers`, then mount the route handlers under a URL prefix in your web framework:
 
 ```typescript
+import { RequestContext } from '@mastra/core/request-context';
+import { agents } from '@mastra/server/handlers';
 import { Hono } from 'hono';
-import { handlers } from '@mastra/server';
 import { mastra } from './mastra-instance';
 
 const app = new Hono();
 
-app.get('/mastra/agents', ctx => handlers.agents.listAgentsHandler({ mastra, requestContext: ctx }));
-app.post('/mastra/agents/:id/generate', async ctx => {
-  const body = await ctx.req.json();
-  return handlers.agents.generateHandler({
+app.get('/mastra/agents', async c => {
+  const result = await agents.LIST_AGENTS_ROUTE.handler({
     mastra,
-    requestContext: ctx,
-    agentId: ctx.req.param('id'),
-    body,
+    partial: c.req.query('partial'),
+    requestContext: new RequestContext(),
   });
+
+  return c.json(result);
 });
 
-// Mount additional handlers as required
+export default app;
 ```
 
-Running `mastra dev` starts a local development UI at
-`http://localhost:3000` using these handlers.
+Each exported route combines its HTTP method, path, validation schemas, permission requirements, response type, and handler. Framework adapter packages automate this registration and translate framework requests and responses into the common handler context.
 
-## Available Handler Groups
+## Documentation
 
-- **Agents** - list defined agents, retrieve metadata, and run `generate`
-  or `stream`.
-- **Workflows** - start and inspect workflow runs.
-- **Tools** - discover tools available to the `Mastra` instance.
-- **Memory** - interact with configured memory stores.
-- **Logs** - query runtime logs when a supporting logger transport is used.
-- **Telemetry** - expose metrics produced by the telemetry subsystem.
-- **Networks** - interact with agent networks.
-- **Vector / Voice** - endpoints related to vector stores and voice synthesis.
+Handler groups cover agents and agent controllers, conversations, workflows and dynamic workflows, tools, MCP, memory, vectors, voice, logs, observability, scores, schedules, datasets, processors, workspaces, skills, plans, authentication, A2A tasks, and stored entities.
 
-Handlers return JSON serialisable data and throw an `HTTPException` (subclass of
-`Error`) when a failure should result in a non-2xx HTTP status.
+Route handlers return serializable values or streams and throw `HTTPException` when an error should map to a non-2xx response. Shared schemas and error-formatting helpers are available through package subpaths for adapters that need to validate requests or emit OpenAPI metadata.
 
-## OpenAPI Spec Generation
+`@mastra/server/server-adapter` exports the abstract `MastraServer` contract and common route-registration utilities. Adapter packages implement framework-specific streaming, parameter extraction, response handling, context middleware, authentication middleware, and HTTP logging around this contract.
 
-The local OpenAPI specification used by the CLI playground and similar tools can
-be refreshed by running:
+The package's OpenAPI-derived route metadata can be refreshed from `packages/server` with:
 
 ```bash
 pnpm run pull:openapispec
 ```
 
-within the `@mastra/server` directory.
+- [`MastraServer` adapter reference](https://mastra.ai/reference/server/mastra-server)
+- [Server adapter guide](https://mastra.ai/docs/server/server-adapters)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/server/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

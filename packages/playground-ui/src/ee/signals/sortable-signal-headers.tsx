@@ -11,10 +11,15 @@ import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 
 import { getSignalHue } from './signal-colors';
-import { formatSignalName, getSignalDescription } from './signal-formatting';
+import { signalDescription, signalLabel } from './signal-formatting';
 import type { TraceSignalName } from './types';
+import { useTraceIntelligence } from './use-trace-intelligence';
 import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/lib/utils';
 
 const DRAG_SENSORS = [useMouseSensor, useTouchSensor, useKeyboardSensor];
 
@@ -66,6 +71,7 @@ export function SortableSignalHeaders({
   reorderDisabled: boolean;
   onOrderChange: (signalNames: TraceSignalName[]) => void;
 }) {
+  const { signalCatalog } = useTraceIntelligence();
   const [dragProjection, setDragProjection] = useState<DragProjection>();
 
   function handleDragStart(start: DragStart) {
@@ -110,7 +116,7 @@ export function SortableSignalHeaders({
               role="group"
             >
               {signalNames.map((signalName, index) => {
-                const label = formatSignalName(signalName);
+                const label = signalLabel(signalCatalog, signalName);
                 const projectedIndex = projectedHeaderIndex(index, dragProjection);
                 const offsetPercent =
                   signalNames.length > 1 ? (projectedIndex / (signalNames.length - 1) - 0.5) * 100 : 0;
@@ -132,26 +138,30 @@ export function SortableSignalHeaders({
                         >
                           <div
                             className={`relative inline-flex items-center justify-center rounded-md border border-transparent px-1 py-0.5 motion-safe:transition-[background-color,border-color,box-shadow,scale] motion-safe:duration-150 ${contentOffsetClass(anchor)} ${
-                              dragSnapshot.isDragging ? 'scale-1.03 border-border2 bg-surface4 shadow-lg' : ''
+                              dragSnapshot.isDragging ? `scale-1.03 ${overlaySurfaceStyle}` : ''
                             }`}
                             data-header-anchor={anchor}
                             data-testid="signal-column-header-content"
                           >
                             <Tooltip>
                               <TooltipTrigger
-                                className="cursor-default font-mono text-xs font-semibold tracking-wider"
+                                className="cursor-default font-mono text-column tracking-wider"
                                 data-testid="signal-column-header"
                                 style={{ color: nodeColor(getSignalHue(signalName)) }}
                               >
                                 {label.toUpperCase()}
                               </TooltipTrigger>
-                              <TooltipContent>{getSignalDescription(signalName)}</TooltipContent>
+                              <TooltipContent>{signalDescription(signalCatalog, signalName)}</TooltipContent>
                             </Tooltip>
                             <div
                               {...dragProvided.dragHandleProps}
                               aria-disabled={reorderDisabled}
                               aria-label={`Reorder ${label}`}
-                              className="text-neutral3 hover:text-neutral5 absolute top-1/2 ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+                              className={cn(
+                                quietTextHover,
+                                controlStateColorTransition,
+                                'absolute top-1/2 ml-0.5 -translate-y-1/2 cursor-grab rounded-sm p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50',
+                              )}
                               style={{ left: '100%' }}
                               title={`Drag to reorder the ${label} column`}
                             >

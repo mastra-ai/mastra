@@ -1,22 +1,41 @@
 import type { IOType } from 'node:child_process';
 import type { RequestContext } from '@mastra/core/di';
 import type {
-  SSEClientTransportOptions,
   StreamableHTTPClientTransportOptions,
   ClientCapabilities,
-  ElicitRequest,
+  ElicitRequestParams,
   ElicitResult,
   LoggingLevel,
   ProgressNotification,
   ToolAnnotations,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
+import type { MCPTraceContext } from '../shared/trace-context';
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';
 // Re-export so consumers of @mastra/mcp can type their requireToolApproval callbacks
 // without having to add @modelcontextprotocol/client as a direct dependency.
 export type { ToolAnnotations } from '@modelcontextprotocol/client';
+// Re-export the MCP LoggingLevel for convenience
+export type { LoggingLevel } from '@modelcontextprotocol/client';
+
+/** The current protocol revision; the one `/mcp` servers speak. */
+export const MCP_CLIENT_PROTOCOL_VERSION = '2026-07-28' as const;
+
+/**
+ * Which protocol revision to speak to a server.
+ *
+ * - `'2026-07-28'`: the current revision only. No probe, no fallback; a server
+ *   that does not offer it fails to connect.
+ * - `'legacy'`: the pre-2026 `initialize` handshake only. Use it for servers known
+ *   not to have upgraded, to skip the probe.
+ *
+ * When omitted the client probes with `server/discover` and speaks whichever
+ * revision the server offers.
+ */
+export type MCPClientProtocolVersion = typeof MCP_CLIENT_PROTOCOL_VERSION | 'legacy';
+
 /**
  * Extended fetch function type that receives the current request context as a third argument.
  *
@@ -51,9 +70,6 @@ export type MastraFetchLike = (
   requestContext?: RequestContext | null,
 ) => Promise<Response>;
 
-// Re-export the MCP LoggingLevel for convenience
-export type { LoggingLevel } from '@modelcontextprotocol/client';
-
 /**
  * Log message structure for MCP client logging.
  */
@@ -77,14 +93,6 @@ export interface LogMessage {
 export type LogHandler = (logMessage: LogMessage) => void;
 
 /**
- * Handler function for processing elicitation requests from MCP servers.
- *
- * @param request - The elicitation request parameters including message and schema
- * @returns Promise resolving to the user's response (accept/decline/cancel with optional content)
- */
-export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<ElicitResult>;
-
-/**
  * Handler function for processing progress notifications from MCP servers.
  *
  * @param params - The progress notification parameters including message and status
@@ -92,26 +100,39 @@ export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<E
 export type ProgressHandler = (params: ProgressNotification['params']) => void;
 
 /**
- * Represents a filesystem root that the client exposes to MCP servers.
+ * One keyed input request embedded in an `input_required` result.
  *
- * Per MCP spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
- * Roots define the boundaries of where servers can operate within the filesystem,
- * allowing them to understand which directories and files they have access to.
- *
- * @example
- * ```typescript
- * const root: Root = {
- *   uri: 'file:///home/user/projects/myproject',
- *   name: 'My Project'
- * };
- * ```
+ * Servers on the 2026-07-28 revision obtain user input by answering `tools/call`,
+ * `resources/read`, or `prompts/get` with `input_required` instead of pushing a request
+ * to the client. Every embedded request carries the server-chosen `key` it must be
+ * answered under; the client retries the originating call with the collected responses.
  */
-export interface Root {
-  /** Unique identifier for the root. Must be a file:// URI. */
-  uri: string;
-  /** Optional human-readable name for display purposes. */
-  name?: string;
+export interface MCPInputRequest {
+  /** Server-chosen key this response is filed under for the retry. */
+  key: string;
+  /** Elicitation parameters: form mode (`requestedSchema`) or url mode (`url`). */
+  params: ElicitRequestParams;
+  /** Aborted when the originating call is cancelled or times out. */
+  signal: AbortSignal;
 }
+
+/**
+ * Supplies the response for one embedded input request.
+ *
+ * Return `{ action: 'accept', content }` with content matching `params.requestedSchema`,
+ * or `{ action: 'decline' }` / `{ action: 'cancel' }`. The handler is called once per
+ * request per round; earlier rounds' responses are never re-sent.
+ */
+export type MCPInputRequestHandler = (request: MCPInputRequest) => Promise<ElicitResult>;
+
+/**
+ * Client capabilities a Mastra MCP client may advertise.
+ *
+ * `elicitation` is only accepted together with an `inputRequests` handler; it defaults to
+ * form support when a handler is configured. The deprecated roots and sampling
+ * capabilities are not supported.
+ */
+export type MCPClientCapabilities = Pick<ClientCapabilities, 'elicitation' | 'extensions'>;
 
 /**
  * Context passed to `requireToolApproval` when it's a function.
@@ -142,8 +163,6 @@ export interface RequireToolApprovalContext {
    * This field is `undefined` (not auto-defaulted) when the server omits
    * annotations entirely, so policies can distinguish "no annotations" from
    * "annotated as safe".
-   *
-   * @see https://modelcontextprotocol.io/specification/2025-11-25/server/tools#tool-annotations
    */
   annotations?: ToolAnnotations;
 }
@@ -169,16 +188,45 @@ export type RequireToolApproval = boolean | RequireToolApprovalFn;
 export type BaseServerOptions = {
   /** Optional handler for server log messages */
   logger?: LogHandler;
+  /**
+   * Pin the protocol revision instead of probing for it. See {@link MCPClientProtocolVersion}.
+   *
+   * Features the pre-2026 revisions lack (`subscriptions/listen`, embedded input
+   * requests) fail with an error naming the negotiated revision when the server
+   * turned out to be legacy.
+   */
+  protocolVersion?: MCPClientProtocolVersion;
   /** Optional timeout in milliseconds for server operations */
   timeout?: number;
   /** Optional client capabilities to advertise to the server */
-  capabilities?: ClientCapabilities;
-  /** Whether to enable server log forwarding (default: true) */
+  capabilities?: MCPClientCapabilities;
+  /**
+   * Whether to opt into per-request server logs (default: true).
+   *
+   * 2026-07-28 servers only emit `notifications/message` for requests that carry the
+   * `io.modelcontextprotocol/logLevel` metadata key; this option attaches it to every
+   * request and forwards delivered messages to `logger`.
+   */
   enableServerLogs?: boolean;
+  /**
+   * Minimum severity requested from the server for per-request logs.
+   *
+   * @default 'info'
+   */
+  serverLogLevel?: LoggingLevel;
   /** Whether to enable progress tracking (default: false) */
   enableProgressTracking?: boolean;
   /**
-   * Whether instructions returned by this MCP server during initialization should
+   * Returns the W3C `traceparent`, `tracestate` and `baggage` values to attach
+   * to each outgoing MCP request's `_meta`.
+   *
+   * The provider is called when the request is sent so consumers can read from
+   * their own request-local trace carrier without coupling MCP to a tracing SDK.
+   * Explicit `_meta` keys supplied for a tool call take precedence.
+   */
+  traceContext?: () => MCPTraceContext | undefined;
+  /**
+   * Whether instructions returned by this MCP server during discovery should
    * be forwarded to agents that use the server's tools.
    *
    * Disabled by default: forwarded instructions are injected into the agent's
@@ -235,8 +283,8 @@ export type BaseServerOptions = {
    *   by throwing a `MastraError` that carries the server's `content` text. Tool
    *   spans, stream chunks, scorers, and persisted message parts then reflect the
    *   failure, and the model sees the error text so it can self-correct.
-   * - `'return'`: preserve the legacy behaviour and resolve successfully with the
-   *   raw result (or `structuredContent`), ignoring `isError`.
+   * - `'return'`: resolve successfully with the raw result (or `structuredContent`),
+   *   ignoring `isError`.
    *
    * @default 'throw'
    */
@@ -250,74 +298,28 @@ export type BaseServerOptions = {
    * Cloudflare Workers / V8 isolates: the default `AjvJsonSchemaValidator`
    * compiles validators with `new Function(...)`, which workerd refuses to
    * evaluate when a tool advertises an `outputSchema`.
-   *
-   * @example
-   * ```typescript
-   * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/client/validators/cf-worker';
-   *
-   * const mcp = new MCPClient({
-   *   servers: {
-   *     upstream: {
-   *       url: new URL('https://example/mcp'),
-   *       jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
-   *     },
-   *   },
-   * });
-   * ```
    */
   jsonSchemaValidator?: jsonSchemaValidator;
   /**
-   * List of filesystem roots to expose to the MCP server.
+   * Answers embedded input requests (`input_required` results) from this server.
    *
-   * Per MCP spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
-   * Roots define the boundaries of where servers can operate within the filesystem.
-   *
-   * When configured, the client will:
-   * 1. Automatically advertise the `roots` capability to the server
-   * 2. Respond to `roots/list` requests with these roots
-   * 3. Send `notifications/roots/list_changed` when roots are updated via `setRoots()`
+   * Configuring a handler advertises form elicitation support; widen it with
+   * `capabilities.elicitation` to accept url-mode requests too. Without a handler
+   * an `input_required` result is surfaced as a typed error.
    *
    * @example
    * ```typescript
    * {
-   *   command: 'npx',
-   *   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
-   *   roots: [
-   *     { uri: 'file:///tmp', name: 'Temp Directory' }
-   *   ]
+   *   url: new URL('https://example/mcp'),
+   *   inputRequests: async ({ key, params }) => {
+   *     if (params.mode === 'url') return { action: 'decline' };
+   *     const content = await promptUser(key, params.requestedSchema);
+   *     return { action: 'accept', content };
+   *   },
    * }
    * ```
    */
-  roots?: Root[];
-  /**
-   * Opt-in MCP protocol version negotiation.
-   *
-   * - Omitted (default): the plain legacy (2025-era) connect sequence,
-   *   byte-identical to a client without this option.
-   * - `'auto'`: probe the server with `server/discover` at connect time and use
-   *   the stateless `2026-07-28` revision when the server supports it, with a
-   *   conservative fallback to the legacy `initialize` handshake.
-   * - `'2026-07-28'`: pin to that revision exactly. Connecting to a server that
-   *   does not offer it fails loudly with a typed error — no fallback.
-   *
-   * Elicitation handlers work on both eras: on a negotiated `2026-07-28`
-   * connection, embedded elicitation requests from `input_required` results are
-   * dispatched through the same registered handler and the originating call is
-   * retried automatically.
-   *
-   * @example
-   * ```typescript
-   * const mcp = new MCPClient({
-   *   servers: {
-   *     weather: {
-   *       url: new URL('https://example/mcp'),
-   *       protocolVersion: 'auto',
-   *     },
-   *   },
-   * });
-   * ```
-   */
-  protocolVersion?: 'auto' | '2026-07-28';
+  inputRequests?: MCPInputRequestHandler;
 };
 
 /**
@@ -366,23 +368,17 @@ export type StdioServerDefinition = BaseServerOptions & {
 
   url?: never;
   requestInit?: never;
-  eventSourceInit?: never;
   authProvider?: never;
-  reconnectionOptions?: never;
-  sessionId?: never;
   connectTimeout?: never;
   fetch?: never;
   allowedHosts?: never;
 };
 
 /**
- * Configuration for MCP servers using HTTP-based transport (Streamable HTTP or SSE fallback).
+ * Configuration for MCP servers using the Streamable HTTP transport.
  *
- * Used when connecting to remote MCP servers over HTTP. The client will attempt Streamable HTTP
- * transport first and fall back to SSE if that fails.
- *
- * When `fetch` is provided, all other HTTP-related options (`requestInit`, `eventSourceInit`, `authProvider`)
- * become optional, as the custom fetch function can handle authentication and request customization.
+ * When `fetch` is provided, `requestInit` and `authProvider` become optional, as the custom
+ * fetch function can handle authentication and request customization.
  */
 export type HttpServerDefinition = BaseServerOptions & {
   /** URL of the MCP server endpoint */
@@ -406,10 +402,7 @@ export type HttpServerDefinition = BaseServerOptions & {
    *
    * The third `requestContext` parameter provides access to request-scoped data set by middleware
    * or passed during agent/tool execution. It is `null` when no context is available (e.g.,
-   * during the initial connection handshake).
-   *
-   * When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional,
-   * as you can handle these concerns within your custom fetch function.
+   * during the initial connection).
    *
    * @example
    * ```typescript
@@ -432,10 +425,9 @@ export type HttpServerDefinition = BaseServerOptions & {
    * Optional allowlist of hosts this server's HTTP requests may target.
    *
    * When set, every outgoing request made on behalf of this server (initial
-   * connect, Streamable HTTP POSTs, the SSE fallback and its event stream,
-   * OAuth discovery/token requests routed through the transport fetch, and
-   * every redirect hop) is checked against this list. When unset, no
-   * restriction applies (current behavior).
+   * connect, Streamable HTTP POSTs, OAuth discovery/token requests routed
+   * through the transport fetch, and every redirect hop) is checked against
+   * this list. When unset, no restriction applies.
    *
    * Matching semantics:
    * - Entries are host values matched against `URL.host` — the hostname plus
@@ -454,13 +446,12 @@ export type HttpServerDefinition = BaseServerOptions & {
    * - On the default path (no custom `fetch`), requests to disallowed hosts —
    *   including redirect hops, via manual redirect following — are blocked
    *   BEFORE being sent.
-   * - When a custom `fetch` (or a caller-supplied `eventSourceInit.fetch`) is
-   *   in play, the initial URL is checked before the request, but redirect
-   *   hops are validated post-hoc via `response.url`: the outbound hop may
-   *   occur, but the response never reaches the caller or the model. A
-   *   hand-built `Response` with an empty `response.url` skips the post-hoc
-   *   check (documented limitation — custom fetches legitimately construct
-   *   such responses).
+   * - When a custom `fetch` is in play, the initial URL is checked before the
+   *   request, but redirect hops are validated post-hoc via `response.url`:
+   *   the outbound hop may occur, but the response never reaches the caller
+   *   or the model. A hand-built `Response` with an empty `response.url` skips
+   *   the post-hoc check (documented limitation — custom fetches legitimately
+   *   construct such responses).
    *
    * OAuth note: the SDK routes OAuth discovery and token requests through the
    * transport's fetch, so when using an `authProvider` whose authorization
@@ -469,18 +460,9 @@ export type HttpServerDefinition = BaseServerOptions & {
   allowedHosts?: string[];
   /** Optional request configuration for HTTP requests (optional when `fetch` is provided) */
   requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
-  /** Optional configuration for SSE fallback (required when using custom headers with SSE, optional when `fetch` is provided) */
-  eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
   /** Optional authentication provider for HTTP requests (optional when `fetch` is provided) */
   authProvider?: StreamableHTTPClientTransportOptions['authProvider'];
-  /** Optional reconnection configuration for Streamable HTTP */
-  reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
-  /** Optional session ID for Streamable HTTP */
-  sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
-  /** Optional timeout in milliseconds for the connection phase (default: 3000ms).
-   * This timeout allows the system to switch MCP streaming protocols during the setup phase.
-   * The default is set to 3s because the long default timeout would be extremely slow for SSE backwards compat (60s).
-   */
+  /** Optional timeout in milliseconds for the connection phase (default: 3000ms). */
   connectTimeout?: number;
 };
 
@@ -506,21 +488,6 @@ export type HttpServerDefinition = BaseServerOptions & {
  *     headers: { Authorization: 'Bearer token' }
  *   }
  * };
- *
- * // HTTP server with custom fetch for dynamic auth
- * const httpServerWithFetch: MastraMCPServerDefinition = {
- *   url: new URL('http://localhost:8080/mcp'),
- *   fetch: async (url, init) => {
- *     const token = await getAuthToken(); // Refresh token on each request
- *     return fetch(url, {
- *       ...init,
- *       headers: {
- *         ...init?.headers,
- *         Authorization: `Bearer ${token}`,
- *       },
- *     });
- *   },
- * };
  * ```
  */
 export type MastraMCPServerDefinition = StdioServerDefinition | HttpServerDefinition;
@@ -535,8 +502,6 @@ export type InternalMastraMCPClientOptions = {
   name: string;
   /** Server connection configuration */
   server: MastraMCPServerDefinition;
-  /** Optional client capabilities to advertise to the server */
-  capabilities?: ClientCapabilities;
   /** Optional client version */
   version?: string;
   /** Optional timeout in milliseconds */
@@ -577,9 +542,9 @@ export type SerializableMCPToolDefinition = {
   server: {
     /** The name this server is configured under. */
     name: string;
-    /** Server version reported during the MCP handshake, if any. */
+    /** Server version reported during discovery, if any. */
     version?: string;
-    /** Instructions the server returned during initialization, if any. */
+    /** Instructions the server returned during discovery, if any. */
     instructions?: string;
   };
 };

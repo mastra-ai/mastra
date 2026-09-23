@@ -29,6 +29,7 @@ test-outputs/
 openapi-ts-error*
 
 .mastra
+.factory/
 .sandbox-profiles/
 *.db*
 *.duckdb
@@ -70,7 +71,11 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
+
+# Mastra Code local plans and proof artifacts must never be committed.
 .mastracode/*
+!.mastracode/plans/
+.mastracode/plans/**
 !.mastracode/commands/
 !.mastracode/commands/gh-triage.md
 !.mastracode/commands/gh-bulk-issues.md
@@ -79,6 +84,8 @@ om-reflector-fixture.json
 !.mastracode/skills/
 !.mastracode/skills/*/
 !.mastracode/skills/*/SKILL.md
+!.mastracode/skills/*/references/
+!.mastracode/skills/*/references/**
 !.mastracode/shared/
 !.mastracode/shared/pr-review-context.md
 !.mastracode/shared/issue-debug-context.md
@@ -89,3 +96,7 @@ om-reflector-fixture.json
 
 # Local git worktrees (scratch checkouts; never part of a commit)
 .worktrees/
+
+# Throwaway probe scripts
+*.local.mjs
+*.local.ts

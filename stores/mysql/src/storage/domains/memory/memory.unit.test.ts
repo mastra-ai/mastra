@@ -55,6 +55,36 @@ async function initMemoryWithSnapshot(fixture: ReturnType<typeof convergedCatalo
   return { operations, memory, statements };
 }
 
+describe('listThreads pagination', () => {
+  it.each([NaN, Infinity, -Infinity, 1.5, -0.5, -1])('rejects %s before querying an empty database', async value => {
+    const { pool, statements } = createMockPool(convergedCatalog({ withOmIndex: true }));
+    const operations = new StoreOperationsMySQL({ pool, database: 'mastra' });
+    const memory = new MemoryMySQL({ pool, operations, skipDefaultIndexes: true });
+
+    await expect(memory.listThreads({ perPage: value })).rejects.toThrow('perPage must be >= 0');
+    for (const perPage of [10, 0, undefined, false] as const) {
+      await expect(memory.listThreads({ page: value, perPage })).rejects.toThrow('page must be >= 0');
+    }
+    expect(statements).toEqual([]);
+  });
+
+  it.each([10, 0, undefined, false] as const)('queries with valid perPage %s', async perPage => {
+    const { pool, statements } = createMockPool(convergedCatalog({ withOmIndex: true }));
+    const operations = new StoreOperationsMySQL({ pool, database: 'mastra' });
+    const memory = new MemoryMySQL({ pool, operations, skipDefaultIndexes: true });
+
+    expect(await memory.listThreads({ page: 2, perPage })).toEqual({
+      threads: [],
+      total: 0,
+      page: 2,
+      perPage: perPage ?? 100,
+      hasMore: false,
+    });
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toMatch(/COUNT/i);
+  });
+});
+
 describe('memory domain init consults the schema snapshot', () => {
   it('issues no statements at all when the snapshot shows a converged schema', async () => {
     const { statements } = await initMemoryWithSnapshot(convergedCatalog({ withOmIndex: true }));

@@ -1,0 +1,111 @@
+---
+title: 'Reference: AgentsMDInjector | Processors'
+description: 'Load directory instructions from completed tool calls and configure reader-owned path identities for deduplication.'
+packages:
+  - '@mastra/core'
+---
+
+# AgentsMDInjector
+
+`AgentsMDInjector` loads directory instructions before a model step. It scans completed tool calls in the message list, newest first, and searches their path arguments for `AGENTS.md`, `CLAUDE.md`, or `CONTEXT.md` in the directory ancestry.
+
+```typescript
+import { AgentsMDInjector } from '@mastra/core/processors'
+
+const injector = new AgentsMDInjector({ maxTokens: 1000 })
+```
+
+Add the processor to an agent's `inputProcessors`. Each invocation injects at most one new instruction reminder as a persisted `reactive` signal. The search skips already loaded paths and continues until it finds an uncovered instruction file.
+
+## Constructor options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'maxTokens',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Approximate token limit for each instruction file.',
+  },
+  {
+    name: 'reminderText',
+    type: 'string',
+    isOptional: true,
+    description: 'Fallback text when a discovered instruction file is empty or cannot be read.',
+  },
+  {
+    name: 'pathExists',
+    type: '(path: string) => boolean',
+    isOptional: true,
+    description: 'Override file and directory existence checks. Defaults to the local filesystem.',
+  },
+  {
+    name: 'isDirectory',
+    type: '(path: string) => boolean',
+    isOptional: true,
+    description: 'Override directory checks. Defaults to the local filesystem.',
+  },
+  {
+    name: 'readFile',
+    type: '(path: string) => string',
+    isOptional: true,
+    description: 'Override instruction reads. Defaults to UTF-8 local file reads.',
+  },
+  {
+    name: 'getIgnoredInstructionPaths',
+    type: '(args: ProcessInputStepArgs) => string[]',
+    isOptional: true,
+    description: 'Return paths already included in static instructions so they are not injected again.',
+  },
+  {
+    name: 'isEnabled',
+    type: '(args: ProcessInputStepArgs) => boolean',
+    isOptional: true,
+    description: 'Return false to disable instruction discovery for this request.',
+  },
+  {
+    name: 'getReader',
+    type: '(args: ProcessInputStepArgs) => ReminderFileReader | undefined',
+    isOptional: true,
+    description: 'Select a reader for this request. Returning undefined keeps the instance defaults.',
+  },
+]}
+/>
+
+## `ReminderFileReader`
+
+A reader controls both file access and optional path identity. Return one from `getReader` when instruction files live in a virtual filesystem or a trusted git ref rather than the current checkout.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'pathExists',
+    type: '(path: string) => boolean',
+    description: 'Whether the addressed file or directory exists in this reader.',
+  },
+  {
+    name: 'isDirectory',
+    type: '(path: string) => boolean',
+    description: 'Whether the addressed path is a directory in this reader.',
+  },
+  { name: 'readFile', type: '(path: string) => string', description: 'Read instruction content from this reader.' },
+  {
+    name: 'getPathIdentity',
+    type: '(path: string) => string',
+    isOptional: true,
+    description:
+      'Return a stable comparison key for instruction paths. Equal keys identify the same instructions; distinct files must have distinct keys. Defaults to normalized absolute paths for custom readers.',
+  },
+]}
+/>
+
+`getPathIdentity` applies to in-search deduplication, ignored static paths, and paths in persisted reminder metadata or markup. It doesn't rewrite read addresses, emitted paths, instruction content, or storage. It must accept paths from previous reminders as well as current tool calls, including files that no longer exist in the current checkout.
+
+The default local reader resolves filesystem aliases for comparison. Supplying any instance-level filesystem override, or a custom reader without `getPathIdentity`, keeps lexical path comparison without adding host filesystem lookups for identity.
+
+For trusted git-ref readers, identify a file by its canonical project root and its path relative to that root. Don't resolve checkout-controlled descendant symlinks: two distinct files in the trusted ref remain distinct even if the checkout makes them point to the same physical file.
+
+## Visibility and trust
+
+The reminder remains in model context and storage when a caller uses [stream exclusions](/reference/streaming/agents/stream) to hide its signal chunks. Exclusions aren't an instruction-trust boundary. Use `isEnabled` and a trusted reader to control whether checkout instructions can be loaded.

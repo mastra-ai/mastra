@@ -1,45 +1,64 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { GatewayLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
+import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { resolveModel } from './model.js';
+import { resolveModel, resolvePackMemoryModelChain } from './model.js';
+import type { PackMemoryModelChainEntry } from './model.js';
 
 /**
- * Read controller state from requestContext.
- * Used by both the memory factory and the OM model functions.
+ * Resolve one OM role's model for this invocation. Lookup order:
+ *   1. The explicit role override (`observerModelOverride` / `reflectorModelOverride`).
+ *   2. The active mode pack's optional `models.memory`, walking the pack's fallback
+ *      chain so OM fails over alongside (and independently of) the main agent.
+ *      The pending pack-hop marker wins over the settled pack id so an immediate
+ *      retrigger observes on the landed pack.
+ *   3. The standalone OM configuration seeded into controller state
+ *      (`observerModelId` / `reflectorModelId`), then the default OM model.
  */
-function getAgentControllerState(requestContext: RequestContext): MastraCodeState | undefined {
-  const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
-  return ctx?.getState() as MastraCodeState | undefined;
-}
+function resolveOmRoleModelForRequest(
+  role: 'observer' | 'reflector',
+  requestContext: RequestContext,
+  settingsPath?: string,
+): GatewayLanguageModel | PackMemoryModelChainEntry[] {
+  const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+  const state = controller?.getState() as MastraCodeState | undefined;
+  const resolveOptions = { remapForCodexOAuth: true, requestContext } as const;
 
-/**
- * Observer model function — reads the current observer model ID from
- * controller state via requestContext (now propagated by OM's agent.generate).
- */
-function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
-  const state = getAgentControllerState(requestContext);
-  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, {
-    remapForCodexOAuth: true,
-    requestContext,
-  });
-}
+  // The configured settings file, not the default one: a caller that points the
+  // agent at another settings path must get the same pack/override resolution
+  // for observational memory as it does for the main model.
+  const settings = loadSettings(settingsPath);
+  const roleOverride =
+    role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
+  if (roleOverride) return resolveModel(roleOverride, resolveOptions);
 
-/**
- * Reflector model function — reads the current reflector model ID from
- * controller state via requestContext (now propagated by OM's agent.generate).
- */
-function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
-  const state = getAgentControllerState(requestContext);
-  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, {
-    remapForCodexOAuth: true,
-    requestContext,
-  });
+  const pendingState = state?.mastracodePendingPackFallback as
+    | { toPackId?: unknown; threadId?: unknown }
+    | null
+    | undefined;
+  const pendingPackId =
+    pendingState &&
+    (pendingState.threadId === undefined || pendingState.threadId === controller?.threadId) &&
+    typeof pendingState.toPackId === 'string' &&
+    pendingState.toPackId.length > 0
+      ? pendingState.toPackId
+      : undefined;
+  const packId = pendingPackId ?? state?.activeModelPackId ?? settings.models?.activeModelPackId;
+  if (typeof packId === 'string' && packId.length > 0) {
+    const chained = resolvePackMemoryModelChain(settings, packId, resolveOptions);
+    if (chained) return chained;
+  }
+
+  const stateModelId = role === 'observer' ? state?.observerModelId : state?.reflectorModelId;
+  return resolveModel(stateModelId ?? DEFAULT_OM_MODEL_ID, resolveOptions);
 }
 
 const DYNAMIC_AGENTS_MD_INSTRUCTION =
@@ -69,41 +88,102 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
+export { LOCAL_KNOWLEDGE_ORG_ID };
+
+// One error per session, not per memory resolution. Keyed on the session id
+// rather than the controller object: the controller is read off the request
+// context on every resolution, so it is a fresh object per request and would
+// dedupe nothing. Bounded so a long-running Factory process cannot grow this
+// without limit — refusing sessions are rare, and losing the oldest ids only
+// costs one extra log line.
+const REPORTED_ORG_UNRESOLVED_LIMIT = 500;
+const reportedOrgUnresolved = new Set<string>();
+
+function reportOrgUnresolved(
+  controller: AgentControllerRequestContext<MastraCodeState> | undefined,
+  factoryProjectId: string | undefined,
+  reason?: string,
+) {
+  const sessionId = controller?.session?.id;
+  if (sessionId) {
+    if (reportedOrgUnresolved.has(sessionId)) return;
+    if (reportedOrgUnresolved.size >= REPORTED_ORG_UNRESOLVED_LIMIT) {
+      reportedOrgUnresolved.delete(reportedOrgUnresolved.values().next().value as string);
+    }
+    reportedOrgUnresolved.add(sessionId);
+  }
+  const session = controller?.session;
+  console.error(
+    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'})${reason ? `: ${reason}` : ''}. Knowledge is not written rather than written where it cannot be read.`,
+  );
+}
+
+/**
+ * Whether the experimental subconscious (knowledge graph + reminder sidekick)
+ * is switched on for this process: it needs a vector store and the opt-in flag.
+ */
+export function isSubconsciousEnabled(vector: MastraVector | undefined): boolean {
+  return Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+}
+
+/**
+ * Whether the subconscious tools (`knowledge_*`, `ask_memory`) are registered
+ * for a given session. Beyond the process-level switch, a Factory-owned
+ * session that cannot resolve its org refuses the subconscious entirely (see
+ * `getDynamicMemory`, which applies the same two checks inline because it also
+ * needs the resolved identity). The system prompt's tool guidance calls here so
+ * it never advertises tools that `getDynamicMemory` did not register.
+ */
+export function hasSubconsciousTools(vector: MastraVector | undefined, state: MastraCodeState | undefined): boolean {
+  return isSubconsciousEnabled(vector) && resolveKnowledgeScopeIdentity(state).resolved;
+}
+
 /**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
-export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
+export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector, settingsPath?: string) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
   let cachedMemoryKey: string | null = null;
 
+  // Observer/reflector model functions — read the current model ID from
+  // controller state via requestContext (propagated by OM's agent.generate).
+  // Bound here so the configured settings path reaches role overrides and pack
+  // memory-model resolution.
+  const getObserverModel = ({ requestContext }: { requestContext: RequestContext }) =>
+    resolveOmRoleModelForRequest('observer', requestContext, settingsPath);
+  const getReflectorModel = ({ requestContext }: { requestContext: RequestContext }) =>
+    resolveOmRoleModelForRequest('reflector', requestContext, settingsPath);
+
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
-    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const subconsciousEnabled = isSubconsciousEnabled(vector);
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 
+    // A Factory-owned session that could not resolve its org refuses to curate:
+    // writing under a substituted identity produces knowledge the fail-closed
+    // read path can never see.
+    let orgUnresolvedRefusal = false;
+
     if (subconsciousEnabled) {
-      // Factory seeds the authoritative org id into session state; prefer it.
-      // The session owner is a USER id — mapping it into organizationId is only
-      // the legacy fallback for clients (TUI/studio) that never set factoryOrgId.
-      const factoryOrgId = state?.factoryOrgId;
-      const ownerId = controller?.session.ownerId;
-      if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
-        requestContext.set('organizationId', factoryOrgId);
-      } else if (ownerId) {
-        requestContext.set('organizationId', ownerId);
+      const identity = resolveKnowledgeScopeIdentity(state);
+      if (identity.resolved) {
+        requestContext.set('organizationId', identity.organizationId);
+      } else {
+        orgUnresolvedRefusal = true;
+        reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
       }
-      // Factory runs share one knowledge graph per project: anchor the
-      // subconscious knowledge scope's resource rung on the project id.
-      if (isFactory) {
-        requestContext.set('knowledgeResourceId', factoryProjectId);
+      if (identity.knowledgeResourceId) {
+        requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);
       }
     }
+
+    const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
@@ -115,7 +195,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const observeAttachments = state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries a factory presence bit to keep the two configs from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousEnabled ? 1 : 0}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -133,27 +213,25 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
       options: {
-        // The factory sidebar shows a session the moment it exists, so it needs a
-        // name on the first turn. The TUI names its threads from OM's `threadTitle`
-        // as they grow and would only pay for an extra call here.
-        ...(isFactory ? { generateTitle: { model: getObserverModel } } : {}),
+        // Generate a durable title from the first user message. Every client uses
+        // the same title in its thread list and active-session chrome. Title
+        // generation takes the primary OM model only — its model field does not
+        // accept fallback arrays.
+        generateTitle: {
+          model: ({ requestContext }) => {
+            const resolved = getObserverModel({ requestContext });
+            return Array.isArray(resolved) ? resolved[0]!.model : resolved;
+          },
+        },
         observationalMemory: {
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: subconsciousEnabled
+          experimental_subconscious: subconsciousAvailable
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
-                // Capture-time pinning is a factory-only opinion; every other
-                // client keeps plain curator-maintained pins.
-                pins: isFactory ? { capturePinning: true } : true,
-                // Factory sessions run the curator every 3 observation runs;
-                // other clients leave the cadence trigger dormant.
-                ...(isFactory ? { curationCadence: 3 } : {}),
-                // Real curation over a factory worklist needs tool room: the
-                // default 5-step budget exhausts mid-batch and the curator never
-                // reaches its cursor acknowledgment (observed live 2026-08-13).
+                pins: true,
                 ...(isFactory ? { maxSteps: 25 } : {}),
               })
             : undefined,

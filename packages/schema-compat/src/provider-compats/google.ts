@@ -190,6 +190,10 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   }
 
   shouldApply(): boolean {
+    if (this.getModel().modelId.includes('claude')) {
+      return false;
+    }
+
     return (
       this.getModel().provider.includes('google') ||
       this.getModel().modelId.includes('gemini-') ||

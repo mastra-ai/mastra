@@ -766,6 +766,7 @@ export async function recallPart({
   partIndex,
   charOffset,
   threadScope,
+  retrievalScope = 'thread',
   maxTokens = DEFAULT_MAX_RESULT_TOKENS,
 }: {
   memory: RecallMemory;
@@ -775,6 +776,7 @@ export async function recallPart({
   partIndex: number;
   charOffset?: number;
   threadScope?: string;
+  retrievalScope?: 'thread' | 'resource';
   maxTokens?: number;
 }): Promise<{
   text: string;
@@ -798,7 +800,7 @@ export async function recallPart({
   const resolved = await resolveCursorMessage(memory, cursor, {
     resourceId,
     threadScope,
-    enforceThreadScope: false,
+    enforceThreadScope: retrievalScope !== 'resource',
   });
 
   if ('hint' in resolved) {
@@ -822,7 +824,7 @@ export async function recallPart({
     if (partIndex > highestVisiblePartIndex) {
       const nextMessage = await getNextVisibleMessage({
         memory,
-        threadId,
+        threadId: resolved.threadId ?? threadId,
         resourceId,
         after: resolved.createdAt,
       });
@@ -901,6 +903,7 @@ export async function recallMessages({
   partType,
   toolName,
   threadScope,
+  retrievalScope = 'thread',
   maxTokens = DEFAULT_MAX_RESULT_TOKENS,
 }: {
   memory: RecallMemory;
@@ -913,6 +916,7 @@ export async function recallMessages({
   partType?: 'text' | 'tool-call' | 'tool-result' | 'reasoning' | 'image' | 'file';
   toolName?: string;
   threadScope?: string;
+  retrievalScope?: 'thread' | 'resource';
   maxTokens?: number;
 }): Promise<RecallResult> {
   if (!memory) {
@@ -936,7 +940,7 @@ export async function recallMessages({
   const resolved = await resolveCursorMessage(memory, cursor, {
     resourceId,
     threadScope,
-    enforceThreadScope: false,
+    enforceThreadScope: retrievalScope === 'thread',
   });
 
   if ('hint' in resolved) {
@@ -959,7 +963,7 @@ export async function recallMessages({
 
   if (crossThreadId && threadScope) {
     return {
-      messages: `Cursor does not belong to the active thread. Expected thread "${threadId}" but cursor "${cursor}" belongs to "${anchor.threadId}". Pass threadId="${anchor.threadId}" to browse that thread, or omit threadId and use this cursor directly in resource scope.`,
+      messages: `Cursor does not belong to the active thread. Expected thread "${threadId}" but cursor "${cursor}" belongs to "${anchor.threadId}". Pass threadId="${anchor.threadId}" to browse that thread.`,
       count: 0,
       cursor,
       page: normalizedPage,
@@ -1534,18 +1538,19 @@ export const recallTool = (
         return recallPart({
           memory,
           threadId: targetThreadId,
-          resourceId: isResourceScope ? resourceId : undefined,
+          resourceId,
           cursor,
           partIndex,
           charOffset,
           threadScope,
+          retrievalScope,
         });
       }
 
       return recallMessages({
         memory,
         threadId: targetThreadId,
-        resourceId: isResourceScope ? resourceId : undefined,
+        resourceId,
         cursor,
         page,
         limit,
@@ -1553,6 +1558,7 @@ export const recallTool = (
         partType,
         toolName,
         threadScope,
+        retrievalScope,
       });
     },
   });

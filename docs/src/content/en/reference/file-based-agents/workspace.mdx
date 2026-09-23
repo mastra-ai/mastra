@@ -1,6 +1,6 @@
 ---
 title: "Workspace | File-based Agents"
-description: Give a file-based agent a workspace with workspace.ts and seed files under workspace/.
+description: "A workspace assembles capabilities such as filesystem access and command execution. The configured backends determine which tools are available."
 packages:
   - "@mastra/core"
 ---
@@ -78,7 +78,7 @@ For provider patterns and runtime behavior, see the [sandbox guide](/docs/sandbo
 
 ## Runtime boundary
 
-The workspace filesystem controls what file tools can read and write. The sandbox controls where shell commands run. Application runtime code, including code in [`tools/`](/reference/file-based-agents/tools), still runs in your app/server process unless it explicitly calls workspace or sandbox APIs.
+The workspace filesystem controls file-tool access, and the sandbox determines where shell commands run. Unless it explicitly calls workspace or sandbox APIs, application runtime code still runs in your app or server process, including code in [`tools/`](/reference/file-based-agents/tools).
 
 ## Seed files
 

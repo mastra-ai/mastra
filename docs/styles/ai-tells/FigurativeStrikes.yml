@@ -14,21 +14,21 @@ ignorecase: true
 tokens:
   # --- Resonance: the artifact rings a bell ("strikes a chord," "strikes a
   # nerve," "strikes the right note/tone").
-  - "\\bstrik(?:es|ing)? a (?:chord|nerve)\\b"
+  - "\\b(?:strike|strikes|striking) a (?:chord|nerve)\\b"
   - "\\bstruck a (?:chord|nerve)\\b"
-  - "\\bstrik(?:es|ing)? (?:the right|a|an?) (?:note|tone|chord)\\b"
+  - "\\b(?:strike|strikes|striking) (?:the right|a|an?) (?:note|tone|chord)\\b"
   - "\\bstruck (?:the right|a|an?) (?:note|tone|chord)\\b"
 
   # --- Aptness and targeting: the critique lands at a vital point ("strikes
   # at the core of," "strikes close to home"). "At the heart of" is left to
   # PromotionalPuffery to avoid a double flag, the same split FigurativeSits
   # makes.
-  - "\\bstrik(?:es|ing)? at the (?:core|center|centre|root) of\\b"
+  - "\\b(?:strike|strikes|striking) at the (?:core|center|centre|root) of\\b"
   - "\\bstruck at the (?:core|center|centre|root) of\\b"
-  - "\\bstrik(?:es|ing)? close to home\\b"
+  - "\\b(?:strike|strikes|striking) close to home\\b"
 
   # --- Fortune and opportunism idioms ("strikes gold," "strike while the
   # iron is hot"). The balance sense stays in FalseBalance.
-  - "\\bstrik(?:es|ing)? gold\\b"
+  - "\\b(?:strike|strikes|striking) gold\\b"
   - "\\bstruck gold\\b"
   - "\\bstrike while the iron is hot\\b"

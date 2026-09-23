@@ -21,6 +21,14 @@ tokens:
   - It is worth highlighting that
   - It is worth pointing out that
   - It is worth remembering that
+  # Ported from Metacommentary: the no-'that' contraction forms so this rule
+  # owns the whole "It's worth <verb>ing" family.
+  - It'?s worth noting
+  - It'?s worth mentioning
+  - It'?s worth pointing out
+  - It'?s worth emphasizing
+  - It'?s worth highlighting
+  - It'?s worth remembering
   - It is essential to note
   - It is essential to understand
   - It is essential to recognize

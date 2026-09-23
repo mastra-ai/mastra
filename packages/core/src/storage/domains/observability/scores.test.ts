@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createScoreArgsSchema,
   createScoreRecordSchema,
+  deleteScoresArgsSchema,
   getScoreAggregateArgsSchema,
   getScoreAggregateResponseSchema,
   getScoreBreakdownArgsSchema,
@@ -121,6 +122,21 @@ describe('Score Schemas', () => {
       expect(args.score.traceId).toBe('trace-1');
       expect(args.score.scorerId).toBe('test');
       expect(args.score.score).toBe(0.5);
+    });
+  });
+
+  describe('deleteScoresArgsSchema', () => {
+    it('limits the number of score IDs in a batch', () => {
+      expect(
+        deleteScoresArgsSchema.safeParse({
+          scoreIds: Array.from({ length: 1000 }, (_, index) => `score-${index}`),
+        }).success,
+      ).toBe(true);
+      expect(
+        deleteScoresArgsSchema.safeParse({
+          scoreIds: Array.from({ length: 1001 }, (_, index) => `score-${index}`),
+        }).success,
+      ).toBe(false);
     });
   });
 

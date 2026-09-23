@@ -6,21 +6,21 @@ Apache
 Apache License
 App Services
 Assistant UI
-Astra
+(?i)Astra
 Astro
 (?i)Auth0
-AWS
-Azure
+(?i)AWS
+(?i)Azure
 CDN
-Chroma
+(?i)Chroma
 CI
 CLI
 ClickHouse
-Cloudflare
+(?i)Cloudflare
 Cloudflare Workers
 Convex
 CopilotKit
-Couchbase
+(?i)Couchbase
 CSP
 D1
 Dash0
@@ -34,8 +34,8 @@ DynamoDB
 E2B
 EC2
 (?i)Electron
-Elasticsearch
-ElevenLabs
+(?i)Elasticsearch
+(?i)ElevenLabs
 (?i)Express
 (?i)Fastify
 (?i)FastEmbed
@@ -45,13 +45,13 @@ GCS
 (?i)Gemini
 (?i)GET
 (?i)GitHub
-Google
+(?i)Google
 Google Gemini
 Google Gemini Live
 GraphRAG
 gRPC
 (?i)Hono
-HTTP
+(?i)HTTP
 (?i)HTTPS
 IAM
 (?i)ID
@@ -68,13 +68,13 @@ kubectl
 LanceDB
 (?i)LangSmith
 (?i)LibSQL
-LLM
+(?i)LLM
 (?i)MAP
 (?i)Mastra
 (?i)MCP
 MinIO
 MLflow
-MongoDB
+(?i)MongoDB
 (?i)MSSQL
 Netlify
 New Relic
@@ -86,30 +86,30 @@ OAuth
 (?i)OpenAI
 (?i)OpenAPI
 OpenAI Realtime
-OpenSearch
+(?i)OpenSearch
 OpenTelemetry
 OS
 (?i)OTEL
 PII
-Pinecone
+(?i)Pinecone
 PostgreSQL
 (?i)PostHog
 PR
 Prisma
 (?i)Protobuf
-Qdrant
+(?i)Qdrant
 R2
 (?i)RAG
 Retrieval-Augmented Generation
 (?i)React
-Redis
+(?i)Redis
 Remix
 (?i)REST
 S3
 (?i)SDK
 (?i)Sentry
 SigNoz
-SQL
+(?i)SQL
 SSE
 STS
 STT
@@ -122,15 +122,15 @@ Traceloop
 (?i)TTS
 TTL
 Turbopuffer
-Turso
+(?i)Turso
 (?i)TypeScript
 (?i)UI
-Upstash
+(?i)Upstash
 VAD
 Vercel
 (?i)Vite
 Visual Studio Code
-Vectorize
+(?i)Vectorize
 (?i)Vitest
 (?i)VNext
 WebSocket

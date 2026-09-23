@@ -31,8 +31,7 @@ export function PropertyFilterActions({
   return (
     <div className="flex items-center gap-2">
       {onClear && (
-        <Button disabled={disabled} size="md" onClick={onClear}>
-          <XIcon />
+        <Button disabled={disabled} size="md" onClick={onClear} icon={<XIcon />}>
           Clear
         </Button>
       )}

@@ -1,0 +1,63 @@
+---
+extends: existence
+message: "AI stacked absence: '%s'. Negate the verb once, then say what the thing does instead."
+level: error
+nonword: true
+ignorecase: true
+# The coordinated negated pair: a fact stated by naming two absences ("with
+# no database and no network," "needs neither the database nor a
+# round-trip," "runs without a database or a round-trip," "doesn't need
+# credentials and doesn't call the network"). The sibling of NegatedObject
+# and NegatedSubject, which each take one shifted "no"; here the shift
+# happens twice in one clause, and the prepositional spellings have no verb
+# for NegatedObject to gate on, so the construction escaped every negation
+# rule until a documentation-corpus audit (2026-09) counted twelve of them
+# and named it the construction reviewers push back on most.
+#
+# The plain form negates the verb once and then states what the thing does:
+# "It doesn't need credentials. It reads a file off disk."
+#
+# Costs across the Go and Python standard libraries: the "with no X and no
+# Y" token measures eight ("with no arguments and no results," "with no
+# modifiers and no detail"), the determiner-gated "without a X or a Y" two,
+# the verb-gated "neither" two ("supports neither TLS 1.3 nor"), and the
+# doubled "doesn't" three. Every one is the construction itself and fires
+# by design. The bare "without X or Y" stays out: with eighty hits ("without
+# prefix or suffix," "without arguments or results," the license boilerplate
+# "WITHOUT WARRANTIES OR CONDITIONS") it is ordinary docs English, and the
+# determiner is what separates the AI spelling from it. "Has neither" and
+# "have neither" stay out with NegatedObject's "has no."
+#
+# The maintainer then asked for the negation rules strengthened past the
+# audit's list, so three more spellings of the pair joined: the "nor"
+# continuation ("doesn't need credentials, nor does it call the network";
+# ten corpus hits, all the formal Go register, each the construction),
+# the sentence-initial "Neither X nor Y" with its own verb ("Neither the
+# database nor the network is required"; three, "Neither n nor c is
+# modified"), and the asyndetic list of absences ("no setup, no config,
+# no fuss"; zero).
+tokens:
+  # --- Two prepositional absences ("with no database and no network").
+  - "\\bwith no (?:[a-z-]+,? ){1,3}(?:and|or) no\\b"
+
+  # --- The determiner-gated "without" pair ("without a database or a
+  # round-trip"). The determiners are the gate; see the comment above.
+  - "\\bwithout (?:a|an|the|any) (?:[a-z-]+ ){1,2}or (?:a|an|the|any) [a-z-]+\\b"
+
+  # --- The verb-gated "neither" ("needs neither the database nor a
+  # round-trip," "supports neither").
+  - "\\b(?:needs?|needed|requires?|required|takes?|took|wants?|wanted|uses?|used|calls?|called|makes?|made|touches|touched|involves?|involved|reads?|writes?|wrote|opens?|opened|creates?|created|runs?|ran|starts?|started|spawns?|spawned|accepts?|accepted|expects?|expected|returns?|returned|produces?|produced|holds?|held|keeps?|kept|carries|carry|carried|knows?|knew|owns?|owned|sees?|saw|contains?|contained|offers?|offered|provides?|provided|supports?|supported|allows?|allowed|permits?|permitted|assumes?|assumed|checks?|checked|emits?|emitted|sends?|sent|stores?|stored|loads?|loaded) neither\\b"
+
+  # --- The doubled negated verb ("doesn't need credentials and doesn't
+  # call the network," "never reads the file and never writes it") and
+  # its "nor" continuation ("nor does it call the network").
+  - "\\b(?:doesn't|does not|don't|do not|didn't|did not|won't|will not|never) [a-z]+ (?:[a-z-]+ ){0,5}and (?:doesn't|does not|don't|do not|didn't|did not|won't|will not|never)\\b"
+  - "\\b, nor (?:does|do|did|will|would|can|could|should|is|are|was|were|has|have|had) (?:it|they|this|that|the [a-z]+|a [a-z]+|an [a-z]+)\\b"
+
+  # --- The sentence-initial pair with its own verb ("Neither the database
+  # nor the network is required," "Neither source nor sink survives").
+  - "\\bNeither (?:[a-z-]+ ){1,3}nor (?:[a-z-]+ ){1,3}(?:is|are|was|were|gets?|got|will be|has been|have been|can be|needs?|requires?|matters|applies|exists|changes|runs|touches|writes|reads|calls|holds|carries|breaks|blocks|survives|appears|comes)\\b"
+
+  # --- The asyndetic list of absences, the badge copy of a feature page
+  # ("no setup, no config, no fuss," "no database, no network").
+  - "\\bno (?:[a-z-]+ ){1,2}, (?:and |or )?no (?:[a-z-]+ ){1,2}(?:, (?:and |or )?no (?:[a-z-]+ ){1,2})?"

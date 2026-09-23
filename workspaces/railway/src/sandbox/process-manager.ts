@@ -152,9 +152,10 @@ export class RailwayProcessManager extends SandboxProcessManager<RailwaySandbox>
     // assigned, so `handle` is always defined by the time they run.
     let handle: RailwayProcessHandle;
 
+    const cwd = options.cwd ?? this.sandbox.workingDirectory;
     const execHandle = railway.exec(command, {
       ...(options.timeout !== undefined && { timeoutSec: Math.ceil(options.timeout / 1000) }),
-      ...(options.cwd !== undefined && { cwd: options.cwd }),
+      ...(cwd !== undefined && { cwd }),
       ...(Object.keys(env).length > 0 && { env }),
       onStdout: (chunk: string) => handle.emitStdout(chunk),
       onStderr: (chunk: string) => handle.emitStderr(chunk),

@@ -716,6 +716,35 @@ describe('MastraClient', () => {
         );
         expect(result).toEqual(mockMessages);
       });
+
+      it('should pass pagination parameters page, perPage, and orderBy correctly', async () => {
+        const mockResponse = {
+          messages: [{ id: 'msg-1', content: 'Hello' }],
+          total: 100,
+          page: 1,
+          perPage: 40,
+          hasMore: true,
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.listThreadMessages('thread-1', {
+          agentId: 'agent-1',
+          page: 1,
+          perPage: 40,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1&page=1&perPage=40&orderBy=%7B%22field%22%3A%22createdAt%22%2C%22direction%22%3A%22ASC%22%7D',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockResponse);
+      });
     });
 
     describe('deleteThread', () => {
@@ -992,6 +1021,119 @@ describe('MastraClient', () => {
       );
     });
 
+    it('serializes target filters for experiment listings', async () => {
+      mockSuccess();
+
+      await client.listExperiments({ targetType: 'agent', targetId: 'agent-1' });
+      mockSuccess();
+      await client.listDatasetExperiments('dataset-1', { targetType: 'workflow', targetId: 'wf 1' });
+
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        'http://localhost:4111/api/experiments?targetType=agent&targetId=agent-1',
+        expect.any(Object),
+      );
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        2,
+        'http://localhost:4111/api/datasets/dataset-1/experiments?targetType=workflow&targetId=wf+1',
+        expect.any(Object),
+      );
+    });
+
+    it('serializes target filters as repeated targetIds for dataset listings', async () => {
+      mockSuccess();
+
+      await client.listDatasets({ page: 0, perPage: 20, targetType: 'agent', targetIds: ['a1', 'a 2'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets?page=0&perPage=20&targetType=agent&targetIds=a1&targetIds=a+2',
+        expect.any(Object),
+      );
+    });
+
+    it('serializes orderBy as bracket-notation params for dataset and experiment listings', async () => {
+      mockSuccess();
+      await client.listDatasets({ orderBy: { field: 'name', direction: 'ASC' } });
+      mockSuccess();
+      await client.listDatasetItems('dataset-1', { orderBy: { field: 'updatedAt', direction: 'DESC' } });
+      mockSuccess();
+      await client.listExperiments({ orderBy: { field: 'status', direction: 'ASC' } });
+      mockSuccess();
+      await client.listDatasetExperiments('dataset-1', { orderBy: { field: 'createdAt', direction: 'ASC' } });
+      mockSuccess();
+      await client.listDatasetExperimentResults('dataset-1', 'experiment-1', {
+        orderBy: { field: 'startedAt', direction: 'DESC' },
+      });
+
+      const urls = (global.fetch as any).mock.calls.map((call: [string]) => decodeURIComponent(call[0]));
+      expect(urls).toEqual([
+        'http://localhost:4111/api/datasets?orderBy[field]=name&orderBy[direction]=ASC',
+        'http://localhost:4111/api/datasets/dataset-1/items?orderBy[field]=updatedAt&orderBy[direction]=DESC',
+        'http://localhost:4111/api/experiments?orderBy[field]=status&orderBy[direction]=ASC',
+        'http://localhost:4111/api/datasets/dataset-1/experiments?orderBy[field]=createdAt&orderBy[direction]=ASC',
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1/results?orderBy[field]=startedAt&orderBy[direction]=DESC',
+      ]);
+    });
+
+    it('serializes tags as repeated query params for experiment result listings', async () => {
+      mockSuccess();
+
+      await client.listDatasetExperimentResults('dataset-1', 'experiment-1', { page: 1, tags: ['a', 'b c'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1/results?page=1&tags=a&tags=b+c',
+        expect.any(Object),
+      );
+    });
+
+    it('issues a DELETE for a dataset-scoped experiment', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await client.deleteDatasetExperiment('dataset/1', 'experiment/1');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset%2F1/experiments/experiment%2F1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('scopes a dataset experiment DELETE with tenancy query parameters', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await client.deleteDatasetExperiment('dataset-1', 'experiment-1', {
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1?organizationId=org_a&projectId=proj_1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('issues a top-level DELETE for an experiment with tenancy query', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await client.deleteExperiment('experiment-1', { organizationId: 'org_a', projectId: 'proj_1' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/experiments/experiment-1?organizationId=org_a&projectId=proj_1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
     it('posts provenance and grouping when triggering an experiment', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
@@ -1213,6 +1355,24 @@ describe('MastraClient', () => {
       expect(JSON.parse(init.body)).toMatchObject({ toolMocks });
     });
 
+    it('purgeDatasetItem deletes the tenant-scoped purge endpoint', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await expect(
+        client.purgeDatasetItem('ds/1', 'item/1', { organizationId: 'org/1', projectId: 'project/1' }),
+      ).resolves.toEqual({ success: true });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe(
+        'http://localhost:4111/api/datasets/ds%2F1/items/item%2F1/purge?organizationId=org%2F1&projectId=project%2F1',
+      );
+      expect(init.method).toBe('DELETE');
+    });
+
     it('addDatasetItem posts scorerIds and returns them', async () => {
       const scorerIds = ['quality', 'safety'];
       (global.fetch as any).mockResolvedValueOnce({
@@ -1268,6 +1428,29 @@ describe('MastraClient', () => {
         description,
         metadata,
       });
+    });
+
+    it('updateDatasetExperiment should PATCH the experiment route with name, description and metadata', async () => {
+      const updated = { id: 'exp-1', datasetId: 'ds-1', name: 'renamed', description: 'new desc', metadata: { k: 1 } };
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => updated,
+      });
+
+      const result = await client.updateDatasetExperiment({
+        datasetId: 'ds-1',
+        experimentId: 'exp-1',
+        name: 'renamed',
+        description: 'new desc',
+        metadata: { k: 1 },
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments/exp-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toEqual({ name: 'renamed', description: 'new desc', metadata: { k: 1 } });
+      expect(result).toEqual(updated);
     });
 
     it('batchInsertDatasetItems preserves an explicit empty scorerIds override', async () => {

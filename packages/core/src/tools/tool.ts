@@ -429,7 +429,7 @@ export class Tool<
         // validation. The original args were already validated during the initial
         // execution, and during resume the tool's execute function checks resumeData
         // and returns early without using the input args.
-        const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
+        const isResuming = (context?.resumeData ?? context?.agent?.resumeData ?? context?.workflow?.resumeData) != null;
         const wasBuilderValidated = consumeBuilderValidatedInput(context);
         const skipInputValidation = isResuming || wasBuilderValidated;
 
@@ -504,6 +504,7 @@ export class Tool<
               messages,
               suspend,
               resumeData,
+              suspendPayload,
               threadId,
               resourceId,
               writableStream,
@@ -517,6 +518,7 @@ export class Tool<
                 messages,
                 suspend,
                 resumeData,
+                suspendPayload,
                 threadId,
                 resourceId,
                 writableStream,
@@ -526,7 +528,7 @@ export class Tool<
             };
           } else if (isWorkflowExecution && !baseContext.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
-            const { workflowId, runId, state, setState, suspend, resumeData, ...rest } = baseContext;
+            const { workflowId, runId, state, setState, suspend, resumeData, suspendPayload, ...rest } = baseContext;
             organizedContext = {
               ...rest,
               workflow: {
@@ -536,6 +538,7 @@ export class Tool<
                 setState,
                 suspend,
                 resumeData,
+                suspendPayload,
               },
               // Ensure requestContext is always present
               requestContext: executionRequestContext ?? new RequestContext(),
@@ -571,7 +574,7 @@ export class Tool<
         const resumeData =
           organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
 
-        if (resumeData) {
+        if (resumeData != null) {
           const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);
           if (resumeValidation.error) {
             return resumeValidation.error as any;
@@ -708,6 +711,31 @@ type CreateToolOpts<
   resumeSchema?: TResumeSchema;
   execute?: ToolExecuteFunction<InferSchema<TInputSchema>, InferSchema<TOutputSchema>, TContext, TRequestContext>;
 };
+/**
+ * Defines a tool with a description, input/output schemas, and an execution function.
+ *
+ * @example
+ * ```typescript
+ * import { createTool } from '@mastra/core/tools';
+ * import { z } from 'zod';
+ *
+ * const greet = createTool({
+ *   id: 'greet',
+ *   description: 'Greet someone by name.',
+ *   inputSchema: z.object({ name: z.string() }),
+ *   outputSchema: z.string(),
+ *   execute: async ({ name }) => `Hello, ${name}!`,
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Tool documentation](https://mastra.ai/reference/tools/create-tool)
+ * if packaged docs are unavailable.
+ */
 export function createTool<
   TId extends string = string,
   TInputSchema extends SchemaLike = undefined,

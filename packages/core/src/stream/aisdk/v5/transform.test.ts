@@ -458,6 +458,33 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(errorSpy).not.toHaveBeenCalled();
       errorSpy.mockRestore();
     });
+
+    it('does not log the raw input when JSON cannot be repaired', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const marker = 'SENSITIVE_REPORT_CONTENT';
+      const input = `{"content":"${marker}" garbage ]]`;
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-7',
+        toolName: 'large_payload_tool',
+        input,
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toBeUndefined();
+      }
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(marker);
+      expect(errorSpy.mock.calls[0]?.[1]).toEqual({
+        toolCallId: 'call-7',
+        toolName: 'large_payload_tool',
+        inputLength: input.length,
+      });
+      errorSpy.mockRestore();
+    });
   });
 
   describe('sanitizeToolCallInput', () => {
@@ -715,6 +742,42 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.output.usage.cacheCreationInputTokens1h).toBe(2);
         expect(result.payload.providerMetadata).toEqual(providerMetadata);
         expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
+      }
+    });
+
+    it('should unwrap usage and finish reason re-nested by the AI SDK v2 compatibility shim', () => {
+      // Shape produced when ai@7 `wrapLanguageModel` wraps a model that advertises
+      // 'v2' but already emits V3/V4 chunks (e.g. Mastra's model router).
+      const chunk = {
+        type: 'finish',
+        finishReason: { unified: { unified: 'stop', raw: 'STOP' }, raw: undefined },
+        usage: {
+          inputTokens: {
+            total: { total: 17754, noCache: 5950, cacheRead: 12088, cacheWrite: 3 },
+            noCache: undefined,
+            cacheRead: undefined,
+            cacheWrite: undefined,
+          },
+          outputTokens: { total: { total: 20, text: 15, reasoning: 5 }, text: undefined, reasoning: undefined },
+        },
+        providerMetadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      } as unknown as StreamPart;
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.stepResult.reason).toBe('stop');
+        expect(result.payload.stepResult.rawReason).toBe('STOP');
+        expect(result.payload.output.usage).toMatchObject({
+          inputTokens: 17754,
+          outputTokens: 20,
+          totalTokens: 17774,
+          reasoningTokens: 5,
+          cachedInputTokens: 12088,
+          cacheCreationInputTokens: 3,
+        });
       }
     });
 

@@ -4,9 +4,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, normalize, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { DEFAULT_CONFIG_DIR } from '../../constants.js';
 
 // Filenames to check, in order of preference
@@ -47,6 +47,35 @@ const fsInstructionReader: InstructionFileReader = {
   read: path => readFileSync(path, 'utf-8'),
 };
 
+function realpathOrResolved(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+function createProjectPathResolver(projectPath: string): (path: string) => string | null {
+  const canonicalRoot = realpathOrResolved(projectPath);
+  return path => {
+    const rel = relative(projectPath, path);
+    if (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) return rel.split(sep).join('/');
+
+    // Match an alias of the project root, not the target of a checkout-controlled
+    // descendant symlink. Missing descendants must still resolve against the ref.
+    let ancestor = resolve(path);
+    let projectRelativePath: string | null = null;
+    while (true) {
+      if (realpathOrResolved(ancestor) === canonicalRoot) {
+        projectRelativePath = relative(ancestor, path).split(sep).join('/');
+      }
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return projectRelativePath;
+      ancestor = parent;
+    }
+  };
+}
+
 /**
  * Create a reader that serves instruction files from a git ref instead of the
  * working tree. Paths are still addressed as working-tree paths under
@@ -56,14 +85,10 @@ const fsInstructionReader: InstructionFileReader = {
  * failure (missing ref, missing file, no repo) reports the file as absent.
  */
 export function createGitRefInstructionReader(projectPath: string, ref: string): InstructionFileReader {
-  const toRelative = (path: string): string | null => {
-    const rel = relative(projectPath, path);
-    if (!rel || rel.startsWith('..') || isAbsolute(rel)) return null;
-    return rel.split(sep).join('/');
-  };
+  const toRelative = createProjectPathResolver(projectPath);
   const show = (path: string): string | null => {
     const rel = toRelative(path);
-    if (rel === null) return null;
+    if (!rel) return null;
     for (const candidate of [`origin/${ref}`, ref]) {
       try {
         return execFileSync('git', ['-C', projectPath, 'show', `${candidate}:${rel}`], {
@@ -102,13 +127,11 @@ export function createGitRefReminderReader(
   pathExists: (path: string) => boolean;
   isDirectory: (path: string) => boolean;
   readFile: (path: string) => string;
+  getPathIdentity: (path: string) => string;
 } {
   const gitReader = createGitRefInstructionReader(projectPath, ref);
-  const toRelative = (path: string): string | null => {
-    const rel = relative(projectPath, normalize(path));
-    if (rel.startsWith('..') || isAbsolute(rel)) return null;
-    return rel.split(sep).join('/');
-  };
+  const toRelative = createProjectPathResolver(projectPath);
+  const canonicalRoot = realpathOrResolved(projectPath);
   const objectType = (rel: string): string | null => {
     if (rel === '') return 'tree'; // project root
     for (const candidate of [`origin/${ref}`, ref]) {
@@ -144,6 +167,12 @@ export function createGitRefReminderReader(
       const rel = toRelative(path);
       if (rel === null) return readFileSync(path, 'utf-8');
       return gitReader.read(path);
+    },
+    getPathIdentity: path => {
+      const rel = toRelative(path);
+      // Only canonicalize the project root: checkout symlinks do not define
+      // file identity in the trusted ref, including files missing on disk.
+      return rel === null ? realpathOrResolved(path) : join(canonicalRoot, rel);
     },
   };
 }
@@ -238,7 +267,13 @@ export function getStaticallyLoadedInstructionPaths(
   configDirName = DEFAULT_CONFIG_DIR,
   projectReader?: InstructionFileReader,
 ): string[] {
-  return loadAgentInstructions(projectPath, configDirName, projectReader).map(source => normalize(source.path));
+  const canonicalRoot = realpathOrResolved(projectPath);
+  return loadAgentInstructions(projectPath, configDirName, projectReader).flatMap(source => {
+    const path = normalize(source.path);
+    if (source.scope !== 'project') return [path];
+    const canonicalPath = join(canonicalRoot, relative(projectPath, path));
+    return path === canonicalPath ? [path] : [path, canonicalPath];
+  });
 }
 
 /** Heading the agent-instructions block is introduced by in the system prompt. */

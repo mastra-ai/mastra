@@ -1,8 +1,8 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import type { MastraMessageContentV2, MessageList } from '../agent/message-list';
-import type { ModelRouterModelId } from '../llm/model';
+import type { ModelRouterModelId, MastraModelSettings } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { InferSchemaOutput, OutputSchema } from '../stream/base/schema';
@@ -115,6 +115,7 @@ export type ProcessorInputStepPhaseType = {
   messages: ProcessorMessageType[];
   messageList: MessageList;
   stepNumber: number;
+  runId?: string;
   systemMessages?: CoreMessageType[];
   retryCount?: number;
   model?: ProcessorStepModelConfig;
@@ -122,7 +123,7 @@ export type ProcessorInputStepPhaseType = {
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   steps?: Array<StepResult<ToolSet>>;
   messageId?: string;
@@ -202,6 +203,7 @@ export type ProcessorStepOutputType = {
   messageList?: MessageList;
   systemMessages?: CoreMessageType[];
   stepNumber?: number;
+  runId?: string;
   part?: unknown | null;
   streamParts?: unknown[];
   state?: Record<string, unknown>;
@@ -224,7 +226,7 @@ export type ProcessorStepOutputType = {
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   steps?: Array<StepResult<ToolSet>>;
   messageId?: string;
@@ -556,6 +558,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
   messages: messagesSchema,
   messageList: messageListSchema,
   stepNumber: z.number().describe('The current step number (0-indexed)'),
+  runId: z.string().optional().describe('The active agent run ID'),
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
   messageId: z.string().optional().describe('The active assistant response message ID for this step'),
@@ -569,10 +572,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Current tool choice setting'),
   activeTools: z.array(z.string()).optional().describe('Currently active tools'),
   providerOptions: z.custom<SharedProviderOptions>().optional().describe('Provider-specific options'),
-  modelSettings: z
-    .custom<Omit<CallSettings, 'abortSignal'>>()
-    .optional()
-    .describe('Model settings (temperature, etc.)'),
+  modelSettings: z.custom<MastraModelSettings>().optional().describe('Model settings (temperature, etc.)'),
   structuredOutput: z
     .custom<StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>>()
     .optional()
@@ -702,6 +702,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
 
   // Step-based fields
   stepNumber: z.number().optional(),
+  runId: z.string().optional(),
 
   // Stream-based fields
   part: z.unknown().nullable().optional(),
@@ -733,7 +734,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
   activeTools: z.array(z.string()).optional(),
   providerOptions: z.custom<SharedProviderOptions>().optional(),
-  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional(),
+  modelSettings: z.custom<MastraModelSettings>().optional(),
   structuredOutput: z.custom<StructuredOutputOptions<InferSchemaOutput<OutputSchema>>>().optional(),
   steps: z.custom<Array<StepResult<ToolSet>>>().optional(),
   messageId: z.string().optional(),

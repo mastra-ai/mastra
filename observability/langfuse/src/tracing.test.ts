@@ -53,6 +53,22 @@ vi.mock('@langfuse/client', () => {
 });
 
 vi.mock('@mastra/otel-exporter', () => {
+  function ioAttributes(span: any, field: 'input' | 'output'): Record<string, string> {
+    const value = span[field];
+    if (value === undefined || !span.type) return {};
+    let serialized: string;
+    try {
+      serialized = typeof value === 'string' ? value : JSON.stringify(value);
+    } catch {
+      return {};
+    }
+    const key =
+      span.type === SpanType.MODEL_GENERATION
+        ? `gen_ai.${field}.messages`
+        : `mastra.${String(span.type).toLowerCase()}.${field}`;
+    return { [key]: serialized };
+  }
+
   class MockSpanConverter {
     convertSpan = vi.fn().mockImplementation((span: any) => ({
       name: span.name,
@@ -70,6 +86,8 @@ vi.mock('@mastra/otel-exporter', () => {
         ...(span.attributes?.completionStartTime
           ? { 'mastra.completion_start_time': span.attributes.completionStartTime.toISOString() }
           : {}),
+        ...ioAttributes(span, 'input'),
+        ...ioAttributes(span, 'output'),
         // Pass through entityId/entityName as gen_ai.agent.* (mirrors real SpanConverter behavior)
         ...(span.entityId ? { 'gen_ai.agent.id': span.entityId } : {}),
         ...(span.entityName ? { 'gen_ai.agent.name': span.entityName } : {}),
@@ -414,6 +432,41 @@ describe('LangfuseExporter', () => {
       expect(attrs['mastra.completion_start_time']).toBeUndefined();
     });
 
+    it.each([
+      {
+        name: 'maps a provider-reported USD total',
+        source: 'provider_reported',
+        cost: 0.0123,
+        expected: JSON.stringify({ total: 0.0123 }),
+      },
+      {
+        name: 'does not map a registry estimate',
+        source: 'pricing_registry',
+        cost: 0.0099,
+        expected: undefined,
+      },
+    ])('$name', async ({ source, cost, expected }) => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          attributes: {
+            model: 'anthropic/claude-sonnet-4',
+            provider: 'openrouter',
+            usage: { inputTokens: 10, outputTokens: 5 },
+            costContext: {
+              provider: 'openrouter',
+              estimatedCost: cost,
+              costUnit: 'USD',
+              costMetadata: { source, providerCostFields: ['usage.cost'] },
+            },
+          },
+        }),
+      );
+
+      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBe(expected);
+    });
+
     it('maps userId to user.id', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(exporter, makeSpan({ metadata: { userId: 'user-123' } }));
@@ -430,6 +483,94 @@ describe('LangfuseExporter', () => {
       const attrs = processedSpans[0].attributes;
       expect(attrs['session.id']).toBe('session-456');
       expect(attrs['mastra.metadata.sessionId']).toBeUndefined();
+    });
+
+    it('moves mastra.*.input/output to langfuse.observation.input/output', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.WORKFLOW_STEP,
+          input: { text: 'Hello' },
+          output: { text: 'Hi there' },
+          attributes: {},
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.input']).toBe(JSON.stringify({ text: 'Hello' }));
+      expect(attrs['langfuse.observation.output']).toBe(JSON.stringify({ text: 'Hi there' }));
+      expect(attrs['mastra.workflow_step.input']).toBeUndefined();
+      expect(attrs['mastra.workflow_step.output']).toBeUndefined();
+    });
+
+    it('leaves gen_ai input/output untouched for model generation spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ input: { text: 'Hello' }, output: { text: 'Hi there' } }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['gen_ai.input.messages']).toBe(JSON.stringify({ text: 'Hello' }));
+      expect(attrs['gen_ai.output.messages']).toBe(JSON.stringify({ text: 'Hi there' }));
+      expect(attrs['langfuse.observation.input']).toBeUndefined();
+      expect(attrs['langfuse.observation.output']).toBeUndefined();
+    });
+
+    it('maps root-span input/output to langfuse.trace.input/output', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          type: SpanType.AGENT_RUN,
+          input: { parts: [{ type: 'text', text: 'Hello' }] },
+          output: { text: 'Hi there' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBe(JSON.stringify({ parts: [{ type: 'text', text: 'Hello' }] }));
+      expect(attrs['langfuse.trace.output']).toBe(JSON.stringify({ text: 'Hi there' }));
+    });
+
+    it('passes string root-span input/output through without re-serializing', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({ isRootSpan: true, input: 'plain question', output: 'plain answer' } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBe('plain question');
+      expect(attrs['langfuse.trace.output']).toBe('plain answer');
+    });
+
+    it('does not set trace input/output for non-root spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ isRootSpan: false } as any));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBeUndefined();
+    });
+
+    it('omits trace input/output that cannot be serialized instead of failing the export', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      await exportSpan(exporter, makeSpan({ isRootSpan: true, input: circular, output: { text: 'ok' } } as any));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBe(JSON.stringify({ text: 'ok' }));
+    });
+
+    it('omits trace input/output when the root span has none', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ isRootSpan: true, input: undefined, output: undefined } as any));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBeUndefined();
     });
 
     it('maps tags to langfuse.trace.tags', async () => {
@@ -577,6 +718,138 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.trace.name']).toBeUndefined();
       expect(attrs['langfuse.trace.metadata.agentId']).toBeUndefined();
       expect(attrs['langfuse.trace.metadata.agentName']).toBeUndefined();
+    });
+
+    it('forwards remaining root span metadata to langfuse.trace.metadata.*', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          metadata: {
+            runId: 'run-1',
+            resourceId: 'user-42',
+            sampleKey: 'sample-value',
+            attempt: 3,
+            flags: { beta: true },
+            skipped: null,
+          },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.runId']).toBe('run-1');
+      expect(attrs['langfuse.trace.metadata.resourceId']).toBe('user-42');
+      expect(attrs['langfuse.trace.metadata.sampleKey']).toBe('sample-value');
+      // non-strings are JSON-serialized, matching the metadata.langfuse.* path
+      expect(attrs['langfuse.trace.metadata.attempt']).toBe('3');
+      expect(attrs['langfuse.trace.metadata.flags']).toBe(JSON.stringify({ beta: true }));
+      expect(attrs['langfuse.trace.metadata.skipped']).toBeUndefined();
+      // identity keys are still set alongside the forwarded metadata
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+      // the mastra.metadata.* attributes stay on the observation
+      expect(attrs['mastra.metadata.runId']).toBe('run-1');
+      expect(attrs['mastra.metadata.sampleKey']).toBe('sample-value');
+    });
+
+    it('does not forward metadata from non-root spans to trace metadata', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.TOOL_CALL,
+          isRootSpan: false,
+          metadata: { runId: 'run-child', sampleKey: 'child-value' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.runId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.sampleKey']).toBeUndefined();
+      expect(attrs['mastra.metadata.runId']).toBe('run-child');
+    });
+
+    it('does not duplicate root metadata keys that map to dedicated Langfuse fields', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          metadata: {
+            userId: 'user-123',
+            threadId: 'thread-1',
+            traceName: 'custom-trace-name',
+            version: '2.1.0',
+            runId: 'run-1',
+          },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['user.id']).toBe('user-123');
+      expect(attrs['session.id']).toBe('thread-1');
+      expect(attrs['langfuse.trace.name']).toBe('custom-trace-name');
+      expect(attrs['langfuse.trace.version']).toBe('2.1.0');
+      expect(attrs['langfuse.trace.metadata.userId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.threadId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.sessionId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.traceName']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.version']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.runId']).toBe('run-1');
+    });
+
+    it('does not forward dedicated metadata keys with falsy values', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          metadata: {
+            userId: '',
+            sessionId: '',
+            threadId: '',
+            traceName: '',
+            version: 0,
+            langfuse: '',
+            runId: 'run-1',
+          },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.userId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.sessionId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.threadId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.traceName']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.version']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.langfuse']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.runId']).toBe('run-1');
+    });
+
+    it('lets explicit metadata.langfuse.* values take precedence over root span metadata', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          metadata: {
+            tier: 'root-value',
+            langfuse: { tier: 'explicit-value' },
+          },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.tier']).toBe('explicit-value');
+      expect(attrs['langfuse.trace.metadata.langfuse']).toBeUndefined();
     });
 
     it('scopes trace name and metadata to the workflow on root WORKFLOW_RUN spans', async () => {

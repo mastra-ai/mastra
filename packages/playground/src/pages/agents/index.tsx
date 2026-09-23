@@ -1,21 +1,25 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
 import { AgentsCompactGrid } from '@/domains/agents/components/agent-list/agents-compact-grid';
 import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
 import { sortAgents } from '@/domains/agents/components/agent-list/agents-sort';
 import type { AgentsSort } from '@/domains/agents/components/agent-list/agents-sort';
-import { AgentsSortSelect } from '@/domains/agents/components/agent-list/agents-sort-select';
 import { AgentsViewToggle } from '@/domains/agents/components/agent-list/agents-view-toggle';
 import type { AgentsView } from '@/domains/agents/components/agent-list/agents-view-toggle';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { extractPrompt } from '@/domains/agents/utils/extractPrompt';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/agents')];
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
@@ -25,33 +29,37 @@ function Agents() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Agents</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="agents" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Agents</h1>
+        <PermissionDenied variant="fill" resource="agents" />
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load agents" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Agents</h1>
+        <ErrorState variant="fill" title="Failed to load agents" message={error.message} />
+      </PageLayout>
     );
   }
 
   if (Object.keys(agents).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Agents</h1>
         <NoAgentsInfo />
-      </NoDataPageLayout>
+      </PageLayout>
     );
   }
 
@@ -62,26 +70,37 @@ function Agents() {
   });
   const visibleAgents = sortAgents(filteredAgents, sort);
 
-  let agentsView = <AgentsList agents={visibleAgents} isLoading={isLoading} hasSearch={Boolean(search)} />;
+  let agentsView = (
+    <AgentsList
+      agents={visibleAgents}
+      isLoading={isLoading}
+      hasSearch={Boolean(search)}
+      sort={sort}
+      onSortChange={setSort}
+    />
+  );
   if (view === 'compact') {
     agentsView = <AgentsCompactGrid agents={visibleAgents} isLoading={isLoading} hasSearch={Boolean(search)} />;
   }
 
   return (
-    <PageLayout width="narrow" height="full" className="max-w-7xl grid-rows-[auto_minmax(0,1fr)] content-normal">
-      <AgentHeaderCreateAction />
-      <PageLayout.TopArea>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="max-w-120 flex-1">
-            <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
-          </div>
-          <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">
-            <AgentsSortSelect sort={sort} onSortChange={setSort} />
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      headerActions={<AgentHeaderCreateAction />}
+      actionRow={
+        <ActionRow>
+          <ActionRow.Start>
+            <div className="max-w-120 flex-1">
+              <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+            </div>
+          </ActionRow.Start>
+          <ActionRow.End>
             <AgentsViewToggle view={view} onViewChange={setView} />
-          </div>
-        </div>
-      </PageLayout.TopArea>
-
+          </ActionRow.End>
+        </ActionRow>
+      }
+    >
+      <h1 className="sr-only">Agents</h1>
       {agentsView}
     </PageLayout>
   );

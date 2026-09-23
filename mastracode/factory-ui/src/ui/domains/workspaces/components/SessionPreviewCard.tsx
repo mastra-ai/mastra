@@ -7,7 +7,7 @@ import type { ReactNode, RefObject } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import type { SessionRowStatus } from './SessionNavRow';
+import type { SessionRowStatus } from '../services/sessionStatus';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';
 
 export interface SessionPreviewDetails {
@@ -23,7 +23,7 @@ export interface SessionPreviewDetails {
 function getStatusLabel(status: SessionRowStatus | undefined) {
   if (status === 'initializing') return 'Initializing';
   if (status === 'working') return 'Agent working';
-  if (status === 'ready') return 'Ready';
+  if (status === 'ready') return 'Waiting on you';
   return undefined;
 }
 
@@ -41,7 +41,9 @@ function DetailRow({
 }) {
   return (
     <div className={cn('flex gap-2', centered ? 'items-center' : 'items-start')}>
-      <span className={cn('text-icon3 flex w-avatar-sm shrink-0 justify-center', !centered && 'mt-0.5')}>{icon}</span>
+      <span className={cn('text-muted-foreground flex w-avatar-sm shrink-0 justify-center', !centered && 'mt-0.5')}>
+        {icon}
+      </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="sr-only">{label}</span>
         {children}
@@ -90,46 +92,46 @@ export function SessionPreviewCard({
       <div className="flex flex-col gap-2.5">
         <div className="flex flex-col gap-0.5">
           <div className="flex items-baseline gap-3">
-            <Txt as="p" variant="ui-sm" className="text-icon6 m-0 min-w-0 flex-1 font-medium wrap-anywhere">
+            <Txt as="p" variant="column" className="text-foreground m-0 min-w-0 flex-1 wrap-anywhere">
               {name}
             </Txt>
             {updated && (
-              <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
+              <Txt as="span" variant="meta" className="text-muted-foreground shrink-0">
                 {updated}
               </Txt>
             )}
           </div>
-          <Txt as="p" variant="ui-xs" className="text-icon3 m-0">
+          <Txt as="p" variant="meta" className="text-muted-foreground m-0">
             {statusLabel ? `${details.kind} · ${statusLabel}` : details.kind}
           </Txt>
         </div>
         <div className="flex flex-col gap-1.5">
           <DetailRow icon={<Avatar src={details.owner.avatarUrl} name={ownerName} size="sm" />} label="Owner" centered>
-            <Txt as="p" variant="ui-sm" className="text-icon5 m-0 truncate">
+            <Txt as="p" variant="caption" className="text-foreground m-0 truncate">
               {ownerName}
             </Txt>
           </DetailRow>
           {(details.itemLabel || subtitle) && (
             <DetailRow icon={itemIcon} label={details.kind === 'Review session' ? 'Pull request' : 'Work item'}>
               {details.itemLabel && (
-                <Txt as="p" variant="ui-sm" className="text-icon5 m-0 truncate">
+                <Txt as="p" variant="caption" className="text-foreground m-0 truncate">
                   {details.itemLabel}
                 </Txt>
               )}
               {subtitle && (
-                <Txt as="p" variant="ui-xs" className="text-icon3 m-0 truncate">
+                <Txt as="p" variant="meta" className="text-muted-foreground m-0 truncate">
                   {subtitle}
                 </Txt>
               )}
             </DetailRow>
           )}
           <DetailRow icon={<GitBranch size={14} aria-hidden />} label="Branch">
-            <Txt as="p" variant="ui-sm" className="text-icon5 m-0 truncate">
+            <Txt as="p" variant="caption" className="text-foreground m-0 truncate">
               {details.branch}
             </Txt>
           </DetailRow>
           <DetailRow icon={<GitMerge size={14} aria-hidden />} label="Base branch">
-            <Txt as="p" variant="ui-sm" className="text-icon5 m-0 truncate">
+            <Txt as="p" variant="caption" className="text-foreground m-0 truncate">
               {details.baseBranch}
             </Txt>
           </DetailRow>

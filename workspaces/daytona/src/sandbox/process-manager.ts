@@ -189,12 +189,15 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
   }
 
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    // Apply default timeout and default cwd to the first mount path so that
-    // relative paths resolve inside the FUSE mount instead of /home/daytona.
+    // Apply default timeout and default cwd: per-command cwd wins, then an
+    // explicitly configured workingDirectory, then the first mount path so
+    // that relative paths resolve inside the FUSE mount instead of
+    // /home/daytona. The probe-filled base field deliberately does not
+    // participate — it just reports the session home.
     const effectiveOptions = {
       ...options,
       timeout: options.timeout ?? this._defaultTimeout,
-      cwd: options.cwd ?? this.sandbox.mounts?.entries?.keys().next().value,
+      cwd: options.cwd ?? this.sandbox.explicitWorkingDirectory ?? this.sandbox.mounts?.entries?.keys().next().value,
     };
 
     // The base spawn wrapper already merged the sandbox env into options.env

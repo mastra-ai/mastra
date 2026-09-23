@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { WORKSPACE_TOOLS } from '../../constants';
 import type { CommandResult } from '../../sandbox';
 import { Workspace } from '../../workspace';
-import { executeCommandTool, executeCommandWithBackgroundTool } from '../execute-command';
+import { executeCommandInputSchema, executeCommandTool, executeCommandWithBackgroundTool } from '../execute-command';
 import { getProcessOutputTool } from '../get-process-output';
 import { killProcessTool } from '../kill-process';
 import {
@@ -328,6 +328,124 @@ describe('execute_command tool', () => {
         }),
       );
     });
+
+    it('logs and swallows a synchronous throw from the onExit callback', async () => {
+      const onExit = vi.fn(() => {
+        throw new Error('callback boom');
+      });
+      const handle = createMockHandle({ pid: '42' });
+      const sandbox = createMockSandbox({
+        processes: {
+          spawn: vi.fn().mockResolvedValue(handle),
+        },
+      });
+      const workspace = new Workspace({
+        sandbox,
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            backgroundProcesses: { onExit },
+          },
+        },
+      });
+      const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any;
+      workspace.__setLogger(logger);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        await executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace });
+        await vi.waitFor(() =>
+          expect(logger.error).toHaveBeenCalledWith(
+            'Background process onExit callback threw',
+            expect.objectContaining({ pid: '42' }),
+          ),
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        expect(unhandled).toHaveLength(0);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
+
+    it('logs and swallows a rejected wait() without invoking onExit', async () => {
+      const onExit = vi.fn();
+      const handle = createMockHandle({ pid: '42' });
+      handle.wait.mockRejectedValue(new Error('observe boom'));
+      const sandbox = createMockSandbox({
+        processes: {
+          spawn: vi.fn().mockResolvedValue(handle),
+        },
+      });
+      const workspace = new Workspace({
+        sandbox,
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            backgroundProcesses: { onExit },
+          },
+        },
+      });
+      const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any;
+      workspace.__setLogger(logger);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        await executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace });
+        await vi.waitFor(() =>
+          expect(logger.error).toHaveBeenCalledWith(
+            'Failed to observe background process exit',
+            expect.objectContaining({ pid: '42' }),
+          ),
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        expect(onExit).not.toHaveBeenCalled();
+        expect(unhandled).toHaveLength(0);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
+
+    it('logs and swallows a rejected async onExit callback', async () => {
+      const onExit = vi.fn(async () => {
+        throw new Error('async callback boom');
+      });
+      const handle = createMockHandle({ pid: '42' });
+      const sandbox = createMockSandbox({
+        processes: {
+          spawn: vi.fn().mockResolvedValue(handle),
+        },
+      });
+      const workspace = new Workspace({
+        sandbox,
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            backgroundProcesses: { onExit },
+          },
+        },
+      });
+      const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any;
+      workspace.__setLogger(logger);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        await executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace });
+        await vi.waitFor(() =>
+          expect(logger.error).toHaveBeenCalledWith(
+            'Background process onExit callback threw',
+            expect.objectContaining({ pid: '42' }),
+          ),
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        expect(onExit).toHaveBeenCalledTimes(1);
+        expect(unhandled).toHaveLength(0);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
   });
 });
 
@@ -510,6 +628,31 @@ describe('get_process_output tool', () => {
       const result = await getProcessOutputTool.execute({ pid: '14', tail: 0 }, ctx);
       expect(result).toContain('log 1\n');
       expect(result).toContain('log 500');
+    });
+  });
+
+  describe('tail schema validation', () => {
+    it('execute_command rejects a fractional tail', () => {
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 2.5 }).success).toBe(false);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: '2.5' }).success).toBe(false);
+    });
+
+    it('execute_command accepts an integer tail (number or numeric string)', () => {
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 2 }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: '2' }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 0 }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: -5 }).success).toBe(true);
+    });
+
+    it('get_process_output rejects a fractional tail', () => {
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 2.5 }).success).toBe(false);
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: '2.5' }).success).toBe(false);
+    });
+
+    it('get_process_output accepts an integer tail (number or numeric string)', () => {
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 2 }).success).toBe(true);
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: '2' }).success).toBe(true);
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 0 }).success).toBe(true);
     });
   });
 

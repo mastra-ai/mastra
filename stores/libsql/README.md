@@ -16,27 +16,30 @@ npm install @mastra/libsql
 import { LibSQLVector } from '@mastra/libsql';
 
 const vectorStore = new LibSQLVector({
-  url: 'file:./my-db.db'
+  url: 'file:./my-db.db',
 });
 
 // Create a new table with vector support
 await vectorStore.createIndex({
   indexName: 'my_vectors',
-  dimension: 1536,
+  dimension: 3,
   metric: 'cosine',
 });
 
 // Add vectors
 const ids = await vectorStore.upsert({
   indexName: 'my_vectors',
-  vectors: [[0.1, 0.2, ...], [0.3, 0.4, ...]],
+  vectors: [
+    [0.1, 0.2, 0.3],
+    [0.3, 0.4, 0.5],
+  ],
   metadata: [{ text: 'doc1' }, { text: 'doc2' }],
 });
 
 // Query vectors
 const results = await vectorStore.query({
   indexName: 'my_vectors',
-  queryVector: [0.1, 0.2, ...],
+  queryVector: [0.1, 0.2, 0.3],
   topK: 10, // topK
   filter: { text: 'doc1' }, // filter
   includeVector: false, // includeVector
@@ -44,111 +47,14 @@ const results = await vectorStore.query({
 });
 ```
 
-### Storage
+## Documentation
 
-```typescript
-import { LibSQLStore } from '@mastra/libsql';
+- [@mastra/libsql documentation](https://mastra.ai/reference/vectors/libsql)
 
-const store = new LibSQLStore({
-  id: 'libsql-storage',
-  url: 'file:./my-db.db',
-});
+## Changelog
 
-// Create a thread
-await store.saveThread({
-  thread: {
-    id: 'thread-123',
-    resourceId: 'resource-456',
-    title: 'My Thread',
-    metadata: { key: 'value' },
-    createdAt: new Date(),
-  },
-});
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/libsql/CHANGELOG.md) for version history and release notes.
 
-// Add messages to thread
-await store.saveMessages({
-  messages: [
-    {
-      id: 'msg-789',
-      threadId: 'thread-123',
-      role: 'user',
-      content: { content: 'Hello' },
-      resourceId: 'resource-456',
-      createdAt: new Date(),
-    },
-  ],
-});
+## Support
 
-// Query threads and messages
-const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const messages = await store.listMessages({ threadId: 'thread-123' });
-```
-
-## Configuration
-
-The LibSQLStore store can be initialized with:
-
-- Configuration object with url and auth. Auth is only necessary when using a provider like [Turso](https://turso.tech/)
-
-## Features
-
-### Vector Store Features
-
-- Vector similarity search with cosine, euclidean, and dot product metrics
-- Advanced metadata filtering with MongoDB-like query syntax
-- Minimum score threshold for queries
-- Automatic UUID generation for vectors
-- Table management (create, list, describe, delete, truncate)
-
-### Storage Features
-
-- Thread and message storage with JSON support
-- Atomic transactions for data consistency
-- Efficient batch operations
-- Rich metadata support
-- Timestamp tracking
-- Cascading deletes
-
-## Supported Filter Operators
-
-The following filter operators are supported for metadata queries:
-
-- Comparison: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`
-- Logical: `$and`, `$or`
-- Array: `$in`, `$nin`
-- Text: `$regex`, `$like`
-
-Example filter:
-
-```typescript
-{
-  $and: [{ age: { $gt: 25 } }, { tags: { $in: ['tag1', 'tag2'] } }];
-}
-```
-
-## Vector Store Methods
-
-- `createIndex({indexName, dimension, metric?, indexConfig?, defineIndex?})`: Create a new table with vector support
-- `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
-- `query({indexName, queryVector, topK?, filter?, includeVector?, minScore?})`: Search for similar vectors
-- `updateVector({ indexName, id?, filter?, update })`: Update a single vector by ID or metadata filter
-- `deleteVector({ indexName, id })`: Delete a single vector by ID
-- `deleteVectors({ indexName, ids?, filter? })`: Delete multiple vectors by IDs or metadata filter
-- `defineIndex({indexName, metric?, indexConfig?})`: Define an index
-- `listIndexes()`: List all vector-enabled tables
-- `describeIndex(indexName)`: Get table statistics
-- `deleteIndex(indexName)`: Delete a table
-- `truncateIndex(indexName)`: Remove all data from a table
-
-## Storage Methods
-
-- `saveThread({ thread })`: Create or update a thread
-- `getThreadById({ threadId })`: Get a thread by ID
-- `deleteThread({ threadId })`: Delete a thread and its messages
-- `saveMessages({ messages })`: Save multiple messages in a transaction
-- `listMessages({ threadId, perPage?, page? })`: Get messages for a thread with pagination
-- `deleteMessages(messageIds)`: Delete specific messages
-
-## Related Links
-
-- [LibSQL Documentation](https://docs.turso.tech/sdk/introductionh)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -80,7 +80,7 @@ describe('Tools loading state', () => {
       expect(screen.queryByTestId('tools-card-picker-loading')).toBeNull();
     });
     expect(screen.getByText('No tools available in this project')).toBeTruthy();
-    expect(screen.getByTestId('tools-empty-state').className).toContain('px-6');
-    expect(screen.getByTestId('tools-empty-state').className).toContain('py-6');
+    expect(screen.getByTestId('tools-empty-state').className).toContain('px-4');
+    expect(screen.getByTestId('tools-empty-state').className).toContain('py-4');
   });
 });

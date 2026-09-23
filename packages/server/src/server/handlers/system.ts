@@ -4,8 +4,12 @@ import type { MastraPackage } from '../schemas/system';
 import { apiSchemaManifestResponseSchema, systemPackagesResponseSchema } from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+import { supportsTraceQueryDiscoveryCore } from './observability-shared';
 
 const SOURCE_PROVIDER_CAPABILITIES_TIMEOUT_MS = 3000;
+
+// Default path of liveKitConnectionRoute() from @mastra/livekit — the exact route Studio posts to.
+const LIVEKIT_CONNECTION_DETAILS_PATH = '/voice/livekit/connection-details';
 
 async function getSourceProviderCapabilities(
   getCapabilities: () => Promise<{
@@ -141,8 +145,8 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   path: '/system/packages',
   responseType: 'json',
   responseSchema: systemPackagesResponseSchema,
-  summary: 'Get installed Mastra packages',
-  description: 'Returns a list of all installed Mastra packages and their versions from the project',
+  summary: 'Get installed Mastra packages and Studio capabilities',
+  description: 'Returns installed Mastra packages and runtime capabilities used by Studio',
   tags: ['System'],
   requiresAuth: true,
   handler: async ({ mastra }) => {
@@ -166,11 +170,13 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
       const observabilityStorageType = observabilityStorage?.constructor.name;
       const observabilityStorageFeatures = observabilityStorage?.getFeatures?.();
       const observabilityStorageCapabilities = observabilityStorageFeatures?.some(
-        feature => feature === 'metrics' || feature === 'logs',
+        feature => feature === 'metrics' || feature === 'logs' || feature === 'trace-query-discovery',
       )
         ? {
             metrics: observabilityStorageFeatures.includes('metrics'),
             logs: observabilityStorageFeatures.includes('logs'),
+            traceQueryDiscovery:
+              supportsTraceQueryDiscoveryCore() && observabilityStorageFeatures.includes('trace-query-discovery'),
           }
         : undefined;
       const observabilityRuntimeStrategy = observabilityStorage?.runtimeTracingStrategy;
@@ -179,11 +185,17 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
       const editor = mastra.getEditor();
       const editorSource = editor?.getSource?.();
       const editorSourceCapabilities = editor ? await getEditorSourceCapabilities(editor) : undefined;
+      const liveKitConnectionRouteEnabled =
+        mastra
+          .getServer()
+          ?.apiRoutes?.some(route => route.method === 'POST' && route.path === LIVEKIT_CONNECTION_DETAILS_PATH) ??
+        false;
 
       return {
         packages,
         isDev: process.env.MASTRA_DEV === 'true',
         cmsEnabled: !!editor,
+        liveKitConnectionRouteEnabled,
         editorSource,
         editorSourceCapabilities,
         observabilityEnabled,

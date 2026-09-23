@@ -16,16 +16,20 @@ import {
 import type { ComponentType, SVGProps } from 'react';
 
 import type { WorkItemSource } from '../services/workItems';
-import type { BoardStageId } from '../stages';
+import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { IntakeIcon } from './IntakeIcon';
 
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
-  'github-issue': { icon: GithubIcon, className: 'text-icon5' },
+  'github-issue': { icon: GithubIcon, className: 'text-foreground' },
   'github-pr': { icon: GitPullRequest, className: 'text-accent1' },
+  'gitlab-issue': { icon: GitLabIcon, className: 'text-accent2' },
+  'gitlab-pr': { icon: GitLabIcon, className: 'text-accent2' },
   'linear-issue': { icon: LinearIcon, className: 'text-accent3' },
+  'jira-issue': { icon: JiraIcon, className: 'text-accent3' },
+  'incidentio-follow-up': { icon: IncidentIoIcon, className: 'text-accent2' },
   'slack-thread': { icon: SlackIcon, className: '' },
-  manual: { icon: CircleDot, className: 'text-icon3' },
+  manual: { icon: CircleDot, className: 'text-muted-foreground' },
 };
 
 export function SourceIcon({ source, className }: { source: WorkItemSource; className?: string }) {
@@ -46,17 +50,35 @@ export function actionIcon(label: string) {
   return <Icon aria-hidden />;
 }
 
-const STAGE_ICON_SOURCES: Partial<Record<BoardStageId, string>> = {
+const STAGE_ICON_SOURCES: Partial<Record<string, string>> = {
   triage: '/factory-stage-icons/triage.svg',
   planning: '/factory-stage-icons/in-progress.svg',
   execute: '/factory-stage-icons/in-progress.svg',
 };
 
-export function BoardStageIcon({ stage }: { stage: BoardStageId }) {
-  if (stage === 'intake') return <IntakeIcon className="text-icon3 shrink-0" />;
-  if (stage === 'review') return <GitPullRequest size={16} className="text-icon3 shrink-0" aria-hidden />;
+export function BoardStageIcon({
+  stage,
+  kind,
+  decorative = false,
+}: {
+  /** Built-in phases get bespoke art; any other (custom-board) id falls back to `kind`. */
+  stage: string;
+  kind?: 'resting' | 'working' | 'terminal';
+  /** Beside text that already names the phase, the icon adds nothing to the accessible name. */
+  decorative?: boolean;
+}) {
+  if (kind) {
+    const Icon = kind === 'terminal' ? CheckCircle2 : kind === 'working' ? Play : CircleDot;
+    return decorative ? (
+      <Icon size={16} className="text-muted-foreground shrink-0" aria-hidden />
+    ) : (
+      <Icon size={16} className="text-muted-foreground shrink-0" aria-label={`${kind} phase`} />
+    );
+  }
+  if (stage === 'intake') return <IntakeIcon className="text-muted-foreground shrink-0" />;
+  if (stage === 'review') return <GitPullRequest size={16} className="text-muted-foreground shrink-0" aria-hidden />;
   const source = STAGE_ICON_SOURCES[stage];
   if (source) return <img src={source} alt="" aria-hidden className="size-4 shrink-0" />;
   const Icon = stage === 'done' ? CheckCircle2 : CircleX;
-  return <Icon size={16} className="text-icon3 shrink-0" aria-hidden />;
+  return <Icon size={16} className="text-muted-foreground shrink-0" aria-hidden />;
 }

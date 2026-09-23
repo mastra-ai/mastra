@@ -1,5 +1,4 @@
 import { format } from 'date-fns';
-import { CircleSlashIcon } from 'lucide-react';
 import type { TraceDatePreset } from '../types';
 import { EmptyState } from '@/ds/components/EmptyState';
 
@@ -48,9 +47,5 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoTracesInfoProps): { t
 
 export const NoTracesInfo = ({ datePreset, dateFrom, dateTo }: NoTracesInfoProps = {}) => {
   const { title, description } = describeRange({ datePreset, dateFrom, dateTo });
-  return (
-    <div className="flex h-full items-center justify-center">
-      <EmptyState iconSlot={<CircleSlashIcon />} titleSlot={title} descriptionSlot={description} />
-    </div>
-  );
+  return <EmptyState titleSlot={title} descriptionSlot={description} variant="fill" />;
 };

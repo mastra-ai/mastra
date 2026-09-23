@@ -1,4 +1,4 @@
-import { Workspace, createWorkspaceTools } from '@mastra/core/workspace';
+import { SandboxUnsupportedFeatureError, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { VercelSandbox } from './index';
 
@@ -239,6 +239,17 @@ describe('VercelSandbox', () => {
       expect(createMock).toHaveBeenCalledTimes(1);
       expect(fake.writeFiles).toHaveBeenCalledTimes(1);
     });
+
+    it('rejects an explicit per-file mode without uploading', async () => {
+      const fake = makeFakeSandbox();
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi', mode: 0o600 }])).rejects.toThrow(
+        SandboxUnsupportedFeatureError,
+      );
+      expect(fake.writeFiles).not.toHaveBeenCalled();
+    });
   });
 
   describe('executeCommand()', () => {
@@ -317,6 +328,47 @@ describe('VercelSandbox', () => {
       const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
       expect(runArgs.cwd).toBe('/app');
       expect(runArgs.env).toEqual({ BASE: '1', EXTRA: '2' });
+    });
+
+    it('defaults cwd to the configured workingDirectory', async () => {
+      const fake = makeFakeSandbox({
+        runCommand: vi.fn().mockResolvedValue(makeFinished(0, '')),
+      });
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox({ workingDirectory: '/srv/app' });
+      await sandbox.executeCommand('pwd');
+
+      const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(runArgs.cwd).toBe('/srv/app');
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('per-command cwd wins over the configured workingDirectory', async () => {
+      const fake = makeFakeSandbox({
+        runCommand: vi.fn().mockResolvedValue(makeFinished(0, '')),
+      });
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox({ workingDirectory: '/srv/app' });
+      await sandbox.executeCommand('pwd', [], { cwd: '/app' });
+
+      const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(runArgs.cwd).toBe('/app');
+    });
+
+    it('omits cwd when neither cwd nor workingDirectory is set', async () => {
+      const fake = makeFakeSandbox({
+        runCommand: vi.fn().mockResolvedValue(makeFinished(0, '')),
+      });
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await sandbox.executeCommand('pwd');
+
+      const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(runArgs).not.toHaveProperty('cwd');
+      expect(sandbox.workingDirectory).toBeUndefined();
     });
 
     it('setEnv after construction reaches subsequent commands', async () => {

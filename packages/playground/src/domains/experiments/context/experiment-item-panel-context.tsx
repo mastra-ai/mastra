@@ -16,8 +16,7 @@ export type ExperimentItemPanelContextValue = {
   currentItemId?: string;
   openItem: (itemId: string) => void;
   close: () => void;
-  /** Close the panel and feature the result on the Reviews tab (via `?review=` search param). */
-  openInReview: (resultId: string) => void;
+  /** Close the panel and feature the result on the Review Queue page (via `?review=` search param). */
   /** Undefined at the list boundaries so callers can disable navigation. */
   goToPreviousItem?: () => void;
   goToNextItem?: () => void;
@@ -59,13 +58,6 @@ export function ExperimentItemPanelProvider({
     void navigate(`/experiments/${experimentId}`);
   }, [navigate, experimentId]);
 
-  const openInReview = useCallback(
-    (resultId: string) => {
-      void navigate(`/experiments/${experimentId}?review=${encodeURIComponent(resultId)}`);
-    },
-    [navigate, experimentId],
-  );
-
   const currentIndex = useMemo(
     () => (currentItemId ? results.findIndex(r => r.itemId === currentItemId) : -1),
     [results, currentItemId],
@@ -102,7 +94,6 @@ export function ExperimentItemPanelProvider({
       currentItemId,
       openItem,
       close,
-      openInReview,
       goToPreviousItem,
       goToNextItem,
     }),
@@ -116,7 +107,6 @@ export function ExperimentItemPanelProvider({
       currentItemId,
       openItem,
       close,
-      openInReview,
       goToPreviousItem,
       goToNextItem,
     ],

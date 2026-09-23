@@ -105,7 +105,7 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
       ...existingScorer,
       ...(authorId !== undefined && { authorId }),
       ...(activeVersionId !== undefined && { activeVersionId }),
-      ...(status !== undefined && { status: status as StorageScorerDefinitionType['status'] }),
+      ...(status !== undefined && { status }),
       ...(metadata !== undefined && {
         metadata: { ...existingScorer.metadata, ...metadata },
       }),

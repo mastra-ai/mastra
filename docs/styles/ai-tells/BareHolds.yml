@@ -1,0 +1,122 @@
+---
+extends: existence
+message: "AI possession verb: '%s'. Say what it contains or stores. Disable this rule for concurrency or physical-object prose."
+level: error
+nonword: true
+ignorecase: true
+# The bare possession verb: a data structure with hands ("the table holds
+# every stage's tables," "two records hold identical bytes," "the column
+# holds the serialized object," "whatever the store holds at that moment").
+# FigurativeHolds gates on the idiom complement ("holds true," "holds
+# water," "holds the same layout") and leaves the plain container sense
+# alone, which is where a documentation-corpus audit (2026-09) found the
+# single highest-frequency violation of its standard: 133 occurrences of
+# "hold" with an inanimate subject, every one of them "contains," "stores,"
+# "records," or "has" avoided, and the one that drew the strongest reviewer
+# objection. It gets its own rule so the choice stays with the reader: the
+# idiom tokens measure zero across the corpora and this one does not.
+#
+# The subject slot is open behind a determiner, in the FigurativeLives
+# mold, and the object rides inside the span so the exceptions can name
+# the two registers where holding is literal: the concurrency and
+# memory-management vocabulary (a goroutine holds the lock, a caller holds
+# a reference) and the physical world (a hand, a jar, a clamp).
+#
+# What matches is the container idiom of pre-LLM programming prose, and it is
+# large: about 160 matches across the Go and Python standard libraries ("a
+# directory that holds the output," "each line holds a single directive,"
+# "big enough to hold all ABIs"), each one the substitution this rule
+# names and each one the maintainer asked to see. This is the loudest rule
+# in the package on ordinary technical writing; a project that keeps the
+# container sense disables it per file rather than per sentence, and
+# CommitFigurativeVerbs in the commit style covers this construction where a
+# commit message is the text. The gerund with a determiner object
+# ("holding the lock," "holding the data being relocated") stays out,
+# matching ninety times, all the lock and buffer register; only the
+# counted gerund
+# ("a directory holding one") fires.
+exceptions:
+  # Body parts and people that literally hold
+  - "(?i)hands?"
+  - "(?i)arms?"
+  - "(?i)fingers?"
+  - "(?i)people"
+  - "(?i)person"
+  - "(?i)m[ae]n"
+  - "(?i)wom[ae]n"
+  - "(?i)child(?:ren)?"
+  - "(?i)kids?"
+  - "(?i)users?"
+  - "(?i)callers?"
+  - "(?i)owners?"
+  - "(?i)holders?"
+  - "(?i)players?"
+  - "(?i)patients?"
+  - "(?i)students?"
+  - "(?i)teachers?"
+  - "(?i)staff"
+  - "(?i)teams?"
+  - "(?i)courts?"
+  - "(?i)judges?"
+  - "(?i)degrees?"
+  - "(?i)titles?"
+  - "(?i)offices?"
+  - "(?i)positions?"
+  - "(?i)sessions?"
+  - "(?i)meetings?"
+  # The concurrency and memory-management register
+  - "(?i)locks?"
+  - "(?i)mutex(?:es)?"
+  - "(?i)latch(?:es)?"
+  - "(?i)semaphores?"
+  - "(?i)leases?"
+  - "(?i)references?"
+  - "(?i)pointers?"
+  - "(?i)handles?"
+  - "(?i)descriptors?"
+  - "(?i)\\bfds?\\b"
+  # Physical containers and fasteners
+  - "(?i)jars?"
+  - "(?i)bottles?"
+  - "(?i)tanks?"
+  - "(?i)cups?"
+  - "(?i)bags?"
+  - "(?i)box(?:es)?"
+  - "(?i)buckets?"
+  - "(?i)trays?"
+  - "(?i)shel(?:f|ves)"
+  - "(?i)clamps?"
+  - "(?i)brackets?"
+  - "(?i)straps?"
+  - "(?i)clips?"
+  - "(?i)magnets?"
+  - "(?i)bolts?"
+  - "(?i)screws?"
+  - "(?i)hinges?"
+  - "(?i)in place"
+  - "(?i)liters?"
+  - "(?i)litres?"
+  - "(?i)gallons?"
+tokens:
+  # --- Determiner-gated possession: any artifact holding a determined or
+  # counted object ("the table holds every stage's tables," "the column
+  # holds the serialized object," "each row held one value"), with an
+  # optional modifier and an optional adverb inside the span. The
+  # lookahead leaves FigurativeHolds its idiom complements.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|two|any|some|most|whatever) (?:[a-z'-]+ )?[a-z]+ (?:already |still |also |only |then |now |never |always |currently )?(?:holds?|held) (?!(?:the same|an? (?:similar|identical|comparable|matching)|the key|the line|court|true|water|up|at scale|across|promise|potential|appeal|weight|sway|its own)\\b)(?:a|an|the|its|their|this|that|these|those|every|each|all|any|some|no|zero|one|two|three|several|many|both|identical|only|whatever|what|nothing|exactly|at least|at most|more|fewer|less|up to) (?:[a-z'-]+ )?[a-z]+\\b"
+
+  # --- The quantified object with the subject left open ("two records
+  # hold identical bytes," "holds every input the review needs," "a
+  # directory holding one").
+  - "\\b(?:holds?|held|holding) (?:every|each|all|any|no|zero|identical|whatever|nothing|only|exactly|one|two|three|several|many|both|more|fewer|less|up to|at least|at most) (?:[a-z'-]+ )?[a-z]+\\b"
+
+  # --- The object fronted: a relative clause with the holder after its
+  # contents ("the counts the aux tables already hold," "whatever the
+  # store holds," "the value it holds"). The lookahead refuses a following
+  # object, which the first token reads instead.
+  - "\\b(?:whatever|what|which|that) (?:the|a|an|its|their|this|that|each|every) (?:[a-z]+ ){0,2}(?:holds?|held)\\b(?! (?:a|an|the|its|their|this|that|no|one|two|three|several|many|some|all|every|each|zero|true|water|up|court|sway|promise|for|across|[a-z]+s)\\b)"
+  - "\\b(?:the|a|an|each|every|its|their|this|that|these|those) (?:[a-z]+ )?[a-z]+ (?:it|they|each [a-z]+|every [a-z]+|this [a-z]+|that [a-z]+|the [a-z]+|a [a-z]+|an [a-z]+|no [a-z]+|which|who) (?:[a-z]+ ){0,2}(?:holds?|held)\\b(?! (?:a|an|the|its|their|this|that|no|one|two|three|several|many|some|all|every|each|zero|true|water|up|court|sway|promise|for|across|[a-z]+s)\\b)"
+
+  # --- The participle of storage ("code held as a config value," "the
+  # counts held within the manifest").
+  - "\\bheld (?:as|within|under) (?:a|an|the|its|their|this|that|one|each|every)\\b"

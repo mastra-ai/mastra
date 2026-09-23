@@ -3,8 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playgr
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { MessageSquare, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -13,30 +14,17 @@ import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useWorkspaceAttentionState } from '../../../../hooks/useWorkspaceAttention';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
+import { EMPTY_USER_SESSION_FILTERS, filterUserSessions } from '../services/sessionFilters';
+import type { UserSessionFiltersState } from '../services/sessionFilters';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
-import type { SessionRowStatus } from './SessionNavRow';
-
-function userSessionStatus({
-  session,
-  running,
-  attention,
-}: {
-  session: FactoryUserSession;
-  running: boolean;
-  attention: boolean;
-}): SessionRowStatus | undefined {
-  if (running) return 'working';
-  if (!session.materializedAt) return 'initializing';
-  if (attention) return 'ready';
-  return undefined;
-}
+import { sessionRowStatus } from '../services/sessionStatus';
+import { UserSessionFilters } from './UserSessionFilters';
 
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
@@ -46,6 +34,7 @@ export function UserSessionsSection() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const [filters, setFilters] = useState<UserSessionFiltersState>(EMPTY_USER_SESSION_FILTERS);
   const { pinnedSessions, setPinned } = usePinnedSessions();
 
   const repository = factoryQuery.data?.repositories[0];
@@ -56,19 +45,30 @@ export function UserSessionsSection() {
   // Pinned rows stay on top; within each pin group the viewer's own sessions
   // sort before sessions started by other org members.
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
-  const sessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
+  const allSessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
     (a, b) =>
       Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
       Number(isOwn(b)) - Number(isOwn(a)),
   );
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceIds: sessions.map(session => session.sessionId),
+    resourceIds: allSessions.map(session => session.sessionId),
   });
-  const { attentionByPath: attentionBySessionId, clearAttention } = useWorkspaceAttentionState({
-    projectRepositoryId: repository?.projectRepositoryId,
-    sessionKind: 'user',
-  });
+  const candidates = allSessions.map(session => ({
+    session,
+    ownerName: getSessionOwnerDetails(session, auth.data?.user).name,
+    status: !session.materializedAt
+      ? ('initializing' as const)
+      : runningBySessionId[session.sessionId] === true
+        ? ('working' as const)
+        : ('idle' as const),
+  }));
+  const sessions = filterUserSessions(candidates, filters, viewerUserId).map(candidate => candidate.session);
+  const ownersById = new Map<string, string>();
+  for (const candidate of candidates) ownersById.set(candidate.session.userId, candidate.ownerName);
+  const owners = [...ownersById]
+    .map(([userId, name]) => ({ userId, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
@@ -119,21 +119,32 @@ export function UserSessionsSection() {
   const pending = deleteSession.isPending;
 
   return (
-    <section className="flex flex-col gap-2" aria-label="User sessions">
-      <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          User Sessions
-        </Txt>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="New user session"
-          onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-          disabled={pending}
-        >
-          <Plus size={15} />
-        </Button>
-      </div>
+    <section className="flex flex-col gap-1" aria-label="User sessions">
+      <SidebarSectionHeading
+        icon={<MessageSquare />}
+        action={
+          <div className="flex items-center gap-0.5">
+            <UserSessionFilters
+              filters={filters}
+              owners={owners}
+              viewerUserId={viewerUserId}
+              onChange={setFilters}
+              onClear={() => setFilters(EMPTY_USER_SESSION_FILTERS)}
+            />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="New user session"
+              onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
+              disabled={pending}
+            >
+              <Plus size={15} />
+            </Button>
+          </div>
+        }
+      >
+        User Sessions
+      </SidebarSectionHeading>
 
       <div className="flex flex-col gap-1">
         <MainSidebar.NavList>
@@ -142,10 +153,9 @@ export function UserSessionsSection() {
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
             const active = location.pathname === url;
 
-            const status = userSessionStatus({
-              session,
+            const status = sessionRowStatus({
               running: runningBySessionId[session.sessionId] === true,
-              attention: attentionBySessionId[session.sessionId] === true,
+              initializing: !session.materializedAt,
             });
             return (
               <SessionNavRow
@@ -163,10 +173,7 @@ export function UserSessionsSection() {
                 disabled={pending}
                 status={status}
                 pinned={pinnedSessions.has(session.sessionId)}
-                onSelect={() => {
-                  clearAttention(session.sessionId);
-                  void navigate(url);
-                }}
+                onSelect={() => void navigate(url)}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
                 // The DELETE route is owner-only and 404s for non-owners, which
                 // deleteUserSession treats as an idempotent success; offering
@@ -181,17 +188,17 @@ export function UserSessionsSection() {
         </MainSidebar.NavList>
         {sessionsQuery.isError && (
           <div className="flex items-center gap-2 px-2 py-1">
-            <Txt as="p" variant="ui-xs" className="text-error m-0">
+            <Txt as="p" variant="meta" className="text-error m-0">
               Couldn’t load sessions
             </Txt>
-            <Button variant="ghost" size="xs" onClick={() => void sessionsQuery.refetch()}>
+            <Button variant="ghost" size="sm" onClick={() => void sessionsQuery.refetch()}>
               Retry
             </Button>
           </div>
         )}
         {sessionsQuery.isSuccess && sessions.length === 0 && (
-          <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
-            No sessions yet
+          <Txt as="p" variant="meta" className="text-muted-foreground m-0 px-2 py-1">
+            {allSessions.length === 0 ? 'No sessions yet' : 'No sessions match these filters'}
           </Txt>
         )}
       </div>
@@ -203,9 +210,9 @@ export function UserSessionsSection() {
               <DialogTitle>Delete session?</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
-                This deletes the <span className="text-icon6">{getUserSessionLabel(confirmDelete)}</span> session and
-                its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
+              <Txt as="p" variant="caption" className="text-muted-foreground m-0">
+                This deletes the <span className="text-foreground">{getUserSessionLabel(confirmDelete)}</span> session
+                and its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
               </Txt>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteSession.isPending}>

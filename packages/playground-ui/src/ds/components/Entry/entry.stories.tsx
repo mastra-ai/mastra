@@ -17,7 +17,7 @@ type Story = StoryObj<typeof Entry>;
 export const Default: Story = {
   args: {
     label: 'Label',
-    children: <Txt variant="ui-md">Value content</Txt>,
+    children: <Txt variant="body">Value content</Txt>,
   },
 };
 
@@ -25,7 +25,7 @@ export const WithText: Story = {
   args: {
     label: 'Name',
     children: (
-      <Txt variant="ui-md" className="text-neutral6">
+      <Txt variant="body" tone="ink">
         John Doe
       </Txt>
     ),
@@ -35,7 +35,7 @@ export const WithText: Story = {
 export const WithBadge: Story = {
   args: {
     label: 'Status',
-    children: <Badge variant="success">Active</Badge>,
+    children: <Badge variant="green">Active</Badge>,
   },
 };
 
@@ -43,7 +43,7 @@ export const WithLongContent: Story = {
   args: {
     label: 'Description',
     children: (
-      <Txt variant="ui-md" className="text-neutral6">
+      <Txt variant="body" tone="ink">
         This is a longer description that contains multiple lines of text to show how the component handles longer
         content.
       </Txt>
@@ -53,17 +53,17 @@ export const WithLongContent: Story = {
 
 export const MultipleEntries: Story = {
   render: () => (
-    <div className="w-dropdown-max-height flex flex-col gap-4">
+    <div className="flex w-75 flex-col gap-4">
       <Entry label="Name">
-        <Txt variant="ui-md" className="text-neutral6">
+        <Txt variant="body" tone="ink">
           My Agent
         </Txt>
       </Entry>
       <Entry label="Status">
-        <Badge variant="success">Running</Badge>
+        <Badge variant="green">Running</Badge>
       </Entry>
       <Entry label="Created">
-        <Txt variant="ui-md" className="text-neutral6">
+        <Txt variant="body" tone="ink">
           Jan 14, 2026
         </Txt>
       </Entry>
@@ -76,13 +76,13 @@ export const WithComplexContent: Story = {
     label: 'Configuration',
     children: (
       <div className="flex flex-col gap-1">
-        <Txt variant="ui-sm" className="text-neutral5">
+        <Txt variant="caption" tone="ink">
           Model: GPT-4
         </Txt>
-        <Txt variant="ui-sm" className="text-neutral5">
+        <Txt variant="caption" tone="ink">
           Temperature: 0.7
         </Txt>
-        <Txt variant="ui-sm" className="text-neutral5">
+        <Txt variant="caption" tone="ink">
           Max tokens: 4096
         </Txt>
       </div>

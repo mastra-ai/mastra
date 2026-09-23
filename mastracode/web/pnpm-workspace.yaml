@@ -5,6 +5,11 @@
 # @mastra/code-sdk (`pnpm --filter ./mastracode/sdk build:lib`) first.
 packages:
   - '.'
+overrides:
+  hono@<4.12.34: 4.12.34
+  nanoid@>=3.0.0 <3.3.18: 3.3.18
+  postcss@<8.5.23: 8.5.23
+  undici@<6.28.0: 6.28.0
 # Share pnpm's machine-global virtual store (same setting as the monorepo
 # root). With identical versions this makes react/react-dom resolve to the
 # exact same physical module as the `link:`ed monorepo packages use, so the

@@ -76,6 +76,14 @@ describe('components/* subpath exports', () => {
     expect(mod.ComposerActions).toBeDefined();
   });
 
+  it('Comment entry exports its compound components', async () => {
+    const mod = await import('./ds/components/Comment');
+    expect(mod.Comment).toBeDefined();
+    expect(mod.CommentList).toBeDefined();
+    expect(mod.CommentItem).toBeDefined();
+    expect(mod.CommentComposer).toBeDefined();
+  });
+
   it('AI plan entry exports Plan', async () => {
     const mod = await import('./ds/components/ai/plan');
     expect(mod.Plan).toBeDefined();

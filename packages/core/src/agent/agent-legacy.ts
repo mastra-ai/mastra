@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
@@ -51,7 +50,10 @@ import type {
 } from './types';
 
 import { resolveThreadIdFromArgs } from './utils';
-import { fireClientToolOutputHooks } from './workflows/prepare-stream/client-tool-output-hooks';
+import {
+  applyClientToolModelOutput,
+  fireClientToolOutputHooks,
+} from './workflows/prepare-stream/client-tool-output-hooks';
 
 const LEGACY_MEMORY_RUN_STATE_KEY = createRunScopeKey<MemoryRunState>('agent-legacy.memoryRunState');
 
@@ -329,12 +331,22 @@ export class AgentLegacyHandler {
         });
 
         // The legacy path has no abort signal to forward to the hook.
-        const fireClientHooks = () =>
-          fireClientToolOutputHooks({
+        const fireClientHooks = async () => {
+          await fireClientToolOutputHooks({
             messages,
             tools: convertedTools,
             logger: this.capabilities.logger,
           });
+          // Enrich ingested client tool results with the server tool's
+          // toModelOutput. The legacy v4 prompt conversion does not consume the
+          // metadata, but it persists with the message so later requests on the
+          // current paths restore the mapped output.
+          await applyClientToolModelOutput({
+            messageList,
+            tools: convertedTools,
+            logger: this.capabilities.logger,
+          });
+        };
 
         let messageList = new MessageList({
           threadId,
@@ -835,7 +847,7 @@ export class AgentLegacyHandler {
         threadId: threadFromArgs?.id,
         resourceId,
       }) ||
-      randomUUID();
+      globalThis.crypto.randomUUID();
     const instructions = args.instructions || (await this.capabilities.getInstructions({ requestContext }));
     const llm = await this.capabilities.getLLM({
       requestContext,
@@ -1033,7 +1045,7 @@ export class AgentLegacyHandler {
         usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
         finishReason: 'other',
         response: {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           timestamp: new Date(),
           modelId: 'tripwire',
           messages: [],
@@ -1108,7 +1120,7 @@ export class AgentLegacyHandler {
           usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
           finishReason: 'other',
           response: {
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             timestamp: new Date(),
             modelId: 'tripwire',
             messages: [],
@@ -1238,7 +1250,7 @@ export class AgentLegacyHandler {
         usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
         finishReason: 'other',
         response: {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           timestamp: new Date(),
           modelId: 'tripwire',
           messages: [],
@@ -1384,7 +1396,7 @@ export class AgentLegacyHandler {
         finishReason: Promise.resolve('other'),
         tripwire: beforeResult.tripwire,
         response: {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           timestamp: new Date(),
           modelId: 'tripwire',
           messages: [],

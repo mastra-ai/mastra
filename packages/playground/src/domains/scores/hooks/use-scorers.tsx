@@ -109,7 +109,7 @@ export const useScorer = (scorerId: string) => {
   return { scorer, isLoading, error };
 };
 
-export const useScorers = () => {
+export const useScorers = (options?: { enabled?: boolean }) => {
   const client = useMastraClient();
   const requestContext = useMergedRequestContext();
 
@@ -118,5 +118,6 @@ export const useScorers = () => {
     queryFn: () => client.listScorers(requestContext),
     staleTime: 0,
     gcTime: 0,
+    enabled: options?.enabled ?? true,
   });
 };

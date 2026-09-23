@@ -1,6 +1,6 @@
 ---
 title: "AgentCore | Sandbox"
-description: "API reference for AgentCoreRuntimeSandbox, a Workspace sandbox provider that executes shell commands in AWS Bedrock AgentCore Runtime sessions."
+description: "Execute commands in AWS Bedrock AgentCore Runtime sessions from Mastra workspaces, with session management, environment variables, and file operations."
 packages:
   - "@mastra/agentcore"
 ---
@@ -108,6 +108,13 @@ if (!result?.success) {
     description: 'Accept header used for command event streams.',
     isOptional: true,
     defaultValue: 'application/vnd.amazon.eventstream',
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given, applied as a shell `cd` prefix. A per-command `cwd` always wins. The path is shell-quoted, so `~` is not expanded — use an absolute path.',
+    isOptional: true,
   },
   {
     name: 'commandTimeout',

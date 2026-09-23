@@ -2,10 +2,11 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ChevronDownIcon, CopyIcon, ScissorsIcon, ClipboardIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
+import { Combobox } from '../Combobox';
 import { DropdownMenu } from '../DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
-import { ButtonsGroup, ButtonsGroupSeparator, ButtonsGroupText } from './buttons-group';
+import { ButtonsGroup, ButtonsGroupText } from './buttons-group';
 
 const meta: Meta<typeof ButtonsGroup> = {
   title: 'Composite/ButtonsGroup',
@@ -28,22 +29,69 @@ export const Default: Story = {
   ),
 };
 
-export const DefaultSpacing: Story = {
+/**
+ * The rung lives on the group, not on the segments. Height, icon-mode width and glyph size all
+ * come from `size`, and a segment cannot lift itself off it: every row below asks for an
+ * `icon-lg` chevron and a `lg` trigger, and all three still come out flat. The field's inner
+ * control follows too, inset by its own border.
+ *
+ * This is why a segment rarely needs a `size` of its own. `icon-*` stays on the button because
+ * it also picks the square shape — the rung part of it is overridden here.
+ */
+export const Sizes: Story = {
   render: () => (
-    <ButtonsGroup>
-      <Button>Cancel</Button>
-      <Button>Save</Button>
-    </ButtonsGroup>
+    <div className="flex flex-col items-start gap-4">
+      {(['sm', 'md', 'lg'] as const).map(size => (
+        <ButtonsGroup key={size} size={size} aria-label={`${size} group`}>
+          <InputGroup className="w-50">
+            <InputGroupAddon align="inline-start">
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput aria-label={`Search (${size})`} placeholder="Search..." />
+          </InputGroup>
+          <Button icon={<CopyIcon />}>Copy</Button>
+          <ButtonsGroupText>{size}</ButtonsGroupText>
+          <Select defaultValue="recent">
+            <SelectTrigger size="lg" aria-label="Sort by">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="recent">Most recent</SelectItem>
+              <SelectItem value="oldest">Oldest</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="icon-lg" aria-label="More options">
+            <ChevronDownIcon />
+          </Button>
+        </ButtonsGroup>
+      ))}
+    </div>
   ),
 };
 
-export const CloseSpacing: Story = {
-  render: () => (
-    <ButtonsGroup spacing="close">
-      <Button>Cancel</Button>
-      <Button>Save</Button>
-    </ButtonsGroup>
-  ),
+/**
+ * A segmented view toggle: the selected segment is `default` (filled), the rest are `ghost`.
+ * The group draws one continuous ring whether or not a segment is filled, and the seam between
+ * two segments is a single pixel — never two stacked borders.
+ */
+export const AsSegmentedControl: Story = {
+  render: function Render() {
+    const [view, setView] = useState('list');
+    return (
+      <ButtonsGroup aria-label="View">
+        {['list', 'board', 'calendar'].map(value => (
+          <Button
+            key={value}
+            variant={view === value ? 'default' : 'ghost'}
+            aria-pressed={view === value}
+            onClick={() => setView(value)}
+          >
+            {value}
+          </Button>
+        ))}
+      </ButtonsGroup>
+    );
+  },
 };
 
 /**
@@ -55,7 +103,7 @@ export const CloseSpacing: Story = {
  */
 export const AsSplitButton: Story = {
   render: () => (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <Button>Save</Button>
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
@@ -83,60 +131,18 @@ export const Vertical: Story = {
   ),
 };
 
-export const VerticalCloseSpacing: Story = {
-  render: () => (
-    <ButtonsGroup orientation="vertical" spacing="close">
-      <Button variant="outline">
-        <CopyIcon />
-        Copy
-      </Button>
-      <Button variant="outline">
-        <ScissorsIcon />
-        Cut
-      </Button>
-      <Button variant="outline">
-        <ClipboardIcon />
-        Paste
-      </Button>
-    </ButtonsGroup>
-  ),
-};
-
-export const WithSeparator: Story = {
-  render: () => (
-    <ButtonsGroup>
-      <Button variant="ghost">
-        <CopyIcon />
-        Copy
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
-        <ScissorsIcon />
-        Cut
-      </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
-        <ClipboardIcon />
-        Paste
-      </Button>
-    </ButtonsGroup>
-  ),
-};
-
-export const VerticalWithSeparator: Story = {
+export const VerticalOutline: Story = {
   render: () => (
     <ButtonsGroup orientation="vertical">
-      <Button variant="ghost">
+      <Button variant="outline">
         <CopyIcon />
         Copy
       </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
+      <Button variant="outline">
         <ScissorsIcon />
         Cut
       </Button>
-      <ButtonsGroupSeparator />
-      <Button variant="ghost">
+      <Button variant="outline">
         <ClipboardIcon />
         Paste
       </Button>
@@ -151,7 +157,7 @@ export const VerticalWithSeparator: Story = {
  */
 export const Stepper: Story = {
   render: () => (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <Button variant="outline" aria-label="Decrement">
         −
       </Button>
@@ -166,7 +172,7 @@ export const Stepper: Story = {
 /** `ButtonsGroupText` as an actual text label segment (e.g. a unit) next to a control. */
 export const WithText: Story = {
   render: () => (
-    <ButtonsGroup spacing="close">
+    <ButtonsGroup>
       <ButtonsGroupText>https://</ButtonsGroupText>
       <Button variant="outline">example.com</Button>
     </ButtonsGroup>
@@ -179,22 +185,24 @@ export const WithText: Story = {
  * `ButtonsGroup` merger; an interactive clear button would go in an `InputGroupAddon`
  * (`align="inline-end"`) with an `InputGroupButton`.
  *
- * No layout classes on the children (`flex-1`/`min-w-0`/`shrink-0`): the group owns sizing in
- * `spacing="close"` — the InputGroup fills the row and the Select trigger sizes to its content.
- * The group collapses the touching borders into a divider and flattens the inner corners,
- * leaving the outer pill rounded.
+ * No layout classes on the children (`flex-1`/`min-w-0`/`shrink-0`): the group owns sizing — the
+ * InputGroup fills the row and the Select trigger sizes to its content. The group collapses the
+ * touching borders into a divider and flattens the inner corners, leaving the outer pill rounded.
+ *
+ * Neither segment names a size. They cannot: the group puts every segment on its own rung, so
+ * the pill is flat by construction (see `Sizes`).
  *
  * Only one class is passed: `rounded-full` on the `SelectTrigger`, an intentional shape choice
  * so its outer corner matches the InputGroup pill (the trigger's standalone default is
- * `rounded-lg`). The `w-[420px]` on the group is just the demo container width.
+ * `rounded-lg`). The `w-105` on the group is just the demo container width.
  */
 export const SearchWithDropdown: Story = {
   render: () => {
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState('recent');
     return (
-      <ButtonsGroup spacing="close" className="w-105">
-        <InputGroup variant="outline" size="default">
+      <ButtonsGroup className="w-105">
+        <InputGroup>
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>
@@ -207,7 +215,7 @@ export const SearchWithDropdown: Story = {
           />
         </InputGroup>
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger aria-label="Sort by" size="lg" className="rounded-full">
+          <SelectTrigger aria-label="Sort by" className="rounded-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
@@ -216,6 +224,43 @@ export const SearchWithDropdown: Story = {
             <SelectItem value="name">Name</SelectItem>
           </SelectContent>
         </Select>
+      </ButtonsGroup>
+    );
+  },
+};
+
+/**
+ * Two field triggers joined — Studio's composer pairs a provider picker with a model picker
+ * this way. A field's resting edge is its material's inset rim, which paints all four sides,
+ * so the group flattens the material and gives both segments the border it can halve at the
+ * seam. Hover and focus move that border instead of the rim.
+ */
+export const AsFieldPair: Story = {
+  render: () => {
+    const [provider, setProvider] = useState('openai');
+    const [model, setModel] = useState('gpt-5');
+    return (
+      <ButtonsGroup>
+        <Combobox
+          value={provider}
+          onValueChange={value => setProvider(String(value))}
+          options={[
+            { value: 'openai', label: 'OpenAI' },
+            { value: 'anthropic', label: 'Anthropic' },
+          ]}
+          aria-label="Provider"
+          className="w-auto"
+        />
+        <Combobox
+          value={model}
+          onValueChange={value => setModel(String(value))}
+          options={[
+            { value: 'gpt-5', label: 'gpt-5' },
+            { value: 'gpt-5-mini', label: 'gpt-5-mini' },
+          ]}
+          aria-label="Model"
+          className="w-auto"
+        />
       </ButtonsGroup>
     );
   },

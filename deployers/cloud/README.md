@@ -1,20 +1,11 @@
 # @mastra/deployer-cloud
 
-A cloud-optimized deployer for Mastra applications with built-in telemetry, logging, and storage integration.
-
-## Features
-
-- **Cloud-Native Integration**: Automatic setup for LibSQL storage and vector databases
-- **Advanced Logging**: Built-in PinoLogger with HTTP transport for cloud logging endpoints
-- **Telemetry & Monitoring**: OpenTelemetry instrumentation with readiness logging
-- **Evaluation Hooks**: Automatic agent evaluation tracking and storage
-- **Multi-Logger Support**: Combines cloud logging with existing application loggers
-- **Environment-Based Configuration**: Smart configuration based on deployment environment
+A cloud-optimized deployer for Mastra applications with built-in logging, storage, instrumentation, and server entry-point generation.
 
 ## Installation
 
 ```bash
-pnpm add @mastra/deployer-cloud
+npm install @mastra/deployer-cloud
 ```
 
 ## Usage
@@ -24,151 +15,30 @@ The cloud deployer is used as part of the Mastra build process:
 ```typescript
 import { CloudDeployer } from '@mastra/deployer-cloud';
 
-const deployer = new CloudDeployer();
+const deployer = new CloudDeployer({ studio: false });
 
-// Bundle your Mastra application
-await deployer.bundle(mastraDir, outputDirectory);
-
-// The deployer automatically:
-// - Adds cloud dependencies
-// - Sets up instrumentation
-// - Configures logging and storage
+await deployer.bundle('./src/mastra', './.mastra/output');
 ```
 
-## What It Does
+## Documentation
 
-### 1. Dependency Management
+`CloudDeployer` creates the server bundle used by Mastra Cloud. It discovers the Mastra entry file and tools, generates a production server entry point, keeps npm dependencies external, writes the deployment package manifest, and installs the resulting dependencies into the output directory.
 
-Automatically adds cloud-specific dependencies to your package.json:
+The generated server combines the application's logger with a cloud `PinoLogger`, sends logs to `BUSINESS_API_RUNNER_LOGS_ENDPOINT` when configured, and emits structured readiness events containing the deployment team, project, and build identifiers. When `MASTRA_STORAGE_URL` and `MASTRA_STORAGE_AUTH_TOKEN` are present, it initializes Mastra Cloud LibSQL storage; otherwise it initializes the storage configured by the application.
 
-- `@mastra/loggers` - Cloud-optimized logging
-- `@mastra/libsql` - Serverless SQL storage
-- `@mastra/cloud` - Cloud platform utilities
+Studio is excluded by default. Pass `new CloudDeployer({ studio: true })` to copy and serve the Studio assets with the deployed server. The generated server disables Swagger UI, exposes discovered tools, registers internal trace-scoring support when storage is available, and applies the cloud authentication entry point.
 
-### 2. Server Entry Generation
+Common runtime variables include:
 
-Creates a production-ready server entry point with:
+- `MASTRA_STORAGE_URL` and `MASTRA_STORAGE_AUTH_TOKEN` for managed storage.
+- `BUSINESS_API_RUNNER_LOGS_ENDPOINT` and `BUSINESS_JWT_TOKEN` for cloud log transport.
+- `RUNNER_START_TIME`, `TEAM_ID`, `PROJECT_ID`, and `BUILD_ID` for readiness and deployment metadata.
+- `CI=true` to disable the remote log transport during CI builds.
 
-- Cloud storage initialization (LibSQL)
-- Vector database setup
-- Multi-transport logging
-- Telemetry and monitoring
-- Evaluation hooks for agent metrics
+## Changelog
 
-### 3. Instrumentation
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/deployers/cloud/CHANGELOG.md) for version history and release notes.
 
-Provides OpenTelemetry instrumentation for:
+## Support
 
-- Distributed tracing
-- Performance monitoring
-- Custom telemetry configuration
-
-## Environment Variables
-
-The deployer configures your application to use these environment variables:
-
-```bash
-# Storage Configuration
-MASTRA_STORAGE_URL=your-libsql-url
-MASTRA_STORAGE_AUTH_TOKEN=your-auth-token
-
-# Logging Configuration
-BUSINESS_API_RUNNER_LOGS_ENDPOINT=your-logs-endpoint
-BUSINESS_JWT_TOKEN=your-jwt-token
-
-# Studio Configuration
-PLAYGROUND_JWT_TOKEN=your-playground-jwt-token
-
-# Runtime Configuration
-RUNNER_START_TIME=deployment-start-time
-CI=true|false
-
-# Deployment Metadata
-TEAM_ID=your-team-id
-PROJECT_ID=your-project-id
-BUILD_ID=your-build-id
-```
-
-## Generated Server Code
-
-The deployer generates a server entry that:
-
-1. **Initializes Logging**:
-   - Sets up PinoLogger with cloud transports
-   - Combines with existing application loggers
-   - Provides structured JSON logging
-
-2. **Configures Storage**:
-   - Initializes LibSQL store when credentials are provided
-   - Sets up vector database for semantic search
-   - Integrates with Mastra's memory system
-
-3. **Registers Hooks**:
-   - `ON_GENERATION` - Tracks agent generation metrics
-   - `ON_EVALUATION` - Stores evaluation results
-
-4. **Starts Server**:
-   - Creates Node.js server with Mastra configuration
-   - Disables Studio and Swagger UI for production
-   - Exports tools for API access
-
-## Project Structure
-
-After deployment, your project will have:
-
-```
-output/
-├── package.json          # With cloud dependencies
-├── index.mjs            # Main server entry
-├── mastra.mjs          # Your Mastra configuration
-└── tools/              # Exported tools
-```
-
-## Readiness Logging
-
-The deployer includes structured readiness logs for monitoring:
-
-```json
-{
-  "message": "Server starting|Server started|Runner Initialized",
-  "type": "READINESS",
-  "startTime": 1234567890,
-  "durationMs": 123,
-  "metadata": {
-    "teamId": "your-team-id",
-    "projectId": "your-project-id",
-    "buildId": "your-build-id"
-  }
-}
-```
-
-## Testing
-
-The cloud deployer includes comprehensive tests covering:
-
-- Build pipeline functionality
-- Server runtime generation
-- Dependency management
-- Error handling
-- Integration scenarios
-
-Run tests with:
-
-```bash
-pnpm test
-```
-
-## Development
-
-For local development:
-
-```bash
-# Build the deployer
-pnpm build
-
-# Run tests
-pnpm test
-
-# Lint code
-pnpm lint
-```
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

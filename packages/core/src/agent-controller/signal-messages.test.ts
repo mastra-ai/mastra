@@ -2,7 +2,8 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
-import { RequestContext } from '../request-context';
+import type { AgentThreadEvent } from '../agent/types';
+import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -357,7 +358,7 @@ describe('AgentController signal messages', () => {
 
     await session.thread.create();
     await session.sendMessage({ content: 'hello' });
-    await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
+    await waitFor(() => events.some(event => event.type === 'message_end'));
 
     const assistantStarts = events.filter(
       (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
@@ -365,11 +366,16 @@ describe('AgentController signal messages', () => {
     );
     const assistantEnds = events.filter(
       (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        event.type === 'message_end' && event.message.role === 'assistant',
+        event.type === 'message_end' && event.id === assistantStarts[0]?.message.id,
     );
     expect(assistantStarts).toHaveLength(1);
     expect(assistantEnds).toHaveLength(1);
-    expect(assistantEnds[0]?.message.content.parts).toEqual([{ type: 'text', text: 'Hello' }]);
+    expect(assistantStarts[0]?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
+    expect(events).toContainEqual({
+      type: 'message_update',
+      id: assistantStarts[0]!.message.id,
+      event: { type: 'text-delta', delta: 'Hello' },
+    });
     expect(session.getCurrentRunId()).toBeNull();
   });
 
@@ -386,7 +392,11 @@ describe('AgentController signal messages', () => {
     );
     await signal.accepted;
 
-    expect(buildToolsets).toHaveBeenCalledWith(session, requestContext);
+    const toolsetRequestContext = buildToolsets.mock.calls[0]?.[1];
+    expect(toolsetRequestContext).toBeInstanceOf(RequestContext);
+    expect(toolsetRequestContext).not.toBe(requestContext);
+    expect(toolsetRequestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext.get('controller')).toBeUndefined();
   });
 
   it('sends active text signals without building idle stream options', async () => {
@@ -578,7 +588,7 @@ describe('AgentController signal messages', () => {
     await expect(accepted.accepted).resolves.toEqual({ accepted: true, runId: 'run-2', action: 'deliver' });
   });
 
-  it('tracks queued follow-ups in display state while running', async () => {
+  it('accepts the synchronous shared queue snapshot when subscribing to a thread', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
     const events: AgentControllerEvent[] = [];
@@ -586,16 +596,150 @@ describe('AgentController signal messages', () => {
       events.push(event);
     });
 
-    session.run.ensureAbortController();
+    const agent = session.machinery.getAgent();
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
+      listener({ type: 'queue-count-changed', count: 1 });
+      return vi.fn();
+    });
+    vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+    } as any);
+    await session.thread.create();
 
-    await session.followUp({ content: 'queued follow-up' });
-
-    expect(session.followUps.count()).toBe(1);
     expect(session.displayState.get().queuedFollowUps).toBe(1);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
   });
 
-  it('uses queueMessage when draining follow-ups for a subscribed thread', async () => {
+  it('does not retain queued display state when queue acceptance rejects', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const agent = session.machinery.getAgent();
+    let queueListener!: (event: AgentThreadEvent) => void;
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
+      queueListener = listener;
+      listener({ type: 'queue-count-changed', count: 0 });
+      return vi.fn();
+    });
+    vi.spyOn(agent, 'queueMessage').mockImplementation((() => {
+      queueListener({ type: 'queue-count-changed', count: 1 });
+      queueListener({ type: 'queue-count-changed', count: 0 });
+      return {
+        accepted: Promise.reject(new Error('queue rejected')),
+        signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+      };
+    }) as any);
+    await session.thread.create();
+    session.run.ensureAbortController();
+
+    await expect(session.followUp({ content: 'queued follow-up' })).rejects.toThrow('queue rejected');
+
+    expect(session.displayState.get().queuedFollowUps).toBe(0);
+  });
+
+  it('unsubscribes without cancelling submitted messages when silently rebinding', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const agent = session.machinery.getAgent();
+    const unsubscribe = vi.fn();
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((scope, listener) => {
+      listener({ type: 'queue-count-changed', count: scope.threadId === 'old-thread' ? 1 : 0 });
+      return scope.threadId === 'old-thread' ? unsubscribe : vi.fn();
+    });
+    vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+    } as any);
+    const cancelQueuedMessages = vi.spyOn(agent, 'cancelQueuedMessages').mockReturnValue({ cancelledSignalIds: [] });
+    await session.thread.create({ id: 'old-thread' });
+    session.run.ensureAbortController();
+    await session.followUp({ content: 'queued follow-up' });
+
+    await session.thread.create({ id: 'new-thread' });
+
+    expect(cancelQueuedMessages).not.toHaveBeenCalled();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(session.displayState.get().queuedFollowUps).toBe(0);
+  });
+
+  it('releases each shared queue observer when a session repeatedly rebinds', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const agent = session.machinery.getAgent();
+    const unsubscribes = [vi.fn(), vi.fn()];
+    let subscription = 0;
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
+      listener({ type: 'queue-count-changed', count: 0 });
+      return unsubscribes[subscription++];
+    });
+    vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+    } as any);
+    vi.spyOn(agent, 'cancelQueuedMessages').mockReturnValue({ cancelledSignalIds: [] });
+    await session.thread.create({ id: 'first-thread' });
+    session.run.ensureAbortController();
+    await session.followUp({ content: 'first queued follow-up' });
+    await session.thread.create({ id: 'second-thread' });
+    session.run.ensureAbortController();
+    await session.followUp({ content: 'second queued follow-up' });
+    session.thread.cleanupSubscription();
+
+    expect(unsubscribes[0]).toHaveBeenCalledOnce();
+    expect(unsubscribes[1]).toHaveBeenCalledOnce();
+  });
+
+  it('shares pending follow-ups with another session and preserves them through steering and cleanup', async () => {
+    const prompts: unknown[] = [];
+    const releases: Array<() => void> = [];
+    const agent = createGatedAgent(prompts, releases);
+    const { controller, session: first } = await createController(new InMemoryStore(), agent);
+    const second = await controller.createSession({
+      id: 'collaborator',
+      ownerId: 'second-owner',
+      scope: 'collaborator',
+    });
+    expect(second).not.toBe(first);
+    const threadId = first.thread.getId()!;
+    second.thread.set({ threadId });
+    await second.thread.ensureCurrentSubscription();
+    const abort = vi.spyOn(first, 'abort');
+    const cancelled = vi.spyOn(agent, 'cancelQueuedMessages');
+
+    const running = first.sendMessage({ content: 'initial message' });
+    await waitFor(() => releases.length === 1 && first.run.isRunning() && second.run.isRunning());
+    await first.followUp({ content: 'first queued follow-up' });
+    expect(first.displayState.get().queuedFollowUps).toBe(1);
+    // The collaborator sees it without submitting a follow-up themselves.
+    expect(second.displayState.get().queuedFollowUps).toBe(1);
+    await second.followUp({ content: 'second queued follow-up' });
+    expect(first.displayState.get().queuedFollowUps).toBe(2);
+    expect(second.displayState.get().queuedFollowUps).toBe(2);
+
+    const activeAbortSignal = first.run.getAbortSignal();
+    expect(activeAbortSignal?.aborted).toBe(false);
+    const steering = first.steer({ content: 'steering input' });
+    expect(abort).toHaveBeenCalledOnce();
+    expect(activeAbortSignal?.aborted).toBe(true);
+    expect(cancelled).not.toHaveBeenCalled();
+    expect(first.displayState.get().queuedFollowUps).toBe(2);
+    expect(second.displayState.get().queuedFollowUps).toBe(2);
+
+    first.cleanupFollowUpBinding();
+    expect(second.displayState.get().queuedFollowUps).toBe(2);
+    releases[0]!();
+    await steering;
+    await running;
+    await waitFor(() => second.displayState.get().queuedFollowUps === 0 && !second.run.isRunning());
+    const serializedPrompts = prompts.map(prompt => JSON.stringify(prompt));
+    expect(serializedPrompts.some(prompt => prompt.includes('steering input'))).toBe(true);
+    const firstQueued = serializedPrompts.findIndex(prompt => prompt.includes('first queued follow-up'));
+    const secondQueued = serializedPrompts.findIndex(prompt => prompt.includes('second queued follow-up'));
+    expect(firstQueued).toBeGreaterThan(0);
+    expect(secondQueued).toBeGreaterThan(firstQueued);
+    expect(cancelled).not.toHaveBeenCalled();
+    first.thread.cleanupSubscription();
+    second.thread.cleanupSubscription();
+  });
+
+  it('uses queueMessage for active follow-ups on a subscribed thread', async () => {
     const storage = new InMemoryStore();
     const agent = new Agent({
       id: 'follow-up-queue-agent',
@@ -614,19 +758,27 @@ describe('AgentController signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'run-1',
     });
-    const queueMessage = vi.spyOn(agent, 'queueMessage').mockReturnValue({
-      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
-      signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+    let queueListener!: (event: AgentThreadEvent) => void;
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
+      queueListener = listener;
+      listener({ type: 'queue-count-changed', count: 0 });
+      return vi.fn();
     });
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockImplementation(((_message: any, _target: any) => {
+      queueListener({ type: 'queue-count-changed', count: 1 });
+      return {
+        accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+        signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+      };
+    }) as any);
     const sendSignal = vi.spyOn(agent, 'sendSignal');
     const thread = await session.thread.create();
     session.run.ensureAbortController();
 
     await session.followUp({ content: 'queued follow-up' });
-    await session.drainFollowUpQueue();
 
     expect(queueMessage).toHaveBeenCalledWith(
-      'queued follow-up',
+      { contents: 'queued follow-up' },
       expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
@@ -641,10 +793,147 @@ describe('AgentController signal messages', () => {
       }),
     );
     expect(sendSignal).not.toHaveBeenCalled();
-    expect(session.followUps.count()).toBe(0);
-    expect(session.displayState.get().queuedFollowUps).toBe(0);
+    expect(session.displayState.get().queuedFollowUps).toBe(1);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
-    expect(events).toContainEqual({ type: 'follow_up_queued', count: 0, runId: 'queued-run-id' });
+  });
+
+  it('updates queued display state from Agent snapshots before queue acceptance resolves', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const accepted = Promise.withResolvers<any>();
+    const agent = session.machinery.getAgent();
+    let queueListener!: (event: AgentThreadEvent) => void;
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
+      queueListener = listener;
+      listener({ type: 'queue-count-changed', count: 0 });
+      return vi.fn();
+    });
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockImplementation((() => {
+      queueListener({ type: 'queue-count-changed', count: 1 });
+      return { accepted: accepted.promise, signal: createSignal({ type: 'user', contents: 'queued follow-up' }) };
+    }) as any);
+    await session.thread.create();
+    session.run.ensureAbortController();
+
+    const followUp = session.followUp({ content: 'queued follow-up' });
+    await waitFor(() => queueMessage.mock.calls.length === 1);
+    expect(session.displayState.get().queuedFollowUps).toBe(1);
+    queueListener({ type: 'queue-count-changed', count: 0 });
+    accepted.resolve({ action: 'deliver', runId: 'queued-run-id' });
+    await followUp;
+
+    expect(session.displayState.get().queuedFollowUps).toBe(0);
+  });
+
+  it('returns when target preparation turns an idle queueMessage into a queued delivery', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const agent = session.machinery.getAgent();
+    vi.spyOn(session.stream, 'isActive').mockReturnValue(false);
+    vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued after preparation' }),
+    } as any);
+    await session.thread.create();
+
+    await expect(session.queueMessage({ content: 'queued after preparation' })).resolves.toBeUndefined();
+  });
+
+  it.each(['cleanup', 'switch'] as const)(
+    'preserves submitted follow-ups when %s happens before acceptance resolves',
+    async action => {
+      const prompts: unknown[] = [];
+      const releases: Array<() => void> = [];
+      const agent = createGatedAgent(prompts, releases);
+      const { session } = await createController(new InMemoryStore(), agent);
+      const acceptance = Promise.withResolvers<void>();
+      const queueMessage = agent.queueMessage.bind(agent);
+      let submittedSignal: AbortSignal | undefined;
+      const queued = vi.spyOn(agent, 'queueMessage').mockImplementation((message, target) => {
+        submittedSignal = target.ifIdle?.streamOptions?.abortSignal;
+        const result = queueMessage(message, target);
+        return {
+          ...result,
+          accepted: result.accepted.then(async accepted => {
+            await acceptance.promise;
+            return accepted;
+          }),
+        };
+      });
+      const cancelled = vi.spyOn(agent, 'cancelQueuedMessages');
+      await session.sendSignal({ content: 'initial message' }).accepted;
+      await waitFor(() => releases.length === 1 && session.run.isRunning());
+      const followUp = session.followUp({ content: 'survives session cleanup' });
+      await waitFor(() => queued.mock.calls.length === 1);
+      expect(session.displayState.get().queuedFollowUps).toBe(1);
+
+      if (action === 'switch') await session.thread.create({ id: 'different-thread' });
+      else session.thread.cleanupSubscription();
+      expect(submittedSignal?.aborted).toBe(false);
+      expect(cancelled).not.toHaveBeenCalled();
+      acceptance.resolve();
+      await followUp;
+      releases[0]!();
+      await waitFor(() => prompts.some(prompt => JSON.stringify(prompt).includes('survives session cleanup')));
+      session.thread.cleanupSubscription();
+    },
+  );
+
+  it('preserves a follow-up whose preparation finishes after steering', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const prepare = Promise.withResolvers<Record<string, unknown>>();
+    let preparationSignal: AbortSignal | undefined;
+    const buildStreamOptions = vi.spyOn(session.machinery, 'buildStreamOptions').mockImplementation(input => {
+      preparationSignal = input.abortSignal;
+      return prepare.promise;
+    });
+    const queueMessage = vi.spyOn(session.machinery.getAgent(), 'queueMessage');
+    const sendMessage = vi.spyOn(session as any, 'sendMessage').mockResolvedValue(undefined);
+    await session.thread.create();
+    session.run.ensureAbortController();
+
+    const followUp = session.followUp({ content: 'stale follow-up' });
+    await waitFor(() => buildStreamOptions.mock.calls.length === 1);
+    await session.steer({ content: 'replacement input' });
+    expect(preparationSignal?.aborted).toBe(false);
+    prepare.resolve({});
+    await followUp;
+
+    expect(sendMessage).toHaveBeenCalledWith({ content: 'replacement input', requestContext: undefined });
+    expect(queueMessage).toHaveBeenCalledOnce();
+  });
+
+  it('does not enqueue a follow-up whose preparation finishes after switching threads', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const prepare = Promise.withResolvers<Record<string, unknown>>();
+    const buildStreamOptions = vi.spyOn(session.machinery, 'buildStreamOptions').mockReturnValue(prepare.promise);
+    const queueMessage = vi.spyOn(session.machinery.getAgent(), 'queueMessage');
+    await session.thread.create({ id: 'first-thread' });
+    session.run.ensureAbortController();
+
+    const followUp = session.followUp({ content: 'stale follow-up' });
+    await waitFor(() => buildStreamOptions.mock.calls.length === 1);
+    await session.thread.create({ id: 'second-thread' });
+    prepare.resolve({});
+    await followUp;
+
+    expect(session.thread.getId()).toBe('second-thread');
+    expect(queueMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue a follow-up whose preparation finishes after subscription cleanup', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const prepare = Promise.withResolvers<Record<string, unknown>>();
+    const buildStreamOptions = vi.spyOn(session.machinery, 'buildStreamOptions').mockReturnValue(prepare.promise);
+    const queueMessage = vi.spyOn(session.machinery.getAgent(), 'queueMessage');
+    await session.thread.create({ id: 'cleanup-thread' });
+    session.run.ensureAbortController();
+
+    const followUp = session.followUp({ content: 'stale follow-up' });
+    await waitFor(() => buildStreamOptions.mock.calls.length === 1);
+    session.thread.cleanupSubscription();
+    prepare.resolve({});
+    await followUp;
+
+    expect(queueMessage).not.toHaveBeenCalled();
   });
 
   it('sends idle follow-ups immediately without marking them queued', async () => {
@@ -659,7 +948,6 @@ describe('AgentController signal messages', () => {
     await session.followUp({ content: 'idle follow-up' });
 
     expect(sendMessage).toHaveBeenCalledWith({ content: 'idle follow-up', requestContext: undefined });
-    expect(session.followUps.count()).toBe(0);
     expect(session.displayState.get().queuedFollowUps).toBe(0);
     expect(events.some(event => event.type === 'follow_up_queued')).toBe(false);
   });
@@ -792,7 +1080,7 @@ describe('AgentController signal messages', () => {
       return true;
     });
 
-    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+    const subscribeToThread = vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {
         yield { type: 'start', runId: 'run-1' };
         await abortReleased;
@@ -816,6 +1104,7 @@ describe('AgentController signal messages', () => {
     await waitFor(() => events.some(event => event.type === 'agent_end'));
     await new Promise(resolve => setTimeout(resolve, 0));
 
+    expect(subscribeToThread).toHaveBeenCalledTimes(1);
     expect(events.filter(event => event.type === 'agent_start')).toHaveLength(1);
     expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'aborted' }]);
   });
@@ -836,7 +1125,7 @@ describe('AgentController signal messages', () => {
     await waitFor(() =>
       events.some(
         event =>
-          event.type === 'message_end' &&
+          event.type === 'message_start' &&
           event.message.id === signal.id &&
           event.message.content.parts.some(
             part => part.type === 'data-user-message' && part.data?.contents === 'hows it going',
@@ -900,14 +1189,7 @@ describe('AgentController signal messages', () => {
     const signal = session.sendSignal({ content: 'run tool' });
     await signal.accepted;
     await waitFor(() =>
-      events.some(
-        event =>
-          event.type === 'message_end' &&
-          event.message.role === 'assistant' &&
-          event.message.content.parts.some(
-            part => part.type === 'text' && part.text === 'approved through subscription',
-          ),
-      ),
+      events.some(event => event.type === 'message_update' && event.event.delta === 'approved through subscription'),
     );
 
     expect(sendToolApproval).toHaveBeenCalledWith(expect.objectContaining({ approved: true, toolCallId: 'tool-1' }));
@@ -924,27 +1206,40 @@ describe('AgentController signal messages', () => {
     await session.thread.create();
     const signal = session.sendSignal({ content: 'hello from signal' });
     await signal.accepted;
-    await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
+    await waitFor(() => {
+      const assistantId = events.find(
+        (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+          event.type === 'message_start' && event.message.role === 'assistant',
+      )?.message.id;
+      return Boolean(assistantId) && events.some(event => event.type === 'message_end' && event.id === assistantId);
+    });
 
-    const signalEnd = events.find(
-      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        event.type === 'message_end' && event.message.id === signal.id,
+    const signalStart = events.find(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        event.type === 'message_start' && event.message.id === signal.id,
     );
-    const assistantEnd = events.find(
-      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        event.type === 'message_end' && event.message.role === 'assistant',
+    const assistantStart = events.find(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        event.type === 'message_start' && event.message.role === 'assistant',
     );
 
-    // DB-native: the echoed user-message signal ends as a role:'signal' message
+    // DB-native: the echoed user-message signal starts as a role:'signal' message
     // carrying the raw data-user-message part (id/createdAt are dynamic).
-    expect(signalEnd?.message.role).toBe('signal');
-    expect(signalEnd?.message.content.parts).toEqual([
+    expect(signalStart?.message.role).toBe('signal');
+    expect(signalStart?.message.content.parts).toEqual([
       expect.objectContaining({
         type: 'data-user-message',
         data: expect.objectContaining({ type: 'user', contents: 'hello from signal' }),
       }),
     ]);
-    expect(assistantEnd?.message.content.parts).toEqual([{ type: 'text', text: 'Hello' }]);
+    expect(assistantStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
+    expect(events).toContainEqual({
+      type: 'message_update',
+      id: assistantStart!.message.id,
+      event: { type: 'text-delta', delta: 'Hello' },
+    });
+    expect(events).toContainEqual({ type: 'message_end', id: signalStart!.message.id });
+    expect(events).toContainEqual({ type: 'message_end', id: assistantStart!.message.id });
   });
 
   it('does not carry a stale abort reason into a later idle signal run', async () => {
@@ -1034,6 +1329,46 @@ describe('AgentController signal messages', () => {
     expect(JSON.stringify(prompts[3])).toContain('second active interjection');
   });
 
+  it('runs Session.queueMessage calls FIFO as later Agent runs', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+
+    const initial = session.sendMessage({ content: 'finish the initial task' });
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+
+    await session.queueMessage({ content: 'run the first queued task next' });
+    await session.queueMessage({ content: 'run the second queued task after that' });
+    releases.shift()?.();
+
+    await initial;
+    await waitFor(() => prompts.length === 3 && session.getCurrentRunId() === null);
+
+    expect(JSON.stringify(prompts[1])).toContain('run the first queued task next');
+    expect(JSON.stringify(prompts[2])).toContain('run the second queued task after that');
+  });
+
+  it('waits for the accepted run instead of an unrelated terminal event', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const completion = (session as any).waitForAcceptedRunCompletion(
+      Promise.resolve({ action: 'deliver', runId: 'submitted-run' }),
+    );
+    let settled = false;
+    void completion.then(() => {
+      settled = true;
+    });
+
+    session.run.setRunId({ runId: 'unrelated-run' });
+    await session.finishAgentRun('complete');
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    session.run.setRunId({ runId: 'submitted-run' });
+    await session.finishAgentRun('complete');
+    await completion;
+    expect(settled).toBe(true);
+  });
+
   it('tags a message sent into a live run as a while-active interjection', async () => {
     const releases: Array<() => void> = [];
     const prompts: unknown[] = [];
@@ -1096,7 +1431,7 @@ describe('AgentController signal messages', () => {
 
   // A steer aborts before it sends, so by the time the runtime resolves a delivery
   // route it sees an idle session — the interjection has to be stamped at submit time.
-  it('tags a steer as a while-active interjection even though its abort left the session idle', async () => {
+  it('tags steering input as a while-active interjection', async () => {
     const releases: Array<() => void> = [];
     const prompts: unknown[] = [];
     const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
@@ -1140,36 +1475,37 @@ describe('AgentController signal messages', () => {
 
     // DB-native: the echoed file user-message signal preserves its raw
     // data-user-message part (including the original contents array) verbatim.
-    const signalEnd = events.find(event => event.type === 'message_end' && event.message.id === 'signal-file-1');
-    expect(signalEnd).toMatchObject({
-      type: 'message_end',
-      message: {
-        id: 'signal-file-1',
-        role: 'signal',
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'data-user-message',
-              data: {
-                id: 'signal-file-1',
-                type: 'user-message',
-                contents: [
-                  { type: 'text', text: 'Review this' },
-                  {
-                    type: 'file',
-                    data: 'data:text/plain;base64,aGVsbG8=',
-                    mediaType: 'text/plain',
-                    filename: 'note.txt',
-                  },
-                ],
-                createdAt: '2026-05-04T00:00:00.000Z',
-              },
+    const signalStart = events.find(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        event.type === 'message_start' && event.message.id === 'signal-file-1',
+    );
+    expect(signalStart?.message).toMatchObject({
+      id: 'signal-file-1',
+      role: 'signal',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'data-user-message',
+            data: {
+              id: 'signal-file-1',
+              type: 'user-message',
+              contents: [
+                { type: 'text', text: 'Review this' },
+                {
+                  type: 'file',
+                  data: 'data:text/plain;base64,aGVsbG8=',
+                  mediaType: 'text/plain',
+                  filename: 'note.txt',
+                },
+              ],
+              createdAt: '2026-05-04T00:00:00.000Z',
             },
-          ],
-        },
+          },
+        ],
       },
     });
+    expect(events).toContainEqual({ type: 'message_end', id: 'signal-file-1' });
   });
 
   it('emits echoed user-message signals as user message events', async () => {
@@ -1195,7 +1531,9 @@ describe('AgentController signal messages', () => {
     );
 
     const signalEvents = events.filter(
-      event => (event.type === 'message_start' || event.type === 'message_end') && event.message.id === 'signal-user-1',
+      event =>
+        (event.type === 'message_start' && event.message.id === 'signal-user-1') ||
+        (event.type === 'message_end' && event.id === 'signal-user-1'),
     );
     // DB-native: the echoed user-message signal is emitted as a 'signal'-role
     // MastraDBMessage carrying the raw data-user-message part (no flattening).
@@ -1228,7 +1566,7 @@ describe('AgentController signal messages', () => {
     };
     expect(signalEvents).toEqual([
       { type: 'message_start', message: expectedMessage },
-      { type: 'message_end', message: expectedMessage },
+      { type: 'message_end', id: expectedMessage.id },
     ]);
   });
 
@@ -1290,10 +1628,99 @@ describe('AgentController signal messages', () => {
       (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
     );
 
+    const messageStarts = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> => event.type === 'message_start',
+    );
+
     expect(messageEndEvents).toHaveLength(1);
-    expect(messageEndEvents[0].message.content.parts).toEqual([{ type: 'text', text: 'Fact 1' }]);
-    expect(messageUpdateEvents.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'Fact 2' }]);
-    expect(messageUpdateEvents.at(-1)?.message.id).not.toBe(messageEndEvents[0].message.id);
+    expect(messageStarts.find(event => event.message.id === messageEndEvents[0]?.id)?.message.content.parts).toEqual([
+      { type: 'text', text: '' },
+    ]);
+    expect(messageUpdateEvents.at(-1)).toMatchObject({
+      type: 'message_update',
+      event: { type: 'text-delta', delta: 'Fact 2' },
+    });
+    expect(messageUpdateEvents.at(-1)?.id).not.toBe(messageEndEvents[0]?.id);
+  });
+
+  it('opens a new reasoning part when a later step reuses a block id after reasoning-end', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+    const chunks: Parameters<typeof session.runEngine.processStreamChunk>[1][] = [
+      { type: 'reasoning-start', payload: { id: '0' } },
+      { type: 'reasoning-delta', payload: { id: '0', text: 'step one' } },
+      { type: 'reasoning-end', payload: { id: '0' } },
+      { type: 'reasoning-start', payload: { id: '0' } },
+      { type: 'reasoning-delta', payload: { id: '0', text: 'step two' } },
+    ];
+
+    for (const chunk of chunks) {
+      await session.runEngine.processStreamChunk(state, chunk, requestContext);
+    }
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates).toEqual([
+      {
+        type: 'message_update',
+        id: expect.any(String),
+        event: { type: 'reasoning-delta', index: 0, delta: 'step one' },
+      },
+      {
+        type: 'message_update',
+        id: expect.any(String),
+        event: {
+          type: 'part',
+          index: 1,
+          part: { type: 'reasoning', reasoning: '', details: [{ type: 'text', text: '' }] },
+        },
+      },
+      {
+        type: 'message_update',
+        id: expect.any(String),
+        event: { type: 'reasoning-delta', index: 1, delta: 'step two' },
+      },
+    ]);
+  });
+
+  it('opens a new text part when a later step reuses a block id after text-end', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+    const chunks: Parameters<typeof session.runEngine.processStreamChunk>[1][] = [
+      { type: 'text-start', payload: { id: '1' } },
+      { type: 'text-delta', payload: { id: '1', text: 'step one' } },
+      { type: 'text-end', payload: { id: '1' } },
+      { type: 'text-start', payload: { id: '1' } },
+      { type: 'text-delta', payload: { id: '1', text: 'step two' } },
+    ];
+
+    for (const chunk of chunks) {
+      await session.runEngine.processStreamChunk(state, chunk, requestContext);
+    }
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates).toEqual([
+      { type: 'message_update', id: expect.any(String), event: { type: 'text-delta', delta: 'step one' } },
+      {
+        type: 'message_update',
+        id: expect.any(String),
+        event: { type: 'part', index: 1, part: { type: 'text', text: '' } },
+      },
+      { type: 'message_update', id: expect.any(String), event: { type: 'text-delta', delta: 'step two' } },
+    ]);
   });
 
   it('emits generic reactive signal data parts as renderable message updates', async () => {
@@ -1473,5 +1900,73 @@ describe('AgentController signal messages', () => {
         }),
       }),
     });
+  });
+});
+
+describe('AgentController message author', () => {
+  const author = { id: 'user-1', name: 'Ada', avatarUrl: 'https://avatars.example/ada.png' };
+
+  async function sentUserMessage(requestContext: RequestContext) {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    await session.thread.create();
+    await session.sendMessage({ content: 'hello', requestContext });
+    await waitFor(() => events.some(event => event.type === 'agent_end'));
+    for (const event of events) {
+      if (event.type !== 'message_start') continue;
+      const part = event.message.content.parts.find(part => part.type === 'data-user-message');
+      if (part) return part.data;
+    }
+    throw new Error('no user message was emitted');
+  }
+
+  it('stamps the request author on the sent user message', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, author);
+
+    const sent = await sentUserMessage(requestContext);
+
+    expect(sent?.providerOptions).toEqual({ mastra: { author } });
+  });
+
+  it('leaves the sent user message unattributed when the request names no author', async () => {
+    const sent = await sentUserMessage(new RequestContext());
+
+    expect(sent?.contents).toBe('hello');
+    expect(sent?.providerOptions).toBeUndefined();
+  });
+
+  it('carries the author through a follow-up queued behind a running turn', async () => {
+    const agent = new Agent({
+      id: 'authored-follow-up-agent',
+      name: 'authored-follow-up-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const { session } = await createController(new InMemoryStore(), agent);
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, author);
+    await session.thread.create();
+    session.run.ensureAbortController();
+
+    await session.followUp({ content: 'queued follow-up', requestContext });
+
+    expect(queueMessage).toHaveBeenCalledWith(
+      { contents: 'queued follow-up', providerOptions: { mastra: { author } } },
+      expect.anything(),
+    );
   });
 });

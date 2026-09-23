@@ -19,15 +19,27 @@ import type {
   FileContent,
   FileEntry,
   FileStat,
+  FilesystemGrepMatch,
+  FilesystemGrepOptions,
+  FilesystemGrepResult,
   FilesystemInfo,
   ListOptions,
   ProviderStatus,
   ReadOptions,
   RemoveOptions,
+  WalkEntry,
+  WalkOptions,
   WorkspaceFilesystem,
   WriteOptions,
 } from '@mastra/core/workspace';
-import { FileExistsError, FileNotFoundError, IsDirectoryError } from '@mastra/core/workspace';
+import {
+  DirectoryNotFoundError,
+  FileExistsError,
+  FileNotFoundError,
+  IsDirectoryError,
+  NotDirectoryError,
+  UnsupportedGrepPatternError,
+} from '@mastra/core/workspace';
 
 /**
  * Sentinel exit codes used by guard clauses that run before the real command,
@@ -36,6 +48,7 @@ import { FileExistsError, FileNotFoundError, IsDirectoryError } from '@mastra/co
 const EXIT_NOT_FOUND = 20;
 const EXIT_IS_DIRECTORY = 21;
 const EXIT_EXISTS = 22;
+const EXIT_NOT_DIRECTORY = 23;
 
 /** Minimal command result shape we depend on. */
 export interface SandboxCommandResult {
@@ -53,8 +66,14 @@ export interface SandboxExec {
 export interface SandboxFilesystemOptions {
   /** Live sandbox to run commands in. */
   sandbox: SandboxExec;
-  /** Absolute path inside the sandbox that is the workspace root. */
-  workdir: string;
+  /**
+   * Absolute path inside the sandbox that is the workspace root — or a lazy
+   * resolver for it. The resolver form exists for sandboxes whose workspace
+   * root is only knowable once the VM is running (e.g. `$HOME/<repo>` under
+   * a provider-chosen home dir): it is awaited on the first file operation
+   * (which itself may lazily start the VM) and the result is memoized.
+   */
+  workdir: string | (() => Promise<string> | string);
   /** Optional stable id; defaults to a sandbox-derived id. */
   id?: string;
 }
@@ -80,32 +99,71 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   readonly id: string;
   readonly name = 'SandboxFilesystem';
   readonly provider = 'sandbox';
-  readonly basePath: string;
   status: ProviderStatus = 'ready';
 
   private readonly sandbox: SandboxExec;
+  private readonly workdirSource: string | (() => Promise<string> | string);
+  private resolvedBase?: string;
+  private resolvingBase?: Promise<string>;
 
   constructor(options: SandboxFilesystemOptions) {
     this.sandbox = options.sandbox;
-    this.basePath = options.workdir;
-    // Include the workdir: one sandbox can back several filesystems rooted at
-    // different worktrees, and each needs a distinct id.
-    this.id = options.id ?? `sandbox-fs:${options.sandbox.id}:${options.workdir}`;
+    this.workdirSource = options.workdir;
+    if (typeof options.workdir === 'string') this.resolvedBase = options.workdir;
+    // Include the workdir when known: one sandbox can back several
+    // filesystems rooted at different checkouts, and each needs a distinct
+    // id. Lazy-workdir callers pass an explicit id.
+    this.id =
+      options.id ??
+      (typeof options.workdir === 'string'
+        ? `sandbox-fs:${options.sandbox.id}:${options.workdir}`
+        : `sandbox-fs:${options.sandbox.id}`);
+  }
+
+  /** The resolved workspace root; empty until a lazy workdir first resolves. */
+  get basePath(): string {
+    return this.resolvedBase ?? '';
+  }
+
+  /** Await (and memoize) the workspace root, resolving a lazy workdir once. */
+  private async base(): Promise<string> {
+    if (this.resolvedBase) return this.resolvedBase;
+    const source = this.workdirSource;
+    if (typeof source === 'string') return (this.resolvedBase = source);
+    this.resolvingBase ??= Promise.resolve()
+      .then(source)
+      .then(resolved => {
+        if (!resolved) throw new Error('Sandbox workspace root resolution returned an empty path');
+        return (this.resolvedBase = resolved);
+      })
+      .finally(() => {
+        this.resolvingBase = undefined;
+      });
+    return this.resolvingBase;
   }
 
   // ── Path handling ──────────────────────────────────────────────────────
 
   /**
    * Resolve a workspace path to an absolute path inside the sandbox, enforcing
-   * that it stays within the workdir.
+   * that it stays within the workdir. Awaits the workspace root first, which
+   * for a lazy workdir may start the VM.
+   */
+  private async resolveAsync(inputPath: string): Promise<string> {
+    return this.resolveAgainst(await this.base(), inputPath);
+  }
+
+  /**
+   * Resolve a workspace path against a known base, enforcing that it stays
+   * within the workdir.
    *
    * Accepts both workspace-relative paths (`src/foo.ts`, `/src/foo.ts`) and
    * absolute sandbox paths that already live under the workdir — the agent's
    * prompt advertises the workdir as its working directory, so tools are
    * routinely called with fully-qualified paths like `<workdir>/src/foo.ts`.
    */
-  private resolve(inputPath: string): string {
-    const base = posixPath.normalize(this.basePath);
+  private resolveAgainst(basePath: string, inputPath: string): string {
+    const base = posixPath.normalize(basePath);
     const normalizedInput = posixPath.normalize(inputPath);
     const rel =
       normalizedInput === base
@@ -115,16 +173,18 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
           : inputPath.startsWith('/')
             ? inputPath.slice(1)
             : inputPath;
-    const resolved = posixPath.normalize(posixPath.join(this.basePath, rel));
-    const root = posixPath.normalize(this.basePath);
-    if (resolved !== root && !resolved.startsWith(`${root}/`)) {
+    const resolved = posixPath.normalize(posixPath.join(base, rel));
+    if (resolved !== base && !resolved.startsWith(`${base}/`)) {
       throw new Error(`Path escapes workspace root: ${inputPath}`);
     }
     return resolved;
   }
 
   resolveAbsolutePath(inputPath: string): string | undefined {
-    return this.resolve(inputPath);
+    // Sync interface: a lazy workdir that has not resolved yet has no
+    // absolute form to offer.
+    if (!this.resolvedBase) return undefined;
+    return this.resolveAgainst(this.resolvedBase, inputPath);
   }
 
   // ── Command helper ─────────────────────────────────────────────────────
@@ -198,7 +258,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── File operations ────────────────────────────────────────────────────
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedRealpath(abs, path);
     // Guard clauses first: redirecting from a directory "succeeds" with empty
     // output on some shells, so classify before reading.
@@ -218,7 +278,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     const dir = posixPath.dirname(abs);
@@ -239,7 +299,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async appendFile(path: string, content: FileContent): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     await this.execOk(
@@ -249,7 +309,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     // Contain the parent's realpath: deleting `link/file` where `link` points
     // outside the workdir must fail, while deleting a symlink entry itself
     // (which lives inside the workdir) stays allowed.
@@ -270,8 +330,8 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    const srcAbs = this.resolve(src);
-    const destAbs = this.resolve(dest);
+    const srcAbs = await this.resolveAsync(src);
+    const destAbs = await this.resolveAsync(dest);
     await this.assertContainedRealpath(srcAbs, src);
     await this.assertContainedDest(destAbs, dest);
     const recursive = options?.recursive ? '-r ' : '';
@@ -313,8 +373,8 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    const srcAbs = this.resolve(src);
-    const destAbs = this.resolve(dest);
+    const srcAbs = await this.resolveAsync(src);
+    const destAbs = await this.resolveAsync(dest);
     await this.assertContainedRealpath(srcAbs, src);
     await this.assertContainedDest(destAbs, dest);
     if (options?.overwrite === false) {
@@ -350,14 +410,14 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── Directory operations ───────────────────────────────────────────────
 
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedDest(abs, path);
     const flag = options?.recursive === false ? '' : '-p ';
     await this.execOk(`mkdir ${flag}${shellQuote(abs)}`, `mkdir ${path}`);
   }
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     // Same parent containment as deleteFile — `rm -r` through a symlinked
     // parent would otherwise delete outside the workspace.
     await this.assertContainedRealpath(posixPath.dirname(abs), path);
@@ -373,7 +433,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedRealpath(abs, path);
     if (options?.recursive) {
       // Recursive listing emitting "type\tpath". `find -printf` is GNU-only
@@ -432,16 +492,271 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     return exts.some(ext => name.endsWith(ext));
   }
 
+  // ── Native walk / grep capabilities ────────────────────────────────────
+
+  /**
+   * Walk the tree in a single sandbox command instead of one readdir round
+   * trip per directory. Uses `find` with a portable classification loop
+   * (`find -printf` is GNU-only and fails on macOS/BSD hosts). `find` does
+   * not follow symlinked directories by default, matching the host-side
+   * walker's no-recursion-into-symlinks behavior.
+   */
+  async walk(path: string, options?: WalkOptions): Promise<WalkEntry[]> {
+    const abs = await this.resolveAsync(path);
+    await this.assertContainedRealpath(abs, path);
+    const maxDepth =
+      options?.maxDepth !== undefined && Number.isFinite(options.maxDepth)
+        ? `-maxdepth ${Math.max(0, Math.floor(options.maxDepth))} `
+        : '';
+    // Prune hidden entries in-sandbox when not requested, so a huge hidden
+    // tree (e.g. `.git`) doesn't inflate the response.
+    const hiddenPrune = options?.includeHidden ? '' : `-name '.*' -prune -o `;
+    // Emit "flag\tpath[\ttarget]" — flag is d/f for regular entries, D/F for
+    // symlinks (with the link target as a third field).
+    const script =
+      `root=${shellQuote(abs)}\n` +
+      `[ -e "$root" ] || [ -L "$root" ] || exit ${EXIT_NOT_FOUND}\n` +
+      `[ -d "$root" ] || exit ${EXIT_NOT_DIRECTORY}\n` +
+      `find "$root" -mindepth 1 ${maxDepth}${hiddenPrune}-print 2>/dev/null | while IFS= read -r f; do ` +
+      `if [ -L "$f" ]; then if [ -d "$f" ]; then t=D; else t=F; fi; printf '%s\\t%s\\t%s\\n' "$t" "$f" "$(readlink "$f")"; ` +
+      `elif [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`;
+    const result = await this.exec(script);
+    if (result.exitCode === EXIT_NOT_FOUND) throw new DirectoryNotFoundError(path);
+    if (result.exitCode === EXIT_NOT_DIRECTORY) throw new NotDirectoryError(path);
+    if (result.exitCode !== 0) {
+      throw new Error(`walk ${path} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
+    }
+    const entries: WalkEntry[] = [];
+    for (const line of result.stdout.split('\n')) {
+      if (!line) continue;
+      const tab = line.indexOf('\t');
+      if (tab < 0) continue;
+      const flag = line.slice(0, tab);
+      const isSymlink = flag === 'D' || flag === 'F';
+      let fullPath = line.slice(tab + 1);
+      let symlinkTarget: string | undefined;
+      if (isSymlink) {
+        const tab2 = fullPath.lastIndexOf('\t');
+        if (tab2 >= 0) {
+          symlinkTarget = fullPath.slice(tab2 + 1) || undefined;
+          fullPath = fullPath.slice(0, tab2);
+        }
+      }
+      const rel = posixPath.relative(abs, fullPath);
+      if (!rel || rel.startsWith('..')) continue;
+      entries.push({
+        name: posixPath.basename(rel),
+        type: flag === 'd' || flag === 'D' ? 'directory' : 'file',
+        ...(isSymlink ? { isSymlink: true, ...(symlinkTarget ? { symlinkTarget } : {}) } : {}),
+        path: rel,
+      });
+    }
+    return entries;
+  }
+
+  /**
+   * Content search executed inside the sandbox in one command. Prefers
+   * ripgrep (`rg --json`) when installed; otherwise falls back to
+   * `grep -rnE`. Patterns the ERE fallback can't express (PCRE-style classes,
+   * word boundaries, lookarounds, non-greedy quantifiers) throw
+   * {@link UnsupportedGrepPatternError} so callers use their host-side walk.
+   *
+   * Callers are expected to apply their own gitignore/hidden/glob filtering
+   * to the returned paths; both engines run with ignore rules disabled so
+   * results are a superset of what any host-side filter would keep.
+   */
+  async grep(options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
+    const abs = await this.resolveAsync(options.path);
+    await this.assertContainedRealpath(abs, options.path);
+    if (await this.hasRipgrep()) {
+      return this.grepWithRipgrep(abs, options);
+    }
+    return this.grepWithPosixGrep(abs, options);
+  }
+
+  private rgCheck: Promise<boolean> | undefined;
+
+  private hasRipgrep(): Promise<boolean> {
+    this.rgCheck ??= this.exec('command -v rg >/dev/null 2>&1').then(
+      r => r.exitCode === 0,
+      () => false,
+    );
+    return this.rgCheck;
+  }
+
+  private async grepWithRipgrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
+    const args = [
+      'rg --json --no-ignore --hidden',
+      // .git is filtered host-side too; exclude it here so its object files
+      // don't inflate the response.
+      `-g ${shellQuote('!.git/**')}`,
+      options.caseSensitive ? '' : '-i',
+      options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
+      options.contextLines ? `-C ${Math.max(0, Math.floor(options.contextLines))}` : '',
+      `-e ${shellQuote(options.pattern)}`,
+      shellQuote(abs),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const result = await this.exec(args);
+    // rg exits 1 when there are no matches, 2 on any error. A bad pattern
+    // produces no output at all, but a per-file error (e.g. an unreadable
+    // file) also yields exit 2 while still emitting matches for every other
+    // file. Keep those partial results; only treat "error with no matches"
+    // as an unsupported pattern so the caller falls back to the host walk.
+    if (result.exitCode === 1) return [];
+    const results = this.parseRipgrepJson(result.stdout, abs, options);
+    if (result.exitCode !== 0 && results.length === 0) {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    return results;
+  }
+
+  private parseRipgrepJson(stdout: string, abs: string, options: FilesystemGrepOptions): FilesystemGrepResult[] {
+    interface FileState {
+      matches: Array<FilesystemGrepMatch & { lineNumber: number }>;
+      linesByNumber: Map<number, string>;
+    }
+    const files = new Map<string, FileState>();
+    for (const line of stdout.split('\n')) {
+      if (!line) continue;
+      let event: any;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (event.type !== 'match' && event.type !== 'context') continue;
+      const filePath: string | undefined = event.data?.path?.text;
+      const lineNumber: number | undefined = event.data?.line_number;
+      if (!filePath || !lineNumber) continue;
+      let state = files.get(filePath);
+      if (!state) {
+        state = { matches: [], linesByNumber: new Map() };
+        files.set(filePath, state);
+      }
+      const text: string = (event.data?.lines?.text ?? '').replace(/\r?\n$/, '');
+      state.linesByNumber.set(lineNumber, text);
+      if (event.type === 'match') {
+        // rg submatch offsets are byte offsets into the line; convert to a
+        // UTF-16 (JS string) index for the capability contract.
+        const byteStart: number = event.data?.submatches?.[0]?.start ?? 0;
+        const column = Buffer.from(text, 'utf8').subarray(0, byteStart).toString('utf8').length;
+        state.matches.push({ line: lineNumber, column, text, lineNumber });
+      }
+    }
+    const contextLines = options.contextLines ?? 0;
+    const results: FilesystemGrepResult[] = [];
+    for (const [filePath, state] of files) {
+      if (state.matches.length === 0) continue;
+      const rel = posixPath.relative(abs, filePath) || posixPath.basename(filePath);
+      const matches: FilesystemGrepMatch[] = state.matches.map(({ lineNumber, ...match }) => {
+        if (contextLines <= 0) return match;
+        const before: string[] = [];
+        for (let n = lineNumber - 1; n >= Math.max(1, lineNumber - contextLines); n--) {
+          const t = state.linesByNumber.get(n);
+          if (t === undefined) break;
+          before.unshift(t);
+        }
+        const after: string[] = [];
+        for (let n = lineNumber + 1; n <= lineNumber + contextLines; n++) {
+          const t = state.linesByNumber.get(n);
+          if (t === undefined) break;
+          after.push(t);
+        }
+        return { ...match, before, after };
+      });
+      results.push({ path: rel, matches });
+    }
+    return this.applyTotalCap(results, options.maxTotalMatches);
+  }
+
+  /**
+   * Patterns whose meaning differs between POSIX ERE and JS RegExp. The grep
+   * runs with ERE but match columns are recomputed with JS, so anything that
+   * only one side understands (PCRE classes, lookarounds, lazy quantifiers,
+   * POSIX bracket classes, GNU word anchors) must fall back to the host walk.
+   */
+  private static readonly ERE_UNSUPPORTED = /\\[dDwWsSbB<>]|\(\?|[*+?}]\?|\[:[a-z]+:\]/;
+
+  private async grepWithPosixGrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
+    if (SandboxFilesystem.ERE_UNSUPPORTED.test(options.pattern)) {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    let jsRegex: RegExp;
+    try {
+      jsRegex = new RegExp(options.pattern, options.caseSensitive ? '' : 'i');
+    } catch {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    // Reconstructing per-match context from `grep -C` text output is not
+    // reliable (separator lines are ambiguous); let the host walk handle it.
+    if (options.contextLines) {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    const args = [
+      'grep -rnIE',
+      options.caseSensitive ? '' : '-i',
+      options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
+      '--',
+      shellQuote(options.pattern),
+      shellQuote(abs),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const result = await this.exec(args);
+    if (result.exitCode === 1) return [];
+    if (result.exitCode !== 0) {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    // grep -n has no column output; recompute with the JS regex host-side so
+    // columns are UTF-16 indices, consistent with the fallback implementation.
+    const byFile = new Map<string, FilesystemGrepMatch[]>();
+    for (const line of result.stdout.split('\n')) {
+      if (!line) continue;
+      const parsed = /^(.*?):(\d+):(.*)$/.exec(line);
+      if (!parsed) continue;
+      const rel = posixPath.relative(abs, parsed[1]!) || posixPath.basename(parsed[1]!);
+      const text = parsed[3]!;
+      const column = jsRegex.exec(text)?.index;
+      // grep matched this line but the JS regex did not: the two dialects
+      // disagree on this pattern, so the columns would be wrong. Fall back.
+      if (column === undefined) throw new UnsupportedGrepPatternError(options.pattern);
+      let matches = byFile.get(rel);
+      if (!matches) {
+        matches = [];
+        byFile.set(rel, matches);
+      }
+      matches.push({ line: Number(parsed[2]), column, text });
+    }
+    const results = [...byFile.entries()].map(([path, matches]) => ({ path, matches }));
+    return this.applyTotalCap(results, options.maxTotalMatches);
+  }
+
+  private applyTotalCap(results: FilesystemGrepResult[], maxTotal?: number): FilesystemGrepResult[] {
+    if (maxTotal === undefined) return results;
+    const capped: FilesystemGrepResult[] = [];
+    let total = 0;
+    for (const file of results) {
+      if (total >= maxTotal) break;
+      const remaining = maxTotal - total;
+      const matches = file.matches.slice(0, remaining);
+      total += matches.length;
+      capped.push({ path: file.path, matches });
+    }
+    return capped;
+  }
+
   // ── Path / metadata ────────────────────────────────────────────────────
 
   async exists(path: string): Promise<boolean> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     const result = await this.exec(`test -e ${shellQuote(abs)}`);
     return result.exitCode === 0;
   }
 
   async stat(path: string): Promise<FileStat> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedRealpath(abs, path);
     // GNU stat: %F=type, %s=size, %Y=mtime (epoch seconds), %W=birth (or -1).
     // BSD/macOS stat (local sandbox hosts) rejects `-c`; fall back to its
@@ -472,7 +787,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
   async init(): Promise<void> {
-    await this.execOk(`mkdir -p ${shellQuote(this.basePath)}`, 'init workdir');
+    await this.execOk(`mkdir -p ${shellQuote(await this.base())}`, 'init workdir');
   }
 
   async destroy(): Promise<void> {
@@ -480,7 +795,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async isReady(): Promise<boolean> {
-    const result = await this.exec(`test -d ${shellQuote(this.basePath)}`);
+    const result = await this.exec(`test -d ${shellQuote(await this.base())}`);
     return result.exitCode === 0;
   }
 

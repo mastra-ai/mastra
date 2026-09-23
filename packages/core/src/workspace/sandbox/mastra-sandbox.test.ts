@@ -16,7 +16,7 @@ import type { MountResult } from '../filesystem/mount';
 import type { ProviderStatus, SandboxStartResult } from '../lifecycle';
 
 import { MastraSandbox } from './mastra-sandbox';
-import type { MastraSandboxOptions } from './mastra-sandbox';
+import type { MastraSandboxOptions, SandboxStartOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { SpawnProcessOptions } from './process-manager';
@@ -169,6 +169,27 @@ function createMockLogger(): IMastraLogger {
 }
 
 describe('MastraSandbox Base Class', () => {
+  it('preserves original argv through the process manager env wrapper', async () => {
+    const pm = new ExecuteCommandProcessManager('first second');
+    const sandbox = new ProcessBackedSandbox(pm, { BASE: 'base' });
+    const args = ['-c', 'printf "first" && printf " second"', '', 'a\\b'];
+    const release = vi.spyOn(pm, 'release');
+    const result = await sandbox.executeCommand!('sh', args, { env: { CALL: 'call' } });
+
+    expect(pm.lastOptions?.originalInvocation).toEqual({ command: 'sh', args });
+    expect(pm.lastOptions?.originalInvocation?.args).not.toBe(args);
+    expect(pm.lastOptions?.env).toMatchObject({ BASE: 'base', CALL: 'call' });
+    expect(result.stdout).toBe('first second');
+    expect(result.command).toContain('sh -c');
+    expect(release).toHaveBeenCalledWith('execute-command-process');
+  });
+
+  it.each([undefined, []])('does not add invocation metadata for absent argv: %s', async args => {
+    const pm = new ExecuteCommandProcessManager('');
+    const sandbox = new ProcessBackedSandbox(pm);
+    await sandbox.executeCommand!('echo hello', args);
+    expect(pm.lastOptions).not.toHaveProperty('originalInvocation');
+  });
   describe('MountManager Creation', () => {
     it('constructor creates MountManager if mount() implemented', () => {
       const sandbox = new MountableSandbox();
@@ -719,6 +740,46 @@ describe('MastraSandbox Base Class', () => {
       expect(manager.lastOptions?.env).toEqual({ STABLE: 'yes' });
     });
   });
+
+  describe('Working directory', () => {
+    class WdSandbox extends MastraSandbox {
+      readonly id = 'wd-sandbox';
+      readonly name = 'WdSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      constructor(workingDirectory?: string) {
+        super({ name: 'WdSandbox', workingDirectory });
+      }
+
+      async start(): Promise<void> {}
+
+      /** Test seam for the protected setter (probe-based providers use it). */
+      probeResolved(dir: string): void {
+        this.setWorkingDirectory(dir);
+      }
+    }
+
+    it('stores the constructor option and exposes it via the getter', () => {
+      const sandbox = new WdSandbox('/srv/app');
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('is undefined when the option is omitted', () => {
+      const sandbox = new WdSandbox();
+      expect(sandbox.workingDirectory).toBeUndefined();
+    });
+
+    it('setWorkingDirectory updates the getter', () => {
+      const sandbox = new WdSandbox();
+      sandbox.probeResolved('/home/probe/repo');
+      expect(sandbox.workingDirectory).toBe('/home/probe/repo');
+
+      const configured = new WdSandbox('/srv/app');
+      configured.probeResolved('/srv/other');
+      expect(configured.workingDirectory).toBe('/srv/other');
+    });
+  });
 });
 
 // =============================================================================
@@ -743,14 +804,16 @@ class LifecycleSandbox extends MastraSandbox {
   startError: Error | undefined;
   startGate: Promise<void> | undefined;
   statusDuringImpl: ProviderStatus | undefined;
+  startOptions: SandboxStartOptions | undefined;
 
   constructor(options?: MastraSandboxOptions) {
     super({ ...options, name: 'LifecycleSandbox' });
   }
 
-  async start(): Promise<{ outcome: 'created' | 'connected' } | void> {
+  async start(options?: SandboxStartOptions): Promise<{ outcome: 'created' | 'connected' } | void> {
     this.implCalls += 1;
     this.statusDuringImpl = this.status;
+    this.startOptions = options;
     if (this.startGate) await this.startGate;
     if (this.startError) throw this.startError;
     return this.startResult;
@@ -777,6 +840,15 @@ describe('MastraSandbox start lifecycle wrap', () => {
     expect(sandbox.implCalls).toBe(1);
     expect(sandbox.statusDuringImpl).toBe('starting');
     expect(sandbox.status).toBe('running');
+  });
+
+  it('forwards start options to the provider implementation', async () => {
+    const sandbox = new LifecycleSandbox();
+    const controller = new AbortController();
+
+    await sandbox.start({ abortSignal: controller.signal });
+
+    expect(sandbox.startOptions).toEqual({ abortSignal: controller.signal });
   });
 
   it('coalesces concurrent direct start() and _start() calls onto one attempt', async () => {
@@ -931,6 +1003,9 @@ class PrimitiveSandbox extends MastraSandbox<string> {
   connectCalls = 0;
   createCalls = 0;
   lastConnectedHandle: string | undefined;
+  findOptions: SandboxStartOptions | undefined;
+  connectOptions: SandboxStartOptions | undefined;
+  createOptions: SandboxStartOptions | undefined;
   connectError: Error | undefined;
   createError: Error | undefined;
 
@@ -940,19 +1015,22 @@ class PrimitiveSandbox extends MastraSandbox<string> {
     super({ ...options, name: 'PrimitiveSandbox' });
   }
 
-  protected override async find(): Promise<string | undefined> {
+  protected override async find(options?: SandboxStartOptions): Promise<string | undefined> {
     this.findCalls += 1;
+    this.findOptions = options;
     return this.vmExists ? 'vm-handle' : undefined;
   }
 
-  protected override async connect(handle: string): Promise<void> {
+  protected override async connect(handle: string, options?: SandboxStartOptions): Promise<void> {
     this.connectCalls += 1;
     this.lastConnectedHandle = handle;
+    this.connectOptions = options;
     if (this.connectError) throw this.connectError;
   }
 
-  protected override async create(): Promise<void> {
+  protected override async create(options?: SandboxStartOptions): Promise<void> {
     this.createCalls += 1;
+    this.createOptions = options;
     if (this.createError) throw this.createError;
     this.vmExists = true;
   }
@@ -990,6 +1068,22 @@ describe('MastraSandbox acquisition primitives', () => {
     expect(sandbox.findCalls).toBe(1);
     expect(sandbox.createCalls).toBe(1);
     expect(sandbox.connectCalls).toBe(0);
+  });
+
+  it('forwards start options through acquisition primitives', async () => {
+    const controller = new AbortController();
+    const options = { abortSignal: controller.signal };
+    const created = new PrimitiveSandbox();
+
+    await created.start(options);
+    expect(created.findOptions).toBe(options);
+    expect(created.createOptions).toBe(options);
+
+    const connected = new PrimitiveSandbox();
+    connected.vmExists = true;
+    await connected.start(options);
+    expect(connected.findOptions).toBe(options);
+    expect(connected.connectOptions).toBe(options);
   });
 
   it('a create-only provider (no find) always creates', async () => {

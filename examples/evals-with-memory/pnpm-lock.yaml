@@ -16,8 +16,8 @@ catalogs:
       specifier: ^6.0.3
       version: 6.0.3
     zod:
-      specifier: ^4.4.3
-      version: 4.4.3
+      specifier: ^4.6.5
+      version: 4.6.5
 
 overrides:
   '@mastra/core': link:../../packages/core
@@ -28,6 +28,28 @@ overrides:
   '@mastra/memory': link:../../packages/memory
   '@mastra/observability': link:../../observability/mastra
   mastra: link:../../packages/cli
+  nanoid@>=3.0.0 <3.3.19: 3.3.19
+  proxy-addr: 2.0.8
+  qs: 6.16.0
+  fast-uri: 3.1.8
+  js-yaml@>=3.0.0 <4.0.0: 3.15.2
+  js-yaml@>=4.0.0 <5.0.0: 4.3.2
+  jsondiffpatch: 0.7.6
+  adm-zip@<=0.6.0: 0.6.1
+  image-size@<=2.0.2: 2.0.4
+  '@fastify/proxy-addr@<=5.1.0': 5.1.1
+  qs@>=6.7.0 <6.16.0: 6.16.0
+  fast-uri@<3.1.8: 3.1.8
+  fast-uri@>=4.0.0 <4.1.5: 4.2.1
+  brace-expansion@>=1.0.0 <1.1.21: 1.1.21
+  brace-expansion@>=2.0.0 <2.1.7: 2.1.7
+  brace-expansion@>=4.0.0 <5.0.12: 5.0.12
+  hono@<4.13.8: 4.13.8
+  ip-address@<10.7.1: 10.7.2
+  js-yaml@>=3.0.0 <3.15.2: 3.15.2
+  js-yaml@>=4.0.0 <4.3.2: 4.3.2
+  compression@<=1.8.1: 1.8.2
+  axios@>=1.0.0 <1.20.0: 1.20.0
 
 importers:
 
@@ -56,7 +78,7 @@ importers:
         version: link:../../observability/mastra
       zod:
         specifier: 'catalog:'
-        version: 4.4.3
+        version: 4.6.5
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -255,8 +277,8 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
 snapshots:
 
@@ -384,4 +406,4 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  zod@4.4.3: {}
+  zod@4.6.5: {}

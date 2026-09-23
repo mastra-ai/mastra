@@ -1,6 +1,6 @@
 ---
 title: "Reference: createTool() | Tools and MCP"
-description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
+description: "The createTool() function is used to define custom tools that your Mastra agents can execute."
 packages:
   - "@mastra/core"
 ---
@@ -485,6 +485,8 @@ The tool still returns the full `execute` result to your application, while the 
 - `type: 'json'`
 - `type: 'content'` with parts like `text`, `image-url`, `image-data`, `file-url`, `file-data`, `file-id`, `image-file-id`, or `custom`
 
+`toModelOutput` also applies to tools without an `execute` function that run on the client. When the client sends the tool result back on the next request, the server applies the tool definition's `toModelOutput` to it before the model sees it.
+
 ## Example with `transform`
 
 Use `transform` when the tool should keep raw inputs or outputs for runtime behavior, but display streams or transcript messages should receive a smaller or safer shape.
@@ -723,7 +725,7 @@ When exposing tools via the Model Context Protocol (MCP), you can provide annota
 
 MCP-specific properties are grouped under the `mcp` property, which includes `annotations` and `_meta`:
 
-```typescript prettier:false
+```typescript oxfmt:false
 mcp: {
   annotations: { /* behavior hints */ },
   _meta: { /* custom metadata */ },

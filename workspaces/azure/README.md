@@ -1,6 +1,6 @@
 # @mastra/azure
 
-Azure Blob Storage filesystem and content-addressable blob store provider for Mastra workspaces.
+Store Mastra workspace files in Azure Blob Storage using account keys, SAS tokens, or DefaultAzureCredential, with container and mount configuration.
 
 ## Installation
 
@@ -29,51 +29,14 @@ const agent = new Agent({
 });
 ```
 
-### Account key
-
-```typescript
-const filesystem = new AzureBlobFilesystem({
-  container: 'my-container',
-  accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME,
-  accountKey: process.env.AZURE_STORAGE_ACCOUNT_KEY,
-});
-```
-
-### Shared access signature
-
-```typescript
-const filesystem = new AzureBlobFilesystem({
-  container: 'my-container',
-  accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME,
-  sasToken: process.env.AZURE_STORAGE_SAS_TOKEN,
-});
-```
-
-### DefaultAzureCredential
-
-Requires `@azure/identity` to be installed.
-
-```typescript
-const filesystem = new AzureBlobFilesystem({
-  container: 'my-container',
-  accountName: process.env.AZURE_STORAGE_ACCOUNT_NAME,
-  useDefaultCredential: true,
-});
-```
-
-## Blob Store
-
-`AzureBlobStore` is a content-addressable blob store backed by Azure Blob Storage, used for skill versioning.
-
-```typescript
-import { AzureBlobStore } from '@mastra/azure/blob';
-
-const blobs = new AzureBlobStore({
-  container: 'my-skill-blobs',
-  connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
-});
-```
-
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+- [Azure Blob](https://mastra.ai/integrations/file-storage/azure-blob)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/azure/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -1,41 +1,37 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon, Plus } from 'lucide-react';
+import { ExternalLinkIcon, Plus } from 'lucide-react';
 
 export interface NoDatasetsInfoProps {
   onCreateClick?: () => void;
 }
 
 export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
-  <div className="flex h-full items-center justify-center">
-    <EmptyState
-      iconSlot={<CircleSlashIcon />}
-      titleSlot="No Datasets yet"
-      descriptionSlot={
-        <>
-          Create your first dataset to start evaluating <br />
-          your agents and workflows.
-        </>
-      }
-      actionSlot={
-        <div className="flex flex-col items-center gap-2">
-          {onCreateClick && (
-            <Button variant="primary" onClick={onCreateClick}>
-              <Plus />
-              Create Dataset
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            as="a"
-            href="https://mastra.ai/en/docs/datasets/overview"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Datasets Documentation <ExternalLinkIcon />
+  <EmptyState
+    titleSlot="No Datasets yet"
+    descriptionSlot={
+      <>
+        Create your first dataset to start evaluating <br />
+        your agents and workflows.
+      </>
+    }
+    actionSlot={
+      <div className="flex flex-col items-center gap-2">
+        {onCreateClick && (
+          <Button variant="primary" onClick={onCreateClick} icon={<Plus />}>
+            Create Dataset
           </Button>
-        </div>
-      }
-    />
-  </div>
+        )}
+        <Button
+          variant="ghost"
+          render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
+
+          icon={<ExternalLinkIcon />}
+        >
+          Datasets Documentation
+        </Button>
+      </div>
+    }
+    variant="fill"
+  />
 );

@@ -133,6 +133,18 @@ describe('ComposioToolProvider — catalog allowlist', () => {
     expect(services.data.map(s => s.slug)).toEqual(['gmail']);
   });
 
+  it('listTools propagates catalog errors instead of returning an empty page', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await integration.listTools({ toolkit: 'gmail' }).catch(() => undefined);
+    const raw = getRawInstance();
+
+    const failure = new Error('catalog unavailable');
+    raw.tools.getRawComposioTools.mockRejectedValue(failure);
+
+    await expect(integration.listTools({ toolkit: 'gmail' })).rejects.toBe(failure);
+  });
+
   it('listTools honors per-service allowedTools entries', async () => {
     const integration = new ComposioToolProvider({
       apiKey: 'k',

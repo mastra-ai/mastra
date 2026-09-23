@@ -1497,6 +1497,61 @@ describe('MastraEditor.hasEnabledBuilderConfig', () => {
   });
 });
 
+describe('MastraEditor.hasEnabledWorkflowBuilderConfig', () => {
+  it('returns false when workflowBuilder is omitted', () => {
+    const editor = new MastraEditor({});
+    expect(editor.hasEnabledWorkflowBuilderConfig()).toBe(false);
+  });
+
+  it('returns false when workflowBuilder.enabled is false', () => {
+    const editor = new MastraEditor({ workflowBuilder: { enabled: false } });
+    expect(editor.hasEnabledWorkflowBuilderConfig()).toBe(false);
+  });
+
+  it('returns true when workflowBuilder is enabled', () => {
+    const editor = new MastraEditor({ workflowBuilder: {} });
+    expect(editor.hasEnabledWorkflowBuilderConfig()).toBe(true);
+  });
+});
+
+describe('MastraEditor.resolveWorkflowBuilder', () => {
+  it('returns undefined when workflowBuilder is omitted or disabled', async () => {
+    await expect(new MastraEditor({}).resolveWorkflowBuilder()).resolves.toBeUndefined();
+    await expect(
+      new MastraEditor({ workflowBuilder: { enabled: false } }).resolveWorkflowBuilder(),
+    ).resolves.toBeUndefined();
+  });
+
+  it('creates and caches the workflow builder with its model policy', async () => {
+    const modelPolicy = {
+      active: true,
+      pickerVisible: false,
+      default: { provider: 'openai', modelId: 'gpt-4o-mini' },
+    } as const;
+    const editor = new MastraEditor({ workflowBuilder: { modelPolicy } });
+    const first = await editor.resolveWorkflowBuilder();
+    const second = await editor.resolveWorkflowBuilder();
+
+    expect(first).toBeDefined();
+    expect(first).toBe(second);
+    expect(first?.enabled).toBe(true);
+    expect(first?.getAgent()).toBeDefined();
+    expect(first?.getModelPolicy()).toEqual(modelPolicy);
+  });
+
+  it('registers the hidden workflow builder agent with Mastra storage', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({ workflowBuilder: {} });
+    new Mastra({ storage, editor });
+
+    const builder = await editor.resolveWorkflowBuilder();
+    const memory = await builder?.getAgent().getMemory();
+
+    expect(memory?.storage).toBeDefined();
+    expect(memory?.storage.id).toBe(storage.id);
+  });
+});
+
 describe('MastraEditor.resolveBuilder', () => {
   it('returns undefined when builder is omitted', async () => {
     const editor = new MastraEditor({});
@@ -1630,6 +1685,17 @@ describe('MastraEditor.resolveBuilder license guard', () => {
     const editor = new MastraEditor({ builder: { enabled: true } });
     const result = await editor.resolveBuilder();
     expect(result).toBeDefined();
+  });
+
+  it('applies the same production license guard to the workflow builder', async () => {
+    const editor = new MastraEditor({ workflowBuilder: { enabled: true } });
+    await expect(editor.resolveWorkflowBuilder()).rejects.toThrow(/Workflow Builder is configured/);
+  });
+
+  it('resolves the workflow builder when a valid MASTRA_EE_LICENSE is set', async () => {
+    process.env.MASTRA_EE_LICENSE = 'a'.repeat(64);
+    const editor = new MastraEditor({ workflowBuilder: { enabled: true } });
+    await expect(editor.resolveWorkflowBuilder()).resolves.toBeDefined();
   });
 });
 

@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApiGlobalOptions } from './target';
 
 const mocks = vi.hoisted(() => ({
+  getCurrentOrgId: vi.fn(),
   getToken: vi.fn(),
   fetchServerProjects: vi.fn(),
   loadProjectConfig: vi.fn(),
 }));
 
 vi.mock('../auth/credentials.js', () => ({
+  getCurrentOrgId: mocks.getCurrentOrgId,
   getToken: mocks.getToken,
 }));
 
@@ -44,6 +46,7 @@ describe('resolveTarget', () => {
     delete process.env.MASTRA_PROJECT_ID;
     delete process.env.MASTRA_ORGANIZATION_ID;
     fetchMock.mockRejectedValue(new Error('local unavailable'));
+    mocks.getCurrentOrgId.mockResolvedValue('org-current');
     mocks.getToken.mockResolvedValue('platform-token');
     mocks.loadProjectConfig.mockResolvedValue(null);
   });
@@ -422,6 +425,20 @@ describe('resolveTarget', () => {
     expect(mocks.fetchServerProjects).toHaveBeenCalledWith('platform-token', 'org-1');
   });
 
+  it('sends the deploy-owned organization for discovered Factory routes', async () => {
+    mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+    mocks.fetchServerProjects.mockResolvedValueOnce([
+      { id: 'project-1', slug: 'project-one', instanceUrl: 'https://shipyard.factory.mastra.cloud' },
+    ]);
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/web/factory/projects')).resolves.toMatchObject({
+      headers: {
+        Authorization: 'Bearer platform-token',
+        'X-Mastra-Organization-Id': 'org-1',
+      },
+    });
+  });
+
   it('does not use localhost when the probe returns a non-2xx response', async () => {
     const cancel = vi.fn();
     fetchMock.mockResolvedValueOnce({ ok: false, body: { cancel } });
@@ -479,6 +496,38 @@ describe('resolveTarget', () => {
       });
 
       expect(mocks.getToken).toHaveBeenCalledOnce();
+    });
+
+    it('sends the selected organization for an explicit hosted Factory route', async () => {
+      await expect(
+        resolveTarget(options({ url: 'https://shipyard.factory.mastra.cloud' }), undefined, '/web/factory/projects'),
+      ).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: {
+          Authorization: 'Bearer platform-token',
+          'X-Mastra-Organization-Id': 'org-current',
+        },
+        timeoutMs: 30_000,
+      });
+    });
+
+    it('preserves an explicit organization header for an explicit hosted Factory route', async () => {
+      await expect(
+        resolveTarget(
+          options({
+            url: 'https://shipyard.factory.mastra.cloud',
+            header: ['X-Mastra-Organization-Id: org-explicit'],
+          }),
+          undefined,
+          '/web/factory/projects',
+        ),
+      ).resolves.toMatchObject({
+        headers: {
+          Authorization: 'Bearer platform-token',
+          'X-Mastra-Organization-Id': 'org-explicit',
+        },
+      });
+      expect(mocks.getCurrentOrgId).not.toHaveBeenCalled();
     });
 
     it.each([

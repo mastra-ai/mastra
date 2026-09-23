@@ -1,11 +1,10 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "1.2.19-alpha.1",
+  "version": "1.2.28-alpha.1",
   "description": "",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -75,7 +74,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.50.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.58.0-0 <2.0.0-0",
     "wrangler": "^4.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },

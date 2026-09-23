@@ -1,8 +1,14 @@
 # @mastra/deployer-sandbox
 
-Deploy a full Mastra server or a non-HTTP worker into a workspace sandbox.
+Deploy a full Mastra server or a non-HTTP worker into a workspace sandbox. It is intended for ephemeral previews, CI smoke deployments, isolated jobs, agent-built application verification, and untrusted tenant environments rather than permanent production hosting.
 
-Server deployments work with any `WorkspaceSandbox` provider that implements `executeCommand` and `networking`. Worker deployments require only `executeCommand`; they do not allocate ports, ingress, public URLs, or HTTP health checks. Positioning: **ephemeral environments** — instant previews, PR/CI smoke deploys, isolated jobs, agent-built-app verification, and multi-tenant untrusted instances. Not production hosting.
+## Installation
+
+```bash
+npm install @mastra/deployer-sandbox
+```
+
+Install a workspace sandbox provider separately. The examples below use `@mastra/vercel`.
 
 ## Usage
 
@@ -14,104 +20,46 @@ import { VercelSandbox } from '@mastra/vercel';
 
 const deployer = new SandboxDeployer({
   sandbox: new VercelSandbox({
-    sandboxName: 'my-preview', // identity: redeploys resume this sandbox
-    timeout: 2_400_000, // must stay under the plan's max sandbox lifetime (45 min on Pro)
+    sandboxName: 'my-preview',
+    timeout: 2_400_000,
     ports: [4111],
   }),
 });
 
-export const mastra = new Mastra({
-  // ...
-  deployer,
-});
+export const mastra = new Mastra({ deployer });
 ```
 
-```bash
-mastra build
-```
+Running `mastra build` bundles the project and deploys it into the sandbox, then prints the API and Studio URLs.
 
-`mastra build` bundles the project and deploys it into the sandbox in one step, printing the live API and Studio URLs.
+## Documentation
 
-Manage the deployment afterward with `getDeployment()` from the server-only `client` export — the sandbox name is the identity, so this works from any process or codebase:
+Server deployments require a `WorkspaceSandbox` implementation with command execution and networking support. The sandbox name is the deployment identity, so subsequent processes can reconnect to the same deployment with the server-only `@mastra/deployer-sandbox/client` export:
 
 ```typescript
 import { getDeployment } from '@mastra/deployer-sandbox/client';
 import { VercelSandbox } from '@mastra/vercel';
 
-const dep = await getDeployment({
+const deployment = await getDeployment({
   sandbox: new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] }),
-}); // never wakes a stopped sandbox
-console.log(dep.status, dep.url);
-await dep.stop(); // snapshot-stop (resumable)
-await dep.destroy(); // permanent delete
-```
-
-Provider tooling works too (for example `vercel sandbox ls|stop|rm`).
-
-One-shot programmatic deploy (CI / agents), no bundler — takes a prebuilt output dir:
-
-```typescript
-import { deployToSandbox } from '@mastra/deployer-sandbox';
-import { VercelSandbox } from '@mastra/vercel';
-
-const sandbox = new VercelSandbox({ sandboxName: 'ci-preview', ports: [4111] });
-const deployment = await deployToSandbox({ sandbox, dir: '.mastra/output', port: 4111 });
-console.log(deployment.url);
-```
-
-## Non-HTTP workers and custom commands
-
-Deploy a prebuilt worker artifact without requiring networking. The command, arguments, working directory, and install command are trusted developer-authored inputs. The deployer preserves the artifact layout rather than assuming a Mastra-specific entrypoint or process protocol.
-
-```typescript
-import { deployWorkerToSandbox } from '@mastra/deployer-sandbox';
-import { VercelSandbox } from '@mastra/vercel';
-
-const worker = await deployWorkerToSandbox({
-  sandbox: new VercelSandbox({ sandboxName: 'experiment-worker' }),
-  dir: '.mastra/experiment-worker',
-  executionId: 'attempt-1',
-  mode: 'job',
-  command: 'node',
-  args: ['index.mjs'],
-  env: { JOB_ID: 'job-123' },
-  input: { type: 'stdin', data: JSON.stringify({ requestId: 'request-123' }) },
-  startupTimeoutMs: 10_000,
-  executionTimeoutMs: 15 * 60_000,
-  terminationGraceMs: 5_000,
 });
 
-const stdout = await worker.readOutput('stdout', { offset: 0, maxBytes: 64 * 1024 });
-const stderr = await worker.readOutput('stderr', { offset: 0, maxBytes: 64 * 1024 });
-console.log(await worker.status(), stdout, stderr);
-await worker.cancel();
+console.log(deployment.status, deployment.url);
+await deployment.stop(); // Resumable snapshot stop
+await deployment.destroy(); // Permanent deletion
 ```
 
-Each caller-provided execution ID gets isolated runtime state. Input is bounded and may be delivered through stdin or staged at an artifact-relative file path. Stdout and stderr remain separate and are read as raw bytes with offsets, EOF, truncation, and interruption metadata; the deployer does not interpret their protocol.
+Use `deployToSandbox()` for one-shot programmatic deployments of a prebuilt `.mastra/output` directory. Pass `wake: true` to `getDeployment()` when a stopped server should be resumed and health-checked before it is returned.
 
-Dependency installs are serialized and cached using the artifact's `package.json`, supported lockfiles, and install command. `cancel()` sends TERM and then KILL to the process group when necessary. `stop()` snapshot-stops the provider sandbox without assuming process preservation. `relaunch({ executionId })` starts the recorded command under a new execution identity. `destroy()` retries permanent sandbox deletion and returns a typed result.
+The package also supports non-HTTP workers through `deployWorkerToSandbox()`. Workers only require command execution and can receive bounded input through stdin or a staged file. Their handles expose status checks, separate offset-based stdout and stderr reads, cancellation, snapshot stop, relaunch, and permanent destruction. `attachWorkerDeployment()` reconstructs a handle from persisted sandbox and execution IDs after a supervisor restart.
 
-A restarted supervisor can reconstruct an operational handle from the persisted sandbox and execution identities. The attached handle supports status, offset-based output reads, cancellation, stop, and destroy, but not relaunch because the original launch configuration isn't persisted.
+Dependency installation is serialized and cached from the artifact's package manifest and lockfile. Worker cancellation sends TERM before KILL when necessary, while server health checks surface startup logs when a deployment fails to become ready.
 
-```typescript
-import { attachWorkerDeployment } from '@mastra/deployer-sandbox';
-import { VercelSandbox } from '@mastra/vercel';
+- [Sandbox deployment documentation](https://mastra.ai/docs/deployment/sandbox)
 
-const sandbox = new VercelSandbox({ sandboxName: persistedSandboxId });
-const worker = await attachWorkerDeployment({ sandbox, executionId: persistedExecutionId });
+## Changelog
 
-const status = await worker.status();
-const stdout = await worker.readOutput('stdout', { offset: persistedStdoutOffset });
-```
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/deployers/sandbox/CHANGELOG.md) for version history and release notes.
 
-Pass `wake: true` to resume a stopped server sandbox before returning — useful in a route handler that fronts the sandbox. If the server isn't healthy after the resume (some providers restore the filesystem but not processes), the wake relaunches it:
+## Support
 
-```typescript
-import { getDeployment } from '@mastra/deployer-sandbox/client';
-import { VercelSandbox } from '@mastra/vercel';
-
-const sandbox = new VercelSandbox({ sandboxName: 'my-preview', ports: [4111] });
-const dep = await getDeployment({ sandbox, wake: true });
-```
-
-See the Mastra docs for lifecycle, routing tiers, and security notes.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -5,6 +5,14 @@ level: error
 ignorecase: true
 scope: heading
 tokens:
+  # The general free-relative heading: a wh-word, a determiner, then a
+  # subject and its verb ("Why the Pin Exists," "How the Cache Works,"
+  # "What the Data Shows"). The determiner gate keeps the conventional
+  # doc heading out ("How to Configure X," "What's New"), and the two
+  # required words after it hold the pattern to subject + verb. A section
+  # that genuinely poses a question fires too ("When the Interpreter
+  # Starts"); rename it to the topic ("Interpreter startup").
+  - "(?:what|why|how|when|where|who) (?:the|this|that|these|those|a|an|each|every|your|our|its) [-'\\w]+ [-'\\w]+"
   - Deep Dive
   - Under the Hood
   - Demystifying

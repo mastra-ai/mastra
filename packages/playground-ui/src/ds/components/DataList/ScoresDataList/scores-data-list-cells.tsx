@@ -21,7 +21,7 @@ export interface ScoresDataListDateCellProps {
 export function ScoresDataListDateCell({ timestamp }: ScoresDataListDateCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral2">
+    <DataListCell className="text-muted-foreground">
       {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : '-'}
     </DataListCell>
   );
@@ -38,7 +38,7 @@ export interface ScoresDataListTimeCellProps {
 export function ScoresDataListTimeCell({ timestamp }: ScoresDataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral3">
+    <DataListCell className="text-body-sm text-muted-foreground">
       {date ? format(date, 'h:mm:ss aaa') : '-'}
     </DataListCell>
   );
@@ -55,8 +55,8 @@ export interface ScoresDataListInputCellProps {
 export function ScoresDataListInputCell({ input }: ScoresDataListInputCellProps) {
   const display = input != null ? JSON.stringify(input) : '-';
   return (
-    <DataListCell height="compact">
-      <span className="text-ui-smd text-neutral3 block max-w-full min-w-0 truncate font-mono" title={display}>
+    <DataListCell>
+      <span className="block max-w-full min-w-0 truncate font-mono text-body-sm text-muted-foreground" title={display}>
         {display}
       </span>
     </DataListCell>
@@ -74,8 +74,8 @@ export interface ScoresDataListEntityCellProps {
 export function ScoresDataListEntityCell({ entityId }: ScoresDataListEntityCellProps) {
   const display = entityId || '-';
   return (
-    <DataListCell height="compact">
-      <span className="text-ui-smd block max-w-full min-w-0 truncate" title={display}>
+    <DataListCell>
+      <span className="block max-w-full min-w-0 truncate text-body-sm" title={display}>
         {display}
       </span>
     </DataListCell>
@@ -93,8 +93,8 @@ export interface ScoresDataListScoreCellProps {
 export function ScoresDataListScoreCell({ score }: ScoresDataListScoreCellProps) {
   const display = score == null ? '-' : typeof score === 'object' ? JSON.stringify(score) : String(score);
   return (
-    <DataListCell height="compact">
-      <span className="text-ui-smd text-neutral3 block max-w-full min-w-0 truncate font-mono" title={display}>
+    <DataListCell>
+      <span className="block max-w-full min-w-0 truncate font-mono text-body-sm text-muted-foreground" title={display}>
         {display}
       </span>
     </DataListCell>

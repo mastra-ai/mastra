@@ -1,5 +1,6 @@
 import type {
   EntityLearningProgressResponse,
+  SignalCatalogEntry,
   ThemeEntitiesResponse,
   ThemeFlowResponse,
   ThemeNode,
@@ -7,6 +8,93 @@ import type {
 } from '@mastra/client-js';
 
 export const emptyThemeEntitiesResponse: ThemeEntitiesResponse = { entities: [] };
+
+export const customSignalCatalog: SignalCatalogEntry[] = [
+  {
+    name: 'goal',
+    label: 'Goal',
+    description: 'What the user wanted from the interaction.',
+    order: 0,
+    builtIn: true,
+    enabled: true,
+    status: 'ready',
+  },
+  {
+    name: 'tool_usage',
+    label: 'Tool Operations',
+    description: 'How the agent uses tools.',
+    order: 1,
+    builtIn: false,
+    enabled: true,
+    status: 'ready',
+  },
+  {
+    name: 'outcome',
+    label: 'Outcome',
+    description: 'How the interaction ended.',
+    order: 2,
+    builtIn: true,
+    enabled: true,
+    status: 'ready',
+  },
+  {
+    name: 'handoff_quality',
+    label: 'Handoff Quality',
+    description: 'Whether context survives a handoff.',
+    order: 3,
+    builtIn: false,
+    enabled: true,
+    status: 'collecting',
+  },
+  {
+    name: 'resolution_detail',
+    label: 'Resolution Detail',
+    description: 'How completely the resolution is explained.',
+    order: 4,
+    builtIn: false,
+    enabled: true,
+    status: 'processing',
+  },
+  {
+    name: 'legacy_risk',
+    label: 'Legacy Risk',
+    description: 'Historical risk themes.',
+    order: 5,
+    builtIn: false,
+    enabled: false,
+    status: 'ready',
+  },
+];
+
+export const customThemeEntitiesResponse: ThemeEntitiesResponse = {
+  entities: [
+    {
+      entityId: 'support-agent',
+      entityType: 'agent',
+      availableSignals: ['outcome', 'tool_usage', 'goal'],
+      signalCatalog: customSignalCatalog,
+      latestWindow: {
+        startedAt: '2026-07-01T00:00:00.000Z',
+        endedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+  ],
+};
+
+export const customSignalProgressResponse: EntityLearningProgressResponse = {
+  status: 'processing',
+  traceCount: 87,
+  signals: {
+    goal: { generated: 87, embedded: 84 },
+    tool_usage: { generated: 87, embedded: 80 },
+    outcome: { generated: 87, embedded: 75 },
+    handoff_quality: { generated: 0, embedded: 0 },
+    resolution_detail: { generated: 31, embedded: 19 },
+    legacy_risk: { generated: 50, embedded: 50 },
+  },
+  availableSignals: ['goal', 'tool_usage', 'outcome'],
+  signalCatalog: customSignalCatalog,
+};
 
 export const processingProgressResponse: EntityLearningProgressResponse = {
   status: 'processing',
@@ -91,6 +179,15 @@ export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
       availableSignals: ['goal', 'outcome'],
     },
   ],
+};
+
+export const customThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  ...themeSnapshotsResponse,
+  snapshots: themeSnapshotsResponse.snapshots.map(snapshot => ({
+    ...snapshot,
+    availableSignals: ['goal', 'tool_usage', 'outcome'],
+  })),
+  signalCatalog: customSignalCatalog,
 };
 
 export const billingThemeSnapshotsResponse: ThemeSnapshotsResponse = {
@@ -271,6 +368,45 @@ export const themeFlowResponse: ThemeFlowResponse = {
       traceCount: 3,
       sourceShare: 0.06,
       targetShare: 0.06,
+    },
+  ],
+};
+
+export const customThemeFlowResponse: ThemeFlowResponse = {
+  ...themeFlowResponse,
+  snapshot: customThemeSnapshotsResponse.snapshots[0],
+  stages: [
+    themeFlowResponse.stages[0],
+    {
+      signalName: 'tool_usage',
+      traceCount: 50,
+      nodes: [
+        {
+          nodeId: 'tool-usage-search',
+          kind: 'theme',
+          themeId: 'theme-tool-usage-search',
+          label: 'Searches documentation',
+          traceCount: 50,
+          stageShare: 1,
+        },
+      ],
+    },
+    themeFlowResponse.stages[1],
+  ],
+  links: [
+    {
+      sourceNodeId: 'goal-support',
+      targetNodeId: 'tool-usage-search',
+      traceCount: 50,
+      sourceShare: 1,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'tool-usage-search',
+      targetNodeId: 'outcome-resolved',
+      traceCount: 50,
+      sourceShare: 1,
+      targetShare: 1,
     },
   ],
 };

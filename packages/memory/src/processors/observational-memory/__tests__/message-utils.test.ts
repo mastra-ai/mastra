@@ -31,12 +31,18 @@ describe('getObservableMessages', () => {
     expect(getObservableMessages(messageList).map(m => m.id)).toEqual(['input-1', 'response-1']);
   });
 
-  it('returns the full list when there are no context messages', () => {
+  it('keeps the synthetic continuation live while excluding it from the OM window', () => {
     const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
     messageList.add(createMessage('input-1', 'hello'), 'input');
+    messageList.add(createMessage('memory-1', 'durable memory context'), 'memory');
+    messageList.add(
+      createMessage('om-continuation', '<system-reminder>Continue naturally</system-reminder>'),
+      'memory',
+    );
     messageList.add(createMessage('response-1', 'hi', 'assistant'), 'response');
 
-    expect(getObservableMessages(messageList).map(m => m.id)).toEqual(messageList.get.all.db().map(m => m.id));
+    expect(messageList.get.all.db().map(m => m.id)).toContain('om-continuation');
+    expect(getObservableMessages(messageList).map(m => m.id)).toEqual(['input-1', 'memory-1', 'response-1']);
   });
 });
 

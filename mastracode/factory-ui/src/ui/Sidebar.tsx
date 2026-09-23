@@ -1,5 +1,5 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { Settings } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -20,34 +20,34 @@ function useSettingsOpen() {
 }
 
 /**
- * Alpha status tag rendered as a dashed-outline chip (Clerk-style), so it reads
+ * Beta status tag rendered as a dashed-outline chip (Clerk-style), so it reads
  * as a subtle stage marker rather than a solid pill competing with the nav items.
  * Tinted with the Mastra brand green (#7aff78, `--color-ds-green` on the website).
  *
- * The tint is centralised in the `--alpha-green` custom property so it can flip
+ * The tint is centralised in the `--beta-green` custom property so it can flip
  * per theme: the neon brand green only reads on dark surfaces, so light mode uses
  * a darker brand-green shade that keeps enough contrast against the pale sidebar.
  */
-function AlphaBadge() {
+function BetaBadge() {
   return (
-    <span className="relative bg-[var(--alpha-green)]/10 px-[0.1875rem] text-[0.625rem]/[0.875rem] font-medium tracking-wide text-[var(--alpha-green)] uppercase [--alpha-green:oklch(48%_0.17_142)] dark:[--alpha-green:#7aff78]">
-      Alpha
-      <span className="absolute inset-x-[-0.1875rem] -top-px block transform-gpu text-[var(--alpha-green)]/40">
+    <span className="relative bg-[var(--beta-green)]/10 px-[0.1875rem] text-[0.625rem]/[0.875rem] font-medium tracking-wide text-[var(--beta-green)] uppercase [--beta-green:oklch(48%_0.17_142)] dark:[--beta-green:#7aff78]">
+      Beta
+      <span className="absolute inset-x-[-0.1875rem] -top-px block transform-gpu text-[var(--beta-green)]/40">
         <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
           <line x1="0" x2="100%" y1="0.5" y2="0.5" />
         </svg>
       </span>
-      <span className="absolute inset-x-[-0.1875rem] -bottom-px block transform-gpu text-[var(--alpha-green)]/40">
+      <span className="absolute inset-x-[-0.1875rem] -bottom-px block transform-gpu text-[var(--beta-green)]/40">
         <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
           <line x1="0" x2="100%" y1="0.5" y2="0.5" />
         </svg>
       </span>
-      <span className="absolute inset-y-[-0.1875rem] -left-px block transform-gpu text-[var(--alpha-green)]/40">
+      <span className="absolute inset-y-[-0.1875rem] -left-px block transform-gpu text-[var(--beta-green)]/40">
         <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
           <line x1="0.5" x2="0.5" y1="0" y2="100%" />
         </svg>
       </span>
-      <span className="absolute inset-y-[-0.1875rem] -right-px block transform-gpu text-[var(--alpha-green)]/40">
+      <span className="absolute inset-y-[-0.1875rem] -right-px block transform-gpu text-[var(--beta-green)]/40">
         <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
           <line x1="0.5" x2="0.5" y1="0" y2="100%" />
         </svg>
@@ -64,13 +64,15 @@ export function Sidebar() {
   const settingsOpen = useSettingsOpen();
 
   return (
-    <MainSidebar className="h-full">
-      <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
-        <div className="mt-1 mb-2 flex items-center gap-2 pt-1 pl-3">
-          <LogoWithoutText aria-label="Mastra" role="img" className="text-icon6 h-4 w-auto" />
-          <AlphaBadge />
-          <SidebarGlobalSearchButton />
-        </div>
+    <SidebarNew aria-label="Main sidebar" className="h-full">
+      <SidebarNew.CommandHeader>
+        <SidebarNew.Brand
+          logo={<LogoWithoutText aria-label="Mastra" role="img" className="text-foreground h-4 w-auto" />}
+          title={<BetaBadge />}
+        />
+        <SidebarGlobalSearchButton />
+      </SidebarNew.CommandHeader>
+      <SidebarNew.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         {settingsOpen ? (
           <SettingsNavigation />
         ) : (
@@ -86,11 +88,11 @@ export function Sidebar() {
             </section>
           </div>
         )}
-      </MainSidebar.Nav>
-      <MainSidebar.Bottom role="region" aria-label="Attention, account, and settings">
+      </SidebarNew.Nav>
+      <SidebarNew.Footer aria-label="Attention, account, and settings">
         <SidebarFooter />
-      </MainSidebar.Bottom>
-    </MainSidebar>
+      </SidebarNew.Footer>
+    </SidebarNew>
   );
 }
 
@@ -112,10 +114,10 @@ function SidebarFooter() {
   };
 
   return (
-    <MainSidebar.NavList>
+    <SidebarNew.NavList>
       <SidebarAttention />
       <SidebarAccountLink />
-      <MainSidebar.NavLink
+      <SidebarNew.NavLink
         asChild
         link={{
           name: 'Settings',
@@ -132,9 +134,9 @@ function SidebarFooter() {
           aria-current={settingsOpen ? 'page' : undefined}
         >
           <Settings />
-          <MainSidebar.NavLabel>Settings</MainSidebar.NavLabel>
+          <SidebarNew.NavLabel>Settings</SidebarNew.NavLabel>
         </button>
-      </MainSidebar.NavLink>
-    </MainSidebar.NavList>
+      </SidebarNew.NavLink>
+    </SidebarNew.NavList>
   );
 }

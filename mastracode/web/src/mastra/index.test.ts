@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import type * as factoryModule from '@mastra/factory';
-import { resolveFactoryGithubRule } from '@mastra/factory/rules/resolve';
 
 const factoryConfigs = vi.hoisted(() => [] as Array<ConstructorParameters<typeof factoryModule.MastraFactory>[0]>);
 vi.mock('@mastra/factory', async importOriginal => {
@@ -43,10 +42,30 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'MASTRA_SHARED_API_URL',
       'MASTRA_PLATFORM_SECRET_KEY',
       'MASTRA_PLATFORM_ACCESS_TOKEN',
+      'MASTRA_CLOUD_ACCESS_TOKEN',
+      'MASTRA_ENVIRONMENT_ID',
+      'DATABASE_URL',
+      'APP_DATABASE_URL',
+      'REDIS_URL',
+      'GITHUB_APP_ID',
+      'GITHUB_APP_PRIVATE_KEY',
+      'GITHUB_APP_CLIENT_ID',
+      'GITHUB_APP_CLIENT_SECRET',
+      'GITHUB_APP_SLUG',
+      'GITHUB_APP_WEBHOOK_SECRET',
+      'GITLAB_ACCESS_TOKEN',
+      'GITLAB_ACCESS_TOKEN_TYPE',
+      'GITLAB_BASE_URL',
+      'GITLAB_WEBHOOK_SECRET',
+      'MASTRA_GITLAB_CONNECTION_ID',
+      'LINEAR_CLIENT_ID',
+      'LINEAR_CLIENT_SECRET',
+      'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
     ]) {
       vi.stubEnv(name, '');
     }
+    vi.stubEnv('MASTRA_PROJECT_ID', 'test-project');
     factoryConfigs.length = 0;
     vi.resetModules();
   });
@@ -74,6 +93,15 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
   });
 
+  it('uses the preferred installed boards without deployment-owned lifecycle handlers', async () => {
+    const { factoryConfigVersion } = await import('./index.js');
+    expect(factoryConfigVersion).toBe('mastracode-web-v1');
+    expect(factoryConfigs[0]?.configVersion).toBe(factoryConfigVersion);
+    expect(factoryConfigs[0]).not.toHaveProperty('rules');
+    expect(factoryConfigs[0]?.boards).toBeUndefined();
+    expect(factoryConfigs[0]?.includeDefaultBoards).toBeUndefined();
+  });
+
   it('forwards the dispatcher concurrency environment setting to the factory', { timeout: 60_000 }, async () => {
     vi.stubEnv('MASTRACODE_DISPATCH_MAX_IN_FLIGHT', '7');
     await import('./index.js');
@@ -82,8 +110,20 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(factoryConfigs[0]?.dispatcher).toEqual({ maxInFlight: 7 });
   });
 
-  it('uses the production Factory rules to retriage linked issue updates without moving their stage', async () => {
-    const { factoryRules } = await import('./index.js');
+  it('uses the installed GitHub rules to retriage linked issue updates without moving their stage', async () => {
+    vi.stubEnv('GITHUB_APP_ID', '123');
+    vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+    vi.stubEnv('GITHUB_APP_CLIENT_ID', 'client-id');
+    vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+    vi.stubEnv('GITHUB_APP_SLUG', 'factory-app');
+    vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'test-webhook-secret');
+    const { factoryConfigVersion } = await import('./index.js');
+    const { GithubIntegration } = await import('@mastra/factory/integrations/github/integration');
+    const github = factoryConfigs[0]?.integrations?.find(
+      (integration): integration is InstanceType<typeof GithubIntegration> => integration instanceof GithubIntegration,
+    );
+    expect(github).toBeDefined();
+    if (!github) throw new Error('Expected the configured GitHub integration');
     const item = {
       id: 'issue-42',
       source: 'github-issue' as const,
@@ -97,7 +137,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       tenant: { orgId: 'org-1', projectId: 'project-1' },
       actor: { type: 'github' as const, login: 'contributor', trusted: true, factoryAuthored: false },
       causalChain: [],
-      ruleSetVersion: factoryRules.version,
+      configVersion: factoryConfigVersion,
       factory: { createdAt: '2030-01-01T00:00:00.000Z' },
       repository: { id: 10, fullName: 'acme/repo' },
       item,
@@ -105,8 +145,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       itemRevision: 3,
     };
 
-    const issueEdited = resolveFactoryGithubRule(factoryRules, 'issueEdited');
-    const issueCommentCreated = resolveFactoryGithubRule(factoryRules, 'issueCommentCreated');
+    const { issueEdited, issueCommentCreated } = github.rules;
 
     expect(
       issueEdited?.({
@@ -151,8 +190,16 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'GITHUB_APP_CLIENT_SECRET',
         'GITHUB_APP_SLUG',
         'GITHUB_APP_WEBHOOK_SECRET',
+        'GITLAB_ACCESS_TOKEN',
+        'GITLAB_ACCESS_TOKEN_TYPE',
+        'GITLAB_BASE_URL',
+        'GITLAB_WEBHOOK_SECRET',
+        'MASTRA_GITLAB_CONNECTION_ID',
         'LINEAR_CLIENT_ID',
         'LINEAR_CLIENT_SECRET',
+        'JIRA_BASE_URL',
+        'JIRA_EMAIL',
+        'JIRA_API_TOKEN',
         'SLACK_APP_SIGNING_SECRET',
       ]) {
         vi.stubEnv(name, '');
@@ -204,6 +251,28 @@ describe('platform entry (src/mastra/index.ts)', () => {
       },
     );
 
+    it.each(['personal', 'group'] as const)(
+      'registers direct GitLab with a %s access token',
+      { timeout: 60_000 },
+      async accessTokenType => {
+        vi.resetModules();
+        vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+        vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+        vi.stubEnv('GITLAB_ACCESS_TOKEN', `glpat-${accessTokenType}-secret`);
+        vi.stubEnv('GITLAB_ACCESS_TOKEN_TYPE', accessTokenType);
+        vi.stubEnv('GITLAB_BASE_URL', 'https://gitlab.acme.test');
+        await import('./index.js');
+
+        const integration = factoryConfigs[0]?.integrations?.find(candidate => candidate.id === 'gitlab');
+        expect(integration?.diagnostics()).toMatchObject({
+          mode: 'direct',
+          accessTokenType,
+          endpointHost: 'gitlab.acme.test',
+        });
+        expect(JSON.stringify(integration?.diagnostics())).not.toContain(`glpat-${accessTokenType}-secret`);
+      },
+    );
+
     it(
       'boots when the Linear group is partially configured so diagnostics can report the missing setup',
       { timeout: 60_000 },
@@ -225,6 +294,70 @@ describe('platform entry (src/mastra/index.ts)', () => {
       const mod = await import('./index.js');
       const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
       expect(paths).toContain('/auth/linear/connect');
+    });
+
+    it(
+      'mounts the disabled Jira status route when the Jira group is partially configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
+        vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
+        vi.stubEnv('JIRA_API_TOKEN', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra).toBeDefined();
+        const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+        expect(paths).toContain('/web/jira/status');
+      },
+    );
+
+    it('registers the direct Jira integration when the full group is configured', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
+      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
+      vi.stubEnv('JIRA_API_TOKEN', 'jira-token');
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      expect(paths).toContain('/web/jira/status');
+      expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')?.constructor.name).toBe(
+        'JiraIntegration',
+      );
+    });
+
+    it('does not register Platform Jira without Platform credentials', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      expect(paths).toContain('/web/jira/status');
+      expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')).toBeUndefined();
+    });
+
+    it(
+      'registers Platform Jira for automatic discovery when Platform credentials are configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+        const mod = await import('./index.js');
+        const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+        expect(paths).toContain('/web/jira/status');
+        expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')?.constructor.name).toBe(
+          'PlatformJiraIntegration',
+        );
+      },
+    );
+
+    it('prefers direct Jira credentials when both Jira configurations are complete', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
+      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
+      vi.stubEnv('JIRA_API_TOKEN', 'jira-token');
+      await import('./index.js');
+      expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')?.constructor.name).toBe(
+        'JiraIntegration',
+      );
     });
 
     it('skips Slack channel wiring when the Slack app env is unset', { timeout: 60_000 }, async () => {

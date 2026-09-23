@@ -1,6 +1,6 @@
 ---
 title: 'OpenTelemetry | Observability'
-description: 'Connect Mastra to OpenTelemetry with the exporter or bridge'
+description: "Connect Mastra observability to OpenTelemetry with an exporter for traces and logs or a bridge for joining existing distributed trace contexts."
 packages:
   - '@mastra/observability'
   - '@mastra/otel-exporter'
@@ -501,10 +501,13 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](http
 
 #### Span Naming
 
-- **LLM Operations**: `chat {model}`
+- **Model calls**: `chat {model}`
+- **Generation loop**: `model_generation {model}`, with one `agent_step {agent_id}` per turn
 - **Tool Execution**: `execute_tool {tool_name}`
 - **Agent Runs**: `invoke_agent {agent_id}`
 - **Workflow Runs**: `invoke_workflow {workflow_id}`
+
+Each agent turn calls the model once. The `chat` span is that call and is the only span that carries `gen_ai.request.model`, the messages, and `gen_ai.usage.*`, so backends that sum usage across spans count each call once. The `model_generation` span wraps the whole loop and `agent_step` wraps one turn (model call plus tool execution); neither carries usage.
 
 #### Key Attributes
 
@@ -723,10 +726,13 @@ With the `OtelBridge`, your traces maintain proper hierarchy across OTEL and Mas
 ```
 HTTP POST /api/chat (from Hono middleware)
 └── agent.assistant (from Mastra via OtelBridge)
-    ├── chat gpt-5.4 (LLM call)
-    ├── tool.execute search (tool execution)
-    │   └── HTTP GET api.example.com (from OTEL auto-instrumentation)
-    └── chat gpt-5.4 (follow-up LLM call)
+    └── model_generation __AI_SDK_OPENAI_MODEL_BASE__ (generation loop)
+        ├── agent_step assistant (turn 1)
+        │   ├── chat __AI_SDK_OPENAI_MODEL_BASE__ (LLM call)
+        │   └── execute_tool search (tool execution)
+        │       └── HTTP GET api.example.com (from OTEL auto-instrumentation)
+        └── agent_step assistant (turn 2)
+            └── chat __AI_SDK_OPENAI_MODEL_BASE__ (follow-up LLM call)
 ```
 
 ### Multi-service distributed tracing
@@ -739,7 +745,9 @@ Service A: HTTP POST /api/process
 
 Service B: HTTP POST /api/analyze (incoming call - same trace!)
 └── agent.analyzer (Mastra agent inherits trace context)
-    └── chat gpt-5.4
+    └── model_generation __AI_SDK_OPENAI_MODEL_BASE__
+        └── agent_step analyzer
+            └── chat __AI_SDK_OPENAI_MODEL_BASE__
 ```
 
 Both services must have:

@@ -188,6 +188,7 @@ describe('createMcpManager', () => {
             client_id: 'client-id',
             client_secret: 'client-secret',
           },
+          clientMetadataUrl: undefined,
           storage: expect.anything(),
         }),
       );
@@ -1147,7 +1148,11 @@ describe('createMcpManager', () => {
       const options = MockedMCPOAuthClientProvider.mock.calls[0]![0]!;
       expect(options.redirectUrl).toBe('http://127.0.0.1:1458/oauth/callback');
       expect(options.clientMetadata.redirect_uris).toEqual(['http://127.0.0.1:1458/oauth/callback']);
+      // No pre-registered client: the Client ID Metadata Document is the identity.
       expect(options.clientInformation).toBeUndefined();
+      expect(options.clientMetadataUrl).toBe('https://code.mastra.ai/.well-known/oauth-client/mastracode.json');
+      expect(options.clientMetadata.client_id).toBe('https://code.mastra.ai/.well-known/oauth-client/mastracode.json');
+      expect(options.clientMetadata.client_name).toBe('Mastra Code');
 
       // The provider is attached to the live server def so the client sees it
       const serverDef = (MockedMCPClient.mock.calls[0]![0]! as any).servers['api'];
@@ -1382,12 +1387,12 @@ describe('createMcpManager', () => {
   });
 
   describe('disable/enable servers', () => {
-    async function withTempAppData(fn: () => Promise<void>) {
+    async function withTempAppData(fn: (dataDir: string) => Promise<void>) {
       const dataDir = await fs.mkdtemp(join(tmpdir(), 'mc-disable-test-'));
       const prevDataDir = process.env.MASTRA_APP_DATA_DIR;
       process.env.MASTRA_APP_DATA_DIR = dataDir;
       try {
-        await fn();
+        await fn(dataDir);
       } finally {
         if (prevDataDir === undefined) {
           delete process.env.MASTRA_APP_DATA_DIR;
@@ -1599,6 +1604,8 @@ describe('createMcpManager', () => {
         const status = await projectA.setServerDisabled('fs', true, { global: true });
         expect(status.disabled).toBe(true);
         expect(status.disabledScope).toBe('global');
+        expect(status.globalDefault).toBe('disabled');
+        expect(status.globalKillSwitch).toBe(false);
         expect(Object.keys(projectA.getTools())).toEqual(['api_fetch']);
 
         // A different project sees the same server disabled with global scope.
@@ -1610,7 +1617,7 @@ describe('createMcpManager', () => {
       });
     });
 
-    it('project-level enable cannot undo a global disable', async () => {
+    it('project-level enable overrides a global per-server disable until the project inherits again', async () => {
       await withTempAppData(async () => {
         setupConfig({ mcpServers: { fs: { command: 'npx' } } });
         mockClientWithToolsets({ fs: { read: {} } });
@@ -1620,15 +1627,65 @@ describe('createMcpManager', () => {
         await manager.setServerDisabled('fs', true, { global: true });
 
         const status = await manager.setServerDisabled('fs', false);
-        expect(status.disabled).toBe(true);
-        expect(status.disabledScope).toBe('global');
-        expect(Object.keys(manager.getTools())).toEqual([]);
-
-        // Enabling in the global scope actually re-enables it.
-        const enabled = await manager.setServerDisabled('fs', false, { global: true });
-        expect(enabled.disabled).toBeUndefined();
-        expect(enabled.connected).toBe(true);
+        expect(status.disabled).toBeUndefined();
+        expect(status.connected).toBe(true);
+        expect(status.projectOverride).toBe('enabled');
+        expect(status.globalDefault).toBe('disabled');
+        expect(status.globalKillSwitch).toBe(false);
         expect(Object.keys(manager.getTools())).toEqual(['fs_read']);
+
+        const inherited = await manager.inheritServer('fs');
+        expect(inherited.disabled).toBe(true);
+        expect(inherited.disabledScope).toBe('global');
+        expect(inherited.projectOverride).toBeUndefined();
+        expect(inherited.globalDefault).toBe('disabled');
+        expect(inherited.globalKillSwitch).toBe(false);
+        expect(Object.keys(manager.getTools())).toEqual([]);
+      });
+    });
+
+    it('inheritAllServers clears project overrides and restores global defaults', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+        await manager.setServerDisabled('fs', true, { global: true });
+        await manager.setAllDisabled(false);
+
+        expect(Object.keys(manager.getTools()).sort()).toEqual(['api_fetch', 'fs_read']);
+        expect(manager.getServerStatuses().every(status => status.projectOverride === 'enabled')).toBe(true);
+
+        await manager.inheritAllServers();
+
+        expect(manager.getDisabledServers()).toEqual(['fs']);
+        expect(Object.keys(manager.getTools())).toEqual(['api_fetch']);
+        expect(manager.getServerStatuses().every(status => status.projectOverride === undefined)).toBe(true);
+      });
+    });
+
+    it('loads legacy project disabledServers entries as disabled overrides', async () => {
+      await withTempAppData(async dataDir => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+        await fs.writeFile(
+          join(dataDir, 'mcp-state.json'),
+          JSON.stringify({ projects: { '/tmp/test': { disabledServers: ['fs'] } } }),
+          'utf-8',
+        );
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+
+        expect(manager.getDisabledServers()).toEqual(['fs']);
+        expect(manager.getServerStatuses().find(status => status.name === 'fs')?.projectOverride).toBe('disabled');
+
+        await manager.setServerDisabled('api', false);
+        const persisted = JSON.parse(await fs.readFile(join(dataDir, 'mcp-state.json'), 'utf-8'));
+        expect(persisted.projects['/tmp/test']).toEqual({
+          serverOverrides: { api: 'enabled', fs: 'disabled' },
+        });
       });
     });
 
@@ -1662,7 +1719,17 @@ describe('createMcpManager', () => {
         expect(manager.isAllDisabledGlobally()).toBe(true);
         expect(manager.getDisabledServers()).toEqual(['api', 'fs']);
         expect(Object.keys(manager.getTools())).toEqual([]);
-        expect(manager.getServerStatuses().every(s => s.disabled && s.disabledScope === 'global')).toBe(true);
+        expect(
+          manager
+            .getServerStatuses()
+            .every(
+              status =>
+                status.disabled &&
+                status.disabledScope === 'global' &&
+                status.globalDefault === 'enabled' &&
+                status.globalKillSwitch,
+            ),
+        ).toBe(true);
 
         // Other projects are affected too.
         const other = createMcpManager('/tmp/project-b');

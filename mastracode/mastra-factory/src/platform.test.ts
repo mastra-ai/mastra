@@ -22,7 +22,13 @@ const cliAuth = vi.hoisted(() => ({
 
 vi.mock('mastra/internal/auth', () => cliAuth);
 
-import { attachNeonDatabase, createServerProject, PlatformApiError, waitForDatabaseReady } from './platform.js';
+import {
+  attachNeonDatabase,
+  createServerProject,
+  ensureProductionEnvironment,
+  PlatformApiError,
+  waitForDatabaseReady,
+} from './platform.js';
 
 /**
  * Build a fresh Response every time — a `Response` body is single-use, and
@@ -61,6 +67,54 @@ describe('createServerProject', () => {
       expect.objectContaining({
         body: JSON.stringify({ name: 'My Factory', region: 'eu', factoryEnabled: true }),
       }),
+    );
+  });
+});
+
+describe('ensureProductionEnvironment', () => {
+  const options = { token: 'wos-token', orgId: 'org_123', projectId: 'proj_1', region: 'eu' as const };
+  const url = 'https://platform.example.test/v1/projects/proj_1/environments';
+
+  it('reuses the production environment by type, not its name or list order', async () => {
+    cliAuth.platformFetch.mockImplementationOnce(
+      jsonResponseFactory(200, {
+        environments: [
+          { id: 'env_staging', type: 'staging', name: 'production' },
+          { id: 'env_prod', type: 'production', name: 'renamed' },
+        ],
+      }),
+    );
+    await expect(ensureProductionEnvironment(options)).resolves.toBe('env_prod');
+    expect(cliAuth.platformFetch).toHaveBeenCalledTimes(1);
+    expect(cliAuth.platformFetch).toHaveBeenCalledWith(url, {
+      headers: { Authorization: 'Bearer wos-token', 'x-mastra-org-id': 'org_123' },
+    });
+  });
+
+  it('creates production in the selected region when it does not exist', async () => {
+    cliAuth.platformFetch
+      .mockImplementationOnce(jsonResponseFactory(200, { environments: [] }))
+      .mockImplementationOnce(jsonResponseFactory(201, { environment: { id: 'env_new' } }));
+    await expect(ensureProductionEnvironment(options)).resolves.toBe('env_new');
+    expect(cliAuth.platformFetch).toHaveBeenLastCalledWith(url, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer wos-token', 'x-mastra-org-id': 'org_123', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'production', type: 'production', region: 'eu' }),
+    });
+  });
+
+  it('does not create an environment when listing fails', async () => {
+    cliAuth.platformFetch.mockImplementationOnce(jsonResponseFactory(403, { detail: 'forbidden' }));
+    await expect(ensureProductionEnvironment(options)).rejects.toThrow('Failed to list environments — forbidden');
+    expect(cliAuth.platformFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports environment creation failures', async () => {
+    cliAuth.platformFetch
+      .mockImplementationOnce(jsonResponseFactory(200, { environments: [] }))
+      .mockImplementationOnce(jsonResponseFactory(409, { detail: 'conflict' }));
+    await expect(ensureProductionEnvironment(options)).rejects.toThrow(
+      'Failed to create production environment — conflict',
     );
   });
 });

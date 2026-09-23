@@ -1,6 +1,6 @@
 ---
 title: "Reference: ToolSearchProcessor | Processors"
-description: "Documentation for the ToolSearchProcessor in Mastra, which enables runtime-defined tool discovery and loading for agents with large tool libraries."
+description: "The ToolSearchProcessor is an input processor that enables runtime-defined tool discovery and loading."
 packages:
   - "@mastra/core"
 ---
@@ -338,7 +338,7 @@ const toolSearch = new ToolSearchProcessor({
 
 Loading tools is cache-friendly in both modes: loads are append-only, so the cached prompt prefix stays stable for providers that support prompt caching.
 
-Unloading a tool changes the tool definitions sent to the model, which shifts the cached prefix and causes the next turn to pay a cache write instead of a cache hit. In `'in-memory'` mode this happens when a thread's state is evicted by `ttl`. In `'context'` mode it happens when a tool's discovery result is no longer present in the messages (for example, when older messages are trimmed). The tool de-loads, and the model must search for it again before reuse. This is expected: removing an unused tool trades one cache write for a smaller prefix on later turns.
+Unloading a tool changes the definitions sent to the model, shifting the cached prefix so the next turn pays for a cache write instead of receiving a cache hit. In `'in-memory'` mode, this happens when `ttl` evicts a thread's state; in `'context'` mode, it happens when older-message trimming removes the tool's discovery result. The model must then search for the unloaded tool before reuse. This expected tradeoff exchanges one cache write for a smaller prefix on later turns.
 
 ## Combining with other processors
 

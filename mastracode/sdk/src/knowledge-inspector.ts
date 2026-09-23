@@ -11,6 +11,7 @@ import type {
   MastraCompositeStore,
 } from '@mastra/core/storage';
 
+import { resolveKnowledgeScopeIdentity } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 
 export type KnowledgeInspectorScopeLevel = 'org' | 'resource' | 'thread';
@@ -141,7 +142,9 @@ export class KnowledgeInspectorError extends Error {
 }
 
 interface Binding {
-  ownerId: string;
+  /** Org rung shared with the subconscious writers (see knowledge-scope.ts). */
+  organizationId: string;
+  /** Resource rung of the knowledge scope: the Factory project id, else the session resource. */
   resourceId: string;
   threadId?: string;
   fingerprint: string;
@@ -254,7 +257,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       identityKey: binding.identityKey,
       defaultLevel: 'resource',
       roots: [
-        { level: 'org', id: binding.ownerId, available: true },
+        { level: 'org', id: binding.organizationId, available: true },
         { level: 'resource', id: binding.resourceId, available: true },
         binding.threadId
           ? { level: 'thread', id: binding.threadId, available: true }
@@ -456,27 +459,42 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   }
 
   async #binding(): Promise<Binding> {
-    const ownerId = this.#session.identity.getOwnerId();
-    const resourceId = this.#session.identity.getResourceId();
-    if (!ownerId || !resourceId) {
-      throw new KnowledgeInspectorError('unavailable', 'Knowledge inspection requires an active owner and project.');
+    // Scope rungs come from the same resolver the subconscious writes under; an
+    // owner id is a USER id and never names a knowledge org.
+    const identity = resolveKnowledgeScopeIdentity(this.#session.state.get());
+    const sessionResourceId = this.#session.identity.getResourceId();
+    if (!identity.resolved) {
+      // An unresolved org is its own identity: handles minted under the
+      // previous scope must not survive into whatever resolves next.
+      this.#invalidateIdnode();
+      throw new KnowledgeInspectorError(
+        'unavailable',
+        identity.reason
+          ? `Knowledge inspection unavailable: ${identity.reason}`
+          : 'Knowledge inspection requires a resolved organization for this session.',
+      );
     }
+    if (!sessionResourceId) {
+      throw new KnowledgeInspectorError('unavailable', 'Knowledge inspection requires an active project.');
+    }
+    const organizationId = identity.organizationId;
+    const resourceId = identity.knowledgeResourceId ?? sessionResourceId;
     const activeThreadId = this.#session.thread.getId() ?? undefined;
     const thread = activeThreadId ? await this.#session.thread.getById({ threadId: activeThreadId }) : null;
-    const threadId = thread?.resourceId === resourceId ? thread.id : undefined;
-    const fingerprint = `${ownerId}\0${resourceId}\0${threadId ?? ''}`;
+    const threadId = thread?.resourceId === sessionResourceId ? thread.id : undefined;
+    const fingerprint = `${organizationId}\0${resourceId}\0${threadId ?? ''}`;
     if (this.#fingerprint !== fingerprint) {
       this.#fingerprint = fingerprint;
       this.#identityKey = opaqueToken();
       this.#handles.clear();
       this.#cursors.clear();
     }
-    return { ownerId, resourceId, threadId, fingerprint, identityKey: this.#identityKey };
+    return { organizationId, resourceId, threadId, fingerprint, identityKey: this.#identityKey };
   }
 
   #scope(binding: Binding, level: KnowledgeInspectorScopeLevel): KnowledgeScope {
-    if (level === 'org') return [`org:${binding.ownerId}`];
-    const scope = [`org:${binding.ownerId}`, `resource:${binding.resourceId}`];
+    if (level === 'org') return [`org:${binding.organizationId}`];
+    const scope = [`org:${binding.organizationId}`, `resource:${binding.resourceId}`];
     if (level === 'resource') return scope;
     if (!binding.threadId) {
       throw new KnowledgeInspectorError('unavailable', 'The active thread does not belong to this project.');

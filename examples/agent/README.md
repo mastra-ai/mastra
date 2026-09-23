@@ -31,6 +31,35 @@ This directory contains example agents demonstrating various Mastra features.
 - `pnpm mastra:build` - Build for production
 - `pnpm mastra:start` - Start production server
 
+## Computer-use agent
+
+The `computer-use-agent` controls a remote Linux desktop through workspace screenshot, mouse, keyboard, and shell tools. It uses Daytona by default:
+
+```bash
+DAYTONA_API_KEY=your-daytona-api-key
+```
+
+To use E2B Desktop instead, set:
+
+```bash
+COMPUTER_USE_PROVIDER=e2b-desktop
+E2B_API_KEY=your-e2b-api-key
+```
+
+Then start the linked workspace version of Mastra:
+
+```bash
+pnpm mastra dev
+```
+
+Open **Computer Use Agent** in Studio and try:
+
+> Take a screenshot and report the screen dimensions. Open a terminal through the desktop UI, create `/tmp/computer-use-demo.txt` containing a unique marker, then use the shell tool to read the file and verify that the GUI and shell are operating on the same machine.
+
+Only `COMPUTER_USE_PROVIDER=e2b-desktop` selects E2B Desktop; any other value uses Daytona. The selected provider's API key is required when the agent first uses a computer or shell tool.
+
+Computer actions can create billable cloud sandboxes. Stop or destroy test sandboxes when you're finished, and don't share authenticated desktop stream URLs.
+
 ## Request Context Presets
 
 This example includes a demonstration of Mastra's **Request Context Presets** feature, which allows you to define named configurations that can be easily switched between in the Studio UI.

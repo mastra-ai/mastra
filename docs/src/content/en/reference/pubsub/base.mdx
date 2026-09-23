@@ -1,6 +1,6 @@
 ---
 title: 'Reference: PubSub | PubSub'
-description: API reference for the PubSub abstract base class that defines the pub/sub contract in Mastra.
+description: "Extend the PubSub abstract class to implement Mastra event publishing, subscriptions, message delivery, and provider lifecycle behavior."
 packages:
   - '@mastra/core'
 ---
@@ -82,7 +82,7 @@ await pubsub.publish('my-topic', {
 
 Registers a callback to receive events published to a topic. When `options.group` is set, subscribers in the same group compete for messages and each event is delivered to one member. Without a group, every subscriber receives every event.
 
-Pass `options.batch` to opt in to batched delivery. The callback signature is unchanged: a batch of N events is delivered as N consecutive `cb(event, ack, nack)` calls in publish order. Batching is honored only when the backend's [`supportsNativeBatching`](#properties) is `true`. Other backends ignore the option and deliver events one at a time.
+Pass `options.batch` to opt in to batched delivery. The unchanged callback signature delivers a batch of N events as N consecutive `cb(event, ack, nack)` calls in publish order. Batching is honored only when the backend's [`supportsNativeBatching`](#properties) is `true`. Other backends ignore the option and deliver events one at a time.
 
 Set `options.startFrom` to `"latest"` to receive only events published after a new consumer group is created. The default, `"earliest"`, includes retained events. Existing consumer groups keep their current checkpoint.
 
@@ -116,7 +116,7 @@ await pubsub.flush()
 
 Deletes all retained state for a topic (cached history, persistent stream entries, and consumer groups) once no more events will be published to it. Mastra's run lifecycles (durable agents and the evented workflow engine) call this automatically when a run reaches a terminal state, so per-run topics don't accumulate on transports that retain messages.
 
-The default implementation is a no-op: transports that retain nothing per topic (such as `EventEmitterPubSub`) have nothing to clear. Backends that persist messages, like [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), override it. The contract is best-effort: implementations log failures rather than throwing, because callers invoke it fire-and-forget at cleanup boundaries.
+The default implementation is a no-op because transports that retain nothing per topic, such as `EventEmitterPubSub`, have nothing to clear. Backends that persist messages, like [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), override it. Implementations follow a best-effort contract and log failures instead of throwing because callers invoke cleanup without awaiting it.
 
 ```typescript
 await pubsub.clearTopic('workflow.events.v2.run-123')

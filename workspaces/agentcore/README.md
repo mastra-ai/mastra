@@ -1,6 +1,6 @@
 # @mastra/agentcore
 
-AWS Bedrock AgentCore Runtime sandbox provider for Mastra workspaces.
+Execute commands in AWS Bedrock AgentCore Runtime sessions from Mastra workspaces, with session management, environment variables, and file operations.
 
 ## Installation
 
@@ -28,8 +28,14 @@ const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
 });
 ```
 
-`AgentCoreRuntimeSandbox` uses `InvokeAgentRuntimeCommand` to run one-shot shell commands inside an existing AgentCore Runtime session. It does not provide background process management or filesystem mounts.
+## Documentation
 
-By default, `destroy()` does not stop the AgentCore Runtime session because sessions can be shared with other AgentCore invocations. Call `stopRuntimeSession()` explicitly, or set `stopSessionOnLifecycle: true`, when the sandbox owns the session and should clean it up.
+- [AgentCore](https://mastra.ai/integrations/sandboxes/agentcore)
 
-AgentCore Code Interpreter is a separate AgentCore service and is not part of this runtime sandbox provider.
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/agentcore/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

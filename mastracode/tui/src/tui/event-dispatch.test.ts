@@ -14,7 +14,7 @@ function createMockAgentController(initialState: Record<string, unknown> = {}, p
     state,
     loadOMProgress: vi.fn().mockResolvedValue(undefined),
     session: {
-      thread: { list: vi.fn().mockResolvedValue([]), getId: vi.fn(() => 'thread-1') },
+      thread: { getId: vi.fn(() => 'current-thread'), list: vi.fn().mockResolvedValue([]) },
       state: {
         get: () => ({ ...state }),
         set: setState,
@@ -43,7 +43,8 @@ function createMockTUIState(controller: ReturnType<typeof createMockAgentControl
     allToolComponents: [],
     chatContainer: { children: [] },
     taskToolInsertIndex: 5,
-    ui: { requestRender: vi.fn() },
+    ui: { requestRender: vi.fn(), terminal: { setTitle: vi.fn() } },
+    options: { appName: 'Mastra Code' },
     projectInfo: { rootPath: '/tmp/test', gitBranch: 'main' },
     currentThreadTitle: 'Old thread',
     editor: { escapeEnabled: false },
@@ -65,6 +66,7 @@ function createMockEctx(): EventHandlerContext {
     renderClearedTasksInline: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
     renderTaskDeltaInline: vi.fn(),
+    addUserMessage: vi.fn(),
     updateStatusLine: vi.fn(),
   } as unknown as EventHandlerContext;
 }
@@ -85,9 +87,146 @@ describe('dispatchEvent thread lifecycle', () => {
     ectx = createMockEctx();
   });
 
+  it.each(['thread_changed', 'thread_created'] as const)('clears tool contexts on %s', async type => {
+    state.backgroundToolContexts = new Map([
+      ['old-tool', { toolName: 'view', threadId: 'old-thread', resourceId: 'resource', createdAt: 0 }],
+    ]);
+    const event =
+      type === 'thread_changed'
+        ? { type, threadId: 'current-thread', previousThreadId: 'old-thread' }
+        : {
+            type,
+            thread: { id: 'current-thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+          };
+    await dispatchEvent(event, ectx, state);
+    expect(state.backgroundToolContexts.size).toBe(0);
+  });
+
+  it('ignores live messages targeted at a different thread', async () => {
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'origin-thread-signal',
+          threadId: 'origin-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'thread-scoped message' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('renders live messages targeted at the current thread', async () => {
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'current-thread-signal',
+          threadId: 'current-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'thread-scoped message' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).toHaveBeenCalledOnce();
+  });
+
+  it('ignores thread-scoped live messages while waiting to create a new thread', async () => {
+    state.pendingNewThread = true;
+
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'stale-current-thread-signal',
+          threadId: 'current-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'origin-thread completion' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { type: 'tool_start', toolCallId: 'late-call', toolName: 'view', args: { path: 'old.ts' } },
+    { type: 'tool_input_start', toolCallId: 'late-call', toolName: 'view' },
+    { type: 'tool_update', toolCallId: 'late-call', partialResult: 'old progress' },
+    { type: 'shell_output', toolCallId: 'late-call', output: 'old output', stream: 'stdout' },
+    {
+      type: 'tool_end',
+      toolCallId: 'late-call',
+      result: 'old result',
+      isError: false,
+      providerMetadata: { mastra: { backgroundTask: { taskId: 'old-task', status: 'running' } } },
+    },
+  ] as const)('ignores late $type from another thread', async event => {
+    state.options.backgroundToolsEnabled = true;
+    state.backgroundToolContexts = new Map();
+    state.backgroundActivities = new Map();
+    state.pendingTools = new Map();
+    state.pendingSubagents = new Map();
+    await dispatchEvent({ ...event, threadId: 'origin-thread' }, ectx, state);
+    expect(state.backgroundToolContexts.size).toBe(0);
+    expect(state.backgroundActivities.size).toBe(0);
+    expect(state.pendingTools.size).toBe(0);
+    expect(state.pendingSubagents.size).toBe(0);
+    expect(state.agentRunLastStreamPartAt).toBeUndefined();
+  });
+
+  it('updates the active and terminal titles when a generated title arrives', async () => {
+    await dispatchEvent(
+      { type: 'thread_title_updated', threadId: 'current-thread', title: 'Generated demo title' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Generated demo title');
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Generated demo title');
+    expect(ectx.updateStatusLine).toHaveBeenCalledOnce();
+  });
+
+  it('ignores generated titles from another thread', async () => {
+    await dispatchEvent(
+      { type: 'thread_title_updated', threadId: 'thread-2', title: 'Wrong thread' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Old thread');
+    expect(state.ui.terminal.setTitle).not.toHaveBeenCalled();
+  });
+
+  it('strips terminal escape sequences and control characters from generated titles', async () => {
+    await dispatchEvent(
+      {
+        type: 'thread_title_updated',
+        threadId: 'current-thread',
+        title: 'Safe\x07\x1b]0;unsafe\x07Visible \x1b[31mRed\x1b[0m',
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Safe Visible Red');
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Safe Visible Red');
+  });
+
   it('clears per-thread state on thread_changed', async () => {
     state.latestRequestPromptTokens = 90_000;
-
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
       ectx,

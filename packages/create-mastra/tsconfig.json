@@ -1,15 +1,4 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "esModuleInterop": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "outDir": "dist",
-    "declaration": true,
-    "types": ["node"]
-  },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "extends": "../../tsconfig.node.json",
+  "exclude": ["node_modules", "**/*.test.ts", "src/public/**/*.ts", "dist/**", "eslint.config.js", "oxlint.config.ts"]
 }

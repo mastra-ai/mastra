@@ -29,24 +29,15 @@ const agent = new Agent({
 });
 ```
 
-## Authentication
-
-Supply one of:
-
-- **`accessToken`** — A pre-obtained OAuth access token (use the `https://www.googleapis.com/auth/drive` scope).
-- **`getAccessToken`** — A callback that returns a token; useful when tokens are refreshed externally.
-- **`serviceAccount`** — A Google service account. Share the target folder with the service account email.
-
-```typescript
-new GoogleDriveFilesystem({
-  folderId: process.env.GOOGLE_DRIVE_FOLDER_ID!,
-  serviceAccount: {
-    clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
-    privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_KEY!,
-  },
-});
-```
-
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview) and the [GoogleDriveFilesystem reference](https://mastra.ai/reference/workspace/google-drive-filesystem).
+- [Google Drive integration guide](https://mastra.ai/integrations/file-storage/google-drive)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/google-drive/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

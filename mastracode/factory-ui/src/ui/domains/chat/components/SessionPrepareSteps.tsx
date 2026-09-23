@@ -1,37 +1,18 @@
 import { ProcessStepListItem } from '@mastra/playground-ui/components/Steps';
 import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
 
-import type { PrepareProgress } from '../../workspaces/services/github';
 import { useChatMessagesInitializing } from '../context/useChatMessagesInitializing';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 
+// Entering a session provisions nothing — sandboxes boot lazily at the first
+// command — so the only work worth showing is resolving the session and then
+// loading its history.
 const GROUPS = [
-  { id: 'preparing-sandbox', title: 'Preparing sandbox' },
-  { id: 'cloning-repository', title: 'Cloning repository' },
+  { id: 'preparing-session', title: 'Preparing session' },
   { id: 'starting-session', title: 'Starting session' },
 ] as const;
 
 type GroupId = (typeof GROUPS)[number]['id'];
-
-const PHASE_TO_GROUP: Record<PrepareProgress['phase'], GroupId> = {
-  reattaching: 'preparing-sandbox',
-  provisioning: 'preparing-sandbox',
-  'preparing-workspace': 'preparing-sandbox',
-  cloning: 'cloning-repository',
-  pulling: 'cloning-repository',
-  finalizing: 'starting-session',
-  done: 'starting-session',
-};
-
-const PHASE_DESCRIPTION: Record<PrepareProgress['phase'], string> = {
-  reattaching: 'Reattaching…',
-  provisioning: 'Provisioning…',
-  'preparing-workspace': 'Preparing files…',
-  cloning: 'Cloning…',
-  pulling: 'Fetching updates…',
-  finalizing: 'Finalizing…',
-  done: 'Starting…',
-};
 
 type StepStatus = 'pending' | 'running' | 'success';
 
@@ -41,24 +22,6 @@ function getStepStatus(index: number, activeIndex: number): StepStatus {
   return 'pending';
 }
 
-function getActiveGroup(options: {
-  observedGroup: GroupId | undefined;
-  sandboxWarming: boolean;
-  startingSession: boolean;
-}): GroupId {
-  // Sandbox progress wins because history loads in parallel with warm-up.
-  if (options.observedGroup) return options.observedGroup;
-  if (options.sandboxWarming) return 'preparing-sandbox';
-  if (options.startingSession) return 'starting-session';
-  return 'preparing-sandbox';
-}
-
-function getActiveDescription(observedPhase: PrepareProgress['phase'] | undefined, loadingMessages: boolean) {
-  if (observedPhase && observedPhase !== 'done') return PHASE_DESCRIPTION[observedPhase];
-  if (loadingMessages) return 'Loading messages…';
-  return 'Starting…';
-}
-
 export function SessionPrepareSteps({
   finishing = false,
   historyInitializing = false,
@@ -66,22 +29,14 @@ export function SessionPrepareSteps({
   finishing?: boolean;
   historyInitializing?: boolean;
 }) {
-  const { sandboxPreparing, sandboxProgress, sandboxWarming } = useChatSessionContext();
+  const { sandboxPreparing } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
-
-  const observedPhase = sandboxProgress?.phase;
-  const observedGroup = observedPhase ? PHASE_TO_GROUP[observedPhase] : undefined;
 
   const loadingMessages = !sandboxPreparing && messagesInitializing;
   const startingSession = loadingMessages || (!sandboxPreparing && historyInitializing);
 
-  const activeDescription = getActiveDescription(observedPhase, loadingMessages);
-
-  const activeGroup = getActiveGroup({
-    observedGroup,
-    sandboxWarming: sandboxWarming === true,
-    startingSession,
-  });
+  const activeDescription = loadingMessages ? 'Loading messages…' : 'Starting…';
+  const activeGroup: GroupId = startingSession ? 'starting-session' : 'preparing-session';
   const activeIndex = finishing ? GROUPS.length : GROUPS.findIndex(group => group.id === activeGroup);
 
   const items: Array<{ step: ProcessStep; position: number }> = GROUPS.map((group, index) => {
