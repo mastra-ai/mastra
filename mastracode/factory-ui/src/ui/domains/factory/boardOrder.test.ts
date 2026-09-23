@@ -82,4 +82,35 @@ describe('board column order', () => {
 
     expect(orderWorkItemsForStage([oldest, newest], 'triage').map(card => card.id)).toEqual(['newest', 'oldest']);
   });
+
+  it('can prioritize cards the current user most recently moved into the column', () => {
+    const movedByMe = item({
+      id: 'moved-by-me',
+      createdAt: '2026-07-20T09:00:00.000Z',
+      stageHistory: [{ stage: 'triage', enteredAt: '2026-07-22T10:00:00.000Z', by: 'user-1' }],
+    });
+    const movedByTeammate = item({
+      id: 'moved-by-teammate',
+      createdAt: '2026-07-21T09:00:00.000Z',
+      stageHistory: [{ stage: 'triage', enteredAt: '2026-07-24T10:00:00.000Z', by: 'user-2' }],
+    });
+
+    expect(
+      orderWorkItemsForStage([movedByTeammate, movedByMe], 'triage', 'recent-mine', 'user-1').map(card => card.id),
+    ).toEqual(['moved-by-me', 'moved-by-teammate']);
+  });
+
+  it('can sort by Factory creation time in either direction', () => {
+    const oldest = item({ id: 'oldest', createdAt: '2026-07-20T09:00:00.000Z' });
+    const newest = item({ id: 'newest', createdAt: '2026-07-22T09:00:00.000Z' });
+
+    expect(orderWorkItemsForStage([oldest, newest], 'triage', 'created-newest').map(card => card.id)).toEqual([
+      'newest',
+      'oldest',
+    ]);
+    expect(orderWorkItemsForStage([oldest, newest], 'triage', 'created-oldest').map(card => card.id)).toEqual([
+      'oldest',
+      'newest',
+    ]);
+  });
 });

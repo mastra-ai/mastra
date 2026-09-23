@@ -19,6 +19,7 @@ import { BoardColumn, BoardColumnHeader } from '../domains/factory/components/Bo
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
 import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
 import { BoardFilters } from '../domains/factory/components/BoardFilters';
+import { BoardSortControl } from '../domains/factory/components/BoardSortControl';
 import { CandidateCard } from '../domains/factory/components/CandidateCard';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
@@ -48,6 +49,8 @@ import type { BoardFilterState } from '../domains/factory/boardFilters';
 import { candidatePayload } from '../domains/factory/boardDrag';
 import { cardMatchesSearch } from '../domains/factory/boardItems';
 import { orderWorkItemsForStage } from '../domains/factory/boardOrder';
+import type { BoardSort } from '../domains/factory/boardOrder';
+import { boardSortFromParams, boardSortParams } from '../domains/factory/boardSort';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
@@ -164,6 +167,7 @@ function BoardContent({
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
   const filters = boardFiltersFromParams(searchParams, kind);
+  const sort = boardSortFromParams(searchParams);
 
   const auth = useFactoryAuth();
   const items = useBoardItems({ factoryProjectId, kind, currentUserId: auth.data?.user?.userId });
@@ -207,6 +211,9 @@ function BoardContent({
     clearOpenCard(params);
     setSearchParams(params, { replace: true });
   };
+  const setSort = (next: BoardSort) => {
+    setSearchParams(boardSortParams(searchParams, next), { replace: true });
+  };
   const setIntakeSource = (source: IntakeSource) => {
     if (targetItemId) {
       const next = new URLSearchParams(searchParams);
@@ -238,6 +245,8 @@ function BoardContent({
         );
       }),
       stage,
+      sort,
+      auth.data?.user?.userId,
     );
   const boardWorkItems = stages.flatMap(stage => workItemsForStage(stage.id));
   const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
@@ -312,6 +321,7 @@ function BoardContent({
                 filters={filters}
                 onFiltersChange={setFilters}
               />
+              <BoardSortControl value={sort} currentUserId={auth.data?.user?.userId} onChange={setSort} />
               {builtin && (
                 <BoardAutomationSettings
                   factoryProjectId={factoryProjectId}
