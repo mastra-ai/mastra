@@ -1,4 +1,5 @@
 import type { IntakeFeed } from '../boardCandidates';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { LoadMoreSentinel } from './LoadMoreSentinel';
 
 /**
@@ -14,6 +15,7 @@ export function IntakeColumnExtras({ feed }: { feed?: IntakeFeed }) {
       isFetchingNextPage={Boolean(feed.isFetchingNextPage)}
       onLoadMore={() => void feed.fetchNextPage()}
       label="Load more candidates"
+      loadingIndicator={<SkeletonRows label="Loading more candidates" rows={2} rowClassName="h-24 w-full" />}
     />
   );
 }

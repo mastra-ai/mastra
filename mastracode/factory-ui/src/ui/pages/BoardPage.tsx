@@ -447,7 +447,7 @@ function BoardContent({
                       />
                     )}
                     {columnFeed && <IntakeFeedNotice source={intake.active} feed={columnFeed} />}
-                    {stage.id === definition.initialPhase && <IntakeColumnExtras feed={columnFeed} />}
+                    {columnFeed && <IntakeColumnExtras feed={columnFeed} />}
                   </BoardColumn>
                 ),
               )}

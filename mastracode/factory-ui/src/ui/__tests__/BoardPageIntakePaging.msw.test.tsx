@@ -32,10 +32,29 @@ function pullRequest(number: number, title: string) {
   };
 }
 
+function issue(number: number, title: string) {
+  return {
+    number,
+    title,
+    url: `https://github.com/acme/app/issues/${number}`,
+    author: 'alice',
+    assignee: null,
+    labels: ['status: auto-triaged'],
+    comments: 0,
+    createdAt: '2026-08-01T00:00:00.000Z',
+    updatedAt: '2026-08-01T00:00:00.000Z',
+  };
+}
+
 const pullRequestPages: Record<string, { pullRequests: ReturnType<typeof pullRequest>[]; nextPage: number | null }> = {
   '1': { pullRequests: [pullRequest(7, 'Fix login')], nextPage: 2 },
   '2': { pullRequests: [pullRequest(8, 'Fix signup')], nextPage: 3 },
   '3': { pullRequests: [pullRequest(9, 'Fix logout')], nextPage: null },
+};
+
+const triageIssuePages: Record<string, { issues: ReturnType<typeof issue>[]; nextPage: number | null }> = {
+  '1': { issues: [issue(17, 'Triage login')], nextPage: 2 },
+  '2': { issues: [issue(18, 'Triage signup')], nextPage: null },
 };
 
 /**
@@ -120,8 +139,76 @@ function stubReviewBoard() {
   return requestedPages;
 }
 
+/** Stubs Work's independent Intake and Triage candidate feeds. */
+function stubWorkBoard() {
+  const requestedTriagePages: string[] = [];
+  let releaseSecondPage = () => {};
+  const secondPageGate = new Promise<void>(resolve => {
+    releaseSecondPage = resolve;
+  });
+  server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      HttpResponse.json({
+        connections: [
+          {
+            id: 'conn-1',
+            installationId: 'inst-1',
+            repositories: [
+              {
+                id: REPO_ID,
+                branch: 'main',
+                sandboxWorkdir: '/repo',
+                repository: { slug: 'acme/app', defaultBranch: 'main' },
+              },
+            ],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+      HttpResponse.json({ workItems: [] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+      HttpResponse.json({ decisions: [] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+      HttpResponse.json({
+        config: { github: { enabled: true, sourceIds: ['acme/app'] }, linear: { enabled: false, sourceIds: null } },
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+    http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
+    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, async ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      if (!params.has('label')) return HttpResponse.json({ issues: [], nextPage: null });
+      const page = params.get('page') ?? '1';
+      requestedTriagePages.push(page);
+      if (page === '2') await secondPageGate;
+      return HttpResponse.json(triageIssuePages[page]);
+    }),
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+      HttpResponse.json({ sessions: [] }),
+    ),
+  );
+  return { requestedTriagePages, releaseSecondPage };
+}
+
 function renderReviewBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
+  return renderWithProviders(<RouterProvider router={router} />);
+}
+
+function renderWorkBoard() {
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
@@ -162,5 +249,23 @@ describe('Intake candidate paging', () => {
     scrollSentinel(true);
     await waitFor(() => expect(within(intake).getByText('Fix logout')).toBeInTheDocument());
     expect(requestedPages).toEqual(['1', '2', '3']);
+  });
+
+  it('scroll-loads a feed attached to a non-Intake column and shows card skeletons while it loads', async () => {
+    const { scrollSentinel } = stubIntersectionObserver(false);
+    const { requestedTriagePages, releaseSecondPage } = stubWorkBoard();
+    const { client } = renderWorkBoard();
+
+    const triage = await screen.findByTestId('board-column-triage');
+    await waitFor(() => expect(within(triage).getByText('Triage login')).toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    expect(requestedTriagePages).toEqual(['1']);
+
+    scrollSentinel(true);
+    expect(await within(triage).findByRole('status', { name: 'Loading more candidates' })).toBeInTheDocument();
+    releaseSecondPage();
+
+    await waitFor(() => expect(within(triage).getByText('Triage signup')).toBeInTheDocument());
+    expect(requestedTriagePages).toEqual(['1', '2']);
   });
 });
