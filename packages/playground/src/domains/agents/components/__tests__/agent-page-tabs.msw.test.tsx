@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentLayout } from '../../agent-layout';
 import { systemPackages } from './fixtures/channels';
-import { v2Agent } from './fixtures/composer-model-settings';
+import { agentsResponse, v2Agent } from './fixtures/composer-model-settings';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
@@ -81,7 +81,7 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
 
 function commonHandlers(packagesResponse = systemPackages) {
   return [
-    http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json({ 'agent-1': v2Agent })),
+    http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(agentsResponse)),
     http.get(`${BASE_URL}/api/agents/agent-1`, () => HttpResponse.json(v2Agent)),
     http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesResponse)),
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),

@@ -116,12 +116,13 @@ describe('WorkflowPageTabs', () => {
       server.use(...commonHandlers());
       const { queryClient } = renderLayout();
 
-      const schedules = await screen.findByRole('tab', { name: 'Schedules' });
+      await screen.findByRole('tab', { name: 'Schedules' });
       await waitFor(() =>
         expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
       );
-      expect(schedules.getAttribute('aria-disabled')).toBe('true');
-      fireEvent.click(schedules);
+      const disabledSchedules = screen.getByRole('tab', { name: 'Schedules' });
+      expect(disabledSchedules.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.click(disabledSchedules);
       expect(navigateSpy).not.toHaveBeenCalled();
     });
 
@@ -129,13 +130,48 @@ describe('WorkflowPageTabs', () => {
       server.use(...commonHandlers());
       const { queryClient } = renderLayout();
 
-      const schedules = await screen.findByRole('tab', { name: 'Schedules' });
+      await screen.findByRole('tab', { name: 'Schedules' });
       await waitFor(() =>
         expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
       );
-      expect(schedules.getAttribute('aria-disabled')).toBe('true');
-      if (schedules.parentElement) fireEvent.focus(schedules.parentElement);
+      const disabledSchedules = screen.getByRole('tab', { name: 'Schedules' });
+      expect(disabledSchedules.getAttribute('aria-disabled')).toBe('true');
+      if (disabledSchedules.parentElement) fireEvent.focus(disabledSchedules.parentElement);
       expect((await screen.findByRole('tooltip')).textContent).toContain('Configure a schedule');
+    });
+  });
+
+  describe('when the schedules query is pending', () => {
+    it('keeps the Schedules tab enabled until availability is known', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/schedules`, async () => {
+          await new Promise<void>(() => {});
+          return HttpResponse.json(noSchedules);
+        }),
+        ...commonHandlers(),
+      );
+      const { queryClient } = renderLayout();
+
+      const schedules = await screen.findByRole('tab', { name: 'Schedules' });
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.fetchStatus).toBe('fetching'),
+      );
+      expect(schedules.getAttribute('aria-disabled')).not.toBe('true');
+    });
+  });
+
+  describe('when the schedules query fails', () => {
+    it('keeps the Schedules tab enabled when availability is unknown', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/schedules`, () => HttpResponse.json({}, { status: 503 })),
+        ...commonHandlers(),
+      );
+      const { queryClient } = renderLayout();
+
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('error'),
+      );
+      expect(screen.getByRole('tab', { name: 'Schedules' }).getAttribute('aria-disabled')).not.toBe('true');
     });
   });
 
