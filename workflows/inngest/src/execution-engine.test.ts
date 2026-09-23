@@ -457,6 +457,15 @@ describe('InngestExecutionEngine.wrapDurableOperation', () => {
     expect(err.message).toBe('custom');
   });
 
+  it('wraps nullish thrown values with the fallback error', async () => {
+    const err = await captureWrapped(async () => {
+      throw null;
+    });
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe('Unknown step execution error');
+  });
+
   it('keeps custom error properties in the cause', async () => {
     const err = await captureWrapped(async () => {
       throw Object.assign(new Error('rate limited'), { statusCode: 429 });
