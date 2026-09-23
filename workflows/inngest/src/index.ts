@@ -19,14 +19,21 @@ import type { ChunkType, LanguageModelUsage } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool, createTool } from '@mastra/core/tools';
 import type { DynamicArgument } from '@mastra/core/types';
-import type { Step, AgentStepOptions, StepParams, ToolStep, StepMetadata } from '@mastra/core/workflows';
+import type {
+  Step,
+  AgentStepOptions,
+  StepParams,
+  ToolStep,
+  StepMetadata,
+  InferSchemaOutput,
+} from '@mastra/core/workflows';
 import {
   Workflow,
   createStepFromAgent as coreCreateStepFromAgent,
   createStepFromTool as coreCreateStepFromTool,
 } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
-import type { InngestEngineType, InngestWorkflowConfig } from './types';
+import type { InngestEngineType, InngestCreateWorkflowParams } from './types';
 import { InngestWorkflow } from './workflow';
 
 export * from './workflow';
@@ -952,9 +959,9 @@ export function init<TRequestContext = unknown>(inngest: Inngest) {
     createTool,
     createWorkflow<
       TWorkflowId extends string = string,
-      TState = any,
-      TInput = any,
-      TOutput = any,
+      TInputSchema extends PublicSchema<any> = PublicSchema<any>,
+      TOutputSchema extends PublicSchema<any> = PublicSchema<any>,
+      TStateSchema extends PublicSchema<any> | undefined = undefined,
       TSteps extends Step<string, any, any, any, any, any, InngestEngineType>[] = Step<
         string,
         any,
@@ -964,17 +971,17 @@ export function init<TRequestContext = unknown>(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+    >(params: InngestCreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps>) {
       return new InngestWorkflow<
         InngestEngineType,
         TSteps,
         TWorkflowId,
-        TState,
-        TInput,
-        TOutput,
-        TInput,
+        InferSchemaOutput<TStateSchema>,
+        InferPublicSchema<TInputSchema>,
+        InferPublicSchema<TOutputSchema>,
+        InferPublicSchema<TInputSchema>,
         TRequestContext
-      >(params, inngest);
+      >(params as any, inngest);
     },
     createStep,
     cloneStep<TStepId extends string>(

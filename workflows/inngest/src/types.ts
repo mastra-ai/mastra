@@ -1,4 +1,5 @@
-import type { Step, WorkflowConfig } from '@mastra/core/workflows';
+import type { PublicSchema } from '@mastra/core/schema';
+import type { CreateWorkflowParams, InferSchemaOutput, Step, WorkflowConfig } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
 
 // Extract Inngest's native flow control configuration types from createFunction first argument
@@ -28,6 +29,19 @@ export type InngestWorkflowConfig<
 > = WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext> &
   InngestFlowControlConfig &
   InngestFlowCronConfig<TInput, TState>;
+
+// Schema-typed params for `init().createWorkflow`, mirroring core's `CreateWorkflowParams` so the
+// workflow input is inferred from the schema's output (post-`.default()`) shape, matching `createStep`.
+export type InngestCreateWorkflowParams<
+  TWorkflowId extends string,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TSteps extends Step<string, any, any, any, any, any, InngestEngineType, any>[],
+> = Omit<CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, any>, 'steps' | 'schedule'> & {
+  steps?: TSteps;
+} & InngestFlowControlConfig &
+  InngestFlowCronConfig<NoInfer<InferSchemaOutput<TInputSchema>>, NoInfer<InferSchemaOutput<TStateSchema>>>;
 
 // Compile-time compatibility assertion
 export type _AssertInngestCompatibility =
