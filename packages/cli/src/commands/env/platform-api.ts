@@ -86,7 +86,29 @@ export async function fetchProjects(token: string, orgId: string): Promise<Proje
   return data.projects;
 }
 
-export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
+/**
+ * Which store a project's deployed runtime reads env vars from.
+ *
+ * - `environment`: each environment row carries its own vars (the
+ *   environment_deploys pipeline). This is the steady state for every
+ *   project adopted onto environments.
+ * - `project`: a legacy project whose production environment has not been
+ *   adopted yet. The runtime still boots from the project row, and the
+ *   environment rows' vars are not read by anything.
+ */
+export type EnvVarsAuthority = 'environment' | 'project';
+
+export interface EnvironmentList {
+  environments: Environment[];
+  /**
+   * Absent on platforms that predate the field. Callers should treat a
+   * missing value as `environment`, which is what the hosted platform has
+   * been for every adopted project.
+   */
+  envVarsAuthority?: EnvVarsAuthority;
+}
+
+export async function fetchEnvironmentList(token: string, orgId: string, projectId: string): Promise<EnvironmentList> {
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments`, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -99,8 +121,13 @@ export async function fetchEnvironments(token: string, orgId: string, projectId:
     throwApiError('Failed to fetch environments', resp.status, extractApiErrorDetail(err));
   }
 
-  const data = (await resp.json()) as { environments: Environment[] };
-  return data.environments;
+  const data = (await resp.json()) as EnvironmentList;
+  return { environments: data.environments, envVarsAuthority: data.envVarsAuthority };
+}
+
+export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
+  const { environments } = await fetchEnvironmentList(token, orgId, projectId);
+  return environments;
 }
 
 export async function fetchEnvironmentDeploys(

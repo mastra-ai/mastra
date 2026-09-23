@@ -55,7 +55,7 @@ System values are applied last, so they win on a name collision. Your stored val
 
 A database attached to a single environment shadows a project-wide database of the same provider, but only inside that environment. To point one environment at a different database, attach an [environment-scoped database](/docs/mastra-platform/database#attach-with-the-cli) rather than overwriting the connection variable by hand.
 
-To see what an environment runs with, pull the merged set into a local file:
+To see what an environment runs with, pull its variables into a local file:
 
 ```bash
 mastra env vars pull staging --output .env.staging
