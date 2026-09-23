@@ -31,6 +31,7 @@ import {
   getRootExportSpan,
   resolveObservabilityContext,
 } from '../observability';
+import { initContextStorage } from '../observability/context-storage';
 import { executeWithContext } from '../observability/utils';
 import type {
   OutputResult,
@@ -1057,7 +1058,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
               attributes: {
-                ...resolveProcessorSpanAttributes(processor, toProcessorSpanPhase(phase)),
+                ...resolveProcessorSpanAttributes(processor, phase),
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
                 processorIndex: processor.processorIndex,
@@ -1173,17 +1174,30 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Uses executeWithContext to set the processor span as the active OTEL context,
       // so auto-instrumented operations inside processors nest correctly under the span.
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
+        // Recorded around the phase rather than per branch below: every phase can
+        // mutate the list, and the legacy runner records the same log, so a trace
+        // would otherwise show or hide a processor's edits depending only on which
+        // executor ran it.
+        const recordingList = processorSpan ? processorMessageList : undefined;
+        if (recordingList) initContextStorage();
+        recordingList?.startRecording(processorSpan);
+        const takeMutations = () => {
+          const mutations = recordingList?.stopRecording(processorSpan) ?? [];
+          return mutations.length > 0 ? { messageListMutations: mutations } : undefined;
+        };
         try {
           const result = await executeWithContext({ span: processorSpan, fn });
-          processorSpan?.end({ output: buildProcessorSpanOutput(result) });
+          processorSpan?.end({ output: buildProcessorSpanOutput(result), attributes: takeMutations() });
           return result;
         } catch (error) {
+          const mutationAttributes = takeMutations();
           // TripWire errors should end span but bubble up to halt the workflow
           if (error instanceof TripWire) {
             processorSpan?.error({
               error,
               endSpan: true,
               attributes: {
+                ...mutationAttributes,
                 tripwireAbort: {
                   reason: error.message,
                   retry: error.options?.retry,
@@ -1192,7 +1206,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
               },
             });
           } else {
-            processorSpan?.error({ error: error as Error, endSpan: true });
+            processorSpan?.error({ error: error as Error, endSpan: true, attributes: mutationAttributes });
           }
           throw error;
         }
@@ -1369,7 +1383,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
                   attributes: {
-                    ...resolveProcessorSpanAttributes(processor, 'output'),
+                    ...resolveProcessorSpanAttributes(processor, 'outputStream'),
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
                   },
@@ -1863,6 +1877,7 @@ export class Workflow<
       validateInputs: options.validateInputs ?? true,
       emitStepEvents: options.emitStepEvents ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
+      evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,

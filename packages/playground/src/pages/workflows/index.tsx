@@ -1,10 +1,10 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -45,7 +45,7 @@ function Workflows() {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workflows</h1>
-        <ErrorState variant="fill" title="Failed to load workflows" message={error.message} />
+        <EmptyState tone="error" variant="fill" titleSlot="Failed to load workflows" descriptionSlot={error.message} />
       </PageLayout>
     );
   }

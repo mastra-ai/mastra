@@ -52,7 +52,7 @@ export const WithGroup: Story = {
         <span className="text-body text-muted-foreground">12 total</span>
       </HeaderGroup>
       <HeaderAction>
-        <Button variant="outline" size="md">
+        <Button size="md">
           <Settings className="size-4" />
         </Button>
       </HeaderAction>

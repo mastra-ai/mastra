@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -34,7 +34,7 @@ function renderLayout(initialEntry = `/workflows/${WORKFLOW_ID}/traces`) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  return render(
+  const view = render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={navigateSpy} paths={noopPaths}>
@@ -56,6 +56,7 @@ function renderLayout(initialEntry = `/workflows/${WORKFLOW_ID}/traces`) {
       </QueryClientProvider>
     </MastraReactProvider>,
   );
+  return { ...view, queryClient };
 }
 
 function commonHandlers({ packages = packagesWithObservability, schedules = noSchedules } = {}) {
@@ -77,13 +78,16 @@ afterEach(() => {
 
 describe('WorkflowPageTabs', () => {
   describe('when the layout renders on the traces route', () => {
-    it('renders Graph, Traces and Schedules tabs with Traces selected', async () => {
+    it('keeps Graph and Traces as tabs when Schedules is unavailable', async () => {
       server.use(...commonHandlers());
-      renderLayout(`/workflows/${WORKFLOW_ID}/traces`);
+      const { queryClient } = renderLayout(`/workflows/${WORKFLOW_ID}/traces`);
 
       const traces = await screen.findByRole('tab', { name: 'Traces' });
-
-      expect(tabNames()).toEqual(['Graph', 'Traces', 'Schedules']);
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
+      );
+      expect(tabNames()).toEqual(['Graph', 'Traces']);
+      expect(screen.getByRole('button', { name: 'Schedules' }).getAttribute('aria-disabled')).toBe('true');
       expect(traces.getAttribute('aria-selected')).toBe('true');
       expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('false');
     });
@@ -91,7 +95,7 @@ describe('WorkflowPageTabs', () => {
 
   describe('when the layout renders on the schedules route', () => {
     it('selects the Schedules tab', async () => {
-      server.use(...commonHandlers());
+      server.use(...commonHandlers({ schedules: twoSchedules }));
       renderLayout(`/workflows/${WORKFLOW_ID}/schedules`);
 
       const schedules = await screen.findByRole('tab', { name: 'Schedules' });
@@ -105,29 +109,119 @@ describe('WorkflowPageTabs', () => {
       server.use(...commonHandlers({ schedules: twoSchedules }));
       renderLayout();
 
-      expect(await screen.findByRole('tab', { name: 'Schedules (2)' })).not.toBeNull();
+      const schedules = await screen.findByRole('tab', { name: 'Schedules (2)' });
+      await waitFor(() => expect(schedules.getAttribute('aria-disabled')).not.toBe('true'));
+    });
+  });
+
+  describe('when the workflow has no schedules', () => {
+    it('replaces the Schedules tab with a disabled icon button', async () => {
+      server.use(...commonHandlers());
+      const { queryClient } = renderLayout();
+
+      await screen.findByRole('tab', { name: 'Schedules' });
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
+      );
+      const disabledSchedules = screen.getByRole('button', { name: 'Schedules' });
+      expect(screen.queryByRole('tab', { name: 'Schedules' })).toBeNull();
+      expect(disabledSchedules.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.click(disabledSchedules);
+      expect(navigateSpy).not.toHaveBeenCalled();
+    });
+
+    it('explains how to enable Schedules when focused', async () => {
+      server.use(...commonHandlers());
+      const { queryClient } = renderLayout();
+
+      await screen.findByRole('tab', { name: 'Schedules' });
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
+      );
+      const disabledSchedules = screen.getByRole('button', { name: 'Schedules' });
+      expect(disabledSchedules.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.focus(disabledSchedules);
+      const tooltip = await screen.findByRole('tooltip');
+      expect(within(tooltip).queryByText('Schedules')).toBeNull();
+      expect(tooltip.textContent).toContain('Configure a schedule');
+    });
+
+    it('links to the scheduled workflows documentation from the tooltip', async () => {
+      server.use(...commonHandlers());
+      const { queryClient } = renderLayout();
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
+      );
+      const schedules = screen.getByRole('button', { name: 'Schedules' });
+      fireEvent.focus(schedules);
+
+      const docsLink = within(await screen.findByRole('tooltip')).getByRole('link', { name: 'Learn more' });
+      expect(docsLink.getAttribute('href')).toBe('https://mastra.ai/docs/workflows/scheduled-workflows');
+      expect(docsLink.getAttribute('target')).toBe('_blank');
+      expect(docsLink.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+  });
+
+  describe('when the schedules query is pending', () => {
+    it('keeps the Schedules tab enabled until availability is known', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/schedules`, async () => {
+          await new Promise<void>(() => {});
+          return HttpResponse.json(noSchedules);
+        }),
+        ...commonHandlers(),
+      );
+      const { queryClient } = renderLayout();
+
+      const schedules = await screen.findByRole('tab', { name: 'Schedules' });
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.fetchStatus).toBe('fetching'),
+      );
+      expect(schedules.getAttribute('aria-disabled')).not.toBe('true');
+    });
+  });
+
+  describe('when the schedules query fails', () => {
+    it('keeps the Schedules tab enabled when availability is unknown', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/schedules`, () => HttpResponse.json({}, { status: 503 })),
+        ...commonHandlers(),
+      );
+      const { queryClient } = renderLayout();
+
+      await waitFor(() =>
+        expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('error'),
+      );
+      expect(screen.getByRole('tab', { name: 'Schedules' }).getAttribute('aria-disabled')).not.toBe('true');
     });
   });
 
   describe('when observability is not installed', () => {
-    it('disables the Traces tab', async () => {
+    it('shows a disabled Traces icon button instead of a tab', async () => {
       server.use(...commonHandlers({ packages: packagesWithoutObservability }));
       renderLayout(`/workflows/${WORKFLOW_ID}/schedules`);
 
-      const traces = await screen.findByRole('tab', { name: 'Traces' });
+      const traces = await screen.findByRole('button', { name: 'Traces' });
+      expect(traces.getAttribute('aria-disabled')).toBe('true');
+      expect(screen.queryByRole('tab', { name: 'Traces' })).toBeNull();
+    });
 
-      await waitFor(() =>
-        expect(traces.hasAttribute('disabled') || traces.getAttribute('aria-disabled') === 'true').toBe(true),
-      );
+    it('keeps Schedules in the tab list when Traces is unavailable', async () => {
+      server.use(...commonHandlers({ packages: packagesWithoutObservability, schedules: twoSchedules }));
+      renderLayout();
+
+      await screen.findByRole('tab', { name: 'Schedules (2)' });
+      expect(tabNames()).toEqual(['Graph', 'Schedules (2)']);
+      expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
     });
   });
 
   describe('when a tab is clicked', () => {
     it('navigates to the matching workflow route', async () => {
-      server.use(...commonHandlers());
+      server.use(...commonHandlers({ schedules: twoSchedules }));
       renderLayout(`/workflows/${WORKFLOW_ID}/traces`);
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Schedules' }));
+      fireEvent.click(await screen.findByRole('tab', { name: 'Schedules (2)' }));
 
       await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith(`/workflows/${WORKFLOW_ID}/schedules`));
     });
@@ -155,12 +249,12 @@ describe('WorkflowPageTabs', () => {
       const encodedId = encodeURIComponent(rawId);
       server.use(
         http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({ [rawId]: weatherWorkflow })),
-        http.get(`${BASE_URL}/api/workflows/${encodedId}`, () => HttpResponse.json(weatherWorkflow)),
-        ...commonHandlers().slice(2),
+        http.get(`${BASE_URL}/api/workflows/team/ship`, () => HttpResponse.json(weatherWorkflow)),
+        ...commonHandlers({ schedules: twoSchedules }).slice(2),
       );
       renderLayout(`/workflows/${encodedId}/traces`);
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Schedules' }));
+      fireEvent.click(await screen.findByRole('tab', { name: 'Schedules (2)' }));
 
       await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith(`/workflows/${encodedId}/schedules`));
     });

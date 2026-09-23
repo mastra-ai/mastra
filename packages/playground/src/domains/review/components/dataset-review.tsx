@@ -483,7 +483,6 @@ export function DatasetReview({
           {toolbarEnd}
           {showCreateScorer && (
             <Button
-              variant="outline"
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
@@ -508,7 +507,7 @@ export function DatasetReview({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" disabled={isAnalyzing} aria-label="More actions">
+                  <Button disabled={isAnalyzing} aria-label="More actions">
                     {isAnalyzing ? <Spinner className="h-4 w-4" /> : <EllipsisIcon />}
                   </Button>
                 </DropdownMenu.Trigger>
@@ -610,7 +609,7 @@ export function DatasetReview({
             </div>
           </div>
           <DialogFooter>
-            <Button icon={<X />} variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
+            <Button icon={<X />} onClick={() => setShowAnalyzeDialog(false)}>
               Cancel
             </Button>
             <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
@@ -684,7 +683,7 @@ export function DatasetReview({
             })}
           </div>
           <DialogFooter>
-            <Button icon={<X />} variant="outline" onClick={() => setShowProposalDialog(false)}>
+            <Button icon={<X />} onClick={() => setShowProposalDialog(false)}>
               Cancel
             </Button>
             <Button

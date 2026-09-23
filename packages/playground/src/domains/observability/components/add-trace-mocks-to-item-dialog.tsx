@@ -228,7 +228,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
       </div>
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button icon={<X />} type="button" variant="outline" onClick={onClose}>
+        <Button icon={<X />} type="button" onClick={onClose}>
           Cancel
         </Button>
         <Button

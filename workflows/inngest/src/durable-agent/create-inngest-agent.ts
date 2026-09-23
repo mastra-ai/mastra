@@ -38,6 +38,7 @@
 
 import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
 import {
+  AGENT_STREAM_TOPIC,
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
@@ -103,6 +104,9 @@ const CLOSE_ON_SUSPEND = Symbol('mastra.durable.inngest.closeOnSuspend');
  * the local stream subscription.
  */
 const STREAM_CLEANUP = Symbol('mastra.durable.inngest.streamCleanup');
+
+const RESUME_SNAPSHOT_WAIT_MS = 10_000;
+const RESUME_SNAPSHOT_POLL_MS = 100;
 
 // =============================================================================
 // Types
@@ -622,7 +626,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Set up pubsub with lazy CachingPubSub creation
   // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
   let innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
-  let _cachingPubsub: PubSub | null = null;
+  let _cachingPubsub: CachingPubSub | null = null;
 
   // Resolve the cache that backs CachingPubSub history.
   //
@@ -646,7 +650,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   //
   // If the inner pubsub is already a CachingPubSub (e.g. a user passed `new Mastra({ pubsub })`
   // with their own caching layer), we reuse it instead of double-wrapping (issue #18148).
-  function getPubsub(): PubSub {
+  function getPubsub(): CachingPubSub {
     if (!_cachingPubsub) {
       if (innerPubsub instanceof CachingPubSub) {
         _cachingPubsub = innerPubsub;
@@ -656,6 +660,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       }
     }
     return _cachingPubsub;
+  }
+
+  async function getPubsubOffset(runId: string): Promise<number> {
+    const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId));
+    return history.length;
   }
 
   // Route workflow event publishes through a CachingPubSub backed by the same cache
@@ -1003,6 +1012,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
+      const existingRegistryEntry = globalRunRegistry.get(runId);
+      const priorExecution = existingRegistryEntry?.workflowExecution;
+
+      // Settle the prior segment before taking its event offset. Otherwise a late
+      // suspension event can be replayed into the new segment and close it early.
+      await priorExecution?.catch(() => {
+        /* errors already handled by the prior segment */
+      });
+      const resumeOffset = await getPubsubOffset(runId);
+
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
       // co-located) can react. The previous run's controller is no longer
@@ -1025,7 +1044,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // entry is in memory — without this, the abort controller would be
       // silently dropped and the durable LLM step (when co-located) would
       // have nothing to react to.
-      let existingEntry = globalRunRegistry.get(runId);
+      let existingEntry = existingRegistryEntry;
       if (!existingEntry) {
         existingEntry = {
           // Minimal placeholder fields. The durable LLM step recreates tools
@@ -1059,6 +1078,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
         runId,
+        offset: resumeOffset,
         messageId: crypto.randomUUID(),
         model: {
           modelId: undefined,
@@ -1099,12 +1119,33 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // and sends an event to the same trigger name (not a .resume suffix)
       const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
+      // Set when the run is not resumable: that rejection belongs to this caller only
+      // and must not be published to the run's shared stream topic, which would close
+      // the original run's stream too.
+      let notResumable = false;
+
       const dispatch = ready.then(async () => {
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
-          runId,
-        });
+        const loadSnapshot = async (): Promise<any> =>
+          workflowsStore?.loadWorkflowSnapshot({ workflowName: InngestDurableStepIds.AGENTIC_LOOP, runId });
+
+        // The suspension reaches the caller's stream before the loop's finalize step
+        // persists the suspended snapshot. Resuming inside that window used to find no
+        // suspended step and dispatch a fresh run whose input was the resume payload,
+        // crashing with "Cannot read properties of undefined (reading 'threadId')" (#24749).
+        let snapshot: any = await loadSnapshot();
+        const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
+        while (workflowsStore && snapshot?.status !== 'suspended' && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
+          snapshot = await loadSnapshot();
+        }
+        if (workflowsStore && snapshot?.status !== 'suspended') {
+          notResumable = true;
+          throw new NonRetriableError(
+            `Cannot resume run ${runId}: it is not suspended` +
+              (snapshot?.status ? ` (status: ${snapshot.status}).` : ' (no snapshot found).'),
+          );
+        }
 
         // Resolve which suspended leaf to resume. `resume.steps` is a path: the outer
         // step id followed by the nested step ids beneath it, so a nested suspension has
@@ -1180,7 +1221,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // The registry entry still tracks the whole dispatch so watchers keep seeing
       // dispatch failures as a stream error, exactly as before.
       const workflowExecution = dispatch.catch(error => {
-        void emitError(runId, error);
+        if (!notResumable) void emitError(runId, error);
       });
       existingEntry.workflowExecution = workflowExecution;
 

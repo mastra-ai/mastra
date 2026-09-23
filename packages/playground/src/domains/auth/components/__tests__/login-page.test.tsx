@@ -97,7 +97,7 @@ describe('LoginPage UI parity for /login and /signup', () => {
     const loginRoot = await screen.findByTestId('login-page');
     expect(loginRoot.className).not.toMatch(/min-h-screen/);
     expect(loginRoot.className).not.toMatch(/bg-sidebar/);
-    expect(loginRoot.closest('[data-slot="studio-card"]')).toBeNull();
+    expect(loginRoot.closest('[data-slot="main-card"]')).toBeNull();
 
     unmount();
     cleanup();
@@ -107,7 +107,7 @@ describe('LoginPage UI parity for /login and /signup', () => {
     const signUpRoot = await screen.findByTestId('login-page');
     expect(signUpRoot.className).not.toMatch(/min-h-screen/);
     expect(signUpRoot.className).not.toMatch(/bg-sidebar/);
-    expect(signUpRoot.closest('[data-slot="studio-card"]')).toBeNull();
+    expect(signUpRoot.closest('[data-slot="main-card"]')).toBeNull();
   });
 
   it('shows the sign in heading on /login by default', async () => {

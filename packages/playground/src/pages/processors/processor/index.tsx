@@ -1,7 +1,7 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useParams, Navigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
