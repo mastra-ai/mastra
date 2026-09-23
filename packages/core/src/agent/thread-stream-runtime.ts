@@ -2255,7 +2255,17 @@ export class AgentThreadStreamRuntime {
         }
         this.#releaseThreadLease(pubsub, key, runId);
         // The signal this run rebroadcasts is persisted by definition.
-        this.#publish(pubsub, key, { type: 'run-completed', runId, streamId, persisted: true, status: 'success' });
+        // The signal this run rebroadcasts is persisted by definition, so once
+        // run-completed lands its entries can leave the topic.
+        void this.#publishAndWait(pubsub, key, {
+          type: 'run-completed',
+          runId,
+          streamId,
+          persisted: true,
+          status: 'success',
+        })
+          .then(() => this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), { runId }))
+          .catch(() => {});
       }, 0);
     });
   }
