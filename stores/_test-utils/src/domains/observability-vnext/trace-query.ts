@@ -2426,6 +2426,10 @@ function evaluateScalarPredicate(
   }
 }
 
+function durationMsBetween(startedAt: string, endedAt: string | null): number | null {
+  return endedAt === null ? null : new Date(endedAt).getTime() - new Date(startedAt).getTime();
+}
+
 function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
   const model = typeof span.attributes?.model === 'string' ? span.attributes.model : null;
   const provider = typeof span.attributes?.provider === 'string' ? span.attributes.provider : null;
@@ -2436,7 +2440,7 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     provider,
     startedAt: span.startedAt,
     endedAt: span.endedAt,
-    durationMs: span.endedAt === null ? null : new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime(),
+    durationMs: durationMsBetween(span.startedAt, span.endedAt),
     status: span.error === null ? 'success' : 'error',
     error: span.error,
     entityType: span.entityType,
@@ -2461,7 +2465,7 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     resourceId: root.resourceId,
     startedAt: root.startedAt,
     endedAt: root.endedAt,
-    durationMs: root.endedAt === null ? null : new Date(root.endedAt).getTime() - new Date(root.startedAt).getTime(),
+    durationMs: durationMsBetween(root.startedAt, root.endedAt),
     entityName: root.entityName,
     entityType: root.entityType,
     environment: root.environment,

@@ -54,7 +54,7 @@ describe('Postgres advanced trace query', () => {
     );
 
     expect(compiled.text).toContain(
-      `EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt")) * 1000 IS NOT NULL AND EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt")) * 1000 > $3`,
+      `EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt"))::numeric * 1000 IS NOT NULL AND EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt"))::numeric * 1000 > $3`,
     );
     expect(compiled.values).toContain(5000);
   });
@@ -148,7 +148,7 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text.match(/FROM current_spans s/g)).toHaveLength(1);
     expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'model') = 'string'`);
     expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'provider') = 'string'`);
-    expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000`);
+    expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt"))::numeric * 1000`);
     expect(compiled.text).toContain(`CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status"`);
     expect(compiled.text).toContain('s."name" IS NOT DISTINCT FROM');
     expect(compiled.text).toContain('s."model" IS NOT DISTINCT FROM');
