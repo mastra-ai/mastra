@@ -3500,6 +3500,34 @@ export class Session<TState = unknown> {
     });
   }
 
+  /**
+   * Answer an approval that is stored with a suspended run but not parked on this
+   * session's gate, e.g. a card rebuilt from thread history after a restart.
+   * Resolves the run that owns `toolCallId` and resumes it by run id. Throws when
+   * no suspended run on the current thread is waiting on that tool call.
+   */
+  async respondToPersistedToolApproval({
+    toolCallId,
+    approved,
+    requestContext,
+  }: {
+    toolCallId: string;
+    approved: boolean;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const threadId = this.thread.getId();
+    const resourceId = this.identity.getResourceId();
+    if (!threadId) throw new Error('Cannot answer a tool approval without a current thread');
+    const { runs } = await this.machinery.getAgent().listSuspendedRuns({ threadId, resourceId });
+    const run = runs.find(candidate =>
+      candidate.toolCalls.some(call => call.requiresApproval && call.toolCallId === toolCallId),
+    );
+    if (!run) throw new Error(`No suspended run is waiting on tool call ${toolCallId}`);
+    const identity = { toolCallId, requestContext, runId: run.runId, threadId, resourceId };
+    if (approved) await this.approveToolCall(identity);
+    else await this.declineToolCall(identity);
+  }
+
   // ===========================================================================
   // Run control
   // ===========================================================================

@@ -2333,7 +2333,20 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'threadId is required' });
       }
 
-      if (effectiveResourceId) {
+      if (withInitialHistory) {
+        // History returns stored messages, so apply the same checks as the messages route.
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await enforceThreadAccess({
+            mastra,
+            requestContext: serverRequestContext,
+            threadId: effectiveThreadId,
+            thread,
+            effectiveResourceId,
+          });
+        }
+      } else if (effectiveResourceId) {
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
         if (memory) {
           const thread = await memory.getThreadById({ threadId: effectiveThreadId });
