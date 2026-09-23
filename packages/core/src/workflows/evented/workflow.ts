@@ -1825,15 +1825,16 @@ export class EventedWorkflow<
 
     const supportsConcurrentUpdates = workflowsStore?.supportsConcurrentUpdates?.() ?? false;
     if (workflowsStore && !supportsConcurrentUpdates) {
+      const storageName = this.mastra?.getStorage()?.name ?? 'The configured storage';
       throw new MastraError({
         id: 'ATOMIC_STORAGE_OPERATIONS_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
         text:
-          `Workflow "${this.id}" runs on the evented execution engine, which requires a storage adapter that supports concurrent updates. ` +
-          `Your current workflow storage adapter does not. Switch to an adapter that does (for example @mastra/libsql), or, if you do not need scheduled execution, ` +
-          `remove the \`schedule\` field from this workflow's definition to use the default execution engine.`,
-        details: { workflowId: this.id },
+          `Workflow "${this.id}" runs on the evented execution engine, which advances steps from concurrent workers and therefore requires a storage adapter whose workflows domain applies concurrent updates atomically (\`supportsConcurrentUpdates()\`). ${storageName} storage reports that it does not. ` +
+          `Storage adapters that do: @mastra/libsql, @mastra/pg, @mastra/mysql, @mastra/mssql, @mastra/oracledb, @mastra/mongodb, @mastra/dynamodb, @mastra/spanner, @mastra/dsql, @mastra/upstash and @mastra/convex. ` +
+          `A workflow runs on this engine when it declares a \`schedule\`. Durable agents on such a store fall back to the in-process engine with a warning instead of failing here.`,
+        details: { workflowId: this.id, storage: storageName },
       });
     }
 

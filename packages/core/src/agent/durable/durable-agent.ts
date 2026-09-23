@@ -1754,6 +1754,15 @@ export class DurableAgent<
    * released behavior, so we preserve it here as a fallback (with a warning)
    * instead of throwing.
    *
+   * The same applies to a host whose storage cannot apply concurrent workflow
+   * updates atomically. The evented engine advances a run from concurrent
+   * workers, so `createRun()` refuses to start on such a store. Letting that
+   * throw would turn a working durable agent into a hard failure on upgrade
+   * for stores like Redis, so durable agents degrade to the in-process engine
+   * the same way a hostless one does. A workflow that opts into the evented
+   * engine directly (by declaring a `schedule`) still gets the error, because
+   * there is no other engine it could have meant.
+   *
    * The result is memoized: `getWorkflow()` caches the created workflow, so
    * an agent that first streamed hostless keeps its default-engine workflow
    * even if it is registered on a Mastra instance afterwards — identical to
@@ -1771,6 +1780,23 @@ export class DurableAgent<
         `EventedAgent '${this.id}' has no Mastra host; running on the default in-process engine. ` +
           `Register the agent on a Mastra instance (with storage) to get evented execution.`,
       );
+    } else if (engine === 'evented') {
+      // Read `stores` directly rather than `await getStore('workflows')`: engine
+      // resolution is synchronous (`getWorkflow()` is), and `getStore()` is only
+      // async by signature — it returns `this.stores?.[name]` without awaiting
+      // init, so this sees exactly what the engine's own gate sees.
+      const storage = this.#mastra?.getStorage();
+      const workflowsStore = storage?.stores?.workflows;
+      if (workflowsStore && !(workflowsStore.supportsConcurrentUpdates?.() ?? false)) {
+        engine = 'default';
+        this.logger.warn(
+          `EventedAgent '${this.id}' is registered with ${storage?.name ?? 'a'} storage, which does not apply concurrent ` +
+            `workflow updates atomically (\`supportsConcurrentUpdates()\`); running the durable loop on the default ` +
+            `in-process engine instead. In-flight runs will not resume on their own after a process restart. Use a ` +
+            `storage adapter that supports atomic concurrent updates (for example @mastra/libsql, @mastra/pg or ` +
+            `@mastra/mysql) to get evented execution.`,
+        );
+      }
     }
     this.#resolvedWorkflowEngine = engine;
     return engine;
