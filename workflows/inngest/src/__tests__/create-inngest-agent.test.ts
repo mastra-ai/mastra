@@ -298,6 +298,19 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(defaultPublish).toHaveBeenCalledWith(workflowTopic, expect.any(Object), undefined);
     expect(customPublish).toHaveBeenCalledTimes(2);
 
+    const customClearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
+    const defaultClearTopic = vi.spyOn(workflowDefault, 'clearTopic');
+    await routed.clearTopic(streamTopic);
+    await routed.clearTopic(workflowTopic);
+    expect(customClearTopic).toHaveBeenCalledOnce();
+    expect(customClearTopic).toHaveBeenCalledWith(streamTopic);
+    expect(defaultClearTopic).toHaveBeenCalledOnce();
+    expect(defaultClearTopic).toHaveBeenCalledWith(workflowTopic);
+
+    expect(routed.supportedModes).toEqual(['pull']);
+    expect(routed.supportsNativeBatching).toBe(true);
+    expect(routed.supportsOffsets).toBe(false);
+
     const collectNested = (steps: any[]): any[] => {
       const found: any[] = [];
       for (const step of steps ?? []) {

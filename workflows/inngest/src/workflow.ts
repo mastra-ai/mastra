@@ -74,6 +74,34 @@ class WorkflowEventPolicyPubSub extends PubSub {
   flush(): Promise<void> {
     return this.pubsub.flush();
   }
+
+  clearTopic(topic: string): Promise<void> {
+    return this.pubsub.clearTopic(topic);
+  }
+
+  get supportedModes() {
+    return this.pubsub.supportedModes;
+  }
+
+  get supportsNativeBatching(): boolean {
+    return this.pubsub.supportsNativeBatching;
+  }
+
+  get supportsOffsets(): boolean {
+    return this.pubsub.supportsOffsets;
+  }
+
+  getHistory(topic: string, offset?: number): Promise<Event[]> {
+    return this.pubsub.getHistory(topic, offset);
+  }
+
+  subscribeWithReplay(topic: string, cb: EventCallback): Promise<void> {
+    return this.pubsub.subscribeWithReplay(topic, cb);
+  }
+
+  subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
+    return this.pubsub.subscribeFromOffset(topic, offset, cb);
+  }
 }
 
 export class InngestWorkflow<
@@ -627,8 +655,7 @@ export class InngestWorkflow<
                 // For suspended workflows, read existing snapshot to preserve suspendedPaths and resumeLabels
                 // which were set correctly by the handlers during execution
                 let existingSnapshot:
-                  | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
-                  | undefined;
+                  { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> } | undefined;
                 if (result.status === 'suspended') {
                   existingSnapshot =
                     (await workflowsStore.loadWorkflowSnapshot({

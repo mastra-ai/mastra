@@ -101,6 +101,35 @@ class InngestAgentPubSubRouter extends PubSub {
   flush(): Promise<void> {
     return Promise.all([this.defaultPubsub.flush(), this.getAgentPubsub().flush()]).then(() => undefined);
   }
+
+  clearTopic(topic: string): Promise<void> {
+    return this.resolve(topic).clearTopic(topic);
+  }
+
+  get supportedModes() {
+    const agentModes = this.getAgentPubsub().supportedModes;
+    return this.defaultPubsub.supportedModes.filter(mode => agentModes.includes(mode));
+  }
+
+  get supportsNativeBatching(): boolean {
+    return this.defaultPubsub.supportsNativeBatching && this.getAgentPubsub().supportsNativeBatching;
+  }
+
+  get supportsOffsets(): boolean {
+    return this.defaultPubsub.supportsOffsets && this.getAgentPubsub().supportsOffsets;
+  }
+
+  getHistory(topic: string, offset?: number): Promise<Event[]> {
+    return this.resolve(topic).getHistory(topic, offset);
+  }
+
+  subscribeWithReplay(topic: string, cb: EventCallback): Promise<void> {
+    return this.resolve(topic).subscribeWithReplay(topic, cb);
+  }
+
+  subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
+    return this.resolve(topic).subscribeFromOffset(topic, offset, cb);
+  }
 }
 
 /**
