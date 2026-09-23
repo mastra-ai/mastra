@@ -3359,8 +3359,11 @@ export class AgentThreadStreamRuntime {
   }
 
   async #loadThreadHistory(agent: Agent<any, any, any, any>, options: AgentSubscribeToThreadOptions) {
-    const memory = await agent.getMemory({ requestContext: options.requestContext }).catch(() => undefined);
+    const memory = await agent.getMemory({ requestContext: options.requestContext });
     if (!memory) return { messages: [], hasMore: false };
+    // The controller subscribes as soon as it creates a thread, before memory
+    // may hold it; a thread that doesn't exist yet has no history.
+    if (!(await memory.getThreadById({ threadId: options.threadId }))) return { messages: [], hasMore: false };
     const perPage =
       typeof options.withInitialHistory === 'object' && options.withInitialHistory.perPage !== undefined
         ? options.withInitialHistory.perPage
@@ -3617,6 +3620,10 @@ export class AgentThreadStreamRuntime {
           replayedStreamIds.add(data.streamId);
         }
         const local = Boolean(localRecord);
+        const registeredAt = event.createdAt === undefined ? undefined : new Date(event.createdAt).getTime();
+        // A history subscriber reads registrations published before its
+        // history load as backlog: only a held lease makes those runs live.
+        const backlog = historyReadAt !== undefined && registeredAt !== undefined && registeredAt <= historyReadAt;
         // A registration published by this very runtime instance is always a
         // live delivery — a restarted process gets a fresh source id, so a
         // matching id can never be a stale replay of a dead run. This also
@@ -3625,7 +3632,7 @@ export class AgentThreadStreamRuntime {
         // run because its terminal event was already processed.
         const live =
           local ||
-          (data.sourceId !== undefined && data.sourceId === this.#getSourceId()) ||
+          (!backlog && data.sourceId !== undefined && data.sourceId === this.#getSourceId()) ||
           (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
         if (live) {
           state.activeThreadRunIds.set(key, data.runId);
@@ -3742,14 +3749,14 @@ export class AgentThreadStreamRuntime {
         const eventStreamId = data.streamId ?? data.runId;
         stopRemoteRunLeaseWatch(eventStreamId);
         const deferredRecord = deferredRunsByStreamId.get(eventStreamId);
-        if (
-          options.withInitialHistory &&
-          !historyLoadStarted &&
-          data.type === 'run-completed' &&
-          data.status === 'success'
-        ) {
-          // Finished successfully before history was read, so storage holds all of it.
-          storedStreamIds.add(eventStreamId);
+        if (options.withInitialHistory && data.type === 'run-completed' && data.status === 'success') {
+          // Judge by publish time, not delivery time: backends such as Redis
+          // Streams deliver the backlog after subscribe() returns.
+          const completedAt = event.createdAt === undefined ? undefined : new Date(event.createdAt).getTime();
+          if (historyReadAt === undefined || (completedAt !== undefined && completedAt <= historyReadAt)) {
+            // Finished successfully before history was read, so storage holds all of it.
+            storedStreamIds.add(eventStreamId);
+          }
         }
         if (deferredRecord) {
           deferredRunsByStreamId.delete(eventStreamId);
@@ -3760,7 +3767,9 @@ export class AgentThreadStreamRuntime {
             data.type === 'run-suspended' ||
             (data.type === 'run-completed' &&
               (data.persisted ?? (bufferedRun !== undefined && deferredRunEndedCleanly(bufferedRun.parts))));
-          if (flush) {
+          if (storedStreamIds.has(eventStreamId)) {
+            discardDeferredRun(eventStreamId);
+          } else if (flush) {
             enqueueRun(deferredRecord);
           } else {
             // Unpersisted terminal run (mid-stream failure surfaces as
@@ -3804,7 +3813,7 @@ export class AgentThreadStreamRuntime {
       }
     };
 
-    let historyLoadStarted = false;
+    let historyReadAt: number | undefined;
     const storedStreamIds = new Set<string>();
 
     let eventTail = Promise.resolve();
@@ -3845,7 +3854,7 @@ export class AgentThreadStreamRuntime {
       // Events already processed were published before this read, so any run
       // they completed is in storage.
       await eventTail;
-      historyLoadStarted = true;
+      historyReadAt = Date.now();
       try {
         const history = await this.#loadThreadHistory(agent, options);
         historyChunk = {
@@ -3854,7 +3863,7 @@ export class AgentThreadStreamRuntime {
           from: ChunkFrom.AGENT,
           payload: history,
         };
-        historyFilter = createThreadHistoryFilter(history.messages, Date.now());
+        historyFilter = createThreadHistoryFilter(history.messages, historyReadAt);
       } catch (error) {
         control.references--;
         control.observers--;

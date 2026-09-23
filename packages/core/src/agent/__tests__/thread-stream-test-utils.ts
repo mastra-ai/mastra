@@ -20,6 +20,8 @@ export function nextTicks(count = 5) {
 /** In-memory pubsub with a real lease provider, standing in for Redis Streams. */
 export class LeasePubSub extends PubSub implements LeaseProvider {
   owners = new Map<string, string>();
+  /** Deliver retained events after subscribe() returns, as Redis Streams does. */
+  delayBacklog = false;
   #subscribers = new Map<string, Set<EventCallback>>();
   /** One entry per delivery, in publish order — enough to assert what was acked. */
   deliveries: Array<{ topic: string; event: any; acked: boolean; nacked: boolean }> = [];
@@ -57,7 +59,19 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
     const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
     subscribers.add(cb);
     this.#subscribers.set(topic, subscribers);
-    for (const event of this.#retained.get(topic) ?? []) await this.#deliver(topic, event, cb);
+    const backlog = [...(this.#retained.get(topic) ?? [])];
+    if (this.delayBacklog) {
+      // Redis Streams returns from subscribe() before the backlog is read.
+      setTimeout(
+        () =>
+          void (async () => {
+            for (const event of backlog) await this.#deliver(topic, event, cb);
+          })(),
+        0,
+      );
+      return;
+    }
+    for (const event of backlog) await this.#deliver(topic, event, cb);
   }
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
     this.#subscribers.get(topic)?.delete(cb);

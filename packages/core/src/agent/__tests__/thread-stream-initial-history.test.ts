@@ -31,6 +31,7 @@ function setup(stored: () => MastraDBMessage[]) {
   const agent = {
     id: harness.agent.id,
     getMemory: async () => ({
+      getThreadById: async ({ threadId }: { threadId: string }) => ({ id: threadId }),
       recall: async (args: unknown) => {
         recalls.push(args);
         return { messages: [...stored()].reverse(), hasMore: false };

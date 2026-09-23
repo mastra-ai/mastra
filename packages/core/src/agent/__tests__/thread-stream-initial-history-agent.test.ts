@@ -48,9 +48,10 @@ function model() {
   });
 }
 
-function setup() {
+function setup(delayBacklog: boolean) {
   const pubsub = new LeasePubSub();
   pubsub.retain = true;
+  pubsub.delayBacklog = delayBacklog;
   const lookup = createTool({
     id: 'lookup',
     description: 'look something up',
@@ -98,16 +99,19 @@ afterEach(() => {
   agentThreadStreamRuntime.resetForTests();
 });
 
-describe('subscribeToThread withInitialHistory with a real agent', () => {
+describe.each([
+  ['immediate', false],
+  ['delayed', true],
+])('subscribeToThread withInitialHistory with a real agent (%s backlog)', (_mode, delayBacklog) => {
   it('a completed text run emits only thread-history', async () => {
-    const { agent } = setup();
+    const { agent } = setup(delayBacklog);
     await drain(await agent.stream('hello', { memory }));
 
     expect(await historyThenParts(agent)).toEqual(['thread-history']);
   });
 
   it('an approved and completed tool run does not replay its approval', async () => {
-    const { agent } = setup();
+    const { agent } = setup(delayBacklog);
     const first = await agent.stream('use the tool', { memory, requireToolApproval: true });
     expect(await drain(first)).toContain('tool-call-approval');
     await drain(await agent.approveToolCall({ runId: first.runId, toolCallId: 'call-1' }));
@@ -116,7 +120,7 @@ describe('subscribeToThread withInitialHistory with a real agent', () => {
   });
 
   it('does not replay an older completed run outside the perPage window', async () => {
-    const { agent } = setup();
+    const { agent } = setup(delayBacklog);
     await drain(await agent.stream('hello', { memory }));
     await drain(await agent.stream('hello again', { memory }));
 
@@ -124,7 +128,7 @@ describe('subscribeToThread withInitialHistory with a real agent', () => {
   });
 
   it('still emits the approval of a run waiting on it', async () => {
-    const { agent } = setup();
+    const { agent } = setup(delayBacklog);
     await drain(await agent.stream('use the tool', { memory, requireToolApproval: true }));
 
     expect(await historyThenParts(agent)).toEqual(['thread-history', 'tool-call-approval']);
