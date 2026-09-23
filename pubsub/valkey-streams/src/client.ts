@@ -135,10 +135,6 @@ export class ValkeyStreamsClient {
       message: Object.fromEntries(fields.map(([field, value]) => [text(field), text(value)])),
     }));
   }
-  /** Resets an owned pending entry's idle time without bumping its delivery count. */
-  async xClaimJustId(key: string, group: string, consumer: string, id: string) {
-    await this.command(['XCLAIM', key, group, consumer, '0', id, 'JUSTID']);
-  }
   async xAck(key: string, group: string, id: string) {
     return (await this.getClient()).xack(key, group, [id]);
   }

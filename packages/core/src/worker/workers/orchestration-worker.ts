@@ -40,6 +40,10 @@ export class OrchestrationWorker extends MastraWorker {
 
   constructor(config: OrchestrationWorkerConfig = {}) {
     super();
+    const interval = config.leaseRenewIntervalMs;
+    if (interval !== undefined && (!Number.isFinite(interval) || interval <= 0)) {
+      throw new Error(`OrchestrationWorker: leaseRenewIntervalMs must be a positive number, got ${interval}`);
+    }
     this.#config = config;
   }
 

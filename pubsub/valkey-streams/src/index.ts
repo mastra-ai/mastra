@@ -8,6 +8,20 @@ import type { ValkeyClientOptions, ValkeyClientType } from './client.js';
 const RECLAIM_PAGE_SIZE = 100;
 
 /**
+ * Heartbeat: reset a pending entry's idle time only if this consumer still
+ * owns it, so a late heartbeat never takes an entry back from a sibling.
+ * KEYS[1] stream, ARGV[1] group, ARGV[2] consumer, ARGV[3] entry id
+ */
+const EXTEND_IF_OWNED_SCRIPT = `
+  local pending = redis.call("XPENDING", KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
+  if #pending == 0 or pending[1][2] ~= ARGV[2] then
+    return 0
+  end
+  redis.call("XCLAIM", KEYS[1], ARGV[1], ARGV[2], 0, ARGV[3], "JUSTID")
+  return 1
+`;
+
+/**
  * Atomically nack a pending entry only if it is still owned by the given
  * consumer. Returns 1 if this consumer owned it and it was settled, 0 if the
  * entry was not pending for this consumer (acked, or claimed by a sibling).
@@ -1047,7 +1061,10 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       if (!entry || entry.expire !== expire) return;
       entry.since = Date.now();
       if (sub.isGrouped) {
-        await this.#writeClient.xClaimJustId(sub.streamKey, sub.group, sub.consumer, streamId);
+        await this.#writeClient.eval(EXTEND_IF_OWNED_SCRIPT, {
+          keys: [sub.streamKey],
+          arguments: [sub.group, sub.consumer, streamId],
+        });
       }
     };
 
