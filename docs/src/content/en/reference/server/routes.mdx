@@ -400,7 +400,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Delete an experiment
 
-Both delete routes remove the experiment and its result records. When storage supports observability and trace deletion, Mastra also removes the traces produced by the experiment together with their spans and trace-linked signals.
+Both delete routes remove the experiment and its result records when deletion succeeds. When storage supports observability and trace deletion, Mastra first removes the traces produced by the experiment, together with their spans and trace-linked signals, and then removes the experiment.
 
 Use the dataset-scoped route when you know the owning dataset:
 
@@ -418,7 +418,17 @@ curl -X DELETE http://localhost:4111/api/experiments/experiment-id
 
 The top-level route accepts optional `organizationId` and `projectId` query parameters. When either is present, deletion is limited to that tenancy. A tenancy mismatch returns `{ "success": true }` without deleting the experiment. Without tenancy parameters, a missing experiment returns `404`.
 
-A successful deletion returns `{ "success": true }`. The top-level route returns the same response for a tenancy mismatch, but doesn't delete anything. Both routes return `501` unless the installed `@mastra/core` advertises support through the `experiment-deletion` feature flag, including when an older version predates this support. When storage lacks observability or trace deletion support, Mastra logs a warning, leaves the traces in place, and still deletes the experiment with its result records. If trace cleanup fails after an earlier batch succeeds, the route returns `500` and preserves the experiment and result records even though some traces may already have been removed.
+A successful deletion returns `{ "success": true }`. The top-level route returns the same response for a tenancy mismatch, but doesn't delete anything. Both routes return `501` unless the installed `@mastra/core` advertises support through the `experiment-deletion` feature flag, including when an older version predates this support. When storage lacks observability or trace deletion support, Mastra logs a warning, leaves the traces in place, and still deletes the experiment with its result records. If trace deletion fails for any other reason, the route returns `500` and preserves the experiment and result records. Traces are deleted in batches of 1,000, so some traces may already have been removed. Repeat the request to finish the deletion.
+
+### Purge a dataset item
+
+`DELETE /api/datasets/:datasetId/items/:itemId/purge` permanently scrubs the item's stored content from every historical row, deletion tombstone, and linked experiment result. It doesn't create a new dataset version and can't be undone. See [`dataset.purgeItem()`](/reference/datasets/purgeItem) for the complete purge behavior.
+
+```bash
+curl -X DELETE http://localhost:4111/api/datasets/dataset-id/items/item-id/purge
+```
+
+The route accepts optional `organizationId` and `projectId` query parameters. It returns `404` if the dataset is outside the supplied tenancy or the item has no history in the dataset. It returns `501` unless the installed `@mastra/core` advertises support through the `dataset-item-purge` feature flag. MongoDB storage without transaction support returns `500` before changing any data. A successful purge returns `{ "success": true }`.
 
 ### Caller-driven experiment routes
 

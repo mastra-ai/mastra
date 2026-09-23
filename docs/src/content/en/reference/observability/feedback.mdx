@@ -134,7 +134,9 @@ await observability.batchCreateFeedback({
 
 ### `deleteFeedback(args)`
 
-Deletes up to 1,000 feedback records by id. The operation is idempotent: ids that don't exist are ignored, and an empty `feedbackIds` array is a no-op. When `organizationId` or `resourceId` are provided, they're ANDed into the delete predicate to restrict deletion to records with matching scope fields.
+**Added in:** `@mastra/core@1.66.0`
+
+Deletes up to 1,000 feedback records by id. The operation is idempotent: ids that don't exist are ignored, and an empty `feedbackIds` array is a no-op. When `organizationId` or `resourceId` are provided, Mastra adds them to the delete condition so only records with matching scope fields are deleted.
 
 ```typescript
 await mastraClient.deleteFeedback({
@@ -164,7 +166,21 @@ await mastraClient.deleteFeedback({
 ]}
 />
 
-On ClickHouse, deletion uses lightweight deletes on the main feedback events table to remove rows from reads, including OLAP queries, without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse doesn't configure a retention TTL for deletion requests in open-source deployments. Delete APIs intentionally leave cursor-only delta rows untouched. These rows contain identifiers rather than feedback payloads and expire within two days.
+Returns `Promise<void>` from the storage domain. The HTTP route and `mastraClient.deleteFeedback()` return `{ success: boolean }`. Requests with more than 1,000 ids return `400`. A server running `@mastra/core` older than `1.66.0` returns `501`. ClickHouse, PostgreSQL, DuckDB, and the in-memory store implement deletion. LibSQL and MongoDB throw `OBSERVABILITY_STORAGE_DELETE_FEEDBACK_NOT_IMPLEMENTED`.
+
+On ClickHouse, deletion uses lightweight deletes on the main feedback events table to remove rows from reads, including OLAP queries, without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse applies a TTL to deletion requests only when tracing, logs, metrics, scores, and feedback all have finite retention. The TTL is the longest signal retention plus 30 days. When any signal is unbounded, deletion requests remain unbounded so deleted data isn't reintroduced. See [ClickHouse native TTL](/reference/storage/retention#clickhouse-native-ttl). Delete APIs leave the separate delta cursor table untouched. Its rows contain identifiers rather than feedback payloads and expire within two days.
+
+### `deleteScores(args)`
+
+**Added in:** `@mastra/core@1.66.0`
+
+Deletes up to 1,000 score records by id. It has the same idempotency, scope fields, return values, and store support as `deleteFeedback()`. Pass `scoreIds` instead of `feedbackIds`.
+
+```typescript
+await mastraClient.deleteScores({
+  scoreIds: ['score-1', 'score-2'],
+})
+```
 
 ## List feedback
 
@@ -573,10 +589,11 @@ These routes belong to a Mastra runtime and use its configured observability sto
 
 | Method | Path | Purpose | Permission |
 | - | - | - | - |
-| `GET` | `/api/observability/feedback` | List feedback records | None derived |
-| `POST` | `/api/observability/feedback` | Create a feedback record | None derived |
+| `GET` | `/api/observability/feedback` | List feedback records | `observability:read` |
+| `POST` | `/api/observability/feedback` | Create a feedback record | `observability:write` |
 | `DELETE` | `/api/observability/feedback` | Delete feedback records by id | `observability:delete` |
 | `DELETE` | `/api/observability/scores` | Delete score records by id | `observability:delete` |
+| `PATCH` | `/api/observability/feedback/:feedbackId/review-status` | Update review status | `observability:write` |
 | `POST` | `/api/observability/feedback/aggregate` | Return one aggregate value | `observability:read` |
 | `POST` | `/api/observability/feedback/breakdown` | Group feedback by dimensions | `observability:read` |
 | `POST` | `/api/observability/feedback/timeseries` | Bucket feedback by interval | `observability:read` |
