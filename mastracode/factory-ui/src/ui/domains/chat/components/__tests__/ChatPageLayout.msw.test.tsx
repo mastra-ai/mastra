@@ -5,13 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 
 import { OverlaysProvider } from '../../../../lib/overlays';
-import { SettingsHeader } from '../../../settings/components/SettingsHeader';
-import { ChatHeader } from '../ChatHeader';
-
-function SidebarStateProbe() {
-  const { openMobile } = useMainSidebar();
-  return <output data-testid="sidebar-state">{openMobile ? 'open' : 'closed'}</output>;
-}
+import { ChatPageLayout } from '../ChatPageLayout';
 
 function DesktopSidebarStateProbe() {
   const { desktopState } = useMainSidebar();
@@ -37,38 +31,37 @@ afterEach(() => {
   window.localStorage.removeItem('chat-header-desktop-test');
 });
 
-function renderMobileHeader() {
-  mockMobileViewport(true);
-  render(
-    <MemoryRouter initialEntries={['/settings/preferences']}>
-      <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
-        <OverlaysProvider>
-          <ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />
-          <SidebarStateProbe />
-        </OverlaysProvider>
-      </MainSidebarProvider>
-    </MemoryRouter>,
-  );
-}
+describe('ChatPageLayout', () => {
+  it('renders no header on mobile — AppLayout owns the mobile trigger and search', () => {
+    mockMobileViewport(true);
+    render(
+      <MemoryRouter initialEntries={['/settings/preferences']}>
+        <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
+          <OverlaysProvider>
+            <ChatPageLayout>body</ChatPageLayout>
+          </OverlaysProvider>
+        </MainSidebarProvider>
+      </MemoryRouter>,
+    );
 
-describe('ChatHeader', () => {
-  it('renders and focuses the mobile content passed by the page', () => {
-    renderMobileHeader();
-
-    const mobileHeader = screen.getByRole('banner');
-    expect(within(mobileHeader).getByRole('heading', { name: 'Preferences' })).toHaveFocus();
-    // The mobile settings header intentionally has no close button — navigation happens through the drawer.
-    expect(within(mobileHeader).queryByRole('button', { name: 'Close settings' })).not.toBeInTheDocument();
-    expect(within(mobileHeader).getByRole('button', { name: 'Search and navigate' })).toBeInTheDocument();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 
-  it('opens the design-system mobile sidebar', async () => {
-    renderMobileHeader();
+  it('renders page content without shell controls while the desktop sidebar is open', () => {
+    mockMobileViewport(false);
+    render(
+      <MainSidebarProvider storageKey="chat-header-desktop-test" collapsedWidth={0} mobileBreakpoint={768}>
+        <OverlaysProvider>
+          <ChatPageLayout crumbs={<li>Page title</li>}>body</ChatPageLayout>
+        </OverlaysProvider>
+      </MainSidebarProvider>,
+    );
 
-    expect(screen.getByTestId('sidebar-state')).toHaveTextContent('closed');
-    await userEvent.click(screen.getByLabelText('Open navigation menu'));
-    expect(screen.getByTestId('sidebar-state')).toHaveTextContent('open');
+    const header = screen.getByRole('banner');
+    expect(within(header).getByText('Page title')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
   });
 
   it('reopens a fully collapsed desktop sidebar from the top-left toggle', async () => {
@@ -82,7 +75,7 @@ describe('ChatHeader', () => {
         mobileBreakpoint={768}
       >
         <OverlaysProvider>
-          <ChatHeader />
+          <ChatPageLayout>body</ChatPageLayout>
           <DesktopSidebarStateProbe />
         </OverlaysProvider>
       </MainSidebarProvider>,

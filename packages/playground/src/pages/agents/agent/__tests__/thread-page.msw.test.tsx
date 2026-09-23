@@ -223,6 +223,13 @@ const threadsResponse = {
 
 const onTracesRequest = vi.fn<(threadId: string | null) => void>();
 
+/** Without observability the tab bar renders a single disabled "Traces" placeholder, never an aside toggle. */
+function expectOnlyDisabledTracesButton() {
+  const tracesButtons = screen.getAllByRole('button', { name: /traces/i });
+  expect(tracesButtons).toHaveLength(1);
+  expect(tracesButtons[0]?.getAttribute('aria-disabled')).toBe('true');
+}
+
 function installHandlers() {
   const emptyTraces = ({ request }: { request: Request }) => {
     onTracesRequest(new URL(request.url).searchParams.get('threadId'));
@@ -687,7 +694,7 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
+    expectOnlyDisabledTracesButton();
     expect(screen.queryByRole('complementary')).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
@@ -697,7 +704,7 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
+    expectOnlyDisabledTracesButton();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
