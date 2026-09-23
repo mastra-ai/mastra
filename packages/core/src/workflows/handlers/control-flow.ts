@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fastq from 'fastq';
 import type { done as DoneCallback } from 'fastq';
+import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
@@ -841,46 +842,85 @@ export async function executeLoop(
       executionContext,
     });
 
-    isTrue = await condition(
-      createDeprecationProxy(
-        {
-          workflowId,
-          runId,
-          mastra: engine.mastra!,
-          requestContext,
-          actor,
-          inputData: result.output,
-          state: executionContext.state,
-          retryCount: -1,
-          ...createObservabilityContext({ currentSpan: evalSpan }),
-          iterationCount: iteration + 1,
-          getInitData: () => stepResults?.input as any,
-          getStepResult: getStepResult.bind(null, stepResults),
-          bail: (() => {}) as () => InnerOutput,
-          abort: () => {
-            abortController?.abort();
-          },
-          [PUBSUB_SYMBOL]: pubsub,
-          [STREAM_FORMAT_SYMBOL]: executionContext.format,
-          engine: engine.getEngineContext(),
-          abortSignal: abortController?.signal,
-          writer: new ToolStream(
-            {
-              prefix: 'workflow-step',
-              callId: randomUUID(),
-              name: 'loop',
-              runId,
+    try {
+      isTrue = await condition(
+        createDeprecationProxy(
+          {
+            workflowId,
+            runId,
+            mastra: engine.mastra!,
+            requestContext,
+            actor,
+            inputData: result.output,
+            state: executionContext.state,
+            retryCount: -1,
+            ...createObservabilityContext({ currentSpan: evalSpan }),
+            iterationCount: iteration + 1,
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(null, stepResults),
+            bail: (() => {}) as () => InnerOutput,
+            abort: () => {
+              abortController?.abort();
             },
-            outputWriter,
-          ),
+            [PUBSUB_SYMBOL]: pubsub,
+            [STREAM_FORMAT_SYMBOL]: executionContext.format,
+            engine: engine.getEngineContext(),
+            abortSignal: abortController?.signal,
+            writer: new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId: randomUUID(),
+                name: 'loop',
+                runId,
+              },
+              outputWriter,
+            ),
+          },
+          {
+            paramName: 'runCount',
+            deprecationMessage: runCountDeprecationMessage,
+            logger: engine.getLogger(),
+          },
+        ),
+      );
+    } catch (conditionError) {
+      const errorObj = conditionError instanceof Error ? conditionError : new Error(String(conditionError));
+      await engine.errorChildSpan({
+        span: evalSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.span.error`,
+        errorOptions: {
+          error: errorObj,
+          attributes: {
+            result: false,
+          },
         },
-        {
-          paramName: 'runCount',
-          deprecationMessage: runCountDeprecationMessage,
-          logger: engine.getLogger(),
+      });
+      await engine.endChildSpan({
+        span: loopSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.end.early`,
+        endOptions: {
+          attributes: {
+            totalIterations: iteration + 1,
+          },
         },
-      ),
-    );
+      });
+      // Honor cancellation the same way a normal condition return does: a
+      // condition that aborted before throwing must report 'canceled', not
+      // 'failed'.
+      if (abortController?.signal?.aborted) {
+        return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+      }
+      // A throwing loop condition is a failure of the loop step itself.
+      // Convert it to a failed result so the normal failure path persists
+      // the run and emits terminal lifecycle events — a bare rejection here
+      // leaves the durable snapshot stuck 'running', a silent zombie.
+      return {
+        status: 'failed',
+        error: errorObj,
+        ...(errorObj instanceof TripWire ? { tripwire: errorObj } : {}),
+        endedAt: Date.now(),
+      } as StepResult<any, any, any, any>;
+    }
     await engine.endChildSpan({
       span: evalSpan,
       operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.span.end`,
