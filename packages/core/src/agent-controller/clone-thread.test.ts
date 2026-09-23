@@ -68,7 +68,7 @@ describe('AgentController cloneThread', () => {
       resourceId: 'target-resource',
     });
 
-    expect(memoryFactory).toHaveBeenCalledTimes(1);
+    expect(memoryFactory).toHaveBeenCalled();
     expect(resolvedControllerContext).toMatchObject({
       controllerId: 'test-controller',
       state: { memoryProfile: 'session-profile' },

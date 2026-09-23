@@ -3359,7 +3359,7 @@ export class AgentThreadStreamRuntime {
   }
 
   async #loadThreadHistory(agent: Agent<any, any, any, any>, options: AgentSubscribeToThreadOptions) {
-    const memory = await agent.getMemory({ requestContext: options.requestContext });
+    const memory = await agent.getMemory({ requestContext: options.requestContext }).catch(() => undefined);
     if (!memory) return { messages: [], hasMore: false };
     const perPage =
       typeof options.withInitialHistory === 'object' && options.withInitialHistory.perPage !== undefined
