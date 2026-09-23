@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -68,7 +69,7 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
   }, [auditQuery]);
 
   return (
-    <div className="mt-6 flex flex-col gap-6 pb-16">
+    <div className="flex flex-col gap-6 pt-6 pb-16">
       {itemsQuery.isPending || auditQuery.isPending ? (
         <SkeletonRows label="Loading activity" rows={6} rowClassName="h-10 w-full" />
       ) : itemsQuery.isError || auditQuery.isError ? (
@@ -87,9 +88,7 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
           </Button>
         </Notice>
       ) : entries.length === 0 ? (
-        <div className="text-caption text-placeholder flex min-h-40 items-center justify-center">
-          Nothing has happened yet.
-        </div>
+        <EmptyState variant="fill" titleSlot="Nothing has happened yet." />
       ) : (
         <>
           <ActivityRail entries={entries.slice(0, shown)} members={roster} factoryProjectId={factoryId} />

@@ -13,6 +13,7 @@ import { AttentionItemRow, KindIcon } from '../domains/factory/components/Attent
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { DayHeading, RailRow, RAIL_LIST } from '../domains/factory/components/Timeline';
 import { useAttentionItemActions } from '../domains/factory/components/useAttentionItemActions';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
@@ -168,13 +169,16 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           </Button>
         </Notice>
       ) : items.length === 0 ? (
-        <div className="text-caption text-placeholder flex min-h-40 items-center justify-center text-center">
-          {attention.hasNextPage
-            ? 'Loading older items…'
-            : search
-              ? 'No attention items match your search.'
-              : `No ${view} attention items.`}
-        </div>
+        <EmptyState
+          className="w-full"
+          titleSlot={
+            attention.hasNextPage
+              ? 'Loading older items…'
+              : search
+                ? 'No attention items match your search.'
+                : `No ${view} attention items.`
+          }
+        />
       ) : (
         <>
           {interrupting.length > 0 ? (
