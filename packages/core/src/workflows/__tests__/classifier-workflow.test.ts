@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Classifier } from '../../classifier';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createWorkflow } from '../create';
 import { toStorableGraph } from '../dynamic';
+import { createWorkflow as createEventedWorkflow } from '../evented';
 import { createStep } from '../workflow';
 
 const questions = {
@@ -52,11 +54,15 @@ function createClassifier(doEvaluate?: EvaluationModelV4['doEvaluate']) {
   return new Classifier({ id: 'ticket-router', model, questions });
 }
 
-function bind(workflow: ReturnType<typeof createWorkflow>, classifier = createClassifier()) {
+function bind(
+  workflow: ReturnType<typeof createWorkflow> | ReturnType<typeof createEventedWorkflow>,
+  classifier = createClassifier(),
+) {
   const mastra = new Mastra({
     workflows: { [workflow.id]: workflow },
     classifiers: { router: classifier },
     storage: new InMemoryStore(),
+    pubsub: workflow.engineType === 'evented' ? new EventEmitterPubSub() : undefined,
     logger: false,
   });
   workflow.__registerMastra(mastra);
@@ -70,37 +76,42 @@ const ENGINES = [
 
 describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
   afterEach(() => {
-    delete process.env.MASTRA_EVENTED_EXECUTION;
     vi.restoreAllMocks();
   });
 
+  const workflowFactory = evented ? createEventedWorkflow : createWorkflow;
+
   it('executes inline and returns typed answers', async () => {
-    if (evented) process.env.MASTRA_EVENTED_EXECUTION = 'true';
     const classifier = createClassifier();
-    const workflow = createWorkflow({
+    const workflow = workflowFactory({
       id: `inline-${evented}`,
       inputSchema: z.object({ message: z.string() }),
       outputSchema: z.any(),
     })
       .classifier(classifier)
       .commit();
-    bind(workflow, classifier);
+    expect(workflow.engineType === 'evented').toBe(evented);
+    const mastra = bind(workflow, classifier);
 
-    const result = await (await workflow.createRun()).start({ inputData: { message: 'Refund me' } });
+    try {
+      if (evented) await mastra.startWorkers();
+      const result = await (await workflow.createRun()).start({ inputData: { message: 'Refund me' } });
 
-    expect(result.status).toBe('success');
-    if (result.status === 'success') {
-      expect(result.result.answers.route.probabilities).toEqual({ billing: 0.8, support: 0.15, other: 0.05 });
-      expect(result.result.usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result.answers.route.probabilities).toEqual({ billing: 0.8, support: 0.15, other: 0.05 });
+        expect(result.result.usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
+      }
+    } finally {
+      if (evented) await mastra.stopWorkers?.();
     }
   });
 
   it('resolves a registered classifier with mapped input', async () => {
-    if (evented) process.env.MASTRA_EVENTED_EXECUTION = 'true';
     const sourceClassifier = createClassifier();
     const doEvaluate = vi.fn(options => sourceClassifier.model.doEvaluate(options));
     const classifier = createClassifier(doEvaluate);
-    const workflow = createWorkflow({
+    const workflow = workflowFactory({
       id: `registered-${evented}`,
       inputSchema: z.object({ message: z.string() }),
       outputSchema: z.any(),
@@ -108,16 +119,21 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
       .map({ message: { initData: true, path: 'message' } })
       .classifier('ticket-router', undefined, { id: 'classify-ticket' })
       .commit();
-    bind(workflow, classifier);
+    expect(workflow.engineType === 'evented').toBe(evented);
+    const mastra = bind(workflow, classifier);
 
-    const result = await (await workflow.createRun()).start({ inputData: { message: 'Account locked' } });
+    try {
+      if (evented) await mastra.startWorkers();
+      const result = await (await workflow.createRun()).start({ inputData: { message: 'Account locked' } });
 
-    expect(result.status).toBe('success');
-    expect(doEvaluate).toHaveBeenCalledWith(expect.objectContaining({ state: { message: 'Account locked' } }));
+      expect(result.status).toBe('success');
+      expect(doEvaluate).toHaveBeenCalledWith(expect.objectContaining({ state: { message: 'Account locked' } }));
+    } finally {
+      if (evented) await mastra.stopWorkers?.();
+    }
   });
 
   it('passes classifier output to a following branch', async () => {
-    if (evented) process.env.MASTRA_EVENTED_EXECUTION = 'true';
     const classifier = createClassifier();
     const billingStep = createStep({
       id: 'billing-branch',
@@ -131,7 +147,7 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
       outputSchema: z.object({ routedTo: z.literal('fallback') }),
       execute: async () => ({ routedTo: 'fallback' as const }),
     });
-    const workflow = createWorkflow({
+    const workflow = workflowFactory({
       id: `branch-${evented}`,
       inputSchema: z.object({ message: z.string() }),
       outputSchema: z.any(),
@@ -142,13 +158,19 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
         [async ({ inputData }) => inputData.answers.route.choice === 'other', fallbackStep],
       ])
       .commit();
-    bind(workflow, classifier);
+    expect(workflow.engineType === 'evented').toBe(evented);
+    const mastra = bind(workflow, classifier);
 
-    const result = await (await workflow.createRun()).start({ inputData: { message: 'Refund me' } });
+    try {
+      if (evented) await mastra.startWorkers();
+      const result = await (await workflow.createRun()).start({ inputData: { message: 'Refund me' } });
 
-    expect(result.status).toBe('success');
-    if (result.status === 'success') {
-      expect(result.result).toEqual({ 'billing-branch': { routedTo: 'billing' } });
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ 'billing-branch': { routedTo: 'billing' } });
+      }
+    } finally {
+      if (evented) await mastra.stopWorkers?.();
     }
   });
 });
