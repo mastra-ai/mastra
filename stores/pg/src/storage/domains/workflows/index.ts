@@ -4,6 +4,7 @@ import {
   mergeWorkflowStepResult,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
   TABLE_SCHEMAS,
   matchesExpectedWorkflowState,
   WorkflowsStorage,
@@ -64,6 +65,14 @@ import {
   finalizeWorkflowResumeRecord,
   persistWorkflowStepUpdateRecord,
   rollbackWorkflowResumeRecord,
+  WorkflowSnapshotHandoffFenceError,
+  materializeWorkflowSnapshotHandoffSnapshot,
+  pinWorkflowCasGuardValue,
+  validateWorkflowSnapshotHandoffFence,
+  validateWorkflowSnapshotHandoffIdentity,
+  validateWorkflowSnapshotHandoffLimit,
+  workflowSnapshotHandoffCanonicalStatesEqual,
+  workflowSnapshotHandoffSnapshotsEqual,
 } from '@mastra/core/storage';
 import type {
   AdvanceWorkflowTerminalizationInput,
@@ -120,6 +129,17 @@ import type {
   WorkflowTerminalContinuationPlanRecord,
   WorkflowTerminalizationCapabilities,
   WorkflowResumeCapabilities,
+  WorkflowSnapshotHandoffCapabilities,
+  WorkflowSnapshotHandoffCanonicalState,
+  WorkflowSnapshotHandoffRecord,
+  ClaimWorkflowSnapshotHandoffInput,
+  ClaimWorkflowSnapshotHandoffResult,
+  TransitionWorkflowSnapshotHandoffInput,
+  TransitionWorkflowSnapshotHandoffResult,
+  CompleteWorkflowSnapshotHandoffInput,
+  CompleteWorkflowSnapshotHandoffResult,
+  ListWorkflowSnapshotHandoffsInput,
+  ListWorkflowSnapshotHandoffsResult,
   WorkflowTerminalRecoveryAncestryRecord,
   TABLE_NAMES,
   PruneOptions,
@@ -173,6 +193,9 @@ const WORKFLOW_PARENT_REVISION_MIGRATION = 'workflow-parent-revision-v1';
 const WORKFLOW_PARENT_REVISION_MIGRATION_EPOCH = 1;
 const TERMINAL_WORKFLOW_RUN_STATUSES = ['success', 'failed', 'canceled', 'tripwire', 'bailed', 'skipped'] as const;
 const WORKFLOW_TERMINALIZATION_STATUSES = ['success', 'failed', 'canceled'] as const;
+// Bounds the prune exclusion list: a run of candidates that keep failing their
+// revision/handoff recheck cannot grow the NOT IN unnest past this many pairs.
+const MAX_WORKFLOW_PRUNE_SKIPPED_CANDIDATES = 4096;
 type TerminalWorkflowRunStatus = (typeof TERMINAL_WORKFLOW_RUN_STATUSES)[number];
 type WorkflowSnapshotColumnType = 'jsonb' | 'json' | 'text';
 const WORKFLOW_PARENT_REVISION_BASE_CHECKS = ['generation >= 0', 'updated_at >= 0'] as const;
@@ -295,6 +318,7 @@ export class WorkflowsPG extends WorkflowsStorage {
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [
     TABLE_WORKFLOW_SNAPSHOT,
+    TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
     TABLE_WORKFLOW_TERMINALIZATIONS,
     TABLE_WORKFLOW_TERMINAL_EFFECTS,
     TABLE_WORKFLOW_TERMINAL_SNAPSHOTS,
@@ -346,8 +370,21 @@ export class WorkflowsPG extends WorkflowsStorage {
     return { atomicResumeVersion: 1, fencedStepUpdateVersion: 1 };
   }
 
+  getWorkflowSnapshotHandoffCapabilities(): WorkflowSnapshotHandoffCapabilities {
+    return { handoffVersion: 1, recoveryVersion: 1 };
+  }
+
   private materializeResumeSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
     return JSON.parse(sanitizeJsonForPg(JSON.stringify(snapshot))) as WorkflowRunState;
+  }
+
+  private materializeWorkflowSnapshotHandoffSnapshot(snapshot: WorkflowRunState): WorkflowRunState {
+    const canonical = materializeWorkflowSnapshotHandoffSnapshot(snapshot);
+    const materialized: unknown = JSON.parse(sanitizeJsonForPg(JSON.stringify(canonical)));
+    if (!materialized || typeof materialized !== 'object' || Array.isArray(materialized)) {
+      throw new TypeError('Workflow snapshot handoff snapshot must be a JSON object');
+    }
+    return materialized as WorkflowRunState;
   }
 
   private async mutateWorkflowResume<T extends { status: string }>(
@@ -365,6 +402,7 @@ export class WorkflowsPG extends WorkflowsStorage {
            WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
+        await this.assertWorkflowSnapshotHandoffAvailable(t, workflowName, runId);
         if (!revision && row) {
           throw new TypeError('Workflow snapshot is missing parent revision evidence');
         }
@@ -387,6 +425,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return publicResult as T;
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', operation.toUpperCase(), 'FAILED'),
@@ -400,57 +439,194 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async admitWorkflowResume(input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {
+    // Capture CAS/identity fields first: scalars before any serialization so
+    // guard-internal toJSON/getters cannot retarget them, and the object
+    // guard by reference so it is pinned before payload getters fire. Each
+    // named read fires that field's own accessor exactly once.
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      nextLifecycleResumeAttempt,
+      lifecycleStepStates: rawLifecycleStepStates,
+      resourceId,
+      replaceRequestContext,
+    } = input;
+    const lifecycleStepStates = pinWorkflowCasGuardValue(rawLifecycleStepStates);
+    // Payload fields last: their getters may run arbitrary caller code now
+    // that every expectation is pinned.
+    const { requestContext, operationReplayContext } = input;
+    const frozenInput: AdmitWorkflowResumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      // Object-valued guards are pinned to their JSON projection: the caller's
+      // retained reference could otherwise mutate the fence contents while the
+      // transaction awaits row locks.
+      lifecycleStepStates,
+      nextLifecycleResumeAttempt,
+      resourceId,
+      requestContext,
+      replaceRequestContext,
+      operationReplayContext,
+    };
     return this.mutateWorkflowResume(
-      input.workflowName,
-      input.runId,
-      input.resourceId,
+      workflowName,
+      runId,
+      resourceId,
       snapshot =>
-        admitWorkflowResumeRecord(snapshot, input, Date.now(), value => this.materializeResumeSnapshot(value)),
+        admitWorkflowResumeRecord(snapshot, frozenInput, Date.now(), value => this.materializeResumeSnapshot(value)),
       'admit_workflow_resume',
     );
   }
 
   async rollbackWorkflowResume(input: RollbackWorkflowResumeInput): Promise<RollbackWorkflowResumeResult> {
+    // Capture every field before pinning the object-valued guard: scalar CAS
+    // fields must be read before guard serialization runs caller code, and the
+    // guard itself must be pinned before any other caller code could mutate
+    // its contents. Rollback inputs carry no payload fields, so one ordered
+    // destructure covers both.
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates: rawLifecycleStepStates,
+      resourceId,
+    } = input;
+    const lifecycleStepStates = pinWorkflowCasGuardValue(rawLifecycleStepStates);
+    const frozenInput: RollbackWorkflowResumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates,
+      resourceId,
+    };
     return this.mutateWorkflowResume(
-      input.workflowName,
-      input.runId,
-      input.resourceId,
+      workflowName,
+      runId,
+      resourceId,
       snapshot =>
-        rollbackWorkflowResumeRecord(snapshot, input, Date.now(), value => this.materializeResumeSnapshot(value)),
+        rollbackWorkflowResumeRecord(snapshot, frozenInput, Date.now(), value => this.materializeResumeSnapshot(value)),
       'rollback_workflow_resume',
     );
   }
 
   async finalizeWorkflowResume(input: FinalizeWorkflowResumeInput): Promise<FinalizeWorkflowResumeResult> {
+    // Capture CAS/identity fields first: scalars before any serialization so
+    // guard-internal toJSON/getters cannot retarget them, and the object
+    // guard by reference so it is pinned before payload getters fire.
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates: rawLifecycleStepStates,
+      resourceId,
+      shouldPersistSnapshot,
+      receiptKey,
+    } = input;
+    const lifecycleStepStates = pinWorkflowCasGuardValue(rawLifecycleStepStates);
+    // Payload fields last: their getters fire only after every expectation
+    // is pinned.
+    const { snapshot, result } = input;
+    const frozenInput: FinalizeWorkflowResumeInput = {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      lifecycleStepStates,
+      resourceId,
+      shouldPersistSnapshot,
+      receiptKey,
+      snapshot,
+      result,
+    };
     return this.mutateWorkflowResume(
-      input.workflowName,
-      input.runId,
-      input.resourceId,
+      workflowName,
+      runId,
+      resourceId,
       snapshot =>
-        finalizeWorkflowResumeRecord(snapshot, input, Date.now(), value => this.materializeResumeSnapshot(value)),
+        finalizeWorkflowResumeRecord(snapshot, frozenInput, Date.now(), value => this.materializeResumeSnapshot(value)),
       'finalize_workflow_resume',
     );
   }
 
   async consumeWorkflowResumeResult(input: ConsumeWorkflowResumeResultInput): Promise<ConsumeWorkflowResumeResult> {
+    const {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      receiptKey,
+      consumerId,
+    } = input;
+    const frozenInput: ConsumeWorkflowResumeResultInput = {
+      workflowName,
+      runId,
+      resumeOperationHash,
+      executionGeneration,
+      lifecycleResumeAttempt,
+      receiptKey,
+      consumerId,
+    };
     return this.mutateWorkflowResume(
-      input.workflowName,
-      input.runId,
+      workflowName,
+      runId,
       undefined,
       snapshot =>
-        consumeWorkflowResumeResultRecord(snapshot, input, Date.now(), value => this.materializeResumeSnapshot(value)),
+        consumeWorkflowResumeResultRecord(snapshot, frozenInput, Date.now(), value =>
+          this.materializeResumeSnapshot(value),
+        ),
       'consume_workflow_resume_result',
     );
   }
 
   async persistWorkflowStepUpdate(input: PersistWorkflowStepUpdateInput): Promise<PersistWorkflowStepUpdateResult> {
+    // Pin every field in one ordered capture: CAS/identity fields before the
+    // payload `snapshot` so its getter cannot retarget an expectation — each
+    // input property's getter fires exactly once and a spread would re-read
+    // them all.
+    const {
+      workflowName,
+      runId,
+      resourceId,
+      expectedResumeOperationHash,
+      expectedExecutionGeneration,
+      expectedLifecycleResumeAttempt,
+      retainExistingLifecycleOutbox,
+      lifecycleEvents,
+      snapshot,
+    } = input;
+    const frozenInput: PersistWorkflowStepUpdateInput = {
+      workflowName,
+      runId,
+      resourceId,
+      expectedResumeOperationHash,
+      expectedExecutionGeneration,
+      expectedLifecycleResumeAttempt,
+      retainExistingLifecycleOutbox,
+      lifecycleEvents,
+      snapshot,
+    };
     try {
       return await this.#db.client.tx(async t => {
-        const revision = await this.lockWorkflowParentRevisionForSnapshotUpsert(t, input.workflowName, input.runId);
+        const revision = await this.lockWorkflowParentRevisionForSnapshotUpsert(t, workflowName, runId);
+        await this.assertWorkflowSnapshotHandoffAvailable(t, workflowName, runId);
         const row = await t.oneOrNone<{ snapshot: WorkflowRunState | string; resourceId?: string | null }>(
           `SELECT snapshot, "resourceId" FROM ${this.workflowSnapshotTableName()}
            WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
-          [input.workflowName, input.runId],
+          [workflowName, runId],
         );
         if (revision.created && row) {
           throw new TypeError('Workflow snapshot is missing parent revision evidence');
@@ -458,13 +634,13 @@ export class WorkflowsPG extends WorkflowsStorage {
         const snapshot = row?.snapshot
           ? this.materializeResumeSnapshot(typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot)
           : undefined;
-        const outcome = persistWorkflowStepUpdateRecord(snapshot, input, value =>
+        const outcome = persistWorkflowStepUpdateRecord(snapshot, frozenInput, value =>
           this.materializeResumeSnapshot(value),
         );
         const { snapshot: updatedSnapshot, ...result } = outcome;
         if (updatedSnapshot) {
           const now = new Date();
-          const retainedResourceId = row?.resourceId ?? updatedSnapshot.resourceId ?? input.resourceId ?? null;
+          const retainedResourceId = row?.resourceId ?? updatedSnapshot.resourceId ?? resourceId ?? null;
           await t.none(
             `INSERT INTO ${this.workflowSnapshotTableName()}
                (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
@@ -472,8 +648,8 @@ export class WorkflowsPG extends WorkflowsStorage {
              ON CONFLICT (workflow_name, run_id) DO UPDATE
              SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
             [
-              input.workflowName,
-              input.runId,
+              workflowName,
+              runId,
               retainedResourceId,
               sanitizeJsonForPg(JSON.stringify(updatedSnapshot)),
               now,
@@ -482,19 +658,20 @@ export class WorkflowsPG extends WorkflowsStorage {
               now,
             ],
           );
-          await this.bumpWorkflowParentRevision(t, input.workflowName, input.runId, revision.generation);
+          await this.bumpWorkflowParentRevision(t, workflowName, runId, revision.generation);
         } else {
-          await this.deleteProvisionalWorkflowParentRevision(t, input.workflowName, input.runId, revision.created);
+          await this.deleteProvisionalWorkflowParentRevision(t, workflowName, runId, revision.created);
         }
         return result;
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'PERSIST_WORKFLOW_STEP_UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName: input.workflowName, runId: input.runId },
+          details: { workflowName, runId },
         },
         error,
       );
@@ -510,6 +687,10 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   private workflowSnapshotTableName(): string {
     return getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+  }
+
+  private workflowSnapshotHandoffTableName(): string {
+    return getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT_HANDOFF, schemaName: getSchemaName(this.#schema) });
   }
 
   private terminalEffectTableName(): string {
@@ -641,16 +822,129 @@ export class WorkflowsPG extends WorkflowsStorage {
     workflowName: string,
     runId: string,
     created: boolean,
+    generation = 0,
   ): Promise<void> {
     if (!created) return;
     const result = await t.query(
       `DELETE FROM ${this.workflowParentRevisionTableName()}
-       WHERE workflow_name = $1 AND run_id = $2 AND generation = 0 AND terminal_status IS NULL`,
-      [workflowName, runId],
+       WHERE workflow_name = $1 AND run_id = $2 AND generation = $3 AND terminal_status IS NULL`,
+      [workflowName, runId, generation],
     );
     if ((result.rowCount ?? 0) !== 1) {
       throw new TypeError('Provisional workflow parent revision could not be rolled back');
     }
+  }
+
+  private decodeWorkflowSnapshotHandoff(row: Record<string, unknown>): WorkflowSnapshotHandoffRecord {
+    const numberValue = (value: unknown, field: string): number => {
+      const parsed = typeof value === 'string' ? Number(value) : value;
+      if (typeof parsed !== 'number' || !Number.isSafeInteger(parsed) || parsed < 0) {
+        throw new TypeError(`Invalid workflow snapshot handoff ${field}`);
+      }
+      return parsed;
+    };
+    if (row.version !== 1 && row.version !== '1') throw new TypeError('Invalid workflow snapshot handoff version');
+    if (row.status !== 'pending' && row.status !== 'completed') {
+      throw new TypeError('Invalid workflow snapshot handoff status');
+    }
+    if (typeof row.workflow_name !== 'string' || typeof row.run_id !== 'string') {
+      throw new TypeError('Invalid workflow snapshot handoff identity');
+    }
+    if (typeof row.mutation_fence !== 'string') throw new TypeError('Invalid workflow snapshot handoff fence');
+    const snapshot = typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot;
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      throw new TypeError('Invalid workflow snapshot handoff snapshot');
+    }
+    const createdAt = numberValue(row.created_at, 'created_at');
+    const updatedAt = numberValue(row.updated_at, 'updated_at');
+    const completedAt =
+      row.completed_at === null || row.completed_at === undefined
+        ? undefined
+        : numberValue(row.completed_at, 'completed_at');
+    return {
+      version: 1,
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      status: row.status,
+      ...(row.resource_id === null || row.resource_id === undefined ? {} : { resourceId: String(row.resource_id) }),
+      snapshot: snapshot as WorkflowRunState,
+      mutationFence: row.mutation_fence,
+      createdAt,
+      updatedAt,
+      ...(completedAt === undefined ? {} : { completedAt }),
+    };
+  }
+
+  private async lockWorkflowSnapshotHandoff(
+    t: TxClient,
+    workflowName: string,
+    runId: string,
+  ): Promise<WorkflowSnapshotHandoffRecord | undefined> {
+    const row = await t.oneOrNone<Record<string, unknown>>(
+      `SELECT * FROM ${this.workflowSnapshotHandoffTableName()}
+       WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+      [workflowName, runId],
+    );
+    return row ? this.decodeWorkflowSnapshotHandoff(row) : undefined;
+  }
+
+  private async assertWorkflowSnapshotHandoffAvailable(
+    t: TxClient,
+    workflowName: string,
+    runId: string,
+  ): Promise<void> {
+    const handoff = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
+    if (handoff) {
+      throw new WorkflowSnapshotHandoffFenceError({
+        workflowName,
+        runId,
+        handoffStatus: handoff.status,
+      });
+    }
+  }
+
+  private async lockWorkflowSnapshotHandoffCanonicalState(
+    t: TxClient,
+    workflowName: string,
+    runId: string,
+  ): Promise<WorkflowSnapshotHandoffCanonicalState> {
+    const row = await t.oneOrNone<{ snapshot: WorkflowRunState | string; resourceId?: string | null }>(
+      `SELECT snapshot, "resourceId" FROM ${this.workflowSnapshotTableName()}
+       WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+      [workflowName, runId],
+    );
+    if (!row) return { kind: 'absent' };
+    const snapshot = typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot;
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      throw new TypeError('Workflow snapshot handoff canonical snapshot is invalid');
+    }
+    return {
+      kind: 'present',
+      ...(row.resourceId === null || row.resourceId === undefined ? {} : { resourceId: row.resourceId }),
+      snapshot: snapshot as WorkflowRunState,
+    };
+  }
+
+  /** Serializes a handoff claim with both existing and first native snapshot writers. */
+  private async lockWorkflowParentRevisionForSnapshotHandoff(
+    t: TxClient,
+    workflowName: string,
+    runId: string,
+  ): Promise<WorkflowParentRevisionCreationLock> {
+    const inserted = await t.oneOrNone<{ generation: number | string }>(
+      `INSERT INTO ${this.workflowParentRevisionTableName()}
+       (workflow_name, run_id, generation, updated_at)
+       VALUES ($1, $2, 1, floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint)
+       ON CONFLICT (workflow_name, run_id) DO NOTHING
+       RETURNING generation`,
+      [workflowName, runId],
+    );
+    const row = await t.one<{ generation: number | string; terminal_status: string | null }>(
+      `SELECT generation, terminal_status FROM ${this.workflowParentRevisionTableName()}
+       WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+      [workflowName, runId],
+    );
+    return { ...this.decodeWorkflowParentRevision(row, 1), created: inserted !== null };
   }
 
   private async bumpWorkflowParentRevision(
@@ -1431,6 +1725,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       envelopeHash: recovery.envelopeHash as `sha256:${string}`,
       createdAt: now,
     });
+    await this.assertWorkflowSnapshotHandoffAvailable(t, input.workflowName, input.runId);
     const update = await t.query(
       `UPDATE ${this.workflowSnapshotTableName()}
        SET "resourceId" = $3, snapshot = $4, "updatedAt" = $5, "updatedAtZ" = $6
@@ -1466,6 +1761,30 @@ export class WorkflowsPG extends WorkflowsStorage {
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         details: { workflowName, runId },
+      },
+      error,
+    );
+  }
+
+  private snapshotHandoffError(
+    operation: string,
+    workflowName: string | undefined,
+    runId: string | undefined,
+    error: unknown,
+  ): Error {
+    // The fence error must reach callers as its own instanceof-checkable type;
+    // validation TypeErrors/RangeErrors likewise keep their identity.
+    if (error instanceof WorkflowSnapshotHandoffFenceError) return error;
+    if (error instanceof TypeError || error instanceof RangeError) return error;
+    const details: Record<string, string> = {};
+    if (workflowName !== undefined) details.workflowName = workflowName;
+    if (runId !== undefined) details.runId = runId;
+    return new MastraError(
+      {
+        id: createStorageErrorId('PG', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details,
       },
       error,
     );
@@ -2755,6 +3074,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           storageTimestamp,
         );
         if (finalized.status === 'applied' && finalized.plan.contract.patch.kind !== 'none') {
+          await this.assertWorkflowSnapshotHandoffAvailable(t, effect.parentWorkflowName, effect.parentRunId);
           const serializedParent = sanitizeJsonForPg(JSON.stringify(patchedParent));
           const timestamp = new Date(storageTimestamp);
           const update = await t.query(
@@ -2846,6 +3166,11 @@ export class WorkflowsPG extends WorkflowsStorage {
         columns: ['parent_workflow_name', 'parent_run_id'],
         where: `"effect_kind" = 'parent-workflow-step-end'`,
       },
+      {
+        name: 'mastra_workflow_snapshot_handoffs_recovery_idx',
+        table: TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
+        columns: ['status', 'updated_at', 'workflow_name COLLATE "C" ASC', 'run_id COLLATE "C" ASC'],
+      },
     ];
   }
 
@@ -2873,6 +3198,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     statements.push(WorkflowsPG.getTerminalSnapshotTableDDL(schemaName));
     statements.push(WorkflowsPG.getTerminalRecoveryAncestryTableDDL(schemaName));
     statements.push(WorkflowsPG.getTerminalDestinationReceiptTableDDL(schemaName));
+    statements.push(WorkflowsPG.getWorkflowSnapshotHandoffTableDDL(schemaName));
     statements.push(WorkflowsPG.getWorkflowSchemaMigrationTableDDL(schemaName));
     statements.push(WorkflowsPG.getWorkflowParentRevisionExportDDL(schemaName));
     statements.push(WorkflowsPG.getTerminalContinuationPlanTableDDL(schemaName));
@@ -2934,6 +3260,33 @@ export class WorkflowsPG extends WorkflowsStorage {
       "updated_at" BIGINT NOT NULL,
       "completed_at" BIGINT,
       PRIMARY KEY ("workflow_name", "run_id")
+    );`;
+  }
+
+  private static getWorkflowSnapshotHandoffTableDDL(schemaName?: string): string {
+    const tableName = getTableName({
+      indexName: TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
+      schemaName: getSchemaName(schemaName),
+    });
+    return `CREATE TABLE IF NOT EXISTS ${tableName} (
+      "workflow_name" TEXT NOT NULL,
+      "run_id" TEXT NOT NULL,
+      "version" INTEGER NOT NULL,
+      "status" TEXT NOT NULL,
+      "resource_id" TEXT,
+      "snapshot" JSONB NOT NULL,
+      "mutation_fence" TEXT NOT NULL,
+      "created_at" BIGINT NOT NULL,
+      "updated_at" BIGINT NOT NULL,
+      "completed_at" BIGINT,
+      PRIMARY KEY ("workflow_name", "run_id"),
+      CHECK ("version" = 1),
+      CHECK ("status" IN ('pending', 'completed')),
+      CHECK (length("mutation_fence") BETWEEN 1 AND 4096),
+      CHECK ((jsonb_typeof("snapshot") = 'object') IS TRUE),
+      CHECK ("created_at" >= 0 AND "updated_at" >= "created_at"),
+      CHECK (("status" = 'pending' AND "completed_at" IS NULL)
+        OR ("status" = 'completed' AND "completed_at" IS NOT NULL AND "completed_at" >= "created_at"))
     );`;
   }
 
@@ -4291,11 +4644,15 @@ export class WorkflowsPG extends WorkflowsStorage {
 
     // Expression index backing the status filter in listWorkflowRuns(). Only valid on jsonb
     // columns — legacy json/text snapshot columns still go through the sanitizing regexp,
-    // which cannot use an index anyway.
-    const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
-    if (snapshotType !== 'jsonb') return;
-
+    // which cannot use an index anyway. Never ask information_schema: a warm init must
+    // stay inside the catalog snapshot, and a cold init already knows the declared type.
     const indexName = workflowSnapshotStatusIndexName(this.#schema);
+    const snapshot = getSchemaSnapshot(this.#db.client, this.#schema);
+    if (snapshot?.indexes.has(indexName)) return;
+    const recordedType = snapshot?.columnTypes.get(TABLE_WORKFLOW_SNAPSHOT)?.get('snapshot');
+    const declaredType = TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT]?.snapshot?.type;
+    const snapshotType = recordedType ?? declaredType;
+    if (snapshotType !== 'jsonb') return;
     try {
       await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema));
     } catch (error) {
@@ -4325,6 +4682,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     await this.#db.client.none(WorkflowsPG.getTerminalSnapshotTableDDL(this.#schema));
     await this.#db.client.none(WorkflowsPG.getTerminalRecoveryAncestryTableDDL(this.#schema));
     await this.#db.client.none(WorkflowsPG.getTerminalDestinationReceiptTableDDL(this.#schema));
+    await this.#db.client.none(WorkflowsPG.getWorkflowSnapshotHandoffTableDDL(this.#schema));
     const snapshotColumnType = await this.migrateWorkflowParentRevisions();
     await this.#db.client.none(WorkflowsPG.getTerminalContinuationPlanTableDDL(this.#schema));
     await this.#db.alterTable({
@@ -4363,6 +4721,77 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Deletes one bounded batch of aged snapshots while taking the same parent
+   * revision and handoff locks as ordinary workflow writers. A handoff row is
+   * a durable fence, so retention must leave both pending and completed runs
+   * in place rather than deleting around that fence through the generic table
+   * pruner.
+   */
+  private async pruneWorkflowSnapshotsBatch(
+    cutoff: Date | number,
+    limit: number,
+    options?: PruneOptions,
+  ): Promise<{ deleted: number; truncated: boolean }> {
+    let deleted = 0;
+    // Candidates skipped under the revision/handoff locks (e.g. a handoff that
+    // committed mid-batch, or a row with missing revision evidence) are
+    // excluded from re-selection: the loop can never spin on the same rows,
+    // and remaining eligible rows are still drained within this call. The
+    // exclusion list is capped so a run of stuck candidates cannot grow the
+    // NOT IN unnest without bound — hitting the cap or an abort ends the batch
+    // early, which is reported as truncated so the sweep does not claim the
+    // table drained while unattempted candidates remain.
+    const skippedNames: string[] = [];
+    const skippedRuns: string[] = [];
+    while (deleted < limit) {
+      if (options?.signal?.aborted) return { deleted, truncated: true };
+      const candidates = await this.#db.client.manyOrNone<{ workflow_name: string; run_id: string }>(
+        `SELECT snapshot.workflow_name, snapshot.run_id
+         FROM ${this.workflowSnapshotTableName()} AS snapshot
+         INNER JOIN ${this.workflowParentRevisionTableName()} AS revision
+           ON revision.workflow_name = snapshot.workflow_name AND revision.run_id = snapshot.run_id
+         WHERE snapshot."updatedAtZ" < $1
+           AND NOT EXISTS (
+             SELECT 1 FROM ${this.workflowSnapshotHandoffTableName()} AS handoff
+             WHERE handoff.workflow_name = snapshot.workflow_name AND handoff.run_id = snapshot.run_id
+           )
+           AND (snapshot.workflow_name, snapshot.run_id) NOT IN (
+             SELECT * FROM unnest($3::text[], $4::text[])
+           )
+         ORDER BY snapshot."updatedAtZ", snapshot.workflow_name, snapshot.run_id
+         LIMIT $2`,
+        [cutoff, limit - deleted, skippedNames, skippedRuns],
+      );
+      if (candidates.length === 0) break;
+      for (const candidate of candidates) {
+        if (options?.signal?.aborted) return { deleted, truncated: true };
+        const removed = await this.#db.client.tx(async t => {
+          const revision = await this.lockExistingWorkflowParentRevision(t, candidate.workflow_name, candidate.run_id);
+          if (!revision) return false;
+          if (await this.lockWorkflowSnapshotHandoff(t, candidate.workflow_name, candidate.run_id)) return false;
+          const result = await t.query(
+            `DELETE FROM ${this.workflowSnapshotTableName()}
+             WHERE workflow_name = $1 AND run_id = $2 AND "updatedAtZ" < $3`,
+            [candidate.workflow_name, candidate.run_id, cutoff],
+          );
+          if ((result.rowCount ?? 0) !== 1) return false;
+          await this.bumpWorkflowParentRevision(t, candidate.workflow_name, candidate.run_id, revision.generation);
+          return true;
+        });
+        if (removed) {
+          deleted++;
+        } else {
+          skippedNames.push(candidate.workflow_name);
+          skippedRuns.push(candidate.run_id);
+          if (skippedNames.length >= MAX_WORKFLOW_PRUNE_SKIPPED_CANDIDATES) return { deleted, truncated: true };
+        }
+        if (deleted >= limit) break;
+      }
+    }
+    return { deleted, truncated: false };
+  }
+
   /** Delete workflow run snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     await this.ensureRetentionIndexes(policies);
@@ -4371,7 +4800,25 @@ export class WorkflowsPG extends WorkflowsStorage {
       descriptor: WorkflowsPG.retentionTables,
       order: ['workflowSnapshot'],
     });
-    return runPrune({ db: this.#db, domain: 'workflows', targets, options });
+    // A batch cut short by cancellation or the skipped-candidate bound did not
+    // evaluate every eligible row: the sweep is resumable, not drained, so the
+    // result must not report done.
+    let truncated = false;
+    const results = await runPrune({
+      db: this.#db,
+      domain: 'workflows',
+      targets,
+      options,
+      deleteBatch: async (_target, cutoff, limit) => {
+        const batch = await this.pruneWorkflowSnapshotsBatch(cutoff, limit, options);
+        truncated ||= batch.truncated;
+        return batch.deleted;
+      },
+    });
+    if (truncated) {
+      for (const result of results) result.done = false;
+    }
+    return results;
   }
 
   /**
@@ -4395,7 +4842,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.client.none(
-      `TRUNCATE TABLE ${this.terminalContinuationPlanTableName()}, ${this.terminalDestinationReceiptTableName()}, ${this.terminalEffectTableName()}, ${this.terminalSnapshotTableName()}, ${this.terminalRecoveryAncestryTableName()}, ${this.terminalizationTableName()}, ${this.workflowSnapshotTableName()}, ${this.workflowParentRevisionTableName()} CASCADE`,
+      `TRUNCATE TABLE ${this.terminalContinuationPlanTableName()}, ${this.terminalDestinationReceiptTableName()}, ${this.terminalEffectTableName()}, ${this.terminalSnapshotTableName()}, ${this.terminalRecoveryAncestryTableName()}, ${this.terminalizationTableName()}, ${this.workflowSnapshotHandoffTableName()}, ${this.workflowSnapshotTableName()}, ${this.workflowParentRevisionTableName()} CASCADE`,
     );
   }
 
@@ -4416,6 +4863,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       return await this.#db.client.tx(async t => {
         const tableName = this.workflowSnapshotTableName();
         const revisionLock = await this.lockExistingWorkflowParentRevision(t, operation.workflowName, operation.runId);
+        await this.assertWorkflowSnapshotHandoffAvailable(t, operation.workflowName, operation.runId);
         const row = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
           `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [operation.workflowName, operation.runId],
@@ -4448,6 +4896,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         };
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'BIND_WORKFLOW_NESTED_RUN_OWNERSHIP', 'FAILED'),
@@ -4536,6 +4985,7 @@ export class WorkflowsPG extends WorkflowsStorage {
            WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [operation.workflowName, operation.runId],
         );
+        await this.assertWorkflowSnapshotHandoffAvailable(t, operation.workflowName, operation.runId);
         if (!parentRow) {
           return { status: 'missing_run' };
         }
@@ -4608,6 +5058,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           if (error instanceof TypeError) return { status: 'child_snapshot_conflict' };
           throw error;
         }
+        await this.assertWorkflowSnapshotHandoffAvailable(t, operation.nestedWorkflowName, operation.nestedRunId);
         if (childRevision.terminalStatus !== null) return { status: 'child_terminal' };
         const childRow = await t.oneOrNone<{ snapshot: WorkflowRunState | string }>(
           `SELECT snapshot FROM ${this.workflowSnapshotTableName()}
@@ -4728,6 +5179,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           ],
         );
         if (ownership.status === 'bound') {
+          await this.assertWorkflowSnapshotHandoffAvailable(t, operation.workflowName, operation.runId);
           await t.none(
             `UPDATE ${this.workflowSnapshotTableName()}
              SET snapshot = $1, "updatedAt" = $2, "updatedAtZ" = $3
@@ -4754,6 +5206,257 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  async claimWorkflowSnapshotHandoff(
+    input: ClaimWorkflowSnapshotHandoffInput,
+  ): Promise<ClaimWorkflowSnapshotHandoffResult> {
+    // Capture every input field before invoking caller serialization
+    // (toJSON/getters) or awaiting: a mutated input object must not redirect
+    // the compare-and-write or swap the expected state mid-call. `input.snapshot`
+    // is read only after the expectation is fully materialized so its getter
+    // cannot rewrite the expected state mid-capture.
+    const { workflowName, runId, mutationFence, resourceId, expectedCanonical: rawExpectedCanonical } = input;
+    validateWorkflowSnapshotHandoffFence(mutationFence);
+    validateWorkflowSnapshotHandoffIdentity(
+      workflowName,
+      runId,
+      resourceId,
+      rawExpectedCanonical.kind === 'present' ? rawExpectedCanonical.resourceId : undefined,
+    );
+    const expectedCanonical: WorkflowSnapshotHandoffCanonicalState =
+      rawExpectedCanonical.kind === 'present'
+        ? {
+            kind: 'present' as const,
+            resourceId: rawExpectedCanonical.resourceId,
+            snapshot: this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedCanonical.snapshot),
+          }
+        : { kind: 'absent' };
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
+    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
+    try {
+      return await this.#db.client.tx(async t => {
+        const revision = await this.lockWorkflowParentRevisionForSnapshotHandoff(t, workflowName, runId);
+        const observedCanonical = await this.lockWorkflowSnapshotHandoffCanonicalState(t, workflowName, runId);
+        if (!workflowSnapshotHandoffCanonicalStatesEqual(expectedCanonical, observedCanonical)) {
+          await this.deleteProvisionalWorkflowParentRevision(t, workflowName, runId, revision.created, 1);
+          return { status: 'conflict', observedCanonical };
+        }
+        const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
+        if (existing) {
+          const same =
+            existing.mutationFence === mutationFence &&
+            existing.resourceId === resourceId &&
+            workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
+          if (existing.status === 'completed' && existing.mutationFence !== mutationFence) {
+            return { status: 'conflict', record: existing };
+          }
+          return {
+            status: existing.status === 'completed' ? 'completed' : same ? 'existing' : 'conflict',
+            record: existing,
+          } as ClaimWorkflowSnapshotHandoffResult;
+        }
+        const clock = await t.one<{ now_ms: string }>(
+          `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
+        );
+        const now = Number(clock.now_ms);
+        if (!Number.isSafeInteger(now) || now < 0) throw new TypeError('Invalid PostgreSQL workflow handoff clock');
+        await t.none(
+          `INSERT INTO ${this.workflowSnapshotHandoffTableName()}
+         (workflow_name, run_id, version, status, resource_id, snapshot, mutation_fence, created_at, updated_at)
+         VALUES ($1, $2, 1, 'pending', $3, $4, $5, $6, $6)`,
+          [workflowName, runId, resourceId ?? null, serializedSnapshot, mutationFence, now],
+        );
+        return {
+          status: 'created',
+          record: {
+            version: 1,
+            workflowName,
+            runId,
+            status: 'pending',
+            ...(resourceId === undefined ? {} : { resourceId }),
+            snapshot: materializedSnapshot,
+            mutationFence,
+            createdAt: now,
+            updatedAt: now,
+          },
+        };
+      });
+    } catch (error) {
+      throw this.snapshotHandoffError('CLAIM_WORKFLOW_SNAPSHOT_HANDOFF', workflowName, runId, error);
+    }
+  }
+
+  async transitionWorkflowSnapshotHandoff(
+    input: TransitionWorkflowSnapshotHandoffInput,
+  ): Promise<TransitionWorkflowSnapshotHandoffResult> {
+    // `input.snapshot` is read only after the expectation is fully
+    // materialized so its getter cannot rewrite the expected state mid-capture.
+    const {
+      workflowName,
+      runId,
+      mutationFence,
+      resourceId,
+      expectedResourceId,
+      expectedSnapshot: rawExpectedSnapshot,
+    } = input;
+    validateWorkflowSnapshotHandoffFence(mutationFence);
+    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId, expectedResourceId);
+    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
+    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
+    try {
+      return await this.#db.client.tx(async t => {
+        await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
+        const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
+        if (!existing) return { status: 'missing' };
+        if (existing.status === 'completed') {
+          return existing.mutationFence === mutationFence
+            ? { status: 'completed', record: existing }
+            : { status: 'conflict', record: existing };
+        }
+        const expectedMatches =
+          existing.mutationFence === mutationFence &&
+          existing.resourceId === expectedResourceId &&
+          workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
+        if (!expectedMatches) return { status: 'conflict', record: existing };
+        const sameReplacement =
+          existing.resourceId === resourceId &&
+          workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, materializedSnapshot);
+        if (sameReplacement) return { status: 'existing', record: existing };
+        const clock = await t.one<{ now_ms: string }>(
+          `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
+        );
+        const now = Number(clock.now_ms);
+        if (!Number.isSafeInteger(now) || now < 0) throw new TypeError('Invalid PostgreSQL workflow handoff clock');
+        await t.none(
+          `UPDATE ${this.workflowSnapshotHandoffTableName()}
+         SET resource_id = $1, snapshot = $2, updated_at = $3
+         WHERE workflow_name = $4 AND run_id = $5`,
+          [resourceId ?? null, serializedSnapshot, now, workflowName, runId],
+        );
+        return {
+          status: 'transitioned',
+          record: {
+            ...existing,
+            ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
+            snapshot: materializedSnapshot,
+            updatedAt: now,
+          },
+        };
+      });
+    } catch (error) {
+      throw this.snapshotHandoffError('TRANSITION_WORKFLOW_SNAPSHOT_HANDOFF', workflowName, runId, error);
+    }
+  }
+
+  async completeWorkflowSnapshotHandoff(
+    input: CompleteWorkflowSnapshotHandoffInput,
+  ): Promise<CompleteWorkflowSnapshotHandoffResult> {
+    // `input.snapshot` is read only after the expectation is fully
+    // materialized so its getter cannot rewrite the expected state mid-capture.
+    const {
+      workflowName,
+      runId,
+      mutationFence,
+      resourceId,
+      expectedResourceId,
+      expectedSnapshot: rawExpectedSnapshot,
+    } = input;
+    validateWorkflowSnapshotHandoffFence(mutationFence);
+    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId, expectedResourceId);
+    const expectedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(rawExpectedSnapshot);
+    const materializedSnapshot = this.materializeWorkflowSnapshotHandoffSnapshot(input.snapshot);
+    const serializedSnapshot = sanitizeJsonForPg(JSON.stringify(materializedSnapshot));
+    try {
+      return await this.#db.client.tx(async t => {
+        await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
+        const existing = await this.lockWorkflowSnapshotHandoff(t, workflowName, runId);
+        if (!existing) return { status: 'missing' };
+        if (existing.status === 'completed') {
+          return existing.mutationFence === mutationFence
+            ? { status: 'already_completed', record: existing }
+            : { status: 'conflict', record: existing };
+        }
+        const expectedMatches =
+          existing.mutationFence === mutationFence &&
+          existing.resourceId === expectedResourceId &&
+          workflowSnapshotHandoffSnapshotsEqual(existing.snapshot, expectedSnapshot);
+        if (!expectedMatches) return { status: 'conflict', record: existing };
+        const clock = await t.one<{ now_ms: string }>(
+          `SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint AS now_ms`,
+        );
+        const now = Number(clock.now_ms);
+        if (!Number.isSafeInteger(now) || now < 0) throw new TypeError('Invalid PostgreSQL workflow handoff clock');
+        await t.none(
+          `UPDATE ${this.workflowSnapshotHandoffTableName()}
+           SET status = 'completed', resource_id = $1, snapshot = $2, updated_at = $3, completed_at = $3
+           WHERE workflow_name = $4 AND run_id = $5`,
+          [resourceId ?? null, serializedSnapshot, now, workflowName, runId],
+        );
+        return {
+          status: 'completed',
+          record: {
+            ...existing,
+            status: 'completed',
+            ...(resourceId === undefined ? { resourceId: undefined } : { resourceId }),
+            snapshot: materializedSnapshot,
+            updatedAt: now,
+            completedAt: now,
+          },
+        };
+      });
+    } catch (error) {
+      throw this.snapshotHandoffError('COMPLETE_WORKFLOW_SNAPSHOT_HANDOFF', workflowName, runId, error);
+    }
+  }
+
+  async listWorkflowSnapshotHandoffs(
+    input: ListWorkflowSnapshotHandoffsInput = {},
+  ): Promise<ListWorkflowSnapshotHandoffsResult> {
+    const limit = validateWorkflowSnapshotHandoffLimit(input.limit);
+    const values: unknown[] = [];
+    const clauses: string[] = [];
+    const add = (value: unknown): string => {
+      values.push(value);
+      return `$${values.length}`;
+    };
+    if (input.workflowName !== undefined) clauses.push(`workflow_name = ${add(input.workflowName)}`);
+    if (input.status !== undefined) clauses.push(`status = ${add(input.status)}`);
+    if (input.after) {
+      const updatedAt = add(input.after.updatedAt);
+      const workflowName = add(input.after.workflowName);
+      const runId = add(input.after.runId);
+      // COLLATE "C" pins UTF-8 byte ordering, matching the code-point tuple
+      // comparison the in-memory adapter applies to the same cursor.
+      clauses.push(
+        `(updated_at, workflow_name COLLATE "C", run_id COLLATE "C") > (${updatedAt}, ${workflowName}, ${runId})`,
+      );
+    }
+    values.push(limit + 1);
+    let decoded: WorkflowSnapshotHandoffRecord[];
+    try {
+      const rows = await this.#db.client.any<Record<string, unknown>>(
+        `SELECT * FROM ${this.workflowSnapshotHandoffTableName()}
+         ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+         ORDER BY updated_at ASC, workflow_name COLLATE "C" ASC, run_id COLLATE "C" ASC
+         LIMIT $${values.length}`,
+        values,
+      );
+      decoded = rows.map(row => this.decodeWorkflowSnapshotHandoff(row));
+    } catch (error) {
+      throw this.snapshotHandoffError('LIST_WORKFLOW_SNAPSHOT_HANDOFFS', input.workflowName, undefined, error);
+    }
+    const page = decoded.slice(0, limit);
+    const hasMore = decoded.length > limit;
+    const last = page.at(-1);
+    return {
+      records: page,
+      hasMore,
+      ...(hasMore && last
+        ? { nextCursor: { updatedAt: last.updatedAt, workflowName: last.workflowName, runId: last.runId } }
+        : {}),
+    };
+  }
+
   async updateWorkflowResults({
     workflowName,
     runId,
@@ -4772,6 +5475,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       return await this.#db.client.tx(async t => {
         const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
         const revision = await this.lockWorkflowParentRevisionForSnapshotUpsert(t, workflowName, runId);
+        await this.assertWorkflowSnapshotHandoffAvailable(t, workflowName, runId);
 
         // Load existing snapshot within transaction with FOR UPDATE to lock the row
         // This prevents concurrent updates from reading stale data
@@ -4826,6 +5530,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return snapshot.context;
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
@@ -4850,11 +5555,44 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
+    // Capture the CAS guards and state options before awaiting: `opts` is
+    // caller-owned, so reading it inside the transaction would let a caller
+    // mutate expectations while the row locks are being acquired.
+    // `expectedStatus` is a compare-and-set guard, not state; `finalState` is
+    // likewise a directive rather than snapshot state.
+    // Scalar guards are read before `expectedStatus` is pinned — its
+    // serialization runs caller code that could otherwise retarget them — and
+    // payload fields are copied through descriptors afterwards so their
+    // getters fire exactly once and the guard accessors are never re-read.
+    const expectedExecutionGeneration = opts.expectedExecutionGeneration;
+    const expectedLifecycleResumeAttempt = opts.expectedLifecycleResumeAttempt;
+    const expectedStatus = pinWorkflowCasGuardValue(opts.expectedStatus);
+    const finalState = opts.finalState;
+    const stateOptions: Record<PropertyKey, unknown> = {};
+    for (const key of Reflect.ownKeys(opts)) {
+      if (
+        key === 'expectedStatus' ||
+        key === 'expectedExecutionGeneration' ||
+        key === 'expectedLifecycleResumeAttempt' ||
+        key === 'finalState'
+      ) {
+        continue;
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(opts, key);
+      if (!descriptor?.enumerable) continue;
+      Object.defineProperty(stateOptions, key, {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: 'value' in descriptor ? descriptor.value : descriptor.get?.call(opts),
+      });
+    }
     try {
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
         const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
         const revision = await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
+        await this.assertWorkflowSnapshotHandoffAvailable(t, workflowName, runId);
 
         // Load existing snapshot within transaction with FOR UPDATE to lock the row
         // This prevents concurrent updates from reading stale data
@@ -4878,16 +5616,6 @@ export class WorkflowsPG extends WorkflowsStorage {
           throw new Error(`Snapshot not found for runId ${runId}`);
         }
 
-        // `expectedStatus` is a compare-and-set guard, not state. It is checked here, inside the
-        // row lock, and stripped so it can never be merged into the persisted snapshot.
-        // `finalState` is likewise a directive rather than snapshot state.
-        const {
-          expectedStatus,
-          expectedExecutionGeneration,
-          expectedLifecycleResumeAttempt,
-          finalState,
-          ...stateOptions
-        } = opts;
         if (
           !matchesExpectedWorkflowState(snapshot, {
             expectedStatus,
@@ -4931,6 +5659,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return updatedSnapshot;
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
@@ -4961,6 +5690,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
   }): Promise<void> {
+    validateWorkflowSnapshotHandoffIdentity(workflowName, runId, resourceId);
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
@@ -4969,6 +5699,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
       await this.#db.client.tx(async t => {
         const revision = await this.lockWorkflowParentRevisionForSnapshotUpsert(t, workflowName, runId);
+        await this.assertWorkflowSnapshotHandoffAvailable(t, workflowName, runId);
         const existingSnapshot = await t.oneOrNone<{ exists: boolean }>(
           `SELECT TRUE AS exists FROM ${this.workflowSnapshotTableName()}
            WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
@@ -4997,6 +5728,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         await this.bumpWorkflowParentRevision(t, workflowName, runId, revision.generation);
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
@@ -5150,6 +5882,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       await this.#db.client.tx(async t => {
         const revision = await this.lockExistingWorkflowParentRevision(t, workflowName, runId);
+        await this.assertWorkflowSnapshotHandoffAvailable(t, workflowName, runId);
         const snapshot = await t.oneOrNone<{ exists: boolean }>(
           `SELECT TRUE AS exists FROM ${this.workflowSnapshotTableName()}
            WHERE run_id = $1 AND workflow_name = $2 FOR UPDATE`,
@@ -5169,6 +5902,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         }
       });
     } catch (error) {
+      if (error instanceof WorkflowSnapshotHandoffFenceError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),

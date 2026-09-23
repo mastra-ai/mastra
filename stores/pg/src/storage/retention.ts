@@ -21,6 +21,8 @@ export interface PruneTarget {
   policy: TableRetentionPolicy;
 }
 
+type PruneCutoff = Date | number;
+
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0 || signal?.aborted) return;
   await new Promise<void>(resolve => {
@@ -117,11 +119,13 @@ export async function runPrune({
   domain,
   targets,
   options,
+  deleteBatch,
 }: {
   db: PgDB;
   domain: string;
   targets: PruneTarget[];
   options?: PruneOptions;
+  deleteBatch?: (target: PruneTarget, cutoff: PruneCutoff, limit: number) => Promise<number>;
 }): Promise<PruneResult[]> {
   const results: PruneResult[] = [];
   const now = Date.now();
@@ -136,7 +140,10 @@ export async function runPrune({
     const batchSize = target.policy.batchSize ?? DEFAULT_BATCH_SIZE;
 
     const { deleted, done } = await runBatchedDelete({
-      deleteBatch: limit => db.pruneBatch({ tableName: target.table, column: target.column, cutoff, limit }),
+      deleteBatch: limit =>
+        deleteBatch
+          ? deleteBatch(target, cutoff, limit)
+          : db.pruneBatch({ tableName: target.table, column: target.column, cutoff, limit }),
       batchSize,
       options,
     });
