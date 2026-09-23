@@ -255,6 +255,19 @@ export class MessageHistory implements Processor {
                   text: cleaned !== text ? cleaned.trim() : text,
                 };
               }
+              // Strip a run-local truncated modelOutput (e.g. TokenLimiterProcessor's
+              // maxToolResultTokens cap) so future turns see the full tool result again,
+              // not a truncation snapshot frozen at this run's cap setting.
+              const mastraMeta = p.providerMetadata?.mastra as Record<string, unknown> | undefined;
+              if (mastraMeta?.modelOutputCapped) {
+                const restMastra = { ...mastraMeta };
+                delete restMastra.modelOutput;
+                delete restMastra.modelOutputCapped;
+                return {
+                  ...p,
+                  providerMetadata: { ...p.providerMetadata, mastra: restMastra },
+                } as typeof p;
+              }
               return p;
             })
             .filter((p): p is NonNullable<typeof p> => Boolean(p));

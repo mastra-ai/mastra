@@ -341,11 +341,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       const total = this.countTokens(text);
       if (total <= maxTokens) continue;
       const suffix = `\n[truncated: showing ${maxTokens.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tokens]`;
-      const sliceBudget = Math.max(0, maxTokens - this.countTokens(suffix));
-      const value = `${sliceByTokensSafe(text, 0, sliceBudget)}${suffix}`;
+      const suffixTokens = this.countTokens(suffix);
+      const value =
+        suffixTokens >= maxTokens
+          ? sliceByTokensSafe(text, 0, maxTokens)
+          : `${sliceByTokensSafe(text, 0, maxTokens - suffixTokens)}${suffix}`;
       part.providerMetadata = {
         ...part.providerMetadata,
-        mastra: { ...mastraMeta, modelOutput: { type: 'text', value } },
+        mastra: { ...mastraMeta, modelOutput: { type: 'text', value }, modelOutputCapped: true },
       };
     }
   }
