@@ -361,9 +361,24 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
-      return ['metrics', 'logs', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
+      return [
+        'metrics',
+        'logs',
+        'trace-query',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+      ] as const;
     }
-    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
+    return [
+      'metrics',
+      'logs',
+      'delta-polling',
+      'trace-query',
+      'trace-query-discovery',
+      'thread-query',
+      'trace-query-tenant-scope',
+    ] as const;
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {

@@ -13,6 +13,7 @@ import type {
 } from '../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
+import { getToolTitle } from '../../../tools/tool-title';
 
 /**
  * A raw chunk collected during the stream.
@@ -113,6 +114,7 @@ export function buildMessagesFromChunks({
         const toolDef = tools?.[p.toolName] || findProviderToolByName(tools, p.toolName);
         const providerExecuted = inferProviderExecuted(p.providerExecuted, toolDef);
         const providerMetadata = withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata);
+        const title = p.title ?? getToolTitle(toolDef);
 
         // Check if we have a matching result from a provider-executed tool
         const result = toolResults.get(p.toolCallId);
@@ -135,6 +137,7 @@ export function buildMessagesFromChunks({
               result.providerMetadata ?? providerMetadata,
             ),
             providerExecuted: resultProviderExecuted,
+            title,
           } as MastraMessagePart);
         } else {
           // No result yet — emit as 'call' state
@@ -148,6 +151,7 @@ export function buildMessagesFromChunks({
             },
             providerMetadata,
             providerExecuted,
+            title,
           } as MastraMessagePart);
         }
         break;
