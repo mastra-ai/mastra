@@ -159,6 +159,8 @@ export interface GitLabMember {
   name?: string | null;
   state?: string;
   access_level?: number;
+  /** Public avatar URL served by the GitLab instance for this user. */
+  avatar_url?: string | null;
 }
 
 export interface GitLabApiClientConfig {

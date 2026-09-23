@@ -2,13 +2,16 @@
  * GitHub identity capability for the standalone integration.
  *
  * Iterates the source-control installations the acting org has connected on
- * this integration. Only `Organization`-typed installations produce members
- * (a user-account installation has no roster). For each org installation we
- * paginate `GET /orgs/{org}/members` using the installation-scoped Octokit
+ * this integration. Org installations paginate `GET /orgs/{org}/members`;
+ * user-account installations resolve to a single-element list containing the
+ * account owner themselves (a user is not a group but is still a claimable
+ * identity). For each installation we use the installation-scoped Octokit
  * the integration already builds. Results are de-duplicated by GitHub login
  * across installations (a person on two orgs is still one identity) and
  * tagged with their installation's account name so the settings UI can
- * disambiguate when the same login appears twice.
+ * disambiguate when the same login appears twice. GitHub's members payload
+ * always includes `avatar_url`; we forward it so the settings UI and `@me`
+ * chips can render a face.
  *
  * A failing installation is dropped rather than failing the whole call.
  * Source (a) observed-from-comments discovery is intentionally not merged
@@ -63,26 +66,42 @@ export function buildGithubIdentity(host: GithubIdentityHost): IntegrationIdenti
     async listCandidateAccounts(_ctx, { orgId, query }) {
       const installations = await host.sourceControlStorage.installations.list({ orgId });
       const githubInstallations = installations.filter(
-        installation => installation.integrationId === 'github' && installation.accountType === 'Organization',
+        installation => installation.integrationId === 'github',
       );
 
       const perInstallation = await Promise.all(
         githubInstallations.map(async installation => {
           const externalInstallationId = Number(installation.externalId);
           if (!Number.isFinite(externalInstallationId)) return [] as IntegrationCandidateAccount[];
-          const org = installation.accountName;
-          if (!org) return [] as IntegrationCandidateAccount[];
+          const owner = installation.accountName;
+          if (!owner) return [] as IntegrationCandidateAccount[];
           try {
             const octokit = host.getInstallationOctokit(externalInstallationId);
+            // User-account installations have no roster to list; the account
+            // owner themselves is the sole claimable identity, so resolve
+            // them via `GET /users/{login}` (public profile — no scopes
+            // needed, always returns `avatar_url`).
+            if (installation.accountType !== 'Organization') {
+              const { data: user } = await octokit.users.getByUsername({ username: owner });
+              return [
+                {
+                  externalUserId: String(user.login ?? user.id),
+                  label: String(user.login ?? user.id),
+                  installation: owner,
+                  ...(user.avatar_url ? { avatarUrl: user.avatar_url } : {}),
+                },
+              ];
+            }
             const members = await octokit.paginate(octokit.orgs.listMembers, {
-              org,
+              org: owner,
               per_page: 100,
               role: 'all',
             });
             return members.map((member): IntegrationCandidateAccount => ({
               externalUserId: String(member.login ?? member.id),
               label: String(member.login ?? member.id),
-              installation: org,
+              installation: owner,
+              ...(member.avatar_url ? { avatarUrl: member.avatar_url } : {}),
             }));
           } catch {
             return [] as IntegrationCandidateAccount[];

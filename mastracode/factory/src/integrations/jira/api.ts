@@ -126,6 +126,11 @@ export interface JiraUserRecord {
   active?: boolean;
   displayName?: string;
   emailAddress?: string | null;
+  /**
+   * Jira returns avatars in a size-keyed record (`{ "48x48": url, "32x32": url, ... }`).
+   * We forward the largest one available to the identity capability.
+   */
+  avatarUrls?: Record<string, string> | null;
 }
 
 export interface JiraComment {

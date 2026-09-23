@@ -4,6 +4,7 @@
  * DELETEs one. The board `@me` chip and the Cmd+K `@me` token read the same
  * claim set via `useResolvedMe`, so a change here refreshes both immediately.
  */
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
@@ -80,9 +81,12 @@ export function IdentityClaimsSection() {
         label: row.label && row.label !== row.externalUserId ? `${row.label} · ${row.externalUserId}` : row.externalUserId,
         description: row.email ?? undefined,
         start: (
-          <Badge variant={meta.tone} emphasis="muted" size="sm" className="mr-1 shrink-0">
-            {meta.label}
-          </Badge>
+          <span className="mr-1 flex shrink-0 items-center gap-1.5">
+            <Avatar src={row.avatarUrl} name={row.label || row.externalUserId} size="sm" />
+            <Badge variant={meta.tone} emphasis="muted" size="sm">
+              {meta.label}
+            </Badge>
+          </span>
         ),
       };
     });
@@ -167,7 +171,11 @@ export function IdentityClaimsSection() {
                 const meta = integrationMeta(integrationId);
                 const display = row.label && row.label !== row.externalUserId ? row.label : row.externalUserId;
                 return (
-                  <li key={`${integrationId}:${row.externalUserId}`}>
+                  <li
+                    key={`${integrationId}:${row.externalUserId}`}
+                    className="flex items-center gap-1.5 rounded-full border border-border bg-fill px-1.5 py-0.5"
+                  >
+                    <Avatar src={row.avatarUrl} name={display} size="sm" />
                     <Badge variant={meta.tone} emphasis="muted" size="sm">
                       {`${meta.label} · ${display}`}
                     </Badge>

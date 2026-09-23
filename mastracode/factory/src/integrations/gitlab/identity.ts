@@ -72,6 +72,7 @@ async function collectFromContext(api: GitLabApiClient, host: string, query: str
           accounts.set(key, {
             externalUserId: member.username,
             label: member.name || member.username,
+            ...(member.avatar_url ? { avatarUrl: member.avatar_url } : {}),
             installation: host,
           });
         }

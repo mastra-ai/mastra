@@ -80,6 +80,7 @@ export function buildPlatformLinearIdentity(host: PlatformLinearIdentityHost): I
               externalUserId: user.id,
               label,
               ...(user.email ? { email: user.email } : {}),
+              ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
               ...(installation ? { installation } : {}),
             });
           }

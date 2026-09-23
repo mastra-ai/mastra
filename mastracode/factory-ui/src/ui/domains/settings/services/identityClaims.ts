@@ -18,6 +18,12 @@ export interface IdentityRow {
   externalUserId: string;
   label: string;
   email?: string;
+  /**
+   * Provider-served avatar URL when the integration surfaces one. Used by
+   * the identity settings dropdown and `@me` chips so rows render a face
+   * instead of the initials fallback whenever possible.
+   */
+  avatarUrl?: string;
   claimed: boolean;
 }
 

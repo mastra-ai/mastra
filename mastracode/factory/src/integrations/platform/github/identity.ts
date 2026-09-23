@@ -2,17 +2,18 @@
  * Platform GitHub identity capability.
  *
  * Walks every installation Factory has registered for the acting org, then
- * fetches its org-members roster via the platform endpoint
+ * fetches its members roster via the platform endpoint
  * `GET /v1/server/github-app/installations/:installationId/members`.
  *
- * The platform endpoint returns `[]` for installations installed on a user
- * account (as opposed to an org), so we treat both empty and 404 responses
- * as "nothing to claim" rather than an error — that matches the standalone
- * capability's behavior when the App is installed on a user account.
+ * The platform endpoint returns the org members for org installations and
+ * a single-element list with the account owner themselves for user-account
+ * installations. Both shapes flow through identically here.
  *
  * Members are deduped by `login` across installations, and the GitHub
- * account login (`org` slug) is tagged as `installation` so operators who
- * connect multiple orgs can tell same-named users apart.
+ * account login (`org` slug or user login) is tagged as `installation` so
+ * operators who connect multiple accounts can tell same-named users apart.
+ * When the platform payload includes `avatarUrl` we forward it so the
+ * settings UI and `@me` chips render a face instead of initials.
  */
 
 import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
@@ -72,6 +73,7 @@ export function buildPlatformGithubIdentity(host: PlatformGithubIdentityHost): I
             externalUserId: member.login,
             label: member.login,
             ...(installation.accountName ? { installation: installation.accountName } : {}),
+            ...(member.avatarUrl ? { avatarUrl: member.avatarUrl } : {}),
           });
         }
       }

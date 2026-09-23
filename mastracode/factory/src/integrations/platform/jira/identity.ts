@@ -34,6 +34,17 @@ function isAtlassianUser(user: JiraUserRecord): boolean {
   return true;
 }
 
+/** See standalone Jira identity — Jira serves avatars in a size-keyed record. */
+function pickJiraAvatar(avatarUrls: Record<string, string> | null | undefined): string | undefined {
+  if (!avatarUrls) return undefined;
+  const preferred = ['48x48', '32x32', '24x24', '16x16'];
+  for (const size of preferred) {
+    if (avatarUrls[size]) return avatarUrls[size];
+  }
+  const first = Object.values(avatarUrls).find(url => typeof url === 'string' && url.length > 0);
+  return first;
+}
+
 function siteHost(siteUrl: string): string | undefined {
   try {
     return new URL(siteUrl).host;
@@ -65,10 +76,12 @@ export function buildPlatformJiraIdentity(host: PlatformJiraIdentityHost): Integ
             if (!isAtlassianUser(user)) continue;
             const key = `${installation ?? ''}:${user.accountId}`;
             if (collected.has(key)) continue;
+            const avatarUrl = pickJiraAvatar(user.avatarUrls);
             collected.set(key, {
               externalUserId: user.accountId,
               label: user.displayName ?? user.accountId,
               ...(user.emailAddress ? { email: user.emailAddress } : {}),
+              ...(avatarUrl ? { avatarUrl } : {}),
               ...(installation ? { installation } : {}),
             });
           }

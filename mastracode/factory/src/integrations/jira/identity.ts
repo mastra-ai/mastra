@@ -43,6 +43,21 @@ function isAtlassianUser(user: JiraUserRecord): boolean {
   return true;
 }
 
+/**
+ * Jira's `avatarUrls` is a size-keyed record (`{ "48x48": url, "32x32": url, ... }`).
+ * Pick the biggest square avatar available; fall back to any entry if the
+ * conventional keys are missing (some Atlassian sites customize this).
+ */
+function pickJiraAvatar(avatarUrls: Record<string, string> | null | undefined): string | undefined {
+  if (!avatarUrls) return undefined;
+  const preferred = ['48x48', '32x32', '24x24', '16x16'];
+  for (const size of preferred) {
+    if (avatarUrls[size]) return avatarUrls[size];
+  }
+  const first = Object.values(avatarUrls).find(url => typeof url === 'string' && url.length > 0);
+  return first;
+}
+
 export function buildJiraIdentity(host: JiraIdentityHost): IntegrationIdentityCapability {
   return {
     async listCandidateAccounts(_ctx, { orgId: _orgId, query }) {
@@ -62,10 +77,12 @@ export function buildJiraIdentity(host: JiraIdentityHost): IntegrationIdentityCa
         }
         for (const user of users) {
           if (!isAtlassianUser(user)) continue;
+          const avatarUrl = pickJiraAvatar(user.avatarUrls);
           collected.push({
             externalUserId: user.accountId,
             label: user.displayName ?? user.accountId,
             ...(user.emailAddress ? { email: user.emailAddress } : {}),
+            ...(avatarUrl ? { avatarUrl } : {}),
             ...(installation ? { installation } : {}),
           });
         }

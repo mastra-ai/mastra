@@ -75,6 +75,7 @@ const octocat: IdentityRow = {
   externalUserId: 'octocat',
   label: 'The Octocat',
   email: 'octocat@example.com',
+  avatarUrl: 'https://github.com/octocat.png',
   claimed: false,
 };
 
@@ -82,6 +83,7 @@ const alice: IdentityRow = {
   integrationId: 'linear',
   externalUserId: 'alice',
   label: 'Alice Linear',
+  // Intentionally no avatarUrl — asserts the Avatar initial fallback path.
   claimed: false,
 };
 
@@ -171,5 +173,22 @@ describe('IdentityClaimsSection', () => {
       externalUserId: 'alice',
       label: 'Alice Linear',
     });
+  });
+
+  it('given a provider-served avatar, when the option renders, then the avatar image and initial fallback both appear', async () => {
+    stub({ index: baseIndex([octocat, alice]) });
+
+    renderWithProviders(<IdentityClaimsSection />);
+    await openCombobox();
+
+    // Octocat has an avatarUrl — rendered as an <img alt> the person's name.
+    const octoAvatar = await screen.findByRole('img', { name: /The Octocat/ });
+    expect(octoAvatar.getAttribute('src')).toBe('https://github.com/octocat.png');
+
+    // Alice has no avatarUrl — Avatar falls back to the initial ("A"). Since
+    // the fallback initial appears inside the option (label also starts with
+    // "A"), assert no <img> is rendered for Alice — that's what proves the
+    // fallback path is running.
+    expect(screen.queryByRole('img', { name: /Alice Linear/ })).not.toBeInTheDocument();
   });
 });

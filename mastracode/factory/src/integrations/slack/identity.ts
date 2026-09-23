@@ -20,6 +20,17 @@ interface SlackUserProfile {
   real_name?: string;
   display_name?: string;
   email?: string;
+  /**
+   * Slack serves several avatar sizes; we prefer the highest-resolution
+   * pre-rendered square that's likely to be there (`image_192`) and fall
+   * back down through smaller sizes.
+   */
+  image_512?: string;
+  image_192?: string;
+  image_72?: string;
+  image_48?: string;
+  image_32?: string;
+  image_24?: string;
 }
 
 interface SlackUser {
@@ -66,6 +77,20 @@ function labelFor(user: SlackUser): string {
   return user.profile?.display_name?.trim() || user.profile?.real_name?.trim() || user.real_name || user.name || user.id;
 }
 
+function avatarFor(user: SlackUser): string | undefined {
+  const profile = user.profile;
+  if (!profile) return undefined;
+  return (
+    profile.image_192 ||
+    profile.image_512 ||
+    profile.image_72 ||
+    profile.image_48 ||
+    profile.image_32 ||
+    profile.image_24 ||
+    undefined
+  );
+}
+
 export function buildSlackIdentity(host: SlackIdentityHost): IntegrationIdentityCapability {
   const doFetch: typeof fetch = host.fetchImpl ?? globalThis.fetch;
   return {
@@ -103,10 +128,12 @@ export function buildSlackIdentity(host: SlackIdentityHost): IntegrationIdentity
         for (const member of body.members ?? []) {
           if (!isRealPerson(member)) continue;
           const email = member.profile?.email?.trim();
+          const avatarUrl = avatarFor(member);
           collected.push({
             externalUserId: member.id,
             label: labelFor(member),
             ...(email ? { email } : {}),
+            ...(avatarUrl ? { avatarUrl } : {}),
             ...(installation ? { installation } : {}),
           });
         }

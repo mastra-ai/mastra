@@ -211,6 +211,13 @@ export interface IntegrationCandidateAccount {
   /** Provider-reported email, when available. Display-only. */
   email?: string;
   /**
+   * Provider-reported avatar URL, when available. Display-only. Integrations
+   * should populate this whenever the provider returns an avatar for the
+   * account so the settings UI and `@me` chips can render a face instead of
+   * initials fallback.
+   */
+  avatarUrl?: string;
+  /**
    * Which installation this candidate belongs to. A factory org can have
    * multiple installations per integration (three GitHub orgs, two Linear
    * workspaces, etc.). The label is provider-native (`myorg` for GitHub,

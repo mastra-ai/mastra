@@ -19,6 +19,7 @@ interface LinearUserNode {
   name?: string | null;
   displayName?: string | null;
   email?: string | null;
+  avatarUrl?: string | null;
 }
 
 interface LinearUsersConnection {
@@ -36,6 +37,7 @@ const LINEAR_USERS_QUERY = /* GraphQL */ `
         name
         displayName
         email
+        avatarUrl
       }
       pageInfo {
         hasNextPage
@@ -101,6 +103,7 @@ export function buildLinearIdentity(host: LinearIdentityHost): IntegrationIdenti
             externalUserId: node.id,
             label,
             ...(node.email ? { email: node.email } : {}),
+            ...(node.avatarUrl ? { avatarUrl: node.avatarUrl } : {}),
             ...(workspace ? { installation: workspace } : {}),
           });
         }
