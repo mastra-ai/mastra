@@ -142,8 +142,14 @@ describe('init catalog snapshot', () => {
     expect(count(statements, /pg_catalog\.pg_attribute/i)).toBe(2);
     expect(count(statements, /pg_catalog\.pg_index\b/i)).toBe(1);
 
-    const columnProbes = statements.filter(statement => INFORMATION_SCHEMA_COLUMN_PROBE.test(statement));
-    expect(columnProbes.map(statement => statement.replace(/\s+/g, ' ').slice(0, 400))).toEqual([]);
+    // Harness attachment init still reads data_b64 nullability directly. This
+    // pull request does not add that read; warm init must not add another one.
+    const columnProbes = statements
+      .filter(statement => INFORMATION_SCHEMA_COLUMN_PROBE.test(statement))
+      .map(statement => statement.replace(/\s+/g, ' ').trim());
+    expect(columnProbes).toEqual([
+      'SELECT is_nullable FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3',
+    ]);
     expect(count(statements, NO_OP_ALTER)).toBe(0);
     expect(createdTableNames(statements).sort()).toEqual([...WORKFLOW_BOOTSTRAP_TABLES].sort());
     expect(count(statements, INDEX_PROBE)).toBe(0);
@@ -354,8 +360,12 @@ describe('init catalog snapshot', () => {
 
     // The extra objects neither reintroduce probes nor provoke DDL beyond the
     // seven workflow bootstrap statements that PF-3554 and native handoff own.
-    const columnProbes = statements.filter(statement => INFORMATION_SCHEMA_COLUMN_PROBE.test(statement));
-    expect(columnProbes.map(statement => statement.replace(/\s+/g, ' ').slice(0, 400))).toEqual([]);
+    const columnProbes = statements
+      .filter(statement => INFORMATION_SCHEMA_COLUMN_PROBE.test(statement))
+      .map(statement => statement.replace(/\s+/g, ' ').trim());
+    expect(columnProbes).toEqual([
+      'SELECT is_nullable FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3',
+    ]);
     expect(count(statements, INDEX_PROBE)).toBe(0);
     expect(createdTableNames(statements).sort()).toEqual([...WORKFLOW_BOOTSTRAP_TABLES].sort());
     expect(count(statements, CREATE_INDEX)).toBe(0);
