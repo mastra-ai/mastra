@@ -447,6 +447,16 @@ describe('InngestExecutionEngine.wrapDurableOperation', () => {
     expect(err.message).toBe('all failed');
   });
 
+  it('does not flatten subclasses of built-in errors to the built-in type', async () => {
+    class CustomTypeError extends TypeError {}
+    const err = await captureWrapped(async () => {
+      throw new CustomTypeError('custom');
+    });
+
+    expect(err).not.toBeInstanceOf(TypeError);
+    expect(err.message).toBe('custom');
+  });
+
   it('keeps custom error properties in the cause', async () => {
     const err = await captureWrapped(async () => {
       throw Object.assign(new Error('rate limited'), { statusCode: 429 });

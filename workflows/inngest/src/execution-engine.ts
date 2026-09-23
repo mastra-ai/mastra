@@ -242,7 +242,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           wrapped.stack = errorInstance.stack;
         }
         // Inngest derives the reported `name` from the prototype, so keep built-in error types (e.g. TypeError).
-        const builtinErrorType = BUILTIN_ERROR_TYPES.find(ErrorType => e instanceof ErrorType);
+        const builtinErrorType = BUILTIN_ERROR_TYPES.find(
+          ErrorType => Object.getPrototypeOf(e) === ErrorType.prototype,
+        );
         if (builtinErrorType) {
           Object.setPrototypeOf(wrapped, builtinErrorType.prototype);
         }
