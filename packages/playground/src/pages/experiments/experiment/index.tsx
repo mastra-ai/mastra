@@ -4,11 +4,13 @@ import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeft, PlayCircle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
@@ -18,25 +20,55 @@ import { ExperimentResultsSection } from '@/domains/experiments/components/exper
 import { ExperimentSideRail } from '@/domains/experiments/components/experiment-side-rail';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
+import { ExperimentCrumb, ExperimentCrumbStatusIcon } from '@/domains/experiments/experiment-crumb';
 import { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
+import { navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
 // Stable fallback so the selection hook's memoised filters don't churn while results load.
 const EMPTY_RESULTS: never[] = [];
 
-function ExperimentPageShell({ children }: { children?: ReactNode }) {
+const RESULTS_SORT_KEYS = ['startedAt'] as const;
+
+function ExperimentPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout height="full">
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Experiment</h1>
       <div />
-      <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
+      <div className="flex h-full items-center justify-center">{children}</div>
     </PageLayout>
   );
 }
 
 function ExperimentPage() {
-  const { experimentId } = useParams<{ experimentId: string }>();
+  const { experimentId, itemId } = useParams<{ experimentId: string; itemId: string }>();
+  // The `to` link only renders on the nested items/:itemId route.
+  const crumbs: CrumbDef[] = [
+    navCrumb('/experiments'),
+    {
+      id: 'experiment',
+      Component: ExperimentCrumb,
+      icon: ExperimentCrumbStatusIcon,
+      to: experimentId ? `/experiments/${encodeURIComponent(experimentId)}` : undefined,
+    },
+    ...(itemId
+      ? [
+          { id: 'experiment-items', label: 'Items' },
+          { id: 'experiment-item', label: truncateItemIdCrumb(itemId) },
+        ]
+      : []),
+  ];
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: RESULTS_SORT_KEYS });
+  const orderBy = useMemo(
+    () =>
+      sort
+        ? { field: sort.key, direction: sort.direction === 'asc' ? ('ASC' as const) : ('DESC' as const) }
+        : undefined,
+    [sort],
+  );
 
   // Resolve datasetId from experimentId (the URL has only the experiment id).
   const { data: experimentsData, isLoading: experimentsListLoading } = useExperiments();
@@ -59,6 +91,7 @@ function ExperimentPage() {
     datasetId,
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
+    orderBy,
   });
 
   const experimentMetrics = useExperimentMetrics({ experimentId, experimentStatus: experiment?.status });
@@ -74,7 +107,7 @@ function ExperimentPage() {
 
   if (experimentError && is401UnauthorizedError(experimentError)) {
     return (
-      <ExperimentPageShell>
+      <ExperimentPageShell crumbs={crumbs}>
         <SessionExpired />
       </ExperimentPageShell>
     );
@@ -82,20 +115,19 @@ function ExperimentPage() {
 
   if (experimentError && is403ForbiddenError(experimentError)) {
     return (
-      <ExperimentPageShell>
+      <ExperimentPageShell crumbs={crumbs}>
         <PermissionDenied resource="datasets" />
       </ExperimentPageShell>
     );
   }
 
   const notFound = (
-    <ExperimentPageShell>
+    <ExperimentPageShell crumbs={crumbs}>
       <EmptyState
-        iconSlot={<PlayCircle />}
         titleSlot="Experiment not found"
         descriptionSlot={`No experiment with id "${experimentId}".`}
         actionSlot={
-          <Button as={Link} to="/experiments" icon={<ArrowLeft />}>
+          <Button render={<Link to="/experiments" />} icon={<ArrowLeft />}>
             Back to Experiments
           </Button>
         }
@@ -107,7 +139,7 @@ function ExperimentPage() {
 
   if (experimentError) {
     return (
-      <ExperimentPageShell>
+      <ExperimentPageShell crumbs={crumbs}>
         <ErrorState
           title="Failed to load experiment"
           message={
@@ -134,13 +166,17 @@ function ExperimentPage() {
       hasNextPage={hasNextPage}
     >
       <div className="h-full">
-        <PageLayout height="full">
-          <ExperimentTopArea experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)}>
-            <ExperimentResultsBulkActions selection={selection} />
-          </ExperimentTopArea>
-
+        <PageLayout
+          breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+          actionRow={
+            <ExperimentTopArea experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)}>
+              <ExperimentResultsBulkActions selection={selection} />
+            </ExperimentTopArea>
+          }
+        >
+          <h1 className="sr-only">{experimentId}</h1>
           {/* Results take the remaining width; the rail keeps the pipeline and run metadata beside them. */}
-          <PageLayout.MainArea className="grid grid-cols-[1fr_auto] gap-4 overflow-visible">
+          <div className="grid grid-cols-[1fr_auto] gap-4 overflow-visible">
             <ExperimentResultsSection
               experimentId={experimentId}
               experimentStatus={experiment.status}
@@ -151,9 +187,11 @@ function ExperimentPage() {
               hasNextPage={hasNextPage}
               selectedIds={selection.selectedIds}
               onToggleSelect={selection.toggleSelect}
+              sort={sort}
+              onSortChange={onSortChange}
             />
             <ExperimentSideRail experiment={experiment} metrics={experimentMetrics} className="w-80 overflow-y-auto" />
-          </PageLayout.MainArea>
+          </div>
         </PageLayout>
 
         {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}

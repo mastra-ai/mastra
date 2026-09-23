@@ -19,8 +19,14 @@
   "overrides": {
     "@hono/node-server": "1.19.15",
     "ip-address": "10.3.1",
-    "js-yaml": "3.15.1",
-    "nanoid": "3.3.18"
+    "js-yaml": "3.15.2",
+    "nanoid": "3.3.19",
+    "proxy-addr": "2.0.8",
+    "qs": "6.16.0",
+    "fast-uri": "3.1.7",
+    "@ai-sdk/provider-utils": "3.0.28",
+    "adm-zip@<=0.6.0": "0.6.1",
+    "image-size@<=2.0.2": "2.0.4"
   },
   "devDependencies": {
     "dotenv": "^17.4.2"

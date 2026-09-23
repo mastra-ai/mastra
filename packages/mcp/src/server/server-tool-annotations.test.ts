@@ -1,132 +1,76 @@
 /**
- *
- * This test verifies that MCP tool annotations (annotations, _meta) are properly
- * supported in Mastra tools and exposed via the MCP protocol.
- *
- * The MCP ToolSchema supports:
- * - annotations: { title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint }
- * - _meta: arbitrary metadata passthrough
- *
- * These fields are supported under the `mcp` property of Mastra tools and exposed via MCPServer.
+ * MCP tool annotations and `_meta` are advertised on tools/list for both
+ * `mcp.annotations` / `mcp._meta`, including UI metadata normalization.
  */
-import http from 'node:http';
 import { createTool } from '@mastra/core/tools';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { z } from 'zod/v3';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { connectClient, serveHTTP } from './__tests__/harness.mock';
+import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 
-vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
+
+const annotations = {
+  title: 'Annotated Query Tool',
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
 
 describe('MCPServer Tool Annotations (Issue #9859)', () => {
-  let server: MCPServer;
-  let httpServer: http.Server;
-  let rawMcpClient: Client;
-  const PORT = 9800 + Math.floor(Math.random() * 100);
+  let served: ServedHTTP;
+  let tools: Awaited<ReturnType<Awaited<ReturnType<typeof connectClient>>['listTools']>>['tools'];
 
   beforeAll(async () => {
-    // Create a tool with MCP annotations metadata (Issue #9859)
-    const annotatedTool = createTool({
-      id: 'annotated-tool',
-      description: 'A tool with MCP annotations for OpenAI Apps SDK compatibility',
-      strict: true,
-      inputSchema: z.object({
-        query: z.string().describe('The query to process'),
-      }),
-      mcp: {
-        annotations: {
-          title: 'Annotated Query Tool',
-          readOnlyHint: true,
-          destructiveHint: false,
-          idempotentHint: true,
-          openWorldHint: false,
-        },
-        _meta: {
-          customField: 'custom-value',
-          version: '1.0.0',
-        },
-      },
-      execute: async ({ query }) => {
-        return { result: `Processed: ${query}` };
-      },
-    });
-
-    server = new MCPServer({
+    const server = new MCPServer({
       name: 'AnnotationsTestServer',
       version: '1.0.0',
       tools: {
-        annotatedTool,
+        annotatedTool: createTool({
+          id: 'annotated-tool',
+          description: 'A tool with MCP annotations',
+          strict: true,
+          inputSchema: z.object({ query: z.string().describe('The query to process') }),
+          mcp: { annotations, _meta: { customField: 'custom-value', version: '1.0.0' } },
+          execute: async ({ query }) => ({ result: `Processed: ${query}` }),
+        }),
+        uiTool: createTool({
+          id: 'ui-tool',
+          description: 'A tool with UI metadata',
+          inputSchema: z.object({}),
+          outputSchema: z.string(),
+          mcp: { annotations, _meta: { ui: { resourceUri: 'ui://widget' } } },
+          execute: async () => 'ok',
+        }),
       },
     });
-
-    // Start HTTP server
-    httpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-      const url = new URL(req.url || '', `http://localhost:${PORT}`);
-      await server.startHTTP({
-        url,
-        httpPath: '/http',
-        req,
-        res,
-        options: {
-          sessionIdGenerator: undefined,
-        },
-      });
-    });
-
-    await new Promise<void>(resolve => {
-      httpServer.listen(PORT, resolve);
-    });
-
-    // Create raw MCP client to access unprocessed listTools response
-    rawMcpClient = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
-
-    const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${PORT}/http`));
-
-    await rawMcpClient.connect(transport);
+    served = await serveHTTP(server);
+    const client = await connectClient(served.url);
+    try {
+      tools = (await client.listTools()).tools;
+    } finally {
+      await client.close();
+    }
   });
 
   afterAll(async () => {
-    await rawMcpClient?.close();
-    await server?.close();
-    await new Promise<void>((resolve, reject) => {
-      httpServer?.close((err?: Error) => (err ? reject(err) : resolve()));
+    await served.close();
+  });
+
+  it('exposes annotations and _meta of business tools', () => {
+    const tool = tools.find(t => t.name === 'annotatedTool')!;
+    expect(tool.annotations).toEqual(annotations);
+    expect(tool._meta).toEqual({ customField: 'custom-value', version: '1.0.0', mastra: { strict: true } });
+  });
+
+  it('normalizes UI _meta so older hosts find the flat key', () => {
+    const tool = tools.find(t => t.name === 'uiTool')!;
+    expect(tool.annotations).toEqual(annotations);
+    expect(tool._meta).toEqual({
+      ui: { resourceUri: 'ui://widget' },
+      'ui/resourceUri': 'ui://widget',
     });
-  });
-
-  it('should expose tool annotations.title in MCP listTools response', async () => {
-    const { tools } = await rawMcpClient.listTools({});
-
-    const annotatedTool = tools.find(t => t.name === 'annotatedTool');
-    expect(annotatedTool).toBeDefined();
-
-    // Verify that annotations.title is properly exposed via MCP
-    expect(annotatedTool!.annotations?.title).toBe('Annotated Query Tool');
-  });
-
-  it('should expose tool annotations hints in MCP listTools response', async () => {
-    const { tools } = await rawMcpClient.listTools({});
-
-    const annotatedTool = tools.find(t => t.name === 'annotatedTool');
-    expect(annotatedTool).toBeDefined();
-
-    // Verify that all annotation hints are properly exposed via MCP
-    expect(annotatedTool!.annotations).toBeDefined();
-    expect(annotatedTool!.annotations?.readOnlyHint).toBe(true);
-    expect(annotatedTool!.annotations?.destructiveHint).toBe(false);
-    expect(annotatedTool!.annotations?.idempotentHint).toBe(true);
-    expect(annotatedTool!.annotations?.openWorldHint).toBe(false);
-  });
-
-  it('should expose tool _meta in MCP listTools response', async () => {
-    const { tools } = await rawMcpClient.listTools({});
-
-    const annotatedTool = tools.find(t => t.name === 'annotatedTool');
-    expect(annotatedTool).toBeDefined();
-
-    // Verify that _meta is properly exposed via MCP
-    expect((annotatedTool as any)._meta).toBeDefined();
-    expect((annotatedTool as any)._meta?.customField).toBe('custom-value');
-    expect((annotatedTool as any)._meta?.version).toBe('1.0.0');
-    expect((annotatedTool as any)._meta?.mastra?.strict).toBe(true);
   });
 });

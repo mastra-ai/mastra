@@ -18,6 +18,11 @@ export {
   type TraceQueryArgs,
 } from './use-trace-query';
 export { useTags } from './use-tags';
+export {
+  useTraceMetadataFilterFields,
+  type TraceMetadataFilterField,
+  type TraceQueryDiscoveryTimeRange,
+} from './use-trace-metadata-filter-fields';
 export { useEntityNames } from './use-entity-names';
 export { useEnvironments } from './use-environments';
 export { useServiceNames } from './use-service-names';

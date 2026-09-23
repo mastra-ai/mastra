@@ -13,7 +13,8 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-import { postRepositoryGitOp, readJsonOrThrow } from './http';
+import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
+import type { GitLabRepository } from '../../factory/services/gitlab';
 
 export interface GithubInstallation {
   installationId: number;
@@ -21,13 +22,20 @@ export interface GithubInstallation {
   accountType: string | null;
 }
 
-/** Reason the GitHub feature is in its current state, returned by the server. */
+/**
+ * Reason the GitHub feature is in its current state. Every value but
+ * `unavailable` comes from the server; `unavailable` is set by the browser
+ * when the status endpoint could not be reached or answered with an error,
+ * so consumers can tell a transient failure from a deliberately disabled
+ * feature.
+ */
 export type GithubStatusReason =
   | 'missing_config'
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
-  | 'ready';
+  | 'ready'
+  | 'unavailable';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
@@ -82,11 +90,19 @@ export interface GithubRepo {
   sandboxWorkdir: string;
 }
 
+export type SourceControlRepository = GithubRepo | GitLabRepository;
+
+export function isGitLabRepository(repo: SourceControlRepository): repo is GitLabRepository {
+  return 'provider' in repo && repo.provider === 'gitlab';
+}
+
 /**
- * Read GitHub feature/connection status. Resolves to a disabled status on 404,
- * a network error, or when the feature is off, so the SPA can cleanly hide the
- * feature. A 401 is reported distinctly via `authRequired` so the SPA can prompt
- * re-login instead of treating the feature as disabled.
+ * Read GitHub feature/connection status. Never throws: a 401 is reported via
+ * `authRequired` so the SPA can prompt re-login, and any other failed response
+ * or network error resolves to a disabled status with `reason: 'unavailable'`
+ * so the SPA can offer a retry instead of reporting the feature as
+ * unconfigured. A server that has the feature off answers 200 with
+ * `enabled: false` and its own reason.
  */
 export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> {
   try {
@@ -97,11 +113,20 @@ export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> 
     if (res.status === 401) {
       return { enabled: false, connected: false, installations: [], authRequired: true, reason: 'auth_required' };
     }
-    if (!res.ok) return { enabled: false, connected: false, installations: [] };
+    if (!res.ok) return unavailableStatus();
     return (await res.json()) as GithubStatus;
   } catch {
-    return { enabled: false, connected: false, installations: [] };
+    return unavailableStatus();
   }
+}
+
+/**
+ * Status used when the endpoint failed or could not be reached. It is not a
+ * `missing_config` answer: the server never said the feature is off, so the
+ * UI should offer a retry rather than report the feature as unconfigured.
+ */
+function unavailableStatus(): GithubStatus {
+  return { enabled: false, connected: false, installations: [], reason: 'unavailable' };
 }
 
 function currentPageRedirectTo(): string {
@@ -218,6 +243,7 @@ interface ProjectRepositoryPayload {
 /** A source-control connection (with linked repos) from the Factory project routes. */
 interface ProjectConnectionPayload {
   id: string;
+  integrationId?: string;
   installationId: string;
   repositories: ProjectRepositoryPayload[];
 }
@@ -225,6 +251,7 @@ interface ProjectConnectionPayload {
 /** Browser-shaped view of a repository linked to a Factory project. */
 export interface LinkedRepositoryPayload {
   projectRepositoryId: string;
+  provider?: 'github' | 'gitlab';
   slug: string;
   gitBranch?: string;
   sandboxWorkdir?: string;
@@ -240,9 +267,11 @@ export type FactoryProject = FactoryProjectSnapshot;
 function toLinkedRepositoryPayload(
   project: FactoryProjectPayload,
   link: ProjectRepositoryPayload,
+  integrationId?: string,
 ): LinkedRepositoryPayload {
   return {
     projectRepositoryId: link.id,
+    provider: integrationId === 'gitlab' ? 'gitlab' : 'github',
     slug: link.repository?.slug ?? project.name,
     gitBranch: link.branch ?? link.repository?.defaultBranch,
     sandboxWorkdir: link.sandboxWorkdir,
@@ -280,7 +309,7 @@ export async function listFactoryProjects(baseUrl: string): Promise<FactoryProje
       return {
         ...project,
         repositories: connections.flatMap(connection =>
-          connection.repositories.map(link => toLinkedRepositoryPayload(project, link)),
+          connection.repositories.map(link => toLinkedRepositoryPayload(project, link, connection.integrationId)),
         ),
       };
     }),
@@ -376,6 +405,7 @@ export async function connectInstallation(
   baseUrl: string,
   factoryProjectId: string,
   installationId: string,
+  integrationId: 'github' | 'gitlab' = GITHUB_INTEGRATION_ID,
 ): Promise<string> {
   const connections = await listProjectConnections(baseUrl, factoryProjectId);
   const existing = connections.find(connection => connection.installationId === installationId);
@@ -387,12 +417,12 @@ export async function connectInstallation(
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ integrationId: GITHUB_INTEGRATION_ID, installationId }),
+      body: JSON.stringify({ integrationId, installationId }),
     },
   );
   const { connection } = await readJsonOrThrow<{ connection: { id: string } }>(
     res,
-    'Failed to connect GitHub installation',
+    `Failed to connect ${integrationId === 'gitlab' ? 'GitLab' : 'GitHub'} installation`,
   );
   return connection.id;
 }
@@ -405,8 +435,9 @@ export async function linkRepository(
   baseUrl: string,
   factoryProjectId: string,
   connectionId: string,
-  repo: GithubRepo,
+  repo: SourceControlRepository,
 ): Promise<LinkedRepositoryPayload> {
+  const gitlab = isGitLabRepository(repo);
   const res = await fetch(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/source-control-connections/${encodeURIComponent(connectionId)}/repositories`,
     {
@@ -414,7 +445,7 @@ export async function linkRepository(
       credentials: 'include',
       headers: { 'content-type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
-        repository: { externalId: String(repo.id), slug: repo.fullName },
+        repository: { externalId: gitlab ? repo.externalId : String(repo.id), slug: repo.fullName },
         branch: repo.defaultBranch,
         sandboxProvider: repo.sandboxProvider,
         sandboxWorkdir: repo.sandboxWorkdir,
@@ -423,9 +454,13 @@ export async function linkRepository(
   );
   const { projectRepository } = await readJsonOrThrow<{ projectRepository: ProjectRepositoryPayload }>(
     res,
-    'Failed to link GitHub repository',
+    `Failed to link ${gitlab ? 'GitLab' : 'GitHub'} repository`,
   );
-  return toLinkedRepositoryPayload({ id: factoryProjectId, name: repo.fullName }, projectRepository);
+  return toLinkedRepositoryPayload(
+    { id: factoryProjectId, name: repo.fullName },
+    projectRepository,
+    gitlab ? 'gitlab' : 'github',
+  );
 }
 
 /**
@@ -523,10 +558,13 @@ export async function fetchRepositorySettings(
   baseUrl: string,
   projectRepositoryId: string,
 ): Promise<RepositorySettings> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/settings`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
+  const res = await fetch(
+    `${baseUrl}/web/source-control/projects/${encodeURIComponent(projectRepositoryId)}/settings`,
+    {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    },
+  );
   if (!res.ok) throw new Error(`Failed to load repository settings (${res.status})`);
   return (await res.json()) as RepositorySettings;
 }
@@ -537,5 +575,5 @@ export async function saveRepositorySettings(
   projectRepositoryId: string,
   settings: RepositorySettings,
 ): Promise<RepositorySettings> {
-  return postRepositoryGitOp<RepositorySettings>(baseUrl, projectRepositoryId, 'settings', settings);
+  return postSourceControlRepositoryOp<RepositorySettings>(baseUrl, projectRepositoryId, 'settings', settings);
 }

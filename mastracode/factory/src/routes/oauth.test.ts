@@ -46,9 +46,12 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 function makeAuthStorage() {
   return {
-    set: vi.fn(),
-    remove: vi.fn(),
-  } as unknown as AuthStorage & { set: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> };
+    addAccount: vi.fn(async () => undefined),
+    logout: vi.fn(),
+  } as unknown as AuthStorage & {
+    addAccount: ReturnType<typeof vi.fn>;
+    logout: ReturnType<typeof vi.fn>;
+  };
 }
 
 let authStorage: ReturnType<typeof makeAuthStorage>;
@@ -154,7 +157,7 @@ describe('paste-code flow (anthropic)', () => {
     const cred = await seed.credentials.getCredential(TENANT_A, 'anthropic');
     expect(cred).toMatchObject({ type: 'oauth', access: 'a-1' });
     // Server-side only: never written to the local auth.json in tenant mode.
-    expect(authStorage.set).not.toHaveBeenCalled();
+    expect(authStorage.addAccount).not.toHaveBeenCalled();
   });
 
   it("keeps user A's credential invisible to user B", async () => {
@@ -329,7 +332,7 @@ describe('session cancel and sign-out', () => {
     expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toBeUndefined();
     expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-b' }, 'anthropic')).toBeDefined();
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeDefined();
-    expect(authStorage.remove).not.toHaveBeenCalled();
+    expect(authStorage.logout).not.toHaveBeenCalled();
   });
 });
 
@@ -521,7 +524,7 @@ describe('local mode', () => {
 
     const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
     expect(res.status).toBe(200);
-    expect(authStorage.set).toHaveBeenCalledWith('anthropic', expect.objectContaining({ type: 'oauth' }));
+    expect(authStorage.addAccount).toHaveBeenCalledWith('anthropic', ANTHROPIC_CREDS);
   });
 
   it('signs out via AuthStorage using the auth provider id', async () => {
@@ -529,6 +532,6 @@ describe('local mode', () => {
       method: 'DELETE',
     });
     expect(res.status).toBe(200);
-    expect(authStorage.remove).toHaveBeenCalledWith('openai-codex');
+    expect(authStorage.logout).toHaveBeenCalledWith('openai-codex');
   });
 });

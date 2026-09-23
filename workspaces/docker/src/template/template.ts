@@ -33,6 +33,7 @@
 import posixPath from 'node:path/posix';
 import Docker from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
+import { createAbortError, normalizeAbortError, throwIfAborted, waitForAbortable } from '../abort';
 import { DockerSandbox, type DockerSandboxOptions } from '../sandbox';
 import { openBuildSession, type BuildSession } from './build-session';
 import {
@@ -96,6 +97,8 @@ export interface DockerTemplateBuildOptions {
    * read from `process.env` as a last resort.
    */
   secrets?: DockerTemplateSecrets;
+  /** Cancel this caller's wait for preparation. */
+  abortSignal?: AbortSignal;
 }
 
 export interface DockerTemplateBuildResult {
@@ -104,6 +107,12 @@ export interface DockerTemplateBuildResult {
   templateId: string;
   /** Failure detail when `status` is `'failed'`. */
   error?: string;
+}
+
+interface InFlightBuild {
+  promise: Promise<DockerTemplateBuildResult>;
+  controller: AbortController;
+  waiters: number;
 }
 
 /**
@@ -118,7 +127,8 @@ export class DockerTemplate {
   readonly #secrets: DockerTemplateSecrets | undefined;
   #docker: Docker | undefined;
   #built = false;
-  #inFlight: Promise<DockerTemplateBuildResult> | undefined;
+  #queueTail: InFlightBuild | undefined;
+  #plainBuild: InFlightBuild | undefined;
 
   constructor(options: DockerTemplateOptions = {}, state?: DockerTemplateState) {
     this.#baseImage = state ? state.baseImage : validateString(options.baseImage ?? 'node:22-slim', 'baseImage');
@@ -266,30 +276,59 @@ export class DockerTemplate {
    * `options.secrets`, the template's `secrets` option, or `process.env`.
    */
   async build(options: DockerTemplateBuildOptions = {}): Promise<DockerTemplateBuildResult> {
+    throwIfAborted(options.abortSignal, 'build Docker template');
     // Many sandboxes starting concurrently from one template must share a
     // single `docker build` rather than racing to build the same tag. Only a
     // plain request may join an in-flight build; a forced build, different
     // secrets, or a different daemon is queued behind it instead.
     const isPlain = !options.force && options.secrets === undefined && options.docker === undefined;
-    if (isPlain && this.#inFlight) return this.#inFlight;
-    const previous = this.#inFlight?.catch(() => undefined) ?? Promise.resolve();
-    const run = previous.then(() => this.#build(options));
-    this.#inFlight = run;
-    run
+    if (isPlain && this.#plainBuild) return this.#waitForBuild(this.#plainBuild, options.abortSignal);
+
+    const previous = this.#queueTail?.promise.catch(() => undefined) ?? Promise.resolve();
+    const controller = new AbortController();
+    const run: InFlightBuild = {
+      controller,
+      waiters: 0,
+      promise: previous.then(() => {
+        throwIfAborted(controller.signal, 'build Docker template');
+        return this.#build({ ...options, abortSignal: controller.signal });
+      }),
+    };
+    this.#queueTail = run;
+    if (isPlain) this.#plainBuild = run;
+    run.promise
       .finally(() => {
-        if (this.#inFlight === run) this.#inFlight = undefined;
+        if (this.#queueTail === run) this.#queueTail = undefined;
+        if (this.#plainBuild === run) this.#plainBuild = undefined;
       })
       .catch(() => undefined);
-    return run;
+    return this.#waitForBuild(run, options.abortSignal);
+  }
+
+  #waitForBuild(run: InFlightBuild, abortSignal: AbortSignal | undefined): Promise<DockerTemplateBuildResult> {
+    run.waiters += 1;
+    let settled = false;
+    const release = (aborted: boolean) => {
+      if (settled) return;
+      settled = true;
+      run.waiters -= 1;
+      if (aborted && run.waiters === 0) run.controller.abort();
+    };
+    return waitForAbortable(run.promise, abortSignal, 'build Docker template', () => release(true)).finally(() =>
+      release(false),
+    );
   }
 
   async #build(options: DockerTemplateBuildOptions): Promise<DockerTemplateBuildResult> {
     const docker = options.docker ?? this.#getDocker();
     const tag = this.templateId;
+    const { abortSignal } = options;
+    throwIfAborted(abortSignal, 'build Docker template');
 
     if (!options.force) {
       try {
         await docker.getImage(tag).inspect();
+        throwIfAborted(abortSignal, 'build Docker template');
         this.#built = true;
         return { status: 'ready', templateId: tag };
       } catch (error) {
@@ -300,6 +339,7 @@ export class DockerTemplate {
     // Only a real build needs the secret values; reusing a cached image must not
     // require the original credentials to still be present.
     const secrets = await this.#resolveSecrets(options.secrets);
+    throwIfAborted(abortSignal, 'build Docker template');
 
     const context = tarPack();
     context.entry({ name: 'Dockerfile' }, this.dockerfile);
@@ -308,19 +348,30 @@ export class DockerTemplate {
     try {
       const nocache = options.force === true;
       if (secrets) {
-        const { stream, session } = await this.#buildWithSecrets(docker, context, tag, secrets, nocache);
+        const { stream, session } = await this.#buildWithSecrets(docker, context, tag, secrets, nocache, abortSignal);
         try {
-          await this.#followBuild(docker, stream);
+          await this.#followBuild(docker, stream, abortSignal);
         } finally {
           // The daemon calls GetSecret only while the build runs; drop the
           // session however the output stream settled (end, error, or close).
           session.close();
         }
       } else {
-        await this.#followBuild(docker, await docker.buildImage(context, { t: tag, nocache }));
+        const build = docker.buildImage(context, { t: tag, nocache }).then(stream => {
+          if (abortSignal?.aborted) {
+            (stream as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+            throw createAbortError(abortSignal, 'build Docker template');
+          }
+          return stream;
+        });
+        const stream = await waitForAbortable(build, abortSignal, 'build Docker template', () => {
+          (context as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+        });
+        await this.#followBuild(docker, stream, abortSignal);
       }
     } catch (error) {
       this.#built = false;
+      if (abortSignal?.aborted) throw normalizeAbortError(error, 'build Docker template');
       return { status: 'failed', templateId: tag, error: error instanceof Error ? error.message : String(error) };
     }
 
@@ -357,12 +408,36 @@ export class DockerTemplate {
     tag: string,
     secrets: Record<string, string>,
     nocache: boolean,
+    abortSignal?: AbortSignal,
   ): Promise<{ stream: NodeJS.ReadableStream; session: BuildSession }> {
-    const session = await openBuildSession(docker, secrets);
+    throwIfAborted(abortSignal, 'build Docker template');
+    const session = await openBuildSession(docker, secrets, abortSignal);
     let stream: NodeJS.ReadableStream;
     try {
       stream = await new Promise<NodeJS.ReadableStream>((resolve, reject) => {
-        docker.modem.dial(
+        let settled = false;
+        let request: { destroy?(error?: Error): void } | undefined;
+        const finish = (error?: unknown, data?: unknown) => {
+          if (settled) {
+            if (data) (data as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+            return;
+          }
+          settled = true;
+          abortSignal?.removeEventListener('abort', abort);
+          error === undefined ? resolve(data as NodeJS.ReadableStream) : reject(error);
+        };
+        const abort = () => {
+          (context as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+          request?.destroy?.();
+          session.close();
+          if (abortSignal) finish(createAbortError(abortSignal, 'build Docker template'));
+        };
+        abortSignal?.addEventListener('abort', abort, { once: true });
+        if (abortSignal?.aborted) {
+          abort();
+          return;
+        }
+        request = docker.modem.dial(
           {
             path: '/build?',
             method: 'POST',
@@ -371,8 +446,8 @@ export class DockerTemplate {
             isStream: true,
             statusCodes: { 200: true, 500: 'server error' },
           },
-          (err: Error | null, data: unknown) => (err ? reject(err) : resolve(data as NodeJS.ReadableStream)),
-        );
+          (err: Error | null, data: unknown) => finish(err ?? undefined, data),
+        ) as unknown as { destroy?(error?: Error): void } | undefined;
       });
     } catch (error) {
       session.close();
@@ -381,20 +456,36 @@ export class DockerTemplate {
     return { stream, session };
   }
 
-  #followBuild(docker: Docker, stream: NodeJS.ReadableStream): Promise<void> {
+  #followBuild(docker: Docker, stream: NodeJS.ReadableStream, abortSignal?: AbortSignal): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: unknown) => {
+        if (settled) return;
+        settled = true;
+        abortSignal?.removeEventListener('abort', abort);
+        error === undefined ? resolve() : reject(error);
+      };
+      const abort = () => {
+        (stream as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+        if (abortSignal) finish(createAbortError(abortSignal, 'build Docker template'));
+      };
+      abortSignal?.addEventListener('abort', abort, { once: true });
+      if (abortSignal?.aborted) {
+        abort();
+        return;
+      }
       docker.modem.followProgress(stream, (err: Error | null, output: Array<Record<string, unknown>>) => {
         if (err) {
-          reject(err);
+          finish(err);
           return;
         }
         const failure = output?.find(entry => entry && (entry.error !== undefined || entry.errorDetail !== undefined));
         if (failure) {
           const detail = failure.errorDetail as { message?: string } | undefined;
-          reject(new Error(String(detail?.message ?? failure.error ?? 'docker build failed')));
+          finish(new Error(String(detail?.message ?? failure.error ?? 'docker build failed')));
           return;
         }
-        resolve();
+        finish();
       });
     });
   }

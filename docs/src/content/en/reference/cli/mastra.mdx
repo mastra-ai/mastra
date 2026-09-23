@@ -555,11 +555,11 @@ mastra env db create --kind neon --name my-app-db --region aws-us-east-1 --share
 
 #### `--kind`
 
-Database provider (required). One of `turso`, `neon`, or `redis`.
+Database provider (required). One of `turso` or `neon`.
 
 #### `--name`
 
-Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-redis`).
+Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-pg`).
 
 #### `--region`
 
@@ -1618,6 +1618,17 @@ The response remains nested under `data` to preserve cursor pagination:
 
 Pass a non-null `page.next` value back as `page.after` in the next query. See [Advanced trace queries](/reference/observability/tracing/trace-query) for supported fields and operators, recursive predicates, limits, pagination, and errors.
 
+To load a numbered page and then poll, keep the same time range and predicate in both requests:
+
+```bash
+mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"pagination":{"page":0,"perPage":100}}'
+mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"mode":"delta","after":"CURSOR_FROM_NUMBERED_RESPONSE","limit":100}'
+```
+
+Replace `CURSOR_FROM_NUMBERED_RESPONSE` with `data.deltaCursor` from the first response. Delta results remain under `data`, with `traces`, `delta: { limit, hasMore }`, and `deltaCursor`. Merge traces by `traceId`, retain each returned cursor, and continue immediately while `data.delta.hasMore` is `true`. Don't combine delta mode with `page`, `pagination`, or `orderBy`.
+
+Omitting `after` establishes a cursor and returns no historical traces. Changing the time range or predicate requires a fresh numbered request. See [Delta polling limitations](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) before using this workflow to maintain a local trace list.
+
 #### `mastra api trace get`
 
 Gets a lightweight timeline for one observability trace without fetching full span input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full trace payload.
@@ -1701,7 +1712,7 @@ mastra api metric label-values '{"metricName":"latency_ms","labelKey":"model","p
 
 #### Observability with `curl`
 
-You can call the hosted observability API directly with your platform access token and project ID. The examples below use the United States host. Substitute `https://observability.eu.mastra.ai` for a European Union environment. The [hosted feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) documents feedback endpoints that don't have CLI commands:
+You can call the hosted observability API directly with your platform access token and project ID. The examples below use the United States host. Substitute `https://observability.eu.mastra.ai` for a European Union environment. The [Feedback API](/docs/mastra-platform/api#feedback-api) documents feedback endpoints that don't have CLI commands:
 
 ```bash
 curl -sS "https://observability.mastra.ai/api/observability/traces?page=0&perPage=20" \

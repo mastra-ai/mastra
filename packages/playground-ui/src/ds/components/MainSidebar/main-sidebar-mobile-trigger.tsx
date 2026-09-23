@@ -1,6 +1,7 @@
 import { MenuIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarMobileTriggerProps = ComponentPropsWithoutRef<'button'> & {
@@ -14,9 +15,10 @@ export function MainSidebarMobileTrigger({
   onClick,
   ...props
 }: MainSidebarMobileTriggerProps) {
-  const { isMobile, setOpenMobile } = useMainSidebar();
+  const { isMobile, mobileTriggerRef, setOpenMobile } = useMainSidebar();
   return (
     <button
+      ref={mobileTriggerRef}
       type="button"
       aria-label={ariaLabel}
       aria-hidden={!isMobile}
@@ -28,10 +30,12 @@ export function MainSidebarMobileTrigger({
         if (!event.defaultPrevented) setOpenMobile(true);
       }}
       className={cn(
-        'new-theme inline-flex size-10 items-center justify-center rounded-md',
+        'inline-flex size-10 items-center justify-center rounded-md',
         // compound selector, not `in-*` — its `:where()` ties with a consumer's later `.inline-flex`
         "[[data-sidebar-mobile='false']_&]:hidden",
-        'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
+        "[[data-sidebar-mobile-present='true']_&]:invisible",
+        quietTextHover,
+        'hover:bg-fill-subtle',
         'focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
         className,
       )}

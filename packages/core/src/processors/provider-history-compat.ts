@@ -2,6 +2,11 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart, MessageList } from '../agent/message-list';
+import { getResponseProviderItemIdFromPart } from '../agent/message-list';
+import {
+  RESPONSE_ITEM_ID_PROVIDERS,
+  RESPONSE_RESULT_ITEM_ID_KEY,
+} from '../agent/message-list/utils/response-item-metadata';
 import type {
   Processor,
   ProcessAPIErrorArgs,
@@ -328,6 +333,15 @@ function supportsAssistantPrefill(modelId: string): boolean | undefined {
   return major < 4 || (major === 4 && minor < 6);
 }
 
+const GEMINI_VERSION_PATTERN = /gemini-(\d+)/i;
+
+function supportsTrailingModelTurn(modelId: string): boolean | undefined {
+  const match = GEMINI_VERSION_PATTERN.exec(modelId);
+  if (!match) return undefined;
+
+  return Number(match[1]) < 3;
+}
+
 /**
  * Detects Anthropic models that removed assistant-message prefill support.
  * Claude 4.6 and later reject assistant-prefill requests, while earlier
@@ -352,6 +366,36 @@ export function isMaybeAnthropicWithoutAssistantPrefill(model: unknown): boolean
 
   if (!modelId) return true;
   return supportsAssistantPrefill(modelId) !== true;
+}
+
+/**
+ * Detects Google models that reject a request ending on a model turn.
+ *
+ * Gemini 3 and later return 400 "Requests ending with a model turn are not
+ * supported"; Gemini 2.x accepted the same prompt, including under native
+ * structured output. Unknown Google model versions are matched conservatively
+ * so a new model cannot silently bypass compatibility guards.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/23320
+ */
+export function isMaybeGoogleWithoutTrailingModelTurn(model: unknown): boolean {
+  if (typeof model === 'function') return true;
+
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeGoogleWithoutTrailingModelTurn((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (getModelProviderFamily(model) !== 'google') return false;
+
+  const modelId =
+    typeof model === 'string'
+      ? model
+      : model && typeof model === 'object' && typeof (model as { modelId?: unknown }).modelId === 'string'
+        ? (model as { modelId: string }).modelId
+        : undefined;
+
+  if (!modelId) return true;
+  return supportsTrailingModelTurn(modelId) !== true;
 }
 
 export function isMaybeAzure(
@@ -669,6 +713,183 @@ export const azureSystemReminderTransform: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: orphaned Responses message itemId (OpenAI / Azure)
+// ---------------------------------------------------------------------------
+
+function hasReasoningPart(message: MastraDBMessage): boolean {
+  return (message.content?.parts ?? []).some(p => p.type === 'reasoning');
+}
+
+/**
+ * True when `message` looks like the leading half of a turn that storage split across two
+ * assistant rows: it carries a reasoning item and has not yet produced text of its own. A
+ * following text row is then covered by that reasoning item.
+ *
+ * Deliberately not "has any reasoning part" — a previous row that already paired its own
+ * reasoning with its own text says nothing about the row after it, and treating it as cover
+ * would leave a genuine orphan unrepaired. The retry would then hit the same 400, and
+ * `processAPIError` bails at `retryCount > 0`, turning a recoverable turn into a hard failure.
+ */
+function isUnpairedReasoningRow(message: MastraDBMessage): boolean {
+  const parts = message.content?.parts ?? [];
+  return parts.some(p => p.type === 'reasoning') && !parts.some(p => p.type === 'text');
+}
+
+/**
+ * Strips `itemId` and its result-side partner from every Responses namespace a
+ * part carries, in both metadata containers, leaving every other field (cache
+ * counts, reasoning-token counts, logprobs) intact. Mirrors the narrow
+ * destructure in `client-sdks/ai-sdk/src/helpers.ts` (PR #23323).
+ *
+ * {@link RESPONSE_RESULT_ITEM_ID_KEY} has to go with it: a merged tool part
+ * keeps the result half of the pair under that key, and
+ * `splitResponsesToolItemReferences` turns it back into an `itemId` on the
+ * tool-result part during conversion. Dropping only `itemId` would leave a
+ * live reference into the very response that was rejected.
+ *
+ * Both `providerMetadata` and `providerOptions` are cleared because
+ * {@link getResponseProviderItemIdFromPart} reads an id from either, so
+ * leaving one behind would report a part as still item-bearing — and would
+ * leave the unsatisfiable reference in the prompt, which is the whole failure.
+ *
+ * Returns true when it removed an id.
+ */
+function stripResponseItemIds(part: MastraMessagePart): boolean {
+  const containers = [
+    (part as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+    (part as { providerOptions?: Record<string, unknown> }).providerOptions,
+  ];
+
+  let stripped = false;
+  for (const container of containers) {
+    if (!container) continue;
+    for (const provider of RESPONSE_ITEM_ID_PROVIDERS) {
+      const namespace = container[provider] as Record<string, unknown> | undefined;
+      if (!namespace) continue;
+      if (!('itemId' in namespace) && !(RESPONSE_RESULT_ITEM_ID_KEY in namespace)) continue;
+      const { itemId: _itemId, [RESPONSE_RESULT_ITEM_ID_KEY]: _resultItemId, ...rest } = namespace;
+      container[provider] = rest;
+      stripped = true;
+    }
+  }
+  return stripped;
+}
+
+/**
+ * OpenAI's Responses API replays a persisted assistant message by reference
+ * (`item_reference`) when the message carries an `itemId` (`msg_…`). If that
+ * message has no accompanying `reasoning` item, the request is rejected with a
+ * non-retryable 400:
+ *
+ * ```
+ * Item 'msg_…' of type 'message' was provided without its required 'reasoning' item: 'rs_…'
+ * ```
+ *
+ * Because the offending message is already persisted, that 400 repeats on every
+ * subsequent turn, and the thread stops working. This rule is a recovery
+ * seatbelt for histories that are *already* corrupted: dropping the `itemId`
+ * makes the message replay by value instead of by reference, which OpenAI
+ * accepts. The content the user sees is unchanged.
+ *
+ * The repair is in-memory for the current turn: a message sourced from storage
+ * is not re-drained, so a later turn on the same thread spends one rejected
+ * request before recovering again. Same property as `anthropicToolIdFormat`.
+ *
+ * Reactive by design — it fires only after OpenAI has actually rejected the
+ * request, so a legitimately reasoning-free message (e.g.
+ * `reasoning.effort: 'none'`, or a non-reasoning model) is untouched on any
+ * thread that has not already hit this 400. Once it has, see the collateral
+ * note below.
+ *
+ * Deliberately narrow:
+ * - Matches only the `of type 'message'` phrasing. The sibling `function_call`
+ *   (`fc_…`) variant is a different failure, addressed by PR #19408. Matching
+ *   narrowly is not the same as repairing narrowly, though: once a message is
+ *   established as an orphan, every item reference it carries is unsatisfiable
+ *   for the same reason, so the repair covers all of them. A message whose
+ *   `msg_…` id was dropped while its `fc_…` id stayed would simply fail on the
+ *   next item in the list, spending the one available retry to arrive at the
+ *   same error.
+ * - Strips only the item-reference keys (`itemId` and its result-side partner
+ *   `resultItemId`); all other fields in the namespace survive.
+ * - Reads and strips through the shared Responses helpers, so the `azure`
+ *   namespace is covered on the same footing as `openai` — the repo treats
+ *   them as one Responses family, and Azure raises this same 400.
+ * - Skips a message whose reasoning lives on the immediately preceding
+ *   assistant row, when that row has reasoning and no text of its own. Stored
+ *   history can split one turn across adjacent assistant rows (adjacent rows
+ *   are merged when streamed, but not when loaded from storage), and in that
+ *   case the reasoning item *is* present in the prompt — stripping the id
+ *   there would fix nothing and would discard a valid reference. A preceding
+ *   row that already paired its own reasoning with its own text is not cover
+ *   and does not suppress the repair.
+ *
+ * Not covered by that guard, deliberately: the `assistant[reasoning, tool-call]
+ * → tool[result] → assistant[text]` shape, where the preceding entry is a tool
+ * message. If OpenAI rejected the text item there, its reference is genuinely
+ * unsatisfiable and stripping is the right repair.
+ *
+ * The rule repairs every orphan-shaped message in the history rather than only
+ * the id named in the error, because `fix` does not receive the error and the
+ * error names only the first item OpenAI tripped over. Healing that one id
+ * would trade a permanent failure for N sequential ones, and there is a single
+ * retry available, not N.
+ *
+ * The cost of that breadth: in a thread that mixes a reasoning model with a
+ * non-reasoning Responses model, the non-reasoning turns are also orphan-shaped
+ * (an `itemId`, no reasoning) but are perfectly valid, and they lose their item
+ * references too. Ordinary text and tool parts still replay correctly — by
+ * value instead of by reference — so for them the effect is a lost item
+ * reference, not a failure.
+ *
+ * One part type pays more than a reference. A hosted `tool_search` call cannot
+ * be replayed by value at all, so `isUnreplayableHostedToolSearchPart`
+ * (`output-converter.ts`) drops it from the prompt once its ids are gone. On a
+ * genuinely orphaned message that is the right outcome — the ids pointed into
+ * the rejected response. On a swept-along valid message it costs the model that
+ * search result, and it would have to search again. That is accepted: the
+ * asymmetry is still deliberate, because under-stripping ends the turn outright
+ * while over-stripping costs a reference, or at worst one hosted search.
+ *
+ * Known limitation: the guard reasons about message *shape*, because the
+ * required `rs_…` id named in the error is not available to `fix`. A turn whose
+ * reasoning row belongs to a different turn could in principle be skipped
+ * when it should have been repaired. That case degrades to today's behavior — the turn
+ * fails as it already does — so the guard can cost a recovery, never cause a
+ * new failure.
+ *
+ * This is a seatbelt, not the cure: the path that produces these orphans is
+ * fixed separately in the processor-retry rollback (#22291).
+ */
+export const openaiOrphanItemId: CompatRule = {
+  name: 'openai-orphan-item-id',
+  errorPatterns: [/Item '[^']*' of type 'message' was provided without its required 'reasoning' item/i],
+  fix(messages) {
+    let mutated = false;
+
+    messages.forEach((message, index) => {
+      if (message.role !== 'assistant') return;
+
+      const parts = message.content?.parts;
+      if (!parts?.length) return;
+      if (hasReasoningPart(message)) return;
+
+      // Split-history guard: the reasoning item for this turn may sit on the
+      // preceding assistant row, in which case the reference is satisfiable.
+      const previous = messages[index - 1];
+      if (previous?.role === 'assistant' && isUnpairedReasoningRow(previous)) return;
+
+      for (const part of parts) {
+        if (!getResponseProviderItemIdFromPart(part)) continue;
+        mutated = stripResponseItemIds(part) || mutated;
+      }
+    });
+
+    return mutated;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
 
@@ -684,6 +905,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicStripForeignReasoningContent,
   anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
+  openaiOrphanItemId,
 ];
 
 // ---------------------------------------------------------------------------
@@ -719,6 +941,12 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   provider different from the current target (preemptive). Turns emptied of
  *   all content by the drop are removed from the prompt. Unstamped history is
  *   left untouched.
+ * - **openai-orphan-item-id** — drops the Responses `itemId` (`openai` and
+ *   `azure` namespaces alike) from every item-bearing part of an assistant
+ *   message that carries one but has no `reasoning` part, so it replays by
+ *   value instead of as an unsatisfiable `item_reference`. Reactive (matches
+ *   the specific `of type 'message' … without its required 'reasoning' item`
+ *   400); a recovery seatbelt for already-corrupted history.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts

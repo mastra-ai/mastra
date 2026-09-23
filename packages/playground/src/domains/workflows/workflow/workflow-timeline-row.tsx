@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -15,20 +16,24 @@ import {
 } from 'lucide-react';
 import type { Step } from '../context/use-current-run';
 import type { TimelineRow } from './workflow-timeline-utils';
-import { formatTimelineDuration } from './workflow-timeline-utils';
 
 const statusPresentation = {
-  success: { label: 'Completed', icon: Check, color: 'text-positive1', bar: 'bg-neutral3/60' },
+  success: { label: 'Completed', icon: Check, color: 'text-positive1', bar: 'bg-muted-foreground/60' },
   failed: { label: 'Failed', icon: CircleX, color: 'text-negative1', bar: 'bg-negative1/60' },
   suspended: { label: 'Needs input', icon: Pause, color: 'text-accent3', bar: 'bg-accent3/60' },
-  waiting: { label: 'Waiting', icon: Timer, color: 'text-neutral3', bar: 'bg-neutral3/40' },
-  paused: { label: 'Paused', icon: Pause, color: 'text-neutral3', bar: 'bg-neutral3/40' },
-  skipped: { label: 'Skipped', icon: SkipForward, color: 'text-neutral3', bar: 'bg-neutral3/25' },
+  waiting: { label: 'Waiting', icon: Timer, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
+  paused: { label: 'Paused', icon: Pause, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
+  skipped: { label: 'Skipped', icon: SkipForward, color: 'text-muted-foreground', bar: 'bg-muted-foreground/25' },
   running: { label: 'Running', icon: Loader2, color: 'text-accent6', bar: 'bg-accent6/60' },
-  canceled: { label: 'Canceled', icon: CircleSlash, color: 'text-neutral3', bar: 'bg-neutral3/40' },
+  canceled: { label: 'Canceled', icon: CircleSlash, color: 'text-muted-foreground', bar: 'bg-muted-foreground/40' },
 } satisfies Record<Step['status'], { label: string; icon: typeof Check; color: string; bar: string }>;
 
-const unknownStatus = { label: 'Status unavailable', icon: CircleHelp, color: 'text-neutral3', bar: 'bg-neutral3/25' };
+const unknownStatus = {
+  label: 'Status unavailable',
+  icon: CircleHelp,
+  color: 'text-muted-foreground',
+  bar: 'bg-muted-foreground/25',
+};
 
 export interface WorkflowTimelineRowProps {
   row: TimelineRow;
@@ -63,12 +68,12 @@ export function WorkflowTimelineRow({
       className={cn(
         'grid grid-cols-[minmax(130px,1fr)_minmax(64px,1fr)_56px_64px] items-center gap-3 rounded-md px-2 py-1',
         '@max-[540px]/workflow-timeline:grid-cols-[minmax(0,1fr)_48px_64px] @max-[540px]/workflow-timeline:gap-x-1.5 @max-[540px]/workflow-timeline:gap-y-1 @max-[540px]/workflow-timeline:py-2',
-        (isSelected || isHovered) && 'bg-surface4',
+        (isSelected || isHovered) && 'bg-fill-subtle',
       )}
     >
       <button
         type="button"
-        className="text-ui-xs text-neutral5 focus-visible:outline-neutral3 flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-default"
+        className="flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left text-meta text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus aria-disabled:cursor-default"
         aria-disabled={row.isNestedEntry}
         aria-pressed={isSelected}
         onClick={() => {
@@ -80,7 +85,7 @@ export function WorkflowTimelineRow({
         <span
           aria-label={status.label}
           className={cn(
-            'border-border1 bg-surface2 grid size-6 flex-none place-items-center rounded-md border',
+            'grid size-6 flex-none place-items-center rounded-md border border-border bg-background',
             status.color,
           )}
         >
@@ -89,7 +94,7 @@ export function WorkflowTimelineRow({
         <span className="min-w-0">
           <span className="block truncate">{label}</span>
           {row.isNestedEntry && (
-            <span className="text-neutral3 text-ui-xs flex min-w-0 items-center gap-1">
+            <span className="flex min-w-0 items-center gap-1 text-meta text-muted-foreground">
               <CornerDownRight aria-hidden className="size-3 shrink-0" />
               <span className="truncate">{parentPath}</span>
             </span>
@@ -97,7 +102,7 @@ export function WorkflowTimelineRow({
         </span>
       </button>
       <div
-        className="bg-surface4 relative h-5 min-w-0 overflow-hidden rounded-sm @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-[34px]"
+        className="relative h-5 min-w-0 overflow-hidden rounded-sm bg-muted @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-[34px]"
         aria-hidden
       >
         {row.timing && (
@@ -110,8 +115,11 @@ export function WorkflowTimelineRow({
           />
         )}
       </div>
-      <span className="text-neutral3 text-ui-xs text-right whitespace-nowrap tabular-nums">
-        {row.timing ? formatTimelineDuration(row.timing.durationMs) : <span aria-label="Timing unavailable">—</span>}
+      <span
+        className="text-right text-meta whitespace-nowrap text-muted-foreground tabular-nums"
+        title={row.timing && row.spansSuspension ? 'Includes time spent suspended waiting for input' : undefined}
+      >
+        {row.timing ? formatDuration(row.timing.durationMs) : <span aria-label="Timing unavailable">—</span>}
       </span>
       <div className="flex items-center">
         <Button

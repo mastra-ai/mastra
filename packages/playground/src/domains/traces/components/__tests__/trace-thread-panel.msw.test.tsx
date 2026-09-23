@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -76,19 +76,18 @@ describe('TraceThreadPanel', () => {
       expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
     });
 
-    it('strips the top rounding and horizontal borders of the details columns, only in this panel', async () => {
-      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
+    it('when rendered, then the panel opens wide and only takes the full frame once a span is selected', async () => {
       installHandlers();
       const { queryClient } = renderPanel();
+      const dialog = () => screen.getByRole('dialog', { name: `Thread ${THREAD_ID}` });
 
       expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(dialog().className).toContain('w-4/5');
 
-      const details = screen.getByTestId('thread-view-by-trace').querySelector('[data-slot="thread-trace-details"]');
-      expect(details).not.toBeNull();
-      const wrapper = details!.closest<HTMLElement>('[class*="thread-trace-details"]');
-      expect(wrapper?.className).toContain('[&_[data-slot=thread-trace-details]]:rounded-t-none');
-      expect(wrapper?.className).toContain('[&_[data-slot=thread-trace-details]]:border-y-0');
+      fireEvent.click(await screen.findByText('Chef agent run'));
+
+      await waitFor(() => expect(dialog().className).toContain('w-full'));
     });
 
     it('when "Back to trace" is clicked, then onBack is called', async () => {
@@ -101,13 +100,14 @@ describe('TraceThreadPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when the close button is clicked, then onClose is called', async () => {
+    it('when Escape is pressed, then onClose is called', async () => {
       installHandlers();
       const onClose = vi.fn();
       const { queryClient } = renderPanel({ onClose });
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Close Panel' }));
-      expect(onClose).toHaveBeenCalledTimes(1);
+      const dialog = await screen.findByRole('dialog', { name: `Thread ${THREAD_ID}` });
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
   });

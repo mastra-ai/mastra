@@ -60,6 +60,7 @@ export const loginPreservesModelPackScenario = {
         expires: Date.now() + 60 * 60 * 1000,
       };
     });
+    patches.setProperty(anthropicOAuthProvider, 'getAccountLabel', async () => 'developer@example.com');
 
     try {
       const app = await startMastraCodeApp();
@@ -79,6 +80,15 @@ export const loginPreservesModelPackScenario = {
     await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\)/i, terminal, 8_000);
     terminal.write('\r');
 
+    // The detected email is shown under the full provider name. Accept it unchanged.
+    await runtime.waitForScreenText(
+      /Name this account \(Enter to keep "Anthropic \(Claude Pro\/Max\) developer@example\.com"\)/i,
+      terminal,
+      8_000,
+    );
+    await runtime.waitForScreenTextAbsent(/saved as/i, terminal, 1_000);
+    terminal.write('\r');
+
     await runtime.waitForScreenText(/Logged in to Anthropic/i, terminal, 8_000);
 
     // The active model pack must survive login: the status line still shows the
@@ -95,9 +105,14 @@ export const loginPreservesModelPackScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); console.log("LOGIN_PRESERVE_AUTH="+(a.anthropic?.type||"missing")+":"+(a.anthropic?.access||"missing")); console.log("LOGIN_PRESERVE_PACK="+s.models.activeModelPackId); console.log("LOGIN_PRESERVE_OM="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+s.models.omModelOverride); console.log("LOGIN_PRESERVE_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); const reg=Object.keys(a).find(k=>k.startsWith("accounts:anthropic:")); console.log("LOGIN_PRESERVE_AUTH_OK="+(a.anthropic?.type==="oauth")); console.log("LOGIN_PRESERVE_LABEL="+(reg?a[reg].label:"missing")); console.log("LOGIN_PRESERVE_PACK="+s.models.activeModelPackId); console.log("LOGIN_PRESERVE_OM="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+s.models.omModelOverride); console.log("LOGIN_PRESERVE_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,
     );
-    await runtime.waitForScreenText(/LOGIN_PRESERVE_AUTH=oauth:mc-login-preserve-access/i, terminal, 8_000);
+    await runtime.waitForScreenText(/LOGIN_PRESERVE_AUTH_OK=true/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /LOGIN_PRESERVE_LABEL=Anthropic \(Claude Pro\/Max\) developer@example\.com/i,
+      terminal,
+      8_000,
+    );
     await runtime.waitForScreenText(/LOGIN_PRESERVE_PACK=custom:Login Preserve E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/LOGIN_PRESERVE_OM=custom:custom:login-preserve-e2e\/om-model/i, terminal, 8_000);
     await runtime.waitForScreenText(/LOGIN_PRESERVE_DEFAULTS=0/i, terminal, 8_000);

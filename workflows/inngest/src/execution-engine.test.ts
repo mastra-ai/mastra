@@ -409,3 +409,30 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
     expect(logger.error.mock.calls[0]?.[0]).toContain('child blew up');
   });
 });
+
+describe('InngestExecutionEngine span hooks without observability (#24731)', () => {
+  it('does not spend Inngest steps creating spans when observability is not configured', async () => {
+    const inngestStep = { run: vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn()) };
+    const engine = new InngestExecutionEngine({} as Mastra, inngestStep as any, 0, {} as any);
+    const executionContext = { tracingIds: { traceId: 't', workflowSpanId: 's' } } as any;
+
+    const stepSpan = await engine.createStepSpan({
+      parentSpan: undefined,
+      operationId: 'span.start.step',
+      options: { name: 'step', type: 'workflow_step' },
+      executionContext,
+    });
+    const childSpan = await engine.createChildSpan({
+      parentSpan: undefined,
+      operationId: 'span.start.child',
+      options: { name: 'child', type: 'workflow_loop' },
+      executionContext,
+    });
+    await engine.endStepSpan({ span: stepSpan, operationId: 'span.end.step', endOptions: {} });
+    await engine.endChildSpan({ span: childSpan, operationId: 'span.end.child' });
+
+    expect(stepSpan).toBeUndefined();
+    expect(childSpan).toBeUndefined();
+    expect(inngestStep.run).not.toHaveBeenCalled();
+  });
+});

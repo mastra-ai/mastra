@@ -10,6 +10,7 @@ import type {
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TraceQueryTenantScope,
   TrustedThreadPredicate,
   TrustedThreadQueryPlan,
   TrustedTraceQueryObservedFieldsPlan,
@@ -21,6 +22,7 @@ import type {
 
 import type { DuckDBConnection } from '../../db/index';
 import { parseJson } from './helpers';
+import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 
 type ParameterType = 'scalar' | 'timestamp';
 type FieldDefinition = { sql: string; parameterType: ParameterType };
@@ -316,7 +318,25 @@ export interface CompiledDuckDBTraceQuery {
   values: unknown[];
 }
 
-function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): string[] {
+function compileDuckDBTraceScope(
+  relatedCollections: Set<RelatedCollection>,
+  scope: TraceQueryTenantScope | undefined,
+): { ctes: string[]; values: unknown[] } {
+  // Rows with a NULL organizationId never match a scope: `NULL = ?` is not true.
+  const tenantConditions = (alias: string): string[] =>
+    scope
+      ? [`${alias}.organizationId = ?`, ...(scope.resourceId === undefined ? [] : [`${alias}.resourceId = ?`])]
+      : [];
+  const tenantValues = scope
+    ? scope.resourceId === undefined
+      ? [scope.organizationId]
+      : [scope.organizationId, scope.resourceId]
+    : [];
+  const tenantWhere = (alias: string): string => {
+    const conditions = tenantConditions(alias);
+    return conditions.length ? `\n      WHERE ${conditions.join(' AND ')}` : '';
+  };
+  const values: unknown[] = [...tenantValues];
   const ctes = [
     `root_events AS (
       SELECT
@@ -339,9 +359,12 @@ function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): st
     `root_scope AS (
       SELECT *
       FROM current_roots r
-      WHERE r.endedAt IS NOT NULL
-        AND r.startedAt >= CAST(? AS TIMESTAMP)
-        AND r.startedAt < CAST(? AS TIMESTAMP)
+      WHERE ${[
+        'r.endedAt IS NOT NULL',
+        'r.startedAt >= CAST(? AS TIMESTAMP)',
+        'r.startedAt < CAST(? AS TIMESTAMP)',
+        ...tenantConditions('r'),
+      ].join('\n        AND ')}
     )`,
   ];
 
@@ -358,7 +381,7 @@ function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): st
           ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END ASC, e.cursorId DESC
         ) AS currentRank
       FROM span_events e
-      INNER JOIN root_scope roots ON roots.traceId = e.traceId
+      INNER JOIN root_scope roots ON roots.traceId = e.traceId${tenantWhere('e')}
     ),
     current_spans AS (
       SELECT
@@ -385,29 +408,34 @@ function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): st
       FROM current_span_rows
       WHERE currentRank = 1
     )`);
+    values.push(...tenantValues);
   }
 
   if (relatedCollections.has('scores')) {
     ctes.push(`current_scores AS (
       SELECT s.*
       FROM score_events s
-      INNER JOIN root_scope roots ON roots.traceId = s.traceId
+      INNER JOIN root_scope roots ON roots.traceId = s.traceId${tenantWhere('s')}
     )`);
+    values.push(...tenantValues);
   }
 
   if (relatedCollections.has('feedback')) {
     ctes.push(`current_feedback AS (
       SELECT f.*
       FROM feedback_events f
-      INNER JOIN root_scope roots ON roots.traceId = f.traceId
+      INNER JOIN root_scope roots ON roots.traceId = f.traceId${tenantWhere('f')}
     )`);
+    values.push(...tenantValues);
   }
 
-  return ctes;
+  return { ctes, values };
 }
 
 export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
+  const relatedCollections = collectRelatedCollections(plan.where);
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
   const conditions = [
     `r.endedAt IS NOT NULL`,
     `r.startedAt >= CAST(? AS TIMESTAMP)`,
@@ -420,11 +448,8 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
     values.push(...predicate.values);
   }
 
-  const relatedCollections = collectRelatedCollections(plan.where);
-  const ctes = compileDuckDBTraceScope(relatedCollections);
-
   ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}
+    SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}
     FROM root_scope r
     WHERE ${conditions.slice(3).join('\n      AND ') || 'TRUE'}
   )`);
@@ -447,8 +472,53 @@ LIMIT ?`,
     };
   }
 
+  if (plan.paginationMode === 'delta') {
+    const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb');
+    if (watermark !== undefined && (!/^\d+$/.test(watermark) || BigInt(watermark) > 9223372036854775807n)) {
+      throw new coreStorage.TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+    }
+    values.push(watermark ?? '0', plan.limit + 1);
+    return {
+      sql: `${candidates},
+  delta_head AS (SELECT coalesce(max(cursorId), 0) AS streamHead FROM root_events),
+  delta_rows AS (
+    SELECT * FROM candidates
+    WHERE deltaWatermark > CAST(? AS BIGINT) ${watermark === undefined ? 'AND FALSE' : ''}
+    ORDER BY deltaWatermark ASC, traceId ASC
+    LIMIT ?
+  )
+SELECT delta_rows.*, delta_head.streamHead
+FROM delta_head
+LEFT JOIN delta_rows ON TRUE
+ORDER BY delta_rows.deltaWatermark ASC NULLS LAST, delta_rows.traceId ASC`,
+      values,
+    };
+  }
+
   const orderField = plan.orderBy.field;
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  if (plan.paginationMode === 'page') {
+    values.push(plan.perPage, plan.page * plan.perPage);
+    return {
+      sql: `${candidates},
+  page_rows AS (
+    SELECT *, row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position
+    FROM candidates
+    ORDER BY ${orderField} ${direction}, traceId ASC
+    LIMIT ? OFFSET ?
+  ),
+  page_total AS (
+    SELECT COUNT(*) AS total
+    FROM candidates
+  )
+SELECT page_rows.*, page_total.total${deltaPollingFeatureEnabled() ? ', (SELECT coalesce(max(cursorId), 0) FROM root_events) AS streamHead' : ''}
+FROM page_total
+LEFT JOIN page_rows ON TRUE
+ORDER BY page_rows.__row_position ASC NULLS LAST`,
+      values,
+    };
+  }
+
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
@@ -469,10 +539,10 @@ LIMIT ?`,
 }
 
 export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
-  const values: unknown[] = [plan.traces.timeRange.from, plan.traces.timeRange.to];
   const relatedCollections = collectRelatedCollections(plan.traces.where);
   collectThreadRelatedCollections(plan.where, relatedCollections);
-  const ctes = compileDuckDBTraceScope(relatedCollections);
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
+  const values: unknown[] = [plan.traces.timeRange.from, plan.traces.timeRange.to, ...scopeValues];
 
   let eligibilitySql = 'TRUE';
   if (plan.traces.where) {
@@ -539,12 +609,13 @@ function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope
 export function compileDuckDBTraceQueryObservedFields(
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledDuckDBTraceQuery {
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(new Set(), plan.scope);
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
   if (plan.search) values.push(plan.search);
   values.push(plan.limit + 1);
   const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower(?)) > 0` : '';
   return {
-    sql: `WITH ${compileDuckDBTraceScope(new Set()).join(',\n  ')}
+    sql: `WITH ${ctes.join(',\n  ')}
 SELECT 'metadata.' || entry.key AS path, count(*) AS occurrences
 FROM root_scope r, LATERAL json_each(r.metadata) entry
 WHERE entry.type = 'VARCHAR'
@@ -562,8 +633,8 @@ LIMIT ?`,
 }
 
 export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledDuckDBTraceQuery {
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
-  const ctes = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope));
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope), plan.scope);
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
   let fieldSql: string;
   if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const jsonPath = `$.${JSON.stringify(plan.path.slice('metadata.'.length))}`;
@@ -639,9 +710,50 @@ function asIsoTimestamp(value: unknown): string {
 }
 
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+  if (plan.paginationMode === 'delta') assertDeltaPollingEnabled();
+  if (plan.paginationMode === 'page') {
+    const query = compileDuckDBTraceQuery(plan);
+    const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+    const total = Number(rows[0]?.total ?? 0);
+    const traces = rows
+      .filter(row => row.traceId != null)
+      .map(row => ({
+        traceId: String(row.traceId),
+        rootSpanId: String(row.rootSpanId),
+        name: row.name,
+        entityId: row.entityId ?? null,
+        parentSpanId: row.parentSpanId ?? null,
+        createdAt: asIsoTimestamp(row.startedAt),
+        metadata: parseJson(row.metadata) ?? null,
+        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+        threadId: row.threadId == null ? null : String(row.threadId),
+        resourceId: row.resourceId == null ? null : String(row.resourceId),
+        startedAt: asIsoTimestamp(row.startedAt),
+        endedAt: asIsoTimestamp(row.endedAt),
+        entityName: row.entityName == null ? null : String(row.entityName),
+        entityType: row.entityType == null ? null : String(row.entityType),
+        environment: row.environment == null ? null : String(row.environment),
+        status: row.status,
+      }));
+    return coreStorage.traceQueryResponseSchema.parse({
+      traces,
+      // The list-polling feature predates the trace-query cursor encoder.
+      ...(deltaPollingFeatureEnabled() && typeof coreStorage.encodeTraceQueryDeltaCursor === 'function'
+        ? { deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'duckdb', String(rows[0]?.streamHead ?? 0)) }
+        : {}),
+      pagination: {
+        total,
+        page: plan.page,
+        perPage: plan.perPage,
+        hasMore: (plan.page + 1) * plan.perPage < total,
+      },
+    });
+  }
+
   const query = compileDuckDBTraceQuery(plan);
   const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
-  const visibleRows = rows.slice(0, plan.limit);
+  const matchingRows = plan.paginationMode === 'delta' ? rows.filter(row => row.traceId != null) : rows;
+  const visibleRows = matchingRows.slice(0, plan.limit);
 
   if (plan.result === 'groups') {
     const groups = visibleRows.map(row => ({ threadId: String(row.threadId) }));
@@ -675,6 +787,20 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
   }));
+  if (plan.paginationMode === 'delta') {
+    const previous = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb') ?? '0';
+    const head = String(rows[0]?.streamHead ?? 0);
+    const watermark = visibleRows.length
+      ? String(visibleRows.at(-1)!.deltaWatermark)
+      : BigInt(head) > BigInt(previous)
+        ? head
+        : previous;
+    return coreStorage.traceQueryResponseSchema.parse({
+      traces,
+      delta: { limit: plan.limit, hasMore: matchingRows.length > plan.limit },
+      deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'duckdb', watermark),
+    });
+  }
   const last = traces.at(-1);
   return coreStorage.traceQueryResponseSchema.parse({
     traces,

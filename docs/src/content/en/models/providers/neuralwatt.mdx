@@ -7,7 +7,7 @@ description: "Browse Neuralwatt model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/neuralwatt.svg" alt="Neuralwatt logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Neuralwatt
 
-Access 21 Neuralwatt models through Mastra's model router. Authentication is handled automatically using the `NEURALWATT_API_KEY` environment variable.
+Access 29 Neuralwatt models through Mastra's model router. Authentication is handled automatically using the `NEURALWATT_API_KEY` environment variable.
 
 Learn more in the [Neuralwatt documentation](https://portal.neuralwatt.com/docs).
 
@@ -53,7 +53,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048560,
-    "maxOutput": 65536,
+    "maxOutput": 393216,
     "inputCost": 0.14,
     "outputCost": 0.28
   },
@@ -65,12 +65,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048560,
-    "maxOutput": 65536,
+    "maxOutput": 393216,
     "inputCost": 0.091,
     "outputCost": 0.182
   },
   {
-    "model": "neuralwatt/deepseek-v4-pro",
+    "model": "neuralwatt/deepseek-v4-flash-speed",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -78,8 +78,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048560,
     "maxOutput": 393216,
-    "inputCost": 1,
-    "outputCost": 3
+    "inputCost": 0.14,
+    "outputCost": 0.28
+  },
+  {
+    "model": "neuralwatt/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048560,
+    "maxOutput": 393216,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "neuralwatt/deepseek-v4.1-flash-flex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048560,
+    "maxOutput": 393216,
+    "inputCost": 0.0975,
+    "outputCost": 0.39
   },
   {
     "model": "neuralwatt/gemma-4-31b",
@@ -94,90 +118,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.42
   },
   {
-    "model": "neuralwatt/glm-5.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048560,
-    "maxOutput": 1048560,
-    "inputCost": 1.45,
-    "outputCost": 4.5
-  },
-  {
-    "model": "neuralwatt/glm-5.2-fast",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048560,
-    "maxOutput": 1048560,
-    "inputCost": 1.45,
-    "outputCost": 4.5
-  },
-  {
-    "model": "neuralwatt/glm-5.2-flex",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048560,
-    "maxOutput": 1048560,
-    "inputCost": 0.9425,
-    "outputCost": 2.925
-  },
-  {
-    "model": "neuralwatt/glm-5.2-short",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 199984,
-    "maxOutput": 32000,
-    "inputCost": 1.45,
-    "outputCost": 4.5
-  },
-  {
-    "model": "neuralwatt/glm-5.2-short-fast",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 199984,
-    "maxOutput": 32000,
-    "inputCost": 1.45,
-    "outputCost": 4.5
-  },
-  {
-    "model": "neuralwatt/glm-5.2-short-fast-flex",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 199984,
-    "maxOutput": 32000,
-    "inputCost": 0.9425,
-    "outputCost": 2.925
-  },
-  {
-    "model": "neuralwatt/glm-5.2-short-flex",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 199984,
-    "maxOutput": 32000,
-    "inputCost": 0.9425,
-    "outputCost": 2.925
-  },
-  {
     "model": "neuralwatt/glm-5.3",
     "imageInput": false,
     "audioInput": false,
@@ -188,6 +128,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048560,
     "inputCost": 1.45,
     "outputCost": 4.5
+  },
+  {
+    "model": "neuralwatt/glm-5.3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048560,
+    "maxOutput": 1048560,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
+    "model": "neuralwatt/glm-5.3-flash-flex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048560,
+    "maxOutput": 1048560,
+    "inputCost": 0.0975,
+    "outputCost": 0.325
+  },
+  {
+    "model": "neuralwatt/glm-5.3-flex",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048560,
+    "maxOutput": 1048560,
+    "inputCost": 0.9425,
+    "outputCost": 2.925
   },
   {
     "model": "neuralwatt/kimi-k2.7-code",
@@ -269,9 +245,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262128,
-    "maxOutput": 65536,
+    "maxOutput": 131072,
     "inputCost": 0.45,
     "outputCost": 3.2
+  },
+  {
+    "model": "neuralwatt/qwen-3.8-27b-flex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262128,
+    "maxOutput": 131072,
+    "inputCost": 0.2925,
+    "outputCost": 2.08
   },
   {
     "model": "neuralwatt/qwen3.6-35b",
@@ -296,6 +284,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131056,
     "inputCost": 0.29,
     "outputCost": 1.15
+  },
+  {
+    "model": "neuralwatt/qwen3.6-35b-flex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131056,
+    "maxOutput": 131056,
+    "inputCost": 0.1885,
+    "outputCost": 0.7475
   }
 ]}
 />
@@ -330,7 +330,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "neuralwatt/qwen3.6-35b-fast"
+      ? "neuralwatt/qwen3.6-35b-flex"
       : "neuralwatt/deepseek-v4-flash";
   }
 });

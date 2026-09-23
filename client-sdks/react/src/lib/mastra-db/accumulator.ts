@@ -61,6 +61,59 @@ function toolErrorText(error: unknown): string {
   return String(error);
 }
 
+type AgentChildMessage =
+  | { type: 'text'; content: string }
+  | {
+      type: 'tool';
+      toolCallId: string;
+      toolName: string;
+      args?: unknown;
+      toolOutput?: unknown;
+    };
+
+type AgentDelegationBoundary = {
+  toolCallId: string;
+  toolName: string;
+};
+
+type NormalizedNestedAgentOutput = {
+  leaf: AgentChunkType;
+  boundaries: AgentDelegationBoundary[];
+};
+
+/**
+ * Agent-as-tool boundaries wrap progressive chunks in nested `tool-output`
+ * envelopes. Peel only agent boundaries; workflow/tool envelopes remain the
+ * leaf so existing child-message accumulation can process them normally.
+ */
+const normalizeNestedAgentOutput = (output: unknown): NormalizedNestedAgentOutput | undefined => {
+  const boundaries: AgentDelegationBoundary[] = [];
+  const seen = new Set<object>();
+  let current = output;
+
+  while (current !== null && typeof current === 'object') {
+    if (seen.has(current)) return undefined;
+    seen.add(current);
+
+    const chunk = current as { type?: unknown; payload?: Record<string, unknown> };
+    if (chunk.type !== 'tool-output') {
+      return { leaf: current as AgentChunkType, boundaries };
+    }
+
+    const toolCallId = chunk.payload?.toolCallId;
+    const toolName = chunk.payload?.toolName;
+    if (typeof toolName !== 'string' || !toolName.startsWith('agent-')) {
+      return { leaf: current as AgentChunkType, boundaries };
+    }
+    if (typeof toolCallId !== 'string' || !('output' in (chunk.payload ?? {}))) return undefined;
+
+    boundaries.push({ toolCallId, toolName });
+    current = chunk.payload?.output;
+  }
+
+  return undefined;
+};
+
 const cloneMetadata = (metadata: MastraDBMessageMetadata | undefined): MastraDBMessageMetadata =>
   metadata ? { ...metadata } : {};
 
@@ -1123,7 +1176,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
               toolName,
               args,
               errorText,
-              ...(toolName?.startsWith('agent-') ? { result: toolPart.toolInvocation.result } : {}),
+              ...(chunk.from === 'AGENT' ? { result: toolPart.toolInvocation.result } : {}),
             } as MastraToolInvocation,
           };
         } else {
@@ -1174,7 +1227,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             }
           } else if (isAgent) {
             const existingOutput =
-              toolPart.toolInvocation.state === 'result' ? toolPart.toolInvocation.result : undefined;
+              toolPart.toolInvocation.state === 'partial-call' || toolPart.toolInvocation.state === 'result'
+                ? toolPart.toolInvocation.result
+                : undefined;
             const existingChild = (existingOutput as { childMessages?: unknown[] } | undefined)?.childMessages;
             output = existingOutput
               ? {
@@ -1284,11 +1339,18 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             result: updated,
           } as MastraToolInvocation,
         };
-      } else if (
-        payloadOutput?.from === 'AGENT' ||
-        (payloadOutput?.from === 'USER' && payloadOutput?.payload?.output?.type?.startsWith('workflow-'))
-      ) {
-        return accumulateAgentChunk(payloadOutput, result, metadata, toolCallId, toolName);
+      } else if (toolName.startsWith('agent-') || payloadOutput?.from === 'AGENT') {
+        const normalized = normalizeNestedAgentOutput(payloadOutput);
+        if (!normalized) return result;
+
+        const { leaf, boundaries } = normalized;
+        if (
+          leaf.from === 'AGENT' ||
+          (leaf.type === 'tool-output' && leaf.payload?.output?.type?.startsWith('workflow-'))
+        ) {
+          return accumulateAgentChunk(leaf, result, metadata, toolCallId, toolName, boundaries);
+        }
+        return result;
       } else {
         const currentResult = (toolPart.toolInvocation as any).result;
         const existing = Array.isArray(currentResult) ? currentResult : [];
@@ -1609,143 +1671,175 @@ const assertExhaustive = (_chunk: never, fallback: MastraDBMessage[]): MastraDBM
 
 // ----- Nested agent-chunk accumulation (mirrors `toUIMessageFromAgent`) -----
 
+const findAgentChildToolIndex = (
+  childMessages: AgentChildMessage[],
+  toolCallId?: string,
+  toolName?: string,
+): number => {
+  for (let index = childMessages.length - 1; index >= 0; index--) {
+    const message = childMessages[index];
+    if (message?.type !== 'tool') continue;
+    if (toolCallId ? message.toolCallId === toolCallId : toolName && message.toolName === toolName) return index;
+  }
+  return -1;
+};
+
+const accumulateAgentChildMessages = (
+  chunk: AgentChunkType,
+  childMessages: AgentChildMessage[],
+): AgentChildMessage[] => {
+  if (chunk.type === 'text-delta') {
+    const text = chunk.payload.text;
+    const lastChildMessage = childMessages[childMessages.length - 1];
+    const textMessage: AgentChildMessage = {
+      type: 'text',
+      content: (lastChildMessage?.type === 'text' ? lastChildMessage.content : '') + text,
+    };
+    return lastChildMessage?.type === 'text'
+      ? [...childMessages.slice(0, -1), textMessage]
+      : [...childMessages, textMessage];
+  }
+
+  if (chunk.type === 'tool-call') {
+    const existingIndex = findAgentChildToolIndex(childMessages, chunk.payload.toolCallId);
+    const toolMessage: AgentChildMessage = {
+      ...(existingIndex === -1 ? {} : childMessages[existingIndex]),
+      type: 'tool',
+      toolCallId: chunk.payload.toolCallId,
+      toolName: chunk.payload.toolName,
+      args: chunk.payload.args,
+    };
+    if (existingIndex === -1) return [...childMessages, toolMessage];
+
+    const nextMessages = [...childMessages];
+    nextMessages[existingIndex] = toolMessage;
+    return nextMessages;
+  }
+
+  if (chunk.type === 'tool-output' && chunk.payload.output?.type?.startsWith('workflow-')) {
+    const toolIndex = findAgentChildToolIndex(childMessages, chunk.payload.toolCallId, chunk.payload.toolName);
+    if (toolIndex === -1) return childMessages;
+
+    const currentMessage = childMessages[toolIndex];
+    if (currentMessage?.type !== 'tool') return childMessages;
+    const existingWorkflowState =
+      currentMessage.toolOutput && typeof currentMessage.toolOutput === 'object'
+        ? (currentMessage.toolOutput as WorkflowStreamResult<any, any, any, any>)
+        : ({} as WorkflowStreamResult<any, any, any, any>);
+    const updated = mapWorkflowStreamChunkToWatchResult(existingWorkflowState, chunk.payload.output);
+    const nextMessages = [...childMessages];
+    nextMessages[toolIndex] = {
+      ...currentMessage,
+      toolOutput: { ...updated, runId: chunk.payload.output.runId },
+    };
+    return nextMessages;
+  }
+
+  if (chunk.type === 'tool-result') {
+    const toolIndex = findAgentChildToolIndex(childMessages, chunk.payload.toolCallId, chunk.payload.toolName);
+    if (toolIndex === -1) return childMessages;
+
+    const currentMessage = childMessages[toolIndex];
+    if (currentMessage?.type !== 'tool') return childMessages;
+    const result = chunk.payload.result as { result?: object; runId?: string } | undefined;
+    const nextMessages = [...childMessages];
+    nextMessages[toolIndex] = {
+      ...currentMessage,
+      toolOutput: chunk.payload.toolName?.startsWith('workflow-')
+        ? { ...(result?.result ?? {}), runId: result?.runId }
+        : chunk.payload.result,
+    };
+    return nextMessages;
+  }
+
+  return childMessages;
+};
+
+const routeAgentChunk = (
+  chunk: AgentChunkType,
+  childMessages: AgentChildMessage[],
+  boundaries: AgentDelegationBoundary[],
+): AgentChildMessage[] => {
+  const [boundary, ...remaining] = boundaries;
+  if (!boundary) return accumulateAgentChildMessages(chunk, childMessages);
+
+  let toolIndex = findAgentChildToolIndex(childMessages, boundary.toolCallId, boundary.toolName);
+  let nextMessages = childMessages;
+  if (toolIndex === -1) {
+    toolIndex = childMessages.length;
+    nextMessages = [
+      ...childMessages,
+      {
+        type: 'tool',
+        toolCallId: boundary.toolCallId,
+        toolName: boundary.toolName,
+        args: {},
+      },
+    ];
+  }
+
+  const currentMessage = nextMessages[toolIndex];
+  if (currentMessage?.type !== 'tool' || !currentMessage.toolName.startsWith('agent-')) return childMessages;
+
+  const currentOutput =
+    currentMessage.toolOutput !== null && typeof currentMessage.toolOutput === 'object'
+      ? (currentMessage.toolOutput as Record<string, unknown>)
+      : {};
+  const nestedMessages = Array.isArray(currentOutput.childMessages)
+    ? (currentOutput.childMessages as AgentChildMessage[])
+    : [];
+  const updatedNestedMessages = routeAgentChunk(chunk, nestedMessages, remaining);
+  if (updatedNestedMessages === nestedMessages) return childMessages;
+
+  const updatedMessages = [...nextMessages];
+  updatedMessages[toolIndex] = {
+    ...currentMessage,
+    toolOutput: { ...currentOutput, childMessages: updatedNestedMessages },
+  };
+  return updatedMessages;
+};
+
 const accumulateAgentChunk = (
   chunk: AgentChunkType,
   conversation: MastraDBMessage[],
   _metadata: MastraDBMessageMetadata,
   parentToolCallId?: string,
   parentToolName?: string,
+  boundaries: AgentDelegationBoundary[] = [],
 ): MastraDBMessage[] => {
-  const lastMessage = conversation[conversation.length - 1];
-  if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+  if (!parentToolCallId) return conversation;
+  const location = locateToolPart(conversation, parentToolCallId, false);
+  if (!location) return conversation;
 
-  const parts = [...lastMessage.content.parts];
+  const targetMessage = conversation[location.messageIndex];
+  if (!targetMessage || targetMessage.role !== 'assistant') return conversation;
+  const parts = [...targetMessage.content.parts];
+  const toolPart = parts[location.toolPartIndex];
+  if (!toolPart || !isToolPart(toolPart)) return conversation;
+  if (parentToolName && toolPart.toolInvocation.toolName !== parentToolName) return conversation;
 
-  const findToolPartIndex = () =>
-    parts.findIndex(
-      part =>
-        isToolPart(part) &&
-        ((parentToolCallId && part.toolInvocation.toolCallId === parentToolCallId) ||
-          (parentToolName && part.toolInvocation.toolName === parentToolName)),
-    );
+  const invocationResult =
+    'result' in toolPart.toolInvocation && toolPart.toolInvocation.result !== null
+      ? toolPart.toolInvocation.result
+      : undefined;
+  const existingResult =
+    invocationResult && typeof invocationResult === 'object' ? (invocationResult as Record<string, unknown>) : {};
+  const childMessages = Array.isArray(existingResult.childMessages)
+    ? (existingResult.childMessages as AgentChildMessage[])
+    : [];
+  const updatedChildMessages = routeAgentChunk(chunk, childMessages, boundaries);
+  if (updatedChildMessages === childMessages) return conversation;
 
-  if (chunk.type === 'text-delta') {
-    const agentChunk = chunk.payload as any;
-    const toolPartIndex = findToolPartIndex();
-    if (toolPartIndex === -1) return conversation;
+  parts[location.toolPartIndex] = {
+    ...toolPart,
+    toolInvocation: {
+      ...toolPart.toolInvocation,
+      state: 'partial-call',
+      result: { ...existingResult, childMessages: updatedChildMessages },
+    } as MastraToolInvocation,
+  };
 
-    const toolPart = parts[toolPartIndex] as MastraToolInvocationPart;
-    const existingResult = (toolPart.toolInvocation as any).result || {};
-    const childMessages = existingResult.childMessages || [];
-    const lastChildMessage = childMessages[childMessages.length - 1];
-
-    const textMessage = { type: 'text', content: (lastChildMessage?.content || '') + agentChunk.text };
-    const nextChildren =
-      lastChildMessage?.type === 'text'
-        ? [...childMessages.slice(0, -1), textMessage]
-        : [...childMessages, textMessage];
-
-    parts[toolPartIndex] = {
-      ...toolPart,
-      toolInvocation: {
-        ...toolPart.toolInvocation,
-        result: { ...existingResult, childMessages: nextChildren },
-      } as MastraToolInvocation,
-    };
-  } else if (chunk.type === 'tool-call') {
-    const agentChunk = chunk.payload as any;
-    const toolPartIndex = findToolPartIndex();
-    if (toolPartIndex === -1) return conversation;
-
-    const toolPart = parts[toolPartIndex] as MastraToolInvocationPart;
-    const existingResult = (toolPart.toolInvocation as any).result || {};
-    const childMessages = existingResult.childMessages || [];
-
-    parts[toolPartIndex] = {
-      ...toolPart,
-      toolInvocation: {
-        ...toolPart.toolInvocation,
-        result: {
-          ...existingResult,
-          childMessages: [
-            ...childMessages,
-            {
-              type: 'tool',
-              toolCallId: agentChunk.toolCallId,
-              toolName: agentChunk.toolName,
-              args: agentChunk.args,
-            },
-          ],
-        },
-      } as MastraToolInvocation,
-    };
-  } else if (chunk.type === 'tool-output') {
-    const agentChunk = chunk.payload as any;
-    const toolPartIndex = findToolPartIndex();
-    if (toolPartIndex === -1) return conversation;
-
-    const toolPart = parts[toolPartIndex] as MastraToolInvocationPart;
-    if (agentChunk?.output?.type?.startsWith('workflow-')) {
-      const existingResult = (toolPart.toolInvocation as any).result || {};
-      const childMessages = existingResult.childMessages || [];
-      const lastIndex = childMessages.length - 1;
-      const currentMessage = childMessages[lastIndex];
-      const actualExistingWorkflowState = (currentMessage as any)?.toolOutput || {};
-      const updated = mapWorkflowStreamChunkToWatchResult(actualExistingWorkflowState, agentChunk.output);
-
-      if (lastIndex >= 0 && childMessages[lastIndex]?.type === 'tool') {
-        parts[toolPartIndex] = {
-          ...toolPart,
-          toolInvocation: {
-            ...toolPart.toolInvocation,
-            result: {
-              ...existingResult,
-              childMessages: [
-                ...childMessages.slice(0, -1),
-                {
-                  ...currentMessage,
-                  toolOutput: { ...updated, runId: agentChunk.output.runId },
-                },
-              ],
-            },
-          } as MastraToolInvocation,
-        };
-      }
-    }
-  } else if (chunk.type === 'tool-result') {
-    const agentChunk = chunk.payload as any;
-    const toolPartIndex = findToolPartIndex();
-    if (toolPartIndex === -1) return conversation;
-
-    const toolPart = parts[toolPartIndex] as MastraToolInvocationPart;
-    const existingResult = (toolPart.toolInvocation as any).result || {};
-    const childMessages = existingResult.childMessages || [];
-    const lastIndex = childMessages.length - 1;
-    const isWorkflow = agentChunk?.toolName?.startsWith('workflow-');
-
-    if (lastIndex >= 0 && childMessages[lastIndex]?.type === 'tool') {
-      parts[toolPartIndex] = {
-        ...toolPart,
-        toolInvocation: {
-          ...toolPart.toolInvocation,
-          result: {
-            ...existingResult,
-            childMessages: [
-              ...childMessages.slice(0, -1),
-              {
-                ...childMessages[lastIndex],
-                toolOutput: isWorkflow
-                  ? { ...(agentChunk.result as any)?.result, runId: (agentChunk.result as any)?.runId }
-                  : agentChunk.result,
-              },
-            ],
-          },
-        } as MastraToolInvocation,
-      };
-    }
-  }
-
-  return replaceLast(conversation, withParts(lastMessage, parts));
+  return replaceAt(conversation, location.messageIndex, withParts(targetMessage, parts));
 };
 
 export interface AccumulateNetworkChunkArgs {

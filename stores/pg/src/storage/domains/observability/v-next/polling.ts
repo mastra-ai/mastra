@@ -87,7 +87,7 @@ export function decodeDeltaCursor(cursor: string): DeltaCursorParts {
   };
 }
 
-export async function readSafeXactHorizon(client: DbClient): Promise<string> {
+export async function readSafeXactHorizon(client: Pick<DbClient, 'one'>): Promise<string> {
   const row = await client.one<{ xactId: string }>(`SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS "xactId"`);
   return validatePgInteger(row.xactId);
 }

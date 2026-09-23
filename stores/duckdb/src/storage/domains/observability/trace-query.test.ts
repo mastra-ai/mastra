@@ -283,6 +283,46 @@ describe('DuckDB advanced trace query', () => {
     expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
   });
 
+  it('binds the trusted tenant scope into root_scope and every related CTE in emission order', () => {
+    const scope = { organizationId: 'org-a', resourceId: 'res-a' };
+    const compiled = compileDuckDBTraceQuery(
+      planTraceQuery(
+        parseTraceQueryRequest({
+          timeRange: TIME_RANGE,
+          where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } } } },
+          page: { limit: 2 },
+        }),
+        { scope },
+      ),
+    );
+
+    expect(compiled.sql).toMatch(/root_scope AS \([\s\S]*?r\.organizationId = \?\s+AND r\.resourceId = \?/);
+    expect(compiled.sql).toMatch(/current_scores AS \([\s\S]*?WHERE s\.organizationId = \? AND s\.resourceId = \?/);
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      'org-a',
+      'res-a',
+      'org-a',
+      'res-a',
+      'factuality',
+      3,
+    ]);
+  });
+
+  it('adds no tenant condition when the plan is unscoped', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } } } },
+        page: { limit: 2 },
+      }),
+    );
+
+    expect(compiled.sql).not.toContain('organizationId = ?');
+    expect(compiled.sql).not.toContain('resourceId = ?');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'factuality', 3]);
+  });
+
   it('uses total null semantics for negative predicates', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({ where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'excluded' } } }),
@@ -315,6 +355,22 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).toContain('GROUP BY threadId');
     expect(compiled.sql).toContain('ORDER BY threadId ASC');
     expect(compiled.values.at(-1)).toBe(5);
+  });
+
+  it('compiles list-compatible rows and metadata into one query', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        orderBy: [{ field: 'endedAt', direction: 'asc' }],
+        pagination: { page: 2, perPage: 25 },
+      }),
+    );
+
+    expect(compiled.sql).toContain('page_rows AS');
+    expect(compiled.sql).toContain('ORDER BY endedAt ASC, traceId ASC');
+    expect(compiled.sql).toContain('LIMIT ? OFFSET ?');
+    expect(compiled.sql).toContain('SELECT COUNT(*) AS total\n    FROM candidates');
+    expect(compiled.sql).toContain('LEFT JOIN page_rows ON TRUE');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
   });
 
   it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
@@ -463,6 +519,39 @@ describe('DuckDB advanced trace query', () => {
       inputPreview: null,
     });
     expect(response.page.next).toBeNull();
+  });
+
+  it('returns exact list-compatible pagination metadata from one statement', async () => {
+    const query = vi.fn().mockResolvedValue([{ ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: 3n }]);
+    const response = await queryTraces(
+      { query } as unknown as DuckDBConnection,
+      plan({ pagination: { page: 1, perPage: 2 } }),
+    );
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(response).toMatchObject({
+      traces: [{ traceId: 'trace-c' }],
+      pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
+    });
+    expect(response).not.toHaveProperty('page');
+  });
+
+  it.each([
+    ['empty', 0, 0],
+    ['out-of-range', 3, 7],
+  ])('preserves totals for %s pages without trace rows', async (_case, page, total) => {
+    const query = vi.fn().mockResolvedValue([{ traceId: null, total: BigInt(total) }]);
+
+    const response = await queryTraces(
+      { query } as unknown as DuckDBConnection,
+      plan({ pagination: { page, perPage: 2 } }),
+    );
+
+    expect(response).toEqual({
+      traces: [],
+      pagination: { total, page, perPage: 2, hasMore: false },
+      deltaCursor: expect.any(String),
+    });
   });
 
   it('returns fixed thread identities and computes the next cursor from the last visible row', async () => {

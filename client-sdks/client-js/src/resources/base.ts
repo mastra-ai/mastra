@@ -1,6 +1,6 @@
 import type { RequestOptions, ClientOptions } from '../types';
 import { MastraClientError } from '../types';
-import { normalizeRoutePath } from '../utils';
+import { mergeAbortSignals, normalizeRoutePath } from '../utils';
 
 export class BaseResource {
   readonly options: ClientOptions;
@@ -33,7 +33,7 @@ export class BaseResource {
     if (!Number.isSafeInteger(retries) || retries < 0) {
       throw new RangeError('retries must be a non-negative safe integer');
     }
-    const signal = fetchOptions.signal ?? this.options.abortSignal;
+    const signal = mergeAbortSignals(this.options.abortSignal, fetchOptions.signal);
     const fetchFn = customFetch || fetch;
 
     let delay = backoffMs;
@@ -41,6 +41,9 @@ export class BaseResource {
     const fullPath = `${this.apiPrefix}${path}`;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
+      if (signal?.aborted) {
+        throw signal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
       try {
         const response = await fetchFn(`${baseUrl.replace(/\/$/, '')}${fullPath}`, {
           ...fetchOptions,
@@ -92,7 +95,8 @@ export class BaseResource {
       } catch (error) {
         lastError = error as Error;
 
-        if (signal?.aborted) {
+        // Aborted requests must not be retried
+        if (signal?.aborted || (error as Error)?.name === 'AbortError') {
           throw error;
         }
 
@@ -106,7 +110,17 @@ export class BaseResource {
           break;
         }
 
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+          }, delay);
+          const onAbort = () => {
+            clearTimeout(timer);
+            reject(signal?.reason ?? new DOMException('This operation was aborted', 'AbortError'));
+          };
+          signal?.addEventListener('abort', onAbort, { once: true });
+        });
         delay = Math.min(delay * 2, maxBackoffMs);
       }
     }

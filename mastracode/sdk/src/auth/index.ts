@@ -5,6 +5,7 @@
 export * from './types.js';
 export * from './provider-auth-error.js';
 export * from './storage.js';
+export * from './account-rotation-processor.js';
 export { anthropicOAuthProvider } from './providers/anthropic.js';
 export { githubCopilotOAuthProvider } from './providers/github-copilot.js';
 export { kimiCodingOAuthProvider } from './providers/kimi-coding.js';

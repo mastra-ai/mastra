@@ -124,12 +124,12 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="flex max-h-[90vh] w-[960px] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
-        <DialogHeader className="border-border1 border-b px-4 py-4">
+        <DialogHeader className="border-b border-border px-4 py-4">
           <DialogTitle>Import into dataset</DialogTitle>
-          <DialogDescription className="text-ui-sm text-neutral3 not-sr-only">
+          <DialogDescription className="not-sr-only text-caption text-muted-foreground">
             Add items to{' '}
             {datasetName ? (
-              <code className="bg-surface3 text-ui-xs text-neutral6 rounded px-1 font-mono">{datasetName}</code>
+              <code className="rounded bg-card px-1 font-mono text-meta text-foreground">{datasetName}</code>
             ) : (
               'this dataset'
             )}{' '}
@@ -138,7 +138,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
         </DialogHeader>
 
         <DialogBody className="max-h-none min-h-0 flex-1 overflow-y-auto p-0">
-          <div className="divide-border1 grid divide-y md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
+          <div className="grid divide-y divide-border md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
             <div className="flex min-h-[360px] flex-col p-4">
               <JSONSourcePanel
                 tab={tab}
@@ -158,7 +158,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
           </div>
         </DialogBody>
 
-        <DialogFooter className="border-border1 items-center border-t px-4 py-3 sm:justify-between">
+        <DialogFooter className="items-center border-t border-border px-4 py-3 sm:justify-between">
           <JSONImportStatus validation={validation} />
           <div className="flex gap-2">
             <Button icon={<X />} onClick={handleClose} disabled={isImporting}>
@@ -180,7 +180,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
 function JSONImportStatus({ validation }: { validation: JSONImportValidation }) {
   const dotClassName = cn(
     'size-1.5 shrink-0 rounded-full',
-    validation.status === 'idle' && 'bg-neutral3',
+    validation.status === 'idle' && 'bg-muted-foreground',
     validation.status === 'ready' && 'bg-accent1',
     validation.status === 'error' && 'bg-accent2',
   );
@@ -193,7 +193,8 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
     case 'ready':
       message = (
         <>
-          <b className="text-neutral6 font-medium">{validation.total}</b> item{validation.total !== 1 ? 's' : ''} ready
+          <b className="font-medium text-foreground">{validation.total}</b> item{validation.total !== 1 ? 's' : ''}{' '}
+          ready
           {validation.missingGroundTruthCount > 0 && ` · ${validation.missingGroundTruthCount} without groundTruth`}
         </>
       );
@@ -215,7 +216,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
         case 'missing-input':
           message = (
             <>
-              <b className="text-neutral6 font-medium">{validation.missingInputCount}</b> of {validation.total} item
+              <b className="font-medium text-foreground">{validation.missingInputCount}</b> of {validation.total} item
               {validation.total !== 1 ? 's' : ''} {validation.missingInputCount !== 1 ? 'have' : 'has'} no{' '}
               <code className="font-mono">input</code>
             </>
@@ -226,7 +227,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   }
 
   return (
-    <div role="status" className="text-ui-sm text-neutral4 flex min-w-0 items-center gap-2">
+    <div role="status" className="flex min-w-0 items-center gap-2 text-caption text-muted-foreground">
       <span className={dotClassName} />
       <span className="truncate">{message}</span>
     </div>

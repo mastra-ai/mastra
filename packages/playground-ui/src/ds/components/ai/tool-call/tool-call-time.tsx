@@ -8,7 +8,7 @@ export function ToolCallTime({ at }: { at?: number }) {
 
   return (
     <time
-      className="text-ui-xs text-icon3 shrink-0 tabular-nums"
+      className="shrink-0 text-meta text-muted-foreground tabular-nums"
       dateTime={time.toISOString()}
       title={calendar.format(time)}
     >

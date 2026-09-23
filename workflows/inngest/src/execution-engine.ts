@@ -315,6 +315,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     // otherwise fall back to workflow span
     const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
 
+    // Without observability there is no span to memoize; skip the durable operation.
+    if (!this.mastra?.observability?.getSelectedInstance({})) return undefined;
+
     // Use wrapDurableOperation to memoize span creation
     const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
       const observability = this.mastra?.observability?.getSelectedInstance({});
@@ -398,6 +401,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     // Use the actual parent span's ID if provided, otherwise fall back to workflow span
     const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
+
+    // Without observability there is no span to memoize; skip the durable operation.
+    if (!this.mastra?.observability?.getSelectedInstance({})) return undefined;
 
     // Use wrapDurableOperation to memoize span creation
     const exportedSpan = await this.wrapDurableOperation(operationId, async () => {

@@ -135,6 +135,13 @@ export interface MastraTUIOptions {
   /** Initial message to send on startup */
   initialMessage?: string;
 
+  /**
+   * When set, don't send `initialMessage` if startup resumes a thread that
+   * already has messages (`--tui-initial-prompt`); show this notice instead. By
+   * default the message is always sent.
+   */
+  resumeSkipNotice?: string;
+
   /** Whether to show verbose startup info */
   verbose?: boolean;
 
@@ -246,6 +253,8 @@ export interface TUIState {
   pendingNewThread: boolean;
   /** Current thread title (for display in status line) */
   currentThreadTitle?: string;
+  /** Landed model-pack fallback for the current thread. */
+  fallbackStatus?: { usingPack: string; failedPack: string };
   /** GitHub PR subscriptions for the current thread. */
   activeGithubPrSubscriptions: GithubPrSubscriptionBadge[];
   /** Cached thread previews for the current TUI session */

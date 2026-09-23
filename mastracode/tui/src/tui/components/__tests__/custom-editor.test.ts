@@ -151,6 +151,44 @@ describe('CustomEditor image paste handling', () => {
     expect(followUp).not.toHaveBeenCalled();
   });
 
+  it('preserves the slash and adds a trailing space when Tab accepts a namespaced slash command', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'tab');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    editor.getText = vi.fn().mockReturnValueOnce('/sk/abc').mockReturnValue('skill/always-be-cooking');
+    editor.isShowingAutocomplete = vi.fn(() => true);
+
+    editor.handleInput('\t');
+
+    expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
+    expect(mocks.editorSetText).toHaveBeenCalledWith('/skill/always-be-cooking ');
+  });
+
+  it('does not rewrite a Tab completion that already keeps its slash', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'tab');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    editor.getText = vi.fn().mockReturnValueOnce('/sk').mockReturnValue('/skills ');
+    editor.isShowingAutocomplete = vi.fn(() => true);
+
+    editor.handleInput('\t');
+
+    expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
+    expect(mocks.editorSetText).not.toHaveBeenCalled();
+  });
+
+  it('falls through to the base editor on Tab when autocomplete is hidden', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'tab');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    editor.isShowingAutocomplete = vi.fn(() => false);
+
+    editor.handleInput('\t');
+
+    expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
+    expect(mocks.editorSetText).not.toHaveBeenCalled();
+  });
+
   it('queues a follow-up on Ctrl+F', () => {
     mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'ctrl+f');
 

@@ -7,6 +7,10 @@ describe('runtime-context', () => {
     testTransform(transformer, 'runtime-context');
   });
 
+  it('transforms the documented v0 DI import', () => {
+    testTransform(transformer, 'runtime-context-di');
+  });
+
   it('does not rename RuntimeContext class if not imported from Mastra', () => {
     testTransform(transformer, 'runtime-context-no-import');
   });

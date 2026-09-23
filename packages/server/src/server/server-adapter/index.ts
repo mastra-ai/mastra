@@ -196,7 +196,7 @@ function isSchemaApiRoute(route: ApiRoute): route is SchemaCustomApiRoute {
   return '_mastraSchemaRoute' in route && route._mastraSchemaRoute === true;
 }
 
-function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
+export function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
   // If we have request context, check auth mode to determine which FGA provider to use
   if (requestContext) {
     const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY);

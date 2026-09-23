@@ -386,11 +386,15 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   // Shaped like the real `SourceControlStorageHandle` the Slack wiring now
   // consumes directly: repo resolution is the shared factory-session helper,
   // so the stub has to answer the same row lookups it makes.
-  function makeSourceControl({ existingSession = null as { sessionId: string } | null, hasRepo = true } = {}) {
+  function makeSourceControl({
+    existingSession = null as { sessionId: string } | null,
+    hasRepo = true,
+    integrationId = 'github',
+  } = {}) {
     return {
-      integrationId: 'github',
+      integrationId,
       connections: {
-        list: vi.fn().mockResolvedValue([{ id: 'conn-gh', integrationId: 'github', createdByUserId: 'owner-1' }]),
+        list: vi.fn().mockResolvedValue([{ id: `conn-${integrationId}`, integrationId, createdByUserId: 'owner-1' }]),
       },
       projectRepositories: {
         list: vi.fn().mockResolvedValue(hasRepo ? [{ id: 'pr-1', repositoryId: 'repo-1', branch: null }] : []),
@@ -446,6 +450,18 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
+  });
+
+  it('selects the GitLab partition linked to the routed Factory project', async () => {
+    const github = makeSourceControl({ hasRepo: false });
+    const gitlab = makeSourceControl({ integrationId: 'gitlab' });
+    const { sourceControl: _legacy, ...deps } = makeResolverDeps();
+    const resolve = createChannelResourceIdResolver({ ...deps, sourceControls: [github, gitlab] } as any);
+
+    await expect(resolve(resolveArgs())).resolves.toBe('us-new');
+
+    expect(github.sessions.create).not.toHaveBeenCalled();
+    expect(gitlab.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ projectRepositoryId: 'pr-1' }));
   });
 
   it('a DM thread creates a private session; channel threads stay org-visible', async () => {

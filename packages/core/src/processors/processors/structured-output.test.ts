@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
@@ -39,8 +40,8 @@ describe('StructuredOutputProcessor', () => {
 
   // Helper to create a mock abort function
   function createMockAbort() {
-    return vi.fn((reason?: string) => {
-      throw new Error(reason || 'Aborted');
+    return vi.fn((reason?: string, options = {}) => {
+      throw new TripWire(reason || 'Aborted', options);
     }) as any;
   }
 
@@ -282,8 +283,17 @@ describe('StructuredOutputProcessor', () => {
       ).resolves.toBe(finishChunk);
       expect(abort).not.toHaveBeenCalled();
       expect(controller.enqueue).not.toHaveBeenCalled();
-      expect(() => processor.processOutputStep(outputStepArgs(state, abort))).toThrow(reason);
-      expect(abort).toHaveBeenCalledWith(reason, { retry: true });
+      let tripwire: TripWire<{ error: Error }> | undefined;
+      try {
+        processor.processOutputStep(outputStepArgs(state, abort));
+      } catch (error) {
+        tripwire = error as TripWire<{ error: Error }>;
+      }
+      expect(tripwire).toBeInstanceOf(TripWire);
+      expect(tripwire?.message).toBe(reason);
+      expect(tripwire?.options).toEqual({ retry: true, metadata: { error: upstreamError } });
+      expect(tripwire?.options.metadata?.error).toBe(upstreamError);
+      expect(abort).toHaveBeenCalledWith(reason, { retry: true, metadata: { error: upstreamError } });
       const stepArgs = outputStepArgs(state, abort);
       expect(processor.processOutputStep(stepArgs)).toBe(stepArgs.messages);
 
@@ -349,6 +359,10 @@ describe('StructuredOutputProcessor', () => {
       expect(abort).not.toHaveBeenCalled();
       expect(() => loggingProcessor.processOutputStep(outputStepArgs(state, abort))).toThrow(
         '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+      );
+      expect(abort).toHaveBeenCalledWith(
+        '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+        { retry: true, metadata: { error: upstreamError } },
       );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -1006,11 +1020,12 @@ describe('StructuredOutputProcessor', () => {
           messages: { all: [], user: [], nonUser: [] },
         },
       };
+      const firstError = new Error('first processor failed');
       const errorChunk = {
         runId: 'test-run',
         from: ChunkFrom.AGENT,
         type: 'error',
-        payload: { error: new Error('first processor failed') },
+        payload: { error: firstError },
       };
       const objectChunk = {
         runId: 'test-run',
@@ -1049,7 +1064,7 @@ describe('StructuredOutputProcessor', () => {
 
       const firstReason = '[StructuredOutputProcessor] Structuring failed: first processor failed';
       expect(() => firstProcessor.processOutputStep(outputStepArgs(state, firstAbort))).toThrow(firstReason);
-      expect(firstAbort).toHaveBeenCalledWith(firstReason, { retry: true });
+      expect(firstAbort).toHaveBeenCalledWith(firstReason, { retry: true, metadata: { error: firstError } });
 
       await firstProcessor.processOutputStream({
         part: finishChunk,
@@ -1167,12 +1182,19 @@ describe('StructuredOutputProcessor', () => {
   });
 
   describe('instruction generation', () => {
-    it('should generate instructions based on schema', () => {
-      const instructions = (processor as any).generateInstructions();
+    it('should install generated schema instructions on the structuring agent', async () => {
+      const agent = (processor as unknown as { structuringAgent: Agent }).structuringAgent;
+      const instructions = await agent.getInstructions();
 
       expect(instructions).toContain('data structuring specialist');
       expect(instructions).toContain('JSON format');
       expect(instructions).toContain('Extract relevant information');
+      expect(instructions).toContain('"color"');
+      expect(instructions).toContain('"intensity"');
+      expect(instructions).toContain('"count"');
+      expect(instructions).toContain('"required": [');
+      expect(instructions).toContain('"type": "string"');
+      expect(instructions).toContain('"type": "number"');
       expect(typeof instructions).toBe('string');
     });
 

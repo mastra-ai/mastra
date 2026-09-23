@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { describe, it, beforeEach, afterEach, expect } from 'vitest';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { BaseResource } from './base';
 
 interface RetryTestConfig {
@@ -115,7 +115,7 @@ describe('BaseResource', () => {
     expect(requestCount).toBe(0);
   });
 
-  it('should stop retrying when the selected request signal is aborted', async () => {
+  it('should not fetch at all when the request signal is already aborted', async () => {
     const controller = new AbortController();
     controller.abort();
     let attempts = 0;
@@ -130,25 +130,47 @@ describe('BaseResource', () => {
     });
 
     await expect(customResource.request('/test', { signal: controller.signal })).rejects.toBe(controller.signal.reason);
+    expect(attempts).toBe(0);
+  });
+
+  it('should stop retrying when the signal is aborted during backoff', async () => {
+    const controller = new AbortController();
+    let attempts = 0;
+    const customResource = new BaseResource({
+      baseUrl: serverUrl,
+      retries: 3,
+      backoffMs: 10_000,
+      fetch: async () => {
+        attempts++;
+        // Fail once, then abort while request() is waiting on the backoff timer
+        setTimeout(() => controller.abort(), 5);
+        throw new Error('transient');
+      },
+    });
+
+    await expect(customResource.request('/test', { signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
     expect(attempts).toBe(1);
   });
 
-  it('should prefer a request abort signal over the client abort signal', async () => {
-    const clientSignal = new AbortController().signal;
-    const requestSignal = new AbortController().signal;
+  it('should abort the request when either the request or the client signal aborts', async () => {
+    const clientController = new AbortController();
+    const requestController = new AbortController();
     let receivedSignal: AbortSignal | null | undefined;
     const customResource = new BaseResource({
       baseUrl: serverUrl,
-      abortSignal: clientSignal,
+      abortSignal: clientController.signal,
       fetch: async (_input, init) => {
         receivedSignal = init?.signal;
         return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
       },
     });
 
-    await customResource.request('/test', { signal: requestSignal });
-
-    expect(receivedSignal).toBe(requestSignal);
+    await customResource.request('/test', { signal: requestController.signal });
+    expect(receivedSignal?.aborted).toBe(false);
+    requestController.abort();
+    expect(receivedSignal?.aborted).toBe(true);
   });
 
   it('should use the client abort signal when the request does not provide one', async () => {
@@ -213,5 +235,55 @@ describe('BaseResource', () => {
 
     // Assert: Verify request succeeded using global fetch
     expect(result).toEqual({ success: true });
+  });
+
+  describe('abort signals', () => {
+    const okResponse = () => new Response(JSON.stringify({ ok: true }), { status: 200 });
+
+    it('passes a per-call signal through to fetch', async () => {
+      const customFetch = vi.fn(async () => okResponse());
+      const controller = new AbortController();
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 0, fetch: customFetch });
+
+      await customResource.request('/test', { signal: controller.signal });
+
+      const passedSignal = (customFetch.mock.calls[0] as unknown as [string, RequestInit])[1].signal!;
+      expect(passedSignal.aborted).toBe(false);
+      controller.abort();
+      expect(passedSignal.aborted).toBe(true);
+    });
+
+    it('merges the client-wide abortSignal with the per-call signal', async () => {
+      const customFetch = vi.fn(async () => okResponse());
+      const clientController = new AbortController();
+      const callController = new AbortController();
+      const customResource = new BaseResource({
+        baseUrl: serverUrl,
+        retries: 0,
+        fetch: customFetch,
+        abortSignal: clientController.signal,
+      });
+
+      await customResource.request('/test', { signal: callController.signal });
+
+      const passedSignal = (customFetch.mock.calls[0] as unknown as [string, RequestInit])[1].signal!;
+      expect(passedSignal.aborted).toBe(false);
+      clientController.abort();
+      expect(passedSignal.aborted).toBe(true);
+    });
+
+    it('does not retry when the request was aborted', async () => {
+      const controller = new AbortController();
+      const customFetch = vi.fn(async (_url: string, init: RequestInit) => {
+        controller.abort();
+        throw init.signal!.reason;
+      });
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 3, backoffMs: 0, fetch: customFetch });
+
+      await expect(customResource.request('/test', { signal: controller.signal })).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      expect(customFetch).toHaveBeenCalledTimes(1);
+    });
   });
 });

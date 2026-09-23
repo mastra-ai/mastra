@@ -6,6 +6,7 @@ import { z } from 'zod/v3';
 import { MastraClient } from '../client';
 import type { Body } from '../route-types.generated';
 import type {
+  AbortAgentThreadParams,
   ClientOptions,
   QueueAgentMessageParams,
   SendAgentMessageParams,
@@ -119,7 +120,13 @@ describe('Agent signal routes', () => {
               controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
             }
             // Close after the consumer has had a chance to cancel so onFinish fires against a cancelled stream
-            setTimeout(() => controller.close(), 20);
+            setTimeout(() => {
+              try {
+                controller.close();
+              } catch {
+                // Cancelling the outer stream now cancels this underlying body too
+              }
+            }, 20);
           },
         }),
         { headers: { 'Content-Type': 'text/event-stream' } },
@@ -511,7 +518,8 @@ describe('Agent signal routes', () => {
     const params = {
       resourceId: 'resource-123',
       threadId: 'thread-123',
-    } satisfies SubscribeAgentThreadParams;
+      expectedRunId: 'run-a',
+    } satisfies AbortAgentThreadParams;
     const routeBody: Body<'POST /agents/:agentId/threads/abort'> = params;
 
     await expect(agent.abortThread(params)).resolves.toEqual({ aborted: true });

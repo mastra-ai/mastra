@@ -2194,7 +2194,7 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
-  handler: async ({ mastra, agentId, resourceId, threadId, requestContext: serverRequestContext }) => {
+  handler: async ({ mastra, agentId, resourceId, threadId, expectedRunId, requestContext: serverRequestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
       if (typeof (agent as { abortThreadStream?: unknown }).abortThreadStream !== 'function') {
@@ -2218,7 +2218,11 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         }
       }
 
-      const aborted = await agent.abortThreadStream({ resourceId: effectiveResourceId, threadId: effectiveThreadId });
+      const aborted = await agent.abortThreadStream({
+        resourceId: effectiveResourceId,
+        threadId: effectiveThreadId,
+        expectedRunId,
+      });
       return { aborted };
     } catch (error) {
       return handleError(error, 'error aborting agent thread');
@@ -3664,7 +3668,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
-      const identifier = path ? decodeURIComponent(path) : skillName;
+      const identifier = path ?? skillName;
 
       // Get the skill from the agent (searches both inline and workspace skills)
       const skill = await agent.getSkill(identifier, { requestContext });

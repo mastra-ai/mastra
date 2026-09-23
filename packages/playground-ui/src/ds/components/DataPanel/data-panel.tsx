@@ -1,5 +1,6 @@
 import { DataPanelCloseButton } from './data-panel-close-button';
 import { DataPanelContent } from './data-panel-content';
+import { DataPanelCopyId } from './data-panel-copy-id';
 import { DataPanelHeader } from './data-panel-header';
 import { DataPanelHeaderActions } from './data-panel-header-actions';
 import { DataPanelHeaderContent } from './data-panel-header-content';
@@ -20,6 +21,7 @@ export const DataPanel = Object.assign(DataPanelRoot, {
   Metadata: DataPanelMetadata,
   Meta: DataPanelMeta,
   CloseButton: DataPanelCloseButton,
+  CopyId: DataPanelCopyId,
   NextPrevNav: DataPanelNextPrevNav,
   LoadingData: DataPanelLoadingData,
   NoData: DataPanelNoData,

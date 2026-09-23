@@ -13,6 +13,9 @@ const EXCLUDED_DIRS = new Set([
   'browser/_test-utils',
   'workspaces/_test-utils',
   'observability/_examples',
+  // Standalone private app: not a pnpm workspace member, so its dependencies
+  // are never installed and its suite cannot resolve them (e.g. `hono`).
+  'mastracode/web',
 ]);
 
 // Directories to scan for vitest configs
@@ -35,7 +38,7 @@ const PROJECT_GLOBS = [
   'browser/*/vitest.config.ts',
   'workspaces/*/vitest.config.ts',
   'agent-sdks/*/vitest.config.ts',
-  'mastracode/vitest.config.ts',
+  'mastracode/*/vitest.config.ts',
 ];
 
 /**
@@ -47,7 +50,13 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
   const projects: TestProjectConfiguration[] = [];
 
   // Find all vitest.config.ts files
-  const configPaths = PROJECT_GLOBS.flatMap(pattern => globSync(pattern));
+  const configPaths = PROJECT_GLOBS.flatMap(pattern => {
+    const matches = globSync(pattern);
+    if (matches.length === 0) {
+      throw new Error(`Vitest project glob matched no configs: ${pattern}`);
+    }
+    return matches;
+  });
 
   for (const configPath of configPaths) {
     const projectDir = dirname(configPath);

@@ -10,7 +10,7 @@ import type {
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
 import type { ActorSignal } from '../auth/ee';
-import type { ToolBackgroundConfig } from '../background-tasks';
+import type { BackgroundTaskAdoptionContext, ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
@@ -340,6 +340,12 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      */
     mcp?: MCPToolExecutionContext;
     /**
+     * Skip the TOOL_CALL span for this execution. Set by the MCP server, which
+     * already wraps the call in an MCP_SERVER_REQUEST span. Nested agent and
+     * workflow runs still attach to `tracingContext.currentSpan`.
+     */
+    skipToolSpan?: boolean;
+    /**
      * Workspace for tool execution. When provided at execution time, this overrides
      * any workspace configured at tool build time. Allows dynamic workspace selection
      * per-step via prepareStep.
@@ -370,6 +376,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
     observe?: ToolObserve;
     /** Set by the agent tool-call step when the tool runs as a background task. */
     isBackgroundTask?: boolean;
+    /** Process-local lifecycle bridge for an operation adopted by the background task. */
+    background?: BackgroundTaskAdoptionContext;
   };
 
 /**
@@ -625,6 +633,13 @@ export interface ToolExecutionContext<
 
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
+
+  /**
+   * Process-local lifecycle bridge exposed only during native background
+   * execution. Acknowledgement-returning tools can adopt their existing
+   * operation so the native task remains running until it settles.
+   */
+  background?: BackgroundTaskAdoptionContext;
 
   // ============ Suspend/resume for direct and MCP 2.x execution ============
   // Agents and workflows nest these under `agent` / `workflow` until the next core major.

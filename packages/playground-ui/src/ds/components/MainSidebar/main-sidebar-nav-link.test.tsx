@@ -50,9 +50,10 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       </MainSidebarProvider>,
     );
 
-    expect(Link).toHaveBeenCalledTimes(2);
+    const initialRenderCount = Link.mock.calls.length;
+    expect(initialRenderCount).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Toggle drawer' }));
-    expect(Link).toHaveBeenCalledTimes(2);
+    expect(Link).toHaveBeenCalledTimes(initialRenderCount);
   });
 
   it('applies a pointer cursor to sidebar nav items', () => {
@@ -79,6 +80,27 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     const trigger = screen.getByRole('link', { name: 'Agents' });
     expect(trigger.tagName).toBe('A');
     expect(trigger.getAttribute('href')).toBe('/agents');
+  });
+
+  it('keeps the interactive row mounted when its collapsed tooltip toggles', () => {
+    const { rerender } = render(
+      <TooltipProvider delay={0}>
+        <ul>
+          <MainSidebarNavLink state="collapsed" link={{ name: 'Agents', url: '/agents' }} />
+        </ul>
+      </TooltipProvider>,
+    );
+    const trigger = screen.getByRole('link', { name: 'Agents' });
+
+    rerender(
+      <TooltipProvider delay={0}>
+        <ul>
+          <MainSidebarNavLink state="default" link={{ name: 'Agents', url: '/agents' }} />
+        </ul>
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Agents' })).toBe(trigger);
   });
 
   it('throws when asChild receives a non-element child', () => {

@@ -169,6 +169,7 @@ interface ToolPair {
   args: unknown;
   result?: unknown;
   isError?: boolean;
+  providerMetadata?: Record<string, unknown>;
 }
 
 function assistantToolMessage(id: string, tools: ToolPair[]): MastraDBMessage {
@@ -180,6 +181,7 @@ function assistantToolMessage(id: string, tools: ToolPair[]): MastraDBMessage {
       format: 2,
       parts: tools.map(tool => ({
         type: 'tool-invocation',
+        ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
         toolInvocation: {
           toolCallId: tool.id,
           toolName: tool.name,
@@ -688,7 +690,11 @@ describe('addUserMessage', () => {
     expect((state.chatContainer.children[0] as TemporalGapComponent).render(80).join('\n')).toContain(
       '⏳ 15 minutes later',
     );
-    expect(state.messageComponentsById.size).toBe(0);
+    // Reminders are registered in `messageComponentsById` before insertion —
+    // `render-messages.ts` keys the addUserMessage dedup guard on that map, so
+    // an unregistered reminder would double-render on a repeat dispatch.
+    expect(state.messageComponentsById.size).toBe(1);
+    expect(state.messageComponentsById.get('__temporal_1')).toBe(state.chatContainer.children[0]);
   });
 
   it('anchors a persisted temporal-gap marker before its target message when precedesMessageId is present', () => {
@@ -936,6 +942,33 @@ describe('addUserMessage', () => {
 });
 
 describe('renderExistingMessages history bounds', () => {
+  it('does not replace the active transcript when its owner becomes stale during history loading', async () => {
+    const state = createState();
+    addUserMessage(state, createUserMessage('current transcript', 'current-user'));
+    const currentChildren = [...state.chatContainer.children];
+    let resolveMessages!: (messages: MastraDBMessage[]) => void;
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi.fn().mockReturnValue(
+          new Promise(resolve => {
+            resolveMessages = resolve;
+          }),
+        ),
+      },
+    } as unknown as TUIState['session'];
+    let isCurrent = true;
+
+    const rendering = renderExistingMessages(state, () => isCurrent);
+    isCurrent = false;
+    resolveMessages([createUserMessage('stale transcript', 'stale-user')]);
+    await rendering;
+
+    expect(state.chatContainer.children).toEqual(currentChildren);
+    expect(state.messageComponentsById.has('current-user')).toBe(true);
+    expect(state.messageComponentsById.has('stale-user')).toBe(false);
+  });
+
   it('prunes oversized startup history before the first render', async () => {
     const state = createState();
     const messages = Array.from({ length: 300 }, (_, index) => createUserMessage(`message-${index}`, `user-${index}`));
@@ -1130,6 +1163,35 @@ describe('renderExistingMessages tools', () => {
   });
 
   it.each([undefined, false, true])(
+    'replays completed task metadata without a completion signal (%s)',
+    async enabled => {
+      const message = assistantToolMessage('completed-metadata', [
+        {
+          id: 'completed-call',
+          name: 'view',
+          args: {},
+          result: 'Background task started. Task ID: misleading-text',
+          providerMetadata: { mastra: { backgroundTask: { taskId: 'real-task', status: 'completed' } } },
+        },
+      ]);
+      const state = createState();
+      state.options.backgroundToolsEnabled = enabled;
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      } as unknown as TUIState['session'];
+      await renderExistingMessages(state);
+      const rendered = state.chatContainer
+        .render(120)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m/g, '');
+      expect(rendered).toContain('✓ background · real-task');
+      expect(rendered).not.toContain('background · misleading-text');
+      expect(state.pendingTools.has('completed-call')).toBe(false);
+    },
+  );
+
+  it.each([undefined, false, true])(
     'reconstructs pending background rows only when enabled is true (%s)',
     async enabled => {
       const message = assistantToolMessage('assistant-background-tool', [
@@ -1138,6 +1200,7 @@ describe('renderExistingMessages tools', () => {
           name: 'view',
           args: { path: 'package.json' },
           result: 'Background task started. Task ID: task-1',
+          providerMetadata: { mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } } },
         },
       ]);
       const state = createState();
@@ -1195,7 +1258,8 @@ describe('renderExistingMessages subagents', () => {
         id: 'plugin-call',
         name: 'mastra_expert',
         args: { question: 'demo' },
-        result: 'Background task started. Task ID: visible-demo-123',
+        result: 'Background task resumed. Task ID: visible-demo-123',
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'visible-demo-123', status: 'running' } } },
         isError: false,
       },
     ]);
@@ -1305,6 +1369,53 @@ describe('renderExistingMessages subagents', () => {
     expect(expanded).toContain('Authoritative Alexandria audit');
     expect(state.pendingSubagents.has('tool-background-plugin-1')).toBe(false);
   });
+
+  it.each([undefined, false, true])(
+    'replays cancelled ordinary tool text with background enabled %s',
+    async enabled => {
+      const state = createState();
+      state.options.backgroundToolsEnabled = enabled;
+      const message = assistantToolMessage('cancelled-tool-message', [
+        {
+          id: 'cancelled-call',
+          name: 'view',
+          args: {},
+          result: 'Background task started. Task ID: cancelled-task',
+          isError: false,
+        },
+      ]);
+      const cancellation = createSignal({
+        type: 'notification',
+        tagName: 'notification',
+        contents: 'view cancelled in background',
+        attributes: { source: 'background-work', status: 'cancelled' },
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:cancelled-task:cancelled',
+            taskId: 'cancelled-task',
+            originRunId: 'cancelled-run',
+            originToolCallId: 'cancelled-call',
+            toolName: 'view',
+            status: 'cancelled',
+          },
+        },
+      }).toDBMessage();
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue([message, cancellation]) },
+      } as unknown as TUIState['session'];
+      state.controller = { session: state.session } as unknown as TUIState['controller'];
+      await renderExistingMessages(state);
+      const rendered = state.chatContainer
+        .render(120)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m/g, '');
+      expect(rendered).toContain('Background execution cancelled.');
+      expect(rendered).toContain('■ background · cancelled-task');
+      expect(rendered).not.toContain('Running in background');
+      expect(state.pendingTools.has('cancelled-call')).toBe(false);
+    },
+  );
 
   it('replays a cancelled background plugin subagent as terminal', async () => {
     const toolMessage = assistantToolMessage('assistant-plugin-background-cancelled', [

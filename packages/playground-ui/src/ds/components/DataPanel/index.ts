@@ -11,3 +11,4 @@ export type { DataPanelLoadingDataProps } from './data-panel-loading-data';
 export type { DataPanelNoDataProps } from './data-panel-no-data';
 export type { DataPanelContentProps } from './data-panel-content';
 export type { DataPanelSectionHeadingProps } from './data-panel-section-heading';
+export type { DataPanelCopyIdProps } from './data-panel-copy-id';

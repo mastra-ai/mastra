@@ -38,6 +38,8 @@ export enum SpanType {
   AGENT_RUN = 'agent_run',
   /** Scorer execution */
   SCORER_RUN = 'scorer_run',
+  /** Classifier evaluation */
+  CLASSIFIER_EVALUATION = 'classifier_evaluation',
   /** Individual scorer pipeline step */
   SCORER_STEP = 'scorer_step',
   /** Generic span for custom operations */
@@ -52,6 +54,8 @@ export enum SpanType {
   MODEL_CHUNK = 'model_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
+  /** A request served by a Mastra MCPServer (the server side of an MCP edge) */
+  MCP_SERVER_REQUEST = 'mcp_server_request',
   /** Input or Output Processor execution */
   PROCESSOR_RUN = 'processor_run',
   /** Function/tool execution with inputs, outputs, errors */
@@ -185,6 +189,23 @@ export interface ScorerRunAttributes extends AIBaseAttributes {
   targetScope?: ScorerTargetScope;
   targetEntityType?: EntityType;
   scorerDefinition?: DefinitionSource;
+}
+
+/**
+ * Classifier evaluation attributes
+ */
+export interface ClassifierEvaluationAttributes extends AIBaseAttributes {
+  classifierId?: string;
+  modelId?: string;
+  provider?: string;
+  questionCount?: number;
+  questionTypes?: string[];
+  maxRetries?: number;
+  attemptCount?: number;
+  retryCount?: number;
+  durationMs?: number;
+  usage?: UsageStats;
+  errorType?: string;
 }
 
 /**
@@ -461,6 +482,26 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   toolCallId?: string;
   /** Whether tool execution was successful */
   success?: boolean;
+}
+
+/**
+ * MCP Server Request attributes
+ */
+export interface MCPServerRequestAttributes extends AIBaseAttributes {
+  /** MCP method served, e.g. 'tools/call', 'resources/list', 'prompts/get' */
+  mcpMethod: string;
+  /** Name or URI of the tool, prompt, or resource requested. Absent on list-style calls. */
+  targetName?: string;
+  /** Configured MCPServer name */
+  mcpServer: string;
+  /** Configured MCPServer version */
+  serverVersion?: string;
+  /** Negotiated MCP protocol revision for this request */
+  mcpProtocolVersion?: string;
+  /** Client implementation name, when the client reported one */
+  clientName?: string;
+  /** Client implementation version, when the client reported one */
+  clientVersion?: string;
 }
 
 /**
@@ -895,6 +936,7 @@ export interface GraphActionAttributes extends AIBaseAttributes {
 export interface SpanTypeMap {
   [SpanType.AGENT_RUN]: AgentRunAttributes;
   [SpanType.SCORER_RUN]: ScorerRunAttributes;
+  [SpanType.CLASSIFIER_EVALUATION]: ClassifierEvaluationAttributes;
   [SpanType.SCORER_STEP]: ScorerStepAttributes;
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
@@ -905,6 +947,7 @@ export interface SpanTypeMap {
   [SpanType.CLIENT_TOOL_CALL]: ClientToolCallAttributes;
   [SpanType.PROVIDER_TOOL_CALL]: ProviderToolCallAttributes;
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
+  [SpanType.MCP_SERVER_REQUEST]: MCPServerRequestAttributes;
   [SpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
   [SpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
   [SpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;
@@ -1356,7 +1399,10 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
  * Exported Span interface, used for tracing exporters.
  * This is the format sent to ObservabilityExporter implementations.
  */
-export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {}
+export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
+  /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
+  isInternal?: boolean;
+}
 
 /**
  * Options for ending a model generation span
@@ -1775,6 +1821,12 @@ export interface TraceState {
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
+  /**
+   * Display name for the root span of this trace, replacing the default
+   * `agent run: '<id>'` / `workflow run: '<id>'` name. Use it to tell runs of the
+   * same agent or workflow apart in trace lists. Only applied to the root span.
+   */
+  rootSpanName?: string;
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
   /**

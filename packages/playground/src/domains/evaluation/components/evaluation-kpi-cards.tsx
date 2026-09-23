@@ -61,82 +61,102 @@ export function EvaluationKpiCards({
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Total Scorers</MetricsKpiCard.Label>
         {isLoadingScorers ? (
-          <MetricsKpiCard.Loading />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.Loading />
+          </MetricsKpiCard.ValueRow>
         ) : totalScorers != null ? (
-          <>
+          <MetricsKpiCard.ValueRow>
             <MetricsKpiCard.Value>{String(totalScorers)}</MetricsKpiCard.Value>
             <MetricsKpiCard.NoChange message="Static count" />
-          </>
+          </MetricsKpiCard.ValueRow>
         ) : (
-          <MetricsKpiCard.NoData />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.NoData />
+          </MetricsKpiCard.ValueRow>
         )}
       </MetricsKpiCard>
 
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Total Datasets</MetricsKpiCard.Label>
         {isLoadingDatasets ? (
-          <MetricsKpiCard.Loading />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.Loading />
+          </MetricsKpiCard.ValueRow>
         ) : totalDatasets != null ? (
-          <>
+          <MetricsKpiCard.ValueRow>
             <MetricsKpiCard.Value>{String(totalDatasets)}</MetricsKpiCard.Value>
             <MetricsKpiCard.NoChange message="Static count" />
-          </>
+          </MetricsKpiCard.ValueRow>
         ) : (
-          <MetricsKpiCard.NoData />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.NoData />
+          </MetricsKpiCard.ValueRow>
         )}
       </MetricsKpiCard>
 
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Avg Score</MetricsKpiCard.Label>
         {isLoadingScores ? (
-          <MetricsKpiCard.Loading />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.Loading />
+          </MetricsKpiCard.ValueRow>
         ) : avgScore != null ? (
-          <>
+          <MetricsKpiCard.ValueRow>
             <MetricsKpiCard.Value>{String(avgScore)}</MetricsKpiCard.Value>
             {avgScoreChange ? (
               <MetricsKpiCard.Change changePct={avgScoreChange.changePct} prevValue={avgScoreChange.prevValue} />
             ) : (
               <MetricsKpiCard.NoChange />
             )}
-          </>
+          </MetricsKpiCard.ValueRow>
         ) : (
-          <MetricsKpiCard.NoData />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.NoData />
+          </MetricsKpiCard.ValueRow>
         )}
       </MetricsKpiCard>
 
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Total Experiments</MetricsKpiCard.Label>
         {isLoadingExperiments ? (
-          <MetricsKpiCard.Loading />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.Loading />
+          </MetricsKpiCard.ValueRow>
         ) : totalExperiments != null ? (
-          <>
+          <MetricsKpiCard.ValueRow>
             <MetricsKpiCard.Value>{String(totalExperiments)}</MetricsKpiCard.Value>
             {expComparison ? (
               <MetricsKpiCard.Change changePct={expComparison.changePct} prevValue={expComparison.prevValue} />
             ) : (
               <MetricsKpiCard.NoChange />
             )}
-          </>
+          </MetricsKpiCard.ValueRow>
         ) : (
-          <MetricsKpiCard.NoData />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.NoData />
+          </MetricsKpiCard.ValueRow>
         )}
       </MetricsKpiCard>
 
       <MetricsKpiCard>
         <MetricsKpiCard.Label>Needs Review</MetricsKpiCard.Label>
         {isLoadingReview ? (
-          <MetricsKpiCard.Loading />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.Loading />
+          </MetricsKpiCard.ValueRow>
         ) : totalNeedsReview != null ? (
-          <>
+          <MetricsKpiCard.ValueRow>
             <MetricsKpiCard.Value>{String(totalNeedsReview)}</MetricsKpiCard.Value>
             {totalNeedsReview > 0 ? (
               <MetricsKpiCard.NoChange message="items pending review" />
             ) : (
               <MetricsKpiCard.NoChange message="All caught up" />
             )}
-          </>
+          </MetricsKpiCard.ValueRow>
         ) : (
-          <MetricsKpiCard.NoData />
+          <MetricsKpiCard.ValueRow>
+            <MetricsKpiCard.NoData />
+          </MetricsKpiCard.ValueRow>
         )}
       </MetricsKpiCard>
     </>

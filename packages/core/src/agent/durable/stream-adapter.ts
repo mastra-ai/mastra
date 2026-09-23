@@ -1,6 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
+import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
-import type { Event } from '../../events/types';
+import type { Event, EventCallback } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
@@ -553,6 +554,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }
   };
 
+  // Every delivery has to be acked, including the events this consumer filters
+  // out, or a durable backend (Redis consumer groups) keeps them pending for the
+  // life of the subscription. The EventCallback is a stable reference because
+  // `unsubscribe` has to be handed the same callback that was subscribed.
+  const subscribedCallback: EventCallback = withAck(handleEvent);
+
   // Create the readable stream
   const stream = new ReadableStream<ChunkType<OUTPUT>>({
     start(ctrl) {
@@ -564,16 +571,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       const topic = AGENT_STREAM_TOPIC(runId);
       const subscribePromise =
         offset === undefined
-          ? pubsub.subscribeWithReplay(topic, handleEvent)
+          ? pubsub.subscribeWithReplay(topic, subscribedCallback)
           : pubsub.supportsOffsets
-            ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
-            : pubsub.subscribe(topic, handleEvent, { startFrom: 'latest' });
+            ? pubsub.subscribeFromOffset(topic, offset, subscribedCallback)
+            : pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' });
 
       subscribePromise
         .then(() => {
           if (cancelled) {
             // cleanup() was called before subscribe resolved — unsubscribe now
-            void pubsub.unsubscribe(topic, handleEvent).catch(error => {
+            void pubsub.unsubscribe(topic, subscribedCallback).catch(error => {
               logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);
             });
             resolveReady();
@@ -605,7 +612,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     if (isSubscribed) {
       isSubscribed = false;
       const topic = AGENT_STREAM_TOPIC(runId);
-      void pubsub.unsubscribe(topic, handleEvent).catch(error => {
+      void pubsub.unsubscribe(topic, subscribedCallback).catch(error => {
         logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);
       });
     }

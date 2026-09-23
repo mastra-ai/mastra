@@ -1,8 +1,9 @@
 import { X } from 'lucide-react';
-import type { ElementType, MouseEvent, ReactNode } from 'react';
+import { createElement, type ElementType, type MouseEvent, type ReactNode } from 'react';
 
 import { cn } from '../../../lib/utils';
-import { Button } from '../Button';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { Button, type ButtonProps } from '../Button';
 import { Txt } from '../Txt';
 
 export interface ThreadListProps {
@@ -22,7 +23,7 @@ export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embe
         aria-label={ariaLabel}
         className={cn(
           'flex h-full flex-col gap-1 overflow-y-auto p-1',
-          !embedded && 'rounded-studio-panel border border-border1/50 bg-surface3',
+          !embedded && cn(raisedSurfaceStyle, 'rounded-studio-panel'),
         )}
       >
         {children}
@@ -32,22 +33,20 @@ export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embe
 };
 
 export interface ThreadListNewItemProps {
-  as?: ElementType;
-  href?: string;
-  to?: string;
+  render?: ButtonProps['render'];
   children: ReactNode;
 }
 
-export const ThreadListNewItem = ({ as, href, to, children }: ThreadListNewItemProps) => {
+export const ThreadListNewItem = ({ render, children }: ThreadListNewItemProps) => {
   return (
-    <Button as={as} href={href} to={to} variant="ghost" className="w-full justify-start rounded-xl px-3">
+    <Button render={render} variant="ghost" className="w-full justify-start rounded-xl px-3">
       {children}
     </Button>
   );
 };
 
 export const ThreadListSeparator = () => (
-  <div role="separator" aria-orientation="horizontal" className="bg-border1/40 -mx-1 my-1 h-px" />
+  <div role="separator" aria-orientation="horizontal" className="-mx-1 my-1 h-px bg-border/40" />
 );
 
 export interface ThreadListItemsProps {
@@ -86,15 +85,13 @@ export const ThreadListItem = ({
   return (
     <li className="group relative">
       <Button
-        as={as}
-        href={href}
-        to={to}
+        render={as ? createElement(as, { href, to }) : undefined}
         onClick={onClick}
         variant="ghost"
         className={cn(
           'w-full min-w-0 justify-start rounded-xl px-3 text-left',
           onDelete && 'pr-9',
-          isActive && 'bg-surface4 text-neutral6',
+          isActive && 'bg-fill-hover text-foreground',
           className,
         )}
       >
@@ -122,7 +119,7 @@ export interface ThreadListEmptyProps {
 
 export const ThreadListEmpty = ({ children }: ThreadListEmptyProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className="text-neutral3 px-3 py-2">
+    <Txt as="p" variant="caption" tone="muted" className="px-3 py-2">
       {children}
     </Txt>
   );

@@ -308,18 +308,25 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
   );
 }
 
+type ConvertibleToolResultPartType = 'media' | 'image-url' | 'file-url';
+
 /**
- * Convert tool-result `media` parts in a V2 (AI SDK v5 / spec `v2`) prompt
- * using a caller-provided target content-part shape.
+ * Convert multimodal tool-result parts (`media`, `image-url`, `file-url`) in a
+ * V2 (AI SDK v5 / spec `v2`) prompt using a caller-provided target shape.
  *
  * Mastra's `toModelOutput` and the vendored AI SDK v5 use `{ type: 'media' }`
- * as the authored multimodal tool-result content type. Newer AI SDK provider
- * specs use different content-part shapes, so callers provide the target
- * conversion for their provider spec.
+ * as the authored Base64 tool-result content type, while remote URLs are kept
+ * as `image-url`/`file-url` parts. Newer AI SDK provider specs use different
+ * content-part shapes, so callers provide the target conversion for their
+ * provider spec. Returning the same item from the callback is a pass-through.
  */
 function convertToolResultContent(
   prompt: LanguageModelV2Prompt,
-  convertMediaPart: (contentPart: Record<string, unknown>, mediaType: string) => unknown,
+  convertPart: (
+    contentPart: Record<string, unknown>,
+    partType: ConvertibleToolResultPartType,
+    mediaType: string,
+  ) => unknown,
 ): LanguageModelV2Prompt {
   return prompt.map(message => {
     if (message.role !== `tool`) return message;
@@ -334,10 +341,14 @@ function convertToolResultContent(
       const value = (output.value as unknown[]).map(item => {
         if (item == null || typeof item !== `object`) return item;
         const contentPart = item as Record<string, unknown>;
-        if (contentPart.type !== `media` || typeof contentPart.data !== `string`) return item;
-        outputModified = true;
+        const isMediaPart = contentPart.type === `media` && typeof contentPart.data === `string`;
+        const isUrlPart =
+          (contentPart.type === `image-url` || contentPart.type === `file-url`) && typeof contentPart.url === `string`;
+        if (!isMediaPart && !isUrlPart) return item;
         const mediaType = typeof contentPart.mediaType === `string` ? contentPart.mediaType : ``;
-        return convertMediaPart(contentPart, mediaType);
+        const converted = convertPart(contentPart, contentPart.type as ConvertibleToolResultPartType, mediaType);
+        if (converted !== item) outputModified = true;
+        return converted;
       });
 
       if (!outputModified) return part;
@@ -350,24 +361,63 @@ function convertToolResultContent(
 }
 
 /**
+ * Remote URLs cannot appear in Base64 `media.data`, but messages persisted by
+ * older versions stored them there (issue #22618) — `://` is not valid Base64,
+ * so this detection is unambiguous. Scheme matching is case-insensitive per
+ * RFC 3986: legacy values were stored verbatim, so `HTTPS://…` must heal too.
+ */
+function isRemoteUrl(data: string): boolean {
+  return /^https?:\/\//i.test(data);
+}
+
+/**
  * Convert v5-authored media tool results to the `image-data`/`file-data` shape
  * expected only by AI SDK v6 (`v3`) providers. V5 providers accept `media`, and
- * V7 providers expect `file` parts with tagged data instead.
+ * V7 providers expect `file` parts with tagged data instead. `image-url` and
+ * `file-url` parts are natively valid V3 tool-result content and pass through
+ * unchanged; legacy `media` parts carrying a remote URL are healed into them.
  *
- * See: https://github.com/mastra-ai/mastra/issues/17876
+ * See: https://github.com/mastra-ai/mastra/issues/17876 and
+ * https://github.com/mastra-ai/mastra/issues/22618
  */
 export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
-  return convertToolResultContent(prompt, (contentPart, mediaType) =>
-    mediaType.startsWith(`image/`)
-      ? { type: `image-data`, data: contentPart.data, mediaType }
-      : { type: `file-data`, data: contentPart.data, mediaType },
-  );
+  return convertToolResultContent(prompt, (contentPart, partType, mediaType) => {
+    if (partType !== `media`) return contentPart;
+    const isImage = mediaType.startsWith(`image/`);
+    const data = contentPart.data as string;
+    if (isRemoteUrl(data)) {
+      const rest = { ...contentPart };
+      delete rest.data;
+      return { ...rest, type: isImage ? `image-url` : `file-url`, url: data };
+    }
+    return { ...contentPart, type: isImage ? `image-data` : `file-data`, mediaType };
+  });
 }
 
 export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
-  return convertToolResultContent(prompt, (contentPart, mediaType) => ({
-    type: `file`,
-    data: { type: `data`, data: contentPart.data },
-    mediaType,
-  }));
+  return convertToolResultContent(prompt, (contentPart, partType, mediaType) => {
+    if (partType === `image-url` || partType === `file-url`) {
+      const rest = { ...contentPart };
+      delete rest.url;
+      return {
+        ...rest,
+        type: `file`,
+        data: { type: `url`, url: contentPart.url },
+        // V4 file parts require a mediaType.
+        mediaType: mediaType || (partType === `image-url` ? `image/jpeg` : `application/octet-stream`),
+      };
+    }
+    const data = contentPart.data as string;
+    if (isRemoteUrl(data)) {
+      const rest = { ...contentPart };
+      delete rest.data;
+      return {
+        ...rest,
+        type: `file`,
+        data: { type: `url`, url: data },
+        mediaType: mediaType || `application/octet-stream`,
+      };
+    }
+    return { ...contentPart, type: `file`, data: { type: `data`, data }, mediaType };
+  });
 }

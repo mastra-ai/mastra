@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
+import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -21,8 +21,8 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import { getNeedsApprovalFn } from '../../../tools/toolchecks';
-import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -44,6 +44,7 @@ import {
   STEP_WORKSPACE_KEY,
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
+  TOOL_APPROVAL_VERDICTS_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
@@ -51,6 +52,7 @@ import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
+import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -418,58 +420,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Match the nullish fallback above: null/undefined use framework identity, while other falsy values are valid model payloads.
         const isResumeToolCall = resumeDataFromArgs != null;
 
-        // Check if approval is required.
-        //
-        // The global `requireToolApproval` option (boolean, or — new — a function evaluated per
-        // call so policies can inspect the tool name and args, e.g. regex allowlists) and the
-        // tool's own boolean `requireApproval` flag seed the decision: the call requires approval
-        // if either is truthy.
-        //
-        // A per-tool `needsApprovalFn` (from `createTool({ requireApproval: fn })` or an
-        // MCP-derived tool) is authoritative when present and OVERRIDES the seed — it may return
-        // `false` to allow a call the global policy/flag would otherwise gate. This preserves the
-        // long-standing precedence; the only new behavior is that the global may now be a function.
-        // Any policy that throws defaults to requiring approval, to be safe.
-        const buildApprovalContext = (): ToolApprovalContext => ({
-          toolName: inputData.toolName,
-          args,
-          // Exclude the internal approval hook so policies only see public request-context entries.
-          requestContext: requestContext
-            ? Object.fromEntries(
-                [...requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
-              )
-            : {},
-          workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
-        });
-
-        let globalRequiresApproval: boolean;
-        if (typeof requireToolApproval === 'function') {
-          try {
-            globalRequiresApproval = !!(await requireToolApproval(buildApprovalContext()));
-          } catch (error) {
-            logger?.error(`Error evaluating global requireToolApproval for tool ${inputData.toolName}:`, error);
-            // On error, default to requiring approval to be safe.
-            globalRequiresApproval = true;
-          }
-        } else {
-          globalRequiresApproval = !!requireToolApproval;
-        }
-
-        let toolRequiresApproval: boolean = globalRequiresApproval || !!(tool as any).requireApproval;
-
-        const needsApprovalFn = getNeedsApprovalFn(tool);
-        if (needsApprovalFn) {
-          // Per-tool needsApprovalFn overrides the seed (matches prior behavior).
-          try {
-            const { toolName: _toolName, ...needsApprovalCtx } = buildApprovalContext();
-            toolRequiresApproval = !!(await needsApprovalFn(args, needsApprovalCtx));
-          } catch (error) {
-            // Log error to help developers debug faulty needsApprovalFn implementations
-            logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
-            // On error, default to requiring approval to be safe
-            toolRequiresApproval = true;
-          }
-        }
+        // Reuse the called-strategy scheduling verdict when available so approval policies
+        // are evaluated exactly once per call. Other paths retain execution-time evaluation.
+        const approvalVerdicts = readScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts');
+        const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
+        approvalVerdicts?.delete(inputData.toolCallId);
+        const toolRequiresApproval =
+          cachedApprovalVerdict ??
+          (await resolveToolApprovalVerdict({
+            tool,
+            requireToolApproval,
+            context: buildToolApprovalContext({
+              toolName: inputData.toolName,
+              args,
+              requestContext,
+              workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
+            }),
+            logger,
+          }));
 
         // On resume, the live `requireToolApproval` policy may be gone: function-form
         // policies do not survive RequestContext serialization, and decline/approve
@@ -915,6 +883,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               resolveReconciliation = resolve;
             });
 
+            const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
+              ...inputData.providerMetadata,
+              mastra: {
+                ...inputData.providerMetadata?.mastra,
+                backgroundTask: { taskId, status },
+              },
+            });
+
             // Create a self-contained background task with per-stream hooks
             const bgTask = createBackgroundTask(backgroundTaskManager, {
               toolName: inputData.toolName,
@@ -943,28 +919,48 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // would suspend the AGENT run via tool-call-approval) with
                     // the bg-task workflow's, so calling `suspend()` from the
                     // tool pauses the bg-task run instead.
-                    const rawResult = await resolvedTool.execute!(bgArgs, {
-                      ...toolOptions,
-                      isBackgroundTask: true,
-                      [BACKGROUND_WORK_CONTEXT]: {
-                        originRunId: runId,
-                        originToolCallId: inputData.toolCallId,
-                        taskId: bgTask.task.id,
-                        invocationKind: isAgentTool ? 'agent' : 'tool',
-                        disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
-                      },
-                      ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
-                      suspendedToolRunId: opts?.suspendedToolRunId,
-                      suspend: async (data?: unknown, options?: SuspendOptions) => {
-                        await toolOptions.suspend?.(data, options);
-                        return opts?.suspend?.(data, options);
-                      },
-                      outputWriter: async (chunk: any) => {
-                        await opts?.onProgress?.(chunk);
-                        return toolOptions.outputWriter?.(chunk);
-                      },
+                    const execution = await executeAdoptedBackgroundOperation({
+                      taskId: bgTask.task.id,
+                      disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
                       abortSignal: opts?.abortSignal,
-                    } as any);
+                      onCancelError: error => logger?.warn('Failed to cancel adopted background operation', error),
+                      execute: background =>
+                        resolvedTool.execute!(bgArgs, {
+                          ...toolOptions,
+                          isBackgroundTask: true,
+                          background,
+                          [BACKGROUND_WORK_CONTEXT]: {
+                            originRunId: runId,
+                            originToolCallId: inputData.toolCallId,
+                            taskId: bgTask.task.id,
+                            invocationKind: isAgentTool ? 'agent' : 'tool',
+                            disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                          },
+                          ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                          suspendedToolRunId: opts?.suspendedToolRunId,
+                          suspend: async (data?: unknown, options?: SuspendOptions) => {
+                            await toolOptions.suspend?.(data, options);
+                            return opts?.suspend?.(data, options);
+                          },
+                          outputWriter: async (chunk: any) => {
+                            await opts?.onProgress?.(chunk);
+                            return toolOptions.outputWriter?.(chunk);
+                          },
+                          abortSignal: opts?.abortSignal,
+                        } as any),
+                    });
+                    let rawResult = execution.result;
+
+                    if (execution.adopted) {
+                      const outputValidation = validateToolOutput(
+                        resolveToolOutputValidationSchema(resolvedTool),
+                        rawResult,
+                        inputData.toolName,
+                        false,
+                      );
+                      rawResult = outputValidation.error ?? outputValidation.data;
+                    }
+
                     const result = ensureSerializable(rawResult);
 
                     if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
@@ -1034,7 +1030,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 toolName: chunk.payload.toolName,
                                 args: inputData.args,
                                 result: chunk.payload.result,
-                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                                providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
                                 providerExecuted: inputData.providerExecuted,
                               },
                             },
@@ -1055,7 +1051,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 toolName: chunk.payload.toolName,
                                 error: chunk.payload.error,
                                 args: inputData.args,
-                                providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                                providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'failed'),
                                 providerExecuted: inputData.providerExecuted,
                               },
                             },
@@ -1176,7 +1172,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     }
                     providerMetadata = {
                       ...providerMetadata,
-                      mastra: { ...(providerMetadata as any)?.mastra, modelOutput },
+                      mastra: {
+                        ...(providerMetadata as any)?.mastra,
+                        modelOutput,
+                        backgroundTask: {
+                          taskId: params.taskId,
+                          status: params.status === 'failed' ? 'failed' : 'completed',
+                        },
+                      },
                     } as ProviderMetadata;
 
                     const updated = messageList.updateToolInvocation(
@@ -1224,7 +1227,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                             {
                               role: 'tool' as const,
                               type: 'tool-call',
-                              id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID(),
+                              id:
+                                readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ??
+                                globalThis.crypto.randomUUID(),
                               createdAt: new Date(),
                               content: [
                                 {
@@ -1251,6 +1256,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 toolName: params.toolName,
                                 result: transcriptResult,
                                 isError: params.status === 'failed',
+                                providerOptions: providerMetadata,
                               },
                             ],
                           },
@@ -1310,16 +1316,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             const awaitAuthoritativeBackgroundResult = async () => {
               const completedTask = await bgTask.waitForCompletion({ abortSignal: options?.abortSignal });
+              // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+              if (completedTask.status !== 'cancelled') {
+                const reconciliation = await reconciliationComplete;
+                if (reconciliation.error) {
+                  throw reconciliation.error;
+                }
+              }
+
               if (completedTask.status !== 'completed') {
                 throw new Error(
                   completedTask.error?.message ??
                     `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
                 );
-              }
-
-              const reconciliation = await reconciliationComplete;
-              if (reconciliation.error) {
-                throw reconciliation.error;
               }
 
               return ensureSerializable(completedTask.result);
@@ -1343,6 +1352,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 return {
                   result: await awaitAuthoritativeBackgroundResult(),
                   ...inputData,
+                  providerMetadata: backgroundResultMetadata(task.id, 'completed'),
                   ...(approvalGrant ?? {}),
                 };
               }
@@ -1350,6 +1360,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               return {
                 result: `Background task resumed. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
                 ...inputData,
+                providerMetadata: backgroundResultMetadata(task.id, 'running'),
               };
             }
 
@@ -1390,6 +1401,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 return {
                   result: await awaitAuthoritativeBackgroundResult(),
                   ...inputData,
+                  providerMetadata: backgroundResultMetadata(task.id, 'completed'),
                   ...(approvalGrant ?? {}),
                 };
               }
@@ -1398,6 +1410,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               return {
                 result: `Background task started. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
                 ...inputData,
+                providerMetadata: backgroundResultMetadata(task.id, 'running'),
                 ...(approvalGrant ?? {}),
               };
             }

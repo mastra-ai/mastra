@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import { useFilterBarContext } from './filter-bar-context';
-import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
+import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOperator } from './types';
 
 // eslint-friendly access to mock call arguments (avoids non-null assertions).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,14 +76,15 @@ function Harness({
       }}
     >
       {readOnlyIds.length > 0 || nonRemovableIds.length > 0 ? (
-        items.map(item => (
-          <FilterBar.Chip
-            key={item.id}
-            item={item}
-            readOnly={readOnlyIds.includes(item.id)}
-            removable={!nonRemovableIds.includes(item.id)}
-          />
-        ))
+        <FilterBar.Chips
+          renderChip={item => (
+            <FilterBar.Chip
+              item={item}
+              readOnly={readOnlyIds.includes(item.id)}
+              removable={!nonRemovableIds.includes(item.id)}
+            />
+          )}
+        />
       ) : (
         <FilterBar.Chips />
       )}
@@ -218,6 +219,36 @@ describe('FilterBar', () => {
       await waitFor(() => expect(input.getAttribute('aria-activedescendant')).toBe(first.id));
     });
 
+    it('restarts the highlight on the first option of the next step', async () => {
+      render(<Harness />);
+      getInput().focus();
+      await screen.findByRole('option', { name: 'Status' });
+
+      key('ArrowDown');
+      key('ArrowDown');
+      key('Enter');
+
+      const first = await screen.findByRole('option', { name: 'prod' });
+      await waitFor(() => expect(first.hasAttribute('data-highlighted')).toBe(true));
+      expect(screen.getByRole('option', { name: 'staging' }).hasAttribute('data-highlighted')).toBe(false);
+    });
+
+    it('restarts the highlight on the first field once a chip is committed', async () => {
+      render(<Harness />);
+      getInput().focus();
+      await screen.findByRole('option', { name: 'Status' });
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      key('Enter');
+
+      await screen.findByRole('option', { name: 'Running' });
+      key('ArrowDown');
+      key('Enter');
+
+      const first = await screen.findByRole('option', { name: 'Status' });
+      await waitFor(() => expect(first.hasAttribute('data-highlighted')).toBe(true));
+    });
+
     it('keeps the draft when the input itself is clicked mid-flow', async () => {
       render(<Harness />);
       const input = getInput();
@@ -279,7 +310,7 @@ describe('FilterBar', () => {
     it('accumulates the draft as an inline chip next to the input', async () => {
       render(<Harness />);
       const input = getInput();
-      const draftChip = () => document.querySelector('[data-slot="filter-bar-draft-chip"]');
+      const draftChip = () => document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
 
       input.focus();
       expect(draftChip()).toBeNull();
@@ -307,6 +338,161 @@ describe('FilterBar', () => {
       key('Enter');
       expect(draftChip()).toBeNull();
       expect(getChips()).toHaveLength(1);
+    });
+
+    describe('when a value is picked for the draft', () => {
+      it('turns the draft chip itself into the committed chip instead of replacing it', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        expect(draftNode).not.toBeNull();
+        // The draft is chrome only: the consumer's value is untouched until the value is picked.
+        expect(onChange).not.toHaveBeenCalled();
+
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed).toBe(draftNode);
+        expect(committed.hasAttribute('data-draft')).toBe(false);
+        expect(onChange).toHaveBeenCalledTimes(1);
+      });
+
+      it('glints the committed chip once, while chips present from the start never glint', async () => {
+        render(<Harness initial={[{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'Failed' }]} />);
+        const preexisting = screen.getByRole('group', { name: 'Status is Failed' });
+        expect(preexisting.hasAttribute('data-shine')).toBe(false);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        expect(document.querySelector('[data-draft]')?.hasAttribute('data-shine')).toBe(false);
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed.hasAttribute('data-shine')).toBe(true);
+        expect(preexisting.hasAttribute('data-shine')).toBe(false);
+
+        // jsdom has no AnimationEvent: build one with the name the browser would report.
+        const end = new Event('animationend', { bubbles: true });
+        Object.defineProperty(end, 'animationName', { value: 'filter-bar-chip-shine' });
+        fireEvent(committed, end);
+        expect(committed.hasAttribute('data-shine')).toBe(false);
+      });
+
+      it('keeps the draft chip element when the consumer derives item ids itself', async () => {
+        // Consumers that round-trip filters through a URL rebuild items on every change, so the
+        // id they hand back is theirs, not ours. `createItemId` lets the draft carry that id up front.
+        function DerivedIds() {
+          const [fieldIds, setFieldIds] = useState<string[]>([]);
+          const items = fieldIds.map(fieldId => ({ id: fieldId, fieldId, operatorId: 'is', value: 'Running' }));
+          return (
+            <FilterBar
+              fields={FIELDS}
+              operators={OPERATORS}
+              value={items}
+              onValueChange={next => setFieldIds(next.map(item => item.fieldId))}
+              createItemId={fieldId => fieldId}
+            >
+              <FilterBar.Chips />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          );
+        }
+        render(<DerivedIds />);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed).toBe(draftNode);
+        expect(committed.hasAttribute('data-shine')).toBe(true);
+      });
+
+      it('keeps showing the committed chip while the consumer has not reflected it in value yet', async () => {
+        // URL-backed consumers update `value` a tick later (router round trip). The chip must not
+        // disappear in between, and must still be the same element once value catches up.
+        let flush: (() => void) | undefined;
+        function Deferred() {
+          const [items, setItems] = useState<FilterBarItem[]>([]);
+          return (
+            <FilterBar
+              fields={FIELDS}
+              operators={OPERATORS}
+              value={items}
+              onValueChange={next => {
+                flush = () => setItems(next);
+              }}
+            >
+              <FilterBar.Chips />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          );
+        }
+        render(<Deferred />);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        key('Enter');
+
+        const committed = screen.getByRole('group', { name: 'Status is Running' });
+        expect(committed).toBe(draftNode);
+        expect(getChips()).toHaveLength(1);
+
+        act(() => flush?.());
+
+        expect(screen.getByRole('group', { name: 'Status is Running' })).toBe(draftNode);
+        expect(getChips()).toHaveLength(1);
+      });
+
+      it('keeps the draft chip element with a custom renderChip that skips some items', async () => {
+        function Custom() {
+          const [items, setItems] = useState<FilterBarItem[]>([
+            { id: 'hidden', fieldId: 'status', operatorId: 'is', value: 'Failed' },
+          ]);
+          return (
+            <FilterBar fields={FIELDS} operators={OPERATORS} value={items} onValueChange={setItems}>
+              <FilterBar.Chips renderChip={item => (item.id === 'hidden' ? null : <FilterBar.Chip item={item} />)} />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          );
+        }
+        render(<Custom />);
+        expect(getChips()).toHaveLength(0);
+
+        getInput().focus();
+        type('status');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        await screen.findByRole('option', { name: 'Running' });
+        const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
+        expect(draftNode).not.toBeNull();
+
+        key('Enter');
+
+        expect(getChips()).toHaveLength(1);
+        expect(screen.getByRole('group', { name: 'Status is Running' })).toBe(draftNode);
+      });
     });
 
     it('commits immediately for arity "none" operators', async () => {
@@ -386,7 +572,7 @@ describe('FilterBar', () => {
         getInput().focus();
         type('duration');
         key('Enter');
-        const draft = document.querySelector('[data-slot="filter-bar-draft-chip"]');
+        const draft = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
         expect(draft?.textContent).toBe('Duration');
       });
 
@@ -414,6 +600,61 @@ describe('FilterBar', () => {
       getInput().focus();
       key('Backspace');
       expect(argAt(onChange, 0, 0)).toEqual([{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'running' }]);
+    });
+  });
+
+  describe('a search field', () => {
+    const SEARCH_FIELDS: FilterBarField[] = [
+      { id: 'text', label: 'Text', search: true, operators: ['contains'] },
+      ...FIELDS,
+    ];
+
+    it('stays offered for text that names no field, and commits that text on Enter', async () => {
+      const onChange = vi.fn();
+      render(<Harness fields={SEARCH_FIELDS} onChange={onChange} />);
+      getInput().focus();
+      type('flaky login');
+
+      await screen.findByRole('option', { name: /contains "flaky login"/ });
+      key('Enter');
+
+      expect(argAt(onChange, 0, 0)).toEqual([
+        expect.objectContaining({ fieldId: 'text', operatorId: 'contains', value: 'flaky login' }),
+      ]);
+    });
+
+    it('keeps the field it shadows one arrow away when the text names both', async () => {
+      const onChange = vi.fn();
+      render(<Harness fields={SEARCH_FIELDS} onChange={onChange} />);
+      getInput().focus();
+      type('status');
+
+      await screen.findByRole('option', { name: 'Status' });
+      const options = screen.getAllByRole('option');
+      expect(options[0].textContent).toContain('contains "status"');
+      expect(options[1].textContent).toBe('Status');
+
+      key('ArrowDown');
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('steps through its value like any other field when nothing is typed', async () => {
+      const onChange = vi.fn();
+      render(<Harness fields={SEARCH_FIELDS} onChange={onChange} />);
+      const input = getInput();
+      input.focus();
+
+      await screen.findByRole('option', { name: 'Text' });
+      key('Enter');
+      expect(input.placeholder).toBe('Value…');
+
+      type('abc');
+      key('Enter');
+      expect(argAt(onChange, 0, 0)).toEqual([
+        expect.objectContaining({ fieldId: 'text', operatorId: 'contains', value: 'abc' }),
+      ]);
     });
   });
 
@@ -623,6 +864,87 @@ describe('FilterBar', () => {
     });
   });
 
+  describe('when a chip is removed', () => {
+    const INITIAL: FilterBarItem[] = [
+      { id: 'a', fieldId: 'status', operatorId: 'is', value: 'running' },
+      { id: 'b', fieldId: 'traceId', operatorId: 'is', value: 'x' },
+    ];
+
+    // jsdom has no Web Animations; emulate one animation whose `finished` we control.
+    const mockAnimations = () => {
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const original = Element.prototype.getAnimations;
+      Element.prototype.getAnimations = vi.fn(() => [{ finished } as unknown as Animation]);
+      return { finish, restore: () => void (Element.prototype.getAnimations = original) };
+    };
+
+    it('keeps the chip rendered as leaving until its animations settle', async () => {
+      const { finish, restore } = mockAnimations();
+      try {
+        const onChange = vi.fn();
+        render(<Harness initial={INITIAL} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Status filter' }));
+
+        expect(argAt(onChange, 0, 0).map((i: FilterBarItem) => i.id)).toEqual(['b']);
+        const [leavingChip, liveChip] = [...getChips()];
+        expect(liveChip).toBeDefined();
+        expect(leavingChip?.dataset.leaving).toBe('true');
+        expect(leavingChip?.getAttribute('aria-hidden')).toBe('true');
+        expect(leavingChip?.querySelector('[role="combobox"], button')).toBeNull();
+        // Still first in DOM order; live chip untouched.
+        expect(liveChip?.dataset.leaving).toBeUndefined();
+
+        finish();
+        await waitFor(() => expect(getChips()).toHaveLength(1));
+        expect(screen.getByRole('group', { name: 'Trace ID is x' })).toBeDefined();
+      } finally {
+        restore();
+      }
+    });
+
+    it('drops the chip immediately when nothing animates', () => {
+      render(<Harness initial={INITIAL} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Status filter' }));
+      expect(getChips()).toHaveLength(1);
+      expect(document.querySelector('[data-leaving]')).toBeNull();
+    });
+
+    it('re-adding an item with the same id while it leaves cancels the exit', async () => {
+      const { finish, restore } = mockAnimations();
+      try {
+        function ReAddHarness() {
+          const [items, setItems] = useState<FilterBarItem[]>(INITIAL);
+          return (
+            <>
+              <button onClick={() => setItems(INITIAL)}>Re-add</button>
+              <FilterBar fields={FIELDS} operators={OPERATORS} value={items} onValueChange={setItems}>
+                <FilterBar.Chips />
+                <FilterBar.Input placeholder="Filter…" />
+              </FilterBar>
+            </>
+          );
+        }
+        render(<ReAddHarness />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Status filter' }));
+        expect(document.querySelector('[data-leaving]')).not.toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Re-add' }));
+        expect(getChips()).toHaveLength(2);
+        expect(document.querySelector('[data-leaving]')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Remove Status filter' })).toBeDefined();
+
+        finish();
+        await act(async () => {});
+        expect(getChips()).toHaveLength(2);
+      } finally {
+        restore();
+      }
+    });
+  });
+
   describe('lazy suggestions', () => {
     it('calls the resolver only once the value step opens, with query/operator/signal', async () => {
       const resolver = vi.fn(async ({ query }: { query: string }) =>
@@ -743,6 +1065,255 @@ describe('FilterBar', () => {
         <Harness fields={fields} initial={[{ id: 'scope', fieldId: 'scope', operatorId: 'is', value: 'agent-1' }]} />,
       );
       expect(within(getChips()[0] as HTMLElement).getByText('Scope')).toBeTruthy();
+    });
+  });
+
+  describe('advanced filter', () => {
+    const getAdvancedChips = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-advanced"]');
+    const getLogicToggles = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-logic"]');
+    const getEditors = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-group-editor"]');
+    const openPopover = async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Advanced filter/ }));
+      return screen.findByRole('group', { name: /^Conditions joined with/ });
+    };
+
+    function ExpressionHarness({
+      initial,
+      onChange,
+      maxDepth,
+    }: {
+      initial: FilterBarExpression;
+      onChange?: (expression: FilterBarExpression) => void;
+      maxDepth?: number;
+    }) {
+      const [value, setValue] = useState<FilterBarExpression>(initial);
+      return (
+        <FilterBar
+          fields={FIELDS}
+          operators={OPERATORS}
+          value={value}
+          maxDepth={maxDepth}
+          onValueChange={next => {
+            setValue(next);
+            onChange?.(next);
+          }}
+        >
+          <FilterBar.Chips />
+          <FilterBar.Input placeholder="Filter…" />
+        </FilterBar>
+      );
+    }
+
+    const EXPRESSION: FilterBarExpression = {
+      logic: 'and',
+      nodes: [
+        { id: 'a', fieldId: 'status', operatorId: 'is', value: 'error' },
+        {
+          id: 'g',
+          kind: 'group',
+          logic: 'or',
+          nodes: [
+            { id: 'b', fieldId: 'tags', operatorId: 'in', value: ['prod'] },
+            { id: 'c', fieldId: 'tags', operatorId: 'in', value: ['staging'] },
+          ],
+        },
+        { id: 'd', fieldId: 'traceId', operatorId: 'is', value: 'abc' },
+      ],
+    };
+
+    describe('when the value is a flat list', () => {
+      it('offers no advanced filter option and no chip', async () => {
+        render(<Harness initial={[{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'error' }]} />);
+        getInput().focus();
+        await screen.findByRole('option', { name: 'Status' });
+        expect(screen.queryByRole('option', { name: 'Advanced filter…' })).toBeNull();
+        expect(getAdvancedChips()).toHaveLength(0);
+      });
+    });
+
+    describe('when the value is an expression', () => {
+      it('renders one chip per root group with its condition count and no connectors in the bar', () => {
+        render(<ExpressionHarness initial={EXPRESSION} />);
+        expect(getAdvancedChips()).toHaveLength(1);
+        expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+        // Sub-chips live in the (closed) popover, not in the bar.
+        expect(screen.queryByRole('group', { name: 'Tags prod' })).toBeNull();
+        expect(getLogicToggles()).toHaveLength(0);
+      });
+
+      it('opens the editor with one row per condition and a connector between them', async () => {
+        render(<ExpressionHarness initial={EXPRESSION} />);
+        const editor = await openPopover();
+        expect(within(editor).getByRole('group', { name: 'Tags prod' })).toBeTruthy();
+        expect(within(editor).getByRole('group', { name: 'Tags staging' })).toBeTruthy();
+        expect([...getLogicToggles()].map(t => t.dataset.logic)).toEqual(['or']);
+      });
+
+      it('emits the toggled logic for the group', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        await openPopover();
+        fireEvent.click(screen.getByRole('button', { name: 'Joined with or, switch to and' }));
+        expect(argAt(onChange, 0, 0)).toMatchObject({
+          logic: 'and',
+          nodes: [{ id: 'a' }, { id: 'g', logic: 'and' }, { id: 'd' }],
+        });
+      });
+
+      it('commits a new condition into the group from + Condition', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
+
+        const input = getInput();
+        expect(input.dataset.target).toBe('g');
+        expect(input.placeholder).toBe('Add condition…');
+        expect(editor.contains(input)).toBe(true);
+        // No nested "Advanced filter…" option inside the popover.
+        input.focus();
+        await screen.findByRole('option', { name: 'Trace ID' });
+        expect(screen.queryByRole('option', { name: 'Advanced filter…' })).toBeNull();
+
+        type('trace');
+        key('Enter');
+        await screen.findByRole('option', { name: 'is' });
+        key('Enter');
+        type('xyz');
+        key('Enter');
+
+        const groupNode = argAt(onChange, 0, 0).nodes[1];
+        expect(groupNode.nodes.map((n: { id: string }) => n.id)).toEqual(['b', 'c', expect.any(String)]);
+        expect(groupNode.nodes[2]).toMatchObject({ fieldId: 'traceId', value: 'xyz' });
+        expect(within(editor).getByRole('group', { name: 'Trace ID is xyz' })).toBeTruthy();
+      });
+
+      it('returns focus to + Condition on Escape with an empty query', async () => {
+        render(<ExpressionHarness initial={EXPRESSION} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
+        key('Escape');
+        await waitFor(() =>
+          expect(within(editor).getByRole('button', { name: 'Condition' })).toBe(document.activeElement),
+        );
+        expect(getAdvancedChips()).toHaveLength(1);
+      });
+
+      it('nests a group from + Group with the opposite logic', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Group' }));
+
+        const nested = argAt(onChange, 0, 0).nodes[1].nodes[2];
+        expect(nested).toMatchObject({ kind: 'group', logic: 'and', nodes: [] });
+        expect(getEditors()).toHaveLength(2);
+        expect(getInput().dataset.target).toBe(nested.id);
+      });
+
+      it('lets a nested group switch logic and be removed from its header', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Group' }));
+        // The new group's input opens its typeahead, which aria-hides the rest of the popover.
+        key('Escape');
+        const card = editor.querySelector('[data-slot="filter-bar-editor-nested"]') as HTMLElement;
+        await waitFor(() => expect(within(card).getByText('· 0 conditions')).toBeTruthy());
+
+        fireEvent.click(within(card).getByRole('radio', { name: 'Join with or' }));
+        expect(onChange.mock.lastCall?.[0].nodes[1].nodes[2]).toMatchObject({ kind: 'group', logic: 'or' });
+
+        fireEvent.click(within(card).getByRole('button', { name: 'Remove group' }));
+        expect(onChange.mock.lastCall?.[0].nodes[1].nodes.map((n: { id: string }) => n.id)).toEqual(['b', 'c']);
+        await waitFor(() => expect(getEditors()).toHaveLength(1));
+      });
+
+      it('disables + Group at maxDepth', async () => {
+        render(<ExpressionHarness initial={EXPRESSION} maxDepth={1} />);
+        const editor = await openPopover();
+        expect((within(editor).getByRole('button', { name: 'Group' }) as HTMLButtonElement).disabled).toBe(true);
+      });
+
+      it('prunes an emptied group when the popover closes', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getAllByRole('button', { name: 'Remove Tags filter' })[0] as HTMLElement);
+        fireEvent.click(within(editor).getByRole('button', { name: 'Remove Tags filter' }));
+        // Empty group persists while editing…
+        expect(argAt(onChange, 1, 0).nodes[1]).toMatchObject({ id: 'g', nodes: [] });
+        expect(getAdvancedChips()).toHaveLength(1);
+
+        // …and disappears on close.
+        fireEvent.keyDown(editor, { key: 'Escape' });
+        await waitFor(() => expect(argAt(onChange, 2, 0).nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'd']));
+        await waitFor(() => expect(getAdvancedChips()).toHaveLength(0));
+      });
+
+      it('removes the whole group from the chip remove button', () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove advanced filter' }));
+        expect(argAt(onChange, 0, 0).nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'd']);
+      });
+
+      it('removes the whole group from the editor footer Clear and closes the popover', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Remove advanced filter' }));
+        expect(onChange.mock.lastCall?.[0].nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'd']);
+        await waitFor(() => expect(getEditors()).toHaveLength(0));
+        await waitFor(() => expect(getAdvancedChips()).toHaveLength(0));
+      });
+
+      it('walks ←/→ across the advanced chip in the bar', () => {
+        render(<ExpressionHarness initial={EXPRESSION} />);
+        getInput().focus();
+        key('ArrowLeft');
+        expect(screen.getByRole('group', { name: 'Trace ID is abc' }).contains(document.activeElement)).toBe(true);
+        pressActive({ key: 'ArrowLeft' });
+        pressActive({ key: 'ArrowLeft' });
+        pressActive({ key: 'ArrowLeft' });
+        pressActive({ key: 'ArrowLeft' });
+        const advanced = getAdvancedChips()[0] as HTMLElement;
+        expect(advanced.contains(document.activeElement)).toBe(true);
+        expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('remove');
+        pressActive({ key: 'ArrowLeft' });
+        expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('field');
+        pressActive({ key: 'ArrowLeft' });
+        expect(screen.getByRole('group', { name: 'Status is Error' }).contains(document.activeElement)).toBe(true);
+        // Back the other way: from the Status remove button onto the advanced chip, then past it.
+        pressActive({ key: 'ArrowRight' });
+        expect(advanced.contains(document.activeElement)).toBe(true);
+        expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('field');
+        pressActive({ key: 'ArrowRight' });
+        expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('remove');
+        pressActive({ key: 'ArrowRight' });
+        expect(screen.getByRole('group', { name: 'Trace ID is abc' }).contains(document.activeElement)).toBe(true);
+      });
+
+      it('creates an advanced filter from the input and opens its popover', async () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={{ logic: 'and', nodes: [] }} onChange={onChange} />);
+        getInput().focus();
+        type('adv');
+        fireEvent.click(await screen.findByRole('option', { name: 'Advanced filter…' }));
+
+        expect(argAt(onChange, 0, 0)).toMatchObject({ nodes: [{ kind: 'group', logic: 'or', nodes: [] }] });
+        const editor = await screen.findByRole('group', { name: 'Conditions joined with or' });
+        const input = getInput();
+        expect(editor.contains(input)).toBe(true);
+        expect(input.placeholder).toBe('Add condition…');
+      });
+
+      it('clears items and groups together', () => {
+        const onChange = vi.fn();
+        render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        expect(argAt(onChange, 0, 0)).toEqual({ logic: 'and', nodes: [] });
+      });
     });
   });
 });

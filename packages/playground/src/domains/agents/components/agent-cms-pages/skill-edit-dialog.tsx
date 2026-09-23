@@ -5,6 +5,9 @@ import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import {
   AlertTriangle,
@@ -270,8 +273,8 @@ export function SkillEditDialog({
           {isViewMode && skill?.visibility === 'private' && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-neutral3 shrink-0" aria-label="Private skill">
-                  <Icon size="sm">
+                <span className="shrink-0 text-muted-foreground" aria-label="Private skill">
+                  <Icon size="xs">
                     <LockIcon />
                   </Icon>
                 </span>
@@ -363,17 +366,21 @@ export function SkillEditDialog({
 
             {/* Form section — revealed after agent populates or user expands */}
             {showForm ? (
-              <div className="border-border1 border-t pt-4">
+              <div className="border-t border-border pt-4">
                 <button
                   onClick={() => setShowForm(false)}
-                  className="text-neutral3 hover:text-neutral5 text-ui-sm mb-3 flex items-center gap-1.5 transition-colors"
+                  className={cn(
+                    'mb-3 flex items-center gap-1.5 text-caption',
+                    quietTextHover,
+                    controlStateColorTransition,
+                  )}
                 >
                   <ChevronDown className="h-3 w-3" />
                   Hide skill details
                 </button>
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
-                  <div className="text-ui-sm mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-yellow-600">
+                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-caption text-yellow-600">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
                       {!workspaceId
@@ -410,7 +417,11 @@ export function SkillEditDialog({
                           }
                           setMode('advanced');
                         }}
-                        className="text-neutral3 hover:text-neutral5 text-ui-sm mt-3 flex items-center gap-1.5 transition-colors"
+                        className={cn(
+                          'mt-3 flex items-center gap-1.5 text-caption',
+                          quietTextHover,
+                          controlStateColorTransition,
+                        )}
                       >
                         <Settings2 className="h-3.5 w-3.5" />
                         Advanced mode
@@ -430,7 +441,11 @@ export function SkillEditDialog({
                           }
                           setMode('simple');
                         }}
-                        className="text-neutral3 hover:text-neutral5 text-ui-sm mb-3 flex items-center gap-1.5 transition-colors"
+                        className={cn(
+                          'mb-3 flex items-center gap-1.5 text-caption',
+                          quietTextHover,
+                          controlStateColorTransition,
+                        )}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                         Simple mode
@@ -449,10 +464,10 @@ export function SkillEditDialog({
                 )}
               </div>
             ) : (
-              <div className="border-border1 border-t pt-3">
+              <div className="border-t border-border pt-3">
                 <button
                   onClick={() => setShowForm(true)}
-                  className="text-neutral3 hover:text-neutral5 text-ui-sm flex items-center gap-1.5 transition-colors"
+                  className={cn('flex items-center gap-1.5 text-caption', quietTextHover, controlStateColorTransition)}
                 >
                   <ChevronRight className="h-3 w-3" />
                   {hasFields ? 'Show skill details' : 'or fill in manually'}
