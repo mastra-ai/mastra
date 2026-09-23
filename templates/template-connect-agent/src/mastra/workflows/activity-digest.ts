@@ -1,6 +1,6 @@
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { resolveConnectTools } from '../tools/connect';
+import { connectTools } from '../agents/connect-agent';
 
 export const digestSchema = z.object({
   headline: z.string().describe('One sentence capturing the overall state of play.'),
@@ -30,7 +30,7 @@ const discoverIntegrationsStep = createStep({
     integrations: z.array(z.string()),
   }),
   execute: async ({ inputData, mastra }) => {
-    const tools = await resolveConnectTools({ mastra });
+    const tools = await connectTools({ mastra });
     const integrations = [...new Set(Object.keys(tools).map(key => key.split('_')[0]!))].sort();
     return { focus: inputData.focus, integrations };
   },

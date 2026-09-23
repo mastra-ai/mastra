@@ -1,6 +1,16 @@
+import { connect } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { resolveConnectTools } from '../tools/connect';
+
+/**
+ * Live tool resolver over your Mastra platform project's integration
+ * connections: every integration attached to the project (Linear, Notion, …)
+ * shows up as agent tools, and connections you attach or detach on the
+ * platform are picked up without restarting the server.
+ *
+ * Shared with the activity-digest workflow, which calls it directly.
+ */
+export const connectTools = connect();
 
 export const connectAgent = new Agent({
   id: 'connect-agent',
@@ -24,7 +34,7 @@ Every tool is named \`<integration>_<action>\` — for example \`linear_list_iss
   defaultOptions: {
     maxSteps: 100,
   },
-  tools: ctx => resolveConnectTools(ctx),
+  tools: connectTools,
   memory: new Memory({
     options: {
       lastMessages: 10,
