@@ -6,7 +6,7 @@ import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
-import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 // Size flows down as `data-size` on the named group root (`group/input-group`), read by the
@@ -55,7 +55,7 @@ const inputGroupClassName = cn(
   inputGroupBaseClassName,
   'rounded-full',
   inputSurfaceAndFocusWithinStyle,
-  'has-[[aria-invalid=true]]:[--surface-rim:var(--destructive)]',
+  fieldErrorRimWithin,
   inputGroupRoundedTextareaClassName,
 );
 

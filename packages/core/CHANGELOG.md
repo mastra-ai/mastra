@@ -1,5 +1,54 @@
 # @mastra/core
 
+## 1.70.0-alpha.0
+
+### Minor Changes
+
+- Added typed descriptions for processor span payloads and pipeline attributes. Processor spans now record their exact pipeline phase, so consumers can narrow supported payloads without guessing their shape. ([#24672](https://github.com/mastra-ai/mastra/pull/24672))
+
+  ```ts
+  import { describeSpanOutput } from '@mastra/core/observability';
+
+  const output = describeSpanOutput(span);
+  if (output?.type === 'processor' && output.value.phase === 'outputStream') {
+    output.value.data.totalChunks; // number
+  }
+  ```
+
+  Added `describeProcessorPipeline` for executor, pipeline position, hook duration, mutations, and tripwire details. Unknown attributes remain separate from the known fields, so no value is rendered twice. Spans recorded before the phase existed keep their untyped shape and fall back to JSON.
+
+  Fixed missing message-list mutation logs in workflow processor executions.
+
+- Add an optional `title` to `createTool()` so a tool call can carry a human-readable display name. Closes #20249. ([#24117](https://github.com/mastra-ai/mastra/pull/24117))
+
+  The title is never sent to the model. It is stamped on the `tool-call-input-streaming-start` and `tool-call` stream chunks and persisted on the stored tool-invocation part, so a chat UI can label the call after a reload without a client-side name catalog.
+
+  ```ts
+  const weatherTool = createTool({
+    id: 'get_weather_by_coordinates',
+    title: 'Weather Lookup',
+    description: 'Fetches the current weather for a latitude/longitude pair',
+    inputSchema: z.object({ lat: z.number(), lon: z.number() }),
+    execute: async ({ lat, lon }) => fetchWeather(lat, lon),
+  });
+  ```
+
+- Added a trusted tenant scope to advanced trace queries. Hosts pass `{ organizationId, resourceId? }` to `planTraceQuery`, `planThreadQuery`, and the discovery planners; the scope is carried on the trusted plan, ANDed into every root and related-signal scan by stores, and bound into keyset cursors so a cursor reused under another scope fails with `TRACE_QUERY_CURSOR_CONFLICT` before storage runs. Callers still can't name `organizationId` or `projectId` in predicates. No scope means no filter, so self-hosted behavior is unchanged. ([#24566](https://github.com/mastra-ai/mastra/pull/24566))
+
+  **Example**
+
+  ```ts
+  const plan = planTraceQuery(parseTraceQueryRequest(request), {
+    scope: { organizationId: 'org_123', resourceId: 'project_456' },
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab))
+
+- Durable agent turns now use far fewer Inngest steps, including when observability is not configured. A 20-step agent turn previously used 133–158 Inngest steps. ([#24782](https://github.com/mastra-ai/mastra/pull/24782))
+
 ## 1.69.0
 
 ### Minor Changes

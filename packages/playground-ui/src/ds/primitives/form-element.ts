@@ -52,19 +52,27 @@ const surfaceRimFocus = 'focus-visible:[--surface-rim:var(--surface-rim-focus)]'
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
 // guards have to ask about descendants.
 const surfaceTintHoverWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
-const surfaceRimFocusWithin = 'focus-within:[--surface-rim:var(--surface-rim-focus)]';
+const fieldRimFocus = 'focus-visible:[--surface-rim:var(--field-rim-focus)]';
+const fieldRimFocusWithin = 'focus-within:[--surface-rim:var(--field-rim-focus)]';
+export const fieldErrorRim = '[--field-rim:var(--destructive)] [--field-rim-focus:var(--destructive)]';
+export const fieldErrorRimWithin =
+  'has-[[aria-invalid=true]]:[--field-rim:var(--destructive)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive)]';
+export const fieldTriggerStyle =
+  'bg-field shadow-input ' +
+  fieldRimFocus +
+  ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive)] aria-invalid:[--field-rim-focus:var(--destructive)]';
 
 export const inputSurfaceAndFocusStyle =
-  'bg-card shadow-raised text-foreground disabled:bg-fill-subtle ' +
+  'bg-field shadow-input text-foreground disabled:bg-field-disabled ' +
   surfaceTintHover +
   ' outline-hidden focus-visible:outline-hidden ' +
-  surfaceRimFocus;
+  fieldRimFocus;
 
 export const inputSurfaceAndFocusWithinStyle =
-  'bg-card shadow-raised text-foreground has-[:disabled]:bg-fill-subtle ' +
+  'bg-field shadow-input text-foreground has-[:disabled]:bg-field-disabled ' +
   surfaceTintHoverWithin +
   ' outline-hidden focus-within:outline-hidden ' +
-  surfaceRimFocusWithin;
+  fieldRimFocusWithin;
 
 // The same material, for a neutral control that is a button rather than a field: `Button`'s
 // `default` variant, and with it every trigger built on it (Select, Combobox, DateTimePicker).
