@@ -48,7 +48,7 @@ export const AgentProfileReadyStep = () => {
       panelOverlay={<span ref={sweepRef} className="ready-stage-sweep" aria-hidden="true" />}
       cta={
         <div className="relative z-[2] flex items-center justify-center gap-3">
-          <Button icon={<Eye />} variant="outline" onClick={handleReview} data-testid="agent-builder-ready-review">
+          <Button icon={<Eye />} onClick={handleReview} data-testid="agent-builder-ready-review">
             Review my agent
           </Button>
           <Button icon={<AgentIcon />} variant="primary" onClick={handleTry} data-testid="agent-builder-ready-try">

@@ -119,7 +119,7 @@ function InstalledBoard({ factory, definition }: { factory: FactoryProject; defi
       <EmptyState
         variant="fill"
         as="h2"
-        iconSlot={<GitBranch className="text-muted-foreground size-10" />}
+        iconSlot={<GitBranch />}
         titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
         descriptionSlot={
           review

@@ -1,8 +1,8 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -117,10 +117,11 @@ export default function WorkspaceSkillDetailPage() {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{skillName}</h1>
-        <ErrorState
+        <EmptyState
+          tone="error"
           variant="fill"
-          title="Failed to load skill"
-          message={error instanceof Error ? error.message : 'Skill not found'}
+          titleSlot="Failed to load skill"
+          descriptionSlot={error instanceof Error ? error.message : 'Skill not found'}
         />
       </PageLayout>
     );

@@ -17,10 +17,10 @@ export function InboxEmptyState() {
       }
       actionSlot={
         <div className="flex items-center gap-2">
-          <Button icon={<ExperimentsIcon />} render={<Link to="/experiments" />} variant="outline">
+          <Button icon={<ExperimentsIcon />} render={<Link to="/experiments" />}>
             Go to experiments
           </Button>
-          <Button icon={<TraceIcon />} render={<Link to="/traces" />} variant="outline">
+          <Button icon={<TraceIcon />} render={<Link to="/traces" />}>
             Go to traces
           </Button>
         </div>

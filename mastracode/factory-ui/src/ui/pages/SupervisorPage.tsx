@@ -154,13 +154,13 @@ function SupervisorEmptyState() {
         Ask why a card is stuck, what changed overnight, or how to safely repair a Factory issue.
       </p>
       <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label="Suggested prompts">
-        <Button type="button" variant="outline" size="md" onClick={() => prefillComposer('What needs me right now?')}>
+        <Button type="button" size="md" onClick={() => prefillComposer('What needs me right now?')}>
           What needs me?
         </Button>
-        <Button type="button" variant="outline" size="md" onClick={() => prefillComposer('What is stalled, and why?')}>
+        <Button type="button" size="md" onClick={() => prefillComposer('What is stalled, and why?')}>
           Explain stalled work
         </Button>
-        <Button type="button" variant="outline" size="md" onClick={() => prefillComposer('What finished overnight?')}>
+        <Button type="button" size="md" onClick={() => prefillComposer('What finished overnight?')}>
           Overnight digest
         </Button>
       </div>

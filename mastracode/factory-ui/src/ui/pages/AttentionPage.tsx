@@ -116,13 +116,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
           <p className="text-caption text-muted-foreground mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
         </div>
         {!normalizedSearch && view !== 'archived' && unreadCount > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={markAllRead.isPending}
-            onClick={() => markAllRead.mutate()}
-          >
+          <Button type="button" size="sm" disabled={markAllRead.isPending} onClick={() => markAllRead.mutate()}>
             {markAllRead.isPending ? 'Marking…' : 'Mark all open as read'}
           </Button>
         ) : null}
@@ -136,7 +130,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
               <Button
                 key={option.value}
                 type="button"
-                variant={view === option.value ? 'primary' : 'outline'}
+                variant={view === option.value ? 'primary' : 'default'}
                 aria-pressed={view === option.value}
                 onClick={() => setSearchParams(option.value === 'open' ? {} : { view: option.value })}
               >

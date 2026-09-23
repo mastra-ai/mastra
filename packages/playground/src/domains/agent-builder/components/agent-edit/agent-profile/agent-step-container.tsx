@@ -94,12 +94,7 @@ export const AgentStepContainer = ({
             data-testid="agent-step-footer"
           >
             {backButton}
-            <Button
-              icon={<Settings2 />}
-              variant="outline"
-              onClick={() => startViewTransition(() => next())}
-              disabled={isStreaming}
-            >
+            <Button icon={<Settings2 />} onClick={() => startViewTransition(() => next())} disabled={isStreaming}>
               See agent configuration
             </Button>
             <Button

@@ -5425,11 +5425,11 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mastra/mcp':
-        specifier: ^1.18.0
-        version: 1.18.0(@cfworker/json-schema@4.1.1)(@mastra/core@packages+core)(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(zod@4.6.5)
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.27.1
-        version: 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+        specifier: workspace:^
+        version: link:../mcp
+      '@mastra/mcp-legacy':
+        specifier: npm:@mastra/mcp@^1.18.0
+        version: '@mastra/mcp@1.18.0(@cfworker/json-schema@4.1.1)(@mastra/core@packages+core)(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(zod@4.6.5)'
       local-pkg:
         specifier: ^1.1.2
         version: 1.1.2
@@ -5446,6 +5446,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
+      '@modelcontextprotocol/client':
+        specifier: 2.0.0
+        version: 2.0.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
