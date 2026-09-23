@@ -501,7 +501,6 @@ export const useChat = ({
 
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
-      if (chunk.type === 'thread-history') return;
       const isTerminal = chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error';
       // A delayed terminal event must not finish another run's message, clear
       // its approvals, or trigger its completion callback.
