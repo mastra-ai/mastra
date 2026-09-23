@@ -34,7 +34,9 @@ const surfaceRoles: { token: ColorToken; note: string }[] = [
   { token: 'background', note: 'The canvas every page sits on' },
   { token: 'sidebar', note: 'App chrome, one step behind the canvas' },
   { token: 'card', note: 'Raised container' },
-  { token: 'popover', note: 'Menu, dropdown, dialog' },
+  { token: 'popover', note: 'Menu, dropdown, tooltip' },
+  { token: 'dialog', note: 'Dialog, drawer, alert dialog' },
+  { token: 'field', note: 'Text field fill, set by its surface' },
   { token: 'muted', note: 'Quiet region inside a container' },
 ];
 
