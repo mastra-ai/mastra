@@ -18,7 +18,13 @@ import { selectFixture } from '../__utils__/select-fixture';
  */
 
 async function openMemorySidebar(page: Page) {
+  // On /new with no threads the left panel starts collapsed; expand it to reach the memory card.
+  const expandPanel = page.getByRole('button', { name: 'Expand panel' });
   const memoryCard = page.getByTestId('memory-sidebar-card');
+  await expect(expandPanel.or(memoryCard)).toBeVisible({ timeout: 10000 });
+  if (await expandPanel.isVisible()) {
+    await expandPanel.click();
+  }
   await expect(memoryCard).toBeVisible({ timeout: 10000 });
 
   if ((await memoryCard.getAttribute('aria-pressed')) !== 'true') {

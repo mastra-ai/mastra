@@ -115,11 +115,13 @@ describe('new thread landing', () => {
   });
 
   describe('when visiting /new and the agent has memory but no threads', () => {
-    it('keeps the panel so the memory card stays reachable', async () => {
+    it('keeps the panel mounted but collapsed so the memory card stays reachable', async () => {
       useHandlers([]);
       renderPage();
 
       expect(await screen.findByRole('button', { name: SUGGESTED_PROMPT })).not.toBeNull();
+      // The panel starts collapsed (a layout concern jsdom cannot observe; covered by
+      // e2e/tests/agents/observational-memory.spec.ts) but stays mounted.
       expect(screen.getByTestId('left-slot')).not.toBeNull();
     });
 

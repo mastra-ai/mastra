@@ -79,6 +79,21 @@ function AgentThread() {
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
+  // With memory the panel also hosts the memory card, so it stays mounted (reachable via `{`
+  // or the expand button) but starts collapsed, and reopens once the first thread exists.
+  const collapseThreadsPanel =
+    isNewThread && hasMemory && !isAgentLoading && !isThreadsLoading && sidebarThreads.length === 0;
+  const collapsedForLanding = useRef(false);
+  useLayoutEffect(() => {
+    if (collapseThreadsPanel) {
+      threadsPanel.current?.collapse();
+      collapsedForLanding.current = true;
+    } else if (collapsedForLanding.current) {
+      collapsedForLanding.current = false;
+      threadsPanel.current?.expand();
+    }
+  }, [collapseThreadsPanel]);
+
   // 401 check - session expired, needs re-authentication
   if (error && is401UnauthorizedError(error)) {
     return <SessionExpired variant="fill" />;
@@ -108,7 +123,7 @@ function AgentThread() {
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
   // A first visit has nothing to list: give the landing the full width until a thread exists.
-  // Memory-enabled agents keep the panel — it also hosts the memory card, which must stay reachable.
+  // Without memory there is nothing else in the panel, so it is dropped entirely.
   const hideThreadsPanel = isNewThread && !hasMemory && (isThreadsLoading || sidebarThreads.length === 0);
 
   const handleRefreshThreadList = async () => {
