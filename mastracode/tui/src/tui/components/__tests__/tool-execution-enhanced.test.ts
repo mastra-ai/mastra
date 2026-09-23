@@ -90,6 +90,27 @@ describe('agent_signal_send rendering', () => {
     expect(visible.replaceAll('👩‍💻', '')).not.toMatch(/[👩💻‍�]/u);
   });
 
+  it.each([40, 80, 120, 180])('keeps every word of mixed emoji and text lines in quiet mode at width %i', width => {
+    const message =
+      'This message has two paragraphs and an emoji sequence 👩‍💻👩‍💻👩‍💻 to check wrapping. Please reply with the exact phrase: RECEIVED FULL MESSAGE, and confirm.';
+    const component = new ToolExecutionComponentEnhanced(
+      'agent_signal_send',
+      { ...args, message },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 8, collapsedByDefault: true },
+      ui,
+    );
+
+    const rendered = stripAnsi(component.render(width).join('\n'));
+    const previewText = rendered
+      .split('\n')
+      .filter(line => line.startsWith('  │ '))
+      .map(line => line.slice(4).trimEnd())
+      .join(' ');
+
+    expect(previewText).not.toContain('…');
+    expect(previewText.replace(/\s+/g, '')).toBe(message.replace(/\s+/g, ''));
+  });
+
   it('truncates the message to the quiet preview line limit', () => {
     const component = new ToolExecutionComponentEnhanced(
       'agent_signal_send',
