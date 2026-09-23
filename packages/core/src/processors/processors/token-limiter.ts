@@ -426,7 +426,25 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
               if (modelOutput != null) {
                 // The model receives the mapped/capped copy, not the stored result
                 const mapped = modelOutput as { type?: string; value?: unknown };
-                tokenString += typeof mapped.value === 'string' ? mapped.value : JSON.stringify(modelOutput);
+                if (typeof mapped.value === 'string') {
+                  tokenString += mapped.value;
+                } else if (mapped.type === 'content' && Array.isArray(mapped.value)) {
+                  for (const item of mapped.value) {
+                    if (item && typeof item === 'object' && (item as { type?: string }).type === 'text') {
+                      const text = (item as { text?: unknown }).text;
+                      tokenString += typeof text === 'string' ? text : JSON.stringify(item);
+                    } else if (isMediaPayload(item)) {
+                      const { data, ...rest } = item;
+                      mediaTokens += estimateMediaTokens(data, item.mediaType ?? item.mimeType);
+                      tokenString += JSON.stringify(rest);
+                      overhead -= 12;
+                    } else {
+                      tokenString += JSON.stringify(item);
+                    }
+                  }
+                } else {
+                  tokenString += JSON.stringify(modelOutput);
+                }
               } else if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
                   tokenString += invocation.result;

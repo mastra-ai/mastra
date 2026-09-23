@@ -1126,6 +1126,86 @@ describe('TokenLimiterProcessor', () => {
         expect(double).toBeLessThan(2000);
       });
 
+      it('should estimate media parts inside a mapped modelOutput content array', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+
+        const textOnlyList = new MessageList();
+        textOnlyList.add(
+          {
+            id: 'text-only',
+            role: 'assistant',
+            content: {
+              format: 2,
+              content: '',
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call_1',
+                    toolName: 'screenshotTool',
+                    args: {},
+                    result: 'placeholder',
+                  },
+                  providerMetadata: {
+                    mastra: {
+                      modelOutput: { type: 'content', value: [{ type: 'text', text: 'a screenshot was taken' }] },
+                    },
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:00Z'),
+          } as any,
+          'response',
+        );
+
+        const withMediaList = new MessageList();
+        withMediaList.add(
+          {
+            id: 'with-media',
+            role: 'assistant',
+            content: {
+              format: 2,
+              content: '',
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call_1',
+                    toolName: 'screenshotTool',
+                    args: {},
+                    result: 'placeholder',
+                  },
+                  providerMetadata: {
+                    mastra: {
+                      modelOutput: {
+                        type: 'content',
+                        value: [
+                          { type: 'text', text: 'a screenshot was taken' },
+                          { type: 'media', data: BASE64_IMAGE, mediaType: 'image/png' },
+                        ],
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:00Z'),
+          } as any,
+          'response',
+        );
+
+        const textOnlyTokens = await countTokens(processor, textOnlyList);
+        const withMediaTokens = await countTokens(processor, withMediaList);
+
+        // The media entry must be estimated via the flat per-image cost, not
+        // tokenized as a giant base64 string.
+        expect(withMediaTokens - textOnlyTokens).toBeGreaterThan(100);
+        expect(withMediaTokens - textOnlyTokens).toBeLessThan(2000);
+      });
+
       it('should leave non-media object tool results on the existing counting path', async () => {
         const processor = new TokenLimiterProcessor({ limit: 100_000 });
         const messageList = new MessageList();
