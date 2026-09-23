@@ -245,7 +245,7 @@ describe('IdentityClaimsSection', () => {
     expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
   });
 
-  it('given no candidates, when the user types an id and clicks Add, then it POSTs a claim for that manual id', async () => {
+  it('given no candidates, when the user types an id, clicks Add, then Save, then it POSTs a claim for that manual id', async () => {
     const calls = stub({
       integrations: [{ id: 'github' }],
       claims: [],
@@ -262,11 +262,55 @@ describe('IdentityClaimsSection', () => {
     await userEvent.type(nameInput, 'The Octocat');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
+    // Row appears as a checked candidate — Save is now enabled but no
+    // POST has landed yet.
+    const octocatLabel = await screen.findByText('The Octocat');
+    const octocatCheckbox = octocatLabel.closest('li')?.querySelector('input[type="checkbox"]');
+    expect((octocatCheckbox as HTMLInputElement).checked).toBe(true);
+    expect(calls.posts).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.posts).toHaveLength(1));
     expect(calls.posts[0]).toMatchObject({
       integrationId: 'github',
       externalUserId: 'octocat',
       label: 'The Octocat',
     });
+  });
+
+  it('given an existing checkbox edit, when the user Adds a manual id then Saves, then both the checkbox edit and the manual id are POSTed and neither is deleted', async () => {
+    const monaLisa: IdentityCandidate = {
+      externalUserId: 'monalisa',
+      label: 'Mona Lisa',
+      sources: ['observed'],
+    };
+    const calls = stub({
+      integrations: [{ id: 'github' }],
+      claims: [],
+      candidates: { github: [monaLisa] },
+    });
+
+    renderWithProviders(<IdentityClaimsSection />);
+    await userEvent.click(await screen.findByRole('button', { name: /GitHub/ }));
+
+    // Check the observed candidate.
+    const monalisaLabel = await screen.findByText('Mona Lisa');
+    const monalisaCheckbox = monalisaLabel.closest('li')?.querySelector('input[type="checkbox"]');
+    await userEvent.click(monalisaCheckbox as HTMLInputElement);
+
+    // Add a manual id.
+    await userEvent.type(screen.getByLabelText('GitHub id'), 'octocat');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    // Save.
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.posts).toHaveLength(2));
+
+    const claimedIds = calls.posts.map(post => post.externalUserId).sort();
+    expect(claimedIds).toEqual(['monalisa', 'octocat']);
+    // Crucially — no DELETE was issued. The prior bug had Add's out-of-
+    // band POST fire on Save's diff, causing the just-added claim to be
+    // rolled back to the checkbox-edit baseline.
+    expect(calls.deletes).toHaveLength(0);
   });
 });

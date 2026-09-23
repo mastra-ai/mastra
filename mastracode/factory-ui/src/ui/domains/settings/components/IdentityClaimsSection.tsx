@@ -141,6 +141,15 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
   const [query, setQuery] = useState('');
   const [manualId, setManualId] = useState('');
   const [manualLabel, setManualLabel] = useState('');
+  /**
+   * Manually-typed candidates the user has added but not yet saved. They
+   * live in local state (never in the server-side candidates feed) and
+   * merge into `merged` alongside observed + already-claimed rows so the
+   * Save-flow diff picks them up like any other checked candidate. This
+   * keeps write-through to a single path (Save) — no dual-write race with
+   * the shared claims-query invalidation.
+   */
+  const [manualCandidates, setManualCandidates] = useState<IdentityCandidate[]>([]);
   const candidatesQuery = useIdentityCandidatesQuery(integrationId, query || undefined);
   const upsert = useUpsertIdentityClaimMutation();
   const remove = useRemoveIdentityClaimMutation();
@@ -159,9 +168,11 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
 
   const candidates: IdentityCandidate[] = candidatesQuery.data ?? [];
 
-  // Some claims may not appear in the current candidate feed (e.g. a claim
-  // made from a different session where the observed history has since
-  // aged out). Surface them anyway so the user can unclaim them.
+  // Merge order: observed candidates from the server, then existing claims
+  // not covered by the observed feed (persisted from an earlier session),
+  // then manual-add rows the user just typed in this session (not saved
+  // yet). All three surface as regular candidates so the Save-flow diff
+  // treats them uniformly.
   const merged = useMemo(() => {
     const seen = new Set<string>();
     const rows: IdentityCandidate[] = [];
@@ -171,6 +182,7 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
     }
     for (const claim of claims) {
       if (seen.has(claim.externalUserId)) continue;
+      seen.add(claim.externalUserId);
       rows.push({
         externalUserId: claim.externalUserId,
         label: claim.label,
@@ -178,8 +190,13 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
         sources: [],
       });
     }
+    for (const candidate of manualCandidates) {
+      if (seen.has(candidate.externalUserId)) continue;
+      seen.add(candidate.externalUserId);
+      rows.push(candidate);
+    }
     return rows;
-  }, [candidates, claims]);
+  }, [candidates, claims, manualCandidates]);
 
   const toChange = useMemo(() => diffClaims(claimedIds, pendingChecks, merged), [claimedIds, pendingChecks, merged]);
   const dirty = toChange.toClaim.length > 0 || toChange.toUnclaim.length > 0;
@@ -207,6 +224,10 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
     for (const externalUserId of toChange.toUnclaim) {
       await remove.mutateAsync({ integrationId, externalUserId });
     }
+    // Manual candidates that landed as real claims are now covered by
+    // `claims` on the next refetch; drop the local shadow list so it
+    // doesn't accumulate.
+    if (manualCandidates.length > 0) setManualCandidates([]);
   };
 
   return (
@@ -278,13 +299,24 @@ function IntegrationClaimPanel({ integrationId, claims }: { integrationId: strin
             type="button"
             variant="ghost"
             size="sm"
-            onClick={async () => {
+            onClick={() => {
               const id = manualId.trim();
               if (!id) return;
-              await upsert.mutateAsync({
-                integrationId,
-                externalUserId: id,
-                label: manualLabel.trim() || id,
+              // Push a synthetic candidate and check it. The row now
+              // renders in the candidate list marked as pending; the
+              // existing Save flow will POST it as a claim.
+              setManualCandidates(current => {
+                if (current.some(candidate => candidate.externalUserId === id)) return current;
+                return [
+                  ...current,
+                  { externalUserId: id, label: manualLabel.trim() || id, sources: [] },
+                ];
+              });
+              setPendingChecks(current => {
+                if (current.has(id)) return current;
+                const draft = new Set(current);
+                draft.add(id);
+                return draft;
               });
               setManualId('');
               setManualLabel('');
