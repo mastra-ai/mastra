@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect } from './expect.js';
 import type { McE2eScenario, McE2eTerminal } from './types.js';
 
@@ -21,6 +23,12 @@ export const statusFooterInlineStartScenario: McE2eScenario = {
   testName: 'animates the status footer in place when started below shell output',
   useOpenAIModel: true,
   aimockFixture: 'status-footer-inline-start.json',
+  prepare({ appDataDir }) {
+    const settingsPath = join(appDataDir, 'settings.json');
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, any>;
+    settings.models = { ...settings.models, observerModelOverride: 'openai/gpt-5.4-mini' };
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  },
   async inProcessApp({ terminal, startMastraCodeApp }) {
     // pi-tui renders inline from the current cursor row, like launching from a shell prompt.
     terminal.write('$ mastracode\r\n');
@@ -40,6 +48,7 @@ export const statusFooterInlineStartScenario: McE2eScenario = {
     expectSingleStatusFooterBelowEditor(terminal, 'while the footer animates');
 
     await runtime.waitForScreenText(/Status footer animation complete\./, terminal);
+    await runtime.waitForScreenText(/Status footer title/i, terminal, 10_000);
     expectSingleStatusFooterBelowEditor(terminal, 'after the response');
   },
 };
