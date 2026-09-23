@@ -4,8 +4,8 @@ import * as React from 'react';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Label } from '../Label';
+import { createDrawerHandle } from './create-drawer-handle';
 import {
-  createDrawerHandle,
   Drawer,
   DrawerBackdrop,
   DrawerBody,
@@ -52,7 +52,7 @@ export const Default: Story = {
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
+            <Button>Close</Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
@@ -97,7 +97,7 @@ export const Sides: Story = {
       {sideOptions.map(({ side, label, title, description, body }) => (
         <Drawer key={side} side={side}>
           <DrawerTrigger asChild>
-            <Button variant={side === 'bottom' ? 'default' : 'outline'}>{label}</Button>
+            <Button>{label}</Button>
           </DrawerTrigger>
           <DrawerContent>
             <DrawerHeader>
@@ -109,7 +109,7 @@ export const Sides: Story = {
             </DrawerBody>
             <DrawerFooter>
               <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
+                <Button>Close</Button>
               </DrawerClose>
             </DrawerFooter>
           </DrawerContent>
@@ -148,7 +148,7 @@ function RepositoryPanel({
       </DrawerBody>
       <DrawerFooter>
         <DrawerClose asChild>
-          <Button variant="outline">Cancel</Button>
+          <Button>Cancel</Button>
         </DrawerClose>
         <DrawerClose asChild>
           <Button>Save</Button>
@@ -179,9 +179,7 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
                 <h3 className="text-subheading text-foreground">Recent runs</h3>
                 <p className="text-caption text-muted-foreground">Production checks across connected branches</p>
               </div>
-              <Button variant="outline" onClick={() => setDeployments(count => count + 1)}>
-                Queue run
-              </Button>
+              <Button onClick={() => setDeployments(count => count + 1)}>Queue run</Button>
             </div>
             <div className="grid gap-2">
               {['main', 'release/canary', 'codex/drawer-floating-variant'].map((branch, index) => (
@@ -220,7 +218,7 @@ export const FloatingOverlayModes: Story = {
     <WorkspaceSurface>
       <Drawer side="right" variant="floating">
         <DrawerTrigger asChild>
-          <Button variant="outline">No overlay</Button>
+          <Button>No overlay</Button>
         </DrawerTrigger>
         <RepositoryPanel
           idPrefix="floating-none"
@@ -231,7 +229,7 @@ export const FloatingOverlayModes: Story = {
 
       <Drawer side="right" variant="floating" overlay="transparent">
         <DrawerTrigger asChild>
-          <Button variant="outline">Transparent overlay</Button>
+          <Button>Transparent overlay</Button>
         </DrawerTrigger>
         <RepositoryPanel
           idPrefix="floating-transparent"
@@ -273,9 +271,7 @@ function ControlledExample() {
             <DrawerDescription>Open state is owned by the parent component.</DrawerDescription>
           </DrawerHeader>
           <DrawerFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Close from outside
-            </Button>
+            <Button onClick={() => setOpen(false)}>Close from outside</Button>
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -310,7 +306,7 @@ export const WithForm: Story = {
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button>Cancel</Button>
           </DrawerClose>
           <DrawerClose asChild>
             <Button>Save changes</Button>
@@ -335,7 +331,7 @@ export const Nested: Story = {
         <DrawerBody>
           <Drawer>
             <DrawerTrigger asChild>
-              <Button variant="outline">Security settings</Button>
+              <Button>Security settings</Button>
             </DrawerTrigger>
             <DrawerContent>
               <DrawerHeader>
@@ -351,7 +347,7 @@ export const Nested: Story = {
                 <div className="mt-4">
                   <Drawer>
                     <DrawerTrigger asChild>
-                      <Button variant="outline">Advanced options</Button>
+                      <Button>Advanced options</Button>
                     </DrawerTrigger>
                     <DrawerContent>
                       <DrawerHeader>
@@ -373,7 +369,7 @@ export const Nested: Story = {
               </DrawerBody>
               <DrawerFooter>
                 <DrawerClose asChild>
-                  <Button variant="outline">Close</Button>
+                  <Button>Close</Button>
                 </DrawerClose>
               </DrawerFooter>
             </DrawerContent>
@@ -381,7 +377,7 @@ export const Nested: Story = {
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
+            <Button>Close</Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
@@ -409,7 +405,7 @@ export const SnapPoints: Story = {
         </DrawerBody>
         <DrawerFooter>
           <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
+            <Button>Close</Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
@@ -435,7 +431,7 @@ export const NonModal: Story = {
             </DrawerHeader>
             <DrawerFooter>
               <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
+                <Button>Close</Button>
               </DrawerClose>
             </DrawerFooter>
           </DrawerPopup>
@@ -469,7 +465,7 @@ function SwipeToOpenExample() {
               </DrawerHeader>
               <DrawerFooter>
                 <DrawerClose asChild>
-                  <Button variant="outline">Close</Button>
+                  <Button>Close</Button>
                 </DrawerClose>
               </DrawerFooter>
             </DrawerPopup>
@@ -608,7 +604,7 @@ function DetachedTriggersExample() {
           payload={{ title: 'Settings', description: 'Manage your workspace settings.' }}
           asChild
         >
-          <Button variant="outline">Settings</Button>
+          <Button>Settings</Button>
         </DrawerTrigger>
       </div>
       <Drawer side="right" handle={profileDrawer}>
@@ -620,7 +616,7 @@ function DetachedTriggersExample() {
             </DrawerHeader>
             <DrawerFooter>
               <DrawerClose asChild>
-                <Button variant="outline">Close</Button>
+                <Button>Close</Button>
               </DrawerClose>
             </DrawerFooter>
           </DrawerContent>

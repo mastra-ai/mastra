@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -13,6 +14,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { formatDate } from 'date-fns';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { z } from 'zod';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import { getRunResourceId, getRunTimestamp } from '../utils';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -24,24 +26,30 @@ export interface WorkflowRecentRunsProps {
   runId?: string;
 }
 
-function formatRunInput(snapshot: unknown): string | null {
-  if (!snapshot || typeof snapshot !== 'object' || !('context' in snapshot)) {
-    return null;
-  }
-  const { context } = snapshot;
-  if (!context || typeof context !== 'object' || !('input' in context)) {
-    return null;
-  }
-  const { input } = context;
-  if (input === undefined || input === null) {
-    return null;
-  }
+const runSnapshotSchema = z.object({
+  status: z.enum(['running', 'failed', 'canceled', 'pending', 'waiting', 'paused', 'suspended', 'success']),
+  timestamp: z.number().optional(),
+  context: z.object({ input: z.unknown() }),
+});
+const wrappedRunInputSchema = z.object({ output: z.unknown() });
+type RunSnapshot = z.infer<typeof runSnapshotSchema>;
+type WorkflowRuns = Awaited<ReturnType<ReturnType<MastraClient['getWorkflow']>['runs']>>;
+type WorkflowRunSnapshot = WorkflowRuns['runs'][number]['snapshot'];
 
-  if (typeof input === 'string') {
-    return input;
-  }
+function parseRunSnapshot(snapshot: WorkflowRunSnapshot): RunSnapshot | undefined {
+  const result = runSnapshotSchema.safeParse(snapshot);
+  return result.success ? result.data : undefined;
+}
 
-  const inputValue = typeof input === 'object' && input !== null && 'output' in input ? input.output : input;
+function formatRunInput(snapshot: RunSnapshot | undefined): string | null {
+  if (!snapshot || snapshot.context.input == null) return null;
+
+  const input = snapshot.context.input;
+  const parsedString = z.string().safeParse(input);
+  if (parsedString.success) return parsedString.data;
+
+  const parsedWrappedInput = wrappedRunInputSchema.safeParse(input);
+  const inputValue = parsedWrappedInput.success ? parsedWrappedInput.data.output : input;
 
   try {
     return JSON.stringify(inputValue);
@@ -130,7 +138,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                   <ThreadListItems>
                     {runList.map(run => {
                       const isActiveRun = run.runId === runId;
-                      const snapshot = run.snapshot && typeof run.snapshot === 'object' ? run.snapshot : undefined;
+                      const snapshot = parseRunSnapshot(run.snapshot);
                       const runInput = isActiveRun ? formatRunInput(snapshot) : null;
 
                       return (

@@ -114,7 +114,6 @@ export function ComposerPreview({
               {running ? (
                 <Button
                   type="button"
-                  variant="outline"
                   size="icon-sm"
                   aria-label="Stop response"
                   onClick={() => {
@@ -125,13 +124,7 @@ export function ComposerPreview({
                   <Square />
                 </Button>
               ) : (
-                <Button
-                  type="submit"
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Send message"
-                  disabled={disabled || !text.trim()}
-                >
+                <Button type="submit" size="icon-sm" aria-label="Send message" disabled={disabled || !text.trim()}>
                   <ArrowUp />
                 </Button>
               )}

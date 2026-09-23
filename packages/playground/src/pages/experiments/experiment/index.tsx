@@ -1,9 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft } from 'lucide-react';
@@ -140,9 +139,10 @@ function ExperimentPage() {
   if (experimentError) {
     return (
       <ExperimentPageShell crumbs={crumbs}>
-        <ErrorState
-          title="Failed to load experiment"
-          message={
+        <EmptyState
+          tone="error"
+          titleSlot="Failed to load experiment"
+          descriptionSlot={
             experimentError instanceof Error
               ? experimentError.message
               : 'An unexpected error occurred. Please try again.'

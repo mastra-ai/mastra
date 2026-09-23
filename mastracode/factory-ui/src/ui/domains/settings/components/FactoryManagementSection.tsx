@@ -27,7 +27,6 @@ export function FactoryManagementSection() {
             <AlertDialog.Trigger asChild>
               <Button
                 size="sm"
-                variant="outline"
                 className="text-notice-destructive border-notice-destructive/25 hover:bg-notice-destructive/10 hover:text-notice-destructive"
                 disabled={deleteMutation.isPending}
                 aria-label={`Delete ${factory.name}`}

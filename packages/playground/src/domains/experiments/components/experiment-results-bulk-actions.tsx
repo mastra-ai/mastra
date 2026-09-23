@@ -17,7 +17,7 @@ export function ExperimentResultsBulkActions({ selection }: ExperimentResultsBul
 
   return (
     <div className="flex items-center gap-2 whitespace-nowrap">
-      <Button variant="outline" disabled={busy} onClick={selection.flagSelectedForReview} icon={<ClipboardCheck />}>
+      <Button disabled={busy} onClick={selection.flagSelectedForReview} icon={<ClipboardCheck />}>
         Flag {selectedIds.size} to review
       </Button>
       <ExperimentResultsTagPicker

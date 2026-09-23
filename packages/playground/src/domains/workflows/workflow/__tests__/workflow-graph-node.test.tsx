@@ -81,6 +81,23 @@ describe('WorkflowGraphNode', () => {
     });
   });
 
+  describe('when a workflow contains a classifier step', () => {
+    it('shows the classifier badge', () => {
+      renderNode({
+        label: 'ticket-router',
+        stepId: 'ticket-router',
+        workflowStep: resolveWorkflowGraphStep({
+          type: 'classifier',
+          id: 'ticket-router',
+          classifierId: 'ticket-router',
+        }),
+      });
+
+      expect(screen.getByText('Classifier')).not.toBeNull();
+      expect(screen.getByText('Not started')).not.toBeNull();
+    });
+  });
+
   describe('when a saved run is paused after its first step', () => {
     it('identifies the next step on its card', async () => {
       renderNode(

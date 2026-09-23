@@ -11,6 +11,7 @@ import type {
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TraceQueryTenantScope,
   TrustedThreadPredicate,
   TrustedThreadQueryPlan,
   TrustedTraceQueryObservedFieldsPlan,
@@ -50,6 +51,7 @@ const TRACE_FIELDS = {
   entityType: { sql: 'r.entityType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'String' },
+  tags: { sql: 'r.tags', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
@@ -170,6 +172,15 @@ function compileScalarPredicate<TField extends string>(
     return `${predicate.operator === 'exists' ? 'isNotNull' : 'isNull'}(${field.sql})`;
   }
 
+  if (predicate.type === 'collection') {
+    // Arrays are never NULL in ClickHouse; `DEFAULT []` makes missing and empty the same.
+    if (!('value' in predicate)) return `${predicate.operator}(${field.sql})`;
+    const member = parameters.add(predicate.value, field.parameterType);
+    return predicate.operator === 'includes'
+      ? `has(${field.sql}, ${member})`
+      : `notEmpty(${field.sql}) AND NOT has(${field.sql}, ${member})`;
+  }
+
   if (predicate.type === 'membership') {
     const values = predicate.values.map(value => parameters.add(value, field.parameterType)).join(', ');
     const expression = `${field.sql} ${predicate.operator === 'in' ? 'IN' : 'NOT IN'} (${values})`;
@@ -197,6 +208,7 @@ function compileFeedbackScalarPredicate(
     const present = `(isNotNull(s.valueString) OR isNotNull(s.valueNumber))`;
     return predicate.operator === 'exists' ? present : `NOT ${present}`;
   }
+  if (predicate.type === 'collection') throw new Error('Unsupported trusted trace-query field: value');
   const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
   const field =
     typeof sample === 'number'
@@ -291,13 +303,26 @@ export interface CompiledClickHouseTraceQuery {
   sharedSnapshot?: boolean;
 }
 
+/**
+ * Tenant conditions ANDed into every root and related-signal scan. Columns are
+ * `Nullable(String)`, so rows without a tenant never match a scope.
+ */
+function compileTenantScope(scope: TraceQueryTenantScope | undefined, parameters: ParameterBuilder): string {
+  if (!scope) return '';
+  let sql = `\n      AND organizationId = ${parameters.add(scope.organizationId, 'String')}`;
+  if (scope.resourceId !== undefined) sql += `\n      AND resourceId = ${parameters.add(scope.resourceId, 'String')}`;
+  return sql;
+}
+
 function compileClickHouseTraceScope(
   selection: TraceSelection,
   relationCollections: Set<RelatedCollection>,
   parameters: ParameterBuilder,
+  scope: TraceQueryTenantScope | undefined,
 ): string[] {
   const from = parameters.add(selection.timeRange.from, "DateTime64(3, 'UTC')");
   const to = parameters.add(selection.timeRange.to, "DateTime64(3, 'UTC')");
+  const tenant = compileTenantScope(scope, parameters);
   const ctes = [
     `current_roots AS (
     SELECT * FROM (
@@ -313,7 +338,7 @@ function compileClickHouseTraceScope(
     SELECT *
     FROM current_roots
     WHERE startedAt >= ${from}
-      AND startedAt < ${to}
+      AND startedAt < ${to}${tenant}
   )`,
   ];
 
@@ -338,7 +363,7 @@ function compileClickHouseTraceScope(
       rootEntityVersionId
     FROM ${TABLE_SPAN_EVENTS}
     WHERE isNotNull(traceId)
-      AND traceId IN (SELECT traceId FROM root_scope)
+      AND traceId IN (SELECT traceId FROM root_scope)${tenant}
     ORDER BY dedupeKey
     LIMIT 1 BY dedupeKey
   )`);
@@ -358,7 +383,7 @@ function compileClickHouseTraceScope(
       rootEntityVersionId
     FROM ${currentScoresRelation()} AS current
     WHERE isNotNull(current.traceId)
-      AND current.traceId IN (SELECT traceId FROM root_scope)
+      AND current.traceId IN (SELECT traceId FROM root_scope)${tenant}
   )`);
   }
   if (relationCollections.has('feedback')) {
@@ -383,7 +408,7 @@ function compileClickHouseTraceScope(
       LIMIT 1 BY feedbackId
     ) AS current
     WHERE isNotNull(traceId)
-      AND traceId IN (SELECT traceId FROM root_scope)
+      AND traceId IN (SELECT traceId FROM root_scope)${tenant}
   )`);
   }
 
@@ -415,7 +440,7 @@ export function compileClickHouseTraceQuery(
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const relationCollections = collectRelationCollections(plan.where);
-  const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters);
+  const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters, plan.scope);
 
   const predicate = plan.where ? compilePredicate(plan.where, parameters) : '1';
   ctes.push(`candidates AS (
@@ -535,7 +560,7 @@ export function compileClickHouseThreadQuery(plan: TrustedThreadQueryPlan): Comp
   const parameters = new ParameterBuilder();
   const relationCollections = collectRelationCollections(plan.traces.where);
   collectThreadRelationCollections(plan.where, relationCollections);
-  const ctes = compileClickHouseTraceScope(plan.traces, relationCollections, parameters);
+  const ctes = compileClickHouseTraceScope(plan.traces, relationCollections, parameters, plan.scope);
 
   const eligibility = plan.traces.where ? compilePredicate(plan.traces.where, parameters) : '1';
   ctes.push(`eligible_roots AS (
@@ -592,7 +617,7 @@ export function compileClickHouseTraceQueryObservedFields(
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
-  const ctes = compileClickHouseTraceScope(plan, new Set(), parameters);
+  const ctes = compileClickHouseTraceScope(plan, new Set(), parameters, plan.scope);
   const search = plan.search
     ? `AND positionCaseInsensitiveUTF8(concat('metadata.', key), ${parameters.add(plan.search, 'String')}) > 0`
     : '';
@@ -625,11 +650,14 @@ LIMIT ${limit}`,
 
 export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
-  const ctes = compileClickHouseTraceScope(plan, discoveryCollections(plan.predicateScope), parameters);
+  const ctes = compileClickHouseTraceScope(plan, discoveryCollections(plan.predicateScope), parameters, plan.scope);
   let field: string;
   if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const key = parameters.add(plan.path.slice('metadata.'.length), 'String');
     field = `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`;
+  } else if (plan.predicateScope === 'trace' && plan.path === 'tags') {
+    // One row per (root, distinct tag) so the count is traces carrying the tag, not tag occurrences.
+    field = `arrayJoin(arrayDistinct(${TRACE_FIELDS.tags.sql}))`;
   } else {
     field = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
   }

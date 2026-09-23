@@ -120,7 +120,7 @@ const SaveAsPromptBlockDialog = ({
             ) : null}
           </DialogBody>
           <DialogFooter className="px-4 pt-4">
-            <Button icon={<X />} type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button icon={<X />} type="button" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button icon={<Check />} type="submit" variant="primary" size="sm" disabled={!name.trim() || isPending}>

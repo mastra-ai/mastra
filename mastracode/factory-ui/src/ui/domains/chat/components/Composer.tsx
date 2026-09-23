@@ -291,7 +291,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             <ButtonsGroup size="sm" className="ml-auto" aria-label="Composer actions">
               <Button
                 type="button"
-                variant="outline"
                 size="icon-sm"
                 disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
@@ -302,7 +301,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               {liveRun && (
                 <Button
                   type="button"
-                  variant="outline"
                   size="icon-sm"
                   onClick={() => void abortMutation.mutateAsync()}
                   aria-label="Abort"
@@ -312,7 +310,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               )}
               <Button
                 type="submit"
-                variant="outline"
                 size="icon-sm"
                 disabled={
                   sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())

@@ -20,15 +20,10 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
   return (
     <div className="grid content-start gap-6">
       <div className="flex items-center justify-between gap-3">
-        <Button icon={<ChevronLeft />} variant="outline" size="sm" onClick={onBack}>
+        <Button icon={<ChevronLeft />} size="sm" onClick={onBack}>
           Back to examples
         </Button>
-        <Button
-          icon={<TraceIcon />}
-          render={<LinkComponent href={getTraceHref(traceId)} />}
-          variant="outline"
-          size="sm"
-        >
+        <Button icon={<TraceIcon />} render={<LinkComponent href={getTraceHref(traceId)} />} size="sm">
           Open full trace
         </Button>
       </div>

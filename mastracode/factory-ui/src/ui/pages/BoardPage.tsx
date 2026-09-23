@@ -20,7 +20,9 @@ import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumn
 import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
 import { BoardFilters } from '../domains/factory/components/BoardFilters';
 import { CandidateCard } from '../domains/factory/components/CandidateCard';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
 import { IntakeColumnExtras } from '../domains/factory/components/IntakeColumnExtras';
 import { IntakeFeedNotice } from '../domains/factory/components/IntakeFeedNotice';
@@ -61,24 +63,49 @@ import { settingsSectionPath } from '../domains/settings/settingsSections';
  * agent runs.
  */
 export function WorkBoardPage() {
-  return <FactoryPageShell bleed>{factory => <Board factory={factory} kind="work" />}</FactoryPageShell>;
+  return <BoardLayout kind="work" />;
 }
 
 export function ReviewBoardPage() {
-  return <FactoryPageShell bleed>{factory => <Board factory={factory} kind="review" />}</FactoryPageShell>;
+  return <BoardLayout kind="review" />;
 }
 
 export function CustomBoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
-  return <FactoryPageShell bleed>{factory => <Board factory={factory} kind={boardId ?? ''} />}</FactoryPageShell>;
+  return <BoardLayout kind={boardId ?? ''} />;
+}
+
+function BoardLayout({ kind }: { kind: string }) {
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout variant="fit" {...slots}>
+      <Board factory={factory} kind={kind} />
+    </PageLayout>
+  );
 }
 
 function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {
   const catalog = useBoardCatalog(factory.id);
-  if (catalog.isPending) return <p role="status">Loading boards…</p>;
-  if (catalog.isError) return <p role="alert">Unable to load boards.</p>;
+  if (catalog.isPending) {
+    return (
+      <p role="status" className="p-4">
+        Loading boards…
+      </p>
+    );
+  }
+  if (catalog.isError) {
+    return <EmptyState variant="fill" titleSlot={<span role="alert">Unable to load boards.</span>} />;
+  }
   const definition = catalog.data.find(board => board.id === kind);
-  if (!definition) return <p role="alert">Board unavailable: this board is not installed.</p>;
+  if (!definition) {
+    return (
+      <EmptyState
+        variant="fill"
+        titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>}
+      />
+    );
+  }
   return <InstalledBoard factory={factory} definition={definition} />;
 }
 
@@ -89,26 +116,22 @@ function InstalledBoard({ factory, definition }: { factory: FactoryProject; defi
 
   if (!repository) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
-        <EmptyState
-          as="h2"
-          iconSlot={<GitBranch className="text-muted-foreground size-10" />}
-          titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
-          descriptionSlot={
-            review
-              ? 'Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.'
-              : 'Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
-          }
-          actionSlot={
-            <Link
-              to={settingsSectionPath(factory.id, 'repositories')}
-              className={buttonVariants({ variant: 'primary' })}
-            >
-              Open Repository settings
-            </Link>
-          }
-        />
-      </div>
+      <EmptyState
+        variant="fill"
+        as="h2"
+        iconSlot={<GitBranch />}
+        titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
+        descriptionSlot={
+          review
+            ? 'Link a repository in Repository settings. Its change requests will appear in Intake, ready to move through review.'
+            : 'Link a repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
+        }
+        actionSlot={
+          <Link to={settingsSectionPath(factory.id, 'repositories')} className={buttonVariants({ variant: 'primary' })}>
+            Open Repository settings
+          </Link>
+        }
+      />
     );
   }
 
@@ -267,16 +290,16 @@ function BoardContent({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {mutationError !== undefined && (
-        <div className="shrink-0 p-5 pb-0">
+        <div className="shrink-0 p-4 pb-0">
           <Notice variant="destructive">
             {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
           </Notice>
         </div>
       )}
-      <div className="[container-type:inline-size] min-h-0 flex-1 overflow-auto overscroll-x-contain [scrollbar-gutter:stable] lg:overscroll-x-auto">
+      <div className="[container-type:inline-size] m-px min-h-0 flex-1 overflow-auto overscroll-x-contain rounded-[calc(var(--studio-frame-radius,1.5rem)-1px)] [scrollbar-gutter:stable] lg:overscroll-x-auto">
         <div className="flex min-h-full w-max min-w-full flex-col gap-3">
           <div className="from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
-            <div className="sticky left-0 flex w-[100cqw] flex-wrap items-center gap-x-4 gap-y-3 px-5 pt-5">
+            <div className="sticky left-0 flex w-[100cqw] flex-wrap items-center gap-x-4 gap-y-3 px-4 pt-4">
               <BoardFilters
                 kind={kind}
                 participants={participants}
@@ -293,7 +316,7 @@ function BoardContent({
                 />
               )}
             </div>
-            <div className="from-background via-background sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
+            <div className="from-background via-background sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-4 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
               {stageViews.map(({ stage, loading, taskCount, composerOpen, collapsed }) => (
                 <BoardColumnHeader
                   phaseKind={stage.kind}
@@ -338,7 +361,7 @@ function BoardContent({
             </div>
           </div>
           <BoardTooltipDelay>
-            <div role="group" aria-label="Board columns" className="flex flex-1 items-stretch gap-2 px-5 pb-5 lg:gap-3">
+            <div role="group" aria-label="Board columns" className="flex flex-1 items-stretch gap-2 px-4 pb-4 lg:gap-3">
               {stageViews.map(
                 ({
                   stage,

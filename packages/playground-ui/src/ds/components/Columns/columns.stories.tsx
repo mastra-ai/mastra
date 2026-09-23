@@ -3,7 +3,7 @@ import { SlidersHorizontalIcon } from 'lucide-react';
 
 import { Button } from '../Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../Card';
-import { Column, Columns, MultiColumn } from './index';
+import { Column, Columns } from './index';
 
 const meta: Meta<typeof Columns> = {
   title: 'Layout/Columns',
@@ -22,7 +22,7 @@ const columnContent = [
 
 function MetricsColumn({ title }: { title: string }) {
   return (
-    <Column className="p-5" withRightSeparator>
+    <Column className="p-5">
       <Column.Toolbar>
         <h2 className="text-heading text-foreground">{title}</h2>
         <Button size="sm" variant="ghost">
@@ -53,18 +53,6 @@ export const ResponsiveGrid: Story = {
         <MetricsColumn title="Production" />
         <MetricsColumn title="Development" />
       </Columns>
-    </div>
-  ),
-};
-
-export const HorizontallyScrollable: Story = {
-  render: () => (
-    <div className="h-128 w-full max-w-3xl bg-sidebar p-4">
-      <MultiColumn numOfColumns={3} minColumnWidth="18rem">
-        <MetricsColumn title="Agents" />
-        <MetricsColumn title="Workflows" />
-        <MetricsColumn title="Tools" />
-      </MultiColumn>
     </div>
   ),
 };

@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { useCallback, useMemo, useState } from 'react';
 
 import { useAuditEvents } from '../../hooks/useAuditEvents';
@@ -10,7 +11,9 @@ import { collapseRuns, factoryActivity, factoryDeeds } from '../domains/factory/
 import type { ActivityEntry } from '../domains/factory/activity';
 import { itemBoard } from '../domains/factory/boardStages';
 import { ActivityRail } from '../domains/factory/components/ActivityRail';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import type { FactoryMentionMember } from '../domains/factory/services/members';
 import { SkeletonRows } from '../ui/SkeletonRows';
@@ -20,7 +23,22 @@ const PAGE_SIZE = 60;
 const AUDIT_PAGE_SIZE = 100;
 
 export function ActivityPage() {
-  return <DocumentFactoryPageShell>{factory => <ActivityContent factoryId={factory.id} />}</DocumentFactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout
+      {...slots}
+      variant="narrow"
+      header={
+        <PageHeader>
+          <PageHeader.Title>Activity</PageHeader.Title>
+          <PageHeader.Description>Everything the Factory did, newest first.</PageHeader.Description>
+        </PageHeader>
+      }
+    >
+      <ActivityContent factoryId={factory.id} />
+    </PageLayout>
+  );
 }
 
 export function ActivityContent({ factoryId }: { factoryId: string }) {
@@ -51,16 +69,7 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
   }, [auditQuery]);
 
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="activity-heading">
-      <div>
-        <h1 id="activity-heading" className="text-heading text-foreground m-0 font-semibold">
-          Activity
-        </h1>
-        <Txt as="p" variant="caption" className="text-muted-foreground mt-1 mb-0">
-          Everything the Factory did, newest first.
-        </Txt>
-      </div>
-
+    <div className="flex flex-col gap-6 pt-6 pb-16">
       {itemsQuery.isPending || auditQuery.isPending ? (
         <SkeletonRows label="Loading activity" rows={6} rowClassName="h-10 w-full" />
       ) : itemsQuery.isError || auditQuery.isError ? (
@@ -79,9 +88,7 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
           </Button>
         </Notice>
       ) : entries.length === 0 ? (
-        <div className="text-caption text-placeholder flex min-h-40 items-center justify-center">
-          Nothing has happened yet.
-        </div>
+        <EmptyState variant="fill" titleSlot="Nothing has happened yet." />
       ) : (
         <>
           <ActivityRail entries={entries.slice(0, shown)} members={roster} factoryProjectId={factoryId} />
@@ -93,6 +100,6 @@ export function ActivityContent({ factoryId }: { factoryId: string }) {
           />
         </>
       )}
-    </section>
+    </div>
   );
 }
