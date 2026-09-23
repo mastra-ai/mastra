@@ -221,7 +221,6 @@ export function ProviderAccessSection({ description }: { description?: string })
                           <StatusBadge provider={provider} rowScope={rowScope} />
                           {signedIn ? (
                             <Button
-                              variant="outline"
                               size="sm"
                               aria-label={
                                 scope === 'org'
@@ -235,7 +234,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                             </Button>
                           ) : (
                             <Button
-                              variant={covered ? 'outline' : 'primary'}
+                              variant={covered ? 'default' : 'primary'}
                               size="sm"
                               aria-label={`Sign in to ${displayName}`}
                               disabled={startOAuthMutation.isPending}
@@ -297,7 +296,6 @@ export function ProviderAccessSection({ description }: { description?: string })
                           </Button>
                           {storedKey && (
                             <Button
-                              variant="outline"
                               size="sm"
                               aria-label={`Remove key for ${displayName}`}
                               disabled={isRemoving(provider)}

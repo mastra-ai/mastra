@@ -559,6 +559,24 @@ describe('InngestAgent parity surface', () => {
     return durableAgent;
   }
 
+  function setSuspendedSnapshot(durableAgent: ReturnType<typeof makeIsolatedAgent>) {
+    (durableAgent as any).__setMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          loadWorkflowSnapshot: vi.fn().mockResolvedValue({
+            value: {},
+            context: {},
+            suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+          }),
+        }),
+      }),
+    });
+  }
+
+  async function publishStreamEvent(durableAgent: ReturnType<typeof makeIsolatedAgent>, runId: string, event: any) {
+    await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, ...event } as any);
+  }
+
   it('threads widened execution options through prepare() into workflow input', async () => {
     // Slice 1: prove the widened option surface actually flows to
     // prepareForDurableExecution. We use prepare() instead of stream() because
@@ -761,6 +779,176 @@ describe('InngestAgent parity surface', () => {
       expect(sentEvent?.data.resume).not.toHaveProperty('stepResults');
     } finally {
       result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('resume() fails when its cached history boundary cannot be read', async () => {
+    const durableAgent = makeIsolatedAgent('resume-stream-boundary-failure');
+    setSuspendedSnapshot(durableAgent);
+    const runId = 'resume-stream-boundary-failure-run';
+    const historyError = new Error('history unavailable');
+    const originalGetHistory = durableAgent.pubsub.getHistory.bind(durableAgent.pubsub);
+    const historySpy = vi
+      .spyOn(durableAgent.pubsub, 'getHistory')
+      .mockRejectedValueOnce(historyError)
+      .mockImplementation(originalGetHistory);
+    const sendSpy = stubInngestSend();
+    let result: Awaited<ReturnType<typeof durableAgent.resume>> | undefined;
+
+    try {
+      try {
+        result = await durableAgent.resume(runId, { approved: true });
+        expect.fail('resume should fail when its stream boundary cannot be read');
+      } catch (error) {
+        expect(error).toBe(historyError);
+      }
+
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+    } finally {
+      result?.cleanup();
+      globalRunRegistry.delete(runId);
+      historySpy.mockRestore();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('resume() starts after cached history', async () => {
+    const durableAgent = makeIsolatedAgent('resume-stream-boundary');
+    setSuspendedSnapshot(durableAgent);
+    const runId = 'resume-stream-boundary-run';
+    const originalToolCall = {
+      type: 'tool-call',
+      payload: { toolCallId: 'original-call', toolName: 'save_note', args: { note: 'old' } },
+    };
+    const originalSuspension = {
+      type: 'tool-call-suspended',
+      payload: { toolCallId: 'original-call', toolName: 'save_note' },
+    };
+    await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data: originalToolCall });
+    await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data: originalSuspension });
+    await publishStreamEvent(durableAgent, runId, {
+      type: AgentStreamEventTypes.SUSPENDED,
+      data: { suspendedPaths: { 'agentic-loop': ['agentic-loop'] } },
+    });
+
+    const resumedChunks = [
+      {
+        type: 'tool-result',
+        payload: { toolCallId: 'original-call', toolName: 'save_note', result: { saved: true } },
+      },
+      { type: 'text-start', payload: { id: 'resumed-text' } },
+      { type: 'text-delta', payload: { id: 'resumed-text', text: 'Done.' } },
+      { type: 'text-end', payload: { id: 'resumed-text' } },
+    ];
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async () => {
+      for (const chunk of resumedChunks) {
+        await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data: chunk });
+      }
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.FINISH,
+        data: {
+          output: { text: 'Done.', steps: [{ toolResults: [resumedChunks[0].payload], toolCalls: [] }] },
+          stepResult: { reason: 'stop' },
+        },
+      });
+    });
+
+    const result = await durableAgent.resume(runId, { approved: true });
+    try {
+      const received = [];
+      for await (const chunk of result.fullStream) received.push(chunk);
+
+      expect(received).toEqual([...resumedChunks, expect.objectContaining({ type: 'finish' })]);
+      expect(received).not.toContainEqual(originalToolCall);
+      expect(received).not.toContainEqual(originalSuspension);
+    } finally {
+      result.cleanup();
+      globalRunRegistry.delete(runId);
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('resumeGenerate() returns the resumed result instead of the cached suspension', async () => {
+    const durableAgent = makeIsolatedAgent('resume-generate-boundary');
+    setSuspendedSnapshot(durableAgent);
+    const runId = 'resume-generate-boundary-run';
+    const originalToolCall = {
+      type: 'tool-call',
+      payload: { toolCallId: 'original-call', toolName: 'save_note', args: { note: 'old' } },
+    };
+    await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data: originalToolCall });
+    await publishStreamEvent(durableAgent, runId, {
+      type: AgentStreamEventTypes.CHUNK,
+      data: {
+        type: 'tool-call-suspended',
+        payload: { toolCallId: 'original-call', toolName: 'save_note' },
+      },
+    });
+    await publishStreamEvent(durableAgent, runId, {
+      type: AgentStreamEventTypes.SUSPENDED,
+      data: { suspendedPaths: { 'agentic-loop': ['agentic-loop'] } },
+    });
+
+    const resumedToolResult = {
+      toolCallId: 'original-call',
+      toolName: 'save_note',
+      result: { saved: true },
+    };
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async () => {
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: { type: 'tool-result', payload: resumedToolResult },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: { type: 'text-start', payload: { id: 'resumed-text' } },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: { type: 'text-delta', payload: { id: 'resumed-text', text: 'Done.' } },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: { type: 'text-end', payload: { id: 'resumed-text' } },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.CHUNK,
+        data: {
+          type: 'step-finish',
+          payload: {
+            output: {
+              steps: [],
+              usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            },
+            stepResult: { reason: 'stop', warnings: [] },
+            metadata: {},
+          },
+        },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.FINISH,
+        data: {
+          output: {
+            text: 'Done.',
+            steps: [{ toolResults: [resumedToolResult], toolCalls: [] }],
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          },
+          stepResult: { reason: 'stop' },
+        },
+      });
+    });
+
+    try {
+      const result = await durableAgent.resumeGenerate(runId, { approved: true });
+
+      expect(result.finishReason).toBe('stop');
+      expect(result.text).toBe('Done.');
+      expect(result.toolResults).toEqual([{ type: 'tool-result', payload: resumedToolResult }]);
+      expect(result.toolCalls).toEqual([]);
+    } finally {
+      globalRunRegistry.delete(runId);
       sendSpy.mockRestore();
     }
   });

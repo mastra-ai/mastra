@@ -480,6 +480,7 @@ export interface MCPToolProperties {
  * - Supports FlexibleSchema | Schema for broader AI SDK compatibility
  */
 export type CoreTool = {
+  title?: string;
   description?: string;
   parameters: FlexibleSchema<any> | Schema;
   outputSchema?: FlexibleSchema<any> | Schema;
@@ -538,6 +539,7 @@ export type CoreTool = {
  * The only difference: parameters must be Schema (not FlexibleSchema | Schema)
  */
 export type InternalCoreTool = {
+  title?: string;
   description?: string;
   parameters: Schema;
   outputSchema?: Schema;
@@ -700,6 +702,8 @@ export interface ToolAction<
   TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   id: TId;
+  /** Display name for UIs and MCP clients. Never sent to the model. */
+  title?: string;
   description: string;
   inputSchema?: PublicSchema<TSchemaIn>;
   outputSchema?: PublicSchema<TSchemaOut>;

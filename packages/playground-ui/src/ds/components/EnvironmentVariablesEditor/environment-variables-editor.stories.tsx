@@ -235,9 +235,7 @@ function EnvironmentVariablesDrawerStory() {
           <EnvironmentVariablesEditor.Root editor={editor} className="contents">
             <DrawerHeader className="flex-row items-center justify-between gap-3 border-b border-border">
               <DrawerTitle>Add Environment Variable</DrawerTitle>
-              <EnvironmentVariablesEditor.UploadButton variant="outline" size="sm">
-                Import .env
-              </EnvironmentVariablesEditor.UploadButton>
+              <EnvironmentVariablesEditor.UploadButton size="sm">Import .env</EnvironmentVariablesEditor.UploadButton>
             </DrawerHeader>
             <DrawerBody className="overflow-y-auto">
               <div className="grid gap-6">
