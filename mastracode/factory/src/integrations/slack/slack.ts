@@ -538,6 +538,17 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
             modelId: selectedModelId,
             error: error instanceof Error ? error.message : String(error),
           });
+          const currentModelId = session.model.get();
+          if (currentModelId && !factoryModelId) {
+            try {
+              await session.model.saveForMode({ modeId: session.mode.get(), modelId: currentModelId });
+            } catch (saveError) {
+              console.warn("[slack] Failed to persist the sender's model pack model", {
+                modelId: currentModelId,
+                error: saveError instanceof Error ? saveError.message : String(saveError),
+              });
+            }
+          }
         }
       } else if (!selectedModelId) {
         // Neither preference exists, so the SDK's built-in mode default is this
