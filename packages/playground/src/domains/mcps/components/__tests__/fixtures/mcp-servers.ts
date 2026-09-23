@@ -39,5 +39,25 @@ export const echoTool: McpToolInfo = {
 
 export const emptyToolList: McpServerToolListResponse = { tools: [] };
 
+export const toolList: McpServerToolListResponse = {
+  tools: [
+    echoTool,
+    {
+      id: 'weather-dashboard',
+      name: 'weather-dashboard',
+      description: 'Renders a weather dashboard',
+      inputSchema: JSON.stringify({ type: 'object', properties: {} }),
+      _meta: { ui: { resourceUri: 'ui://weather/dashboard' } },
+    },
+    {
+      id: 'research-agent',
+      name: 'research-agent',
+      description: 'Delegates to the research agent',
+      inputSchema: JSON.stringify({ type: 'object', properties: {} }),
+      toolType: 'agent',
+    },
+  ],
+};
+
 /** Auth disabled: every permission check passes. */
 export const authDisabled: AuthCapabilities = { enabled: false, login: { type: 'credentials' } };

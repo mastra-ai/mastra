@@ -1,3 +1,5 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -11,13 +13,31 @@ export const McpServerPage = () => {
   const { data: mcpServers = [], isLoading } = useMCPServers();
 
   const server = mcpServers.find(server => server.id === serverId);
+  // MCP v2 servers speak Streamable HTTP only; servers that predate transport reporting are 1.x (SSE available).
+  const hasSse = server?.transports?.includes('sse') ?? true;
+
+  const header =
+    isLoading || server ? (
+      <PageHeader>
+        <PageHeader.Title isLoading={isLoading}>{server?.name}</PageHeader.Title>
+        {server && (
+          <PageHeader.Meta beside>
+            <Badge size="sm">v{server.version_detail.version}</Badge>
+          </PageHeader.Meta>
+        )}
+        {server && (
+          <PageHeader.Description>
+            {hasSse
+              ? 'This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use case.'
+              : 'This MCP server speaks Streamable HTTP only (protocol 2026-07-28).'}
+          </PageHeader.Description>
+        )}
+      </PageHeader>
+    ) : undefined;
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-      <h1 className="sr-only">{serverId}</h1>
-      <div className="h-full w-full overflow-hidden">
-        <MCPDetail isLoading={isLoading} server={server} />
-      </div>
+    <PageLayout variant="narrow" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} header={header}>
+      <MCPDetail isLoading={isLoading} server={server} />
     </PageLayout>
   );
 };
