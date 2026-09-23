@@ -2,7 +2,12 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
 import { createWorkflow } from '../../../workflows/create';
 import { readScoped, writeScoped } from '../../run-scope-access';
-import { STEP_WORKSPACE_KEY, TOOL_APPROVAL_VERDICTS_KEY } from '../../run-scope-keys';
+import {
+  STEP_ACTIVE_TOOLS_KEY,
+  STEP_TOOLS_KEY,
+  STEP_WORKSPACE_KEY,
+  TOOL_APPROVAL_VERDICTS_KEY,
+} from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
@@ -138,7 +143,10 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         // called this step. A pure-safe batch parallelizes even while an
         // approval/suspend tool stays registered; a batch that calls one still
         // serializes; run-wide requireToolApproval still forces sequential.
-        const stepActiveTools = _internal?.stepActiveTools;
+        // Read step tools through the run scope like toolCallStep does: on resume, `_internal`
+        // is rebuilt without them while the scope still holds the suspended step's values.
+        const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+        const stepActiveTools = readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools');
         //
         // Under 'called', function approval policies are evaluated with each call's args (the
         // same rule toolCallStep applies), so a policy returning false does not serialize.
@@ -147,26 +155,17 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         const approvalVerdicts = new Map<string, boolean>();
         toolCallForeachOptions.concurrency = await resolveCalledToolCallConcurrency({
           requireToolApproval: rest.requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
-          tools: (_internal?.stepTools as Tools | undefined) ?? rest.tools,
+          tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
           activeTools: stepActiveTools,
           configuredConcurrency: configuredToolCallConcurrency,
           strategy: toolCallConcurrencyStrategy,
           toolCalls,
           approvalVerdicts,
           requestContext,
-          workspace: readScoped(
-            { mastra: rest.mastra, runId: rest.runId, _internal },
-            STEP_WORKSPACE_KEY,
-            'stepWorkspace',
-          ),
+          workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
           logger: rest.logger,
         });
-        writeScoped(
-          { mastra: rest.mastra, runId: rest.runId, _internal },
-          TOOL_APPROVAL_VERDICTS_KEY,
-          'toolApprovalVerdicts',
-          approvalVerdicts,
-        );
+        writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
         return toolCalls;
       },
       { id: 'map-tool-calls' },
