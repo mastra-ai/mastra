@@ -65,7 +65,7 @@ export function AgentPageTabs({
               label="Traces"
               tooltipContent={
                 <>
-                  Add <code>@mastra/observability</code> to enable this tab.
+                  Add <code>@mastra/observability</code> to enable Traces.
                 </>
               }
               docsHref="https://mastra.ai/docs/observability/overview"

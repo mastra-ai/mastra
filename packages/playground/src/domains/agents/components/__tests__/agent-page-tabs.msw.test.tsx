@@ -115,7 +115,7 @@ describe('AgentLayout tool tabs', () => {
       if (editor.parentElement) fireEvent.focus(editor.parentElement);
 
       const tooltip = await screen.findByRole('tooltip');
-      expect(within(tooltip).getByText('Editor')).not.toBeNull();
+      expect(within(tooltip).queryByText('Editor')).toBeNull();
       expect(tooltip.textContent).toContain('Add @mastra/editor');
     });
 

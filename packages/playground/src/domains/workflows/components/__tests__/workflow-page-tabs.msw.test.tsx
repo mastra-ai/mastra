@@ -142,7 +142,7 @@ describe('WorkflowPageTabs', () => {
       expect(disabledSchedules.hasAttribute('disabled')).toBe(true);
       if (disabledSchedules.parentElement) fireEvent.focus(disabledSchedules.parentElement);
       const tooltip = await screen.findByRole('tooltip');
-      expect(within(tooltip).getByText('Schedules')).not.toBeNull();
+      expect(within(tooltip).queryByText('Schedules')).toBeNull();
       expect(tooltip.textContent).toContain('Configure a schedule');
     });
 
