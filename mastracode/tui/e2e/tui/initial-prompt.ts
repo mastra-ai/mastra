@@ -119,6 +119,7 @@ values
 function resumeScenario(
   flag: '--tui-initial-prompt' | '--tui-prompt',
   pipedInput: string | null = null,
+  newThread = false,
 ): Pick<McE2eScenario, 'projectFixture' | 'useOpenAIModel' | 'aimockFixture' | 'env' | 'prepare' | 'inProcessApp'> {
   return {
     projectFixture: 'long-branch',
@@ -128,7 +129,9 @@ function resumeScenario(
     prepare: ({ dbPath, projectDir }) => seedConversation(dbPath, projectDir),
     async inProcessApp({ startMastraCodeApp }) {
       const args = takeInitialPrompt(['node', 'mastracode', flag, RESUME_PROMPT], {});
-      return startMastraCodeApp({ tui: initialMessageOptions(args, pipedInput) });
+      return startMastraCodeApp({
+        tui: { ...initialMessageOptions(args, pipedInput), ...(newThread ? { startNewThread: true } : {}) },
+      });
     },
   };
 }
@@ -185,5 +188,29 @@ export const tuiPromptResumeScenario: McE2eScenario = {
     const body = JSON.stringify(chat[0]);
     assert.ok(body.includes(RESUME_PROMPT), 'the prompt is sent');
     assert.ok(body.includes(SEEDED_REPLY), 'into the resumed conversation');
+  },
+};
+
+export const tuiNewThreadScenario: McE2eScenario = {
+  name: 'tui-new-thread',
+  description:
+    'With --tui-new-thread, startup opens a new thread instead of resuming, so --tui-initial-prompt is sent into it.',
+  testName: 'starts a new thread with --tui-new-thread and sends the initial prompt there',
+  ...resumeScenario('--tui-initial-prompt', null, true),
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/MC resumed prompt response/, terminal, 15_000);
+    runtime.printScreen('after new thread', terminal);
+    await runtime.waitForScreenTextAbsent(/Seeded initial prompt resume assistant turn/, terminal, 2_000);
+    terminal.submit('/help');
+    await runtime.waitForScreenText(/Commands/i, terminal, 8_000);
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const chat = requests.filter(request => !JSON.stringify(request).includes('generate a short title'));
+    assert.equal(chat.length, 1, 'expected exactly one chat request');
+    const body = JSON.stringify(chat[0]);
+    assert.ok(body.includes(RESUME_PROMPT), 'the prompt is sent');
+    assert.ok(!body.includes(SEEDED_REPLY), 'into a new thread, without the earlier conversation');
   },
 };

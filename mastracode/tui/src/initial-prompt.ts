@@ -54,6 +54,14 @@ export function takeInitialPrompt(argv: string[], env: NodeJS.ProcessEnv): Initi
   return { argv: rest, prompt, error, flag, sendOnResume: flag === TUI_PROMPT_FLAG };
 }
 
+export const TUI_NEW_THREAD_FLAG = '--tui-new-thread' as const;
+
+/** Takes `--tui-new-thread`: start on a new thread instead of resuming this directory's last one. */
+export function takeNewThreadFlag(argv: string[]): { argv: string[]; newThread: boolean } {
+  const rest = argv.filter(arg => arg !== TUI_NEW_THREAD_FLAG);
+  return { argv: rest, newThread: rest.length !== argv.length };
+}
+
 /** The first message the TUI sends: the initial prompt, followed by any piped stdin. */
 export function composeInitialMessage(prompt: string | undefined, pipedInput: string | null | undefined) {
   const piped = pipedInput ? `The following was piped via stdin:\n\n${pipedInput}` : undefined;

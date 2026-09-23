@@ -708,6 +708,13 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
 // =============================================================================
 
 export async function promptForThreadSelection(state: TUIState): Promise<void> {
+  // The session already resumed this directory's most recent thread when it was
+  // created; replace it with a new one, as when there is nothing to resume.
+  if (state.options.startNewThread) {
+    await state.session.thread.create();
+    return;
+  }
+
   const currentPath = state.projectInfo.rootPath;
   const currentResourceId = state.session.identity.getResourceId();
 

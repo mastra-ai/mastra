@@ -83,6 +83,7 @@ import {
   initialPromptResumeScenario,
   initialPromptScenario,
   initialPromptSkillScenario,
+  tuiNewThreadScenario,
   tuiPromptResumeScenario,
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
@@ -297,6 +298,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'initial-prompt-skill': initialPromptSkillScenario,
   'initial-prompt-resume': initialPromptResumeScenario,
   'tui-prompt-resume': tuiPromptResumeScenario,
+  'tui-new-thread': tuiNewThreadScenario,
   'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,

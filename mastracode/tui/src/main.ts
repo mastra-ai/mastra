@@ -18,7 +18,13 @@ import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
-import { initialMessageOptions, pipedInputConflict, takeInitialPrompt } from './initial-prompt.js';
+import {
+  initialMessageOptions,
+  pipedInputConflict,
+  TUI_NEW_THREAD_FLAG,
+  takeInitialPrompt,
+  takeNewThreadFlag,
+} from './initial-prompt.js';
 import {
   createOneShotFatalErrorHandler,
   createShutdownCoordinator,
@@ -69,7 +75,7 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> = {}) {
+async function tuiMain(startup: ReturnType<typeof initialMessageOptions> & { startNewThread?: boolean } = {}) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
@@ -162,7 +168,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
     exit: exitCode => void shutdownAndExit(exitCode),
-    ...startupMessage,
+    ...startup,
   });
   tui.run().catch(error => {
     handleFatalError(error);
@@ -361,12 +367,15 @@ async function main() {
     process.exit(1);
   }
   if (initialPrompt.flag) process.argv = initialPrompt.argv;
-  // The flag only means something to the interactive TUI. Paths that can't run
-  // it reject the flag instead of dropping the prompt; an env var prompt is
-  // just ignored there.
+  const { argv, newThread } = takeNewThreadFlag(process.argv);
+  process.argv = argv;
+  // These flags only mean something to the interactive TUI. Paths that can't
+  // run it reject them instead of dropping them; an env var prompt is just
+  // ignored there.
+  const tuiOnlyFlag = initialPrompt.flag ?? (newThread ? TUI_NEW_THREAD_FLAG : undefined);
   const rejectInitialPromptFlag = (reason: string) => {
-    if (!initialPrompt.flag) return;
-    process.stderr.write(`${initialPrompt.flag} starts the interactive TUI; ${reason}\n`);
+    if (!tuiOnlyFlag) return;
+    process.stderr.write(`${tuiOnlyFlag} starts the interactive TUI; ${reason}\n`);
     process.exit(1);
   };
 
@@ -409,7 +418,10 @@ async function main() {
     process.exit(1);
   }
 
-  return tuiMain(initialMessageOptions(initialPrompt, pipedInput));
+  return tuiMain({
+    ...initialMessageOptions(initialPrompt, pipedInput),
+    ...(newThread ? { startNewThread: true } : {}),
+  });
 }
 
 main().catch(error => {

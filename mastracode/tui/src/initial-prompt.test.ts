@@ -6,6 +6,7 @@ import {
   initialMessageOptions,
   pipedInputConflict,
   takeInitialPrompt,
+  takeNewThreadFlag,
 } from './initial-prompt.js';
 
 const node = ['node', 'mastracode'];
@@ -145,5 +146,15 @@ describe('pipedInputConflict', () => {
     expect(pipedInputConflict({ prompt: 'review this', flag: '--tui-initial-prompt' }, 'diff')).toBeUndefined();
     expect(pipedInputConflict({ prompt: '!ls', flag: '--tui-initial-prompt' }, null)).toBeUndefined();
     expect(pipedInputConflict({ prompt: undefined, flag: undefined }, '!rm -rf /')).toBeUndefined();
+  });
+});
+
+describe('takeNewThreadFlag', () => {
+  it('takes --tui-new-thread and leaves the other arguments alone', () => {
+    expect(takeNewThreadFlag([...node, '--tui-new-thread', '--tui-prompt', 'go'])).toEqual({
+      argv: [...node, '--tui-prompt', 'go'],
+      newThread: true,
+    });
+    expect(takeNewThreadFlag([...node, '--acp'])).toEqual({ argv: [...node, '--acp'], newThread: false });
   });
 });

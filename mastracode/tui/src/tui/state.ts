@@ -142,6 +142,9 @@ export interface MastraTUIOptions {
    */
   resumeSkipNotice?: string;
 
+  /** Start on a new thread instead of resuming the directory's last one (`--tui-new-thread`). */
+  startNewThread?: boolean;
+
   /** Whether to show verbose startup info */
   verbose?: boolean;
 

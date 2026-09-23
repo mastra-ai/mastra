@@ -84,6 +84,7 @@ export type ScenarioName =
   | 'initial-prompt-skill'
   | 'initial-prompt-resume'
   | 'tui-prompt-resume'
+  | 'tui-new-thread'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
@@ -258,7 +259,13 @@ export type McE2eStartMastraCodeAppOptions = {
   tui?: Partial<
     Pick<
       MastraTUIOptions,
-      'appName' | 'initialMessage' | 'resumeSkipNotice' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'
+      | 'appName'
+      | 'initialMessage'
+      | 'resumeSkipNotice'
+      | 'startNewThread'
+      | 'inlineQuestions'
+      | 'processMemoryDiagnostics'
+      | 'verbose'
     >
   >;
 };
