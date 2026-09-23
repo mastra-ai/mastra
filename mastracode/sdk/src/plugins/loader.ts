@@ -161,9 +161,6 @@ async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> 
   }
 
   const url = pathToFileURL(entryPath);
-  // Cache-bust on file *content*, not metadata: an update that keeps the same
-  // byte length and lands within the filesystem's timestamp granularity would
-  // otherwise reuse the stale cached module.
   const contentHash = createHash('sha1').update(fs.readFileSync(entryPath)).digest('hex');
   url.searchParams.set('contentHash', contentHash);
   const mod = (await import(url.href)) as { default?: unknown; plugin?: unknown };
