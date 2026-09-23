@@ -6,6 +6,7 @@ import { makeSSOLoginRequest } from '@/domains/auth/services/sso-login';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import type { EmptyStateProps } from '@/ds/components/EmptyState';
+import { toast } from '@/lib/toast';
 
 export type SessionExpiredProps = {
   variant?: EmptyStateProps['variant'];
@@ -20,9 +21,9 @@ export function SessionExpired({ variant }: SessionExpiredProps) {
     try {
       const { url } = await makeSSOLoginRequest(client, { redirectUri: window.location.href });
       window.location.href = url;
-    } catch (error) {
+    } catch {
       setIsRedirecting(false);
-      throw error;
+      toast.error('Could not start the login. Try again.');
     }
   };
 

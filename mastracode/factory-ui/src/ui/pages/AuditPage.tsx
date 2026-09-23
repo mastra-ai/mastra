@@ -54,7 +54,7 @@ function AuditLogEmptyState({
     <EmptyState
       className="min-h-48"
       as="h2"
-      iconSlot={<ScrollText className="size-5" aria-hidden />}
+      iconSlot={<ScrollText aria-hidden />}
       titleSlot={state.title}
       descriptionSlot={state.description}
       actionSlot={

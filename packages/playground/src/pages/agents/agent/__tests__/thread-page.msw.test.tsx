@@ -682,22 +682,22 @@ describe('Standalone thread page', () => {
     );
   });
 
-  it('does not fetch traces nor render a traces aside in the chat view', async () => {
+  it('keeps traces disabled and fetches none in the chat view', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /traces/i }).getAttribute('aria-disabled')).toBe('true');
     expect(screen.queryByRole('complementary')).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
-  it('does not fetch traces on /new', async () => {
+  it('keeps traces disabled and fetches none on /new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /traces/i }).getAttribute('aria-disabled')).toBe('true');
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 

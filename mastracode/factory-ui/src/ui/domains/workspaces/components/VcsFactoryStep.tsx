@@ -145,7 +145,7 @@ function ProviderChoice({
       <ProviderConnection
         provider="GitHub"
         message="Connect GitHub to choose a repository."
-        icon={<GithubIcon className="size-10" />}
+        icon={<GithubIcon />}
         buttonIcon={<GithubIcon className="size-4" />}
         isConnecting={githubRedirecting}
         onConnect={onChooseGithub}
@@ -154,7 +154,7 @@ function ProviderChoice({
       <ProviderConnection
         provider="GitLab"
         message="Connect GitLab to choose a repository."
-        icon={<GitLabIcon className="size-10" />}
+        icon={<GitLabIcon />}
         buttonIcon={<GitLabIcon className="size-4" />}
         onConnect={onChooseGitlab}
       />

@@ -30,10 +30,24 @@
   import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
   ```
 
-- `PermissionDenied` now takes only `resource` (required) and `variant`, and `SessionExpired` only `variant`. The unused `title`, `description`, `actionSlot` and `className` overrides are removed.
+- `PermissionDenied` now takes only `resource` (required) and `variant`, and `SessionExpired` only `variant`. The `title`, `description`, `actionSlot` and `className` overrides are removed:
+
+  ```tsx
+  // Before
+  <PermissionDenied title="Access required" description="Ask an admin." actionSlot={requestButton} />
+  <SessionExpired title="Sign in to continue" className="py-12" />
+
+  // After
+  <PermissionDenied resource="workflows" />
+  <SessionExpired variant="fill" />
+  ```
+
+  For custom copy or actions, render `EmptyState` directly.
+
+- `EmptyState` renders every icon at 32px, whatever size the icon sets itself, so status blocks stay consistent across apps.
 
 **Improved**
 
 - `PermissionDenied` shows a lock icon and `SessionExpired` a timer-off icon, so neither reads as an empty list anymore.
-- The **Log in** button on `SessionExpired` now sends the client's custom headers, like Studio's own login does.
+- The **Log in** button on `SessionExpired` now sends the client's custom headers, like Studio's own login does, and shows an error toast when the login cannot start.
 - `EmptyState` icons without their own color now render muted by default.

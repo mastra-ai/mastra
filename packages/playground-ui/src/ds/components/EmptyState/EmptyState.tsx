@@ -6,7 +6,7 @@ type EmptyStateTone = 'default' | 'error';
 
 const defaultIconByTone: Record<EmptyStateTone, React.ReactNode> = {
   default: <CircleSlashIcon />,
-  error: <CircleXIcon className="size-8" />,
+  error: <CircleXIcon />,
 };
 
 const iconColorByTone: Record<EmptyStateTone, string> = {
@@ -15,7 +15,7 @@ const iconColorByTone: Record<EmptyStateTone, string> = {
 };
 
 export type EmptyStateProps = {
-  /** Defaults to the tone's icon. Pass `null` to render no icon. */
+  /** Defaults to the tone's icon, always rendered at 32px. Pass `null` to render no icon. */
   iconSlot?: React.ReactNode;
   titleSlot: React.ReactNode;
   descriptionSlot?: React.ReactNode;
@@ -49,7 +49,7 @@ export function EmptyState({
         className,
       )}
     >
-      {iconSlot && <div className={cn('mb-3', iconColorByTone[tone])}>{iconSlot}</div>}
+      {iconSlot && <div className={cn('mb-3 [&_svg]:size-8', iconColorByTone[tone])}>{iconSlot}</div>}
       <HeadingTag className="text-subheading text-foreground">{titleSlot}</HeadingTag>
       {descriptionSlot && <p className="mt-1.5 max-w-md text-caption text-muted-foreground">{descriptionSlot}</p>}
       {actionSlot && <div className="mt-4">{actionSlot}</div>}

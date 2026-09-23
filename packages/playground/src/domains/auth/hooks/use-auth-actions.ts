@@ -82,7 +82,7 @@ export function useSSOLogin() {
  *
  * @internal
  */
-export async function makeLogoutRequest(client: MastraClient): Promise<LogoutResponse> {
+export async function makeLogoutRequest(client: Pick<MastraClient, 'options'>): Promise<LogoutResponse> {
   const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options;
   const raw = (apiPrefix || '/api').trim();
   const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');

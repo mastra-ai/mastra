@@ -41,7 +41,7 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
         },
       };
 
-      await makeLogoutRequest(mockClient as any);
+      await makeLogoutRequest(mockClient);
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -58,7 +58,7 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
         },
       };
 
-      await makeLogoutRequest(mockClient as any);
+      await makeLogoutRequest(mockClient);
 
       const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(url).toBe('http://localhost:4000/api/auth/logout');
@@ -80,7 +80,7 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
         },
       };
 
-      await makeLogoutRequest(mockClient as any);
+      await makeLogoutRequest(mockClient);
 
       const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(init.headers).toMatchObject({
@@ -102,7 +102,7 @@ describe('auth actions — apiPrefix support (issue #13901)', () => {
         },
       };
 
-      await makeLogoutRequest(mockClient as any);
+      await makeLogoutRequest(mockClient);
 
       const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
