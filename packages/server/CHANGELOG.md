@@ -1,5 +1,89 @@
 # @mastra/server
 
+## 1.69.0-alpha.4
+
+### Minor Changes
+
+- Deprecated thread grouping on the advanced trace-query endpoint. Grouped requests remain supported until the next major release; use the thread-query endpoint for new integrations. ([#23790](https://github.com/mastra-ai/mastra/pull/23790))
+
+  **Before:**
+
+  ```ts
+  await mastraClient.queryTraces({ timeRange, group: { by: ['threadId'] } });
+  ```
+
+  **After:**
+
+  ```ts
+  await mastraClient.queryTraceThreads({ traces: { timeRange } });
+  ```
+
+### Patch Changes
+
+- Added server schema support for serialized classifier workflow steps. ([#24747](https://github.com/mastra-ai/mastra/pull/24747))
+
+- Honor `tracingOptions.rootSpanName` when creating a root span. The caller-supplied name replaces the default `agent run: '<id>'` or `workflow run: '<id>'` name on the root span only. Works for the default and Inngest workflow engines because the name is applied when the span starts, before any durable snapshot is taken. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const span = observability.startSpan({
+    type: SpanType.WORKFLOW_RUN,
+    name: "workflow run: 'skill-analyze'",
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+
+  span.name; // "skill-analyze: typescript"
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Added `rootSpanName` to `tracingOptions` so each agent or workflow run can set its own root span name. Runs of the same workflow no longer all show up as `workflow run: 'my-workflow'` in trace lists. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  await run.start({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  The name applies to the root span only. Child spans keep their default names, and entity filters still match on the workflow or agent id. Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Added `rootSpanName` to the generated `tracingOptions` request types so per-run root span names can be sent from the client. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```ts
+  const run = await client.getWorkflow('skillAnalyze').createRun();
+
+  await run.startAsync({
+    inputData: { skillId: 'typescript' },
+    tracingOptions: { rootSpanName: 'skill-analyze: typescript' },
+  });
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Accept `rootSpanName` in `tracingOptions` on agent and workflow HTTP routes so clients can set a per-run root span name. ([#24564](https://github.com/mastra-ai/mastra/pull/24564))
+
+  ```http
+  POST /api/workflows/skillAnalyze/start-async
+  {
+    "inputData": { "skillId": "typescript" },
+    "tracingOptions": { "rootSpanName": "skill-analyze: typescript" }
+  }
+  ```
+
+  Related: https://github.com/mastra-ai/mastra/issues/24518
+
+- Updated dependencies [[`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0-alpha.4
+
+## 1.69.0-alpha.3
+
+### Patch Changes
+
+- Preserve literal percent-encoded sequences in workspace filesystem paths. Read, write, create, and delete operations now target the exact requested file instead of decoding query and body values a second time. Closes #24620. ([#24637](https://github.com/mastra-ai/mastra/pull/24637))
+
+- Updated dependencies [[`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c)]:
+  - @mastra/core@1.69.0-alpha.3
+
 ## 1.69.0-alpha.2
 
 ### Patch Changes

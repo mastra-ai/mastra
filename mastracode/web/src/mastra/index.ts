@@ -38,6 +38,7 @@ import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/j
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import { githubRules } from './github-rules.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -146,11 +147,22 @@ if (authDisabled) {
 }
 const secretEncryption = auth === null ? undefined : credentialEncryption();
 
+// Platform-backed integrations are installed by the factory only when Platform
+// credentials are present — the same check it makes internally.
+const platformCredentialsConfigured = Boolean(
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
+);
+
 // Direct GitHub App fallback: when the platform-backed integration isn't in
 // play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
 // a GithubIntegration so the app still gets a real GitHub connection — Connect
 // GitHub in onboarding, the repo picker, and webhooks. A partial group stays
 // disabled so the status route can report exactly what's missing.
+//
+// This integration carries the deployment's GitHub event-rule overrides. When
+// the group is absent the factory installs the Platform-backed integration
+// instead, and `platform.github` (below) hands it the same overrides — only one
+// of the two is ever installed.
 const githubAppId = process.env.GITHUB_APP_ID?.trim();
 const githubPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
 const githubClientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
@@ -168,8 +180,15 @@ const github =
         // Extra reviewer bot logins this deployment trusts to trigger
         // review/comment notifications, on top of the built-in defaults.
         authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
+        rules: githubRules,
       })
     : undefined;
+
+// What the factory installs on its own is the only thing `platform.github`
+// reaches: Platform credentials present and no direct `GITHUB_APP_*`
+// integration holding the slot. Set otherwise, the key would be a
+// warn-and-ignore no-op on every boot.
+const platformGithub = !github && platformCredentialsConfigured ? { rules: githubRules } : undefined;
 
 // Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
 // and Group Access Tokens use the same API/Git authentication; the explicit
@@ -207,9 +226,6 @@ const linear =
 const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
 const jiraEmail = process.env.JIRA_EMAIL?.trim();
 const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
-const platformJiraConfigured = Boolean(
-  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
-);
 const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
 if (jiraDirectVars.some(Boolean) && !jiraDirectVars.every(Boolean)) {
   // A partial group silently disables direct Jira (no /web/jira routes mount),
@@ -225,7 +241,7 @@ const jira =
         email: jiraEmail,
         apiToken: jiraApiToken,
       })
-    : platformJiraConfigured
+    : platformCredentialsConfigured
       ? new PlatformJiraIntegration()
       : undefined;
 
@@ -385,6 +401,9 @@ export const factory = new MastraFactory({
     // comparing against `undefined[bot]` on every Platform deployment, where
     // this is legitimately unset.
     githubAppSlug,
+    // Event-rule overrides for the GitHub integration the factory installs
+    // itself — defined only when it does install one (see `platformGithub`).
+    ...(platformGithub ? { github: platformGithub } : {}),
   },
   // Browser-facing origin. On the platform the SPA is hosted separately, so
   // this MUST be set to the public API origin.

@@ -1399,7 +1399,10 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
  * Exported Span interface, used for tracing exporters.
  * This is the format sent to ObservabilityExporter implementations.
  */
-export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {}
+export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
+  /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
+  isInternal?: boolean;
+}
 
 /**
  * Options for ending a model generation span
@@ -1818,6 +1821,12 @@ export interface TraceState {
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
+  /**
+   * Display name for the root span of this trace, replacing the default
+   * `agent run: '<id>'` / `workflow run: '<id>'` name. Use it to tell runs of the
+   * same agent or workflow apart in trace lists. Only applied to the root span.
+   */
+  rootSpanName?: string;
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
   /**

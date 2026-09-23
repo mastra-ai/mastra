@@ -1,12 +1,10 @@
+import { DisabledFeatureButton } from '@mastra/playground-ui/components/DisabledFeatureButton';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { CalendarClockIcon, ExternalLink } from 'lucide-react';
+import { CalendarClockIcon } from 'lucide-react';
 
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
 import { useLinkComponent } from '@/lib/framework';
@@ -20,70 +18,21 @@ interface WorkflowPageTabsProps {
   showObservability?: boolean;
 }
 
-function WorkflowTab({
-  value,
-  icon,
-  label,
-  disabled,
-  disabledReason,
-}: {
-  value: WorkflowPageTab;
-  icon: React.ReactNode;
-  label: string;
-  disabled?: boolean;
-  disabledReason?: React.ReactNode;
-}) {
-  const tabContent = (
-    <>
+function WorkflowTab({ value, icon, label }: { value: WorkflowPageTab; icon: React.ReactNode; label: string }) {
+  return (
+    <Tab value={value}>
       <Icon size="xs">{icon}</Icon>
       <Txt variant="caption" className="text-inherit">
         {label}
       </Txt>
-    </>
+    </Tab>
   );
-
-  if (disabled) {
-    return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span tabIndex={0} className="inline-flex">
-              <Tab value={value} disabled>
-                {tabContent}
-              </Tab>
-            </span>
-          }
-        />
-        {disabledReason && <TooltipContent side="bottom">{disabledReason}</TooltipContent>}
-      </Tooltip>
-    );
-  }
-
-  return <Tab value={value}>{tabContent}</Tab>;
 }
 
 export function WorkflowPageTabs({ workflowId, activeTab, showObservability = false }: WorkflowPageTabsProps) {
   const { navigate } = useLinkComponent();
-  const { data: schedules } = useSchedules({ workflowId });
+  const { data: schedules, isSuccess: schedulesLoaded } = useSchedules({ workflowId });
   const scheduleCount = schedules?.length ?? 0;
-
-  const observabilityDisabledReason = !showObservability ? (
-    <p>
-      Add <code>@mastra/observability</code> to enable this tab.{' '}
-      <a
-        href="https://mastra.ai/docs/observability/overview"
-        target="_blank"
-        rel="noopener noreferrer"
-        className={cn(
-          'inline-flex items-center gap-1 text-inherit underline hover:text-foreground',
-          controlStateColorTransition,
-        )}
-      >
-        Learn more
-        <ExternalLink className="size-3" />
-      </a>
-    </p>
-  ) : undefined;
 
   const encodedWorkflowId = encodeURIComponent(workflowId);
   const hrefMap: Record<WorkflowPageTab, string> = {
@@ -97,25 +46,47 @@ export function WorkflowPageTabs({ workflowId, activeTab, showObservability = fa
     navigate(hrefMap[value]);
   };
 
+  const schedulesDisabled = schedulesLoaded && scheduleCount === 0;
+
   return (
-    <div className="flex min-w-0 items-center gap-2 p-1.5">
-      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="min-w-0 flex-1">
+    <div className="flex min-w-0 items-center justify-between gap-2 p-1.5">
+      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="min-w-0">
         <TabList variant="pill-ghost">
           <WorkflowTab value="graph" icon={<WorkflowIcon />} label="Graph" />
-          <WorkflowTab
-            value="traces"
-            icon={<TraceIcon />}
-            label="Traces"
-            disabled={!showObservability}
-            disabledReason={observabilityDisabledReason}
-          />
-          <WorkflowTab
-            value="schedules"
-            icon={<CalendarClockIcon />}
-            label={scheduleCount > 0 ? `Schedules (${scheduleCount})` : 'Schedules'}
-          />
+          {showObservability && <WorkflowTab value="traces" icon={<TraceIcon />} label="Traces" />}
+          {!schedulesDisabled && (
+            <WorkflowTab
+              value="schedules"
+              icon={<CalendarClockIcon />}
+              label={scheduleCount > 0 ? `Schedules (${scheduleCount})` : 'Schedules'}
+            />
+          )}
         </TabList>
       </Tabs>
+      {(!showObservability || schedulesDisabled) && (
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {!showObservability && (
+            <DisabledFeatureButton
+              icon={<TraceIcon />}
+              label="Traces"
+              tooltipContent={
+                <>
+                  Add <code>@mastra/observability</code> to enable Traces.
+                </>
+              }
+              docsHref="https://mastra.ai/docs/observability/overview"
+            />
+          )}
+          {schedulesDisabled && (
+            <DisabledFeatureButton
+              icon={<CalendarClockIcon />}
+              label="Schedules"
+              tooltipContent="Configure a schedule on this workflow to enable Schedules."
+              docsHref="https://mastra.ai/docs/workflows/scheduled-workflows"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

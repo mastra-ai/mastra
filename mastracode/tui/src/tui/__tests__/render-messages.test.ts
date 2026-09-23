@@ -942,6 +942,33 @@ describe('addUserMessage', () => {
 });
 
 describe('renderExistingMessages history bounds', () => {
+  it('does not replace the active transcript when its owner becomes stale during history loading', async () => {
+    const state = createState();
+    addUserMessage(state, createUserMessage('current transcript', 'current-user'));
+    const currentChildren = [...state.chatContainer.children];
+    let resolveMessages!: (messages: MastraDBMessage[]) => void;
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi.fn().mockReturnValue(
+          new Promise(resolve => {
+            resolveMessages = resolve;
+          }),
+        ),
+      },
+    } as unknown as TUIState['session'];
+    let isCurrent = true;
+
+    const rendering = renderExistingMessages(state, () => isCurrent);
+    isCurrent = false;
+    resolveMessages([createUserMessage('stale transcript', 'stale-user')]);
+    await rendering;
+
+    expect(state.chatContainer.children).toEqual(currentChildren);
+    expect(state.messageComponentsById.has('current-user')).toBe(true);
+    expect(state.messageComponentsById.has('stale-user')).toBe(false);
+  });
+
   it('prunes oversized startup history before the first render', async () => {
     const state = createState();
     const messages = Array.from({ length: 300 }, (_, index) => createUserMessage(`message-${index}`, `user-${index}`));

@@ -1283,7 +1283,7 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
 export interface TraceQueryConformanceCase {
   name: string;
   request: TraceQueryRequest;
-  expected: Array<{ traceId: string } | { threadId: string }>;
+  expected: Array<{ traceId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
 }
 
@@ -2082,11 +2082,6 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       },
     },
     expected: [{ traceId: 'trace-a' }],
-  },
-  {
-    name: 'returns distinct non-null thread groups',
-    request: { timeRange: fullRange, group: { by: ['threadId'] } },
-    expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
   },
 ];
 
