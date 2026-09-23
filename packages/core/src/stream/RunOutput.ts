@@ -2,22 +2,35 @@ import EventEmitter from 'node:events';
 import { ReadableStream, WritableStream } from 'node:stream/web';
 import type { ReadableStreamGetReaderOptions, ReadableWritablePair, StreamPipeOptions } from 'node:stream/web';
 import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
-import type { WorkflowResult, WorkflowRunStatus } from '../workflows';
+import type { WorkflowResult } from '../workflows';
 import { DelayedPromise } from './aisdk/v5/compat';
 import type { MastraBaseStream } from './base/base';
 import { consumeStream } from './base/consume-stream';
 import { ChunkFrom } from './types';
-import type { StepTripwireData, WorkflowStreamEvent } from './types';
+import type { WorkflowFinishOutcome, WorkflowStreamEvent } from './types';
 
 type AggregatedLanguageModelUsage = Required<LanguageModelUsage> & {
   cacheCreationInputTokens: number;
 };
 
+function finishOutcomeOf(results: WorkflowResult<any, any, any, any>): WorkflowFinishOutcome {
+  switch (results.status) {
+    case 'success':
+      return { workflowStatus: 'success', finalWorkflowResult: results.result };
+    case 'failed':
+      return { workflowStatus: 'failed', error: results.error };
+    case 'tripwire':
+      return { workflowStatus: 'tripwire', tripwire: results.tripwire };
+    default:
+      return { workflowStatus: results.status };
+  }
+}
+
 export class WorkflowRunOutput<
   TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>,
 > implements MastraBaseStream<WorkflowStreamEvent> {
-  #status: WorkflowRunStatus = 'running';
-  #tripwireData: StepTripwireData | undefined;
+  #observedOutcome: WorkflowFinishOutcome = { workflowStatus: 'running' };
+  #settledOutcome: WorkflowFinishOutcome | undefined;
   #usageCount: AggregatedLanguageModelUsage = {
     inputTokens: 0,
     outputTokens: 0,
@@ -34,8 +47,6 @@ export class WorkflowRunOutput<
   #streamFinished = false;
 
   #streamError: Error | undefined;
-
-  #finalWorkflowResult: unknown;
 
   #delayedPromises = {
     usage: new DelayedPromise<LanguageModelUsage>(),
@@ -101,49 +112,12 @@ export class WorkflowRunOutput<
                   }
                 }
               }
-            } else if (chunk.type === 'workflow-canceled') {
-              self.#status = 'canceled';
-            } else if (chunk.type === 'workflow-step-suspended') {
-              self.#status = 'suspended';
-            } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
-              // Check if the failure was due to a tripwire
-              if (chunk.payload.tripwire) {
-                self.#status = 'tripwire';
-                self.#tripwireData = chunk.payload.tripwire;
-              } else {
-                self.#status = 'failed';
-              }
-            } else if (chunk.type === 'workflow-paused') {
-              self.#status = 'paused';
+            } else {
+              self.#trackOutcome(chunk);
             }
           },
           close() {
-            if (self.#status === 'running') {
-              self.#status = 'success';
-            }
-
-            self.#emitter.emit('chunk', {
-              type: 'workflow-finish',
-              runId: self.runId,
-              from: ChunkFrom.WORKFLOW,
-              payload: {
-                workflowStatus: self.#status,
-                metadata: self.#streamError
-                  ? {
-                      error: self.#streamError,
-                      errorMessage: self.#streamError?.message,
-                    }
-                  : {},
-                output: {
-                  usage: self.#usageCount,
-                },
-                ...(self.#status === 'success' && self.#finalWorkflowResult !== undefined
-                  ? { finalWorkflowResult: self.#finalWorkflowResult }
-                  : {}),
-                // Include tripwire data when status is 'tripwire'
-                ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
-              },
-            });
+            self.#emitFinish();
 
             self.#delayedPromises.usage.resolve(self.#usageCount);
 
@@ -232,24 +206,10 @@ export class WorkflowRunOutput<
     // The run terminated because the stream pipeline rejected, so it failed —
     // overwrite any earlier non-terminal status (paused/suspended/canceled/tripwire)
     // so downstream consumers always see a failed terminal status.
-    this.#status = 'failed';
+    this.#settledOutcome = { workflowStatus: 'failed', error };
 
     // Emit a terminal finish so fullStream consumers stop waiting and close.
-    this.#emitter.emit('chunk', {
-      type: 'workflow-finish',
-      runId: this.runId,
-      from: ChunkFrom.WORKFLOW,
-      payload: {
-        workflowStatus: this.#status,
-        metadata: {
-          error: this.#streamError,
-          errorMessage: this.#streamError.message,
-        },
-        output: {
-          usage: this.#usageCount,
-        },
-      },
-    });
+    this.#emitFinish();
 
     // Reject any still-pending delayed promises so result/usage callers see the
     // error instead of awaiting forever.
@@ -265,13 +225,53 @@ export class WorkflowRunOutput<
     console.error('[WorkflowRunOutput] workflow stream pipeline error', error);
   }
 
+  #trackOutcome(chunk: WorkflowStreamEvent) {
+    if (chunk.type === 'workflow-canceled') {
+      this.#observedOutcome = { workflowStatus: 'canceled' };
+    } else if (chunk.type === 'workflow-step-suspended') {
+      this.#observedOutcome = { workflowStatus: 'suspended' };
+    } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
+      this.#observedOutcome = chunk.payload.tripwire
+        ? { workflowStatus: 'tripwire', tripwire: chunk.payload.tripwire }
+        : { workflowStatus: 'failed', error: chunk.payload.error };
+    } else if (chunk.type === 'workflow-paused') {
+      this.#observedOutcome = { workflowStatus: 'paused' };
+    }
+  }
+
+  get #outcome(): WorkflowFinishOutcome {
+    return this.#settledOutcome ?? this.#observedOutcome;
+  }
+
+  #emitFinish() {
+    if (this.#outcome.workflowStatus === 'running') {
+      this.#observedOutcome = { workflowStatus: 'success' };
+    }
+
+    this.#emitter.emit('chunk', {
+      type: 'workflow-finish',
+      runId: this.runId,
+      from: ChunkFrom.WORKFLOW,
+      payload: {
+        ...this.#outcome,
+        metadata: this.#streamError
+          ? {
+              error: this.#streamError,
+              errorMessage: this.#streamError.message,
+            }
+          : {},
+        output: {
+          usage: this.#usageCount,
+        },
+      },
+    });
+  }
+
   /**
    * @internal
    */
   updateResults(results: TResult) {
-    if (results.status === 'success') {
-      this.#finalWorkflowResult = results.result;
-    }
+    this.#settledOutcome = finishOutcomeOf(results);
     this.#delayedPromises.result.resolve(results);
   }
 
@@ -280,7 +280,7 @@ export class WorkflowRunOutput<
    */
   rejectResults(error: Error) {
     this.#delayedPromises.result.reject(error);
-    this.#status = 'failed';
+    this.#settledOutcome = { workflowStatus: 'failed', error };
     this.#streamError = error;
   }
 
@@ -291,7 +291,8 @@ export class WorkflowRunOutput<
     this.#baseStream = stream;
     this.#streamFinished = false;
     this.#consumptionStarted = false;
-    this.#status = 'running';
+    this.#observedOutcome = { workflowStatus: 'running' };
+    this.#settledOutcome = undefined;
     this.#delayedPromises = {
       usage: new DelayedPromise<LanguageModelUsage>(),
       result: new DelayedPromise<TResult>(),
@@ -334,49 +335,12 @@ export class WorkflowRunOutput<
                   }
                 }
               }
-            } else if (chunk.type === 'workflow-canceled') {
-              self.#status = 'canceled';
-            } else if (chunk.type === 'workflow-step-suspended') {
-              self.#status = 'suspended';
-            } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
-              // Check if the failure was due to a tripwire
-              if (chunk.payload.tripwire) {
-                self.#status = 'tripwire';
-                self.#tripwireData = chunk.payload.tripwire;
-              } else {
-                self.#status = 'failed';
-              }
-            } else if (chunk.type === 'workflow-paused') {
-              self.#status = 'paused';
+            } else {
+              self.#trackOutcome(chunk);
             }
           },
           close() {
-            if (self.#status === 'running') {
-              self.#status = 'success';
-            }
-
-            self.#emitter.emit('chunk', {
-              type: 'workflow-finish',
-              runId: self.runId,
-              from: ChunkFrom.WORKFLOW,
-              payload: {
-                workflowStatus: self.#status,
-                metadata: self.#streamError
-                  ? {
-                      error: self.#streamError,
-                      errorMessage: self.#streamError?.message,
-                    }
-                  : {},
-                output: {
-                  usage: self.#usageCount,
-                },
-                ...(self.#status === 'success' && self.#finalWorkflowResult !== undefined
-                  ? { finalWorkflowResult: self.#finalWorkflowResult }
-                  : {}),
-                // Include tripwire data when status is 'tripwire'
-                ...(self.#status === 'tripwire' && self.#tripwireData ? { tripwire: self.#tripwireData } : {}),
-              },
-            });
+            self.#emitFinish();
 
             self.#streamFinished = true;
             self.#emitter.emit('finish');
@@ -461,7 +425,7 @@ export class WorkflowRunOutput<
   }
 
   get status() {
-    return this.#status;
+    return this.#outcome.workflowStatus;
   }
 
   get result() {

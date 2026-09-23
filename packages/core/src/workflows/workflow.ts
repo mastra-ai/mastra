@@ -63,7 +63,6 @@ import type { StorageListWorkflowRunsInput } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
-import { ChunkFrom } from '../stream/types';
 import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
@@ -85,6 +84,7 @@ import type {
 } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
+import { toWorkflowStreamEvent } from './stream-utils';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -4213,30 +4213,8 @@ export class Run<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch doesn't have a type
-        const unwatch = self.watch(async (event: any) => {
-          const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
-          // Check if this is a custom event (has 'data' property instead of 'payload')
-          // Custom events should be passed through as-is with their original structure
-          if (data !== undefined && payload === undefined) {
-            controller.enqueue({
-              type,
-              runId: self.runId,
-              from,
-              data,
-              ...rest,
-            } as WorkflowStreamEvent);
-          } else {
-            controller.enqueue({
-              type,
-              runId: self.runId,
-              from,
-              payload: {
-                stepName: (payload as unknown as { id: string })?.id,
-                ...payload,
-              },
-            } as WorkflowStreamEvent);
-          }
+        const unwatch = self.watch(event => {
+          controller.enqueue(toWorkflowStreamEvent(event, self.runId));
         });
 
         // Captured per invocation: `closeStreamAction` is a field on the run, and
@@ -4348,30 +4326,8 @@ export class Run<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch doesn't have a type
-        const unwatch = self.watch(async (event: any) => {
-          const { type, from = ChunkFrom.WORKFLOW, payload, data, ...rest } = event;
-          // Check if this is a custom event (has 'data' property instead of 'payload')
-          // Custom events should be passed through as-is with their original structure
-          if (data !== undefined && payload === undefined) {
-            controller.enqueue({
-              type,
-              runId: self.runId,
-              from,
-              data,
-              ...rest,
-            } as WorkflowStreamEvent);
-          } else {
-            controller.enqueue({
-              type,
-              runId: self.runId,
-              from,
-              payload: {
-                stepName: (payload as unknown as { id: string })?.id,
-                ...payload,
-              },
-            } as WorkflowStreamEvent);
-          }
+        const unwatch = self.watch(event => {
+          controller.enqueue(toWorkflowStreamEvent(event, self.runId));
         });
 
         // Captured per invocation — see the note in the stream() path. Two concurrent
@@ -4399,7 +4355,7 @@ export class Run<
           ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {
-            void controller.enqueue(chunk);
+            controller.enqueue(toWorkflowStreamEvent(chunk, self.runId));
           },
           isVNext: true,
           forEachIndex,
@@ -5338,17 +5294,8 @@ export class Run<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        // TODO: fix this, watch doesn't have a type
-        const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
-          controller.enqueue({
-            type,
-            runId: self.runId,
-            from,
-            payload: {
-              stepName: (payload as unknown as { id: string }).id,
-              ...payload,
-            },
-          } as WorkflowStreamEvent);
+        const unwatch = self.watch(event => {
+          controller.enqueue(toWorkflowStreamEvent(event, self.runId));
         });
 
         // Captured per invocation — see the note in the stream() path.
@@ -5378,7 +5325,7 @@ export class Run<
           ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {
-            void controller.enqueue(chunk);
+            controller.enqueue(toWorkflowStreamEvent(chunk, self.runId));
           },
           outputOptions,
           perStep,

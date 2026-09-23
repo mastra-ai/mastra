@@ -25,7 +25,7 @@ import type { ScorerResult } from '../loop';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
+import type { StepTripwireInfo, WorkflowStepStatus, WorkflowStreamResult } from '../workflows/types';
 import type { OutputSchema } from './base/schema';
 
 export enum ChunkFrom {
@@ -946,6 +946,14 @@ export type AgentChunkType<OUTPUT = undefined> =
       payload: BackgroundTaskResumedPayload;
     });
 
+export type WorkflowFinishOutcome =
+  | { workflowStatus: 'success'; finalWorkflowResult?: unknown }
+  | { workflowStatus: 'failed'; error: Error }
+  | { workflowStatus: 'tripwire'; tripwire: StepTripwireInfo }
+  | {
+      workflowStatus: Exclude<WorkflowStreamResult<any, any, any, any>['status'], 'success' | 'failed' | 'tripwire'>;
+    };
+
 export type WorkflowStreamEvent =
   | (BaseChunkType & {
       type: 'workflow-start';
@@ -955,9 +963,7 @@ export type WorkflowStreamEvent =
     })
   | (BaseChunkType & {
       type: 'workflow-finish';
-      payload: {
-        workflowStatus: WorkflowRunStatus;
-        finalWorkflowResult?: unknown;
+      payload: WorkflowFinishOutcome & {
         output: {
           usage: {
             inputTokens: number;
@@ -1000,6 +1006,7 @@ export type WorkflowStreamEvent =
       type: 'workflow-step-suspended';
       payload: {
         id: string;
+        stepCallId?: string;
         status: WorkflowStepStatus;
         output?: Record<string, any>;
         payload?: Record<string, any>;
@@ -1038,15 +1045,15 @@ export type WorkflowStreamEvent =
       payload: {
         id: string;
         stepCallId: string;
-        status: WorkflowStepStatus;
         output?: Record<string, any>;
         payload?: Record<string, any>;
         resumePayload?: Record<string, any>;
         suspendPayload?: Record<string, any>;
         /** Tripwire data when step failed due to processor rejection */
-        tripwire?: StepTripwireData;
-      };
-    });
+        tripwire?: StepTripwireInfo;
+      } & ({ status: Exclude<WorkflowStepStatus, 'failed'> } | { status: 'failed'; error: Error });
+    })
+  | (BaseChunkType & DataChunkType);
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
 export type TypedChunkType<OUTPUT = undefined> =

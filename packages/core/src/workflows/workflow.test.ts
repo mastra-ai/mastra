@@ -1412,6 +1412,73 @@ describe('Workflow (Default Engine Specifics)', () => {
     });
   });
 
+  describe('writer.custom events outside the start stream', () => {
+    const reportProgress = createStep({
+      id: 'report-progress',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ done: z.boolean() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ writer, suspend, resumeData }) => {
+        await writer.custom({ type: 'data-progress', data: { resumed: Boolean(resumeData) } });
+        if (!resumeData) {
+          await suspend({});
+        }
+        return { done: true };
+      },
+    });
+
+    const collect = async (stream: ReadableStream<unknown>) => {
+      const events: unknown[] = [];
+      for await (const event of stream) {
+        events.push(event);
+      }
+      return events;
+    };
+
+    it('tags a custom event emitted while resuming with the run', async () => {
+      const workflow = createWorkflow({
+        id: 'custom-event-resume-wf',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+      })
+        .then(reportProgress)
+        .commit();
+      new Mastra({ logger: false, storage: new MockStore(), workflows: { 'custom-event-resume-wf': workflow } });
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+      const resumed = run.resumeStream({ step: 'report-progress', resumeData: { approved: true } });
+
+      expect(await collect(resumed.fullStream)).toContainEqual(
+        expect.objectContaining({ type: 'data-progress', runId: run.runId, from: 'WORKFLOW', data: { resumed: true } }),
+      );
+    });
+
+    it('tags a custom event emitted while time travelling with the run', async () => {
+      const workflow = createWorkflow({
+        id: 'custom-event-time-travel-wf',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+      })
+        .then(reportProgress)
+        .commit();
+      new Mastra({ logger: false, storage: new MockStore(), workflows: { 'custom-event-time-travel-wf': workflow } });
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+      const travelled = run.timeTravelStream({ step: 'report-progress', inputData: {} });
+
+      expect(await collect(travelled.fullStream)).toContainEqual(
+        expect.objectContaining({
+          type: 'data-progress',
+          runId: run.runId,
+          from: 'WORKFLOW',
+          data: { resumed: false },
+        }),
+      );
+    });
+  });
+
   describe('streamLegacy cleanup error safety', () => {
     it('completes cleanup when an observer stream is not consumed', async () => {
       const step = createStep({

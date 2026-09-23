@@ -1,4 +1,5 @@
 import type { GetWorkflowResponse, GetWorkflowRunByIdResponse, StreamVNextChunkType } from '@mastra/client-js';
+import { ChunkFrom } from '@mastra/core/stream';
 import { twoStepWorkflow } from './workflow-debug-step-controls';
 import { suspendedRunState } from './workflow-run-states';
 import type { AuthCapabilities } from '@/domains/auth/types';
@@ -69,14 +70,12 @@ export const nestedIterationSuspension: GetWorkflowRunByIdResponse = {
 export const suspendedChunk: StreamVNextChunkType = {
   type: 'workflow-step-suspended',
   runId: suspendedRunState.runId,
-  from: 'WORKFLOW',
+  from: ChunkFrom.WORKFLOW,
   payload: {
     id: 'transform',
     stepCallId: 'transform-call',
     status: 'suspended',
     payload: {},
     suspendPayload: { question: 'continue?' },
-    startedAt: 100,
-    suspendedAt: 110,
   },
 };

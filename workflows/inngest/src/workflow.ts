@@ -627,9 +627,10 @@ export class InngestWorkflow<
                 data: {
                   type: 'workflow-finish',
                   payload: {
-                    status: result.status,
-                    result: result.status === 'success' ? result.result : undefined,
-                    error: result.status === 'failed' ? result.error : undefined,
+                    workflowStatus: result.status,
+                    ...(result.status === 'success' ? { finalWorkflowResult: result.result } : {}),
+                    ...(result.status === 'failed' ? { error: result.error } : {}),
+                    ...(result.status === 'tripwire' ? { tripwire: result.tripwire } : {}),
                   },
                 },
               });

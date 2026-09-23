@@ -34,7 +34,7 @@ import type {
   StorageConditionalField,
   StoredProcessorGraph,
 } from '@mastra/core/storage';
-import type { ChunkType } from '@mastra/core/stream';
+import type { ChunkType, WorkflowStreamEvent } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { SerializedStepFlowEntry, WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -742,12 +742,8 @@ export interface TemplateInstallationRequest {
   variables?: Record<string, string>;
 }
 
-export interface StreamVNextChunkType {
-  type: string;
-  payload: any;
-  runId: string;
-  from: 'AGENT' | 'WORKFLOW';
-}
+export type StreamVNextChunkType = WorkflowStreamEvent;
+
 export interface MemorySearchResponse {
   results: MemorySearchResult[];
   count: number;

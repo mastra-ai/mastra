@@ -143,6 +143,110 @@ describe('useStreamWorkflow stream ownership', () => {
     });
   });
 
+  it('shows the workflow result from the finish event, not the last step output', async () => {
+    const { result, streams, invoke } = renderWorkflow();
+    const remote = streamResponse();
+    streams.set('mapped', remote.response);
+    let run!: Promise<void>;
+    act(() => {
+      run = invoke('start', 'mapped');
+    });
+    await act(async () => {
+      remote.send('workflow-step-result', { id: 'fetch', status: 'success', output: { raw: 'Paris' } });
+      remote.send('workflow-finish', { workflowStatus: 'success', finalWorkflowResult: { city: 'Paris' } });
+      remote.close();
+      await run;
+    });
+    expect(result.current.streamResult).toMatchObject({ status: 'success', result: { city: 'Paris' } });
+  });
+
+  it('shows the run error even when a parallel step finishes after the failing one', async () => {
+    const { result, streams, invoke, onError } = renderWorkflow();
+    const remote = streamResponse();
+    streams.set('failing', remote.response);
+    const error = { name: 'Error', message: 'Rate limit exceeded' };
+    let run!: Promise<void>;
+    act(() => {
+      run = invoke('start', 'failing');
+    });
+    await act(async () => {
+      remote.send('workflow-step-result', { id: 'charge', status: 'failed', error });
+      remote.send('workflow-step-result', { id: 'notify', status: 'success', output: { sent: true } });
+      remote.send('workflow-finish', { workflowStatus: 'failed', error, metadata: {} });
+      remote.close();
+      await run;
+    });
+    expect(result.current.streamResult).toMatchObject({ status: 'failed', error });
+    expect(onError).toHaveBeenCalled();
+  });
+
+  it('shows the failing step error when an older server sends a failed finish without one', async () => {
+    const { result, streams, invoke } = renderWorkflow();
+    const remote = streamResponse();
+    streams.set('older-failing', remote.response);
+    const error = { name: 'Error', message: 'Rate limit exceeded' };
+    let run!: Promise<void>;
+    act(() => {
+      run = invoke('start', 'older-failing');
+    });
+    await act(async () => {
+      remote.send('workflow-step-result', { id: 'charge', status: 'failed', error });
+      remote.send('workflow-finish', { workflowStatus: 'failed', metadata: {} });
+      remote.close();
+      await run;
+    });
+    expect(result.current.streamResult).toMatchObject({ status: 'failed', error });
+  });
+
+  it('shows the last step output when an older server omits the workflow result', async () => {
+    const { result, streams, invoke } = renderWorkflow();
+    const remote = streamResponse();
+    streams.set('older-success', remote.response);
+    let run!: Promise<void>;
+    act(() => {
+      run = invoke('start', 'older-success');
+    });
+    await act(async () => {
+      remote.send('workflow-step-result', { id: 'lookup', status: 'success', output: { city: 'Paris' } });
+      remote.send('workflow-finish', { workflowStatus: 'success' });
+      remote.close();
+      await run;
+    });
+    expect(result.current.streamResult).toMatchObject({ status: 'success', result: { city: 'Paris' } });
+  });
+
+  it('shows a suspension that a resume stream reports only in its finish event', async () => {
+    const { result, streams, invoke } = renderWorkflow();
+    const first = streamResponse();
+    const resumed = streamResponse();
+    streams.set('approval', first.response);
+    let run!: Promise<void>;
+    act(() => {
+      run = invoke('start', 'approval');
+    });
+    await act(async () => {
+      first.send('workflow-step-suspended', {
+        id: 'approve',
+        status: 'suspended',
+        suspendPayload: { reason: 'review' },
+      });
+      first.send('workflow-finish', { workflowStatus: 'suspended' });
+      first.close();
+      await run;
+    });
+    streams.set('approval', resumed.response);
+    act(() => {
+      run = invoke('resume', 'approval');
+    });
+    await act(async () => {
+      resumed.send('workflow-start', {});
+      resumed.send('workflow-finish', { workflowStatus: 'suspended' });
+      resumed.close();
+      await run;
+    });
+    expect(result.current.streamResult).toMatchObject({ status: 'suspended', suspended: [['approve']] });
+  });
+
   it('continues observing a paused run and preserves opaque outputs, custom IDs and metadata', async () => {
     const { result, streams } = renderWorkflow();
     const remote = streamResponse();

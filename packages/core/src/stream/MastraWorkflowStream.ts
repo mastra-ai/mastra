@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
-import type { Run, Step, WorkflowRunStatus } from '../workflows';
-import type { ChunkType } from './types';
+import type { Run, Step } from '../workflows';
+import type { ChunkType, WorkflowFinishOutcome } from './types';
 import { ChunkFrom } from './types';
 
 export class MastraWorkflowStream<
@@ -110,18 +110,18 @@ export class MastraWorkflowStream<
 
         const stream: ReadableStream<ChunkType> = await createStream(writer);
 
-        let workflowStatus: WorkflowRunStatus = 'success';
+        let outcome: WorkflowFinishOutcome = { workflowStatus: 'success' };
 
         for await (const chunk of stream) {
           // update the usage count
           if (chunk.type === 'step-finish' && chunk.payload.usage) {
             updateUsageCount(chunk.payload.usage);
           } else if (chunk.type === 'workflow-canceled') {
-            workflowStatus = 'canceled';
+            outcome = { workflowStatus: 'canceled' };
           } else if (chunk.type === 'workflow-step-suspended') {
-            workflowStatus = 'suspended';
+            outcome = { workflowStatus: 'suspended' };
           } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
-            workflowStatus = 'failed';
+            outcome = { workflowStatus: 'failed', error: chunk.payload.error };
           }
 
           controller.enqueue(chunk);
@@ -132,7 +132,7 @@ export class MastraWorkflowStream<
           runId: run.runId,
           from: ChunkFrom.WORKFLOW,
           payload: {
-            workflowStatus,
+            ...outcome,
             output: {
               usage: this.#usageCount,
             },

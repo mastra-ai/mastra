@@ -6,7 +6,7 @@ import type {
   MastraToolInvocation,
   MastraToolInvocationPart,
 } from '@mastra/core/agent/message-list';
-import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { AgentChunkType, ChunkType, NetworkChunkType, WorkflowStreamEvent } from '@mastra/core/stream';
 import type { StepResult, WorkflowStreamResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
@@ -35,13 +35,6 @@ import type {
 // in this file is a deliberate storage-boundary cast for one of the above
 // extensions, not an accident. Downstream consumers (`toAISdkV5Messages`,
 // playground `to-assistant-ui-message`) read the V5 fields directly.
-
-type StreamChunk = {
-  type: string;
-  payload: any;
-  runId: string;
-  from: 'AGENT' | 'WORKFLOW';
-};
 
 function toolErrorText(error: unknown): string {
   if (error && typeof error === 'object') {
@@ -300,13 +293,67 @@ const mergeBgTaskMetadata = (
   return merged;
 };
 
+const foldStepState = <TPayload extends { id: string }>(
+  steps: WorkflowStreamResult<any, any, any, any>['steps'],
+  { stepCallId: _stepCallId, stepName: _stepName, ...state }: TPayload & { stepCallId?: string; stepName?: string },
+) => ({ ...steps, [state.id]: { ...steps[state.id], ...state } });
+
+const suspendedStepPaths = (steps: WorkflowStreamResult<any, any, any, any>['steps']): string[][] =>
+  Object.entries(steps as Record<string, StepResult<any, any, any, any>>).flatMap(([stepId, stepResult]) => {
+    if (stepResult?.status !== 'suspended') return [];
+    const nestedPath = stepResult.suspendPayload?.__workflow_meta?.path;
+    return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
+  });
+
+const streamedSteps = (run: WorkflowStreamResult<any, any, any, any>): StepResult<any, any, any, any>[] =>
+  Object.values(run.steps as Record<string, StepResult<any, any, any, any>>);
+
+// Servers before this finish shape send no `error`, and JSON drops an undefined `finalWorkflowResult`.
+const outputOfLastStep = (run: WorkflowStreamResult<any, any, any, any>) => {
+  const lastStep = streamedSteps(run).at(-1);
+  return lastStep?.status === 'success' ? lastStep.output : undefined;
+};
+
+const errorOfFailedStep = (run: WorkflowStreamResult<any, any, any, any>) =>
+  streamedSteps(run).findLast(step => step.status === 'failed')?.error;
+
+// Evented resume streams carry no step events, so the finish is the only sign of a new suspension.
+const suspendRun = (previous: WorkflowStreamResult<any, any, any, any>): WorkflowStreamResult<any, any, any, any> => {
+  if (previous.status === 'suspended') return previous;
+  const [firstPath, ...otherPaths] = suspendedStepPaths(previous.steps);
+  if (!firstPath) return previous;
+  return { suspendPayload: undefined, ...previous, status: 'suspended', suspended: [firstPath, ...otherPaths] };
+};
+
+const finishRun = (
+  previous: WorkflowStreamResult<any, any, any, any>,
+  outcome: Extract<WorkflowStreamEvent, { type: 'workflow-finish' }>['payload'],
+): WorkflowStreamResult<any, any, any, any> => {
+  switch (outcome.workflowStatus) {
+    case 'success':
+      return {
+        ...previous,
+        status: 'success',
+        result: 'finalWorkflowResult' in outcome ? outcome.finalWorkflowResult : outputOfLastStep(previous),
+      };
+    case 'failed':
+      return { ...previous, status: 'failed', error: outcome.error ?? errorOfFailedStep(previous) };
+    case 'tripwire':
+      return { ...previous, status: 'tripwire', tripwire: outcome.tripwire };
+    case 'suspended':
+      return suspendRun(previous);
+    default:
+      return { ...previous, status: outcome.workflowStatus };
+  }
+};
+
 /**
  * Workflow chunk accumulation. Mirrors
  * `mapWorkflowStreamChunkToWatchResult` from the previous accumulator.
  */
 export const mapWorkflowStreamChunkToWatchResult = (
   prev: WorkflowStreamResult<any, any, any, any> | undefined,
-  chunk: StreamChunk,
+  chunk: WorkflowStreamEvent,
 ): WorkflowStreamResult<any, any, any, any> => {
   const previous = prev ?? { status: 'running', input: undefined, steps: {} };
   if (chunk.type === 'workflow-start') {
@@ -322,48 +369,21 @@ export const mapWorkflowStreamChunkToWatchResult = (
   }
 
   if (chunk.type === 'workflow-finish') {
-    const finalStatus = chunk.payload.workflowStatus;
-    const lastStep = Object.values(previous.steps).pop();
-    return {
-      ...previous,
-      status: chunk.payload.workflowStatus,
-      ...(finalStatus === 'success' && lastStep?.status === 'success'
-        ? { result: lastStep?.output }
-        : finalStatus === 'failed' && lastStep?.status === 'failed'
-          ? { error: lastStep?.error }
-          : finalStatus === 'tripwire' && chunk.payload.tripwire
-            ? { tripwire: chunk.payload.tripwire }
-            : {}),
-    };
+    return finishRun(previous, chunk.payload);
   }
 
-  // writer.custom events carry `data` and no payload: nothing to fold into a step.
-  const stepId = chunk.payload?.id;
-  if (stepId === undefined) return previous;
+  if (chunk.type === 'workflow-step-start' || chunk.type === 'workflow-step-result') {
+    return { ...previous, steps: foldStepState(previous.steps, chunk.payload) };
+  }
 
-  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload;
-  const newSteps = {
-    ...previous.steps,
-    [stepId]: {
-      ...previous.steps[stepId],
-      ...newPayload,
-    },
-  };
-
-  if (chunk.type === 'workflow-step-start') return { ...previous, steps: newSteps };
+  if (chunk.type === 'workflow-step-waiting') {
+    return { ...previous, status: 'waiting', steps: foldStepState(previous.steps, chunk.payload) };
+  }
 
   if (chunk.type === 'workflow-step-suspended') {
-    const suspendedStepIds = Object.entries(newSteps as Record<string, StepResult<any, any, any, any>>).flatMap(
-      ([stepId, stepResult]) => {
-        if (stepResult?.status === 'suspended') {
-          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
-          return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
-        }
-        return [];
-      },
-    );
+    const newSteps = foldStepState(previous.steps, chunk.payload);
     // A suspended chunk contributes at least its own step path.
-    const suspended = suspendedStepIds as [string[], ...string[][]];
+    const suspended = suspendedStepPaths(newSteps) as [string[], ...string[][]];
     return {
       ...previous,
       status: 'suspended',
@@ -373,28 +393,11 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
-  if (chunk.type === 'workflow-step-waiting') return { ...previous, status: 'waiting', steps: newSteps };
-
   if (chunk.type === 'workflow-step-progress') {
-    return {
-      ...previous,
-      steps: {
-        ...previous.steps,
-        [stepId]: {
-          ...previous.steps[stepId],
-          foreachProgress: {
-            completedCount: chunk.payload.completedCount,
-            totalCount: chunk.payload.totalCount,
-            currentIndex: chunk.payload.currentIndex,
-            iterationStatus: chunk.payload.iterationStatus,
-            iterationOutput: chunk.payload.iterationOutput,
-          },
-        },
-      },
-    };
+    const { id, completedCount, totalCount, currentIndex, iterationStatus, iterationOutput } = chunk.payload;
+    const foreachProgress = { completedCount, totalCount, currentIndex, iterationStatus, iterationOutput };
+    return { ...previous, steps: foldStepState(previous.steps, { id, foreachProgress }) };
   }
-
-  if (chunk.type === 'workflow-step-result') return { ...previous, steps: newSteps };
 
   return previous;
 };

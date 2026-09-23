@@ -57,7 +57,6 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
-import { ChunkFrom } from '../../stream/types';
 import type { Tool } from '../../tools/tool';
 import { isMastraTool } from '../../tools/toolchecks';
 import type { ToolExecutionContext } from '../../tools/types';
@@ -86,7 +85,7 @@ import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
-import { forwardAgentStreamChunk } from '../stream-utils';
+import { forwardAgentStreamChunk, toWorkflowStreamEvent } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
 import { waitForSuspendedSnapshot } from '../utils';
 import { Workflow, Run } from '../workflow';
@@ -2218,17 +2217,8 @@ export class EventedRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        const unwatch = self.watch((event: WorkflowStreamEvent) => {
-          const { type, payload } = event;
-          controller.enqueue({
-            type,
-            runId: self.runId,
-            from: ChunkFrom.WORKFLOW,
-            payload: {
-              stepName: (payload as any)?.id,
-              ...payload,
-            },
-          } as WorkflowStreamEvent);
+        const unwatch = self.watch(event => {
+          controller.enqueue(toWorkflowStreamEvent(event, self.runId));
         });
 
         self.closeStreamAction = async () => {
@@ -2310,17 +2300,8 @@ export class EventedRun<
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
-        const unwatch = self.watch((event: WorkflowStreamEvent) => {
-          const { type, payload } = event;
-          controller.enqueue({
-            type,
-            runId: self.runId,
-            from: ChunkFrom.WORKFLOW,
-            payload: {
-              stepName: (payload as any)?.id,
-              ...payload,
-            },
-          } as WorkflowStreamEvent);
+        const unwatch = self.watch(event => {
+          controller.enqueue(toWorkflowStreamEvent(event, self.runId));
         });
 
         self.closeStreamAction = async () => {
