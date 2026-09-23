@@ -20,14 +20,34 @@ function toZodSchema(schema: WorkingMemoryConfigSchema): z.ZodType<Record<string
   return z.fromJSONSchema(jsonSchema as Parameters<typeof z.fromJSONSchema>[0]) as z.ZodType<Record<string, unknown>>;
 }
 
+function getConfiguredSchema(
+  memory: Memory,
+  requestContext: RequestContext | undefined,
+): WorkingMemoryConfigSchema | undefined {
+  const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
+  return memory.getMergedThreadConfig(memoryConfig ?? {}).workingMemory?.schema;
+}
+
 /** Resolves the configured working-memory schema as a nullable Zod schema, or undefined in Markdown mode. */
 function getWorkingMemoryDocumentSchema(
   memory: Memory,
   requestContext: RequestContext | undefined,
 ): z.ZodType<Record<string, unknown> | null> | undefined {
-  const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
-  const schema = memory.getMergedThreadConfig(memoryConfig ?? {}).workingMemory?.schema;
+  const schema = getConfiguredSchema(memory, requestContext);
   return schema ? toZodSchema(schema).nullable() : undefined;
+}
+
+/**
+ * Validates a document with the configured schema's own validator. Non-Zod validators may enforce
+ * rules their JSON Schema form can't express, so the converted Zod schema isn't enough here.
+ */
+async function isValidWorkingMemoryDocument(schema: WorkingMemoryConfigSchema, value: unknown): Promise<boolean> {
+  if (schema instanceof z.ZodType) {
+    return schema.safeParse(value).success;
+  }
+  const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
+  const result = await standardSchema['~standard'].validate(value);
+  return !result.issues;
 }
 
 async function getWorkingMemoryDetails(context: ExtractorRuntimeContext): Promise<{
@@ -98,9 +118,12 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
       },
       onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
         const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
-        const documentSchema = getWorkingMemoryDocumentSchema(memory!, requestContext);
+        const configuredSchema = getConfiguredSchema(memory!, requestContext);
 
-        if (documentSchema && (current === null || !documentSchema.safeParse(current).success)) {
+        if (
+          configuredSchema &&
+          (current === null || !(await isValidWorkingMemoryDocument(configuredSchema, current)))
+        ) {
           return undefined;
         }
 

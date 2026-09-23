@@ -429,6 +429,36 @@ describe('Extractor', () => {
       await applyWorkingMemoryValue(memory, { preferredColor: 'blue' });
       expect(memory.updateWorkingMemory).toHaveBeenCalledTimes(1);
     });
+
+    it("uses a Standard Schema's own validator before saving", async () => {
+      const jsonSchema = {
+        type: 'object',
+        properties: { budget: { type: 'number' } },
+        required: ['budget'],
+        additionalProperties: false,
+      };
+      // The validator enforces a rule (budget <= 100) that its JSON Schema doesn't express.
+      const memory = createSchemaMemory({
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: (value: unknown) =>
+            (value as { budget: number }).budget <= 100
+              ? { value }
+              : { issues: [{ message: 'budget too high', path: ['budget'] }] },
+          jsonSchema: { input: () => jsonSchema, output: () => jsonSchema },
+        },
+      } as any);
+      const resolved = await resolveWorkingMemoryExtractor(memory);
+
+      expect(resolved.schema.safeParse({ budget: 500 }).success).toBe(true);
+
+      await applyWorkingMemoryValue(memory, { budget: 500 });
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+
+      await applyWorkingMemoryValue(memory, { budget: 50 });
+      expect(memory.updateWorkingMemory).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('returns extractor failures when the structured extraction call fails', async () => {
