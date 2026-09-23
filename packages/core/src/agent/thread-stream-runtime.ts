@@ -1064,13 +1064,21 @@ export class AgentThreadStreamRuntime {
 
       void resolvedPubSub
         .subscribe(replyTopic, onReply)
-        .then(() =>
-          resolvedPubSub.publish(AGENT_THREAD_PEER_DISCOVERY_TOPIC, {
+        .then(() => {
+          // If the timeout already settled the request, the reply topic has
+          // been released. Publishing now would invite replies that recreate
+          // it, and the subscribe that just finished may have attached the
+          // callback after the release — so release again instead.
+          if (settled) {
+            releaseReplyTopic(resolvedPubSub, replyTopic, onReply);
+            return;
+          }
+          return resolvedPubSub.publish(AGENT_THREAD_PEER_DISCOVERY_TOPIC, {
             type: 'thread-peer-request',
             runId: requestId,
             data: { type: 'thread-peer-request', requestId, replyTopic, sourceId: this.#getSourceId() },
-          }),
-        )
+          });
+        })
         .catch(() => finish());
     });
 
@@ -1244,8 +1252,18 @@ export class AgentThreadStreamRuntime {
       // a locally claimed owner only.
       void pubsub
         .subscribe(replyTopic, onReply)
-        .then(() =>
-          this.#publishAndWait(pubsub, key, {
+        .then(() => {
+          // If the acceptance timeout already settled the request, the reply
+          // topic has been released and the caller has its timeout error.
+          // Publishing now would recreate the topic and enqueue a signal the
+          // caller will never see accepted, and the subscribe that just
+          // finished may have attached the callback after the release — so
+          // release again instead.
+          if (settled) {
+            releaseReplyTopic(pubsub, replyTopic, onReply);
+            return;
+          }
+          return this.#publishAndWait(pubsub, key, {
             type: 'idle-signal-enqueued',
             runId,
             signal: this.#serializeSignal(signal),
@@ -1254,8 +1272,8 @@ export class AgentThreadStreamRuntime {
             replyTopic,
             targetSourceId,
             timeoutMs: AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
-          }),
-        )
+          });
+        })
         .catch(error => finish({ error: getErrorFromUnknown(error) }));
     });
   }
@@ -1307,13 +1325,21 @@ export class AgentThreadStreamRuntime {
 
       void pubsub
         .subscribe(replyTopic, onReply)
-        .then(() =>
-          pubsub.publish(AGENT_THREAD_OWNER_DISCOVERY_TOPIC, {
+        .then(() => {
+          // If the timeout already settled the request, the reply topic has
+          // been released. Publishing now would invite replies that recreate
+          // it, and the subscribe that just finished may have attached the
+          // callback after the release — so release again instead.
+          if (settled) {
+            releaseReplyTopic(pubsub, replyTopic, onReply);
+            return;
+          }
+          return pubsub.publish(AGENT_THREAD_OWNER_DISCOVERY_TOPIC, {
             type: 'thread-owner-request',
             runId: requestId,
             data: { type: 'thread-owner-request', key, requestId, replyTopic, sourceId: this.#getSourceId() },
-          }),
-        )
+          });
+        })
         .catch(() => finish());
     });
   }

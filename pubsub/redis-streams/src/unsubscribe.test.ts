@@ -188,6 +188,24 @@ describe('unsubscribe acquired batches', () => {
     expect(writer.quit).toHaveBeenCalledTimes(1);
   });
 
+  it('resolves unsubscribe and close when the awaited in-flight subscribe rejects', async () => {
+    const connectGate = deferred<void>();
+    reader.connect = vi.fn(() => connectGate.promise);
+    const cb = vi.fn();
+    const sub = ps.subscribe('topic', cb);
+    const stop = ps.unsubscribe('topic', cb); // waits on the pending subscribe
+    const close = ps.close(); // so does close
+    connectGate.reject(new Error('connect refused'));
+    await expect(sub).rejects.toThrow('connect refused');
+    // A rejected subscribe never registered, so both teardowns must settle
+    // cleanly with nothing left behind — not hang on the failed promise.
+    await expect(stop).resolves.toBeUndefined();
+    await expect(close).resolves.toBeUndefined();
+    expect(reader.quit).not.toHaveBeenCalled();
+    expect(writer.quit).toHaveBeenCalledTimes(1);
+    await expect(ps.subscribe('topic', cb)).rejects.toThrow('closed');
+  });
+
   it('deduplicates concurrent subscribes for the same topic and callback', async () => {
     const connectGate = deferred<void>();
     reader.connect = vi.fn(() => connectGate.promise);

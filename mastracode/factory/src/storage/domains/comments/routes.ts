@@ -311,7 +311,13 @@ export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiR
             if (stream.aborted) return;
             const data = event.data;
             const workItemId = isRecord(data) && typeof data.workItemId === 'string' ? data.workItemId : undefined;
-            await stream.writeSSE({ event: 'feed', data: JSON.stringify(workItemId ? { workItemId } : {}) });
+            try {
+              await stream.writeSSE({ event: 'feed', data: JSON.stringify(workItemId ? { workItemId } : {}) });
+            } catch {
+              // A write to a half-closed socket must not reach `withAck` as a
+              // rejection: the nack would republish the event to the shared
+              // feed topic, duplicating the invalidation for every tab.
+            }
           });
           // Claimed before any await: `onAbort` handlers registered after the
           // reader is gone never run, and a broker subscribe is a round trip.
