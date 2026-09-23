@@ -291,6 +291,13 @@ interface RawPayload {
   [key: string]: unknown;
 }
 
+export interface ThreadHistoryPayload {
+  /** Stored thread messages, oldest first. */
+  messages: MastraDBMessage[];
+  /** Whether older messages exist beyond this page. */
+  hasMore: boolean;
+}
+
 interface StartPayload {
   [key: string]: unknown;
 }
@@ -878,6 +885,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'file'; payload: FilePayload })
   | (BaseChunkType & { type: 'reasoning-file'; payload: ReasoningFilePayload })
   | (BaseChunkType & { type: 'custom'; payload: CustomPayload })
+  | (BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload })
   | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
   | (BaseChunkType & { type: 'tool-call-approval'; payload: ToolCallApprovalPayload })
   | (BaseChunkType & { type: 'tool-call-suspended'; payload: ToolCallSuspendedPayload })

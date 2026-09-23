@@ -25,14 +25,24 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
   deliveries: Array<{ topic: string; event: any; acked: boolean; nacked: boolean }> = [];
   /** Topics whose publishes reject, to model a reply that never reaches the backend. */
   failPublish = new Set<string>();
+  /** When true, topics keep every event and replay the backlog to new subscribers, like Redis Streams. */
+  retain = false;
+  #retained = new Map<string, any[]>();
 
   async publish(topic: string, event: any): Promise<void> {
     if (this.failPublish.has(topic)) throw new Error(`publish to ${topic} failed`);
+    const stamped = { ...event, id: 'evt', createdAt: event.createdAt ?? new Date() };
+    if (this.retain) this.#retained.set(topic, [...(this.#retained.get(topic) ?? []), stamped]);
     for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
+      await this.#deliver(topic, stamped, subscriber);
+    }
+  }
+  async #deliver(topic: string, event: any, subscriber: EventCallback) {
+    {
       const record = { topic, event, acked: false, nacked: false };
       this.deliveries.push(record);
       await subscriber(
-        { ...event, id: 'evt', createdAt: new Date() },
+        event,
         async () => {
           record.acked = true;
         },
@@ -47,6 +57,7 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
     const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
     subscribers.add(cb);
     this.#subscribers.set(topic, subscribers);
+    for (const event of this.#retained.get(topic) ?? []) await this.#deliver(topic, event, cb);
   }
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
     this.#subscribers.get(topic)?.delete(cb);

@@ -18,6 +18,7 @@ import { createRecentRequests } from './recent-requests';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
+import { createThreadHistoryFilter, stampPartPublishedAt } from './thread-history';
 import type {
   AgentAbortThreadOptions,
   AgentClaimThreadPeerOptions,
@@ -132,6 +133,8 @@ export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
  * agent-stream wrappers are sanitized recursively. Only broadcast copies are
  * rewritten; the caller's MastraModelOutput is untouched.
  */
+const DEFAULT_INITIAL_HISTORY_PER_PAGE = 40;
+
 function sanitizeBroadcastPart(part: unknown): unknown {
   if (!part || typeof part !== 'object' || !('type' in part)) return part;
   const typed = part as { type?: string; payload?: Record<string, unknown> };
@@ -1650,6 +1653,7 @@ export class AgentThreadStreamRuntime {
         }
       }
       const part = sanitizeBroadcastPart(rawPart);
+      stampPartPublishedAt(part, Date.now());
       parts.push(part);
       await runtime.#publishAndWait(pubsub, key, {
         type: 'stream-part',
@@ -3346,12 +3350,29 @@ export class AgentThreadStreamRuntime {
     }
   }
 
+  async #loadThreadHistory(agent: Agent<any, any, any, any>, options: AgentSubscribeToThreadOptions) {
+    const memory = await agent.getMemory({ requestContext: options.requestContext });
+    if (!memory) return { messages: [], hasMore: false };
+    const perPage =
+      typeof options.withInitialHistory === 'object' && options.withInitialHistory.perPage !== undefined
+        ? options.withInitialHistory.perPage
+        : DEFAULT_INITIAL_HISTORY_PER_PAGE;
+    const result = await memory.recall({
+      threadId: options.threadId,
+      resourceId: options.resourceId,
+      perPage,
+      page: 0,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
+      hideSignals: options.hideSignals,
+    });
+    return { messages: [...result.messages].reverse(), hasMore: result.hasMore };
+  }
+
   async subscribeToThread<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
     options: AgentSubscribeToThreadOptions,
     pubsub?: PubSub,
   ): Promise<AgentThreadSubscription<OUTPUT>> {
-    void agent;
     const resolvedPubSub = this.#getPubSub(pubsub);
     const { provider: leaseProvider, isFallback: hasFallbackLeaseProvider } =
       this.#resolveLeaseProvider(resolvedPubSub);
@@ -3648,6 +3669,7 @@ export class AgentThreadStreamRuntime {
           remoteRun = remoteRuns.get(data.streamId);
           if (!remoteRun) return;
         }
+        stampPartPublishedAt(data.part, new Date(event.createdAt ?? Date.now()).getTime());
         remoteRun.parts.push(data.part);
         while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
         return;
@@ -3795,6 +3817,26 @@ export class AgentThreadStreamRuntime {
       throw error;
     }
 
+    // Subscribe first, then load: parts published while history loads are held
+    // by the subscription and filtered against it, so nothing falls in the gap.
+    let historyChunk: ChunkType | undefined;
+    let historyFilter: ((part: unknown, runId: string) => boolean) | undefined;
+    if (options.withInitialHistory) {
+      try {
+        const history = await this.#loadThreadHistory(agent, options);
+        historyChunk = {
+          type: 'thread-history',
+          runId: '',
+          from: ChunkFrom.AGENT,
+          payload: history,
+        } as ChunkType;
+        historyFilter = createThreadHistoryFilter(history.messages, Date.now());
+      } catch (error) {
+        await resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
+        throw error;
+      }
+    }
+
     const currentRunId = activeRunId();
     const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
@@ -3830,6 +3872,7 @@ export class AgentThreadStreamRuntime {
       unsubscribe,
       stream: (async function* () {
         try {
+          if (historyChunk) yield historyChunk;
           while (!done || pendingRuns.length > 0) {
             if (pendingRuns.length === 0) {
               await new Promise<void>(resolve => waiters.push(resolve));
@@ -3858,7 +3901,10 @@ export class AgentThreadStreamRuntime {
                   typedPart && typeof typedPart === 'object' && !('runId' in typedPart)
                     ? { ...typedPart, runId: run.runId }
                     : typedPart;
-                if (!isSignalChunkExcluded(partWithRunId, options.hideSignals)) {
+                if (
+                  !isSignalChunkExcluded(partWithRunId, options.hideSignals) &&
+                  (!historyFilter || historyFilter(typedPart, run.runId))
+                ) {
                   yield partWithRunId;
                 }
                 if (done) break;

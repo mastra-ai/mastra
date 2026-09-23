@@ -40,6 +40,7 @@ type StreamObjectChunk<TType extends string> = StreamChunkBase<TType> & { object
 type StreamDataChunk<TType extends `data-${string}`> = StreamChunkBase<TType> & { data?: unknown };
 type StreamIgnoredChunk =
   | StreamPayloadChunk<'start'>
+  | StreamPayloadChunk<'thread-history'>
   | StreamPayloadChunk<'abort'>
   | StreamPayloadChunk<'response-metadata'>
   | StreamPayloadChunk<'reasoning-signature'>
@@ -1513,6 +1514,8 @@ export class SessionRunEngine {
           subscription.unsubscribe();
           break;
         }
+
+        if (chunk.type === 'thread-history') continue;
 
         const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
         if (runId && runId === abortedRunId) continue;
