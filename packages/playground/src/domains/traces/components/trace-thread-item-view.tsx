@@ -37,7 +37,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
   if (messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <Txt variant="ui-md" className="text-muted-foreground">
+        <Txt variant="body" tone="muted">
           No agent turn found for this trace.
         </Txt>
       </div>
@@ -45,7 +45,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
   }
 
   return (
-    <div className={cn('animate-in fade-in-0 p-4 duration-300', className)}>
+    <div className={cn('animate-in p-4 duration-300 fade-in-0', className)}>
       {/* Messages carry their own vertical margins; strip them at the edges so `p-4` is the only outer spacing. */}
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 [&>[data-slot=message]:first-child]:mt-0 [&>[data-slot=message]:last-child]:mb-0">
         <ToolCallProvider
@@ -64,7 +64,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
               onHighlightSpans && message.traceSpanIds.length > 0 ? (
                 <Button
                   variant="ghost"
-                  size="icon-xs"
+                  size="icon-sm"
                   tooltip="Highlight spans"
                   aria-label="Highlight spans"
                   onClick={() => onHighlightSpans(message.traceSpanIds)}

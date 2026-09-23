@@ -44,7 +44,7 @@ MCP tool catalogs can change independently of this package. Use `allowTools` to 
 
 ### Generated HTTP providers
 
-Resend and incident.io use checked-in tools generated from their provider contracts. Tool inputs preserve provider field names. Mutations put their JSON request payload under `body`. The one exception is `resend_create_contact_import`, whose `body` fields are sent as a multipart form upload with the CSV text in `body.file`.
+Resend, incident.io, Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot use checked-in tools generated from their provider contracts. Tool inputs preserve provider field names. Mutations put their JSON request payload under `body`. The one exception is `resend_create_contact_import`, whose `body` fields are sent as a multipart form upload with the CSV text in `body.file`.
 
 ```json
 {
@@ -64,7 +64,7 @@ List tools return one provider page and preserve its response envelope. When `ne
 
 ### Template provenance
 
-Resend and incident.io are generated from integration-template contributions [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Until they land upstream, each provider manifest pins the contributing repository and exact commit and records generated file checksums.
+Resend and incident.io are generated from integration-template contributions [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot are generated from contribution [#677](https://github.com/NangoHQ/integration-templates/pull/677), which adds agent-focused actions (PostHog HogQL queries, Stripe balance/dispute/coupon/account reads, GitHub tags and trees, Slack Connect invites, Twitter search and following, HubSpot form submission) on top of upstream main. Until they land upstream, each provider manifest pins the contributing repository and exact commit and records generated file checksums.
 
 ## Documentation
 

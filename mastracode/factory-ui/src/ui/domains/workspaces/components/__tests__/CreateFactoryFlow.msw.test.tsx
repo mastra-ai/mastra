@@ -106,10 +106,12 @@ describe('Create Factory wizard', () => {
     renderFlow();
 
     const field = await screen.findByLabelText('Factory name');
+    expect(screen.getByRole('combobox', { name: 'Factory name' })).toBe(field);
     await user.type(field, 'Mastra');
     await user.click(screen.getByRole('option', { name: /Create “Mastra”/ }));
 
     expect(await screen.findByRole('heading', { name: 'Choose your codebase' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Search repositories' })).toBe(field);
     // The same field carries over, focused and empty — steps swap rows, not the palette.
     expect(screen.getByLabelText('Search repositories')).toBe(field);
     expect(field).toHaveFocus();

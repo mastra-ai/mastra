@@ -43,7 +43,7 @@ function Stage({
           <TooltipTrigger
             render={
               <span
-                className="text-muted-foreground flex size-5 shrink-0 items-center justify-center [&_svg]:size-3.5"
+                className="flex size-5 shrink-0 items-center justify-center text-muted-foreground [&_svg]:size-3.5"
                 role="img"
                 aria-label={typeLabel}
               />
@@ -53,11 +53,11 @@ function Stage({
           </TooltipTrigger>
           <TooltipContent>{typeLabel}</TooltipContent>
         </Tooltip>
-        {!isLast && <span aria-hidden className="bg-border1 mt-1 w-px flex-1" />}
+        {!isLast && <span aria-hidden className="mt-1 w-px flex-1 bg-border" />}
       </div>
       <div className="grid min-w-0 gap-0.5">
-        <div className="text-ui-sm text-foreground flex min-h-5 items-center">{subject}</div>
-        <p className="text-ui-xs text-placeholder">{description}</p>
+        <div className="flex min-h-5 items-center text-caption text-foreground">{subject}</div>
+        <p className="text-meta text-placeholder">{description}</p>
       </div>
     </li>
   );
@@ -111,7 +111,7 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
                 {isDatasetLoading ? <Skeleton className="h-4 w-28" /> : (dataset?.name ?? experiment.datasetId)}
               </span>
               {experiment.datasetVersion != null && (
-                <span className="text-muted-foreground shrink-0">(v{experiment.datasetVersion})</span>
+                <span className="shrink-0 text-muted-foreground">(v{experiment.datasetVersion})</span>
               )}
             </LinkComponent>
           ) : (
@@ -130,7 +130,7 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
               <span className="truncate">{targetName}</span>
             </LinkComponent>
           ) : (
-            <span className="text-muted-foreground truncate">{targetName}</span>
+            <span className="truncate text-muted-foreground">{targetName}</span>
           )
         }
       />

@@ -266,6 +266,9 @@ const traceQueryRequestObjectSchema = z
   .object({
     timeRange: traceQueryTimeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
+    /**
+     * @deprecated Use `queryThreads()` instead. Grouped trace queries remain supported until the next major release.
+     */
     group: z
       .object({ by: z.tuple([z.literal('threadId')]) })
       .strict()
@@ -380,6 +383,9 @@ export const traceQueryPaginatedTraceResponseSchema = z
 export const traceQueryDeltaTraceResponseSchema = z
   .object({ traces: z.array(traceQueryTraceSchema), delta: deltaInfoSchema, deltaCursor: deltaCursorSchema })
   .strict();
+/**
+ * @deprecated Use `queryThreadsResultSchema` instead. Grouped trace queries remain supported until the next major release.
+ */
 export const traceQueryGroupResponseSchema = z
   .object({
     groups: z.array(z.object({ threadId: z.string() }).strict()),
@@ -435,12 +441,21 @@ export type NormalizedQueryThreadsInput = z.output<typeof queryThreadsInputObjec
 export type ThreadIdentity = z.infer<typeof threadIdentitySchema>;
 export type QueryThreadsResult = z.infer<typeof queryThreadsResultSchema>;
 
-export type TraceQueryRequest = z.input<typeof traceQueryRequestObjectSchema>;
+type TraceQueryRequestInput = z.input<typeof traceQueryRequestObjectSchema>;
+export type TraceQueryRequest = Omit<TraceQueryRequestInput, 'group'> & {
+  /**
+   * @deprecated Use `queryThreads()` instead. Grouped trace queries remain supported until the next major release.
+   */
+  group?: TraceQueryRequestInput['group'];
+};
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
 export type TraceQueryPaginatedTraceResponse = z.infer<typeof traceQueryPaginatedTraceResponseSchema>;
 export type TraceQueryDeltaTraceResponse = z.infer<typeof traceQueryDeltaTraceResponseSchema>;
+/**
+ * @deprecated Use `QueryThreadsResult` instead. Grouped trace queries remain supported until the next major release.
+ */
 export type TraceQueryGroupResponse = z.infer<typeof traceQueryGroupResponseSchema>;
 export type TraceQueryResponse = z.infer<typeof traceQueryResponseSchema>;
 
@@ -639,6 +654,9 @@ export type TrustedTraceQueryTracesPlan =
   | TrustedTraceQueryPaginatedTracesPlan
   | TrustedTraceQueryDeltaTracesPlan;
 
+/**
+ * @deprecated Use `TrustedThreadQueryPlan` instead. Grouped trace queries remain supported until the next major release.
+ */
 export type TrustedTraceQueryGroupsPlan = TrustedTraceQueryBasePlan &
   TrustedTraceQueryKeysetPlan & {
     result: 'groups';

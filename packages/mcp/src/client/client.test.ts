@@ -17,6 +17,28 @@ import { z } from 'zod';
 import type { MCPTraceContext } from '../shared/trace-context.js';
 import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
 
+// exit-hook keeps its callbacks in a module-level Set and installs its own process
+// listeners exactly once behind an internal flag, so process.listenerCount('exit') is
+// identical whether one client holds an exit hook or none do. Counting registrations
+// here is the only way to observe that a client actually released its exit hook. The
+// wrapper delegates to the real implementation, so behaviour is unchanged.
+const exitHooks = vi.hoisted(() => ({ live: 0 }));
+
+vi.mock('exit-hook', async importOriginal => {
+  const actual = await importOriginal<typeof import('exit-hook')>();
+  return {
+    ...actual,
+    asyncExitHook: (...args: Parameters<typeof actual.asyncExitHook>) => {
+      const unsubscribe = actual.asyncExitHook(...args);
+      exitHooks.live++;
+      return () => {
+        exitHooks.live--;
+        unsubscribe();
+      };
+    },
+  };
+});
+
 describe('InternalMastraMCPClient - server instructions', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -2425,6 +2447,111 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
 
     const afterDisconnectCount = process.listenerCount('SIGHUP');
     expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
+  describe('failed connect()', () => {
+    let unresponsiveServer: HttpServer;
+    let unreachableUrl: URL;
+
+    beforeEach(async () => {
+      // Accepts the request and never replies, so connect() fails via connectTimeout
+      // rather than a transport-level refusal.
+      unresponsiveServer = createServer(() => {});
+      await new Promise<void>(resolve => unresponsiveServer.listen(0, '127.0.0.1', resolve));
+      const { port } = unresponsiveServer.address() as AddressInfo;
+      unreachableUrl = new URL(`http://127.0.0.1:${port}/mcp`);
+    });
+
+    afterEach(() => {
+      unresponsiveServer?.close();
+    });
+
+    const makeFailingClient = (name: string) =>
+      new InternalMastraMCPClient({
+        name,
+        server: { url: unreachableUrl, connectTimeout: 100 },
+      });
+
+    it('should not leak SIGTERM/SIGHUP listeners or the exit hook when connect() fails', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialSigHup = process.listenerCount('SIGHUP');
+      const initialExitHooks = exitHooks.live;
+
+      const client = makeFailingClient('failed-connect-client');
+      await expect(client.connect()).rejects.toThrow();
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+      expect(exitHooks.live).toBe(initialExitHooks);
+    });
+
+    it('should not accumulate listeners across repeated failed connects', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialSigHup = process.listenerCount('SIGHUP');
+      const initialExitHooks = exitHooks.live;
+
+      // Above Node's default max of 10, so a leak also trips MaxListenersExceededWarning.
+      for (let i = 0; i < 12; i++) {
+        const client = makeFailingClient(`failed-connect-loop-${i}`);
+        await client.connect().catch(() => {});
+        await client.disconnect();
+      }
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+      expect(exitHooks.live).toBe(initialExitHooks);
+    });
+
+    it('should release listeners and the exit hook on disconnect() after a failed connect', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialExitHooks = exitHooks.live;
+
+      const client = makeFailingClient('failed-connect-then-disconnect');
+      await client.connect().catch(() => {});
+      await client.disconnect();
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(exitHooks.live).toBe(initialExitHooks);
+    });
+
+    describe('stdio transport', () => {
+      // Exits before speaking MCP, so client.connect() fails after the child is spawned.
+      // That is the path where a transport is already live when the attempt collapses.
+      const makeFailingStdioClient = (name: string) =>
+        new InternalMastraMCPClient({
+          name,
+          server: { command: process.execPath, args: ['-e', 'process.exit(1)'], timeout: 5000 },
+        });
+
+      it('should not leak listeners or the exit hook when a stdio connect() fails', async () => {
+        const initialSigTerm = process.listenerCount('SIGTERM');
+        const initialSigHup = process.listenerCount('SIGHUP');
+        const initialExitHooks = exitHooks.live;
+
+        const client = makeFailingStdioClient('failed-stdio-connect');
+        await expect(client.connect()).rejects.toThrow();
+
+        expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+        expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+        expect(exitHooks.live).toBe(initialExitHooks);
+      });
+
+      it('should not accumulate listeners across repeated failed stdio connects', async () => {
+        const initialSigTerm = process.listenerCount('SIGTERM');
+        const initialExitHooks = exitHooks.live;
+
+        // Above Node's default max of 10, and with no disconnect() to paper over the
+        // failure path: a failed connect must clean up on its own.
+        for (let i = 0; i < 12; i++) {
+          await makeFailingStdioClient(`failed-stdio-loop-${i}`)
+            .connect()
+            .catch(() => {});
+        }
+
+        expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+        expect(exitHooks.live).toBe(initialExitHooks);
+      });
+    });
   });
 
   it('should not create duplicate connections when connect is called concurrently', async () => {

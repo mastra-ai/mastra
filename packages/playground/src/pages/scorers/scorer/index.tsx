@@ -1,5 +1,5 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -12,8 +12,10 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { MoreVertical, Pencil, Play } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
+import { navCrumb, scorerCrumb } from '@/domains/navigation/crumbs';
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
 import { ScoresColumnsMenu } from '@/domains/scores/components/scores-columns';
 import { ScoresList } from '@/domains/scores/components/scores-list';
@@ -24,6 +26,7 @@ import { useScorer, useScoresByScorerId } from '@/domains/scores/hooks/use-score
 import { useScoresColumns } from '@/domains/scores/hooks/use-scores-columns';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
+const crumbs = [navCrumb('/scorers'), scorerCrumb];
 const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
 
 export default function Scorer() {
@@ -215,13 +218,18 @@ export default function Scorer() {
     const hasError = isUnauthorized || isForbidden || hasOtherError;
 
     return (
-      <PageLayout width="wide" height="full" className={hasError || !scorerActionsMenu ? 'grid-rows-[1fr]' : undefined}>
-        {!hasError && scorerActionsMenu && (
-          <PageLayout.TopArea>
-            <ButtonsGroup className="ml-auto">{scorerActionsMenu}</ButtonsGroup>
-          </PageLayout.TopArea>
-        )}
-        <PageLayout.MainArea isCentered>
+      <PageLayout
+        breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+        actionRow={
+          !hasError && scorerActionsMenu ? (
+            <ActionRow>
+              <ActionRow.End>{scorerActionsMenu}</ActionRow.End>
+            </ActionRow>
+          ) : undefined
+        }
+      >
+        <h1 className="sr-only">{scorerId}</h1>
+        <div className="flex h-full items-center justify-center">
           {isUnauthorized ? (
             <SessionExpired />
           ) : isForbidden ? (
@@ -231,39 +239,43 @@ export default function Scorer() {
           ) : (
             <NoScoresInfo onRunExperiment={() => setRunDialogOpen(true)} />
           )}
-        </PageLayout.MainArea>
+        </div>
         {runDialog}
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout width="wide" height="full">
-      <PageLayout.TopArea>
-        <div className="flex items-center justify-between gap-3">
-          <ScoresTools
-            selectedEntity={selectedEntityOption}
-            entityOptions={entityOptions}
-            onEntityChange={handleSelectedEntityChange}
-            onReset={() => {
-              setSearchParams(prev => {
-                const next = new URLSearchParams(prev);
-                next.set('entity', 'all');
-                return next;
-              });
-            }}
-            isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
-          />
-          <ButtonsGroup>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
+        <ActionRow>
+          <ActionRow.Start>
+            <ScoresTools
+              selectedEntity={selectedEntityOption}
+              entityOptions={entityOptions}
+              onEntityChange={handleSelectedEntityChange}
+              onReset={() => {
+                setSearchParams(prev => {
+                  const next = new URLSearchParams(prev);
+                  next.set('entity', 'all');
+                  return next;
+                });
+              }}
+              isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
+            />
+          </ActionRow.Start>
+          <ActionRow.End>
             <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
             <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Play />}>
               Run Experiment
             </Button>
             {scorerActionsMenu}
-          </ButtonsGroup>
-        </div>
-      </PageLayout.TopArea>
-
+          </ActionRow.End>
+        </ActionRow>
+      }
+    >
+      <h1 className="sr-only">{scorerId}</h1>
       <ScoresList
         scores={scores}
         isLoading={isLoadingScores}

@@ -56,7 +56,7 @@ export function AgentWorkflowDetails({ agentName, workflows }: AgentWorkflowDeta
           >
             {workflowEntries.map(([workflowKey, workflow]) => (
               <li key={workflowKey} className="grid gap-1">
-                <span className="overflow-wrap-anywhere text-ui-sm text-foreground font-medium">
+                <span className="overflow-wrap-anywhere text-column text-foreground">
                   {workflow.name || workflowKey}
                 </span>
                 {workflow.description ? (

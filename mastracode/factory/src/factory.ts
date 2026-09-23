@@ -46,6 +46,7 @@ import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
+import type { GithubRuleOverrides } from './integrations/github/default-rules.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import {
   recordFactoryPullRequestProvenance,
@@ -69,6 +70,7 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
+import { resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
@@ -229,11 +231,27 @@ export interface MastraFactoryConfig {
   includeDefaultBoards?: boolean;
 
   /**
-   * Platform-specific overrides. `githubAppSlug` identifies Factory's own
-   * GitHub App writes so their webhook deliveries do not retrigger triage.
+   * Platform-specific overrides.
    */
   platform?: {
+    /** Identifies Factory's own GitHub App writes so their webhook deliveries do not retrigger triage. */
     githubAppSlug?: string;
+    /**
+     * Overrides for the `PlatformGithubIntegration` the factory installs itself
+     * when Platform credentials are present; these options are forwarded to its
+     * constructor. An explicit integration with id `github` in `integrations`
+     * takes precedence and makes this key a no-op, so the two are not meant to
+     * be used together.
+     */
+    github?: {
+      /** Replace an event handler, or disable it with null; omitted events keep defaults. */
+      rules?: GithubRuleOverrides;
+      /**
+       * GitHub App slug used to recognize Factory's own webhook writes. Falls
+       * back to `githubAppSlug` when omitted.
+       */
+      slug?: string;
+    };
   };
 }
 
@@ -404,9 +422,23 @@ export class MastraFactory {
     // Explicit integrations win. Platform credentials fill only missing
     // provider slots so callers can override each integration independently.
     const integrations = [...(this.#config.integrations ?? [])];
+    const explicitGithub = integrations.some(integration => integration.id === 'github');
+    // Whether this boot constructed the GitHub integration on the caller's
+    // behalf — `platform.github` is only meaningful in that case.
+    let installedPlatformGithub = false;
     if (hasPlatformCredentials()) {
-      if (!integrations.some(integration => integration.id === 'github')) {
-        integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
+      if (!explicitGithub) {
+        // Forward `platform.github` to the integration the factory installs
+        // itself. `slug` falls back to the sibling `githubAppSlug` so existing
+        // deploys keep working; the constructor validates and freezes `rules`,
+        // so invalid ones fail boot.
+        integrations.push(
+          new PlatformGithubIntegration({
+            rules: this.#config.platform?.github?.rules,
+            slug: this.#config.platform?.github?.slug ?? this.#config.platform?.githubAppSlug,
+          }),
+        );
+        installedPlatformGithub = true;
       }
       if (!integrations.some(integration => integration.id === 'incidentio')) {
         integrations.push(new PlatformIncidentioIntegration());
@@ -420,6 +452,17 @@ export class MastraFactory {
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
       }
+    }
+    // Never let the key be a silent no-op: it only applies to the integration
+    // the factory installs itself, so warn when it had nothing to apply to.
+    if (this.#config.platform?.github && !installedPlatformGithub) {
+      console.warn(
+        "[factory] 'platform.github' config was provided but the factory installed no GitHub integration of its " +
+          'own ' +
+          (explicitGithub
+            ? "(an explicit integration with id 'github' takes precedence, so these options were ignored)."
+            : '(no Platform credentials are configured and no explicit GitHub integration was passed).'),
+      );
     }
 
     // Validate ids up front so a copy-paste duplicate fails loud instead of one
@@ -878,11 +921,46 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
-        hostInstructions: ({ requestContext }) => {
+        hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
             | undefined;
-          return parseSupervisorResourceId(context?.resourceId) ? SUPERVISOR_INSTRUCTIONS : undefined;
+          if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
+          // The SDK resolves this callback before it loads repository
+          // AGENTS.md/CLAUDE.md. A controller recreated after restart has
+          // only initialState, and a partially persisted one can keep
+          // `factoryProjectId` while `untrustedCheckout` is gone, so the
+          // presence of the project id alone proves nothing. Heal whenever any
+          // trust field the recovery writes is missing, now, not later when
+          // the agent's tools are assembled. Unbound sessions never gain these
+          // fields and pay one binding lookup per prompt.
+          if (context?.threadId && context.resourceId) {
+            const current = context.getState();
+            const trustStateComplete =
+              Boolean(current.factoryProjectId) &&
+              Boolean(current.factoryOrgId) &&
+              typeof current.untrustedCheckout === 'boolean';
+            if (!trustStateComplete) {
+              const recovered = await resolveFactorySessionAddress({
+                requestContext,
+                storage: workItemsStorage,
+                forceBindingLookup: true,
+                ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+              });
+              if (recovered?.binding) {
+                const state = context.getState();
+                if (
+                  state.factoryProjectId !== recovered.binding.factoryProjectId ||
+                  (recovered.binding.role === 'review' && state.untrustedCheckout !== true)
+                ) {
+                  throw new Error(
+                    'Factory review session security state could not be restored before prompt creation.',
+                  );
+                }
+              }
+            }
+          }
+          return undefined;
         },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller

@@ -30,12 +30,7 @@ function RecursiveFieldRenderer({
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row items-center gap-4">
-            <JSONSchemaForm.FieldName
-              labelIsHidden
-              placeholder="Variable name"
-              size="md"
-              className="[&_input]:bg-surface3 w-full"
-            />
+            <JSONSchemaForm.FieldName labelIsHidden placeholder="Variable name" size="md" className="w-full" />
 
             <JSONSchemaForm.FieldType placeholder="Type" />
             <JSONSchemaForm.FieldOptional />
@@ -130,7 +125,6 @@ export function PromptBlockEditSidebar({
             label="Name"
             required
             placeholder="My Prompt Block"
-            variant="outline"
             {...register('name')}
             errorMsg={errors.name?.message}
           />
@@ -138,20 +132,19 @@ export function PromptBlockEditSidebar({
           <TextareaFieldBlock
             label="Description"
             placeholder="Describe what this prompt block does"
-            variant="outline"
             {...register('description')}
             errorMsg={errors.description?.message}
           />
         </div>
 
         {/* Variables */}
-        <div className="border-border1 flex flex-col gap-4 border-t p-4">
+        <div className="flex flex-col gap-4 border-t border-border p-4">
           <SectionHeader
             title="Variables"
             subtitle={
               <>
                 Define variables for this prompt block. Use{' '}
-                <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax in your content.
+                <code className="font-medium text-accent1">{'{{variableName}}'}</code> syntax in your content.
               </>
             }
           />
@@ -179,7 +172,7 @@ export function PromptBlockEditSidebar({
 
         {/* Used by */}
         {mode === 'edit' && blockId && (
-          <div className="border-border1 flex flex-col gap-3 border-t p-4">
+          <div className="flex flex-col gap-3 border-t border-border p-4">
             <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
             {usedByAgents.length > 0 ? (
               <div className="flex flex-col gap-1.5">
@@ -188,16 +181,16 @@ export function PromptBlockEditSidebar({
                     key={agent.id}
                     type="button"
                     onClick={() => navigate(paths.agentLink(agent.id))}
-                    className="hover:bg-surface3 flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-fill-subtle"
                   >
-                    <Txt variant="ui-sm" className="text-foreground truncate">
+                    <Txt variant="caption" tone="ink" className="truncate">
                       {agent.name || agent.id}
                     </Txt>
                   </button>
                 ))}
               </div>
             ) : (
-              <Txt variant="ui-sm" className="text-muted-foreground">
+              <Txt variant="caption" tone="muted">
                 Not referenced by any agents yet.
               </Txt>
             )}

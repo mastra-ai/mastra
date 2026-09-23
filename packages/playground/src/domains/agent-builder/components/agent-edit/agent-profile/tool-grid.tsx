@@ -43,24 +43,22 @@ export const ToolGrid = ({
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
       <div className="flex shrink-0 items-center justify-between gap-4">
-        <div data-testid="tools-card-picker-search" className="bg-surface3 max-w-[30ch] flex-1 rounded-full">
-          <InputGroup variant="outline" size="md">
-            <InputGroupAddon align="inline-start">
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search tools"
-              placeholder="Search tools..."
-              onChange={event => onSearch(event.target.value)}
-            />
-          </InputGroup>
-        </div>
+        <InputGroup size="md" className="max-w-[30ch] flex-1" data-testid="tools-card-picker-search">
+          <InputGroupAddon align="inline-start">
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label="Search tools"
+            placeholder="Search tools..."
+            onChange={event => onSearch(event.target.value)}
+          />
+        </InputGroup>
 
         <label
           data-testid="tools-only-selected-filter"
           className={cn(
-            'inline-flex items-center gap-2 text-ui-xs text-muted-foreground select-none cursor-pointer',
+            'inline-flex cursor-pointer items-center gap-2 text-meta text-muted-foreground select-none',
             !editable && 'cursor-not-allowed opacity-60',
           )}
         >
@@ -79,7 +77,7 @@ export const ToolGrid = ({
       {tools.length === 0 ? (
         <ToolListEmptyState details={emptyStateDetails} />
       ) : (
-        <div className="grid min-h-0 grid-cols-1 content-start gap-2 overflow-y-auto sm:grid-cols-2 lg:gap-4 2xl:grid-cols-3">
+        <div className="grid min-h-0 grid-cols-1 content-start gap-2 overflow-y-auto 2xl:grid-cols-3 sm:grid-cols-2 lg:gap-4">
           {tools.map(item => (
             <ToolCard key={`${item.type}__${item.id}`} item={item} editable={editable} onToggle={onToggle} />
           ))}
@@ -96,7 +94,7 @@ interface ToolListEmptyStateProps {
 export const ToolListEmptyState = ({ details }: ToolListEmptyStateProps) => {
   return (
     <div className="flex min-h-0 items-center justify-center px-3 py-4">
-      <Txt variant="ui-md" className="text-muted-foreground">
+      <Txt variant="body" tone="muted">
         {details}
       </Txt>
     </div>

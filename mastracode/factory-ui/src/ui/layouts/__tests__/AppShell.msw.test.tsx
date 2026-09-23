@@ -85,9 +85,9 @@ describe('document scroll', () => {
       </AppShell>,
     );
 
-    const aside = container.querySelector('aside');
-    expect(aside?.className).toContain('sticky');
-    expect(aside?.className).toContain('h-dvh');
+    const sidebarSlot = container.querySelector('[data-slot="app-shell-sidebar"]');
+    expect(sidebarSlot?.className).toContain('sticky');
+    expect(sidebarSlot?.className).toContain('h-dvh');
   });
 });
 
