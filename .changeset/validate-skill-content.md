@@ -7,6 +7,6 @@ Added `validateSkillContent()` and exported `validateSkillMetadata()` from `@mas
 ```typescript
 import { validateSkillContent } from '@mastra/core/skills';
 
-const result = validateSkillContent(skillMarkdown, 'my-skill');
+const result = validateSkillContent({ content: skillMarkdown, directoryName: 'my-skill' });
 if (!result.valid) console.error(result.errors);
 ```

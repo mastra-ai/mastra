@@ -206,7 +206,7 @@ If your app writes `SKILL.md` files (from a tool, an upload, or a shell command)
 ```typescript
 import { validateSkillContent } from '@mastra/core/skills'
 
-const result = validateSkillContent(skillMarkdown, 'code-review')
+const result = validateSkillContent({ content: skillMarkdown, directoryName: 'code-review' })
 
 if (!result.valid) {
   throw new Error(`Invalid skill:\n${result.errors.join('\n')}`)

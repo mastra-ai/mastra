@@ -360,16 +360,22 @@ export function extractSkillFrontmatter(content: string): { metadata: SkillMetad
  * Validate raw SKILL.md content (frontmatter + body) using the same rules
  * applied when skills are loaded. Pure: no filesystem access or logging.
  *
- * @param content - Full SKILL.md file content
- * @param directoryName - Name of the directory the skill will live in (name must match)
+ * @param options.content - Full SKILL.md file content
+ * @param options.directoryName - Name of the directory the skill will live in (name must match)
  *
  * @example
  * ```typescript
- * const result = validateSkillContent(skillMd, 'my-skill');
+ * const result = validateSkillContent({ content: skillMd, directoryName: 'my-skill' });
  * if (!result.valid) throw new Error(result.errors.join('\n'));
  * ```
  */
-export function validateSkillContent(content: string, directoryName?: string): SkillContentValidationResult {
+export function validateSkillContent({
+  content,
+  directoryName,
+}: {
+  content: string;
+  directoryName?: string;
+}): SkillContentValidationResult {
   let extracted: ReturnType<typeof extractSkillFrontmatter>;
   try {
     extracted = extractSkillFrontmatter(content);
