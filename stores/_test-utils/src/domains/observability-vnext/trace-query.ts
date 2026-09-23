@@ -65,6 +65,7 @@ export interface RawTraceQueryScore {
   scorerVersion: string | null;
   scoreSource: string | null;
   score: number | null;
+  metadata: Record<string, unknown> | null;
   entityVersionId: string | null;
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
@@ -83,6 +84,7 @@ export interface RawTraceQueryFeedback {
   sourceId: string | null;
   value: string | number;
   comment: string | null;
+  metadata: Record<string, unknown> | null;
   entityVersionId: string | null;
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
@@ -145,6 +147,7 @@ const scoreRecord = (
   scorerVersion: null,
   scoreSource: null,
   score,
+  metadata: null,
   entityVersionId: null,
   parentEntityVersionId: null,
   rootEntityVersionId: null,
@@ -170,6 +173,7 @@ const feedbackRecord = (
   sourceId: null,
   value,
   comment: null,
+  metadata: null,
   entityVersionId: null,
   parentEntityVersionId: null,
   rootEntityVersionId: null,
@@ -733,6 +737,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       entityName: 'Medication lookup',
       entityVersionId: 'tool-v2',
       rootEntityVersionId: 'agent-v1',
+      metadata: { nested: { value: 'span-match' } },
       startedAt: '2026-08-05T10:00:00.500Z',
       endedAt: '2026-08-05T10:00:01.500Z',
     }),
@@ -884,6 +889,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       timestamp: '2026-08-05T10:00:03.000Z',
       scorerVersion: 'v1',
       scoreSource: 'automated',
+      metadata: { nested: { value: 7 } },
       entityVersionId: 'safety-v1',
       rootEntityVersionId: 'root-v1',
     }),
@@ -958,6 +964,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     feedbackRecord(6, 'feedback-b-text-three', 'trace-b', 'rating', 'patient', '3'),
     feedbackRecord(7, 'feedback-c-review', 'trace-c', 'clinical-review', 'clinician', 'approved', {
       comment: 'Reviewed',
+      metadata: { nested: { value: false } },
     }),
     feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
     feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
@@ -1561,6 +1568,38 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       expected: metadataMissingResults,
     },
   ]),
+  {
+    name: 'compares nested span metadata exactly',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          some: { op: 'eq', left: { path: 'metadata.nested.value' }, right: { literal: 'span-match' } },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'compares nested score metadata as a number',
+    request: {
+      timeRange: fullRange,
+      where: {
+        scores: { some: { op: 'eq', left: { path: 'metadata.nested.value' }, right: { literal: 7 } } },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'compares nested feedback metadata as a boolean',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: { some: { op: 'eq', left: { path: 'metadata.nested.value' }, right: { literal: false } } },
+      },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
   ...(
     [
       ['nested string', 'metadata.nestedValue.child', 'value'],

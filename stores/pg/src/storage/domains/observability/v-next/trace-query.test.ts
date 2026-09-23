@@ -126,7 +126,8 @@ describe('Postgres advanced trace query', () => {
       s."score",
       s."entityVersionId",
       s."parentEntityVersionId",
-      s."rootEntityVersionId"
+      s."rootEntityVersionId",
+      s."metadata"
     FROM`);
     expect(compiled.text.match(/EXISTS \(/g)).toHaveLength(3);
     expect(compiled.text).toContain('s."traceId" = r."traceId"');

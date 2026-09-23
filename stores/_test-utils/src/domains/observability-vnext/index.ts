@@ -196,6 +196,7 @@ async function writeTraceQueryFixture(
         rootEntityVersionId: score.rootEntityVersionId,
         organizationId: score.organizationId ?? undefined,
         resourceId: score.resourceId ?? undefined,
+        metadata: score.metadata,
         timestamp,
         createdAt: timestamp,
         updatedAt: null,
@@ -221,7 +222,7 @@ async function writeTraceQueryFixture(
         rootEntityVersionId: feedback.rootEntityVersionId,
         organizationId: feedback.organizationId ?? undefined,
         resourceId: feedback.resourceId ?? undefined,
-        metadata: null,
+        metadata: feedback.metadata,
       },
     });
   }
@@ -356,10 +357,14 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ],
           observedFieldsTruncated: true,
         });
-        await expect(observedFields({ predicateScope: 'spans' })).resolves.toEqual({
-          observedFields: [],
-          observedFieldsTruncated: false,
-        });
+        for (const predicateScope of ['spans', 'scores', 'feedback'] as const) {
+          await expect(observedFields({ predicateScope, search: 'scope.value' })).resolves.toEqual({
+            observedFields: [
+              expect.objectContaining({ path: 'metadata.scope.value', valueKind: 'string', occurrences: 3 }),
+            ],
+            observedFieldsTruncated: false,
+          });
+        }
       });
 
       it('discovers typed metadata values without trimming or coercion', async () => {
@@ -453,6 +458,14 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ],
           valuesTruncated: false,
         });
+        const scopeValuePrefixes = { spans: 'span', scores: 'score', feedback: 'feedback' } as const;
+        for (const predicateScope of ['spans', 'scores', 'feedback'] as const) {
+          const prefix = scopeValuePrefixes[predicateScope];
+          await expect(values({ predicateScope, path: 'metadata.scope.value' })).resolves.toEqual({
+            values: ['a', 'b', 'c'].map(suffix => ({ value: `${prefix}-${suffix}`, count: 1 })),
+            valuesTruncated: false,
+          });
+        }
       });
 
       it('applies the trusted tenant scope to field and value discovery', async () => {

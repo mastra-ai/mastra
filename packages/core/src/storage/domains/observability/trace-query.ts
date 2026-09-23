@@ -633,9 +633,9 @@ export type TraceQueryStructuredSegments = [TraceQueryStructuredRoot, string, ..
 
 const STRUCTURED_FIELD_RULES = {
   trace: { metadata: METADATA_FIELD_RULE },
-  spans: {},
-  scores: {},
-  feedback: {},
+  spans: { metadata: METADATA_FIELD_RULE },
+  scores: { metadata: METADATA_FIELD_RULE },
+  feedback: { metadata: METADATA_FIELD_RULE },
 } as const satisfies Record<TraceQueryPredicateScope, Partial<Record<TraceQueryStructuredRoot, FieldRule>>>;
 
 export type TraceQueryField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['trace'];

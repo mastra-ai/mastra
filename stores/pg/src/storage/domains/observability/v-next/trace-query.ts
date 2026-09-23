@@ -44,6 +44,9 @@ type TraceSelection = {
 
 const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
 const TRACE_STRUCTURED_ROOTS = { metadata: 'r."metadataRaw"' } satisfies StructuredRootExpressions;
+const SPAN_STRUCTURED_ROOTS = { metadata: 's."metadataRaw"' } satisfies StructuredRootExpressions;
+const SCORE_STRUCTURED_ROOTS = { metadata: 's."metadata"' } satisfies StructuredRootExpressions;
+const FEEDBACK_STRUCTURED_ROOTS = { metadata: 's."metadata"' } satisfies StructuredRootExpressions;
 
 const TRACE_FIELDS = {
   traceId: 'r."traceId"',
@@ -157,6 +160,17 @@ function finiteFloat64FromText(text: string): string {
   return `CASE WHEN ${finiteFloat64NumericCondition(numeric)} THEN (${numeric})::double precision END`;
 }
 
+function structuredTextExtraction(text: string, sample: string | number | boolean): string {
+  switch (typeof sample) {
+    case 'number':
+      return finiteFloat64FromText(text);
+    case 'boolean':
+      return `(${text})::boolean`;
+    default:
+      return text;
+  }
+}
+
 function compileStructuredScalarField(
   jsonExpression: string,
   pathParameter: string,
@@ -169,7 +183,7 @@ function compileStructuredScalarField(
   }
   const kind = typeof sample;
   const text = `(${jsonExpression} #>> ${pathParameter})`;
-  const extracted = kind === 'number' ? finiteFloat64FromText(text) : kind === 'boolean' ? `(${text})::boolean` : text;
+  const extracted = structuredTextExtraction(text, sample);
   return `CASE WHEN ${objectPathGuard} AND jsonb_typeof(${json}) = '${kind}' THEN ${extracted} END`;
 }
 
@@ -273,7 +287,7 @@ function compileFeedbackScalarPredicate(
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
   if (predicate.field !== 'value') {
-    return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameterOffset);
+    return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameterOffset, FEEDBACK_STRUCTURED_ROOTS);
   }
   if (predicate.type === 'collection') throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
   if (predicate.type === 'presence') {
@@ -350,6 +364,7 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameterOffset
             predicate.predicate,
             predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS,
             parameterOffset,
+            predicate.collection === 'spans' ? SPAN_STRUCTURED_ROOTS : SCORE_STRUCTURED_ROOTS,
           );
     const table =
       predicate.collection === 'spans'
@@ -492,7 +507,8 @@ function compilePostgresTraceScope(
       s."entityName",
       s."entityVersionId",
       s."parentEntityVersionId",
-      s."rootEntityVersionId"
+      s."rootEntityVersionId",
+      s."metadataRaw"
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
@@ -511,7 +527,8 @@ function compilePostgresTraceScope(
       s."score",
       s."entityVersionId",
       s."parentEntityVersionId",
-      s."rootEntityVersionId"
+      s."rootEntityVersionId",
+      s."metadata"
     FROM ${scoreTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
@@ -532,7 +549,8 @@ function compilePostgresTraceScope(
       s."timestamp",
       s."entityVersionId",
       s."parentEntityVersionId",
-      s."rootEntityVersionId"
+      s."rootEntityVersionId",
+      s."metadata"
     FROM ${feedbackTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
@@ -719,9 +737,9 @@ type StructuredDiscoveryRoot = {
 
 const STRUCTURED_DISCOVERY_ROOTS = {
   trace: [{ root: 'metadata', relation: 'root_scope r', jsonExpression: 'r."metadataRaw"' }],
-  spans: [],
-  scores: [],
-  feedback: [],
+  spans: [{ root: 'metadata', relation: 'current_spans s', jsonExpression: 's."metadataRaw"' }],
+  scores: [{ root: 'metadata', relation: 'current_scores s', jsonExpression: 's."metadata"' }],
+  feedback: [{ root: 'metadata', relation: 'current_feedback s', jsonExpression: 's."metadata"' }],
 } as const satisfies Record<TraceQueryPredicateScope, readonly StructuredDiscoveryRoot[]>;
 
 function structuredDiscoveryRoots(plan: TrustedTraceQueryObservedFieldsPlan): readonly StructuredDiscoveryRoot[] {

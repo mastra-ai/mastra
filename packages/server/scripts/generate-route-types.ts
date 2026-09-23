@@ -132,6 +132,22 @@ function createSchemaOverrideFunction(io: ZodIo) {
       return tsLib.factory.createKeywordTypeNode(tsLib.SyntaxKind.UnknownKeyword);
     }
 
+    if (!countingPass && schema._zod.def.type === 'tuple' && schema._zod.def.rest) {
+      // zod-to-ts 2.1 omits variadic tuple elements, so preserve them here.
+      const options = {
+        auxiliaryTypeStore: state.auxiliaryTypeStore,
+        io,
+        overrideFunction: createSchemaOverrideFunction(io),
+      } as const;
+      const items = schema._zod.def.items.map(item => zodToTs(item, options).node);
+      const rest = zodToTs(schema._zod.def.rest, options).node;
+
+      return tsLib.factory.createTupleTypeNode([
+        ...items,
+        tsLib.factory.createRestTypeNode(tsLib.factory.createArrayTypeNode(rest)),
+      ]);
+    }
+
     if (countingPass) {
       state.nestedOccurrenceCounts.set(schema, (state.nestedOccurrenceCounts.get(schema) ?? 0) + 1);
       return undefined;

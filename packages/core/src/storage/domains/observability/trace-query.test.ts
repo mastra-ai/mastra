@@ -809,21 +809,28 @@ describe('planTraceQuery', () => {
     }
   });
 
-  it('does not allow metadata predicates inside related-record clauses', () => {
+  it('normalizes metadata predicates inside every related-record clause', () => {
     for (const [scope, path] of [
       ['spans', 'metadata.message.id'],
       ['scores', ['metadata', 'message.id']],
       ['feedback', 'metadata.messageId'],
     ] as const) {
-      const error = validationError(() =>
-        planTraceQuery(
-          parsed({
-            ...baseRequest,
-            where: { [scope]: { some: { op: 'exists', path } } },
-          }),
-        ),
+      const plan = planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { [scope]: { some: { op: 'exists', path } } },
+        }),
       );
-      expect(error.issues[0]).toMatchObject({ code: 'field_not_allowed', path: ['where', scope, 'some', 'path'] });
+      expect(plan.where).toEqual({
+        type: 'relation',
+        collection: scope,
+        quantifier: 'some',
+        predicate: {
+          type: 'presence',
+          field: Array.isArray(path) ? path : path.split('.'),
+          operator: 'exists',
+        },
+      });
     }
   });
 
@@ -1817,7 +1824,8 @@ describe('trace-query discovery contract', () => {
     ).toEqual({
       timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
       predicateScope: 'scores',
-      structuredRoots: [],
+      structuredRoots: ['metadata'],
+      scope: undefined,
       search: 'source',
       limit: 10,
     });
@@ -1829,10 +1837,10 @@ describe('trace-query discovery contract', () => {
     });
   });
 
-  it('derives structured roots from the predicate scope', () => {
+  it('derives metadata as a structured root for every predicate scope', () => {
     for (const predicateScope of ['trace', 'spans', 'scores', 'feedback'] as const) {
       const plan = planTraceQueryObservedFields(parseGetTraceQueryFieldsArgs({ ...baseRequest, predicateScope }));
-      expect(plan.structuredRoots).toEqual(predicateScope === 'trace' ? ['metadata'] : []);
+      expect(plan.structuredRoots).toEqual(['metadata']);
     }
   });
 

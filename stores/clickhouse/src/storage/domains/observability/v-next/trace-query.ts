@@ -43,6 +43,9 @@ type TraceSelection = {
 
 const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 const TRACE_STRUCTURED_ROOTS = { metadata: 'r.metadataRaw' } satisfies StructuredRootExpressions;
+const SPAN_STRUCTURED_ROOTS = { metadata: 's.metadataRaw' } satisfies StructuredRootExpressions;
+const SCORE_STRUCTURED_ROOTS = { metadata: 's.metadata' } satisfies StructuredRootExpressions;
+const FEEDBACK_STRUCTURED_ROOTS = { metadata: 's.metadata' } satisfies StructuredRootExpressions;
 
 const TRACE_FIELDS = {
   traceId: { sql: 'r.traceId', parameterType: 'String' },
@@ -143,6 +146,47 @@ function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
+function structuredJsonTypes(sample: string | number | boolean | undefined): string {
+  switch (typeof sample) {
+    case 'number':
+      return "'Int64', 'UInt64', 'Double'";
+    case 'boolean':
+      return "'Bool'";
+    case 'string':
+      return "'String'";
+    default:
+      return "'String', 'Int64', 'UInt64', 'Double', 'Bool'";
+  }
+}
+
+function structuredJsonExtract(
+  jsonExpression: string,
+  keys: string,
+  sample: string | number | boolean | undefined,
+): string {
+  switch (typeof sample) {
+    case 'number':
+      return `JSONExtractFloat(${jsonExpression}, ${keys})`;
+    case 'boolean':
+      return `JSONExtractBool(${jsonExpression}, ${keys})`;
+    case 'string':
+      return `JSONExtractString(${jsonExpression}, ${keys})`;
+    default:
+      return `JSONExtractRaw(${jsonExpression}, ${keys})`;
+  }
+}
+
+function structuredParameterType(sample: string | number | boolean | undefined): ClickHouseParameterType {
+  switch (typeof sample) {
+    case 'number':
+      return 'Float64';
+    case 'boolean':
+      return 'UInt64';
+    default:
+      return 'String';
+  }
+}
+
 function compileStructuredScalarField(
   jsonExpression: string,
   segments: string[],
@@ -150,26 +194,11 @@ function compileStructuredScalarField(
   parameters: ParameterBuilder,
 ): FieldDefinition {
   const keys = segments.map(segment => parameters.add(segment, 'String')).join(', ');
-  const kind = typeof sample;
-  const types =
-    sample === undefined
-      ? "'String', 'Int64', 'UInt64', 'Double', 'Bool'"
-      : kind === 'number'
-        ? "'Int64', 'UInt64', 'Double'"
-        : kind === 'boolean'
-          ? "'Bool'"
-          : "'String'";
-  const extract =
-    sample === undefined
-      ? `JSONExtractRaw(${jsonExpression}, ${keys})`
-      : kind === 'number'
-        ? `JSONExtractFloat(${jsonExpression}, ${keys})`
-        : kind === 'boolean'
-          ? `JSONExtractBool(${jsonExpression}, ${keys})`
-          : `JSONExtractString(${jsonExpression}, ${keys})`;
+  const types = structuredJsonTypes(sample);
+  const extract = structuredJsonExtract(jsonExpression, keys, sample);
   return {
     sql: `if(JSONType(${jsonExpression}, ${keys}) IN (${types}), ${extract}, NULL)`,
-    parameterType: kind === 'number' ? 'Float64' : kind === 'boolean' ? 'UInt64' : 'String',
+    parameterType: structuredParameterType(sample),
   };
 }
 
@@ -236,7 +265,9 @@ function compileFeedbackScalarPredicate(
     return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
   }
   if (predicate.type === 'not') return `NOT (${compileFeedbackScalarPredicate(predicate.arg, parameters)})`;
-  if (predicate.field !== 'value') return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameters);
+  if (predicate.field !== 'value') {
+    return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameters, FEEDBACK_STRUCTURED_ROOTS);
+  }
   if (predicate.type === 'presence') {
     const present = `(isNotNull(s.valueString) OR isNotNull(s.valueNumber))`;
     return predicate.operator === 'exists' ? present : `NOT ${present}`;
@@ -295,6 +326,7 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: Par
             predicate.predicate,
             predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS,
             parameters,
+            predicate.collection === 'spans' ? SPAN_STRUCTURED_ROOTS : SCORE_STRUCTURED_ROOTS,
           );
     const existence = `EXISTS (
       SELECT 1 FROM ${table} s
@@ -393,7 +425,8 @@ function compileClickHouseTraceScope(
       entityName,
       entityVersionId,
       parentEntityVersionId,
-      rootEntityVersionId
+      rootEntityVersionId,
+      metadataRaw
     FROM ${TABLE_SPAN_EVENTS}
     WHERE isNotNull(traceId)
       AND traceId IN (SELECT traceId FROM root_scope)${tenant}
@@ -413,7 +446,8 @@ function compileClickHouseTraceScope(
       score,
       entityVersionId,
       parentEntityVersionId,
-      rootEntityVersionId
+      rootEntityVersionId,
+      metadata
     FROM ${currentScoresRelation()} AS current
     WHERE isNotNull(current.traceId)
       AND current.traceId IN (SELECT traceId FROM root_scope)${tenant}
@@ -433,7 +467,8 @@ function compileClickHouseTraceScope(
       timestamp,
       entityVersionId,
       parentEntityVersionId,
-      rootEntityVersionId
+      rootEntityVersionId,
+      metadata
     FROM (
       SELECT *
       FROM ${TABLE_FEEDBACK_EVENTS} FINAL
@@ -654,9 +689,9 @@ type StructuredDiscoveryRoot = {
 
 const STRUCTURED_DISCOVERY_ROOTS = {
   trace: [{ root: 'metadata', relation: 'root_scope r', jsonExpression: 'r.metadataRaw' }],
-  spans: [],
-  scores: [],
-  feedback: [],
+  spans: [{ root: 'metadata', relation: 'current_spans s', jsonExpression: 's.metadataRaw' }],
+  scores: [{ root: 'metadata', relation: 'current_scores s', jsonExpression: 's.metadata' }],
+  feedback: [{ root: 'metadata', relation: 'current_feedback s', jsonExpression: 's.metadata' }],
 } as const satisfies Record<TraceQueryPredicateScope, readonly StructuredDiscoveryRoot[]>;
 
 function structuredDiscoveryRoots(plan: TrustedTraceQueryObservedFieldsPlan): readonly StructuredDiscoveryRoot[] {

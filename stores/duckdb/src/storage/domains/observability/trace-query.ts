@@ -34,6 +34,9 @@ type RelatedCollection = 'spans' | 'scores' | 'feedback';
 
 const TRACE_STATUS_SQL = `CASE WHEN r.error IS NOT NULL THEN 'error' ELSE 'success' END`;
 const TRACE_STRUCTURED_ROOTS = { metadata: 'r.metadata' } satisfies StructuredRootExpressions;
+const SPAN_STRUCTURED_ROOTS = { metadata: 's.metadata' } satisfies StructuredRootExpressions;
+const SCORE_STRUCTURED_ROOTS = { metadata: 's.metadata' } satisfies StructuredRootExpressions;
+const FEEDBACK_STRUCTURED_ROOTS = { metadata: 's.metadata' } satisfies StructuredRootExpressions;
 
 const TRACE_FIELDS = {
   traceId: { sql: 'r.traceId', parameterType: 'scalar' },
@@ -132,6 +135,30 @@ function structuredObjectPathGuard(jsonExpression: string, segments: string[]): 
   };
 }
 
+function structuredJsonTypes(sample: string | number | boolean | undefined): string {
+  switch (typeof sample) {
+    case 'number':
+      return "'BIGINT', 'UBIGINT', 'DOUBLE'";
+    case 'boolean':
+      return "'BOOLEAN'";
+    case 'string':
+      return "'VARCHAR'";
+    default:
+      return "'VARCHAR', 'BIGINT', 'UBIGINT', 'DOUBLE', 'BOOLEAN'";
+  }
+}
+
+function structuredJsonExtract(jsonExpression: string, sample: string | number | boolean | undefined): string {
+  switch (typeof sample) {
+    case 'number':
+      return `TRY_CAST(json_extract_string(${jsonExpression}, ?) AS DOUBLE)`;
+    case 'boolean':
+      return `TRY_CAST(json_extract_string(${jsonExpression}, ?) AS BOOLEAN)`;
+    default:
+      return `json_extract_string(${jsonExpression}, ?)`;
+  }
+}
+
 function compileStructuredScalarField(
   jsonExpression: string,
   segments: string[],
@@ -140,21 +167,8 @@ function compileStructuredScalarField(
   const path = structuredJsonPointer(segments);
   const objectPathGuard = structuredObjectPathGuard(jsonExpression, segments);
   const guard = objectPathGuard.sql ? `${objectPathGuard.sql} AND ` : '';
-  const kind = typeof sample;
-  const types =
-    sample === undefined
-      ? "'VARCHAR', 'BIGINT', 'UBIGINT', 'DOUBLE', 'BOOLEAN'"
-      : kind === 'number'
-        ? "'BIGINT', 'UBIGINT', 'DOUBLE'"
-        : kind === 'boolean'
-          ? "'BOOLEAN'"
-          : "'VARCHAR'";
-  const extract =
-    kind === 'number'
-      ? `TRY_CAST(json_extract_string(${jsonExpression}, ?) AS DOUBLE)`
-      : kind === 'boolean'
-        ? `TRY_CAST(json_extract_string(${jsonExpression}, ?) AS BOOLEAN)`
-        : `json_extract_string(${jsonExpression}, ?)`;
+  const types = structuredJsonTypes(sample);
+  const extract = structuredJsonExtract(jsonExpression, sample);
   return {
     field: {
       sql: `CASE WHEN ${guard}json_type(${jsonExpression}, ?) IN (${types}) THEN ${extract} END`,
@@ -268,9 +282,10 @@ function compileFeedbackScalarPredicate(predicate: TrustedTraceQueryScalarPredic
     const compiled = compileFeedbackScalarPredicate(predicate.arg);
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
-  if (predicate.field !== 'value' || predicate.type === 'collection') {
-    return compileScalarPredicate(predicate, FEEDBACK_FIELDS);
+  if (predicate.field !== 'value') {
+    return compileScalarPredicate(predicate, FEEDBACK_FIELDS, FEEDBACK_STRUCTURED_ROOTS);
   }
+  if (predicate.type === 'collection') throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
   if (predicate.type === 'presence') {
     return { sql: `s.value IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`, values: [] };
   }
@@ -284,7 +299,11 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate): SqlFragment {
     const compiled =
       predicate.collection === 'feedback'
         ? compileFeedbackScalarPredicate(predicate.predicate)
-        : compileScalarPredicate(predicate.predicate, predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS);
+        : compileScalarPredicate(
+            predicate.predicate,
+            predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS,
+            predicate.collection === 'spans' ? SPAN_STRUCTURED_ROOTS : SCORE_STRUCTURED_ROOTS,
+          );
     const table =
       predicate.collection === 'spans'
         ? 'current_spans'
@@ -468,7 +487,8 @@ function compileDuckDBTraceScope(
         entityName,
         entityVersionId,
         parentEntityVersionId,
-        rootEntityVersionId
+        rootEntityVersionId,
+        metadata
       FROM current_span_rows
       WHERE currentRank = 1
     )`);
@@ -678,9 +698,9 @@ type StructuredDiscoveryRoot = {
 
 const STRUCTURED_DISCOVERY_ROOTS = {
   trace: [{ root: 'metadata', relation: 'root_scope r', jsonExpression: 'r.metadata' }],
-  spans: [],
-  scores: [],
-  feedback: [],
+  spans: [{ root: 'metadata', relation: 'current_spans s', jsonExpression: 's.metadata' }],
+  scores: [{ root: 'metadata', relation: 'current_scores s', jsonExpression: 's.metadata' }],
+  feedback: [{ root: 'metadata', relation: 'current_feedback s', jsonExpression: 's.metadata' }],
 } as const satisfies Record<TraceQueryPredicateScope, readonly StructuredDiscoveryRoot[]>;
 
 function structuredDiscoveryRoots(plan: TrustedTraceQueryObservedFieldsPlan): readonly StructuredDiscoveryRoot[] {

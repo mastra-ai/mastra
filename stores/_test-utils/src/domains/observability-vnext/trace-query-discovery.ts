@@ -56,6 +56,7 @@ const score = (
   parentEntityVersionId: null,
   rootEntityVersionId: null,
   ...overrides,
+  metadata: overrides.metadata ?? null,
 });
 
 const feedback = (
@@ -78,6 +79,7 @@ const feedback = (
   parentEntityVersionId: null,
   rootEntityVersionId: null,
   ...overrides,
+  metadata: overrides.metadata ?? null,
 });
 
 export const TRACE_QUERY_DISCOVERY_TIME_RANGE = {
@@ -146,6 +148,7 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       name: 'model-call',
       spanType: 'model_generation',
       attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+      metadata: { scope: { value: 'span-a' } },
     }),
     span(20, 'trace-b', 'root-b', {
       startedAt: '2026-08-11T10:00:00.000Z',
@@ -169,6 +172,7 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       name: 'model-call',
       spanType: 'model_generation',
       attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+      metadata: { scope: { value: 'span-b' } },
     }),
     span(30, 'trace-c', 'root-c', {
       startedAt: '2026-08-12T10:00:00.000Z',
@@ -188,6 +192,7 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       name: 'fallback-call',
       spanType: 'model_generation',
       attributes: { model: 'gpt-5', provider: 'openai' },
+      metadata: { scope: { value: 'span-c' } },
     }),
     span(40, 'trace-pending', 'root-pending', {
       isPending: true,
@@ -219,16 +224,31 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
   ],
   scores: [
-    score(1, 'score-a', 'trace-a'),
-    score(2, 'score-b', 'trace-b'),
-    score(3, 'score-c', 'trace-c', { scorerId: 'safety', scorerVersion: 'v2', scoreSource: 'manual' }),
-    score(4, 'score-outside', 'trace-outside', { scorerId: 'excluded' }),
+    score(1, 'score-a', 'trace-a', { metadata: { scope: { value: 'score-a' } } }),
+    score(2, 'score-b', 'trace-b', { metadata: { scope: { value: 'score-b' } } }),
+    score(3, 'score-c', 'trace-c', {
+      scorerId: 'safety',
+      scorerVersion: 'v2',
+      scoreSource: 'manual',
+      metadata: { scope: { value: 'score-c' } },
+    }),
+    score(4, 'score-outside', 'trace-outside', {
+      scorerId: 'excluded',
+      metadata: { scope: { value: 'score-outside' } },
+    }),
   ],
   feedback: [
-    feedback(1, 'feedback-a', 'trace-a'),
-    feedback(2, 'feedback-b', 'trace-b'),
-    feedback(3, 'feedback-c', 'trace-c', { feedbackType: 'rating', feedbackSource: 'system' }),
-    feedback(4, 'feedback-outside', 'trace-outside', { feedbackType: 'excluded' }),
+    feedback(1, 'feedback-a', 'trace-a', { metadata: { scope: { value: 'feedback-a' } } }),
+    feedback(2, 'feedback-b', 'trace-b', { metadata: { scope: { value: 'feedback-b' } } }),
+    feedback(3, 'feedback-c', 'trace-c', {
+      feedbackType: 'rating',
+      feedbackSource: 'system',
+      metadata: { scope: { value: 'feedback-c' } },
+    }),
+    feedback(4, 'feedback-outside', 'trace-outside', {
+      feedbackType: 'excluded',
+      metadata: { scope: { value: 'feedback-outside' } },
+    }),
   ],
 };
 
