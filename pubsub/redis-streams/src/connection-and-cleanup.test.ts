@@ -186,6 +186,20 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       await expect.poll(() => received, { timeout: 5000 }).toEqual([3]);
     }, 15_000);
 
+    it('drops every retained entry without a cutoff and keeps later publishes', async () => {
+      const ps = createPubSub();
+      const topic = `trim-all-${randomUUID()}`;
+      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
+      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
+      const inspector = await createInspector();
+      const streamKey = `mastra:topic:${topic}`;
+
+      await ps.trimTopic(topic);
+      expect(await inspector.xLen(streamKey)).toBe(0);
+      await ps.publish(topic, makeEvent({ data: { n: 3 } }));
+      expect(await inspector.xLen(streamKey)).toBe(1);
+    }, 15_000);
+
     it('is a no-op for a topic that was never published to', async () => {
       const ps = createPubSub();
       await expect(ps.trimTopic(`never-${randomUUID()}`, { before: new Date() })).resolves.toBeUndefined();

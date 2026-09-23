@@ -49,6 +49,8 @@ import type {
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
+/** Safety margin when trimming up to a retained run, covering clock skew between us and the pubsub backend. */
+const TRIM_CLOCK_SKEW_MS = 5_000;
 const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = 100;
 const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
 const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
@@ -2755,10 +2757,12 @@ export class AgentThreadStreamRuntime {
   ) {
     const memory = await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext });
     if (!memory) return;
-    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), {
-      // Idle: include the current millisecond so the just-published run-completed goes too.
-      before: new Date(retainedStart ?? Date.now() + 1),
-    });
+    // Idle: trim everything retained. Otherwise back off from the retained run's
+    // start: Redis stamps entry IDs with its own clock, which can skew from ours.
+    await this.#getPubSub(pubsub).trimTopic(
+      this.#threadTopic(key),
+      retainedStart === undefined ? undefined : { before: new Date(retainedStart - TRIM_CLOCK_SKEW_MS) },
+    );
   }
 
   async #drainPendingSignals(

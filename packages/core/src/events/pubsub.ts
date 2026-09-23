@@ -57,7 +57,8 @@ export abstract class PubSub {
 
   /**
    * Drop retained entries published to a topic before `options.before`, keeping
-   * everything published at or after it. Used to trim thread-stream history
+   * everything published at or after it. Without `before`, drop every entry
+   * currently retained (entries published afterwards are kept). Used to trim thread-stream history
    * once storage holds it, so retained transports (e.g. Redis Streams) stay bounded.
    *
    * Default implementation is a no-op: transports that don't retain anything
@@ -66,7 +67,7 @@ export abstract class PubSub {
    * @param topic - The topic to trim
    * @param options.before - Entries published strictly before this time are removed
    */
-  trimTopic(_topic: string, _options: { before: Date }): Promise<void> {
+  trimTopic(_topic: string, _options?: { before?: Date }): Promise<void> {
     return Promise.resolve();
   }
 

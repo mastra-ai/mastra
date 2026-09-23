@@ -228,12 +228,12 @@ Not every topic reaches a `clearTopic` call. Topics without a defined end of lif
 await pubsub.clearTopic('workflow.events.run-123')
 ```
 
-### `trimTopic(topic, { before })`
+### `trimTopic(topic, options?)`
 
-Runs `XTRIM MINID` to drop stream entries older than `before`. Mastra calls it on thread topics after a run's messages are persisted, so an idle thread's stream shrinks to nearly nothing instead of growing to `maxLen`. Best-effort; failures are logged at warn level.
+Runs `XTRIM MINID` to drop stream entries older than `options.before`, or `XTRIM MAXLEN 0` to drop every current entry when `before` is omitted. Mastra calls it on thread topics after a run's messages are persisted, so an idle thread's stream empties instead of growing to `maxLen`. Best-effort; failures are logged at warn level.
 
 ```typescript
-await pubsub.trimTopic('agent.thread.thread-abc', { before: new Date() })
+await pubsub.trimTopic('agent.thread.thread-abc')
 ```
 
 ### `close()`

@@ -757,12 +757,17 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * IDs are Redis-server publish times, so the cutoff maps directly onto them.
    * Consumer groups stay intact; readers simply never see the trimmed prefix.
    */
-  async trimTopic(topic: string, options: { before: Date }): Promise<void> {
+  async trimTopic(topic: string, options?: { before?: Date }): Promise<void> {
     if (this.#closed) return;
-    const minId = `${Math.max(0, Math.floor(options.before.getTime()))}-0`;
     try {
       await this.#ensureWriterConnected();
-      await this.#writeClient.xTrim(this.#streamKey(topic), 'MINID', minId);
+      const key = this.#streamKey(topic);
+      if (options?.before) {
+        await this.#writeClient.xTrim(key, 'MINID', `${Math.max(0, Math.floor(options.before.getTime()))}-0`);
+      } else {
+        // Trim exactly what exists now; no clock comparison against Redis-assigned IDs.
+        await this.#writeClient.xTrim(key, 'MAXLEN', 0);
+      }
     } catch (err) {
       this.#logger?.warn?.('redis-streams: trimTopic failed', {
         topic,

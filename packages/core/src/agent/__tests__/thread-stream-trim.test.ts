@@ -53,10 +53,10 @@ describe('thread topic trim', () => {
     const { trim, register } = setup(true);
     const run = register('trim-run-1');
     await run.registered;
-    const before = Date.now();
     run.complete();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(trim.mock.calls[0]![1].before.getTime()).toBeGreaterThanOrEqual(before);
+    // No cutoff: drop everything retained, without comparing clocks against the backend.
+    expect(trim.mock.calls[0]![1]).toBeUndefined();
   });
 
   it('does not trim a run that did not persist', async () => {
@@ -80,18 +80,17 @@ describe('thread topic trim', () => {
   it('keeps a run still in progress when a concurrent run completes', async () => {
     const { trim, register } = setup(true);
     const active = register('trim-run-active');
-    const activeStart = Date.now();
     await active.registered;
+    const activeRegisteredBy = Date.now();
     const done = register('trim-run-done');
     await done.registered;
     done.complete();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(trim.mock.calls[0]![1].before.getTime()).toBeLessThanOrEqual(Date.now());
-    expect(trim.mock.calls[0]![1].before.getTime()).toBeGreaterThanOrEqual(activeStart);
-    const cutoff = trim.mock.calls[0]![1].before.getTime();
+    // Cut off before the active run started, backed off for clock skew.
+    expect(trim.mock.calls[0]![1]!.before!.getTime()).toBeLessThanOrEqual(activeRegisteredBy - 5_000);
     active.complete();
     await waitFor(() => trim.mock.calls.length === 2);
-    expect(trim.mock.calls[1]![1].before.getTime()).toBeGreaterThan(cutoff - 1);
+    expect(trim.mock.calls[1]![1]).toBeUndefined();
   });
 
   it('keeps a suspended run until it is answered', async () => {
@@ -101,6 +100,6 @@ describe('thread topic trim', () => {
     const registeredBy = Date.now();
     suspended.complete();
     await new Promise(resolve => setTimeout(resolve, 50));
-    for (const [, { before }] of trim.mock.calls) expect(before.getTime()).toBeLessThanOrEqual(registeredBy);
+    for (const [, options] of trim.mock.calls) expect(options?.before?.getTime()).toBeLessThanOrEqual(registeredBy);
   });
 });
