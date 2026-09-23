@@ -912,14 +912,14 @@ describe('Session.message() — default path', () => {
     // The first attempt admits the grant row, then dies writing the durable
     // dispatch marker — the provider was provably never invoked, so a retry
     // may safely re-drive the admission and dispatch.
-    const originalWrite = storage.writeMessageResultEvidence.bind(storage);
+    const originalCas = storage.compareAndSwapSignalDispatch.bind(storage);
     let markerWriteAttempted = false;
-    vi.spyOn(storage, 'writeMessageResultEvidence').mockImplementation(async evidence => {
-      if (!markerWriteAttempted && evidence.dispatch?.state === 'dispatching') {
+    vi.spyOn(storage, 'compareAndSwapSignalDispatch').mockImplementation(async input => {
+      if (!markerWriteAttempted && input.operationKind === 'message' && input.next.state === 'dispatching') {
         markerWriteAttempted = true;
         throw new Error('dispatch marker write lost');
       }
-      return originalWrite(evidence);
+      return originalCas(input);
     });
     await expect(session.message({ ...opts })).rejects.toThrow('An internal harness error occurred');
     vi.restoreAllMocks();
@@ -3831,14 +3831,14 @@ describe('Session.message() — default path', () => {
 
     // Strand the first attempt: the terminal admission lands, then the durable
     // dispatch-marker write is lost — so a retry provably never dispatched.
-    const originalWrite = storage.writeMessageResultEvidence.bind(storage);
+    const originalCas = storage.compareAndSwapSignalDispatch.bind(storage);
     let markerLost = false;
-    vi.spyOn(storage, 'writeMessageResultEvidence').mockImplementation(async (input: any, opts2?: any) => {
-      if (!markerLost && input?.dispatch?.state === 'dispatching') {
+    vi.spyOn(storage, 'compareAndSwapSignalDispatch').mockImplementation(async input => {
+      if (!markerLost && input.operationKind === 'message' && input.next.state === 'dispatching') {
         markerLost = true;
         throw new Error('dispatch marker write lost');
       }
-      return originalWrite(input, opts2);
+      return originalCas(input);
     });
     await expect(session.message({ ...opts })).rejects.toThrow('An internal harness error occurred');
     vi.restoreAllMocks();

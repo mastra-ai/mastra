@@ -59,6 +59,7 @@ export const TABLE_HARNESS_TERMINAL_ADMISSIONS = 'mastra_harness_terminal_admiss
 export const TABLE_HARNESS_TERMINAL_INTENTS = 'mastra_harness_terminal_intents';
 export const TABLE_HARNESS_TERMINAL_TOMBSTONES = 'mastra_harness_terminal_tombstones';
 export const TABLE_HARNESS_TERMINAL_PRESSURE = 'mastra_harness_terminal_pressure';
+export const TABLE_HARNESS_TERMINAL_SESSION_FENCES = 'mastra_harness_terminal_session_fences';
 export const TABLE_HARNESS_OPERATION_TOMBSTONES = 'mastra_harness_operation_tombstones';
 export const TABLE_HARNESS_SESSION_EVENTS = 'mastra_harness_session_events';
 export const TABLE_HARNESS_THREAD_DELETE_FENCES = 'mastra_harness_thread_delete_fences';
@@ -137,6 +138,7 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_TERMINAL_INTENTS
   | typeof TABLE_HARNESS_TERMINAL_TOMBSTONES
   | typeof TABLE_HARNESS_TERMINAL_PRESSURE
+  | typeof TABLE_HARNESS_TERMINAL_SESSION_FENCES
   | typeof TABLE_HARNESS_OPERATION_TOMBSTONES
   | typeof TABLE_HARNESS_SESSION_EVENTS
   | typeof TABLE_HARNESS_THREAD_DELETE_FENCES
@@ -1186,6 +1188,18 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     pending_bytes: { type: 'bigint', nullable: false },
     updated_at: { type: 'bigint', nullable: false },
   },
+  // Durable per-incarnation terminal-handoff fence. Written by
+  // fenceTerminalHandoffsForSession / deleteSessions so an incarnation that was
+  // fenced stays fenced even for admissions inserted after the sweep; without
+  // this row a later admitTerminalHandoff for the same incarnation could still
+  // commit against an otherwise-live session row.
+  [TABLE_HARNESS_TERMINAL_SESSION_FENCES]: {
+    harness_name: { type: 'text', nullable: false },
+    session_id: { type: 'text', nullable: false },
+    session_incarnation: { type: 'text', nullable: false },
+    fenced_at: { type: 'bigint', nullable: false },
+    updated_at: { type: 'bigint', nullable: false },
+  },
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     harness_name: { type: 'text', nullable: false },
@@ -1567,6 +1581,10 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   },
   [TABLE_HARNESS_TERMINAL_PRESSURE]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_TERMINAL_PRESSURE],
+  },
+  [TABLE_HARNESS_TERMINAL_SESSION_FENCES]: {
+    columns: TABLE_SCHEMAS[TABLE_HARNESS_TERMINAL_SESSION_FENCES],
+    compositePrimaryKey: ['harness_name', 'session_id', 'session_incarnation'],
   },
   [TABLE_HARNESS_OPERATION_TOMBSTONES]: {
     columns: TABLE_SCHEMAS[TABLE_HARNESS_OPERATION_TOMBSTONES],

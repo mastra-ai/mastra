@@ -1781,7 +1781,8 @@ export class HarnessLibSQL extends HarnessStorage {
     ) {
       throw new HarnessStorageAdmissionConflictError(input.sessionId, 'signal', input.admissionId);
     }
-    if (!isSignalAdmissionEvidence(current)) {
+    const operationKind = input.operationKind ?? 'signal';
+    if (!messageEvidenceMatchesDispatchKind(current, operationKind)) {
       throw new HarnessStorageAdmissionConflictError(input.sessionId, 'signal', input.admissionId);
     }
     if (isTerminalMessageEvidence(current)) {
@@ -1789,20 +1790,21 @@ export class HarnessLibSQL extends HarnessStorage {
     }
     if (!signalDispatchMatches(current, input.expected)) return { applied: false, evidence: current };
     const expectedDispatch = libsqlSignalDispatchPredicate(input.expected);
-    const legacyExpected =
-      current.dispatch === undefined &&
-      current.status === 'pending' &&
-      (current.runId === undefined
-        ? input.expected.state === 'reserved'
-        : input.expected.state === 'accepted' && input.expected.runId === current.runId);
+    // `signalDispatchMatches` already proved `input.expected` matches this row;
+    // for a row with no dispatch column the JSON predicate cannot see it, so the
+    // CAS predicate re-encodes "still unstamped with the matched run id". This
+    // covers the pre-discriminator signal migration shapes and the admitted
+    // message reservation a terminal dispatch CAS claims.
+    const legacyExpected = current.dispatch === undefined && current.status === 'pending';
     const update = await this.#client.execute({
       sql: `UPDATE ${TABLE_HARNESS_MESSAGE_RESULTS}
-            SET run_id = ?, operation_kind = 'signal', dispatch = ?, updated_at = ?
+            SET run_id = ?, operation_kind = ?, dispatch = ?, updated_at = ?
             WHERE id = ? AND status = 'pending'
               AND operation_kind IS ?
               AND ((${expectedDispatch.sql})${legacyExpected ? ' OR (dispatch IS NULL AND run_id IS ?)' : ''})`,
       args: [
         input.next.state === 'reserved' ? null : input.next.runId,
+        operationKind,
         JSON.stringify(input.next),
         input.updatedAt,
         id,
@@ -7095,11 +7097,19 @@ function normalizedSignalDispatch(record: AgentSignalResultEvidence): AgentSigna
 }
 
 function signalDispatchMatches(record: AgentSignalResultEvidence, expected: AgentSignalDispatchState): boolean {
-  // This branch is reached only after `isSignalAdmissionEvidence` proved an
-  // explicit or narrowly migratable signal row. `runId` matches state; it
-  // never classifies the operation as a signal.
-  if (record.dispatch === undefined && record.status === 'pending' && record.runId !== undefined) {
-    return expected.state === 'accepted' && expected.runId === record.runId;
+  if (record.dispatch === undefined && record.status === 'pending') {
+    if (record.operationKind === 'message') {
+      // An admitted message row is written without a dispatch column and
+      // already carries its run id; an unstamped pending message row is the
+      // reservation the terminal dispatch CAS claims, so it is 'reserved'.
+      return expected.state === 'reserved';
+    }
+    // The remaining branch is reached only after `isSignalAdmissionEvidence`
+    // proved an explicit or narrowly migratable signal row. `runId` matches
+    // state; it never classifies the operation as a signal.
+    if (record.runId !== undefined) {
+      return expected.state === 'accepted' && expected.runId === record.runId;
+    }
   }
   return sameSignalDispatch(normalizedSignalDispatch(record), expected);
 }
@@ -7193,6 +7203,16 @@ function isTerminalMessageEvidence(record: AgentSignalResultEvidence): boolean {
 function isSignalAdmissionEvidence(record: AgentSignalResultEvidence): boolean {
   if (record.operationKind !== undefined) return record.operationKind === 'signal';
   return record.dispatch !== undefined || record.signalId.startsWith('harness-channel-signal-');
+}
+
+/**
+ * Dispatch-CAS discriminator check: `'signal'` keeps the admitted-signal
+ * contract (including legacy undiscriminated rows); `'message'` covers the
+ * admitted message rows a native terminal handoff stamps before send.
+ */
+function messageEvidenceMatchesDispatchKind(record: AgentSignalResultEvidence, kind: 'message' | 'signal'): boolean {
+  if (kind === 'message') return record.operationKind === 'message';
+  return isSignalAdmissionEvidence(record);
 }
 
 function isDispatchFencedAdmission(record: AgentSignalResultEvidence): boolean {

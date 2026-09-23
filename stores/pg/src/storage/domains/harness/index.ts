@@ -52,6 +52,7 @@ import {
   TABLE_HARNESS_TERMINAL_ADMISSIONS,
   TABLE_HARNESS_TERMINAL_INTENTS,
   TABLE_HARNESS_TERMINAL_PRESSURE,
+  TABLE_HARNESS_TERMINAL_SESSION_FENCES,
   TABLE_HARNESS_TERMINAL_TOMBSTONES,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_PLAN_TASKS,
@@ -261,6 +262,7 @@ const HARNESS_TABLE_NAMES = [
   TABLE_HARNESS_TERMINAL_ADMISSIONS,
   TABLE_HARNESS_TERMINAL_INTENTS,
   TABLE_HARNESS_TERMINAL_PRESSURE,
+  TABLE_HARNESS_TERMINAL_SESSION_FENCES,
   TABLE_HARNESS_TERMINAL_TOMBSTONES,
   TABLE_HARNESS_OPERATION_TOMBSTONES,
   TABLE_HARNESS_SESSION_EVENTS,
@@ -766,6 +768,7 @@ export class HarnessPG extends HarnessStorage {
     TABLE_HARNESS_TERMINAL_ADMISSIONS,
     TABLE_HARNESS_TERMINAL_INTENTS,
     TABLE_HARNESS_TERMINAL_PRESSURE,
+    TABLE_HARNESS_TERMINAL_SESSION_FENCES,
     TABLE_HARNESS_TERMINAL_TOMBSTONES,
     TABLE_HARNESS_OPERATION_TOMBSTONES,
     TABLE_HARNESS_SESSION_EVENTS,
@@ -899,6 +902,11 @@ export class HarnessPG extends HarnessStorage {
       tableName: TABLE_HARNESS_TERMINAL_PRESSURE,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_TERMINAL_PRESSURE],
       compositePrimaryKey: TABLE_CONFIGS[TABLE_HARNESS_TERMINAL_PRESSURE]?.compositePrimaryKey,
+    });
+    await this.#db.createTable({
+      tableName: TABLE_HARNESS_TERMINAL_SESSION_FENCES,
+      schema: TABLE_SCHEMAS[TABLE_HARNESS_TERMINAL_SESSION_FENCES],
+      compositePrimaryKey: TABLE_CONFIGS[TABLE_HARNESS_TERMINAL_SESSION_FENCES]?.compositePrimaryKey,
     });
     await this.#db.createTable({
       tableName: TABLE_HARNESS_TERMINAL_TOMBSTONES,
@@ -1061,6 +1069,7 @@ export class HarnessPG extends HarnessStorage {
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_TERMINAL_INTENTS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_TERMINAL_PRESSURE}`);
+    await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_TERMINAL_SESSION_FENCES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_TERMINAL_TOMBSTONES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_OPERATION_TOMBSTONES}`);
     await this.#client.execute(`DELETE FROM ${TABLE_HARNESS_SESSION_EVENTS}`);
@@ -2367,6 +2376,27 @@ export class HarnessPG extends HarnessStorage {
         const terminalIncarnationPredicate =
           candidate.sessionIncarnation === undefined ? '' : ' AND session_incarnation = ?';
         if (candidate.sessionIncarnation !== undefined) terminalArgs.push(candidate.sessionIncarnation);
+        // Persist durable per-incarnation fence markers before sweeping rows:
+        // the UPDATEs only cover admissions that already exist, so a later
+        // admitTerminalHandoff for the deleted incarnation must reject on the
+        // marker instead of committing behind the delete.
+        const fenceIncarnations = new Set<string>();
+        if (candidate.sessionIncarnation !== undefined) fenceIncarnations.add(candidate.sessionIncarnation);
+        const admittedIncarnations = await tx.execute({
+          sql: `SELECT DISTINCT session_incarnation FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
+                WHERE harness_name = ? AND session_id = ?`,
+          args: [candidate.namespace, candidate.sessionId],
+        });
+        for (const row of admittedIncarnations.rows) fenceIncarnations.add(String(row.session_incarnation));
+        for (const incarnation of fenceIncarnations) {
+          await tx.execute({
+            sql: `INSERT INTO ${TABLE_HARNESS_TERMINAL_SESSION_FENCES}
+                  (harness_name, session_id, session_incarnation, fenced_at, updated_at)
+                  VALUES (?, ?, ?, ?, ?)
+                  ON CONFLICT (harness_name, session_id, session_incarnation) DO NOTHING`,
+            args: [candidate.namespace, candidate.sessionId, incarnation, deletionNow, deletionNow],
+          });
+        }
         await tx.execute({
           sql: `UPDATE ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
                 SET status = 'fenced', updated_at = ?
@@ -2432,8 +2462,16 @@ export class HarnessPG extends HarnessStorage {
           throw new HarnessStorageVersionConflictError(sessionId, 0, 0);
         }
         await tx.execute({
-          sql: `DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
-                WHERE harness_name = ? AND session_id = ? AND resource_id = ? AND thread_id = ?`,
+          sql: `DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS} mr
+                WHERE mr.harness_name = ? AND mr.session_id = ? AND mr.resource_id = ? AND mr.thread_id = ?
+                  AND NOT EXISTS (
+                    SELECT 1 FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS} adm
+                    WHERE adm.harness_name = mr.harness_name
+                      AND adm.session_id = mr.session_id
+                      AND adm.signal_id = mr.signal_id
+                      AND adm.admission_id IS NOT DISTINCT FROM mr.admission_id
+                      AND adm.status = 'committed'
+                  )`,
           args: [namespace, sessionId, resourceId, threadId],
         });
         await tx.execute({
@@ -4735,6 +4773,19 @@ export class HarnessPG extends HarnessStorage {
         return { status: 'duplicate', admission: stored };
       }
 
+      // The durable incarnation fence covers admissions inserted after a
+      // fence sweep: a fenced incarnation rejects new admissions even while
+      // the session row itself still reports that incarnation.
+      const incarnationFence = await tx.execute({
+        sql: `SELECT 1 AS present FROM ${TABLE_HARNESS_TERMINAL_SESSION_FENCES}
+              WHERE harness_name = ? AND session_id = ? AND session_incarnation = ? LIMIT 1`,
+        args: [harnessName, admission.sessionId, admission.sessionIncarnation],
+      });
+      if (incarnationFence.rows[0]) {
+        await tx.commit();
+        return { status: 'fenced', admission: { ...admission, status: 'fenced' } };
+      }
+
       // A grant generation binds to at most one admission across the harness.
       const grantWinner = await tx.execute({
         sql: `SELECT * FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
@@ -5466,6 +5517,40 @@ export class HarnessPG extends HarnessStorage {
     assertTerminalClock(now, 'deletedAt');
     const tx = await this.#client.transaction('write');
     try {
+      // Lock the session row in the same position admitTerminalHandoff takes
+      // it, so a marker write and a concurrent admission insert cannot pass
+      // each other: whoever holds the session lock second observes either the
+      // fence marker or the new admission row.
+      const session = await tx.execute({
+        sql: `SELECT session_incarnation FROM ${TABLE_HARNESS_SESSIONS}
+              WHERE harness_name = ? AND id = ? LIMIT 1 FOR UPDATE`,
+        args: [harnessName, input.sessionId],
+      });
+      // Durable per-incarnation markers: the row sweep below only rewrites
+      // admissions and intents that already exist, so without a marker a later
+      // admitTerminalHandoff for the same incarnation could still commit.
+      const fencedIncarnations = new Set<string>();
+      if (input.sessionIncarnation !== undefined) {
+        fencedIncarnations.add(input.sessionIncarnation);
+      } else {
+        const current = session.rows[0]?.session_incarnation;
+        if (current != null && String(current).length > 0) fencedIncarnations.add(String(current));
+        const admitted = await tx.execute({
+          sql: `SELECT DISTINCT session_incarnation FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
+                WHERE harness_name = ? AND session_id = ?`,
+          args: [harnessName, input.sessionId],
+        });
+        for (const row of admitted.rows) fencedIncarnations.add(String(row.session_incarnation));
+      }
+      for (const incarnation of fencedIncarnations) {
+        await tx.execute({
+          sql: `INSERT INTO ${TABLE_HARNESS_TERMINAL_SESSION_FENCES}
+                (harness_name, session_id, session_incarnation, fenced_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (harness_name, session_id, session_incarnation) DO NOTHING`,
+          args: [harnessName, input.sessionId, incarnation, now, now],
+        });
+      }
       const args: (string | number)[] = [harnessName, input.sessionId];
       const predicates = ['harness_name = ?', 'session_id = ?', "status IN ('pending', 'claimed', 'failed')"];
       if (input.sessionIncarnation !== undefined) {
@@ -5585,7 +5670,8 @@ export class HarnessPG extends HarnessStorage {
       ) {
         throw new HarnessStorageAdmissionConflictError(input.sessionId, 'signal', input.admissionId);
       }
-      if (!isSignalAdmissionEvidence(current)) {
+      const operationKind = input.operationKind ?? 'signal';
+      if (!messageEvidenceMatchesDispatchKind(current, operationKind)) {
         throw new HarnessStorageAdmissionConflictError(input.sessionId, 'signal', input.admissionId);
       }
       if (isTerminalMessageEvidence(current) || !signalDispatchMatches(current, input.expected)) {
@@ -5594,23 +5680,33 @@ export class HarnessPG extends HarnessStorage {
       }
       const evidence: AgentSignalResultEvidence = {
         ...(current as Extract<AgentSignalResultEvidence, { status: 'pending' }>),
-        operationKind: 'signal',
+        operationKind,
         dispatch: input.next,
         ...(input.next.state === 'reserved' ? { runId: undefined } : { runId: input.next.runId }),
         updatedAt: input.updatedAt,
       };
-      await tx.execute({
+      const update = await tx.execute({
         sql: `UPDATE ${TABLE_HARNESS_MESSAGE_RESULTS}
-              SET run_id = ?, operation_kind = 'signal', dispatch = ?, updated_at = ?
-              WHERE id = ? AND operation_kind IS NOT DISTINCT FROM ?`,
+              SET run_id = ?, operation_kind = ?, dispatch = ?, updated_at = ?
+              WHERE id = ? AND status = 'pending'
+                AND operation_kind IS NOT DISTINCT FROM ?
+                AND dispatch IS NOT DISTINCT FROM CAST(? AS jsonb)
+                AND run_id IS NOT DISTINCT FROM ?`,
         args: [
           input.next.state === 'reserved' ? null : input.next.runId,
+          operationKind,
           JSON.stringify(input.next),
           input.updatedAt,
           id,
           current.operationKind ?? null,
+          current.dispatch === undefined ? null : JSON.stringify(current.dispatch),
+          current.runId ?? null,
         ],
       });
+      if (update.rowsAffected === 0) {
+        await tx.commit();
+        return { applied: false, evidence: current };
+      }
       await tx.commit();
       return { applied: true, evidence };
     } catch (error) {
@@ -6490,6 +6586,21 @@ export class HarnessPG extends HarnessStorage {
       if (!row) return null;
       const retained = rowToMessageResultEvidence(row as Record<string, unknown>);
       if (retained.status === 'pending') return null;
+      if (this.terminalHandoff.enabled) {
+        // A committed terminal admission replays its durable outcome from the
+        // canonical evidence row; compacting it into a tombstone would orphan
+        // the retry path.
+        await this.#ensureTerminalHandoffTables();
+        const committed = await this.#client.execute({
+          sql: `SELECT 1 AS present FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS}
+                WHERE harness_name = ? AND session_id = ? AND signal_id = ?
+                  AND admission_id IS NOT DISTINCT FROM ?
+                  AND status = 'committed'
+                LIMIT 1`,
+          args: [namespace, sessionId, retained.signalId, retained.admissionId ?? null],
+        });
+        if (committed.rows[0]) return null;
+      }
       const tombstone: OperationAdmissionTombstone = {
         kind: 'signal',
         harnessName: namespace,
@@ -6593,9 +6704,18 @@ export class HarnessPG extends HarnessStorage {
     }
     const where = filters.join(' AND ');
     await this.#ensureMessageResultsTable();
+    await this.#ensureTerminalHandoffTables();
     await this.#client.execute({
-      sql: `DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS}
-            WHERE ${where}`,
+      sql: `DELETE FROM ${TABLE_HARNESS_MESSAGE_RESULTS} mr
+            WHERE ${where}
+              AND NOT EXISTS (
+                SELECT 1 FROM ${TABLE_HARNESS_TERMINAL_ADMISSIONS} adm
+                WHERE adm.harness_name = mr.harness_name
+                  AND adm.session_id = mr.session_id
+                  AND adm.signal_id = mr.signal_id
+                  AND adm.admission_id IS NOT DISTINCT FROM mr.admission_id
+                  AND adm.status = 'committed'
+              )`,
       args,
     });
     await this.#client.execute({
@@ -8765,6 +8885,7 @@ export class HarnessPG extends HarnessStorage {
         TABLE_HARNESS_TERMINAL_ADMISSIONS,
         TABLE_HARNESS_TERMINAL_INTENTS,
         TABLE_HARNESS_TERMINAL_PRESSURE,
+        TABLE_HARNESS_TERMINAL_SESSION_FENCES,
         TABLE_HARNESS_TERMINAL_TOMBSTONES,
       ] as const) {
         const config = TABLE_CONFIGS[tableName];
@@ -11250,11 +11371,19 @@ function normalizedSignalDispatch(record: AgentSignalResultEvidence): AgentSigna
 }
 
 function signalDispatchMatches(record: AgentSignalResultEvidence, expected: AgentSignalDispatchState): boolean {
-  // This branch is reached only after `isSignalAdmissionEvidence` proved an
-  // explicit or narrowly migratable signal row. `runId` matches state; it
-  // never classifies the operation as a signal.
-  if (record.dispatch === undefined && record.status === 'pending' && record.runId !== undefined) {
-    return expected.state === 'accepted' && expected.runId === record.runId;
+  if (record.dispatch === undefined && record.status === 'pending') {
+    if (record.operationKind === 'message') {
+      // An admitted message row is written without a dispatch column and
+      // already carries its run id; an unstamped pending message row is the
+      // reservation the terminal dispatch CAS claims, so it is 'reserved'.
+      return expected.state === 'reserved';
+    }
+    // The remaining branch is reached only after `isSignalAdmissionEvidence`
+    // proved an explicit or narrowly migratable signal row. `runId` matches
+    // state; it never classifies the operation as a signal.
+    if (record.runId !== undefined) {
+      return expected.state === 'accepted' && expected.runId === record.runId;
+    }
   }
   return sameSignalDispatch(normalizedSignalDispatch(record), expected);
 }
@@ -11328,6 +11457,16 @@ function isTerminalMessageEvidence(record: AgentSignalResultEvidence): boolean {
 function isSignalAdmissionEvidence(record: AgentSignalResultEvidence): boolean {
   if (record.operationKind !== undefined) return record.operationKind === 'signal';
   return record.dispatch !== undefined || record.signalId.startsWith('harness-channel-signal-');
+}
+
+/**
+ * Dispatch-CAS discriminator check: `'signal'` keeps the admitted-signal
+ * contract (including legacy undiscriminated rows); `'message'` covers the
+ * admitted message rows a native terminal handoff stamps before send.
+ */
+function messageEvidenceMatchesDispatchKind(record: AgentSignalResultEvidence, kind: 'message' | 'signal'): boolean {
+  if (kind === 'message') return record.operationKind === 'message';
+  return isSignalAdmissionEvidence(record);
 }
 
 function isDispatchFencedAdmission(record: AgentSignalResultEvidence): boolean {

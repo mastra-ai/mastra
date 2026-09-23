@@ -71,6 +71,7 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_harness_terminal_admissions: new Map(),
       mastra_harness_terminal_intents: new Map(),
       mastra_harness_terminal_pressure: new Map(),
+      mastra_harness_terminal_session_fences: new Map(),
       mastra_harness_terminal_tombstones: new Map(),
       mastra_tool_provider_connections: new Map(),
       mastra_notifications: new Map(),

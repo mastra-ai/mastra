@@ -8212,28 +8212,41 @@ export class Session {
           // retry that finds this reservation with a pending admission but no
           // `dispatching` state knows the provider was never invoked and may
           // re-drive safely; anything past this point is treated as possibly
-          // executed and is never auto-replayed.
+          // executed and is never auto-replayed. The stamp is a compare-and-swap
+          // on the durable row, so a concurrent worker holding the same
+          // admission cannot also reach sendSignal — the CAS loser takes the
+          // duplicate path instead of dispatching a second provider turn.
           if (admissionIdentity !== undefined && admissionHash !== undefined) {
-            await this._writeMessageResultEvidence(
-              {
-                status: 'pending',
-                signalId: admissionIdentity.signalId,
+            const stamped = await this._storage.compareAndSwapSignalDispatch({
+              harnessName: this._record.harnessName,
+              sessionId: this.id,
+              resourceId: this.resourceId,
+              threadId: this.threadId,
+              signalId: admissionIdentity.signalId,
+              admissionId: opts.admissionId!,
+              admissionHash,
+              operationKind: 'message',
+              expected: { state: 'reserved' },
+              next: {
+                state: 'dispatching',
+                attemptId: `terminal-dispatch-${randomUUID()}`,
+                claimExpiresAt: Date.now() + SIGNAL_DISPATCH_CLAIM_TTL_MS,
+                delivery: 'idle',
                 runId: admissionIdentity.runId,
-                modeId: effectiveModeId,
-                modelId: effectiveModelId,
-                operationKind: 'message',
-                admissionId: opts.admissionId!,
-                admissionHash,
-                dispatch: {
-                  state: 'dispatching',
-                  attemptId: `terminal-dispatch-${randomUUID()}`,
-                  claimExpiresAt: Date.now() + SIGNAL_DISPATCH_CLAIM_TTL_MS,
-                  delivery: 'idle',
-                  runId: admissionIdentity.runId,
-                },
               },
-              { compatibleAdmissionHashes },
-            );
+              updatedAt: Date.now(),
+            });
+            if (!stamped.applied) {
+              const registeredStart = this._messageAdmissionStarts.get(opts.admissionId!);
+              if (registeredStart !== undefined) registeredStart.duplicate = true;
+              this._messageAdmissionStarts.delete(opts.admissionId!);
+              admissionStart.resolve(stamped.evidence);
+              try {
+                return await this._returnDuplicateMessageResult(stamped.evidence, opts);
+              } finally {
+                finishOwnedMessageTurn();
+              }
+            }
           }
         }
       } catch (err) {

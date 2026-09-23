@@ -1498,6 +1498,16 @@ export class InMemoryHarness extends HarnessStorage {
       }
       return { status: 'duplicate', admission: cloneHarnessTerminal(existing) };
     }
+    // The durable incarnation fence covers admissions inserted after a fence
+    // sweep: a fenced incarnation rejects new admissions even while the
+    // session row itself still reports that incarnation.
+    if (
+      this.db.harnessTerminalSessionFences.has(
+        terminalSessionFenceKey(namespace, input.sessionId, input.sessionIncarnation),
+      )
+    ) {
+      return { status: 'fenced', admission: { ...admission, status: 'fenced' } };
+    }
     // A grant generation binds to at most one admission across the harness.
     const grantWinner = [...this.db.harnessTerminalAdmissions.values()].find(
       candidate =>
@@ -1928,6 +1938,28 @@ export class InMemoryHarness extends HarnessStorage {
   }): void {
     const namespace = resolveHarnessName(input.harnessName, this.harnessName);
     const now = input.deletedAt ?? Date.now();
+    // Durable per-incarnation marker: the row sweep below only rewrites
+    // admissions and intents that already exist, so without a marker a later
+    // admitTerminalHandoff for the same incarnation could still commit. When
+    // the fence is scoped to one incarnation only that marker is written; a
+    // whole-session fence marks every incarnation the session has admitted
+    // under plus its current incarnation, so a deleted session re-created
+    // with a replayed incarnation stays fenced too.
+    const fencedIncarnations = new Set<string>();
+    if (input.sessionIncarnation !== undefined) {
+      fencedIncarnations.add(input.sessionIncarnation);
+    } else {
+      const session = this.db.harnessSessions.get(sessionKey(namespace, input.sessionId));
+      if (session?.sessionIncarnation !== undefined) fencedIncarnations.add(session.sessionIncarnation);
+      for (const admission of this.db.harnessTerminalAdmissions.values()) {
+        if (admission.harnessName === namespace && admission.sessionId === input.sessionId) {
+          fencedIncarnations.add(admission.sessionIncarnation);
+        }
+      }
+    }
+    for (const incarnation of fencedIncarnations) {
+      this.db.harnessTerminalSessionFences.set(terminalSessionFenceKey(namespace, input.sessionId, incarnation), now);
+    }
     for (const admission of this.db.harnessTerminalAdmissions.values()) {
       if (
         admission.harnessName !== namespace ||
@@ -1988,6 +2020,27 @@ export class InMemoryHarness extends HarnessStorage {
     }
     this.db.harnessTerminalPressure.set(namespace, derived);
     return derived;
+  }
+
+  /**
+   * Message-result evidence bound to a committed terminal admission is the
+   * canonical source a committed retry replays; every evidence cleanup path
+   * must retain it (the PG adapter mirrors this with a NOT EXISTS probe).
+   */
+  private hasCommittedTerminalAdmissionFor(evidence: AgentSignalResultEvidence): boolean {
+    for (const admission of this.db.harnessTerminalAdmissions.values()) {
+      if (
+        admission.status === 'committed' &&
+        admission.harnessName === evidence.harnessName &&
+        admission.sessionId === evidence.sessionId &&
+        admission.signalId === evidence.signalId &&
+        admission.admissionId === evidence.admissionId &&
+        admission.admissionHash === evidence.admissionHash
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private adjustTerminalPressure(namespace: string, intentDelta: number, byteDelta: number): void {
@@ -2058,7 +2111,8 @@ export class InMemoryHarness extends HarnessStorage {
     ) {
       throw new HarnessStorageAdmissionConflictError(input.sessionId, 'signal', input.admissionId);
     }
-    if (!isSignalAdmissionEvidence(existing)) {
+    const operationKind = input.operationKind ?? 'signal';
+    if (!messageEvidenceMatchesDispatchKind(existing, operationKind)) {
       throw new HarnessStorageAdmissionConflictError(input.sessionId, 'signal', input.admissionId);
     }
     if (isTerminalMessageEvidence(existing)) {
@@ -2070,7 +2124,7 @@ export class InMemoryHarness extends HarnessStorage {
     const pending = existing as Extract<AgentSignalResultEvidence, { status: 'pending' }>;
     const next: AgentSignalResultEvidence = {
       ...pending,
-      operationKind: 'signal',
+      operationKind,
       dispatch: cloneJson(input.next),
       ...(input.next.state === 'reserved' ? { runId: undefined } : { runId: input.next.runId }),
       updatedAt: input.updatedAt,
@@ -2266,6 +2320,10 @@ export class InMemoryHarness extends HarnessStorage {
       const key = signalId ? messageEvidenceKey(namespace, sessionId, signalId) : undefined;
       const retained = key ? this.db.harnessMessageResultEvidence.get(key) : undefined;
       if (!retained || retained.resourceId !== resourceId || retained.status === 'pending') return null;
+      // A committed terminal admission replays its durable outcome from the
+      // canonical evidence row; compacting it into a tombstone would orphan
+      // the retry path.
+      if (this.hasCommittedTerminalAdmissionFor(retained)) return null;
       const tombstone: OperationAdmissionTombstone = {
         kind: 'signal',
         harnessName: namespace,
@@ -2338,7 +2396,10 @@ export class InMemoryHarness extends HarnessStorage {
         evidence.sessionId === sessionId &&
         evidence.resourceId === resourceId &&
         (threadId === undefined || evidence.threadId === threadId) &&
-        (signalId === undefined || evidence.signalId === signalId)
+        (signalId === undefined || evidence.signalId === signalId) &&
+        // Evidence bound to a committed terminal admission is the canonical
+        // source for a committed retry — it must survive session cleanup.
+        !this.hasCommittedTerminalAdmissionFor(evidence)
       ) {
         this.db.harnessMessageResultEvidence.delete(key);
       }
@@ -4516,6 +4577,12 @@ function channelBindingKey(_harnessName: string, bindingId: string): string {
   return bindingId;
 }
 
+const TERMINAL_SESSION_FENCE_KEY_SEPARATOR = String.fromCharCode(0);
+
+function terminalSessionFenceKey(harnessName: string, sessionId: string, sessionIncarnation: string): string {
+  return [harnessName, sessionId, sessionIncarnation].join(TERMINAL_SESSION_FENCE_KEY_SEPARATOR);
+}
+
 // §14.1: missing optional external IDs normalise to the shared
 // CHANNEL_BINDING_EXTERNAL_ID_SENTINEL (defined in ./base) for tuple uniqueness
 // (storage must not rely on SQL NULL uniqueness semantics). Sharing the constant
@@ -4779,11 +4846,19 @@ function normalizedSignalDispatch(record: AgentSignalResultEvidence): AgentSigna
 }
 
 function signalDispatchMatches(record: AgentSignalResultEvidence, expected: AgentSignalDispatchState): boolean {
-  if (record.dispatch === undefined && record.status === 'pending' && record.runId !== undefined) {
-    // This branch is reached only after `isSignalAdmissionEvidence` proved an
-    // explicit signal discriminator (or the stable pre-discriminator signal-id
-    // namespace). The run id matches state; it never classifies the operation.
-    return expected.state === 'accepted' && expected.runId === record.runId;
+  if (record.dispatch === undefined && record.status === 'pending') {
+    if (record.operationKind === 'message') {
+      // An admitted message row is written without a dispatch column and
+      // already carries its run id; an unstamped pending message row is the
+      // reservation the terminal dispatch CAS claims, so it is 'reserved'.
+      return expected.state === 'reserved';
+    }
+    if (record.runId !== undefined) {
+      // This branch is reached only after `isSignalAdmissionEvidence` proved an
+      // explicit signal discriminator (or the stable pre-discriminator signal-id
+      // namespace). The run id matches state; it never classifies the operation.
+      return expected.state === 'accepted' && expected.runId === record.runId;
+    }
   }
   return sameSignalDispatch(normalizedSignalDispatch(record), expected);
 }
@@ -4791,6 +4866,16 @@ function signalDispatchMatches(record: AgentSignalResultEvidence, expected: Agen
 function isSignalAdmissionEvidence(record: AgentSignalResultEvidence): boolean {
   if (record.operationKind !== undefined) return record.operationKind === 'signal';
   return record.dispatch !== undefined || record.signalId.startsWith('harness-channel-signal-');
+}
+
+/**
+ * Dispatch-CAS discriminator check: `'signal'` keeps the admitted-signal
+ * contract (including legacy undiscriminated rows); `'message'` covers the
+ * admitted message rows a native terminal handoff stamps before send.
+ */
+function messageEvidenceMatchesDispatchKind(record: AgentSignalResultEvidence, kind: 'message' | 'signal'): boolean {
+  if (kind === 'message') return record.operationKind === 'message';
+  return isSignalAdmissionEvidence(record);
 }
 
 function sameSignalDispatch(a: AgentSignalDispatchState | undefined, b: AgentSignalDispatchState | undefined): boolean {

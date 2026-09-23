@@ -287,6 +287,13 @@ export class InMemoryDB {
   readonly harnessTerminalPressure = new Map<string, HarnessTerminalQueuePressure>();
   /** Grant-key cancellation tombstones survive session delete/recreate. */
   readonly harnessTerminalTombstones = new Map<string, HarnessTerminalTombstone>();
+  /**
+   * Durable per-incarnation terminal fence, keyed by
+   * `${harnessName} ${sessionId} ${sessionIncarnation}`. A fenced
+   * incarnation rejects every later admission for the session lifetime — the
+   * marker survives session delete/recreate, unlike the admission sweep.
+   */
+  readonly harnessTerminalSessionFences = new Map<string, number>();
   readonly harnessOperationTombstones = new Map<string, OperationAdmissionTombstone>();
   readonly harnessSessionEvents = new Map<string, HarnessSessionEventRecord>();
   readonly harnessSessionRecordProjectionIntents = new Map<string, HarnessSessionRecordProjectionIntent>();
@@ -386,6 +393,7 @@ export class InMemoryDB {
     this.harnessTerminalIntents.clear();
     this.harnessTerminalPressure.clear();
     this.harnessTerminalTombstones.clear();
+    this.harnessTerminalSessionFences.clear();
     this.harnessOperationTombstones.clear();
     this.harnessSessionEvents.clear();
     this.harnessSessionRecordProjectionIntents.clear();

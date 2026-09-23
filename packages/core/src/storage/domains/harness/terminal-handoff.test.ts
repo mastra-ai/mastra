@@ -797,6 +797,110 @@ describe('native chat terminal handoff', () => {
     ).resolves.toBeNull();
   });
 
+  it('lets only one worker claim the terminal message dispatch compare-and-swap', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const input = admission();
+    // The native terminal path reserves a pending message row, then stamps the
+    // dispatch marker through the CAS so two workers cannot both send.
+    await storage.writeMessageResultEvidence(pendingEvidence(input));
+
+    const claim = (worker: string) => ({
+      harnessName: input.harnessName,
+      sessionId: input.sessionId,
+      resourceId: input.resourceId,
+      threadId: input.threadId,
+      signalId: input.signalId,
+      admissionId: input.admissionId,
+      admissionHash: input.admissionHash,
+      operationKind: 'message' as const,
+      expected: { state: 'reserved' as const },
+      next: {
+        state: 'dispatching' as const,
+        attemptId: `terminal-dispatch-${worker}`,
+        claimExpiresAt: 9_000,
+        delivery: 'idle' as const,
+        runId: input.runId,
+      },
+      updatedAt: 5_000,
+    });
+    const first = await storage.compareAndSwapSignalDispatch(claim('a'));
+    expect(first.applied).toBe(true);
+    // The second worker loses the CAS and observes the durable winner's
+    // dispatch marker instead of sending.
+    const second = await storage.compareAndSwapSignalDispatch(claim('b'));
+    expect(second.applied).toBe(false);
+    expect(second.evidence).toMatchObject({ status: 'pending', operationKind: 'message' });
+    expect(second.evidence.dispatch?.state).toBe('dispatching');
+  });
+
+  it('rejects admissions inserted after an incarnation fence, even while the session stays live', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    await storage.fenceTerminalHandoffsForSession({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      sessionIncarnation: 'incarnation-1',
+    });
+
+    // The fence must cover admissions inserted after the sweep — the session
+    // row still reports the fenced incarnation, so only the durable marker
+    // can reject this admission.
+    const input = admission();
+    await storage.writeMessageResultEvidence(pendingEvidence(input));
+    await expect(storage.admitTerminalHandoff(input)).resolves.toMatchObject({ status: 'fenced' });
+  });
+
+  it('preserves committed terminal evidence across session deletion for the committed retry', async () => {
+    const storage = new InMemoryHarness({ db: new InMemoryDB(), terminalHandoff: { enabled: true } });
+    await storage.saveSession(session(), { ownerId: 'owner-1', ifVersion: 0 });
+    const input = admission();
+    await storage.writeMessageResultEvidence(pendingEvidence(input));
+    await storage.admitTerminalHandoff(input);
+    const projection = { projectionKind: 'chat.summary', projectionId: 'summary-1', payload: { text: 'done' } };
+    const args = {
+      admission: input,
+      resultEvidence: {
+        ...pendingEvidence(input),
+        status: 'completed' as const,
+        result: { text: 'provider output' },
+        updatedAt: 3_000,
+      },
+      terminalResult: { status: 'completed' as const, runId: input.runId, completedAt: 3_000 },
+      projection,
+    };
+    const committed = await storage.commitTerminalHandoff(args);
+    expect(committed.status).toBe('committed');
+
+    await storage.deleteSession({
+      harnessName: 'default',
+      sessionId: 'session-1',
+      ifVersion: 1,
+      expectedResourceId: 'resource-1',
+      expectedThreadId: 'thread-1',
+      expectedParentSessionId: null,
+      expectedCreatedAt: 1_000,
+    });
+
+    // The canonical evidence row is the durable source a committed retry
+    // replays; deleting the session must not remove it.
+    await expect(
+      storage.loadMessageResultEvidence({
+        harnessName: input.harnessName,
+        sessionId: input.sessionId,
+        resourceId: input.resourceId,
+        threadId: input.threadId,
+        signalId: input.signalId,
+      }),
+    ).resolves.toMatchObject({ status: 'completed' });
+
+    // A committed retry still resolves the durable winner even though the
+    // session row is gone.
+    const replay = await storage.commitTerminalHandoff(args);
+    expect(replay.status).toBe('duplicate');
+    expect(replay.intent?.id).toBe(committed.intent!.id);
+  });
+
   it('reports terminal handoff as unsupported and rejects terminal operations when disabled', async () => {
     const disabled = new InMemoryHarness({ db: new InMemoryDB() });
     expect(disabled.supportsTerminalHandoff).toBe(false);

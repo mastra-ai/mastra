@@ -1044,6 +1044,117 @@ describe('HarnessPG native terminal handoff', () => {
     ).rejects.toBeInstanceOf(HarnessTerminalHandoffIdentityConflictError);
   });
 
+  it('lets only one worker claim the terminal message dispatch compare-and-swap', async () => {
+    const session = await createNativeSession(harness(), 'session-dispatch-cas');
+    const input = admissionFor(session, 'dispatch-cas');
+    // The native terminal path reserves a pending message row, then stamps the
+    // dispatch marker through the CAS so two workers cannot both send.
+    await harness().writeMessageResultEvidence(pendingEvidence(input));
+
+    const claim = (worker: string) => ({
+      harnessName: HARNESS,
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+      signalId: input.signalId,
+      admissionId: input.admissionId,
+      admissionHash: input.admissionHash,
+      operationKind: 'message' as const,
+      expected: { state: 'reserved' as const },
+      next: {
+        state: 'dispatching' as const,
+        attemptId: `terminal-dispatch-${worker}`,
+        claimExpiresAt: Date.now() + 60_000,
+        delivery: 'idle' as const,
+        runId: input.runId,
+      },
+      updatedAt: Date.now(),
+    });
+
+    const [first, second] = await Promise.all([
+      harness().compareAndSwapSignalDispatch(claim('a')),
+      harness().compareAndSwapSignalDispatch(claim('b')),
+    ]);
+    expect([first, second].filter(result => result.applied)).toHaveLength(1);
+    const loser = first.applied ? second : first;
+    expect(loser.applied).toBe(false);
+    // The loser observes the durable winner's dispatch marker, not a send.
+    expect(loser.evidence).toMatchObject({ status: 'pending', operationKind: 'message' });
+    expect(loser.evidence.dispatch?.state).toBe('dispatching');
+  });
+
+  it('rejects admissions inserted after an incarnation fence, even while the session stays live', async () => {
+    const session = await createNativeSession(harness(), 'session-fence-later');
+    await harness().fenceTerminalHandoffsForSession({
+      harnessName: HARNESS,
+      sessionId: session.id,
+      sessionIncarnation: session.sessionIncarnation!,
+    });
+
+    // The fence must cover admissions inserted after the sweep — the session
+    // row still reports the fenced incarnation, so only the durable marker
+    // can reject this admission.
+    const input = admissionFor(session, 'fence-later');
+    await harness().writeMessageResultEvidence(pendingEvidence(input));
+    await expect(harness().admitTerminalHandoff(input)).resolves.toMatchObject({ status: 'fenced' });
+    expect(await rowCount(TABLE_HARNESS_TERMINAL_ADMISSIONS)).toBe(0);
+  });
+
+  it('preserves committed terminal evidence across session deletion for the committed retry', async () => {
+    const session = await createNativeSession(harness(), 'session-delete-evidence');
+    const input = admissionFor(session, 'delete-evidence');
+    await harness().writeMessageResultEvidence(pendingEvidence(input));
+    await harness().admitTerminalHandoff(input);
+    const committed = await harness().commitTerminalHandoff(commitInput(input, 'delete-evidence'));
+    expect(committed.status).toBe('committed');
+
+    await harness().deleteSession({
+      harnessName: HARNESS,
+      sessionId: session.id,
+      ifVersion: session.version,
+      expectedResourceId: session.resourceId,
+      expectedThreadId: session.threadId,
+      expectedCreatedAt: session.createdAt,
+    });
+
+    // The canonical evidence row is the durable source a committed retry
+    // replays; deleting the session must not remove it.
+    await expect(
+      harness().loadMessageResultEvidence({
+        harnessName: HARNESS,
+        sessionId: session.id,
+        resourceId: session.resourceId,
+        threadId: session.threadId,
+        signalId: input.signalId,
+      }),
+    ).resolves.toMatchObject({ status: 'completed' });
+
+    // A committed retry still resolves the durable winner even though the
+    // session row is gone.
+    const replay = await harness().commitTerminalHandoff(commitInput(input, 'delete-evidence'));
+    expect(replay.status).toBe('duplicate');
+    expect(replay.intent?.id).toBe(committed.intent!.id);
+
+    // Evidence bound to a committed admission also survives the per-signal
+    // tombstone cleanup that post-delete bookkeeping runs.
+    await harness().deleteOperationAdmissionTombstonesForSession({
+      harnessName: HARNESS,
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+      signalId: input.signalId,
+    });
+    await expect(
+      harness().loadMessageResultEvidence({
+        harnessName: HARNESS,
+        sessionId: session.id,
+        resourceId: session.resourceId,
+        threadId: session.threadId,
+        signalId: input.signalId,
+      }),
+    ).resolves.toMatchObject({ status: 'completed' });
+  });
+
   it('reports terminal handoff as unsupported and rejects terminal operations when disabled', async () => {
     const disabledStore = terminalStore('pg-harness-terminal-disabled-store', schemaName, { enabled: false });
     await disabledStore.init();

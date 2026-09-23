@@ -167,6 +167,13 @@ export interface CompareAndSwapSignalDispatchInput {
   signalId: string;
   admissionId: string;
   admissionHash: string;
+  /**
+   * Durable operation discriminator of the admitted row. `'signal'` (the
+   * default) keeps the admitted-signal CAS contract; `'message'` covers the
+   * admitted message rows a native terminal handoff dispatches through the
+   * same evidence table. The stored row's operation kind must match.
+   */
+  operationKind?: 'message' | 'signal';
   expected: AgentSignalDispatchState;
   next: AgentSignalDispatchState;
   updatedAt: number;
