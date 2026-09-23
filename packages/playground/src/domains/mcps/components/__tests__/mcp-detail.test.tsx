@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
@@ -8,49 +8,78 @@ import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
-const useToolsHandler = () => {
+const mockToolsHandler = () => {
   server.use(http.get(`${TEST_BASE_URL}/api/mcp/:serverId/tools`, () => HttpResponse.json(emptyToolList)));
 };
 
-const renderDetail = (detailServer: typeof legacyServer) =>
-  renderWithProviders(
+const renderDetail = (detailServer: typeof legacyServer) => {
+  mockToolsHandler();
+  return renderWithProviders(
     <TestLinkProvider>
       <MCPDetail isLoading={false} server={detailServer} />
     </TestLinkProvider>,
   );
+};
 
-describe('MCPDetail transports', () => {
-  it('shows the SSE endpoint for a legacy server', async () => {
-    useToolsHandler();
-    const { queryClient } = renderDetail(legacyServer);
+const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name }));
 
-    expect(screen.getByText('Server-Sent Events')).not.toBeNull();
-    expect(screen.getByText('http://localhost:4111/api/mcp/legacy/sse')).not.toBeNull();
-    expect(screen.getByText('npx -y mcp-remote http://localhost:4111/api/mcp/legacy/sse')).not.toBeNull();
+describe('MCPDetail connect card', () => {
+  describe('when rendering an MCP v2 server', () => {
+    it('shows the Connect title', async () => {
+      const { queryClient } = renderDetail(v2Server);
+      expect(screen.getByRole('heading', { name: 'Connect' })).not.toBeNull();
+      await waitForMutationsIdle(queryClient);
+    });
 
-    await waitForMutationsIdle(queryClient);
+    it('shows the Streamable HTTP endpoint by default', async () => {
+      const { queryClient } = renderDetail(v2Server);
+      expect(screen.getByText('http://localhost:4111/api/mcp/v2/mcp')).not.toBeNull();
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('does not offer an SSE tab', async () => {
+      const { queryClient } = renderDetail(v2Server);
+      expect(screen.queryByRole('tab', { name: 'SSE' })).toBeNull();
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('points the CLI at the Streamable HTTP endpoint', async () => {
+      const { queryClient } = renderDetail(v2Server);
+      openTab('CLI');
+      expect(screen.getByText('npx -y mcp-remote http://localhost:4111/api/mcp/v2/mcp')).not.toBeNull();
+      await waitForMutationsIdle(queryClient);
+    });
   });
 
-  it('offers only Streamable HTTP for an MCP v2 server', async () => {
-    useToolsHandler();
-    const { queryClient } = renderDetail(v2Server);
+  describe('when rendering a legacy server', () => {
+    it('shows the SSE endpoint in the SSE tab', async () => {
+      const { queryClient } = renderDetail(legacyServer);
+      openTab('SSE');
+      expect(screen.getByText('http://localhost:4111/api/mcp/legacy/sse')).not.toBeNull();
+      await waitForMutationsIdle(queryClient);
+    });
 
-    expect(screen.getByText('http://localhost:4111/api/mcp/v2/mcp')).not.toBeNull();
-    expect(screen.queryByText('Server-Sent Events')).toBeNull();
-    expect(screen.queryByText(/\/api\/mcp\/v2\/sse/)).toBeNull();
-    expect(screen.getByText('npx -y mcp-remote http://localhost:4111/api/mcp/v2/mcp')).not.toBeNull();
-
-    await waitForMutationsIdle(queryClient);
+    it('points the CLI at the SSE endpoint', async () => {
+      const { queryClient } = renderDetail(legacyServer);
+      openTab('CLI');
+      expect(screen.getByText('npx -y mcp-remote http://localhost:4111/api/mcp/legacy/sse')).not.toBeNull();
+      await waitForMutationsIdle(queryClient);
+    });
   });
 
-  it('shows the SSE endpoint for a server that omits transports', async () => {
-    useToolsHandler();
-    const { queryClient } = renderDetail(legacyServerWithoutTransports);
+  describe('when rendering a server that omits transports', () => {
+    it('shows the SSE endpoint in the SSE tab', async () => {
+      const { queryClient } = renderDetail(legacyServerWithoutTransports);
+      openTab('SSE');
+      expect(screen.getByText('http://localhost:4111/api/mcp/older/sse')).not.toBeNull();
+      await waitForMutationsIdle(queryClient);
+    });
 
-    expect(screen.getByText('Server-Sent Events')).not.toBeNull();
-    expect(screen.getByText('http://localhost:4111/api/mcp/older/sse')).not.toBeNull();
-    expect(screen.getByText('npx -y mcp-remote http://localhost:4111/api/mcp/older/sse')).not.toBeNull();
-
-    await waitForMutationsIdle(queryClient);
+    it('points the CLI at the SSE endpoint', async () => {
+      const { queryClient } = renderDetail(legacyServerWithoutTransports);
+      openTab('CLI');
+      expect(screen.getByText('npx -y mcp-remote http://localhost:4111/api/mcp/older/sse')).not.toBeNull();
+      await waitForMutationsIdle(queryClient);
+    });
   });
 });

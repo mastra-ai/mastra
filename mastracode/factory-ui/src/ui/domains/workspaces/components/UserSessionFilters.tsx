@@ -112,7 +112,7 @@ function FilterSelect<Value extends string>({
         {label}
       </Txt>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger variant="outline" size="sm" aria-label={label}>
+        <SelectTrigger size="sm" aria-label={label}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>{children}</SelectContent>

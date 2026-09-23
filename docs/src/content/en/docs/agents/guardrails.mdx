@@ -58,7 +58,7 @@ export const secureAgent = new Agent({
 })
 ```
 
-Model-backed guardrail processors default to `errorStrategy: 'warn'`, which logs internal model failures and continues with the processor's fallback. Use `errorStrategy: 'strict'` when unchecked content must not proceed if the guardrail model is unavailable or returns invalid output. Strict mode stops processing with a tripwire.
+Model-backed guardrail processors other than `ClassifierProcessor` default to `errorStrategy: 'warn'`, which logs internal model failures and continues with the processor's fallback. Use `errorStrategy: 'strict'` when unchecked content must not proceed if the guardrail model is unavailable or returns invalid output. Strict mode stops processing with a tripwire.
 
 Visit [`PromptInjectionDetector()`](/reference/processors/prompt-injection-detector) reference for a full list of configuration options.
 

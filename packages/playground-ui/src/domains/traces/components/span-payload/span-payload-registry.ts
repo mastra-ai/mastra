@@ -31,3 +31,5 @@ export function pickRenderer<D extends Described>(
 export function asCoreSpan(span: SpanRecord): CoreSpanRecord {
   return span as unknown as CoreSpanRecord;
 }
+
+export const hasItems = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0;

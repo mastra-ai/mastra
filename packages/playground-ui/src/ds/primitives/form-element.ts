@@ -4,15 +4,6 @@
 // guards on each variant keep hover and active fills from painting over these.
 export const sharedFormElementDisabledStyle = 'disabled:cursor-not-allowed disabled:text-muted-foreground';
 
-// Surface half of the disabled language, for neutral controls that carry a fill.
-// It recesses to the lowest rung of the fill ladder, one step below the resting
-// `--fill`, so a disabled field reads quieter than an enabled one on every
-// surface. Variants with their own hue (primary, destructive) keep that hue at
-// reduced emphasis instead, so a disabled destructive action still reads as
-// destructive. Transparent variants (ghost) opt out entirely: a disabled icon
-// button in a toolbar should stay invisible rather than resolve into a pill.
-export const disabledOutlineSurfaceStyle = 'disabled:border-border disabled:bg-transparent';
-
 // Focus indicator for the (green-less) input family. Instead of a heavy ring we
 // reinforce the existing 1px border: on focus it brightens to a translucent
 // `foreground` (theme-aware — light on dark surfaces, dark on light) that clears

@@ -72,12 +72,7 @@ export function TopicTraceSummaryList({
       </DataList>
 
       {visible.hasMore ? (
-        <Button
-          icon={<ChevronDown />}
-          variant="outline"
-          size="sm"
-          onClick={() => setPage(currentPage => currentPage + 1)}
-        >
+        <Button icon={<ChevronDown />} size="sm" onClick={() => setPage(currentPage => currentPage + 1)}>
           Load more traces ({visible.traces.length} of {visible.total})
         </Button>
       ) : null}

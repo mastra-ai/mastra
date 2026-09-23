@@ -11,7 +11,7 @@ const meta: Meta<typeof Textarea> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'outline', 'unstyled'],
+      options: ['default', 'unstyled'],
     },
     size: {
       control: { type: 'select' },

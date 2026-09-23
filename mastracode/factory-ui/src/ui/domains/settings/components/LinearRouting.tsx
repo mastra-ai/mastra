@@ -70,7 +70,7 @@ export function IntakeSourceRouting({
                   route(sourceId, next, next === routedFactory?.id ? board : null);
                 }}
               >
-                <SelectTrigger variant="outline" size="sm" aria-label={`Factory for ${name}`} className="w-auto">
+                <SelectTrigger size="sm" aria-label={`Factory for ${name}`} className="w-auto">
                   <Txt as="span" variant="caption">
                     {routedFactory?.name ?? 'Not routed'}
                   </Txt>
@@ -156,7 +156,7 @@ function BoardPicker({
       disabled={disabled || catalog.isPending}
       onValueChange={value => onChange(value === NO_BOARD ? null : value)}
     >
-      <SelectTrigger variant="outline" size="sm" aria-label={`Board for ${name}`} className="w-auto">
+      <SelectTrigger size="sm" aria-label={`Board for ${name}`} className="w-auto">
         <Txt as="span" variant="caption">
           {label}
         </Txt>

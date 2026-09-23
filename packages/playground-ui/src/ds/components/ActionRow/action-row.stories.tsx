@@ -28,11 +28,11 @@ export const StartAndEnd: Story = {
     <ActionRow>
       <ActionRow.Start>
         <Input placeholder="Search…" className="max-w-120" />
-        <Button variant="outline">Status</Button>
-        <Button variant="outline">Tags</Button>
+        <Button>Status</Button>
+        <Button>Tags</Button>
       </ActionRow.Start>
       <ActionRow.End>
-        <Button variant="outline">Columns</Button>
+        <Button>Columns</Button>
         <Button variant="primary">Run</Button>
       </ActionRow.End>
     </ActionRow>
@@ -43,7 +43,7 @@ export const EndOnly: Story = {
   render: () => (
     <ActionRow>
       <ActionRow.End>
-        <Button variant="outline">Back</Button>
+        <Button>Back</Button>
         <Button variant="primary">Open</Button>
       </ActionRow.End>
     </ActionRow>
