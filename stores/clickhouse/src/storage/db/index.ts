@@ -6,6 +6,7 @@ import {
   createStorageErrorId,
   getSqlType,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_WORKFLOW_SNAPSHOT_HANDOFF,
   TABLE_SPANS,
   TABLE_SCHEMAS,
   TABLE_CONFIGS,
@@ -522,6 +523,14 @@ export class ClickhouseDB extends MastraBase {
             isNullable = false;
           }
 
+          // Special case: the handoff table's updated_at is the ReplacingMergeTree
+          // version column, which ClickHouse requires to be UInt*/Date/DateTime —
+          // the shared bigint mapping (Int64) is not a valid version type. Epoch
+          // milliseconds are always non-negative, so UInt64 preserves ordering.
+          if (tableName === TABLE_WORKFLOW_SNAPSHOT_HANDOFF && name === 'updated_at') {
+            sqlType = 'UInt64';
+          }
+
           // Wrap nullable columns in Nullable() to properly support NULL values
           if (isNullable) {
             sqlType = `Nullable(${sqlType})`;
@@ -568,9 +577,10 @@ export class ClickhouseDB extends MastraBase {
             SETTINGS index_granularity = 8192
           `;
       } else {
-        const keyColumns = isHarnessTable(tableName)
-          ? getClickHouseKeyColumns(tableName, schema)
-          : [quoteClickHouseIdentifier('createdAt'), quoteClickHouseIdentifier('id')];
+        const keyColumns =
+          isHarnessTable(tableName) || tableName === TABLE_WORKFLOW_SNAPSHOT_HANDOFF
+            ? getClickHouseKeyColumns(tableName, schema)
+            : [quoteClickHouseIdentifier('createdAt'), quoteClickHouseIdentifier('id')];
         const keyClause = keyColumns.join(', ');
         sql = `
             CREATE TABLE IF NOT EXISTS ${tableName} (

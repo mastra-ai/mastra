@@ -51,6 +51,15 @@ import type {
   StorageListWorkflowRunsInput,
   WorkflowTerminalizationCapabilities,
   WorkflowResumeCapabilities,
+  WorkflowSnapshotHandoffCapabilities,
+  ClaimWorkflowSnapshotHandoffInput,
+  ClaimWorkflowSnapshotHandoffResult,
+  TransitionWorkflowSnapshotHandoffInput,
+  TransitionWorkflowSnapshotHandoffResult,
+  CompleteWorkflowSnapshotHandoffInput,
+  CompleteWorkflowSnapshotHandoffResult,
+  ListWorkflowSnapshotHandoffsInput,
+  ListWorkflowSnapshotHandoffsResult,
   WorkflowExecutionState,
 } from '../../types';
 import { StorageDomain } from '../base';
@@ -78,6 +87,35 @@ export abstract class WorkflowsStorage extends StorageDomain {
   /** Exact atomic resume protocol versions implemented by this adapter. */
   getWorkflowResumeCapabilities(): WorkflowResumeCapabilities {
     return {};
+  }
+
+  /** Exact framework-native product snapshot handoff protocol versions. */
+  getWorkflowSnapshotHandoffCapabilities(): WorkflowSnapshotHandoffCapabilities {
+    return {};
+  }
+
+  async claimWorkflowSnapshotHandoff(
+    _input: ClaimWorkflowSnapshotHandoffInput,
+  ): Promise<ClaimWorkflowSnapshotHandoffResult> {
+    return { status: 'unsupported' };
+  }
+
+  async transitionWorkflowSnapshotHandoff(
+    _input: TransitionWorkflowSnapshotHandoffInput,
+  ): Promise<TransitionWorkflowSnapshotHandoffResult> {
+    return { status: 'unsupported' };
+  }
+
+  async completeWorkflowSnapshotHandoff(
+    _input: CompleteWorkflowSnapshotHandoffInput,
+  ): Promise<CompleteWorkflowSnapshotHandoffResult> {
+    return { status: 'unsupported' };
+  }
+
+  async listWorkflowSnapshotHandoffs(
+    _input: ListWorkflowSnapshotHandoffsInput = {},
+  ): Promise<ListWorkflowSnapshotHandoffsResult> {
+    return { records: [], hasMore: false };
   }
 
   async admitWorkflowResume(_input: AdmitWorkflowResumeInput): Promise<AdmitWorkflowResumeResult> {

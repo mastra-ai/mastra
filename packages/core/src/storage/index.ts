@@ -13,3 +13,4 @@ export * from './providers';
 export * from './domains';
 export * from './utils';
 export * from './workflow-snapshot';
+export * from './workflow-snapshot-handoff';
