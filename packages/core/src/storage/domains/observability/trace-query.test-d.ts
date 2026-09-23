@@ -21,11 +21,12 @@ test('delta cursors accept only numbered-page and delta trace plans', () => {
   expectTypeOf<TrustedThreadQueryPlan>().not.toExtend<CursorPlan>();
 });
 
-test('metadata paths require a rooted non-empty tuple or canonical dot path', () => {
+test('metadata path types describe the wire shape while runtime reserves arrays for literal dotted keys', () => {
   expectTypeOf<'metadata.customer.id'>().toExtend<TraceQueryMetadataDotPath>();
   expectTypeOf<'customer.id'>().not.toExtend<TraceQueryMetadataDotPath>();
   expectTypeOf<readonly ['metadata', 'customer.id']>().toExtend<TraceQueryExactMetadataPath>();
   expectTypeOf<readonly ['metadata', 'customer.id', 'profile']>().toExtend<TraceQueryExactMetadataPath>();
+  expectTypeOf<readonly ['metadata', 'customer', 'id']>().toExtend<TraceQueryExactMetadataPath>();
   expectTypeOf<readonly ['attributes', 'customer.id']>().not.toExtend<TraceQueryExactMetadataPath>();
   expectTypeOf<['metadata', 'customer.id']>().toExtend<TraceQueryMetadataSegments>();
   expectTypeOf<['attributes', 'customer.id']>().not.toExtend<TraceQueryMetadataSegments>();

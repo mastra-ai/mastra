@@ -181,7 +181,13 @@ export const TRACE_PROPERTY_FILTER_FIELD_IDS = Object.keys(TRACE_PROPERTY_FILTER
  *  means the default (`is`). */
 export const TRACE_FILTER_OPERATOR_PARAM_SUFFIX = '.op';
 export const traceFilterOperatorParam = (valueParam: string) => valueParam + TRACE_FILTER_OPERATOR_PARAM_SUFFIX;
-const isTraceFilterOperatorParam = (param: string) => param.endsWith(TRACE_FILTER_OPERATOR_PARAM_SUFFIX);
+const isTraceFilterOperatorParam = (searchParams: URLSearchParams, param: string) => {
+  if (!param.endsWith(TRACE_FILTER_OPERATOR_PARAM_SUFFIX)) return false;
+  const valueParam = param.slice(0, -TRACE_FILTER_OPERATOR_PARAM_SUFFIX.length);
+  if (!searchParams.has(valueParam)) return false;
+  const operator = searchParams.get(param);
+  return operator !== null && isTraceFilterOperatorId(operator);
+};
 
 const isPresenceOperator = (operatorId: TraceFilterOperatorId | undefined) =>
   operatorId === 'exists' || operatorId === 'notExists';
@@ -204,6 +210,7 @@ const readMetadataFilterValue = (raw: string): FilterBarScalar | undefined => {
 
 const writeMetadataFilterValue = (value: FilterBarScalar): string => {
   if (typeof value === 'string') {
+    if (value.length === 0) return value;
     const decoded = decodeTraceMetadataValue(value);
     if (decoded !== undefined && decoded !== value) return value;
   }
@@ -631,7 +638,7 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
 
   const seen = new Set<string>();
   for (const [paramName] of searchParams.entries()) {
-    if (isTraceFilterOperatorParam(paramName)) continue;
+    if (isTraceFilterOperatorParam(searchParams, paramName)) continue;
     const metadataParam = isTraceMetadataParam(paramName);
     const fieldId = metadataParam ? metadataParamToFieldId(paramName) : paramToFieldId.get(paramName);
     if (!fieldId || seen.has(fieldId)) continue;
@@ -695,7 +702,7 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
   for (const param of searchParams.keys()) {
     if (
       !isTraceMetadataParam(param) ||
-      isTraceFilterOperatorParam(param) ||
+      isTraceFilterOperatorParam(searchParams, param) ||
       !traceMetadataParamToFieldId(param) ||
       seenMetadata.has(param)
     ) {

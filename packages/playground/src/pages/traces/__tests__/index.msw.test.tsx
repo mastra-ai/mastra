@@ -1,5 +1,6 @@
 import type { GetSystemPackagesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
+import { metadataFieldIdToParam } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -1165,12 +1166,14 @@ describe('Traces page metadata filter discovery', () => {
       expect(onValues.mock.calls[0]?.[0]).toMatchObject({ path: 'metadata.region', predicateScope: 'trace' });
     });
 
-    it('writes filterMetadata.region=eu-west to the URL', async () => {
+    it('writes the versioned metadata path and value to the URL', async () => {
       await commitRegionFilter();
+      const regionParam = metadataFieldIdToParam('metadata.region');
+      expect(regionParam).toBeDefined();
+      if (!regionParam) return;
+      const expectedParam = new URLSearchParams([[regionParam, 'eu-west']]).toString();
 
-      await waitFor(() =>
-        expect(screen.getByTestId('location').textContent).toContain('filterMetadata.region=eu-west'),
-      );
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain(expectedParam));
     });
 
     it('sends an eq predicate on metadata.region in the trace query request', async () => {

@@ -142,6 +142,18 @@ function structuredJsonPath(
   };
 }
 
+const POSTGRES_FLOAT64_MAX = '1.7976931348623157e308';
+const POSTGRES_FLOAT64_MIN_POSITIVE = '4.9406564584124654e-324';
+
+function finiteFloat64NumericCondition(numeric: string): string {
+  return `(${numeric} = 0 OR (abs(${numeric}) >= ${POSTGRES_FLOAT64_MIN_POSITIVE}::numeric AND abs(${numeric}) <= ${POSTGRES_FLOAT64_MAX}::numeric))`;
+}
+
+function finiteFloat64FromText(text: string): string {
+  const numeric = `((${text})::numeric)`;
+  return `CASE WHEN ${finiteFloat64NumericCondition(numeric)} THEN (${numeric})::double precision END`;
+}
+
 function compileStructuredScalarField(
   jsonExpression: string,
   pathParameter: string,
@@ -154,8 +166,7 @@ function compileStructuredScalarField(
   }
   const kind = typeof sample;
   const text = `(${jsonExpression} #>> ${pathParameter})`;
-  const extracted =
-    kind === 'number' ? `(${text})::double precision` : kind === 'boolean' ? `(${text})::boolean` : text;
+  const extracted = kind === 'number' ? finiteFloat64FromText(text) : kind === 'boolean' ? `(${text})::boolean` : text;
   return `CASE WHEN ${objectPathGuard} AND jsonb_typeof(${json}) = '${kind}' THEN ${extracted} END`;
 }
 
@@ -730,7 +741,8 @@ export function compilePostgresTraceQueryObservedFields(
       ELSE 'number'
     END AS value_kind
   FROM structured_tree
-  WHERE jsonb_typeof(leaf) IN ('string', 'number', 'boolean')
+  WHERE cardinality(segments) > 1
+    AND jsonb_typeof(leaf) IN ('string', 'number', 'boolean')
     AND (jsonb_typeof(leaf) <> 'string' OR octet_length(leaf #>> '{}') <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES})
 ), grouped_fields AS (
   SELECT path, count(*)::bigint AS occurrences,
@@ -757,12 +769,15 @@ export function compilePostgresTraceQueryValues(
   if (Array.isArray(plan.path)) {
     const descriptor = structuredDiscoveryRoot(plan, plan.path[0]);
     values.push(plan.path.slice(1));
+    const pathParameter = `$${values.length}::text[]`;
     const { json, objectPathGuard } = structuredJsonPath(
       descriptor.jsonExpression,
-      `$${values.length}::text[]`,
+      pathParameter,
       plan.path.length - 1,
     );
-    field = `CASE WHEN ${objectPathGuard} AND jsonb_typeof(${json}) IN ('string', 'number', 'boolean') THEN ${json} END`;
+    const jsonType = `jsonb_typeof(${json})`;
+    const numeric = `((${descriptor.jsonExpression} #>> ${pathParameter})::numeric)`;
+    field = `CASE WHEN ${objectPathGuard} AND ${jsonType} IN ('string', 'number', 'boolean') THEN CASE WHEN ${jsonType} <> 'number' THEN ${json} WHEN ${finiteFloat64NumericCondition(numeric)} THEN ${json} END END`;
     source = descriptor.relation;
   } else {
     field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);

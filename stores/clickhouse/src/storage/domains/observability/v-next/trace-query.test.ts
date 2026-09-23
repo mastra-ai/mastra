@@ -263,6 +263,14 @@ describe('ClickHouse advanced trace query', () => {
     );
   });
 
+  it('excludes scalar structured-root seed rows from field discovery', () => {
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    expect(compileClickHouseTraceQueryObservedFields(discoveryPlan).query).toContain('WHERE length(segments) > 1');
+  });
+
   it('decodes each observed metadata value from the expanded JSON entry', () => {
     const compiled = compileClickHouseTraceQueryObservedFields(
       planTraceQueryObservedFields(

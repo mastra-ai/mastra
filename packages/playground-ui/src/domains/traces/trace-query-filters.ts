@@ -118,6 +118,28 @@ const metadataTokenValues = (value: FilterBarValue): TraceMetadataScalar[] => {
   return values;
 };
 
+function membershipPredicate(
+  op: 'in' | 'notIn',
+  path: TraceQueryPath,
+  values: TraceMetadataScalar[],
+): TraceQueryScalarPredicate | undefined {
+  const setsByType = new Map<string, TraceMetadataScalar[]>();
+  for (const value of values) {
+    const type = typeof value;
+    const set = setsByType.get(type);
+    if (set) set.push(value);
+    else setsByType.set(type, [value]);
+  }
+  const predicates: TraceQueryScalarPredicate[] = [...setsByType.values()].map(set => ({
+    op,
+    value: { path },
+    set,
+  }));
+  const [first, ...rest] = predicates;
+  if (!first) return undefined;
+  return rest.length ? { op: op === 'in' ? 'or' : 'and', args: [first, ...rest] } : first;
+}
+
 function scalarPredicate(
   op: TraceFilterOperatorId,
   path: TraceQueryPath,
@@ -130,13 +152,13 @@ function scalarPredicate(
       return { op: queryOp, path };
     case 'in':
     case 'notIn':
-      return values.length ? { op: queryOp, value: { path }, set: values } : undefined;
+      return membershipPredicate(queryOp, path, values);
     default: {
       if (!values.length) return undefined;
       // `is` with several values is set membership; `isNot` with several is exclusion.
       if (values.length > 1) {
-        if (queryOp === 'eq') return { op: 'in', value: { path }, set: values };
-        if (queryOp === 'ne') return { op: 'notIn', value: { path }, set: values };
+        if (queryOp === 'eq') return membershipPredicate('in', path, values);
+        if (queryOp === 'ne') return membershipPredicate('notIn', path, values);
       }
       const [literal] = values;
       return literal === undefined ? undefined : { op: queryOp, left: { path }, right: { literal } };

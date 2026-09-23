@@ -195,7 +195,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const client = useMastraClient();
   const valueSuggestions = useCallback(
     (scope: TraceQueryRelatedScope, path: string) =>
-      createTraceQueryValuesResolver(client, discoveryTimeRange, scope, path),
+      createTraceQueryValuesResolver(client, discoveryTimeRange, scope, path, 'string'),
     [client, discoveryTimeRange],
   );
 

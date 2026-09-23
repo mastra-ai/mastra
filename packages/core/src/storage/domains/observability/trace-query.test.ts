@@ -687,8 +687,12 @@ describe('planTraceQuery', () => {
     `metadata.${'é'.repeat(60)}`,
     `metadata.${'a.'.repeat(11)}value`,
     'metadata.customer\u0000id',
-  ])('rejects malformed metadata dot path %j', path => {
-    expect(() => parsed({ ...baseRequest, where: { op: 'exists', path } })).toThrow();
+  ])('classifies malformed metadata dot path %j as invalid_metadata_key', path => {
+    const request = parsed({ ...baseRequest, where: { op: 'exists', path } });
+    const error = validationError(() => planTraceQuery(request));
+    expect(error.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_metadata_key', path: ['where', 'path'] }),
+    );
   });
 
   it('accepts metadata paths at the UTF-8 and segment-count boundaries', () => {

@@ -118,12 +118,26 @@ function parameterSql(type: ParameterType): string {
   return type === 'timestamp' ? 'CAST(? AS TIMESTAMP)' : '?';
 }
 
+function structuredJsonPointer(segments: string[]): string {
+  return `/${segments.map(segment => segment.replaceAll('~', '~0').replaceAll('/', '~1')).join('/')}`;
+}
+
+function structuredObjectPathGuard(jsonExpression: string, segments: string[]): { sql: string; values: string[] } {
+  const values = segments.slice(0, -1).map((_, index) => structuredJsonPointer(segments.slice(0, index + 1)));
+  return {
+    sql: values.map(() => `json_type(${jsonExpression}, ?) = 'OBJECT'`).join(' AND '),
+    values,
+  };
+}
+
 function compileStructuredScalarField(
   jsonExpression: string,
   segments: string[],
   sample: string | number | boolean | undefined,
 ): { field: FieldDefinition; values: unknown[] } {
-  const path = '$' + segments.map(segment => `.${JSON.stringify(segment)}`).join('');
+  const path = structuredJsonPointer(segments);
+  const objectPathGuard = structuredObjectPathGuard(jsonExpression, segments);
+  const guard = objectPathGuard.sql ? `${objectPathGuard.sql} AND ` : '';
   const kind = typeof sample;
   const types =
     sample === undefined
@@ -141,10 +155,10 @@ function compileStructuredScalarField(
         : `json_extract_string(${jsonExpression}, ?)`;
   return {
     field: {
-      sql: `CASE WHEN json_type(${jsonExpression}, ?) IN (${types}) THEN ${extract} END`,
+      sql: `CASE WHEN ${guard}json_type(${jsonExpression}, ?) IN (${types}) THEN ${extract} END`,
       parameterType: 'scalar',
     },
-    values: [path, path],
+    values: [...objectPathGuard.values, path, path],
   };
 }
 
@@ -676,7 +690,8 @@ export function compileDuckDBTraceQueryObservedFields(
       ELSE 'number'
     END AS value_kind
   FROM structured_tree
-  WHERE json_type(leaf) IN ('VARCHAR', 'BIGINT', 'UBIGINT', 'DOUBLE', 'BOOLEAN')
+  WHERE len(segments) > 1
+    AND json_type(leaf) IN ('VARCHAR', 'BIGINT', 'UBIGINT', 'DOUBLE', 'BOOLEAN')
     AND (json_type(leaf) <> 'VARCHAR' OR octet_length(encode(json_extract_string(leaf, '$'))) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES})
 ), grouped_fields AS (
   SELECT path, count(*) AS occurrences,
@@ -700,15 +715,13 @@ export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan)
   let source = discoverySource(plan.predicateScope);
   if (Array.isArray(plan.path)) {
     const descriptor = structuredDiscoveryRoot(plan, plan.path[0]);
-    const jsonPath =
-      '$' +
-      plan.path
-        .slice(1)
-        .map(segment => `.${JSON.stringify(segment)}`)
-        .join('');
-    fieldSql = `CASE WHEN json_type(${descriptor.jsonExpression}, ?) IN ('VARCHAR', 'BIGINT', 'UBIGINT', 'DOUBLE', 'BOOLEAN') THEN json_extract(${descriptor.jsonExpression}, ?) END`;
+    const segments = plan.path.slice(1);
+    const jsonPointer = structuredJsonPointer(segments);
+    const objectPathGuard = structuredObjectPathGuard(descriptor.jsonExpression, segments);
+    const guard = objectPathGuard.sql ? `${objectPathGuard.sql} AND ` : '';
+    fieldSql = `CASE WHEN ${guard}json_type(${descriptor.jsonExpression}, ?) IN ('VARCHAR', 'BIGINT', 'UBIGINT', 'DOUBLE', 'BOOLEAN') THEN json_extract(${descriptor.jsonExpression}, ?) END`;
     source = descriptor.relation;
-    values.push(jsonPath, jsonPath);
+    values.push(...objectPathGuard.values, jsonPointer, jsonPointer);
   } else {
     fieldSql = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
   }

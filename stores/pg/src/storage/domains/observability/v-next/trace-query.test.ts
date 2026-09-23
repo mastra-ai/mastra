@@ -71,6 +71,16 @@ describe('Postgres advanced trace query', () => {
     ).toThrow('traceQueryTimeoutMs must be an integer between');
   });
 
+  it('excludes scalar structured-root seed rows from field discovery', () => {
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    expect(compilePostgresTraceQueryObservedFields('public', discoveryPlan).text).toContain(
+      'WHERE cardinality(segments) > 1',
+    );
+  });
+
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
     const compiled = compilePostgresTraceQuery(
       'custom',
@@ -232,6 +242,20 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).not.toContain(value);
     expect(compiled.text).toContain('r."metadataRaw" #> $3::text[]');
     expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path.slice(1), value, 101]);
+  });
+
+  it('guards PostgreSQL numeric extraction to the finite Float64 range', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { op: 'gte', left: { path: 'metadata.retry.count' }, right: { literal: 3 } } }),
+    );
+
+    expect(compiled.text).toContain(`::numeric`);
+    expect(compiled.text).toContain(`4.9406564584124654e-324::numeric`);
+    expect(compiled.text).toContain(`1.7976931348623157e308::numeric`);
+    expect(compiled.text).toContain(`r."metadataRaw" #>> $3::text[]`);
+    expect(compiled.text).toContain(`::double precision END END`);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, ['retry', 'count'], 3, 101]);
   });
 
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {

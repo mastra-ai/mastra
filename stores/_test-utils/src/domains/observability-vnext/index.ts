@@ -288,7 +288,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
 
       it('discovers executable scalar metadata fields from current qualified roots', async () => {
         await writeDiscoveryFixture();
-        const result = await observedFields({ predicateScope: 'trace' });
+        const result = await observedFields({ predicateScope: 'trace', limit: 100 });
         expect(result).toEqual({
           observedFields: expect.arrayContaining([
             expect.objectContaining({ path: 'metadata.account.id', valueKind: 'string', occurrences: 3 }),
@@ -303,6 +303,12 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             }),
             expect.objectContaining({ path: 'metadata.region', valueKind: 'string', occurrences: 3 }),
             expect.objectContaining({ path: 'metadata.emptyValue', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.line\nbreak', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.tab\tkey', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.quote"key', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.back\\slash', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.slash/key', valueKind: 'string', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.tilde~key', valueKind: 'string', occurrences: 1 }),
             expect.objectContaining({ path: 'metadata.nested.plan', valueKind: 'string', occurrences: 1 }),
             expect.objectContaining({ path: 'metadata.retries', valueKind: 'number', occurrences: 1 }),
             expect.objectContaining({ path: ['metadata', 'account.id'], valueKind: 'string', occurrences: 1 }),
@@ -314,7 +320,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ]),
           observedFieldsTruncated: false,
         });
-        expect(await observedFields({ predicateScope: 'trace' })).toEqual(result);
+        expect(await observedFields({ predicateScope: 'trace', limit: 100 })).toEqual(result);
         await expect(observedFields({ predicateScope: 'trace', search: 'REGION' })).resolves.toEqual({
           observedFields: [expect.objectContaining({ path: 'metadata.region', occurrences: 3 })],
           observedFieldsTruncated: false,
@@ -350,6 +356,12 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           { path: 'metadata.whitespaceOnly', value: '   ' },
           { path: ['metadata', 'dotted.key'], value: 'unsupported' },
           { path: ['metadata', 'exactNested', 'literal.key', 'value'], value: 'exact-nested-a' },
+          { path: 'metadata.line\nbreak', value: 'newline-value' },
+          { path: 'metadata.tab\tkey', value: 'tab-value' },
+          { path: 'metadata.quote"key', value: 'quote-value' },
+          { path: 'metadata.back\\slash', value: 'backslash-value' },
+          { path: 'metadata.slash/key', value: 'slash-value' },
+          { path: 'metadata.tilde~key', value: 'tilde-value' },
         ] satisfies Array<{ path: TraceQueryPath; value: string | number | boolean }>) {
           await expect(values({ predicateScope: 'trace', path })).resolves.toEqual({
             values: [{ value, count: 1 }],

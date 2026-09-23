@@ -78,6 +78,7 @@ export const createTraceQueryValuesResolver = (
   timeRange: TraceQueryDiscoveryTimeRange,
   predicateScope: GetTraceQueryValuesArgs['predicateScope'],
   path: TraceMetadataPath,
+  valueKind: ObservedMetadataValueKind,
 ): FilterBarSuggestionsResolver => {
   return async ({ query: search, signal }) => {
     const { values } = await client.getTraceQueryValues(
@@ -85,7 +86,7 @@ export const createTraceQueryValuesResolver = (
       { signal },
     );
     return values.map(({ value }) => ({
-      value: encodeTraceMetadataValue(value),
+      value: valueKind === 'number' || valueKind === 'boolean' ? String(value) : encodeTraceMetadataValue(value),
       label: formatTraceMetadataValue(value),
     }));
   };
@@ -142,7 +143,7 @@ export const useTraceMetadataFilterFields = ({
             type: fieldType(field.valueKind),
             operators: field.operators.map(operator => TRACE_QUERY_OPERATOR_TO_FILTER_OPERATOR[operator]),
             ...(field.valueKind === 'scalar' ? { strict: true } : {}),
-            suggestions: createTraceQueryValuesResolver(client, timeRange, 'trace', identity.path),
+            suggestions: createTraceQueryValuesResolver(client, timeRange, 'trace', identity.path, field.valueKind),
           },
         ];
       }),

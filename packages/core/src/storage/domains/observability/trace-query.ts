@@ -61,16 +61,12 @@ const exactMetadataPathSchema = metadataPathSegmentsSchema.refine(
 const predicateStringPathSchema = z
   .string()
   .min(1)
-  .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large')
-  .superRefine((value, context) => {
-    const normalized = normalizeStringPath(value);
-    const root = structuredRootFromPath(normalized);
-    if (!root) return;
-    const result = createStructuredPathSegmentsSchema(root).safeParse(normalized.split('.'));
-    if (!result.success) {
-      context.addIssue({ code: 'custom', message: result.error.issues[0]?.message ?? 'Invalid structured path' });
-    }
-  });
+  .refine(
+    value =>
+      structuredRootFromPath(normalizeStringPath(value)) !== undefined ||
+      hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_PATH_BYTES),
+    'Predicate path is too large',
+  );
 const predicatePathSchema = z.union([predicateStringPathSchema, exactMetadataPathSchema]);
 const literalSchema = z.union([literalStringSchema, z.number(), z.boolean(), z.null()]);
 const pathRefSchema = z.object({ path: predicatePathSchema }).strict();
@@ -446,6 +442,10 @@ export const queryThreadsResultSchema = z
 
 export type TraceQueryLiteral = string | number | boolean | null;
 export type TraceQueryMetadataDotPath = `metadata.${string}`;
+/**
+ * Escape hatch for metadata keys that contain a literal dot. Runtime validation requires at least one post-root
+ * segment to contain a dot; use a dotted string such as `metadata.retry.count` for ordinary nested paths.
+ */
 export type TraceQueryExactMetadataPath = readonly ['metadata', string, ...string[]];
 export type TraceQueryPath = string | TraceQueryExactMetadataPath;
 export type TraceQueryPathOrLiteral = { path: TraceQueryPath } | { literal: TraceQueryLiteral };
@@ -1455,6 +1455,16 @@ function getRule(
     const rule = Array.isArray(normalized) ? structuredFieldRule(context, normalized) : undefined;
     if (rule && metadataPathSegmentsSchema.safeParse(field).success) return rule;
     state.issues.push({ code: 'field_not_allowed', path, message: 'The predicate field is not allowed here' });
+    return undefined;
+  }
+  const structuredRoot = structuredRootFromPath(field);
+  if (structuredRoot) {
+    const result = createStructuredPathSegmentsSchema(structuredRoot).safeParse(field.split('.'));
+    state.issues.push({
+      code: 'invalid_metadata_key',
+      path,
+      message: result.success ? 'Invalid metadata path' : (result.error.issues[0]?.message ?? 'Invalid metadata path'),
+    });
     return undefined;
   }
   if (!Object.hasOwn(rules, field)) {

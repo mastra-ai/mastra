@@ -297,6 +297,32 @@ describe('QUERY_TRACES', () => {
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
   });
 
+  it('preserves invalid_metadata_key for malformed metadata paths before touching storage', async () => {
+    const { mastra, observabilityStore, getStore } = createHarness();
+    const paths = ['metadata.', 'metadata.customer..id', `metadata.${'x'.repeat(129)}`, 'metadata.customer\0id'];
+
+    for (const path of paths) {
+      const error = await captureHttpException(
+        QUERY_TRACES.handler(
+          params(mastra, {
+            timeRange: TIME_RANGE,
+            where: { op: 'exists', path },
+          }),
+        ),
+      );
+
+      expect(error.status).toBe(422);
+      const body = await error.getResponse().json();
+      expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID' });
+      expect(body.issues).toContainEqual(
+        expect.objectContaining({ code: 'invalid_metadata_key', path: ['where', 'path'] }),
+      );
+    }
+
+    expect(getStore).not.toHaveBeenCalled();
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
   it('preserves the shared canonical semantics and fixed response projections', async () => {
     const { mastra, observabilityStore } = createHarness();
     observabilityStore.queryTraces.mockImplementation(plan => evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, plan));
@@ -329,14 +355,12 @@ describe('QUERY_TRACES', () => {
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
   });
 
-  it('rejects malformed metadata paths at request validation before storage', () => {
+  it('rejects malformed exact metadata paths at request validation before storage', () => {
     const { observabilityStore, getStore } = createHarness();
     const paths = [
       ['attributes', 'customer.id'],
       ['metadata', ''],
       ['metadata', 'customer', 'id'],
-      `metadata.${'x'.repeat(129)}`,
-      'metadata.customer\0id',
     ];
 
     for (const path of paths) {

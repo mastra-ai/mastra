@@ -265,12 +265,15 @@ describe('metadata filter URL params', () => {
     ]);
   });
 
-  it('writes metadata tokens exactly as filterMetadata.<path> params and drops stale ones', () => {
+  it('writes metadata tokens with versioned path params and drops stale ones', () => {
     const params = new URLSearchParams('filterMetadata.stale=x&status=error');
+    const regionParam = traceMetadataFieldIdToParam('metadata.region');
+    expect(regionParam).toBeDefined();
+    if (!regionParam) return;
 
     applyTracePropertyFilterTokens(params, [{ fieldId: 'metadata.region', value: ' eu-west ' }]);
 
-    expect(params.get('filterMetadata.region')).toBe(' eu-west ');
+    expect(params.get(regionParam)).toBe(' eu-west ');
     expect(params.has('filterMetadata.stale')).toBe(false);
   });
 
@@ -296,13 +299,16 @@ describe('metadata filter URL params', () => {
     const exactParam = traceMetadataFieldIdToParam(exact.id);
     expect(exactParam).toBeDefined();
 
+    const nestedParam = traceMetadataFieldIdToParam('metadata.customer.id');
+    expect(nestedParam).toBeDefined();
+    if (!nestedParam) return;
     const params = new URLSearchParams();
     applyTracePropertyFilterTokens(params, [
       { fieldId: 'metadata.customer.id', value: 'nested' },
       { fieldId: exact.id, value: 'literal' },
     ]);
 
-    expect(params.get('filterMetadata.customer.id')).toBe('nested');
+    expect(params.get(nestedParam)).toBe('nested');
     expect(exactParam ? params.get(exactParam) : null).toBe('literal');
     expect(getTracePropertyFilterTokens(params)).toEqual([
       { fieldId: 'metadata.customer.id', value: 'nested' },
@@ -327,6 +333,38 @@ describe('metadata filter URL params', () => {
         value: [false, 0, encodeTraceMetadataValue(''), 'false', '0', '   '],
       },
     ]);
+  });
+
+  it('keeps a neutral scalar distinct from an explicitly selected empty string', () => {
+    const neutral = new URLSearchParams();
+    applyTracePropertyFilterTokens(neutral, [{ fieldId: 'metadata.value', value: '' }]);
+    expect(getTracePropertyFilterTokens(neutral)).toEqual([{ fieldId: 'metadata.value', value: '' }]);
+
+    const explicit = new URLSearchParams();
+    applyTracePropertyFilterTokens(explicit, [{ fieldId: 'metadata.value', value: encodeTraceMetadataValue('') }]);
+    expect(getTracePropertyFilterTokens(explicit)).toEqual([
+      { fieldId: 'metadata.value', value: encodeTraceMetadataValue('') },
+    ]);
+  });
+
+  it('round-trips operators independently for a path and a nested path ending in .op', () => {
+    const params = new URLSearchParams();
+    applyTracePropertyFilterTokens(params, [
+      { fieldId: 'metadata.span', operatorId: 'notIn', value: ['root'] },
+      { fieldId: 'metadata.span.op', operatorId: 'isNot', value: 'nested' },
+    ]);
+
+    expect(getTracePropertyFilterTokens(params)).toEqual([
+      { fieldId: 'metadata.span', operatorId: 'notIn', value: ['root'] },
+      { fieldId: 'metadata.span.op', operatorId: 'isNot', value: 'nested' },
+    ]);
+    expect([...params.keys()].filter(key => key.endsWith('.op'))).toHaveLength(2);
+  });
+
+  it('does not reinterpret a standalone legacy metadata path ending in .op as an operator', () => {
+    const params = new URLSearchParams('filterMetadata.span.op=nested');
+
+    expect(getTracePropertyFilterTokens(params)).toEqual([{ fieldId: 'metadata.span.op', value: 'nested' }]);
   });
 
   it('ignores malformed metadata parameters safely', () => {

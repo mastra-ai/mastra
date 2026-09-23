@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
-import { parseTraceQueryRequest, planTraceQuery, TraceQueryExecutionError, TraceStatus } from '@mastra/core/storage';
+import {
+  parseGetTraceQueryValuesArgs,
+  parseTraceQueryRequest,
+  planTraceQuery,
+  planTraceQueryValues,
+  TraceQueryExecutionError,
+  TraceStatus,
+} from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -382,6 +389,69 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         const setting = await harness.client.one<{ statement_timeout: string }>('SHOW statement_timeout');
         expect(setting.statement_timeout).toBe('0');
         expect(await harness.client.one<{ value: number }>('SELECT 1 AS value')).toEqual({ value: 1 });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('treats stored numbers outside the Float64 range as non-matching', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(TIMESCALE_URL),
+        schemaPrefix: 'trace_query_float64_range',
+      });
+      const startedAt = dayAt(0, 10);
+      const endedAt = dayAt(0, 10, 0, 1);
+      const rows = [
+        ['float-overflow-positive', '1e400'],
+        ['float-overflow-negative', '-1e400'],
+        ['float-underflow-positive', '1e-400'],
+        ['float-underflow-negative', '-1e-400'],
+        ['float-max', '1.7976931348623157e308'],
+        ['float-min-positive', '4.9406564584124654e-324'],
+        ['float-zero', '0'],
+        ['float-negative-max', '-1.7976931348623157e308'],
+      ] as const;
+
+      try {
+        for (const [traceId, numberLiteral] of rows) {
+          await harness.client.none(
+            `INSERT INTO ${qualifiedTable(harness.schema, TABLE_SPAN_EVENTS)}
+              ("traceId", "spanId", "name", "spanType", "startedAt", "endedAt", "metadataRaw")
+             VALUES ($1, $2, 'root-span', 'agent_run', $3, $4, $5::jsonb)`,
+            [traceId, `root-${traceId}`, startedAt, endedAt, `{"metric":${numberLiteral}}`],
+          );
+        }
+
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(endedAt.getTime() + 1_000).toISOString(),
+        };
+        const traceIds = async (where: Record<string, unknown>) => {
+          const response = await harness.domain.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, where, page: { limit: 100 } })),
+          );
+          if (!('traces' in response)) throw new Error('Expected trace results');
+          return response.traces.map(trace => trace.traceId).sort();
+        };
+
+        await expect(traceIds({ op: 'gt', left: { path: 'metadata.metric' }, right: { literal: 0 } })).resolves.toEqual(
+          ['float-max', 'float-min-positive'],
+        );
+        await expect(traceIds({ op: 'lt', left: { path: 'metadata.metric' }, right: { literal: 0 } })).resolves.toEqual(
+          ['float-negative-max'],
+        );
+        await expect(traceIds({ op: 'eq', left: { path: 'metadata.metric' }, right: { literal: 0 } })).resolves.toEqual(
+          ['float-zero'],
+        );
+
+        const discovered = await harness.domain.getTraceQueryValues(
+          planTraceQueryValues(
+            parseGetTraceQueryValuesArgs({ timeRange, predicateScope: 'trace', path: 'metadata.metric', limit: 100 }),
+          ),
+        );
+        expect(discovered.values.map(entry => entry.value).sort((a, b) => Number(a) - Number(b))).toEqual([
+          -1.7976931348623157e308, 0, 4.9406564584124654e-324, 1.7976931348623157e308,
+        ]);
       } finally {
         await harness.close();
       }

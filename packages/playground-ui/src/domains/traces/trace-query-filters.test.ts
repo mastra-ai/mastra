@@ -129,6 +129,10 @@ describe('buildTraceQueryRequest', () => {
     });
   });
 
+  it('does not emit a predicate for a neutral metadata value', () => {
+    expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'metadata.value', value: '' }], now }).where).toBeUndefined();
+  });
+
   it('builds homogeneous typed membership predicates', () => {
     expect(
       buildTraceQueryRequest({
@@ -144,6 +148,64 @@ describe('buildTraceQueryRequest', () => {
     ).toEqual({
       op: 'and',
       args: [{ op: 'in', value: { path: 'metadata.retry.count' }, set: [0, 2.5] }],
+    });
+  });
+
+  it('partitions heterogeneous metadata in values into homogeneous predicates', () => {
+    expect(
+      buildTraceQueryRequest({
+        tokens: [
+          {
+            fieldId: 'metadata.mixedKind',
+            value: [encodeTraceMetadataValue(2), 'string-kind'],
+            operatorId: 'in',
+          },
+        ],
+        now,
+      }).where,
+    ).toEqual({
+      op: 'and',
+      args: [
+        {
+          op: 'or',
+          args: [
+            { op: 'in', value: { path: 'metadata.mixedKind' }, set: [2] },
+            { op: 'in', value: { path: 'metadata.mixedKind' }, set: ['string-kind'] },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('partitions heterogeneous metadata notIn values into homogeneous predicates', () => {
+    expect(
+      buildTraceQueryRequest({
+        tokens: [
+          {
+            fieldId: 'metadata.mixedKind',
+            value: [encodeTraceMetadataValue(2), 'string-kind'],
+            operatorId: 'notIn',
+          },
+        ],
+        now,
+      }).where,
+    ).toEqual({
+      op: 'and',
+      args: [
+        {
+          op: 'or',
+          args: [
+            {
+              op: 'and',
+              args: [
+                { op: 'notIn', value: { path: 'metadata.mixedKind' }, set: [2] },
+                { op: 'notIn', value: { path: 'metadata.mixedKind' }, set: ['string-kind'] },
+              ],
+            },
+            { op: 'notExists', path: 'metadata.mixedKind' },
+          ],
+        },
+      ],
     });
   });
 

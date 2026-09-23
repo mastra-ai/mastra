@@ -682,7 +682,8 @@ export function compileClickHouseTraceQueryObservedFields(
       if(requires_exact, toJSONString(segments), arrayStringConcat(segments, '.')) AS path,
       multiIf(JSONType(leaf) = 'String', 'string', JSONType(leaf) = 'Bool', 'boolean', 'number') AS value_kind
     FROM structured_tree
-    WHERE JSONType(leaf) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool')
+    WHERE length(segments) > 1
+      AND JSONType(leaf) IN ('String', 'Int64', 'UInt64', 'Double', 'Bool')
       AND (JSONType(leaf) != 'String' OR length(JSONExtractString(leaf)) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES})
   )`);
   ctes.push(`grouped_fields AS (

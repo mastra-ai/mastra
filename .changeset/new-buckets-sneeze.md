@@ -1,9 +1,8 @@
 ---
 '@mastra/client-js': minor
-'@mastra/playground-ui': minor
 ---
 
-Added typed nested metadata paths and scalar discovery values to the trace query client. Studio now shows nested and literal-dot metadata fields as distinct filters, offers type-specific operators, and preserves strings, numbers, booleans, empty strings, and whitespace through saved filter URLs.
+Added typed nested metadata paths and scalar discovery values to the trace query client.
 
 ```ts
 const result = await client.queryTraces({

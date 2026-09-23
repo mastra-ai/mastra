@@ -6,9 +6,10 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { encodeTraceMetadataValue } from '../../trace-metadata-filter-codec';
+import { buildTraceQueryRequest } from '../../trace-query-filters';
 import { useTraceMetadataFilterFields } from '../use-trace-metadata-filter-fields';
 import { traceQueryFieldsFixture, traceQueryValuesFixture } from './fixtures/trace-query-discovery';
+import { parseFieldValue } from '@/ds/components/FilterBar/types';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -122,7 +123,7 @@ describe('useTraceMetadataFilterFields', () => {
             : body.path === 'metadata.retry.count'
               ? 0
               : body.path === 'metadata.flags.reviewed'
-                ? false
+                ? true
                 : 'nested';
           return HttpResponse.json({ values: [{ value, count: 1 }], valuesTruncated: false });
         }),
@@ -141,9 +142,28 @@ describe('useTraceMetadataFilterFields', () => {
       expect(options).toEqual([
         [{ value: 'nested', label: 'nested' }],
         [{ value: 'literal-dot', label: 'literal-dot' }],
-        [{ value: encodeTraceMetadataValue(0), label: '0' }],
-        [{ value: encodeTraceMetadataValue(false), label: 'false' }],
+        [{ value: '0', label: '0' }],
+        [{ value: 'true', label: 'true' }],
       ]);
+      const parsedNumber = parseFieldValue(fields[2]?.type, options[2]?.[0]?.value ?? '');
+      const parsedBoolean = parseFieldValue(fields[3]?.type, options[3]?.[0]?.value ?? '');
+      expect(parsedNumber).toBe(0);
+      expect(parsedBoolean).toBe(true);
+      expect(
+        buildTraceQueryRequest({
+          tokens: [
+            { fieldId: 'metadata.retry.count', value: parsedNumber },
+            { fieldId: 'metadata.flags.reviewed', value: parsedBoolean },
+          ],
+          now: new Date(timeRange.to),
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'metadata.retry.count' }, right: { literal: 0 } },
+          { op: 'eq', left: { path: 'metadata.flags.reviewed' }, right: { literal: true } },
+        ],
+      });
       expect(bodies.map(body => body.path)).toEqual([
         'metadata.customer.id',
         ['metadata', 'customer.id'],
