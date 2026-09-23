@@ -168,7 +168,7 @@ describe('IdentityClaimsSection', () => {
     await screen.findByRole('option', { name: /The Octocat/ });
     await screen.findByRole('option', { name: /Alice Linear/ });
 
-    const search = screen.getByPlaceholderText('Search accounts…');
+    const search = screen.getByPlaceholderText('Search by name, id, or email…');
     await userEvent.type(search, 'octo');
 
     await waitFor(() => {

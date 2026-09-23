@@ -126,8 +126,8 @@ export function AccountSettingsSection() {
       </SettingsSubsection>
       <SettingsSubsection
         scope="personal"
-        title="Identity"
-        description="Claim which external accounts on each integration are yours. Used by the board and Cmd+K @me filters."
+        title="Your identities"
+        description="Pick every external account that belongs to you. The board and Cmd+K @me filter match against everything you claim here."
       >
         <IdentityClaimsSection />
       </SettingsSubsection>
