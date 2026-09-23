@@ -57,6 +57,7 @@ import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type {
   AgentChunkType,
+  ThreadHistoryChunk,
   CustomChunkWriter,
   MastraOnFinishCallbackArgs,
   ModelManagerModelConfig,
@@ -483,8 +484,9 @@ export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOption
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface AgentThreadSubscription<OUTPUT = unknown> {
-  stream: AsyncIterable<AgentChunkType<OUTPUT>>;
+export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+  /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
+  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;

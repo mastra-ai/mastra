@@ -1499,7 +1499,7 @@ export class SessionRunEngine {
     this.#session.run.reset();
   }
 
-  async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
+  async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk, true>): Promise<void> {
     const threadId = this.#session.thread.getId() ?? undefined;
     const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;

@@ -9,7 +9,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { MastraModelOutput } from '../stream/base/output';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
 import { ChunkFrom } from '../stream/types';
-import type { ChunkType } from '../stream/types';
+import type { ChunkType, ThreadHistoryChunk } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
@@ -3380,7 +3380,7 @@ export class AgentThreadStreamRuntime {
     agent: Agent<any, any, any, any>,
     options: AgentSubscribeToThreadOptions,
     pubsub?: PubSub,
-  ): Promise<AgentThreadSubscription<OUTPUT>> {
+  ): Promise<AgentThreadSubscription<OUTPUT, boolean>> {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const { provider: leaseProvider, isFallback: hasFallbackLeaseProvider } =
       this.#resolveLeaseProvider(resolvedPubSub);
@@ -3839,7 +3839,7 @@ export class AgentThreadStreamRuntime {
 
     // Subscribe first, then load: parts published while history loads are held
     // by the subscription and filtered against it, so nothing falls in the gap.
-    let historyChunk: ChunkType | undefined;
+    let historyChunk: ThreadHistoryChunk | undefined;
     let historyFilter: ((part: unknown, runId: string) => boolean) | undefined;
     if (options.withInitialHistory) {
       // Events already processed were published before this read, so any run
@@ -3853,7 +3853,7 @@ export class AgentThreadStreamRuntime {
           runId: '',
           from: ChunkFrom.AGENT,
           payload: history,
-        } as ChunkType;
+        };
         historyFilter = createThreadHistoryFilter(history.messages, Date.now());
       } catch (error) {
         control.references--;

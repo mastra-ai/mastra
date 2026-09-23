@@ -6,6 +6,8 @@ Added `withInitialHistory` to `subscribeToThread`. The subscription first emits 
 
 `AgentController` sessions now subscribe with `withInitialHistory`, so a session opened after a restart no longer re-acts on approvals from runs that already finished.
 
+The `thread-history` chunk type only appears on subscriptions that pass `withInitialHistory`; `agent.stream()` and plain subscriptions are typed exactly as before.
+
 ```ts
 const subscription = await agent.subscribeToThread({
   threadId,

@@ -290,7 +290,7 @@ export interface SessionMachinery {
     agent?: Agent;
     resourceId: string;
     threadId: string;
-  }): Promise<AgentThreadSubscription<any>>;
+  }): Promise<AgentThreadSubscription<any, true>>;
   /** Build the per-call stream options (instructions, memory, toolsets, abort signal, tracing). */
   buildStreamOptions(input: {
     requestContext?: RequestContext;
@@ -1032,7 +1032,7 @@ export class SessionThread {
  */
 export class SessionStream {
   /** The live subscription to the active thread, or null when none is open. */
-  #subscription: AgentThreadSubscription<any> | null = null;
+  #subscription: AgentThreadSubscription<any, true> | null = null;
   /** Agent that created the live subscription, or null when none is open. */
   #agent: Agent | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
@@ -1077,7 +1077,7 @@ export class SessionStream {
     agent,
     key,
   }: {
-    subscription: AgentThreadSubscription<any>;
+    subscription: AgentThreadSubscription<any, true>;
     agent?: Agent;
     key: string;
   }): void {
@@ -1087,7 +1087,7 @@ export class SessionStream {
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
-  getAgent({ subscription }: { subscription: AgentThreadSubscription<any> }): Agent | null {
+  getAgent({ subscription }: { subscription: AgentThreadSubscription<any, true> }): Agent | null {
     return this.#subscription === subscription ? this.#agent : null;
   }
 
@@ -1097,7 +1097,7 @@ export class SessionStream {
   }
 
   /** Whether `subscription` is the one currently adopted (identity check). */
-  isCurrent({ subscription }: { subscription: AgentThreadSubscription<any> }): boolean {
+  isCurrent({ subscription }: { subscription: AgentThreadSubscription<any, true> }): boolean {
     return this.#subscription === subscription;
   }
 
@@ -3306,7 +3306,7 @@ export class Session<TState = unknown> {
    * Drive the run loop for a subscribed thread stream: process each run's chunks
    * and finalize it. Delegates to the per-session run engine.
    */
-  processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
+  processSubscribedThreadStream(subscription: AgentThreadSubscription<any, true>): Promise<void> {
     return this.runEngine.processSubscribedThreadStream(subscription);
   }
 
