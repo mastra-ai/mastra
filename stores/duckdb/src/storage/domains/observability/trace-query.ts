@@ -45,6 +45,7 @@ const TRACE_FIELDS = {
   entityType: { sql: 'r.entityType', parameterType: 'scalar' },
   environment: { sql: 'r.environment', parameterType: 'scalar' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'scalar' },
+  tags: { sql: 'r.tags', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
@@ -208,6 +209,21 @@ function compileScalarPredicate<TField extends string>(
     };
   }
 
+  if (predicate.type === 'collection') {
+    // Missing, empty, and non-array JSON all mean "no members", so every branch yields a real boolean.
+    const members = `coalesce(TRY_CAST(${field.sql} AS VARCHAR[]), []::VARCHAR[])`;
+    if (!('value' in predicate)) {
+      return { sql: `len(${members}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
+    }
+    if (predicate.operator === 'includes') {
+      return { sql: `list_contains(${members}, ?)`, values: [...fieldValues, predicate.value] };
+    }
+    return {
+      sql: `len(${members}) > 0 AND NOT list_contains(${members}, ?)`,
+      values: [...fieldValues, ...fieldValues, predicate.value],
+    };
+  }
+
   if (predicate.type === 'membership') {
     const list = predicate.values.map(() => parameterSql(field.parameterType)).join(', ');
     if (predicate.operator === 'in') {
@@ -252,7 +268,9 @@ function compileFeedbackScalarPredicate(predicate: TrustedTraceQueryScalarPredic
     const compiled = compileFeedbackScalarPredicate(predicate.arg);
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
-  if (predicate.field !== 'value') return compileScalarPredicate(predicate, FEEDBACK_FIELDS);
+  if (predicate.field !== 'value' || predicate.type === 'collection') {
+    return compileScalarPredicate(predicate, FEEDBACK_FIELDS);
+  }
   if (predicate.type === 'presence') {
     return { sql: `s.value IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`, values: [] };
   }
@@ -747,6 +765,10 @@ export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan)
     fieldSql = `CASE WHEN ${guard}json_type(${descriptor.jsonExpression}, ?) IN ('VARCHAR', 'BIGINT', 'UBIGINT', 'DOUBLE', 'BOOLEAN') THEN json_extract(${descriptor.jsonExpression}, ?) END`;
     source = descriptor.relation;
     values.push(...objectPathGuard.values, jsonPointer, jsonPointer);
+  } else if (plan.predicateScope === 'trace' && plan.path === 'tags') {
+    // One row per (current root, distinct tag); unnest of NULL yields no rows.
+    fieldSql = 'unnest(list_distinct(TRY_CAST(r.tags AS VARCHAR[])))';
+    source = `${source} WHERE r.tags IS NOT NULL`;
   } else {
     fieldSql = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
   }

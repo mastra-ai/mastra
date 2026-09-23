@@ -171,6 +171,7 @@ async function writeTraceQueryFixture(
       rootEntityVersionId: span.rootEntityVersionId,
       environment: span.environment,
       organizationId: span.organizationId,
+      tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
       error: span.error as CreateSpanRecord['error'],
@@ -502,6 +503,25 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.observedFieldsTruncated).toBe(true);
         expect(new Set(result.observedFields.map(field => JSON.stringify(field.path))).size).toBe(100);
         expect(result.observedFields.every(field => field.occurrences === 1)).toBe(true);
+      });
+
+      it('discovers tag values with per-trace counts from current qualified roots', async () => {
+        await writeDiscoveryFixture();
+        await expect(values({ predicateScope: 'trace', path: 'tags' })).resolves.toEqual({
+          values: [
+            { value: 'beta', count: 2 },
+            { value: 'alpha', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'tags', search: 'ALP' })).resolves.toEqual({
+          values: [{ value: 'alpha', count: 1 }],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'tags', limit: 1 })).resolves.toEqual({
+          values: [{ value: 'beta', count: 2 }],
+          valuesTruncated: true,
+        });
       });
     }
 

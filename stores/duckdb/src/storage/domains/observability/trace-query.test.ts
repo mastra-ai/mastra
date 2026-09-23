@@ -561,6 +561,44 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
   });
 
+  it('compiles tag predicates as null-safe list checks over the JSON tags column', () => {
+    const members = `coalesce(TRY_CAST(r.tags AS VARCHAR[]), []::VARCHAR[])`;
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: 'tags', value: 'beta' },
+            { op: 'notIncludes', path: 'tags', value: 'alpha' },
+            { op: 'exists', path: 'tags' },
+            { op: 'notExists', path: 'tags' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql).toContain(`(list_contains(${members}, ?))`);
+    expect(compiled.sql).toContain(`(len(${members}) > 0 AND NOT list_contains(${members}, ?))`);
+    expect(compiled.sql).toContain(`(len(${members}) > 0)`);
+    expect(compiled.sql).toContain(`(len(${members}) = 0)`);
+    expect(compiled.sql).not.toContain('r.tags IS');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'beta', 'alpha', 101]);
+  });
+
+  it('discovers tag values as one row per current root and distinct tag', () => {
+    const compiled = compileDuckDBTraceQueryValues(
+      planTraceQueryValues(
+        parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', search: 'be' }),
+      ),
+    );
+
+    expect(compiled.sql).toContain(
+      'SELECT unnest(list_distinct(TRY_CAST(r.tags AS VARCHAR[]))) AS value FROM root_scope r WHERE r.tags IS NOT NULL',
+    );
+    expect(compiled.sql).toContain('GROUP BY value\nORDER BY count DESC, value ASC\nLIMIT ?');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'be', 26]);
+  });
+
   it('fails closed when a trusted plan contains an unmapped field', () => {
     const trusted = plan({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
     const invalid = {

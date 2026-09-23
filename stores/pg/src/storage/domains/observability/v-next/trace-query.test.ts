@@ -4,11 +4,13 @@ import {
   encodeTraceQueryDeltaCursor,
   getTraceQueryDeltaWatermark,
   parseGetTraceQueryFieldsArgs,
+  parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
   planTraceQueryObservedFields,
+  planTraceQueryValues,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
@@ -25,6 +27,7 @@ import {
   compilePostgresThreadQuery,
   compilePostgresTraceQuery,
   compilePostgresTraceQueryObservedFields,
+  compilePostgresTraceQueryValues,
   queryThreads,
   queryTraces,
 } from './trace-query';
@@ -256,6 +259,39 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).toContain(`r."metadataRaw" #>> $3::text[]`);
     expect(compiled.text).toContain(`::double precision END END`);
     expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, ['retry', 'count'], 3, 101]);
+  });
+
+  it('compiles tag collection predicates against the text[] column and discovers tags per trace', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'includes', path: 'tags', value: 'alpha' },
+            { op: 'notIncludes', path: 'tags', value: 'beta' },
+            { op: 'exists', path: 'tags' },
+            { op: 'notExists', path: 'tags' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text).toContain(`(r."tags" @> ARRAY[$3]::text[])`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") > 0 AND NOT (r."tags" @> ARRAY[$4]::text[]))`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") > 0)`);
+    expect(compiled.text).toContain(`(cardinality(r."tags") = 0)`);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'alpha', 'beta', 101]);
+
+    const values = compilePostgresTraceQueryValues(
+      'public',
+      planTraceQueryValues(
+        parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', limit: 10 }),
+      ),
+    );
+    expect(values.text).toContain(`SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r`);
+    expect(values.text).toContain('GROUP BY value');
+    expect(values.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 11]);
   });
 
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {

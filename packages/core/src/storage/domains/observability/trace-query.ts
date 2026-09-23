@@ -38,6 +38,10 @@ const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(v
 const literalStringSchema = z
   .string()
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_STRING_BYTES), 'String literal is too large');
+const collectionMemberSchema = literalStringSchema.refine(
+  value => value.trim().length > 0,
+  'Collection predicates require a non-empty string value',
+);
 const timestampLiteralSchema = z.string().datetime({ offset: true });
 export const TRACE_QUERY_MAX_PATH_SEGMENTS = 12;
 export const TRACE_QUERY_MAX_PATH_SEGMENT_BYTES = 128;
@@ -94,6 +98,13 @@ export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicat
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
     z
       .object({
+        op: z.enum(['includes', 'notIncludes']),
+        path: predicateStringPathSchema,
+        value: collectionMemberSchema,
+      })
+      .strict(),
+    z
+      .object({
         op: z.enum(['and', 'or']),
         args: z.array(traceQueryScalarPredicateSchema).min(1),
       })
@@ -119,6 +130,13 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
       })
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
+    z
+      .object({
+        op: z.enum(['includes', 'notIncludes']),
+        path: predicateStringPathSchema,
+        value: collectionMemberSchema,
+      })
+      .strict(),
     z
       .object({
         op: z.enum(['and', 'or']),
@@ -172,6 +190,8 @@ export const traceQueryOperatorSchema = z.enum([
   'notIn',
   'exists',
   'notExists',
+  'includes',
+  'notIncludes',
 ]);
 export const traceQueryObservedValueKindSchema = z.enum(['string', 'number', 'boolean', 'scalar']);
 export const traceQueryValueKindSchema = z.enum([
@@ -179,6 +199,7 @@ export const traceQueryValueKindSchema = z.enum([
   'stringOrNumber',
   'timestamp',
   'presence',
+  'array',
 ]);
 
 const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine((timeRange, context) => {
@@ -465,6 +486,7 @@ export type TraceQueryScalarPredicate =
     }
   | { op: 'in' | 'notIn'; value: TraceQueryPathOrLiteral; set: TraceQueryLiteral[] }
   | { op: 'exists' | 'notExists'; path: TraceQueryPath }
+  | { op: 'includes' | 'notIncludes'; path: string; value: string }
   | { op: 'and' | 'or'; args: TraceQueryScalarPredicate[] }
   | { op: 'not'; arg: TraceQueryScalarPredicate };
 
@@ -521,6 +543,8 @@ interface FieldRule {
 export const TRACE_QUERY_STRING_OPERATORS = ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'] as const;
 export const TRACE_QUERY_ORDERED_OPERATORS = [...TRACE_QUERY_STRING_OPERATORS, 'lt', 'lte', 'gt', 'gte'] as const;
 export const TRACE_QUERY_PRESENCE_OPERATORS = ['exists', 'notExists'] as const;
+/** Stored string collections such as `tags`. `exists` means at least one member; `notExists` means none. */
+export const TRACE_QUERY_ARRAY_OPERATORS = ['includes', 'notIncludes', 'exists', 'notExists'] as const;
 
 const stringField = (valueSuggestions: boolean): FieldRule => ({
   valueKind: 'string',
@@ -537,6 +561,11 @@ const presenceField = (): FieldRule => ({
   operators: TRACE_QUERY_PRESENCE_OPERATORS,
   valueSuggestions: false,
 });
+const arrayField = (): FieldRule => ({
+  valueKind: 'array',
+  operators: TRACE_QUERY_ARRAY_OPERATORS,
+  valueSuggestions: true,
+});
 
 export const TRACE_QUERY_FIELD_REGISTRY = {
   trace: {
@@ -549,6 +578,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     entityType: stringField(true),
     environment: stringField(true),
     status: stringField(true),
+    tags: arrayField(),
   },
   spans: {
     name: stringField(true),
@@ -623,6 +653,7 @@ export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryStru
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
+export type TraceQueryCollectionOperator = 'includes' | 'notIncludes' | 'empty' | 'notEmpty';
 
 export type GetTraceQueryFieldsArgs = z.input<typeof getTraceQueryFieldsArgsSchema>;
 export type NormalizedGetTraceQueryFieldsArgs = z.output<typeof getTraceQueryFieldsArgsSchema>;
@@ -647,6 +678,8 @@ export type TrustedTraceQueryScalarPredicate =
       values: Array<string | number | boolean>;
     }
   | { type: 'presence'; field: TraceQueryPredicateField; operator: TraceQueryPresenceOperator }
+  | { type: 'collection'; field: TraceQueryPredicateField; operator: 'includes' | 'notIncludes'; value: string }
+  | { type: 'collection'; field: TraceQueryPredicateField; operator: 'empty' | 'notEmpty' }
   | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceQueryScalarPredicate[] }
   | { type: 'not'; arg: TrustedTraceQueryScalarPredicate };
 
@@ -1437,7 +1470,35 @@ function planPredicate(
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    if (rule.valueKind === 'array') {
+      return {
+        type: 'collection',
+        field: toTrustedPredicateField(field),
+        operator: predicate.op === 'exists' ? 'notEmpty' : 'empty',
+      };
+    }
     return { type: 'presence', field: toTrustedPredicateField(field), operator: predicate.op };
+  }
+
+  if (predicate.op === 'includes' || predicate.op === 'notIncludes') {
+    state.literalUnits += 1;
+    if (state.literalUnits > TRACE_QUERY_MAX_LITERAL_UNITS) {
+      addPredicateComplexityIssue(
+        [...path, 'value'],
+        `Trace queries are limited to ${TRACE_QUERY_MAX_LITERAL_UNITS} literal units`,
+        state,
+      );
+    }
+    const field = normalizePath(predicate.path);
+    const rule = getRule(field, context, rules, [...path, 'path'], state);
+    if (!rule) return undefined;
+    if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    return {
+      type: 'collection',
+      field: field as TraceQueryPredicateField,
+      operator: predicate.op,
+      value: predicate.value,
+    };
   }
 
   if (predicate.op === 'in' || predicate.op === 'notIn') {
@@ -1625,7 +1686,7 @@ function normalizeLiteral(
     const timestamp = timestampLiteralSchema.safeParse(value);
     return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
   }
-  if (rule.valueKind === 'string') {
+  if (rule.valueKind === 'string' || rule.valueKind === 'array') {
     return typeof value === 'string' && (!rule.nonEmpty || value.trim().length > 0) ? value : undefined;
   }
   return undefined;

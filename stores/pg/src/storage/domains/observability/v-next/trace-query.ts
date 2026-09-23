@@ -55,6 +55,7 @@ const TRACE_FIELDS = {
   entityType: 'r."entityType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
+  tags: 'r."tags"',
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
@@ -218,6 +219,18 @@ function compileScalarPredicate<TField extends string>(
     };
   }
 
+  if (predicate.type === 'collection') {
+    // `tags` is `text[] NOT NULL DEFAULT '{}'`, so an empty list is the only "no tags" shape.
+    if (predicate.operator === 'includes' || predicate.operator === 'notIncludes') {
+      const contains = `${field} @> ARRAY[$${parameterOffset}]::text[]`;
+      return {
+        sql: predicate.operator === 'includes' ? contains : `cardinality(${field}) > 0 AND NOT (${contains})`,
+        values: [...fieldValues, predicate.value],
+      };
+    }
+    return { sql: `cardinality(${field}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
+  }
+
   if (predicate.type === 'membership') {
     const list = placeholders(predicate.values, parameterOffset);
     if (predicate.operator === 'in') {
@@ -262,6 +275,7 @@ function compileFeedbackScalarPredicate(
   if (predicate.field !== 'value') {
     return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameterOffset);
   }
+  if (predicate.type === 'collection') throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
   if (predicate.type === 'presence') {
     const present = `(s."valueString" IS NOT NULL OR s."valueNumber" IS NOT NULL)`;
     return { sql: predicate.operator === 'exists' ? present : `NOT ${present}`, values: [] };
@@ -795,8 +809,7 @@ export function compilePostgresTraceQueryValues(
     discoveryCollections(plan.predicateScope),
     plan.scope,
   );
-  let field: string;
-  let source = discoverySource(plan.predicateScope);
+  let extracted: string;
   if (Array.isArray(plan.path)) {
     const descriptor = structuredDiscoveryRoot(plan, plan.path[0]);
     values.push(plan.path.slice(1));
@@ -808,10 +821,14 @@ export function compilePostgresTraceQueryValues(
     );
     const jsonType = `jsonb_typeof(${json})`;
     const numeric = `((${descriptor.jsonExpression} #>> ${pathParameter})::numeric)`;
-    field = `CASE WHEN ${objectPathGuard} AND ${jsonType} IN ('string', 'number', 'boolean') THEN CASE WHEN ${jsonType} <> 'number' THEN ${json} WHEN ${finiteFloat64NumericCondition(numeric)} THEN ${json} END END`;
-    source = descriptor.relation;
+    const field = `CASE WHEN ${objectPathGuard} AND ${jsonType} IN ('string', 'number', 'boolean') THEN CASE WHEN ${jsonType} <> 'number' THEN ${json} WHEN ${finiteFloat64NumericCondition(numeric)} THEN ${json} END END`;
+    extracted = `SELECT ${field}::text AS value FROM ${descriptor.relation}`;
+  } else if (plan.predicateScope === 'trace' && plan.path === 'tags') {
+    // One row per (trace, distinct tag) so the outer count is a per-trace count.
+    extracted = `SELECT value FROM (SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r) t`;
   } else {
-    field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
+    const field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
+    extracted = `SELECT ${field}::text AS value FROM ${discoverySource(plan.predicateScope)}`;
   }
   const searchParameter = values.length + 1;
   const searchableValue = Array.isArray(plan.path) ? `(value::jsonb #>> '{}')` : 'value';
@@ -820,7 +837,7 @@ export function compilePostgresTraceQueryValues(
   values.push(plan.limit + 1);
   return {
     text: `WITH ${ctes.join(',\n')}, extracted AS (
-  SELECT ${field}::text AS value FROM ${source}
+  ${extracted}
 )
 SELECT value, count(*)::bigint AS count
 FROM extracted

@@ -225,7 +225,7 @@ Value suggestions are available for these canonical fields:
 
 | Scope | Fields |
 | - | - |
-| Trace | `entityName`, `entityType`, `environment`, `status` |
+| Trace | `entityName`, `entityType`, `environment`, `status`, `tags` |
 | Spans | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityName` |
 | Scores | `scorerId`, `scorerVersion`, `scoreSource` |
 | Feedback | `feedbackType`, `feedbackSource` |
@@ -296,6 +296,7 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
 | Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
@@ -306,7 +307,7 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Feedback | `value`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Feedback | `comment` | `exists`, `notExists` |
 
-Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
+Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags).
 
 String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
 
@@ -463,6 +464,32 @@ const messageTrace = {
 The key must name one top-level property. Empty keys and nested paths are rejected. Metadata keys aren't trimmed, so leading and trailing whitespace remains part of the exact key identity. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
 
 Metadata fields aren't available for grouping. Trace-query discovery returns executable top-level string metadata fields observed in the selected time range.
+
+### Filter by tags
+
+Tags are a list of strings stored on the current root span, so they use collection operators instead of the scalar `in` and `notIn` operators. This query finds production traces tagged for manual review that don't carry the `archived` tag:
+
+```typescript
+const manualReview = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+    { op: 'includes', path: 'tags', value: 'manual-review' },
+    { op: 'notIncludes', path: 'tags', value: 'archived' },
+  ],
+}
+```
+
+| Operator | Matches when |
+| - | - |
+| `includes` | The trace has the requested tag |
+| `notIncludes` | The trace has at least one tag, but not the requested tag |
+| `exists` | The trace has at least one tag |
+| `notExists` | The trace has no tags |
+
+Tags compare exactly and case-sensitively as whole strings. `value` must be one string with at least one non-whitespace character. Combine several `includes` predicates with `and` or `or` to require or allow multiple tags. A trace with no recorded tags and a trace with an empty tag list behave the same: both satisfy `notExists`, neither satisfies `includes`, `notIncludes`, or `exists`. Use `{ op: 'not', arg: { op: 'includes', ... } }` when untagged traces should also match.
+
+`tags` is available in trace predicates only, including those inside `traces.some` or `traces.none`. `in`, `notIn`, and the comparison operators are rejected for `tags`. Value discovery for `tags` returns each observed tag with the number of qualifying traces that carry it.
 
 ### Filter by feedback
 
