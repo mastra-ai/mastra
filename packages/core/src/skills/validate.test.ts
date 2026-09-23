@@ -48,3 +48,11 @@ describe('validateSkillContent', () => {
     expect(validateSkillMetadata({ name: 'foo', description: 'x' }, 'foo').valid).toBe(true);
   });
 });
+
+describe('validateSkillContent metadata', () => {
+  it('returns raw metadata even when invalid', () => {
+    const result = validateSkillContent(doc('name: 1\ndescription: x'), 'foo');
+    expect(result.valid).toBe(false);
+    expect(result.metadata?.name).toBe(1);
+  });
+});

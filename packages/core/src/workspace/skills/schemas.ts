@@ -329,8 +329,8 @@ export function validateSkillMetadata(
  * Result of validating raw SKILL.md content
  */
 export interface SkillContentValidationResult extends SkillValidationResult {
-  /** Parsed frontmatter fields (present when frontmatter could be parsed) */
-  metadata?: SkillMetadataInput;
+  /** Raw parsed frontmatter fields (present when frontmatter could be parsed; may be invalid) */
+  metadata?: Record<string, unknown>;
   /** Markdown body after the frontmatter, trimmed */
   instructions?: string;
 }
@@ -382,7 +382,7 @@ export function validateSkillContent(content: string, directoryName?: string): S
   }
   return {
     ...validateSkillMetadata(extracted.metadata, directoryName, extracted.instructions),
-    metadata: extracted.metadata,
+    metadata: { ...extracted.metadata },
     instructions: extracted.instructions,
   };
 }
