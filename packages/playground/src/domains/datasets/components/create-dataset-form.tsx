@@ -99,7 +99,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className={cn('text-muted-foreground hover:text-success-fg text-caption', controlStateColorTransition)}
+          className={cn('text-caption text-muted-foreground hover:text-success-fg', controlStateColorTransition)}
           onClick={() => setShowCustomSchema(true)}
         >
           + Custom schema

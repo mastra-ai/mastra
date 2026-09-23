@@ -42,7 +42,7 @@ export function AgentVersionPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-border border-b px-3 py-3">
+      <div className="border-b border-border px-3 py-3">
         <Txt variant="column" tone="ink">
           Version history
         </Txt>
@@ -69,11 +69,11 @@ export function AgentVersionPanel({
                     type="button"
                     onClick={() => onVersionSelect(version.id)}
                     className={cn(
-                      'w-full text-left px-3 py-2.5 text-body border-l-2',
+                      'w-full border-l-2 px-3 py-2.5 text-left text-body',
                       controlStateColorTransition,
                       isSelected
-                        ? 'bg-fill-hover text-foreground border-border-strong'
-                        : `hover:bg-fill-subtle border-transparent ${quietTextHover}`,
+                        ? 'border-border-strong bg-fill-hover text-foreground'
+                        : `border-transparent hover:bg-fill-subtle ${quietTextHover}`,
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">

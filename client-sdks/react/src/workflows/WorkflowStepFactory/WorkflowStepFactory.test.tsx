@@ -58,6 +58,14 @@ const makeVariantStep = (kind: ResolvedWorkflowStep['kind']): ResolvedWorkflowSt
         result: successResult,
         workflowStatus: 'success',
       };
+    case 'classifier-step':
+      return {
+        kind,
+        id: kind,
+        flow: { type: 'classifier', id: kind, classifierId: 'ticket-router' },
+        result: successResult,
+        workflowStatus: 'success',
+      };
     case 'foreach-step':
       return {
         kind,
@@ -174,6 +182,7 @@ describe('WorkflowStepFactory', () => {
     ['map-step', 'MapStep'],
     ['agent-step', 'AgentStep'],
     ['tool-step', 'ToolStep'],
+    ['classifier-step', 'ClassifierStep'],
     ['foreach-step', 'ForEachStep'],
     ['parallel-step', 'ParallelStep'],
     ['conditional', 'Conditional'],
@@ -189,6 +198,7 @@ describe('WorkflowStepFactory', () => {
       MapStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
       AgentStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
       ToolStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
+      ClassifierStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
       ForEachStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
       ParallelStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
       Conditional: vi.fn<(props: ResolvedWorkflowStep) => void>(),
@@ -217,6 +227,10 @@ describe('WorkflowStepFactory', () => {
         ToolStep={props => {
           calls.ToolStep(props);
           return <div data-testid="ToolStep">{props.kind}</div>;
+        }}
+        ClassifierStep={props => {
+          calls.ClassifierStep(props);
+          return <div data-testid="ClassifierStep">{props.kind}</div>;
         }}
         ForEachStep={props => {
           calls.ForEachStep(props);

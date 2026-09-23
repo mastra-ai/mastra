@@ -33,7 +33,7 @@ function RunDuration({ span, spansSuspension }: Omit<WorkflowRunTiming, 'waiting
 
   return (
     <span
-      className="text-meta text-muted-foreground flex items-center gap-1.5 tabular-nums"
+      className="flex items-center gap-1.5 text-meta text-muted-foreground tabular-nums"
       title={spansSuspension ? 'Run duration, including time spent suspended' : 'Run duration'}
     >
       <Timer aria-hidden className="size-3.5" />
@@ -46,7 +46,7 @@ function RunWaiting({ since }: { since: number }) {
   const waiting = formatDuration(useTimeDiff({ startedAt: since }));
 
   return (
-    <span className="text-meta text-info-fg flex items-center gap-1.5 tabular-nums" title="Waiting for input">
+    <span className="flex items-center gap-1.5 text-meta text-info-fg tabular-nums" title="Waiting for input">
       <Pause aria-hidden className="size-3.5" />
       {waiting}
     </span>
@@ -86,7 +86,7 @@ export function RunWorkflowHeader({
           {timing && <RunDuration span={timing.span} spansSuspension={timing.spansSuspension} />}
         </div>
       </div>
-      <div className="text-meta text-muted-foreground flex min-w-0 items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1 text-meta text-muted-foreground">
         <span className="min-w-0 truncate font-mono" title={runId}>
           {runId}
         </span>

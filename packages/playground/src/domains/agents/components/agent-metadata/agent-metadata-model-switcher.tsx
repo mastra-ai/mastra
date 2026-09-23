@@ -62,7 +62,7 @@ export const AgentMetadataModelSwitcher = ({
       setLoading(true);
       try {
         const result = await updateModel({
-          provider: fullProviderId as UpdateModelParams['provider'],
+          provider: fullProviderId,
           modelId,
         });
         console.info('Model updated:', result);
@@ -111,7 +111,7 @@ export const AgentMetadataModelSwitcher = ({
         const fullOriginalProviderId = resolvedOriginalProvider?.id || originalProvider;
         if (fullOriginalProviderId && originalModel) {
           updateModel({
-            provider: fullOriginalProviderId as UpdateModelParams['provider'],
+            provider: fullOriginalProviderId,
             modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);
@@ -182,9 +182,9 @@ export const AgentMetadataModelSwitcher = ({
         className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
         data-testid="agent-metadata-model-locked"
       >
-        <Lock className="text-muted-foreground h-4 w-4 shrink-0" />
-        <span className="text-caption text-foreground truncate">{lockedLabel}</span>
-        <span className="text-meta text-muted-foreground ml-auto shrink-0">Set by admin</span>
+        <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="truncate text-caption text-foreground">{lockedLabel}</span>
+        <span className="ml-auto shrink-0 text-meta text-muted-foreground">Set by admin</span>
       </div>
     );
   }
@@ -222,7 +222,7 @@ export const AgentMetadataModelSwitcher = ({
           size="md"
           onClick={handleReset}
           disabled={loading}
-          className="text-caption flex items-center gap-1.5 border-0! whitespace-nowrap"
+          className="flex items-center gap-1.5 border-0! text-caption whitespace-nowrap"
           title="Reset to original model"
         >
           <RotateCcw className="h-3.5 w-3.5" />

@@ -5,7 +5,7 @@ import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { AppShell } from '@mastra/playground-ui/new/layout/app-shell';
+import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { SidebarNew, useSidebarNew } from '@mastra/playground-ui/new/sidebar';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
@@ -15,7 +15,6 @@ import { Search } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
-import { StudioCard } from './studio-card';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
@@ -39,7 +38,7 @@ function MobileNavbar() {
   };
 
   return (
-    <header className="border-border bg-sidebar sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b px-3 lg:hidden">
+    <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-sidebar px-3 lg:hidden">
       <div className="flex min-w-0 items-center gap-3">
         <SidebarNew.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
@@ -139,11 +138,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
       >
         <StudioFrame className="flex min-h-0 flex-1 flex-col">
-          <StudioCard>
+          <MainCard>
             <AuthRequired>
               <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
             </AuthRequired>
-          </StudioCard>
+          </MainCard>
         </StudioFrame>
       </AppShell>
     </>
@@ -155,7 +154,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { Link } = useLinkComponent();
 
   return (
-    <div className="bg-sidebar font-body h-screen">
+    <div className="h-screen bg-sidebar font-body">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>

@@ -125,10 +125,10 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       data-testid={`integration-card-${platform.id}`}
       className={cn(
         raisedSurfaceStyle,
-        'state-layer focus-visible:ring-border-focus flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4 text-center focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60',
+        'state-layer flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4 text-center focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60',
       )}
     >
-      <div className="bg-muted grid size-14 place-items-center rounded-xl">
+      <div className="grid size-14 place-items-center rounded-xl bg-muted">
         <PlatformIcon platform={platform.id} className="h-7 w-7" />
       </div>
 

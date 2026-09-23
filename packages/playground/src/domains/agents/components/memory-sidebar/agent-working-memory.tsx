@@ -53,11 +53,11 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     <div className="flex flex-col gap-4 p-4">
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-foreground text-subheading">Working Memory</h3>
+          <h3 className="text-subheading text-foreground">Working Memory</h3>
           {isWorkingMemoryEnabled && workingMemorySource && (
             <span
               className={cn(
-                'text-column px-2 py-0.5 rounded',
+                'rounded px-2 py-0.5 text-column',
                 workingMemorySource === 'resource'
                   ? 'bg-purple-500/20 text-purple-400'
                   : 'bg-blue-500/20 text-blue-400',
@@ -73,7 +73,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           )}
         </div>
         {isWorkingMemoryEnabled && !threadExists && (
-          <p className="text-muted-foreground text-caption">Send a message to the agent to enable working memory.</p>
+          <p className="text-caption text-muted-foreground">Send a message to the agent to enable working memory.</p>
         )}
       </div>
 
@@ -88,28 +88,28 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       content={workingMemoryData || ''}
                       isCopied={isCopied}
                       onCopy={handleCopy}
-                      className={cn(raisedSurfaceStyle, 'text-body min-h-[150px] rounded-lg font-mono')}
+                      className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg font-mono text-body')}
                     />
                   ) : (
                     <>
                       <div className={cn(raisedSurfaceStyle, 'rounded-lg')} style={{ height: '300px' }}>
                         <ScrollArea className="h-full">
-                          <div className="hover:bg-fill-subtle group text-meta relative cursor-pointer p-3">
+                          <div className="group relative cursor-pointer p-3 text-meta hover:bg-fill-subtle">
                             <button
                               type="button"
                               onClick={handleCopy}
                               aria-label="Copy working memory"
-                              className="focus-visible:ring-border-focus absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:outline-hidden"
+                              className="absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-hidden"
                             />
                             <div className="pointer-events-none">
                               <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
                             </div>
                             {isCopied && (
-                              <span className="text-meta pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-green-500/20 px-1.5 py-0.5 text-green-500">
+                              <span className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-green-500/20 px-1.5 py-0.5 text-meta text-green-500">
                                 Copied!
                               </span>
                             )}
-                            <span className="text-meta bg-card text-muted-foreground pointer-events-none absolute top-2 right-2 z-20 rounded-full px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                            <span className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-card px-1.5 py-0.5 text-meta text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
                               Click to copy
                             </span>
                           </div>
@@ -119,7 +119,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <div className="text-muted-foreground text-body font-mono">
+                <div className="font-mono text-body text-muted-foreground">
                   No working memory content yet. Click "Edit Working Memory" to add content.
                 </div>
               )}
@@ -128,7 +128,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             <textarea
               className={cn(
                 raisedSurfaceStyle,
-                'text-foreground text-body min-h-[150px] w-full resize-none rounded-lg p-3 font-mono',
+                'min-h-[150px] w-full resize-none rounded-lg p-3 font-mono text-body text-foreground',
               )}
               value={editState.value}
               onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
@@ -148,7 +148,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                         type="button"
                         aria-disabled="true"
                         onClick={event => event.preventDefault()}
-                        className="text-caption cursor-not-allowed opacity-50"
+                        className="cursor-not-allowed text-caption opacity-50"
                       >
                         Edit Working Memory
                       </Button>
@@ -202,7 +202,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
         </>
       ) : (
         <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-          <p className="text-muted-foreground text-body mb-3">
+          <p className="mb-3 text-body text-muted-foreground">
             Working memory is not enabled for this agent. Enable it to maintain context across conversations.
           </p>
           <a
@@ -210,7 +210,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
-              'text-body inline-flex items-center gap-2 text-blue-400 hover:text-blue-300',
+              'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
               controlStateColorTransition,
             )}
           >

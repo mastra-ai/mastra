@@ -1,9 +1,12 @@
 import type { DataListRootProps } from '@/ds/components/DataList';
 
+const compactNumberFormatter = new Intl.NumberFormat('en-US', {
+  notation: 'compact',
+  maximumSignificantDigits: 3,
+});
+
 export function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return compactNumberFormatter.format(n).replace('K', 'k');
 }
 
 export function formatCost(value: number, unit?: string | null): string {

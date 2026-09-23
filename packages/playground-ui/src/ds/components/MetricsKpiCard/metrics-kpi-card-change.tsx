@@ -1,4 +1,5 @@
-import { TrendingUpIcon, TrendingDownIcon } from 'lucide-react';
+import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
+import { Badge } from '@/ds/components/Badge';
 import { cn } from '@/lib/utils';
 
 export function MetricsKpiCardChange({
@@ -13,22 +14,19 @@ export function MetricsKpiCardChange({
   className?: string;
 }) {
   const isGood = lowerIsBetter ? changePct < 0 : changePct >= 0;
+  const Icon = changePct >= 0 ? ArrowUpRightIcon : ArrowDownRightIcon;
+  const formattedChangePct = Math.abs(changePct) < 10 ? changePct.toFixed(1) : changePct.toFixed(0);
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-1 text-caption text-placeholder', className)}>
-      <div className="flex items-center gap-1">
-        <span className={cn('[&>svg]:size-4', isGood ? 'text-green-600' : 'text-red-600')}>
-          {changePct >= 0 ? <TrendingUpIcon /> : <TrendingDownIcon />}
-        </span>
-        <span
-          className={cn(isGood ? 'text-green-600' : 'text-red-600')}
-        >{`${changePct >= 0 ? '+' : '-'}${Math.abs(changePct).toFixed(1)}%`}</span>
-      </div>
-      {prevValue && (
-        <div>
-          vs previous <b className="text-placeholder text-column">{prevValue}</b>
-        </div>
-      )}
+    <div className={cn('flex items-center gap-1.5', className)}>
+      <Badge variant={isGood ? 'green' : 'red'} emphasis="muted" size="xs" icon={<Icon />} className="tabular-nums">
+        {changePct > 0 ? '+' : ''}
+        {formattedChangePct}%
+      </Badge>
+      <span className="text-meta text-placeholder">
+        vs prior period
+        {prevValue ? <span className="sr-only">, previous value {prevValue}</span> : null}
+      </span>
     </div>
   );
 }

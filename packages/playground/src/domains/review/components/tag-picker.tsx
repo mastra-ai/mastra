@@ -63,7 +63,7 @@ export function TagPicker({
             className={cn(
               quietTextHover,
               controlStateColorTransition,
-              'hover:bg-fill-subtle text-meta inline-flex items-center gap-0.5 rounded px-1 py-0.5',
+              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-meta hover:bg-fill-subtle',
             )}
           >
             <Plus className="h-3 w-3" />
@@ -77,7 +77,7 @@ export function TagPicker({
             onChange={e => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or create tag..."
-            className="text-caption mb-1 h-7"
+            className="mb-1 h-7 text-caption"
             autoFocus
           />
           <div className="max-h-32 space-y-0.5 overflow-y-auto">
@@ -86,7 +86,7 @@ export function TagPicker({
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="hover:bg-fill-subtle text-muted-foreground text-caption w-full rounded px-2 py-1 text-left"
+                className="w-full rounded px-2 py-1 text-left text-caption text-muted-foreground hover:bg-fill-subtle"
               >
                 {tag}
               </button>
@@ -95,7 +95,7 @@ export function TagPicker({
               <button
                 type="button"
                 onClick={() => addTag(search.trim())}
-                className="hover:bg-fill-subtle text-info-fg text-caption w-full rounded px-2 py-1 text-left"
+                className="w-full rounded px-2 py-1 text-left text-caption text-info-fg hover:bg-fill-subtle"
               >
                 Create &quot;{search.trim()}&quot;
               </button>

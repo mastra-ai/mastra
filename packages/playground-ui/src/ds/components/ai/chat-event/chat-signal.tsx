@@ -22,19 +22,19 @@ export function ChatSignal({ kind, label, message, mode, variant = 'row', defaul
   if (variant === 'card') {
     const Icon = kind === 'state' ? Database : Radio;
     return (
-      <div className="border-border bg-background text-foreground my-2 max-w-[80%] rounded-lg border px-4 py-3">
+      <div className="my-2 max-w-[80%] rounded-lg border border-border bg-background px-4 py-3 text-foreground">
         <div className="flex items-start gap-3">
-          <Icon className="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden />
+          <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-column text-foreground">{label}</p>
               {mode && (
-                <span className="border-border text-caption text-muted-foreground inline-flex items-center rounded-full border px-1.5 py-0.5 leading-none">
+                <span className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 text-caption leading-none text-muted-foreground">
                   {mode}
                 </span>
               )}
             </div>
-            {message && <p className="text-caption mt-2 break-words whitespace-pre-wrap">{message}</p>}
+            {message && <p className="mt-2 text-caption break-words whitespace-pre-wrap">{message}</p>}
           </div>
         </div>
       </div>

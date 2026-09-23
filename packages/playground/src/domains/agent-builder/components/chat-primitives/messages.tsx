@@ -83,9 +83,9 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   };
 
   return (
-    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-muted border-transparent">
+    <ToolCard testId="agent-builder-chat-tool-approval" className="border-transparent bg-muted">
       <Txt variant="caption" tone="ink" className="pb-2" as="div">
-        Approval required for <span className="text-foreground font-mono">{toolName}</span>
+        Approval required for <span className="font-mono text-foreground">{toolName}</span>
       </Txt>
       <div className="flex items-center gap-2">
         <Button
@@ -297,12 +297,12 @@ export const Txtmessage = ({
 export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onRetry: (() => void) | null }) => {
   return (
     <Card
-      className="border-warning-border bg-warning-bg flex max-w-[80%] flex-col gap-3 p-4"
+      className="flex max-w-[80%] flex-col gap-3 border-warning-border bg-warning-bg p-4"
       role="alert"
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">
-        <AlertTriangle className="text-warning-fg mt-0.5 size-4 shrink-0" aria-hidden />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-fg" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
           <Txt variant="subheading" tone="ink" as="div">
             Something went wrong while building the agent.
@@ -345,7 +345,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <pre
-              className="text-muted-foreground bg-sidebar text-caption max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
+              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
@@ -407,37 +407,37 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
           className="group flex w-full items-center gap-2 text-left"
           data-testid="agent-builder-chat-generic-tool-trigger"
         >
-          <span className="border-border/60 bg-sidebar inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
-            <Wrench className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-sidebar px-2 py-0.5">
+            <Wrench className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <Txt variant="caption" tone="ink" as="span">
-              Executing <span className="text-foreground font-mono">{toolName}</span>
+              Executing <span className="font-mono text-foreground">{toolName}</span>
             </Txt>
           </span>
           <ChevronRight
-            className="text-muted-foreground size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90"
+            className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
             aria-hidden
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
-            <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
-              <div className="border-border/60 border-b px-2 py-1">
+            <div className="overflow-hidden rounded-md border border-border/60 bg-sidebar">
+              <div className="border-b border-border/60 px-2 py-1">
                 <Txt variant="caption" tone="muted" as="div">
                   Input
                 </Txt>
               </div>
-              <pre className="text-foreground text-caption m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
+              <pre className="m-0 max-h-[320px] overflow-auto p-3 text-caption break-words whitespace-pre-wrap text-foreground">
                 {inputJson || '{}'}
               </pre>
             </div>
             {hasOutput ? (
-              <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
-                <div className="border-border/60 border-b px-2 py-1">
+              <div className="overflow-hidden rounded-md border border-border/60 bg-sidebar">
+                <div className="border-b border-border/60 px-2 py-1">
                   <Txt variant="caption" tone="muted" as="div">
                     Output
                   </Txt>
                 </div>
-                <pre className="text-foreground text-caption m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
+                <pre className="m-0 max-h-[320px] overflow-auto p-3 text-caption break-words whitespace-pre-wrap text-foreground">
                   {outputJson}
                 </pre>
               </div>
@@ -461,7 +461,7 @@ export const ToolCard = ({
   <Card
     data-testid={testId}
     className={cn(
-      'max-w-[80%] p-3 bg-background/60 border-border/60 animate-in fade-in slide-in-from-left-2 duration-300',
+      'max-w-[80%] animate-in border-border/60 bg-background/60 p-3 duration-300 fade-in slide-in-from-left-2',
       className,
     )}
   >
@@ -470,12 +470,12 @@ export const ToolCard = ({
 );
 
 const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
-  <div className="animate-in fade-in slide-in-from-right-4 flex max-w-full min-w-0 items-start gap-2 duration-500 ease-out">
+  <div className="flex max-w-full min-w-0 animate-in items-start gap-2 duration-500 ease-out fade-in slide-in-from-right-4">
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
     <Txt variant="body" tone="muted" className="min-w-0 flex-1 truncate" as="div">
-      {label} <strong className="text-foreground font-medium">{value}</strong>
+      {label} <strong className="font-medium text-foreground">{value}</strong>
     </Txt>
   </div>
 );

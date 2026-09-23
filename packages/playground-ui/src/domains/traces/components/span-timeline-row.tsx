@@ -60,7 +60,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
       className={cn(
         'col-span-2 grid h-7 cursor-pointer grid-cols-subgrid items-stretch rounded-md opacity-80 hover:bg-fill-subtle',
         {
-          'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
+          'opacity-40 dark:opacity-30 [&:hover]:opacity-70 dark:[&:hover]:opacity-60': isFaded,
           'bg-fill-hover': isSelected,
         },
       )}
@@ -121,7 +121,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
           render={<div />}
           className="grid min-w-0 cursor-help grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2"
         >
-          <div className="bg-fill-subtle relative h-4 w-full rounded-sm">
+          <div className="relative h-4 w-full rounded-sm bg-fill-subtle">
             <div
               data-testid="span-timeline-bar"
               className="absolute inset-y-0 rounded-sm"
@@ -132,7 +132,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               }}
             />
           </div>
-          <div className="text-meta text-muted-foreground w-12 text-right tabular-nums">
+          <div className="w-12 text-right text-meta text-muted-foreground tabular-nums">
             {formatDuration(span.latency)}
           </div>
         </HoverCardTrigger>

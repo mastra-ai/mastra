@@ -33,7 +33,7 @@ const DemoButton = ({ onClick, children }: { onClick: () => void; children: Reac
   <button
     type="button"
     onClick={onClick}
-    className="state-layer border-border bg-card text-label text-foreground w-fit cursor-pointer rounded-md border px-2.5 py-1"
+    className="state-layer w-fit cursor-pointer rounded-md border border-border bg-card px-2.5 py-1 text-label text-foreground"
   >
     {children}
   </button>
@@ -44,7 +44,7 @@ const ResizeDemo = () => {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="bg-background h-16 rounded-md p-2">
+      <div className="h-16 rounded-md bg-background p-2">
         <div className={cn('t-resize h-full rounded-sm bg-fill-strong', expanded ? 'w-full' : 'w-1/4')} />
       </div>
       <DemoButton onClick={() => setExpanded(!expanded)}>{expanded ? 'Collapse' : 'Expand'}</DemoButton>
@@ -81,7 +81,7 @@ const stateSpecimens: UtilitySpecimen[] = [
     tokens: ['state-layer'],
     note: 'Hover: the rung lands on top of the fill, never in it',
     demo: (
-      <div className="state-layer bg-card shadow-raised flex h-24 items-center justify-center rounded-lg">
+      <div className="state-layer flex h-24 items-center justify-center rounded-lg bg-card shadow-raised">
         <Txt variant="label">Reach for this one</Txt>
       </div>
     ),
@@ -94,7 +94,7 @@ const stateSpecimens: UtilitySpecimen[] = [
         <input
           aria-label="Filter runs"
           placeholder="Filter runs"
-          className="bg-card text-body text-foreground shadow-raised placeholder:text-placeholder h-8 w-full rounded-full px-3 outline-hidden focus-visible:[--surface-rim:var(--surface-rim-focus)] [&:hover:not(:focus-visible)]:[--surface-tint:var(--fill-subtle)]"
+          className="h-8 w-full rounded-full bg-card px-3 text-body text-foreground shadow-raised outline-hidden placeholder:text-placeholder focus-visible:[--surface-rim:var(--surface-rim-focus)] [&:hover:not(:focus-visible)]:[--surface-tint:var(--fill-subtle)]"
         />
       </div>
     ),
@@ -107,8 +107,8 @@ const frameSpecimens: UtilitySpecimen[] = [
     note: 'Default 1.5rem, then overridden to 2.5rem',
     demo: (
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-studio-frame border-border-strong bg-fill h-24 border" />
-        <div className="rounded-studio-frame border-border-strong bg-fill h-24 border [--studio-frame-radius:2.5rem]" />
+        <div className="h-24 rounded-studio-frame border border-border-strong bg-fill" />
+        <div className="h-24 rounded-studio-frame border border-border-strong bg-fill [--studio-frame-radius:2.5rem]" />
       </div>
     ),
   },
@@ -117,11 +117,11 @@ const frameSpecimens: UtilitySpecimen[] = [
     note: 'Inset by 0.5rem, then 1rem: frame radius minus inset',
     demo: (
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-studio-frame border-border-strong bg-fill h-24 border p-2">
-          <div className="rounded-studio-panel bg-card h-full" />
+        <div className="h-24 rounded-studio-frame border border-border-strong bg-fill p-2">
+          <div className="h-full rounded-studio-panel bg-card" />
         </div>
-        <div className="rounded-studio-frame border-border-strong bg-fill h-24 border p-4 [--studio-frame-inset:1rem]">
-          <div className="rounded-studio-panel bg-card h-full" />
+        <div className="h-24 rounded-studio-frame border border-border-strong bg-fill p-4 [--studio-frame-inset:1rem]">
+          <div className="h-full rounded-studio-panel bg-card" />
         </div>
       </div>
     ),
@@ -130,8 +130,8 @@ const frameSpecimens: UtilitySpecimen[] = [
     tokens: ['rounded-tr-studio-panel'],
     note: 'Only the exposed corner curves; the rest sits flush',
     demo: (
-      <div className="rounded-studio-frame border-border-strong bg-fill h-24 overflow-hidden border p-2 pb-0 pl-0">
-        <div className="rounded-tr-studio-panel bg-card h-full" />
+      <div className="h-24 overflow-hidden rounded-studio-frame border border-border-strong bg-fill p-2 pb-0 pl-0">
+        <div className="h-full rounded-tr-studio-panel bg-card" />
       </div>
     ),
   },
@@ -150,8 +150,8 @@ const animationSpecimens: UtilitySpecimen[] = [
     tokens: ['animate-row-highlight'],
     note: 'A row that landed unseen: tinted, then 2s to nothing',
     demo: (
-      <div className="bg-background rounded-md p-1">
-        <div className="animate-row-highlight text-body-sm text-foreground flex h-10 items-center rounded-sm px-3">
+      <div className="rounded-md bg-background p-1">
+        <div className="animate-row-highlight flex h-10 items-center rounded-sm px-3 text-body-sm text-foreground">
           GET /api/agents
         </div>
       </div>
@@ -161,7 +161,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     tokens: ['animate-sort-arrow-up'],
     note: 'Ascending: drawn from the bottom up, the way it points',
     demo: (
-      <div className="bg-background flex h-16 items-center justify-center rounded-md">
+      <div className="flex h-16 items-center justify-center rounded-md bg-background">
         <ArrowUp className="animate-sort-arrow-up size-icon-lg text-foreground" />
       </div>
     ),
@@ -170,7 +170,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     tokens: ['animate-sort-arrow-down'],
     note: 'Descending: the same reveal, top down',
     demo: (
-      <div className="bg-background flex h-16 items-center justify-center rounded-md">
+      <div className="flex h-16 items-center justify-center rounded-md bg-background">
         <ArrowDown className="animate-sort-arrow-down size-icon-lg text-foreground" />
       </div>
     ),
@@ -179,8 +179,8 @@ const animationSpecimens: UtilitySpecimen[] = [
     tokens: ['animate-click-ripple'],
     note: 'Where a click landed in a remote browser view',
     demo: (
-      <div className="bg-background relative flex h-16 items-center justify-center overflow-hidden rounded-md">
-        <span className="animate-click-ripple bg-success-bg pointer-events-none size-12 rounded-full" />
+      <div className="relative flex h-16 items-center justify-center overflow-hidden rounded-md bg-background">
+        <span className="animate-click-ripple pointer-events-none size-12 rounded-full bg-success-bg" />
       </div>
     ),
   },
@@ -188,7 +188,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     tokens: [ARRIVING_CLASS],
     note: `A streamed word, a tool row: opacity over ${ARRIVING_MS}ms`,
     demo: (
-      <div className="bg-background flex h-16 items-center rounded-md px-3">
+      <div className="flex h-16 items-center rounded-md bg-background px-3">
         <Txt variant="body-sm" className={ARRIVING_CLASS}>
           Ran tool search_docs — 412ms
         </Txt>
@@ -202,11 +202,11 @@ const wrappingSpecimens: UtilitySpecimen[] = [
     tokens: ['wrap-break-word'],
     note: 'Breaks an id mid-word rather than widening its column',
     demo: (
-      <div className="bg-background grid grid-cols-2 gap-3 rounded-md p-3">
-        <div className="text-body-sm text-foreground font-mono wrap-break-word">
+      <div className="grid grid-cols-2 gap-3 rounded-md bg-background p-3">
+        <div className="font-mono text-body-sm wrap-break-word text-foreground">
           trace_01JQX8S9Z7KQ4M2VYB3NCE6WHD_span_0f3a9c1b7e2d
         </div>
-        <div className="text-body-sm text-muted-foreground overflow-hidden font-mono">
+        <div className="overflow-hidden font-mono text-body-sm text-muted-foreground">
           trace_01JQX8S9Z7KQ4M2VYB3NCE6WHD_span_0f3a9c1b7e2d
         </div>
       </div>
@@ -242,7 +242,7 @@ export const UtilitiesFoundations: Story = {
             name="hover:bg-fill-subtle"
             note="The obvious spelling — and it moves the wrong way in one of the two themes"
           >
-            <div className="bg-card shadow-raised hover:bg-fill-subtle flex h-24 items-center justify-center rounded-lg">
+            <div className="flex h-24 items-center justify-center rounded-lg bg-card shadow-raised hover:bg-fill-subtle">
               <Txt variant="label" tone="muted">
                 Not this one
               </Txt>

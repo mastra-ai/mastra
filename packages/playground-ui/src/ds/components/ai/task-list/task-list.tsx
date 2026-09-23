@@ -65,9 +65,9 @@ export const TaskListProgress = ({ tasks, className, ...props }: TaskListProgres
 };
 
 const icons: Record<TaskListItem['status'], ReactNode> = {
-  completed: <CheckCircle2 className="text-success-fg size-3.5 shrink-0" />,
-  in_progress: <Loader2 className="text-muted-foreground size-3.5 shrink-0 motion-safe:animate-spin" />,
-  pending: <Circle className="text-muted-foreground size-3.5 shrink-0" />,
+  completed: <CheckCircle2 className="size-3.5 shrink-0 text-success-fg" />,
+  in_progress: <Loader2 className="size-3.5 shrink-0 text-muted-foreground motion-safe:animate-spin" />,
+  pending: <Circle className="size-3.5 shrink-0 text-muted-foreground" />,
 };
 
 const statusLabels: Record<TaskListItem['status'], string> = {
@@ -114,8 +114,8 @@ const TaskListSummary = ({ task }: { task: TaskListItem }) => (
 
 const TaskListTitle = ({ title }: { title: ReactNode }) => (
   <span className="flex min-w-0 flex-1 items-center gap-2">
-    <ListChecks className="text-muted-foreground size-4 shrink-0" />
-    <span className="text-column text-foreground truncate">{title}</span>
+    <ListChecks className="size-4 shrink-0 text-muted-foreground" />
+    <span className="truncate text-column text-foreground">{title}</span>
   </span>
 );
 

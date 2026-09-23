@@ -490,6 +490,34 @@ export const mastra = new Mastra({
 })
 ```
 
+### classifiers
+
+**Type:** `Record<string, Classifier>`
+
+Classifiers ask evaluation models fixed-option questions about application state and return typed answers. Register reusable classifiers here to retrieve them with `getClassifier()` or `getClassifierById()`. When a registered classifier is evaluated without an active trace, it starts a root `CLASSIFIER_EVALUATION` span through the `Mastra` instance's configured observability provider.
+
+Visit the [Classifier reference](/reference/classifier/classifier) to learn more.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Classifier } from '@mastra/core/classifier'
+
+const safety = new Classifier({
+  id: 'safety',
+  model,
+  questions: {
+    unsafe: {
+      type: 'boolean',
+      criteria: { true: 'Unsafe', false: 'Safe' },
+    },
+  },
+})
+
+export const mastra = new Mastra({
+  classifiers: { safety },
+})
+```
+
 ### storage
 
 **Type:** `MastraCompositeStore`

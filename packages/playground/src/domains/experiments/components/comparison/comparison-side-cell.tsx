@@ -30,7 +30,7 @@ function formatDuration(side: ComparisonSide): string | null {
 
 const codeBoxClass = cn(
   raisedSurfaceStyle,
-  'text-body text-muted-foreground max-h-[30vh] overflow-y-auto rounded-xl p-4 font-mono break-all whitespace-pre-wrap',
+  'max-h-[30vh] overflow-y-auto rounded-xl p-4 font-mono text-body break-all whitespace-pre-wrap text-muted-foreground',
 );
 
 /**
@@ -50,7 +50,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
   }
 
   if (!data.present) {
-    return <p className="text-muted-foreground text-body py-5 text-center">Not present in this experiment</p>;
+    return <p className="py-5 text-center text-body text-muted-foreground">Not present in this experiment</p>;
   }
 
   const outputStr = formatValue(data.output);
@@ -61,7 +61,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <Tooltip>
           <TooltipTrigger
             render={
-              <p className="text-muted-foreground text-body flex items-center justify-end gap-1.5 [&>svg]:size-3.5">
+              <p className="flex items-center justify-end gap-1.5 text-body text-muted-foreground [&>svg]:size-3.5">
                 <ClockIcon />
                 {duration}
               </p>
@@ -73,7 +73,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.error ? (
         <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={data.error.message} />}>
-          <p className="border-destructive-border bg-destructive-bg text-body text-muted-foreground rounded-xl border p-4 break-words">
+          <p className="rounded-xl border border-destructive-border bg-destructive-bg p-4 text-body break-words text-muted-foreground">
             {data.error.message}
           </p>
         </ComparisonSection>
@@ -101,7 +101,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.comment && (
         <ComparisonSection title="Comment" defaultOpen={false}>
-          <p className="text-muted-foreground text-body">{data.comment}</p>
+          <p className="text-body text-muted-foreground">{data.comment}</p>
         </ComparisonSection>
       )}
 
@@ -109,9 +109,9 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <ComparisonSection title="Metadata" defaultOpen={false}>
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
-              <div key={key} className="text-body flex items-start justify-between gap-4">
+              <div key={key} className="flex items-start justify-between gap-4 text-body">
                 <dt className="text-muted-foreground">{key}</dt>
-                <dd className="text-foreground font-mono break-all">{formatValue(value)}</dd>
+                <dd className="font-mono break-all text-foreground">{formatValue(value)}</dd>
               </div>
             ))}
           </dl>

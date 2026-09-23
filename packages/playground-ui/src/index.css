@@ -40,6 +40,10 @@
     var(--elevation-raised);
 }
 
+@utility shadow-rim {
+  box-shadow: inset 0 0 0 1px var(--surface-rim);
+}
+
 @utility shadow-overlay {
   --surface-tint: transparent;
 

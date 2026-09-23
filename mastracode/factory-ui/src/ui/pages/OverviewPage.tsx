@@ -10,7 +10,9 @@ import { Link } from 'react-router';
 import { useSupervisorHealth } from '../../hooks/useSupervisorHealth';
 import { useRunningSessions, useWorkItemsQuery } from '../../hooks/useWorkItems';
 import { CommitRail } from '../domains/factory/components/CommitRail';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { StageFunnel } from '../domains/factory/components/StageFunnel';
 import { ActivityFeed, AttentionPreview, RunningList, StalledList } from '../domains/factory/components/OverviewLists';
 import { computeFactoryOverview } from '../domains/factory/overview';
@@ -29,10 +31,12 @@ const DEFAULT_RANGE_DAYS = 30;
 const BLOCK_TITLE = 'text-column text-muted-foreground m-0 font-semibold';
 
 export function OverviewPage() {
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
   return (
-    <DocumentFactoryPageShell>
-      {project => <OverviewContent factoryProjectId={project.id} repository={project.repositories[0]} />}
-    </DocumentFactoryPageShell>
+    <PageLayout {...slots}>
+      <OverviewContent factoryProjectId={factory.id} repository={factory.repositories[0]} />
+    </PageLayout>
   );
 }
 

@@ -14,7 +14,7 @@ export function MetricsLineChartTooltip({
   if (!active || !payload?.length) return null;
   return (
     <ChartTooltip>
-      <p className="text-foreground text-column mb-1">{label}</p>
+      <p className="mb-1 text-column text-foreground">{label}</p>
       {payload.map(entry => (
         <p key={entry.name} className="text-placeholder">
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />

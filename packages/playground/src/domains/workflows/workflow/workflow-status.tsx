@@ -34,7 +34,7 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
             {status === 'tripwire' && <ShieldAlert className="text-warning-fg" />}
             {status === 'suspended' && <CirclePause className="text-info-fg" />}
             {status === 'waiting' && <HourglassIcon className="text-info-fg" />}
-            {status === 'running' && <Loader2 className="text-warning-fg animate-spin" />}
+            {status === 'running' && <Loader2 className="animate-spin text-warning-fg" />}
           </Icon>
           <Txt as="span" variant="heading" tone="ink">
             {stepId.charAt(0).toUpperCase() + stepId.slice(1)}

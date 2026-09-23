@@ -54,10 +54,10 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
         role="img"
         tabIndex={0}
         aria-label={tooltip}
-        className="focus-visible:outline-border-focus rounded focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-solid"
+        className="rounded focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
       >
         <BanIcon
-          className={cn('text-muted-foreground/40 w-5 h-5 ', {
+          className={cn('h-5 w-5 text-muted-foreground/40', {
             'text-red-900': red,
           })}
         />
@@ -75,7 +75,7 @@ function VersionInfo({ variant, version }: { variant?: VersionInfoVariant; versi
   return (
     <div className="grid grid-cols-[1fr_auto]">
       {version !== undefined && (
-        <span className="text-body text-muted-foreground flex min-w-16 justify-end pr-3">v. {version}</span>
+        <span className="flex min-w-16 justify-end pr-3 text-body text-muted-foreground">v. {version}</span>
       )}
       <span className="inline-flex" role="img" aria-label={tooltip}>
         <Badge variant={badgeVariant} size="xs" icon={icon} />

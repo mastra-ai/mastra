@@ -130,7 +130,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
     <div
       ref={containerRef}
       className={cn(
-        'relative w-full aspect-video bg-background rounded-md overflow-hidden',
+        'relative aspect-video w-full overflow-hidden rounded-md bg-background',
         isInteractive && !isAgentBusy && 'ring-2 ring-success-indicator',
         isInteractive && isAgentBusy && 'ring-2 ring-amber-400',
         className,
@@ -150,7 +150,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
         tabIndex={status === 'streaming' ? 0 : -1}
         role="button"
         className={cn(
-          'absolute inset-0 w-full h-full object-contain',
+          'absolute inset-0 h-full w-full object-contain',
           hasFrame ? 'opacity-100' : 'opacity-0',
           status === 'streaming' && (isInteractive ? 'cursor-text' : 'cursor-pointer'),
         )}
@@ -167,10 +167,10 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
 
       {/* Reconnecting overlay - shown over last frame */}
       {isReconnecting && (
-        <div className="bg-sidebar/80 absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-sidebar/80">
           <div className="flex flex-col items-center gap-2">
-            <div className="border-muted-foreground h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
-            <span className="text-muted-foreground text-body">Reconnecting...</span>
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+            <span className="text-body text-muted-foreground">Reconnecting...</span>
           </div>
         </div>
       )}

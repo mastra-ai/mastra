@@ -209,7 +209,7 @@ const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChan
           >
             {group.providerName}
           </Txt>
-          <div className="grid grid-cols-1 content-start gap-2 sm:grid-cols-2 lg:gap-4 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 content-start gap-2 2xl:grid-cols-3 sm:grid-cols-2 lg:gap-4">
             {group.models.map(entry => {
               const cleanedProvider = cleanProviderId(entry.provider);
               const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
@@ -243,7 +243,7 @@ interface StaleWarningProps {
 const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
   return (
     <div
-      className="border-warning-border bg-warning-bg text-warning-fg mx-4 mb-4 flex items-start gap-2 rounded-md border px-3 py-2"
+      className="mx-4 mb-4 flex items-start gap-2 rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-warning-fg"
       data-testid="model-detail-stale-warning"
       role="alert"
     >
@@ -268,7 +268,7 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
     className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
     data-testid="model-detail-locked-chip"
   >
-    <LockIcon className="text-muted-foreground h-4 w-4 shrink-0" />
+    <LockIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
     <Txt variant="column" tone="ink" className="truncate">
       {provider && modelId ? `${provider}/${modelId}` : 'Locked by admin'}
     </Txt>

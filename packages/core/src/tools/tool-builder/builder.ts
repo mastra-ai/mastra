@@ -46,7 +46,12 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
-import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
+import {
+  registerToolOutputValidationSchema,
+  validateToolInput,
+  validateToolOutput,
+  validateToolSuspendData,
+} from '../validation';
 
 /**
  * Merge two RequestContexts so non-serializable values survive the evented
@@ -556,7 +561,7 @@ export class CoreToolBuilder extends MastraBase {
         }
       }
 
-      return {
+      const builtTool = {
         ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
@@ -578,7 +583,10 @@ export class CoreToolBuilder extends MastraBase {
         toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
         transform: 'transform' in this.originalTool ? this.originalTool.transform : undefined,
         inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
-      } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
+      } as unknown as CoreTool & { id: `${string}.${string}` };
+
+      registerToolOutputValidationSchema(builtTool, outputSchema);
+      return builtTool;
     }
 
     return undefined;
@@ -703,6 +711,7 @@ export class CoreToolBuilder extends MastraBase {
             ),
             ...createObservabilityContext({ currentSpan: contextSpan }),
             abortSignal: execOptions.abortSignal,
+            background: execOptions.background,
             suspend: (args: any, suspendOptions?: SuspendOptions) => {
               suspendData = args;
               const newSuspendOptions = {
@@ -1185,9 +1194,10 @@ export class CoreToolBuilder extends MastraBase {
         : undefined,
     };
 
-    return {
+    const builtTool = {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
+      title: 'title' in this.originalTool ? this.originalTool.title : undefined,
       parameters: processedInputSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
       strict: 'strict' in this.originalTool ? this.originalTool.strict : undefined,
@@ -1204,5 +1214,8 @@ export class CoreToolBuilder extends MastraBase {
       // from the converted CoreTool at dispatch time.
       backgroundConfig: this.options.backgroundConfig,
     } as unknown as CoreTool;
+
+    registerToolOutputValidationSchema(builtTool, outputSchema);
+    return builtTool;
   }
 }

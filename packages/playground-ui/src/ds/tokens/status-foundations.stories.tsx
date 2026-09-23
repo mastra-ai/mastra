@@ -155,7 +155,7 @@ export const StatusFoundations: Story = {
               <div
                 role="img"
                 aria-label={`green ${step} swatch`}
-                className="border-border h-16 border"
+                className="h-16 border border-border"
                 style={{ background: Colors[`green-${step}`] }}
               />
             </Specimen>
@@ -176,7 +176,7 @@ export const StatusFoundations: Story = {
               <div
                 role="img"
                 aria-label={`${alias.token} swatch`}
-                className="border-border flex h-16 overflow-hidden border"
+                className="flex h-16 overflow-hidden border border-border"
               >
                 <div className="flex-1" style={{ background: Colors[alias.token] }} />
               </div>

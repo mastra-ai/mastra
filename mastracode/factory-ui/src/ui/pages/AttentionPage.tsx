@@ -13,7 +13,9 @@ import { AttentionItemRow, KindIcon } from '../domains/factory/components/Attent
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { DayHeading, RailRow, RAIL_LIST } from '../domains/factory/components/Timeline';
 import { useAttentionItemActions } from '../domains/factory/components/useAttentionItemActions';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { attentionCountsIn, attentionGroupOf } from '../domains/factory/services/attention';
 import type {
   FactoryAttentionGroup,
@@ -78,7 +80,13 @@ function AttentionRail({
 }
 
 export function AttentionPage() {
-  return <DocumentFactoryPageShell>{factory => <AttentionContent factoryId={factory.id} />}</DocumentFactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout {...slots}>
+      <AttentionContent factoryId={factory.id} />
+    </PageLayout>
+  );
 }
 
 export function AttentionContent({ factoryId }: { factoryId: string }) {
@@ -121,7 +129,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <ButtonsGroup role="group" aria-label="Attention filter">
+        <ButtonsGroup size="sm" role="group" aria-label="Attention filter">
           {VIEWS.map(option => {
             const Icon = option.icon;
             return (
@@ -129,7 +137,6 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
                 key={option.value}
                 type="button"
                 variant={view === option.value ? 'primary' : 'outline'}
-                size="sm"
                 aria-pressed={view === option.value}
                 onClick={() => setSearchParams(option.value === 'open' ? {} : { view: option.value })}
               >

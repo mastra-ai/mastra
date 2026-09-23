@@ -41,7 +41,7 @@ export function ReferenceViewerDialog({
 
       {/* Dialog */}
       <div
-        className="bg-card shadow-overlay relative mx-4 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl"
+        className="relative mx-4 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-card shadow-overlay"
         role="dialog"
         aria-modal="true"
         aria-labelledby="reference-viewer-title"
@@ -50,16 +50,16 @@ export function ReferenceViewerDialog({
         }}
       >
         {/* Header */}
-        <div className="border-border bg-card flex items-center justify-between border-b px-4 py-4">
+        <div className="flex items-center justify-between border-b border-border bg-card px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="bg-muted rounded p-1.5">
-              <FileText className="text-muted-foreground h-4 w-4" />
+            <div className="rounded bg-muted p-1.5">
+              <FileText className="h-4 w-4 text-muted-foreground" />
             </div>
             <div>
-              <h2 id="reference-viewer-title" className="text-foreground text-subheading">
+              <h2 id="reference-viewer-title" className="text-subheading text-foreground">
                 {referencePath}
               </h2>
-              <p className="text-muted-foreground text-caption">from {skillName}</p>
+              <p className="text-caption text-muted-foreground">from {skillName}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -72,7 +72,7 @@ export function ReferenceViewerDialog({
             <button
               onClick={() => onOpenChange(false)}
               aria-label="Close reference viewer"
-              className={cn('hover:bg-fill-subtle rounded-lg p-2', quietTextHover, controlStateColorTransition)}
+              className={cn('rounded-lg p-2 hover:bg-fill-subtle', quietTextHover, controlStateColorTransition)}
             >
               <X className="h-4 w-4" />
             </button>
@@ -83,19 +83,19 @@ export function ReferenceViewerDialog({
         <div className="flex-1 overflow-auto p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="border-success-border h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-success-border border-t-transparent" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <p className="mb-2 text-red-400">Failed to load reference</p>
-              <p className="text-muted-foreground text-body">{error}</p>
+              <p className="text-body text-muted-foreground">{error}</p>
             </div>
           ) : content ? (
-            <pre className="text-foreground bg-card text-body overflow-auto rounded-lg p-4 font-mono whitespace-pre-wrap">
+            <pre className="overflow-auto rounded-lg bg-card p-4 font-mono text-body whitespace-pre-wrap text-foreground">
               {content}
             </pre>
           ) : (
-            <div className="text-muted-foreground flex items-center justify-center py-8">No content available</div>
+            <div className="flex items-center justify-center py-8 text-muted-foreground">No content available</div>
           )}
         </div>
       </div>

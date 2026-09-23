@@ -188,7 +188,7 @@ export function BuilderAddSkillDialog({
 
         <DialogBody className="flex max-h-none flex-1 flex-col gap-4 overflow-hidden">
           <div className="relative">
-            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={`Search ${registryLabel}...`}
               value={searchQuery}
@@ -201,16 +201,16 @@ export function BuilderAddSkillDialog({
           <div className="flex min-h-0 flex-1 gap-4">
             {/* Skills list */}
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="text-muted-foreground text-column mb-2 tracking-wide uppercase">
+              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
                 {hasSearchResults ? 'Search results' : 'Popular skills'}
               </div>
-              <ScrollArea className="border-border flex-1 rounded-lg border">
+              <ScrollArea className="flex-1 rounded-lg border border-border">
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-5">
-                    <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : displaySkills.length === 0 ? (
-                  <div className="text-muted-foreground flex flex-col items-center justify-center py-5">
+                  <div className="flex flex-col items-center justify-center py-5 text-muted-foreground">
                     <Package className="mb-2 h-8 w-8" />
                     <p className="text-body">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
                   </div>
@@ -225,25 +225,25 @@ export function BuilderAddSkillDialog({
                           key={skillUniqueId}
                           onClick={() => setSelectedSkill(skill)}
                           className={cn(
-                            'w-full text-left px-3 py-2 rounded-md',
+                            'w-full rounded-md px-3 py-2 text-left',
                             'hover:bg-fill-subtle',
-                            selectedUniqueId === skillUniqueId && 'bg-fill-hover border border-border-strong',
+                            selectedUniqueId === skillUniqueId && 'border border-border-strong bg-fill-hover',
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-foreground text-subheading truncate">{skill.name}</span>
+                                <span className="truncate text-subheading text-foreground">{skill.name}</span>
                                 {isInstalled && (
-                                  <span className="bg-info-bg text-info-fg text-meta inline-flex items-center gap-1 rounded px-1.5 py-0.5">
+                                  <span className="inline-flex items-center gap-1 rounded bg-info-bg px-1.5 py-0.5 text-meta text-info-fg">
                                     <Check className="h-2.5 w-2.5" />
                                     Installed
                                   </span>
                                 )}
                               </div>
-                              <div className="text-muted-foreground text-caption truncate">{skill.topSource}</div>
+                              <div className="truncate text-caption text-muted-foreground">{skill.topSource}</div>
                             </div>
-                            <div className="text-muted-foreground text-caption flex shrink-0 items-center gap-1">
+                            <div className="flex shrink-0 items-center gap-1 text-caption text-muted-foreground">
                               <Download className="h-3 w-3" />
                               <span>{skill.installs.toLocaleString()}</span>
                             </div>
@@ -257,22 +257,22 @@ export function BuilderAddSkillDialog({
             </div>
 
             {/* Preview pane */}
-            <div className="border-border flex min-h-0 w-1/2 flex-col overflow-hidden rounded-lg border">
+            <div className="flex min-h-0 w-1/2 flex-col overflow-hidden rounded-lg border border-border">
               {!selectedSkill ? (
-                <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center">
+                <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
                   <Package className="mb-2 h-8 w-8" />
                   <p className="text-body">Select a skill to preview</p>
                 </div>
               ) : (
                 <>
-                  <div className="border-border bg-card border-b p-4">
+                  <div className="border-b border-border bg-card p-4">
                     <div className="flex items-start gap-3">
-                      <div className="bg-muted rounded-lg p-2">
-                        <SkillIcon className="text-muted-foreground h-5 w-5" />
+                      <div className="rounded-lg bg-muted p-2">
+                        <SkillIcon className="h-5 w-5 text-muted-foreground" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-foreground text-subheading truncate">{selectedSkill.name}</h3>
-                        <div className="text-muted-foreground text-caption mt-1 flex items-center gap-3">
+                        <h3 className="truncate text-subheading text-foreground">{selectedSkill.name}</h3>
+                        <div className="mt-1 flex items-center gap-3 text-caption text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <GithubIcon className="h-3 w-3" />
                             {selectedSkill.topSource}
@@ -299,7 +299,7 @@ export function BuilderAddSkillDialog({
 
                   {isLoadingPreview ? (
                     <div className="flex flex-1 items-center justify-center">
-                      <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : previewContent ? (
                     <ScrollArea className="flex-1">
@@ -308,7 +308,7 @@ export function BuilderAddSkillDialog({
                       </div>
                     </ScrollArea>
                   ) : (
-                    <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center">
+                    <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
                       <Package className="mb-2 h-8 w-8" />
                       <p className="text-body">Preview unavailable</p>
                     </div>
@@ -319,9 +319,9 @@ export function BuilderAddSkillDialog({
           </div>
 
           {selectedSkill && (
-            <div className="border-border flex flex-col gap-3 border-t pt-4">
+            <div className="flex flex-col gap-3 border-t border-border pt-4">
               {installError && (
-                <div className="text-body rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-400">
+                <div className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-body text-red-400">
                   {installError}
                 </div>
               )}

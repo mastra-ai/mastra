@@ -1,0 +1,20 @@
+{
+  "fixtures": [
+    {
+      "match": { "sequenceIndex": 0, "endpoint": "chat", "model": "gpt-5.4-mini" },
+      "response": {
+        "toolCalls": [
+          { "id": "call_adopt", "name": "adopted_probe", "arguments": { "_background": { "disposition": "awaited" } } }
+        ]
+      }
+    },
+    {
+      "match": { "sequenceIndex": 1, "endpoint": "chat", "model": "gpt-5.4-mini" },
+      "response": { "toolCalls": [{ "id": "call_parent", "name": "parent_probe", "arguments": {} }] }
+    },
+    {
+      "match": { "endpoint": "chat", "model": "gpt-5.4-mini" },
+      "response": { "content": "PARENT_DONE" }
+    }
+  ]
+}

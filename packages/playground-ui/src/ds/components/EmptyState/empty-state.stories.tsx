@@ -57,7 +57,7 @@ export const WithoutAction: Story = {
 export const CustomHeading: Story = {
   args: {
     as: 'h1',
-    iconSlot: <Inbox className="text-muted-foreground h-auto w-[126px]" />,
+    iconSlot: <Inbox className="h-auto w-[126px] text-muted-foreground" />,
     titleSlot: 'Welcome to the App',
     descriptionSlot: 'This is your dashboard. Start by exploring the features.',
     actionSlot: <Button>Get Started</Button>,
@@ -73,7 +73,7 @@ export const Fill: Story = {
     variant: 'fill',
   },
   render: args => (
-    <div className="border-border h-120 border border-dashed">
+    <div className="h-120 border border-dashed border-border">
       <EmptyState {...args} />
     </div>
   ),

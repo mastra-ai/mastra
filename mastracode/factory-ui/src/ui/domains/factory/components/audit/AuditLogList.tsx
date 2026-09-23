@@ -1,8 +1,8 @@
 import { Code } from '@mastra/playground-ui/components/Code';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
 
 import { relativeTime } from '../../../../../lib/date/relativeTime';
 import {
@@ -15,18 +15,7 @@ import {
 import type { AuditEvent } from '../../services/audit';
 import { LoadMoreSentinel } from '../LoadMoreSentinel';
 
-const AUDIT_GRID_CLASS =
-  'grid-cols-[4.5rem_minmax(0,1fr)_1rem] lg:grid-cols-[7rem_minmax(8rem,0.8fr)_minmax(10rem,0.9fr)_minmax(11rem,1.1fr)_minmax(13rem,1.4fr)_1rem]';
-
-const CELL_CLASS = 'min-w-0 truncate text-caption';
-
-function AuditCell({ children, className, title }: { children: ReactNode; className?: string; title?: string }) {
-  return (
-    <span className={cn(CELL_CLASS, className)} title={title}>
-      {children || '—'}
-    </span>
-  );
-}
+const AUDIT_COLUMNS = '7rem minmax(8rem,0.8fr) minmax(10rem,0.9fr) minmax(11rem,1.1fr) minmax(13rem,1.4fr) 1rem';
 
 function AuditEventRow({
   event,
@@ -43,21 +32,16 @@ function AuditEventRow({
   const target = event.targets[0];
   const visibleMetadata = auditVisibleMetadata(event);
   const hasMetadata = Object.keys(visibleMetadata).length > 0;
-  const actor = auditActorLabel(event, actorName);
-  const targetLabel = target?.name ?? target?.id;
-  const detail = auditMetadataPreview(event);
-  const mobileSummary = [actor, targetLabel, detail].filter(Boolean).join(' · ');
+
   const cells = (
     <>
-      <AuditCell className="text-meta text-placeholder self-start tabular-nums lg:self-auto" title={event.occurredAt}>
+      <DataList.TextCell className="tabular-nums" title={event.occurredAt}>
         {relativeTime(event.occurredAt)}
-      </AuditCell>
-      <AuditCell
-        className={cn('hidden lg:block', event.actorType === 'agent' ? 'text-warning-fg' : 'text-muted-foreground')}
-      >
-        {actor}
-      </AuditCell>
-      <AuditCell className="text-foreground">
+      </DataList.TextCell>
+      <DataList.TextCell className={cn(event.actorType === 'agent' && 'text-warning-fg')}>
+        {auditActorLabel(event, actorName)}
+      </DataList.TextCell>
+      <DataList.NameCell>
         <span className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
@@ -65,61 +49,42 @@ function AuditEventRow({
           />
           <span className="truncate">{auditActionLabel(event.action)}</span>
         </span>
-      </AuditCell>
-      <AuditCell className="text-muted-foreground hidden lg:block">{targetLabel}</AuditCell>
-      <AuditCell className="text-meta text-placeholder hidden lg:block">{detail}</AuditCell>
-      <span className="text-placeholder flex justify-end">
+      </DataList.NameCell>
+      <DataList.TextCell>{target?.name ?? target?.id}</DataList.TextCell>
+      <DataList.TextCell>{auditMetadataPreview(event)}</DataList.TextCell>
+      <DataList.Cell className="text-placeholder justify-end empty:before:content-none">
         {hasMetadata ? (
-          <span
+          <ChevronRight
             aria-hidden="true"
             className={cn(
-              'flex transition-transform duration-150 ease-out motion-reduce:transition-none',
+              'size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none',
               expanded && 'rotate-90',
             )}
-          >
-            <ChevronRight className="size-3.5" />
-          </span>
+          />
         ) : null}
-      </span>
-      <span className="text-meta text-placeholder col-start-2 col-end-3 row-start-2 min-w-0 truncate lg:hidden">
-        {mobileSummary}
-      </span>
+      </DataList.Cell>
     </>
   );
 
   return (
-    <li
-      className={cn(
-        'rounded-md transition-colors even:bg-fill-subtle hover:bg-fill-hover',
-        expanded && 'bg-fill-active even:bg-fill-active',
-      )}
-    >
+    <>
       {hasMetadata ? (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={onToggle}
-          className={cn(
-            'grid w-full cursor-pointer items-start gap-x-3 gap-y-0.5 rounded-md px-3 py-2 text-left outline-none focus-visible:bg-fill-hover lg:items-center lg:gap-4',
-            AUDIT_GRID_CLASS,
-          )}
-        >
+        <DataList.RowButton aria-expanded={expanded} onClick={onToggle} featured={expanded}>
           {cells}
-        </button>
+        </DataList.RowButton>
       ) : (
-        <div className={cn('grid items-start gap-x-3 gap-y-0.5 px-3 py-2 lg:items-center lg:gap-4', AUDIT_GRID_CLASS)}>
-          {cells}
-        </div>
+        <DataList.RowStatic>{cells}</DataList.RowStatic>
       )}
-
       {expanded ? (
-        <Code
-          code={JSON.stringify(visibleMetadata, null, 2)}
-          lang="json"
-          className="text-meta text-muted-foreground m-0 mx-3 mb-3 px-2 py-1 font-sans break-all whitespace-pre-wrap"
-        />
+        <div className="col-span-full px-3 pb-2">
+          <Code
+            code={JSON.stringify(visibleMetadata, null, 2)}
+            lang="json"
+            className="text-meta text-muted-foreground m-0 px-2 py-1 font-sans break-all whitespace-pre-wrap"
+          />
+        </div>
       ) : null}
-    </li>
+    </>
   );
 }
 
@@ -146,37 +111,32 @@ export function AuditLogList({
   };
 
   return (
-    <div className="min-w-0 lg:min-w-[57rem] lg:pr-1">
-      <div
-        className={cn(
-          'sticky top-(--page-sticky-top) z-20 hidden items-center gap-4 rounded-lg bg-fill px-3 py-2 text-column font-semibold tracking-tight text-placeholder lg:grid',
-          AUDIT_GRID_CLASS,
-        )}
-      >
-        <span>When</span>
-        <span>Actor</span>
-        <span>Event</span>
-        <span>Target</span>
-        <span>Details</span>
+    <DataList columns={AUDIT_COLUMNS} aria-label="Audit events">
+      <DataList.Top>
+        <DataList.TopCell>When</DataList.TopCell>
+        <DataList.TopCell>Actor</DataList.TopCell>
+        <DataList.TopCell>Event</DataList.TopCell>
+        <DataList.TopCell>Target</DataList.TopCell>
+        <DataList.TopCell>Details</DataList.TopCell>
         <span />
+      </DataList.Top>
+      {events.map(event => (
+        <AuditEventRow
+          key={event.id}
+          event={event}
+          actorName={actorNames.get(event.actorId)}
+          expanded={openedEventIds.has(event.id)}
+          onToggle={() => toggleEvent(event.id)}
+        />
+      ))}
+      <div className="col-span-full">
+        <LoadMoreSentinel
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={onLoadMore}
+          label="Load older events"
+        />
       </div>
-      <ul className="m-0 flex list-none flex-col p-0 pt-1" aria-label="Audit events">
-        {events.map(event => (
-          <AuditEventRow
-            key={event.id}
-            event={event}
-            actorName={actorNames.get(event.actorId)}
-            expanded={openedEventIds.has(event.id)}
-            onToggle={() => toggleEvent(event.id)}
-          />
-        ))}
-      </ul>
-      <LoadMoreSentinel
-        hasNextPage={hasNextPage}
-        isFetchingNextPage={isFetchingNextPage}
-        onLoadMore={onLoadMore}
-        label="Load older events"
-      />
-    </div>
+    </DataList>
   );
 }

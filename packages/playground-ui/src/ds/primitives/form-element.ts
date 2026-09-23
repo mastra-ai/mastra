@@ -11,7 +11,6 @@ export const sharedFormElementDisabledStyle = 'disabled:cursor-not-allowed disab
 // reduced emphasis instead, so a disabled destructive action still reads as
 // destructive. Transparent variants (ghost) opt out entirely: a disabled icon
 // button in a toolbar should stay invisible rather than resolve into a pill.
-export const disabledFilledSurfaceStyle = 'disabled:border-border disabled:bg-fill-subtle';
 export const disabledOutlineSurfaceStyle = 'disabled:border-border disabled:bg-transparent';
 
 // Focus indicator for the (green-less) input family. Instead of a heavy ring we
@@ -76,19 +75,23 @@ export const inputSurfaceAndFocusWithinStyle =
   ' outline-hidden focus-within:outline-hidden ' +
   surfaceRimFocusWithin;
 
-// Filled field trigger (Select/Combobox `default`): the same surface as Input.
-// Applied *after* `buttonVariants` so tailwind-merge replaces the Button's fill
-// and border with the field material — a field is not a button. The pins have to
-// repeat the Button's own `not-disabled:` prefix: tailwind-merge keys a class by
-// its variants, so a bare `hover:bg-card` sits in a different group from
-// `not-disabled:hover:bg-fill-hover`, both survive, and the Button's two-variant
-// selector then wins on specificity — which is how a field trigger ended up
-// swapping its whole fill on hover while every other field only washed.
-export const fieldTriggerSurfaceStyle =
-  'bg-card not-disabled:hover:bg-card not-disabled:active:bg-card border-0 shadow-raised text-foreground ' +
-  surfaceTintHover +
-  ' ' +
-  surfaceRimFocus;
+// The same material, for a neutral control that is a button rather than a field: `Button`'s
+// `default` variant, and with it every trigger built on it (Select, Combobox, DateTimePicker).
+// A filled neutral control is one material across the system — a `md` input beside a `md`
+// button had two resting fills, `--card` and the 6% `--fill` rung, and read as two systems.
+//
+// A button answers the pointer harder than a field does: a field washes on hover only
+// (its rim is reserved for focus), a button washes on hover and again on press. Both go
+// through `--surface-tint` for the reason above it — an element with a fill cannot carry a
+// pseudo-element state layer. `:not(:active)` on the hover guard keeps the two off each
+// other's specificity: they are both arbitrary property setters, so whichever matched last
+// would otherwise decide the press.
+const controlTintHover =
+  '[&:hover:not(:active):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--fill-subtle)]';
+const controlTintActive = '[&:active:not(:disabled)]:[--surface-tint:var(--fill)]';
+
+export const raisedControlSurfaceStyle =
+  'bg-card shadow-raised text-foreground ' + controlTintHover + ' ' + controlTintActive + ' ' + surfaceRimFocus;
 
 // `filled` was an alias for `default` (both render the filled surface) and has been
 // removed from the variant set. An unknown value makes cva emit nothing for the

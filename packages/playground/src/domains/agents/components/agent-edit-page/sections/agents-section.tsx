@@ -49,7 +49,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
   };
 
   return (
-    <div className="border-border bg-background rounded-md border">
+    <div className="rounded-md border border-border bg-background">
       <Controller
         name="agents"
         control={control}
@@ -83,9 +83,9 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
           return (
             <>
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="bg-card flex items-center justify-between p-3">
+                <div className="flex items-center justify-between bg-card p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="text-muted-foreground h-4 w-4" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     <SectionTitle icon={<AgentIcon className="text-span-agent" />}>
                       Sub-Agents{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>
@@ -93,7 +93,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                 </div>
 
                 <CollapsibleContent>
-                  <div className="border-border border-t p-3">
+                  <div className="border-t border-border p-3">
                     <div className="flex flex-col gap-2">
                       <Combobox
                         multiple

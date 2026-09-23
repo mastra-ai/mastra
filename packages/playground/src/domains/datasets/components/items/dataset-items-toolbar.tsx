@@ -58,7 +58,7 @@ export function DatasetItemsToolbar({
   onReturnToLatestVersion,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
-    <div className="text-warning-fg text-caption flex min-w-0 items-center gap-3">
+    <div className="flex min-w-0 items-center gap-3 text-caption text-warning-fg">
       <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
       {onReturnToLatestVersion && (
         <button
@@ -67,7 +67,7 @@ export function DatasetItemsToolbar({
           className={cn(
             quietTextHover,
             controlStateColorTransition,
-            'text-caption shrink-0 underline underline-offset-2',
+            'shrink-0 text-caption underline underline-offset-2',
           )}
         >
           Return to latest

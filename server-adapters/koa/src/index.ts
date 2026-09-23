@@ -336,7 +336,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       ctx.params = {};
       registeredRoute.paramNames.forEach((name, index) => {
-        ctx.params[name] = match[index + 1];
+        const value = match[index + 1];
+        ctx.params[name] = value === undefined ? value : decodeURIComponent(value);
       });
 
       return registeredRoute;

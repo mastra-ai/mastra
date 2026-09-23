@@ -87,6 +87,8 @@ import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
 import SchedulesPage from './pages/workflows/schedules';
 import { Workflow } from './pages/workflows/workflow';
+import WorkflowSchedules from './pages/workflows/workflow-schedules';
+import WorkflowTraces from './pages/workflows/workflow-traces';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { AuthLayout } from '@/components/auth-layout';
@@ -450,6 +452,8 @@ export const routes: RouteObject[] = [
             path: 'graph/:runId',
             element: <Workflow />,
           },
+          { path: 'traces', element: <WorkflowTraces /> },
+          { path: 'schedules', element: <WorkflowSchedules /> },
         ],
       },
 

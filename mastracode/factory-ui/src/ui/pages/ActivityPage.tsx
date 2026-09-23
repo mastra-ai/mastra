@@ -10,7 +10,9 @@ import { collapseRuns, factoryActivity, factoryDeeds } from '../domains/factory/
 import type { ActivityEntry } from '../domains/factory/activity';
 import { itemBoard } from '../domains/factory/boardStages';
 import { ActivityRail } from '../domains/factory/components/ActivityRail';
-import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import type { FactoryMentionMember } from '../domains/factory/services/members';
 import { SkeletonRows } from '../ui/SkeletonRows';
@@ -20,7 +22,13 @@ const PAGE_SIZE = 60;
 const AUDIT_PAGE_SIZE = 100;
 
 export function ActivityPage() {
-  return <DocumentFactoryPageShell>{factory => <ActivityContent factoryId={factory.id} />}</DocumentFactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout {...slots}>
+      <ActivityContent factoryId={factory.id} />
+    </PageLayout>
+  );
 }
 
 export function ActivityContent({ factoryId }: { factoryId: string }) {

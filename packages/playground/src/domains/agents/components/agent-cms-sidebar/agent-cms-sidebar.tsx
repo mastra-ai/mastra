@@ -101,18 +101,18 @@ const SidebarLink = ({
       <Link
         href={href}
         className={cn(
-          'flex items-center gap-2.5 px-3 py-2 text-body border-r-2 border-transparent',
+          'flex items-center gap-2.5 border-r-2 border-transparent px-3 py-2 text-body',
           controlStateColorTransition,
-          active ? 'bg-fill-hover text-foreground border-border-strong' : `hover:bg-fill-subtle ${quietTextHover}`,
+          active ? 'border-border-strong bg-fill-hover text-foreground' : `hover:bg-fill-subtle ${quietTextHover}`,
         )}
       >
         {done ? (
-          <div className="bg-info-bg flex size-6 shrink-0 items-center justify-center rounded-full">
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-info-bg">
             <Check className="size-3.5 text-white" />
           </div>
         ) : (
           <Txt
-            className="border-placeholder flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full border border-placeholder font-mono"
             variant="caption"
             tone="faint"
           >
@@ -131,7 +131,7 @@ const SidebarLink = ({
         </div>
       </Link>
 
-      {!isLast && <div className="bg-card ml-6 inline-block h-2 w-0.5" />}
+      {!isLast && <div className="ml-6 inline-block h-2 w-0.5 bg-card" />}
     </li>
   );
 };

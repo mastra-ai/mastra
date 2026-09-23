@@ -94,8 +94,8 @@ export function ScheduleTriggersList({
           <span
             className={
               isLinked
-                ? 'text-success-fg text-caption font-mono whitespace-nowrap'
-                : 'text-muted-foreground text-caption font-mono whitespace-nowrap'
+                ? 'font-mono text-caption whitespace-nowrap text-success-fg'
+                : 'font-mono text-caption whitespace-nowrap text-muted-foreground'
             }
           >
             {t.runId}
@@ -109,21 +109,21 @@ export function ScheduleTriggersList({
             <DataList.Cell>
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="text-caption text-destructive-fg inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5 text-caption whitespace-nowrap text-destructive-fg">
                     <AlertTriangleIcon size={14} />
                     publish failed
                   </span>
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="text-caption text-muted-foreground inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5 text-caption whitespace-nowrap text-muted-foreground">
                     pending
                   </span>
                 )}
                 {errorMessage ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-destructive-fg inline-flex">
+                      <span className="inline-flex text-destructive-fg">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>
@@ -139,7 +139,7 @@ export function ScheduleTriggersList({
                 {showDriftWarning ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-info-fg inline-flex">
+                      <span className="inline-flex text-info-fg">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>

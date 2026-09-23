@@ -101,7 +101,7 @@ export const AttachFilePopover = () => {
           </Button>
         </form>
 
-        <hr className="border-border my-3" />
+        <hr className="my-3 border-border" />
 
         <div className="space-y-2">
           <Txt variant="body" tone="muted">
@@ -110,7 +110,7 @@ export const AttachFilePopover = () => {
           <button
             type="button"
             onClick={openFilePicker}
-            className="border-border text-muted-foreground hover:bg-fill-subtle active:bg-fill flex h-28 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed"
+            className="flex h-28 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-muted-foreground hover:bg-fill-subtle active:bg-fill"
           >
             <CloudUpload className="size-8" />
             <Txt variant="heading">Add a local file</Txt>
