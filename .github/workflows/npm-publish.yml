@@ -219,7 +219,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          DEEPEN_BY=500
+          DEEPEN_BY=50
 
           while true; do
             missing=()
@@ -266,7 +266,8 @@ jobs:
             fi
 
             echo "Deepening by $DEEPEN_BY commits..."
-            git fetch --deepen="$DEEPEN_BY"
+            # Deepen only main's history (no branches) and skip tags.
+            git fetch --deepen="$DEEPEN_BY" --no-tags origin main
           done
 
       - name: Check for pre.json file existence
