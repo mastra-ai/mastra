@@ -283,6 +283,7 @@ type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
   results: TAccumulated;
   abortSignal?: AbortSignal;
   requestContext?: RequestContext;
+  mastra?: Mastra;
 };
 
 // Simplified AccumulatedResults - don't try to resolve Promise types here.
@@ -771,7 +772,6 @@ class MastraScorer<
       | GenerateScorePromptObject<any, TInput, TRunOutput>
     > = new Map(),
     mastra?: Mastra,
-    private mastraRegistrationCallbacks: Array<(mastra: Mastra) => void> = [],
   ) {
     this.#mastra = mastra;
     if (!this.config.id) {
@@ -791,21 +791,6 @@ class MastraScorer<
    */
   __registerMastra(mastra: Mastra): void {
     this.#mastra = mastra;
-    for (const callback of this.mastraRegistrationCallbacks) {
-      callback(mastra);
-    }
-  }
-
-  /**
-   * Registers a callback for adapters that need Mastra-backed runtime resolution.
-   * The callback is preserved when scorer builder methods clone the scorer.
-   * @internal
-   */
-  __onRegisterMastra(callback: (mastra: Mastra) => void): void {
-    this.mastraRegistrationCallbacks.push(callback);
-    if (this.#mastra) {
-      callback(this.#mastra);
-    }
   }
 
   /**
@@ -877,7 +862,6 @@ class MastraScorer<
       ],
       new Map(this.originalPromptObjects),
       this.#mastra,
-      [...this.mastraRegistrationCallbacks],
     );
   }
 
@@ -908,7 +892,6 @@ class MastraScorer<
       ],
       new Map(this.originalPromptObjects),
       this.#mastra,
-      [...this.mastraRegistrationCallbacks],
     );
   }
 
@@ -939,7 +922,6 @@ class MastraScorer<
       ],
       new Map(this.originalPromptObjects),
       this.#mastra,
-      [...this.mastraRegistrationCallbacks],
     );
   }
 
@@ -970,7 +952,6 @@ class MastraScorer<
       ],
       new Map(this.originalPromptObjects),
       this.#mastra,
-      [...this.mastraRegistrationCallbacks],
     );
   }
 
@@ -1276,6 +1257,7 @@ class MastraScorer<
           const context = this.createScorerContext(scorerStep.name, run, accumulatedResults, {
             abortSignal: rest.abortSignal,
             requestContext: rest.requestContext,
+            mastra: this.#mastra,
           });
           const currentSpan = observabilityContext.tracingContext.currentSpan;
           const scorerRunSpan =
@@ -1437,7 +1419,10 @@ class MastraScorer<
     stepName: string,
     run: ScorerRun<TInput, TRunOutput>,
     accumulatedResults: Record<string, any>,
-    executionContext: Pick<StepContext<Record<string, any>, TInput, TRunOutput>, 'abortSignal' | 'requestContext'>,
+    executionContext: Pick<
+      StepContext<Record<string, any>, TInput, TRunOutput>,
+      'abortSignal' | 'requestContext' | 'mastra'
+    >,
   ) {
     if (stepName === 'generateReason') {
       const score = accumulatedResults.generateScoreStepResult;

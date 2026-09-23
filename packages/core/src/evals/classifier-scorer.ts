@@ -202,13 +202,12 @@ export function createClassifierScorer<
 ): ClassifierScorerResult<TClassifier, TQuestion, TID, TInput, TRunOutput>;
 
 export function createClassifierScorer(options: any): MastraScorer<any, any, any, any> {
-  let mastra: Mastra | undefined;
   const inlineClassifier = typeof options.classifier === 'string' ? undefined : options.classifier;
   if (inlineClassifier) {
     validateQuestionAndScores(inlineClassifier, options.id, options.question, options.scores);
   }
 
-  const scorer = createScorer({
+  return createScorer({
     id: options.id,
     name: options.name,
     description: options.description ?? `Scores question '${options.question}' with a configured classifier`,
@@ -217,7 +216,7 @@ export function createClassifierScorer(options: any): MastraScorer<any, any, any
   })
     .analyze(async context => {
       const classifier: Classifier<ClassifierQuestions> =
-        inlineClassifier ?? resolveRegisteredClassifier(mastra, options.classifier, options.id);
+        inlineClassifier ?? resolveRegisteredClassifier(context.mastra, options.classifier, options.id);
       validateQuestionAndScores(classifier, options.id, options.question, options.scores);
 
       const state = options.state ? await options.state(context) : context.run.output;
@@ -252,11 +251,6 @@ export function createClassifierScorer(options: any): MastraScorer<any, any, any
     .generateReason(({ results, score }) =>
       classifierReason(options.question, results.analyzeStepResult.answer, score),
     );
-
-  scorer.__onRegisterMastra(registeredMastra => {
-    mastra = registeredMastra;
-  });
-  return scorer;
 }
 
 function resolveRegisteredClassifier(mastra: Mastra | undefined, classifierId: string, scorerId: string) {
