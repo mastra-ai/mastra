@@ -12,6 +12,7 @@ import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentLayout } from '@/domains/agents/components/agent-layout';
 import {
   AgentChatLoadingSkeleton,
+  AgentLandingLoadingSkeleton,
   AgentSidebarLoadingSkeleton,
 } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
@@ -78,6 +79,23 @@ function AgentThread() {
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
+  // With memory the panel also hosts the memory card, so it stays mounted (reachable via `{`
+  // or the expand button) but starts collapsed, and reopens once the first thread exists.
+  // Collapse is one-shot per agent so query refetches can't re-collapse a panel the user opened.
+  const collapseThreadsPanel =
+    isNewThread && hasMemory && !isAgentLoading && !isThreadsLoading && sidebarThreads.length === 0;
+  const hasThread = !isNewThread || sidebarThreads.length > 0;
+  const collapsedForAgent = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (collapseThreadsPanel && collapsedForAgent.current !== agentId) {
+      collapsedForAgent.current = agentId;
+      threadsPanel.current?.collapse();
+    } else if (hasThread && collapsedForAgent.current === agentId) {
+      collapsedForAgent.current = undefined;
+      threadsPanel.current?.expand();
+    }
+  }, [collapseThreadsPanel, hasThread, agentId]);
+
   // 401 check - session expired, needs re-authentication
   if (error && is401UnauthorizedError(error)) {
     return <SessionExpired variant="fill" />;
@@ -89,7 +107,7 @@ function AgentThread() {
   }
 
   if (isAgentLoading) {
-    return <AgentThreadLoadingSkeleton />;
+    return isNewThread ? <AgentLandingLoadingSkeleton /> : <AgentThreadLoadingSkeleton />;
   }
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
@@ -106,6 +124,9 @@ function AgentThread() {
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
+  // A first visit has nothing to list: give the landing the full width until a thread exists.
+  // Without memory there is nothing else in the panel, so it is dropped entirely.
+  const hideThreadsPanel = isNewThread && !hasMemory && (isThreadsLoading || sidebarThreads.length === 0);
 
   const handleRefreshThreadList = async () => {
     if (isNewThread && activeNewThread.current === newThreadKey) {
@@ -140,7 +161,7 @@ function AgentThread() {
                       agentId={agentId!}
                       leftPanel={threadsPanel}
                       leftSlot={
-                        isThreadsLoading ? (
+                        hideThreadsPanel ? undefined : isThreadsLoading ? (
                           <AgentSidebarLoadingSkeleton />
                         ) : (
                           <AgentSidebar

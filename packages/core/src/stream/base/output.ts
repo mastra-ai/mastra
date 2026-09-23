@@ -261,6 +261,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       providerExecuted?: boolean;
       providerMetadata?: ProviderMetadata;
       dynamic?: boolean;
+      title?: string;
       observability?: ToolCallChunk['payload']['observability'];
     }
   > = {};
@@ -625,6 +626,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 providerExecuted: chunk.payload.providerExecuted,
                 providerMetadata: chunk.payload.providerMetadata,
                 dynamic: chunk.payload.dynamic,
+                ...(chunk.payload.title ? { title: chunk.payload.title } : {}),
                 ...(chunk.payload.observability ? { observability: chunk.payload.observability } : {}),
               };
               break;
@@ -656,6 +658,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     providerExecuted: meta.providerExecuted,
                     providerMetadata: meta.providerMetadata,
                     dynamic: meta.dynamic,
+                    ...(meta.title ? { title: meta.title } : {}),
                     ...(meta.observability ? { observability: meta.observability } : {}),
                   },
                 };

@@ -205,6 +205,9 @@ function resolveActivator(element: HTMLElement): HTMLElement {
  */
 const measurementAttempts = 3;
 
+const CONTROL_BETWEEN_ROWS =
+  "input, textarea, select, button, a, label, summary, [contenteditable], [role='textbox'], [role='searchbox'], [role='button'], [role='link'], [role='radio'], [role='checkbox'], [role='switch'], [role='slider'], [role='spinbutton'], [role='tab'], [role='radiogroup'], [role='tablist'], [role='toolbar']";
+
 export function useFluidHover<T extends HTMLElement>(
   containerRef: RefObject<T | null>,
   options: UseFluidHoverOptions = {},
@@ -451,11 +454,8 @@ export function useFluidHover<T extends HTMLElement>(
         if (element.contains(target)) return;
       }
       // A control that sits between the rows (a search field at the top of
-      // a menu, a footer button) keeps its own click too.
-      const control = target.closest(
-        "input, textarea, select, button, a, summary, [contenteditable], [role='textbox'], [role='searchbox'], [role='button']",
-      );
-      if (control) return;
+      // a menu, a footer button, a theme toggle) keeps its own click too.
+      if (target.closest(CONTROL_BETWEEN_ROWS)) return;
       if (gapClick === false) return;
       const index = activeIndexRef.current;
       if (index === null) return;

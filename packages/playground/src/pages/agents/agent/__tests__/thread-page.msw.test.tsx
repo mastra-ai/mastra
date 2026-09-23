@@ -223,6 +223,13 @@ const threadsResponse = {
 
 const onTracesRequest = vi.fn<(threadId: string | null) => void>();
 
+/** Without observability the tab bar renders a single disabled "Traces" placeholder, never an aside toggle. */
+function expectOnlyDisabledTracesButton() {
+  const tracesButtons = screen.getAllByRole('button', { name: /traces/i });
+  expect(tracesButtons).toHaveLength(1);
+  expect(tracesButtons[0]?.getAttribute('aria-disabled')).toBe('true');
+}
+
 function installHandlers() {
   const emptyTraces = ({ request }: { request: Request }) => {
     onTracesRequest(new URL(request.url).searchParams.get('threadId'));
@@ -384,7 +391,7 @@ describe('Standalone thread page', () => {
       );
       renderAt(`/agents/${AGENT_ID}/threads/new`);
 
-      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(await screen.findByTestId('thread-welcome')).not.toBeNull();
       expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
       expect(messagesRequested).not.toHaveBeenCalled();
     });
@@ -403,7 +410,7 @@ describe('Standalone thread page', () => {
       );
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
-      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(await screen.findByTestId('thread-welcome')).not.toBeNull();
       expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
       expect(messagesRequested).not.toHaveBeenCalled();
     });
@@ -682,22 +689,22 @@ describe('Standalone thread page', () => {
     );
   });
 
-  it('keeps traces disabled and fetches none in the chat view', async () => {
+  it('does not fetch traces nor render a traces aside in the chat view', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.getByRole('button', { name: /traces/i }).getAttribute('aria-disabled')).toBe('true');
+    expectOnlyDisabledTracesButton();
     expect(screen.queryByRole('complementary')).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
-  it('keeps traces disabled and fetches none on /new', async () => {
+  it('does not fetch traces on /new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.getByRole('button', { name: /traces/i }).getAttribute('aria-disabled')).toBe('true');
+    expectOnlyDisabledTracesButton();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
