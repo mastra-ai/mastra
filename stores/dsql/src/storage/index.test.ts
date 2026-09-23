@@ -5,6 +5,7 @@ import {
   createDomainDirectTests,
   createStoreIndexTests,
   createDomainIndexTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import { TABLE_THREADS } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
@@ -19,6 +20,24 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 // Run integration tests only when DSQL_HOST is set and DSQL_INTEGRATION=true
 if (canRunDSQLTests()) {
   createTestSuite(new DSQLStore(TEST_CONFIG));
+
+  createMemoryTokenBoundaryConformanceTest({
+    createStores: async () => {
+      const firstPool = createTestPool();
+      const secondPool = createTestPool();
+      const first = new MemoryDSQL({ pool: firstPool });
+      const second = new MemoryDSQL({ pool: secondPool });
+      await first.init();
+      await second.init();
+      return {
+        first,
+        second,
+        cleanup: async () => {
+          await Promise.all([firstPool.end(), secondPool.end()]);
+        },
+      };
+    },
+  });
 
   // Pre-configured client acceptance tests
   createClientAcceptanceTests({

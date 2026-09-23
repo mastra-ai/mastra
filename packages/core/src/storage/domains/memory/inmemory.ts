@@ -35,7 +35,7 @@ import {
   validateStorageMetadataFilter,
 } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
-import { MemoryStorage } from './base';
+import { MemoryStorage, type AdvanceMemoryTokenBoundaryInput, type AdvanceMemoryTokenBoundaryResult } from './base';
 
 export class InMemoryMemory extends MemoryStorage {
   override readonly supportsPartialThreadUpdate: boolean = true;
@@ -93,6 +93,30 @@ export class InMemoryMemory extends MemoryStorage {
       thread.updatedAt = new Date();
     }
     return thread;
+  }
+
+  override async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: AdvanceMemoryTokenBoundaryInput): Promise<AdvanceMemoryTokenBoundaryResult> {
+    const thread = this.db.threads.get(id);
+    if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
+      return { supported: true, thread: null, boundary: undefined };
+    }
+
+    const previous = this.getMemoryTokenBoundary(thread);
+    const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+    if (boundary !== previous) {
+      thread.metadata = { ...thread.metadata, memoryTokenLimiter: boundary };
+      thread.updatedAt = new Date();
+    }
+
+    return {
+      supported: true,
+      thread: { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata },
+      boundary,
+    };
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {

@@ -4,6 +4,7 @@ import {
   createConfigValidationTests,
   createClientAcceptanceTests,
   createDomainDirectTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -31,6 +32,21 @@ const createTestClient = async (): Promise<RedisClient> => {
   await client.connect();
   return client as unknown as RedisClient;
 };
+
+createMemoryTokenBoundaryConformanceTest({
+  repetitions: 20,
+  createStores: async () => {
+    const firstClient = await createTestClient();
+    const secondClient = await createTestClient();
+    return {
+      first: new StoreMemoryRedis({ client: firstClient }),
+      second: new StoreMemoryRedis({ client: secondClient }),
+      cleanup: async () => {
+        await Promise.all([firstClient.quit(), secondClient.quit()]);
+      },
+    };
+  },
+});
 
 const createThread = (overrides: Partial<StorageThreadType> = {}): StorageThreadType => ({
   id: `thread-${randomUUID()}`,

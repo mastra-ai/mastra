@@ -71,6 +71,7 @@ import {
 import { getResourceById, saveResource, updateResource } from './resources';
 import { clearAllMemoryTables, initMemorySchema } from './schema';
 import {
+  advanceMemoryTokenBoundary as advanceMemoryTokenBoundaryInTransaction,
   deleteThread,
   getThreadById,
   insertThreadRow,
@@ -168,6 +169,26 @@ export class MemoryOracle extends MemoryStorage {
     metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     return updateThread(this.ctx, args);
+  }
+
+  async advanceMemoryTokenBoundary(args: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    return advanceMemoryTokenBoundaryInTransaction(
+      this.ctx,
+      {
+        getMemoryTokenBoundary: thread => this.getMemoryTokenBoundary(thread),
+        mergeMemoryTokenBoundaries: (previous, candidate) => this.mergeMemoryTokenBoundaries(previous, candidate),
+      },
+      args,
+    );
   }
 
   async deleteThread(args: { threadId: string }): Promise<void> {

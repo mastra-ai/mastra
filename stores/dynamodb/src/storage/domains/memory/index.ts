@@ -33,6 +33,22 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   private service: Service<Record<string, any>>;
   private ttlConfig?: DynamoDBTtlConfig;
 
+  private isConditionalCheckFailed(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    const value = error as { name?: string; code?: string; __type?: string; message?: string; cause?: unknown };
+    if (
+      value.name === 'ConditionalCheckFailedException' ||
+      value.code === 'ConditionalCheckFailedException' ||
+      value.__type?.includes('ConditionalCheckFailedException') ||
+      value.message?.includes('conditional request failed')
+    ) {
+      return true;
+    }
+    if (!value.cause || typeof value.cause !== 'object') return false;
+    const cause = value.cause as { name?: string; code?: string };
+    return cause.name === 'ConditionalCheckFailedException' || cause.code === 'ConditionalCheckFailedException';
+  }
+
   constructor(config: DynamoDBDomainConfig) {
     super();
     const resolved = resolveDynamoDBConfig(config);
@@ -207,6 +223,62 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         error,
       );
     }
+  }
+
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const thread = await this.getThreadById({ threadId: id, resourceId });
+      if (!thread) return { supported: true, thread: null, boundary: undefined };
+
+      const metadata = typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : (thread.metadata ?? {});
+      const previous = this.getMemoryTokenBoundary({ metadata });
+      const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+      if (JSON.stringify(previous) === JSON.stringify(boundary)) {
+        return { supported: true, thread: { ...thread, metadata }, boundary };
+      }
+
+      const previousMetadata = thread.metadata === undefined ? undefined : JSON.stringify(metadata);
+      const now = new Date();
+      try {
+        let operation = this.service.entities.thread.update({ entity: 'thread', id }).set({
+          metadata: JSON.stringify({ ...metadata, memoryTokenLimiter: boundary }),
+          updatedAt: now.toISOString(),
+        });
+        operation = operation.where((attributes: any, operations: any) => {
+          const conditions = [
+            previousMetadata === undefined
+              ? operations.notExists(attributes.metadata)
+              : operations.eq(attributes.metadata, previousMetadata),
+          ];
+          if (resourceId !== undefined) conditions.push(operations.eq(attributes.resourceId, resourceId));
+          return conditions.join(' AND ');
+        });
+        await operation.go();
+        return {
+          supported: true,
+          thread: { ...thread, metadata: { ...metadata, memoryTokenLimiter: boundary }, updatedAt: now },
+          boundary,
+        };
+      } catch (error) {
+        if (this.isConditionalCheckFailed(error) && attempt < 4) continue;
+        throw error;
+      }
+    }
+
+    throw new Error(`Failed to advance memory token boundary for thread ${id} after 5 attempts`);
   }
 
   async updateThread({

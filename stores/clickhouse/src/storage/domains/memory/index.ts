@@ -875,6 +875,23 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const thread = await this.getThreadById({ threadId: id, resourceId });
+    return { supported: false, thread, boundary: this.getMemoryTokenBoundary(thread) };
+  }
+
   async updateThread({
     id,
     title,

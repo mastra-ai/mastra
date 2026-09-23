@@ -21,6 +21,7 @@ export interface ValkeyClient {
   zRank(key: string, value: string): Promise<number | null>;
   zAdd(key: string, value: { score: number; value: string }): Promise<number>;
   zRem(key: string, value: string): Promise<number>;
+  eval(script: string, keys: string[], args: string[]): Promise<unknown>;
   multi(): ValkeyMulti;
 }
 
@@ -129,6 +130,10 @@ export class GlideValkeyClient implements ValkeyClient {
 
   async zRem(key: string, value: string): Promise<number> {
     return asNumber(await this.command(['ZREM', key, value]));
+  }
+
+  async eval(script: string, keys: string[], args: string[]): Promise<unknown> {
+    return this.command(['EVAL', script, String(keys.length), ...keys, ...args]);
   }
 
   multi(): ValkeyMulti {

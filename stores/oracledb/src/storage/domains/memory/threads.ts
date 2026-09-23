@@ -227,6 +227,78 @@ export async function updateThread(
   }
 }
 
+export async function advanceMemoryTokenBoundary(
+  ctx: MemoryContext,
+  storage: {
+    getMemoryTokenBoundary(thread: Pick<StorageThreadType, 'metadata'>):
+      | {
+          createdAt: string;
+          messageIds: string[];
+          maxTokens: number;
+          atMaxRemoveTokens: number;
+        }
+      | undefined;
+    mergeMemoryTokenBoundaries(
+      previous:
+        | {
+            createdAt: string;
+            messageIds: string[];
+            maxTokens: number;
+            atMaxRemoveTokens: number;
+          }
+        | undefined,
+      candidate: {
+        createdAt: string;
+        messageIds: string[];
+        maxTokens: number;
+        atMaxRemoveTokens: number;
+      },
+    ): {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  },
+  {
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  },
+) {
+  return ctx.db.tx(async client => {
+    const resourceFilter = resourceId === undefined ? '' : ` AND ${THREAD_RESOURCE_ID} = :resourceId`;
+    const row = (await client.oneOrNone(
+      `${threadSelect()} FROM ${table(ctx, TABLE_THREADS)} WHERE id = :id${resourceFilter} FOR UPDATE`,
+      resourceId === undefined ? { id } : { id, resourceId },
+    )) as ThreadRow | null;
+    if (!row) return { supported: true, thread: null, boundary: undefined };
+
+    const thread = parseThread(row);
+    const previous = storage.getMemoryTokenBoundary(thread);
+    const boundary = storage.mergeMemoryTokenBoundaries(previous, candidate);
+    if (boundary !== previous) {
+      thread.metadata = { ...(thread.metadata ?? {}), memoryTokenLimiter: boundary };
+      thread.updatedAt = new Date();
+      await client.none(
+        `UPDATE ${table(ctx, TABLE_THREADS)} SET metadata = :metadata, ${THREAD_UPDATED_AT} = :updatedAt WHERE id = :id`,
+        { id, metadata: jsonBind(thread.metadata), updatedAt: thread.updatedAt },
+      );
+    }
+
+    return { supported: true, thread, boundary };
+  });
+}
+
 export async function deleteThread(ctx: MemoryContext, { threadId }: { threadId: string }): Promise<void> {
   try {
     await ctx.db.tx(async client => {

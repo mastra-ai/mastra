@@ -493,6 +493,63 @@ export class MemoryStorageDO extends MemoryStorage {
     }
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const table = this.#db.getTableName(TABLE_THREADS);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const params: Array<string | null> = [id];
+      const resourceFilter = resourceId === undefined ? '' : ' AND resourceId = ?';
+      if (resourceId !== undefined) params.push(resourceId);
+      const row = await this.#db.executeQuery({
+        sql: `SELECT * FROM ${table} WHERE id = ?${resourceFilter} LIMIT 1`,
+        params,
+        first: true,
+      });
+      if (!row || Array.isArray(row)) return { supported: true, thread: null, boundary: undefined };
+
+      const storedMetadata = typeof row.metadata === 'string' ? row.metadata : null;
+      const metadata = storedMetadata ? JSON.parse(storedMetadata) : {};
+      const previous = this.getMemoryTokenBoundary({ metadata });
+      const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+      const thread: StorageThreadType = {
+        id: String(row.id),
+        resourceId: String(row.resourceId),
+        title: String(row.title ?? ''),
+        metadata,
+        createdAt: ensureDate(String(row.createdAt)) as Date,
+        updatedAt: ensureDate(String(row.updatedAt)) as Date,
+      };
+      if (boundary === previous) return { supported: true, thread, boundary };
+
+      thread.metadata = { ...metadata, memoryTokenLimiter: boundary };
+      thread.updatedAt = new Date();
+      const changes = await this.#db.executeUpdate({
+        sql: `UPDATE ${table} SET metadata = ?, updatedAt = ? WHERE id = ?${resourceFilter} AND ${storedMetadata === null ? 'metadata IS NULL' : 'metadata = ?'}`,
+        params: [
+          JSON.stringify(thread.metadata),
+          thread.updatedAt.toISOString(),
+          id,
+          ...(resourceId === undefined ? [] : [resourceId]),
+          ...(storedMetadata === null ? [] : [storedMetadata]),
+        ],
+      });
+      if (changes === 1) return { supported: true, thread, boundary };
+    }
+    throw new Error(`Failed to advance memory token boundary for thread ${id} after concurrent updates`);
+  }
+
   async updateThread({
     id,
     title,

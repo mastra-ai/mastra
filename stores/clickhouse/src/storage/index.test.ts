@@ -32,6 +32,37 @@ const createTestClient = () =>
 
 const storage = new ClickhouseStore(TEST_CONFIG);
 
+describe('memory token boundary persistence', () => {
+  it('returns the visible boundary without persisting a candidate', async () => {
+    const memory = new MemoryStorageClickhouse({ client: {} as never });
+    const visibleBoundary = {
+      createdAt: '2025-01-01T00:00:01.000Z',
+      messageIds: ['visible'],
+      maxTokens: 100,
+      atMaxRemoveTokens: 25,
+    };
+    vi.spyOn(memory, 'getThreadById').mockResolvedValue({
+      id: 'thread',
+      resourceId: 'resource',
+      title: 'Thread',
+      metadata: { memoryTokenLimiter: visibleBoundary },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const update = vi.spyOn(memory, 'updateThread');
+
+    const result = await memory.advanceMemoryTokenBoundary({
+      id: 'thread',
+      resourceId: 'resource',
+      candidate: { ...visibleBoundary, createdAt: '2025-01-01T00:00:02.000Z', messageIds: ['candidate'] },
+    });
+
+    expect(result.supported).toBe(false);
+    expect(result.boundary).toEqual(visibleBoundary);
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
 createTestSuite(storage);
 
 // Configuration validation tests

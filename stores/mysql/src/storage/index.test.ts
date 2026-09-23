@@ -1,6 +1,9 @@
-import { createSpan, createTestSuite } from '@internal/storage-test-utils';
+import { createMemoryTokenBoundaryConformanceTest, createSpan, createTestSuite } from '@internal/storage-test-utils';
+import { createPool } from 'mysql2/promise';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
+import { MemoryMySQL } from './domains/memory';
+import { StoreOperationsMySQL } from './domains/operations';
 import { MySQLStore } from './index';
 import type { MySQLStoreConfig } from './index';
 
@@ -29,6 +32,30 @@ describe('MySQLStore configuration validation', () => {
 const store = new MySQLStore(TEST_CONFIG);
 // MySQL does not persist tool mocks / tool mock reports — it rejects them.
 createTestSuite(store, { toolMocks: false });
+
+createMemoryTokenBoundaryConformanceTest({
+  createStores: async () => {
+    const firstPool = createPool(TEST_CONFIG);
+    const secondPool = createPool(TEST_CONFIG);
+    const first = new MemoryMySQL({
+      pool: firstPool,
+      operations: new StoreOperationsMySQL({ pool: firstPool, database: TEST_CONFIG.database }),
+    });
+    const second = new MemoryMySQL({
+      pool: secondPool,
+      operations: new StoreOperationsMySQL({ pool: secondPool, database: TEST_CONFIG.database }),
+    });
+    await first.init();
+    await second.init();
+    return {
+      first,
+      second,
+      cleanup: async () => {
+        await Promise.all([firstPool.end(), secondPool.end()]);
+      },
+    };
+  },
+});
 
 afterAll(async () => {
   await store.close();

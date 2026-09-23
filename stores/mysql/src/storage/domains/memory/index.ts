@@ -818,6 +818,58 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const params: any[] = [id];
+      const resourceFilter = resourceId === undefined ? '' : ` AND ${quoteIdentifier('resourceId', 'column name')} = ?`;
+      if (resourceId !== undefined) params.push(resourceId);
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT * FROM ${formatTableName(TABLE_THREADS)} WHERE ${quoteIdentifier('id', 'column name')} = ?${resourceFilter} FOR UPDATE`,
+        params,
+      );
+      const row = rows[0];
+      if (!row) {
+        await connection.commit();
+        return { supported: true, thread: null, boundary: undefined };
+      }
+
+      const thread = this.mapThread(row as ThreadRow);
+      const previous = this.getMemoryTokenBoundary(thread);
+      const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+      if (boundary !== previous) {
+        thread.metadata = { ...(thread.metadata ?? {}), memoryTokenLimiter: boundary };
+        thread.updatedAt = new Date();
+        await connection.execute(
+          `UPDATE ${formatTableName(TABLE_THREADS)} SET ${quoteIdentifier('metadata', 'column name')} = ?, ${quoteIdentifier('updatedAt', 'column name')} = ? WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+          [JSON.stringify(thread.metadata), transformToSqlValue(thread.updatedAt), id],
+        );
+      }
+
+      await connection.commit();
+      return { supported: true, thread, boundary };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   async updateThread({
     id,
     title,

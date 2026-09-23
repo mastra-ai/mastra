@@ -92,6 +92,29 @@ export function isAfterMemoryTokenBoundary(message: MastraDBMessage, boundary: M
   return time > start || (time === start && !boundary.messageIds.includes(message.id));
 }
 
+/**
+ * Merge persisted memory-trim boundaries within one normalized token configuration.
+ * A different configuration starts a new epoch, so the candidate replaces the previous boundary.
+ */
+export function mergeMemoryTokenBoundaries(
+  previous: MemoryTokenBoundary | undefined,
+  candidate: MemoryTokenBoundary,
+): MemoryTokenBoundary {
+  if (!previous) return candidate;
+  if (previous.maxTokens !== candidate.maxTokens || previous.atMaxRemoveTokens !== candidate.atMaxRemoveTokens) {
+    return candidate;
+  }
+
+  const previousTime = Date.parse(previous.createdAt);
+  const candidateTime = Date.parse(candidate.createdAt);
+  if (candidateTime < previousTime) return previous;
+  if (candidateTime > previousTime) return candidate;
+
+  const messageIds = [...new Set([...previous.messageIds, ...candidate.messageIds])];
+  if (messageIds.length === previous.messageIds.length) return previous;
+  return { ...candidate, messageIds };
+}
+
 /** Keep the cursor monotonic even when semantic recall brings back older messages. */
 export function advanceMemoryTokenBoundary(
   previous: MemoryTokenBoundary | undefined,
@@ -101,15 +124,15 @@ export function advanceMemoryTokenBoundary(
 ): MemoryTokenBoundary | undefined {
   if (!removed.length) return previous;
   const newest = Math.max(...removed.map(message => new Date(message.createdAt).getTime()));
-  const previousTime = previous ? Date.parse(previous.createdAt) : -Infinity;
-  if (newest < previousTime) return previous;
-  const messageIds = removed
-    .filter(message => new Date(message.createdAt).getTime() === newest)
-    .map(message => message.id);
-  return {
+  const candidate: MemoryTokenBoundary = {
     createdAt: new Date(newest).toISOString(),
-    messageIds: [...new Set([...(newest === previousTime ? previous!.messageIds : []), ...messageIds])],
+    messageIds: [
+      ...new Set(
+        removed.filter(message => new Date(message.createdAt).getTime() === newest).map(message => message.id),
+      ),
+    ],
     maxTokens,
     atMaxRemoveTokens,
   };
+  return mergeMemoryTokenBoundaries(previous, candidate);
 }

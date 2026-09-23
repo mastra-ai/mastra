@@ -5,6 +5,7 @@ import {
   createDomainDirectTests,
   createStoreIndexTests,
   createDomainIndexTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import { SpanType } from '@mastra/core/observability';
 import { TABLE_THREADS } from '@mastra/core/storage';
@@ -73,6 +74,20 @@ const createConnectorHandler = async (): Promise<{ handler: ConnectorHandler; cl
     client,
   };
 };
+
+createMemoryTokenBoundaryConformanceTest({
+  createStores: async () => {
+    const firstConnection = await createConnectorHandler();
+    const secondConnection = await createConnectorHandler();
+    return {
+      first: new MemoryStorageMongoDB({ connectorHandler: firstConnection.handler }),
+      second: new MemoryStorageMongoDB({ connectorHandler: secondConnection.handler }),
+      cleanup: async () => {
+        await Promise.all([firstConnection.client.close(), secondConnection.client.close()]);
+      },
+    };
+  },
+});
 
 // Mock connectorHandler for config validation tests (doesn't need real connection)
 const createMockConnectorHandler = (): ConnectorHandler => {

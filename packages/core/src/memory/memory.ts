@@ -32,11 +32,7 @@ import type { ToolAction } from '../tools';
 import type { IdGeneratorContext } from '../types';
 import { deepMerge } from '../utils';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
-import {
-  advanceMemoryTokenBoundary,
-  getMemoryTokenBoundary,
-  normalizeMessageHistoryConfig,
-} from './message-history-config';
+import { advanceMemoryTokenBoundary, normalizeMessageHistoryConfig } from './message-history-config';
 
 import type {
   SharedMemoryConfig,
@@ -926,18 +922,16 @@ https://mastra.ai/en/docs/memory/overview`,
           const localMessages = removed.filter(message => message.threadId === thread.id);
           if (!localMessages.length) return;
 
-          const updated = await memoryStore!.updateThreadMetadata({
+          const candidate = advanceMemoryTokenBoundary(undefined, localMessages, maxTokens, atMaxRemoveTokens)!;
+          const persistBoundary = memoryStore!.advanceMemoryTokenBoundary;
+          if (typeof persistBoundary !== 'function') return;
+
+          const result = await persistBoundary.call(memoryStore, {
             id: thread.id,
             resourceId: memoryContext.resourceId,
-            update: latest => {
-              const stored = getMemoryTokenBoundary(latest);
-              const previous =
-                stored?.maxTokens === maxTokens && stored.atMaxRemoveTokens === atMaxRemoveTokens ? stored : undefined;
-              const boundary = advanceMemoryTokenBoundary(previous, localMessages, maxTokens, atMaxRemoveTokens);
-              return boundary === previous ? undefined : { memoryTokenLimiter: boundary };
-            },
+            candidate,
           });
-          if (updated) thread.metadata = updated.metadata;
+          if (result.supported && result.thread) thread.metadata = result.thread.metadata;
         },
       });
       processors.push({

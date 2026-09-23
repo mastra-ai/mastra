@@ -14,6 +14,7 @@ import {
   createClientAcceptanceTests,
   createConfigValidationTests,
   createDomainDirectTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -326,6 +327,24 @@ describe('DynamoDBStore', () => {
         expectedError: /invalid characters|not between 3 and 255/,
       },
     ],
+  });
+
+  createMemoryTokenBoundaryConformanceTest({
+    repetitions: 20,
+    createStores: () => ({
+      first: new MemoryStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      }),
+      second: new MemoryStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      }),
+    }),
   });
 
   // Domain-level pre-configured client tests

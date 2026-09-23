@@ -34,6 +34,42 @@ import type { ValkeyDomainConfig } from '../../db';
 import type { ValkeyClient } from '../../types';
 import { getKey, processRecord } from '../utils';
 
+const ADVANCE_MEMORY_TOKEN_BOUNDARY_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return '' end
+local thread = cjson.decode(raw)
+if ARGV[1] ~= '' and thread.resourceId ~= ARGV[1] then return '' end
+local metadata = thread.metadata or {}
+if type(metadata) == 'string' then metadata = cjson.decode(metadata) end
+local candidate = cjson.decode(ARGV[2])
+local previous = metadata.memoryTokenLimiter
+local boundary = candidate
+if previous and previous.maxTokens == candidate.maxTokens and previous.atMaxRemoveTokens == candidate.atMaxRemoveTokens then
+  if candidate.createdAt < previous.createdAt then
+    boundary = previous
+  elseif candidate.createdAt == previous.createdAt then
+    local seen = {}
+    local ids = {}
+    for _, id in ipairs(previous.messageIds or {}) do seen[id] = true; table.insert(ids, id) end
+    for _, id in ipairs(candidate.messageIds or {}) do
+      if not seen[id] then seen[id] = true; table.insert(ids, id) end
+    end
+    if #ids == #(previous.messageIds or {}) then
+      boundary = previous
+    else
+      boundary.messageIds = ids
+    end
+  end
+end
+if cjson.encode(previous) ~= cjson.encode(boundary) then
+  metadata.memoryTokenLimiter = boundary
+  thread.metadata = metadata
+  thread.updatedAt = ARGV[3]
+  redis.call('SET', KEYS[1], cjson.encode(thread))
+end
+return cjson.encode(thread)
+`;
+
 export class StoreMemoryValkey extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   private client: ValkeyClient;
@@ -238,6 +274,38 @@ export class StoreMemoryValkey extends MemoryStorage {
       this.logger.error(mastraError.toString());
       throw mastraError;
     }
+  }
+
+  public async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const key = getKey(TABLE_THREADS, { id });
+    const value = await this.client.eval(
+      ADVANCE_MEMORY_TOKEN_BOUNDARY_SCRIPT,
+      [key],
+      [resourceId ?? '', JSON.stringify(candidate), new Date().toISOString()],
+    );
+    if (!value) return { supported: true, thread: null, boundary: undefined };
+
+    const stored = JSON.parse(String(value)) as StorageThreadType;
+    const thread = {
+      ...stored,
+      createdAt: ensureDate(stored.createdAt)!,
+      updatedAt: ensureDate(stored.updatedAt)!,
+      metadata: typeof stored.metadata === 'string' ? JSON.parse(stored.metadata) : stored.metadata,
+    };
+    return { supported: true, thread, boundary: this.getMemoryTokenBoundary(thread) };
   }
 
   public async updateThread({

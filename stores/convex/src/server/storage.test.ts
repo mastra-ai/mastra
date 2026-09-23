@@ -656,6 +656,65 @@ describe('mastraStorage memory atomic updates', () => {
     });
   });
 
+  it('advances memory token boundaries monotonically inside one storage mutation', async () => {
+    const memoryCtx = createStatefulMemoryCtx({
+      'thread-1': {
+        _id: asConvexId('thread-doc'),
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'thread title',
+        metadata: { keep: true },
+        createdAt: '2026-05-29T00:00:00.000Z',
+        updatedAt: '2026-05-29T00:00:00.000Z',
+      },
+    });
+    const candidate = {
+      createdAt: '2026-05-29T00:02:00.000Z',
+      messageIds: ['message-a'],
+      maxTokens: 100,
+      atMaxRemoveTokens: 25,
+    };
+
+    await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'advanceMemoryTokenBoundary',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      candidate,
+      updatedAt: '2026-05-29T00:03:00.000Z',
+    });
+    await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'advanceMemoryTokenBoundary',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      candidate: { ...candidate, createdAt: '2026-05-29T00:01:00.000Z', messageIds: ['older'] },
+      updatedAt: '2026-05-29T00:04:00.000Z',
+    });
+    const result = await handleTypedOperation(memoryCtx.ctx, 'mastra_threads', {
+      op: 'advanceMemoryTokenBoundary',
+      tableName: TABLE_THREADS,
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      candidate: { ...candidate, messageIds: ['message-b'] },
+      updatedAt: '2026-05-29T00:05:00.000Z',
+    });
+
+    expect(memoryCtx.patches).toHaveLength(2);
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        boundary: { ...candidate, messageIds: ['message-a', 'message-b'] },
+        thread: {
+          metadata: {
+            keep: true,
+            memoryTokenLimiter: { ...candidate, messageIds: ['message-a', 'message-b'] },
+          },
+        },
+      },
+    });
+  });
+
   it('returns null for missing thread updates without inserting a replacement row', async () => {
     const memoryCtx = createMemoryCtx(null);
 

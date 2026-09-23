@@ -353,6 +353,48 @@ function mergeMetadata(existing: unknown, update: Record<string, unknown> | unde
   };
 }
 
+type StoredMemoryTokenBoundary = {
+  createdAt: string;
+  messageIds: string[];
+  maxTokens: number;
+  atMaxRemoveTokens: number;
+};
+
+function parseMemoryTokenBoundary(metadata: unknown): StoredMemoryTokenBoundary | undefined {
+  const boundary = parseMetadataForMerge(metadata).memoryTokenLimiter;
+  if (!boundary || typeof boundary !== 'object') return undefined;
+  const value = boundary as Record<string, unknown>;
+  if (
+    typeof value.createdAt !== 'string' ||
+    !Array.isArray(value.messageIds) ||
+    !value.messageIds.every(id => typeof id === 'string') ||
+    typeof value.maxTokens !== 'number' ||
+    typeof value.atMaxRemoveTokens !== 'number'
+  ) {
+    return undefined;
+  }
+  return value as StoredMemoryTokenBoundary;
+}
+
+function mergeMemoryTokenBoundaries(
+  previous: StoredMemoryTokenBoundary | undefined,
+  candidate: StoredMemoryTokenBoundary,
+): StoredMemoryTokenBoundary {
+  if (
+    !previous ||
+    previous.maxTokens !== candidate.maxTokens ||
+    previous.atMaxRemoveTokens !== candidate.atMaxRemoveTokens
+  ) {
+    return candidate;
+  }
+  const previousTime = Date.parse(previous.createdAt);
+  const candidateTime = Date.parse(candidate.createdAt);
+  if (candidateTime > previousTime) return candidate;
+  if (candidateTime < previousTime) return previous;
+  const messageIds = [...new Set([...previous.messageIds, ...candidate.messageIds])];
+  return messageIds.length === previous.messageIds.length ? previous : { ...previous, messageIds };
+}
+
 /**
  * Handle operations on typed tables (threads, messages, etc.)
  * Records are stored with their `id` field as a regular field (not _id).
@@ -581,6 +623,30 @@ export async function handleTypedOperation(
       }
       await ctx.db.patch(existing._id, patchRecord);
       return { ok: true, result: { ...existing, ...patchRecord } };
+    }
+
+    case 'advanceMemoryTokenBoundary': {
+      if (convexTable !== 'mastra_threads') {
+        return { ok: false, error: `Unsupported operation ${request.op} for table ${request.tableName}` };
+      }
+
+      const existing = await ctx.db
+        .query(convexTable)
+        .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
+        .unique();
+      if (!existing || (request.resourceId !== undefined && existing.resourceId !== request.resourceId)) {
+        return { ok: true, result: { thread: null } };
+      }
+
+      const previous = parseMemoryTokenBoundary(existing.metadata);
+      const boundary = mergeMemoryTokenBoundaries(previous, request.candidate);
+      if (boundary !== previous) {
+        const metadata = { ...parseMetadataForMerge(existing.metadata), memoryTokenLimiter: boundary };
+        const patchRecord = { metadata, updatedAt: request.updatedAt };
+        await ctx.db.patch(existing._id, patchRecord);
+        return { ok: true, result: { thread: { ...existing, ...patchRecord }, boundary } };
+      }
+      return { ok: true, result: { thread: existing, boundary } };
     }
 
     case 'updateResource': {

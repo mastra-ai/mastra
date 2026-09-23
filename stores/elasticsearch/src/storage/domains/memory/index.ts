@@ -218,6 +218,75 @@ export class MemoryElasticSearch extends MemoryStorage {
     }
   }
 
+  public async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const client = this.db.getClient();
+    const key = getKey(TABLE_THREADS, { id });
+    await this.db.ensureIndex(TABLE_THREADS);
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const response = await client.get<{ key: string; doc: string }>(
+        { index: TABLE_THREADS, id: key },
+        { ignore: [404] },
+      );
+      if (!response.found || !response._source?.doc) {
+        return { supported: true, thread: null, boundary: undefined };
+      }
+
+      const current = JSON.parse(response._source.doc) as StorageThreadType;
+      if (resourceId !== undefined && current.resourceId !== resourceId) {
+        return { supported: true, thread: null, boundary: undefined };
+      }
+      const metadata = typeof current.metadata === 'string' ? JSON.parse(current.metadata) : (current.metadata ?? {});
+      const previous = this.getMemoryTokenBoundary({ metadata });
+      const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+      const thread = {
+        ...current,
+        metadata,
+        createdAt: ensureDate(current.createdAt)!,
+        updatedAt: ensureDate(current.updatedAt)!,
+      };
+      if (JSON.stringify(previous) === JSON.stringify(boundary)) {
+        return { supported: true, thread, boundary };
+      }
+
+      const updatedThread = {
+        ...thread,
+        metadata: { ...metadata, memoryTokenLimiter: boundary },
+        updatedAt: new Date(),
+      };
+      const { processedRecord } = processRecord(TABLE_THREADS, updatedThread);
+      try {
+        await client.index({
+          index: TABLE_THREADS,
+          id: key,
+          document: { key, doc: JSON.stringify(processedRecord) },
+          if_seq_no: response._seq_no,
+          if_primary_term: response._primary_term,
+          refresh: true,
+        });
+        return { supported: true, thread: updatedThread, boundary };
+      } catch (error: any) {
+        if ((error?.statusCode === 409 || error?.meta?.statusCode === 409) && attempt < 4) continue;
+        throw error;
+      }
+    }
+
+    throw new Error(`Failed to advance memory token boundary for thread ${id} after 5 attempts`);
+  }
+
   public async updateThread({
     id,
     title,

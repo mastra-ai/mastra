@@ -1384,6 +1384,66 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const resourceFilter = resourceId === undefined ? '' : ' AND resourceId = ?';
+      const result = await this.#client.execute({
+        sql: `SELECT *, CASE WHEN metadata IS NULL THEN NULL ELSE json(metadata) END AS __metadataJson FROM ${TABLE_THREADS} WHERE id = ?${resourceFilter}`,
+        args: resourceId === undefined ? [id] : [id, resourceId],
+      });
+      const row = result.rows[0];
+      if (!row) return { supported: true, thread: null, boundary: undefined };
+
+      const storedMetadata = typeof row.__metadataJson === 'string' ? row.__metadataJson : null;
+      const metadata = storedMetadata ? JSON.parse(storedMetadata) : {};
+      const previous = this.getMemoryTokenBoundary({ metadata });
+      const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+      const thread: StorageThreadType = {
+        id: String(row.id),
+        resourceId: String(row.resourceId),
+        title: String(row.title ?? ''),
+        metadata,
+        createdAt: new Date(String(row.createdAt)),
+        updatedAt: new Date(String(row.updatedAt)),
+      };
+      if (boundary === previous) return { supported: true, thread, boundary };
+
+      thread.metadata = { ...metadata, memoryTokenLimiter: boundary };
+      thread.updatedAt = new Date();
+      const update = await this.#db.executeWriteOperationWithRetry(
+        () =>
+          withClientWriteLock(this.#client, () =>
+            this.#client.execute({
+              sql: `UPDATE ${TABLE_THREADS} SET metadata = jsonb(?), updatedAt = ? WHERE id = ?${resourceFilter} AND ${storedMetadata === null ? 'metadata IS NULL' : 'json(metadata) = ?'}`,
+              args: [
+                JSON.stringify(thread.metadata),
+                thread.updatedAt.toISOString(),
+                id,
+                ...(resourceId === undefined ? [] : [resourceId]),
+                ...(storedMetadata === null ? [] : [storedMetadata]),
+              ],
+            }),
+          ),
+        `advance memory token boundary for thread ${id}`,
+      );
+      if (update.rowsAffected === 1) return { supported: true, thread, boundary };
+    }
+    throw new Error(`Failed to advance memory token boundary for thread ${id} after concurrent updates`);
+  }
+
   async updateThread({
     id,
     title,

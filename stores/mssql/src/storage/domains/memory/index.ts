@@ -434,6 +434,67 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const transaction = new sql.Transaction(this.pool);
+    let begun = false;
+    try {
+      await transaction.begin();
+      begun = true;
+      const table = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const request = new sql.Request(transaction);
+      request.input('id', id);
+      if (resourceId !== undefined) request.input('resourceId', resourceId);
+      const result = await request.query(
+        `SELECT * FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE id = @id${resourceId === undefined ? '' : ' AND [resourceId] = @resourceId'}`,
+      );
+      const row = result.recordset[0];
+      if (!row) {
+        await transaction.commit();
+        return { supported: true, thread: null, boundary: undefined };
+      }
+
+      const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {});
+      const previous = this.getMemoryTokenBoundary({ metadata });
+      const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+      const thread: StorageThreadType = {
+        id: row.id,
+        resourceId: row.resourceId,
+        title: row.title,
+        metadata,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+      if (boundary !== previous) {
+        thread.metadata = { ...metadata, memoryTokenLimiter: boundary };
+        thread.updatedAt = new Date();
+        const update = new sql.Request(transaction);
+        update.input('id', id);
+        update.input('metadata', JSON.stringify(thread.metadata));
+        update.input('updatedAt', sql.DateTime2, thread.updatedAt);
+        await update.query(`UPDATE ${table} SET metadata = @metadata, [updatedAt] = @updatedAt WHERE id = @id`);
+      }
+
+      await transaction.commit();
+      return { supported: true, thread, boundary };
+    } catch (error) {
+      if (begun) await transaction.rollback();
+      throw error;
+    }
+  }
+
   /**
    * Updates a thread's title and metadata, merging with existing metadata. Returns the updated thread.
    */

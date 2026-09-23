@@ -5,11 +5,12 @@ import type { ProcessInputArgs } from '../processors';
 import { MessageHistory } from '../processors/memory/message-history';
 import { TokenLimiterProcessor } from '../processors/processors/token-limiter';
 import { RequestContext } from '../request-context';
-import { InMemoryStore } from '../storage';
+import { InMemoryStore, MemoryStorage } from '../storage';
 import { loadMessageHistory } from './load-message-history';
 import {
   advanceMemoryTokenBoundary,
   getMemoryTokenBoundary,
+  mergeMemoryTokenBoundaries,
   normalizeMessageHistoryConfig,
 } from './message-history-config';
 import { MockMemory } from './mock';
@@ -194,7 +195,66 @@ describe('token-based memory history', () => {
     expect(second.messageIds).toEqual(['first', 'second']);
   });
 
-  it('does not let concurrent metadata updates move a boundary backward', async () => {
+  it('merges boundary candidates within one normalized configuration epoch', () => {
+    const older = advanceMemoryTokenBoundary(undefined, [message('older')], 100, 25)!;
+    const newer = advanceMemoryTokenBoundary(undefined, [message('newer', 2)], 100, 25)!;
+    const sameTime = advanceMemoryTokenBoundary(undefined, [message('same-time', 2)], 100, 25)!;
+
+    expect(mergeMemoryTokenBoundaries(newer, older)).toBe(newer);
+    expect(mergeMemoryTokenBoundaries(older, newer)).toBe(newer);
+    expect(mergeMemoryTokenBoundaries(newer, sameTime)).toEqual({
+      ...newer,
+      messageIds: ['newer', 'same-time'],
+    });
+  });
+
+  it('starts a separate boundary epoch when the normalized configuration changes', () => {
+    const previous = advanceMemoryTokenBoundary(undefined, [message('newer', 2)], 100, 25)!;
+    const nextEpoch = advanceMemoryTokenBoundary(undefined, [message('older')], 200, 50)!;
+
+    expect(mergeMemoryTokenBoundaries(previous, nextEpoch)).toBe(nextEpoch);
+    expect(advanceMemoryTokenBoundary(previous, [message('older')], 200, 50)).toEqual(nextEpoch);
+  });
+
+  it('keeps the base storage compatibility fallback observational', async () => {
+    const store = (await new InMemoryStore().getStore('memory'))!;
+    await store.saveThread({
+      thread: {
+        id: 'thread',
+        resourceId: 'resource',
+        metadata: { unrelated: true },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const candidate = advanceMemoryTokenBoundary(undefined, [message('candidate', 1)], 100, 25)!;
+
+    const result = await MemoryStorage.prototype.advanceMemoryTokenBoundary.call(store, {
+      id: 'thread',
+      resourceId: 'resource',
+      candidate,
+    });
+
+    expect(result).toMatchObject({ supported: false, boundary: undefined });
+    expect(result.thread?.metadata).toEqual({ unrelated: true });
+    expect((await store.getThreadById({ threadId: 'thread' }))?.metadata).toEqual({ unrelated: true });
+    await expect(
+      MemoryStorage.prototype.advanceMemoryTokenBoundary.call(store, {
+        id: 'missing',
+        resourceId: 'resource',
+        candidate,
+      }),
+    ).resolves.toEqual({ supported: false, thread: null, boundary: undefined });
+    await expect(
+      MemoryStorage.prototype.advanceMemoryTokenBoundary.call(store, {
+        id: 'thread',
+        resourceId: 'other-resource',
+        candidate,
+      }),
+    ).resolves.toEqual({ supported: false, thread: null, boundary: undefined });
+  });
+
+  it('does not let supported boundary updates move an in-memory boundary backward', async () => {
     const store = (await new InMemoryStore().getStore('memory'))!;
     await store.saveThread({
       thread: {
@@ -206,18 +266,15 @@ describe('token-based memory history', () => {
     });
 
     const updateBoundary = (removed: MastraDBMessage[]) =>
-      store.updateThreadMetadata({
+      store.advanceMemoryTokenBoundary({
         id: 'thread',
         resourceId: 'resource',
-        update: latest => {
-          const previous = getMemoryTokenBoundary(latest);
-          const boundary = advanceMemoryTokenBoundary(previous, removed, 100, 25);
-          return boundary === previous ? undefined : { memoryTokenLimiter: boundary };
-        },
+        candidate: advanceMemoryTokenBoundary(undefined, removed, 100, 25)!,
       });
 
-    await Promise.all([updateBoundary([message('newer', 2)]), updateBoundary([message('older', 1)])]);
+    const results = await Promise.all([updateBoundary([message('newer', 2)]), updateBoundary([message('older', 1)])]);
 
+    expect(results.every(result => result.supported)).toBe(true);
     expect(getMemoryTokenBoundary(await store.getThreadById({ threadId: 'thread' }))?.createdAt).toBe(
       message('newer', 2).createdAt.toISOString(),
     );
@@ -437,6 +494,60 @@ describe('token-based memory history', () => {
     await history.processInput!(args(next, context));
     expect(next.get.all.db().map(item => item.id)).toEqual(['kept']);
     expect((await store.listMessages({ threadId: 'thread', perPage: false })).messages).toHaveLength(4);
+  });
+
+  it('does not install a trim candidate when storage reports persistence unsupported', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('memory'))!;
+    const thread = await store.saveThread({
+      thread: {
+        id: 'thread',
+        resourceId: 'resource',
+        metadata: { unrelated: true },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    vi.spyOn(store, 'advanceMemoryTokenBoundary').mockImplementation(input =>
+      MemoryStorage.prototype.advanceMemoryTokenBoundary.call(store, input),
+    );
+    const context = new RequestContext();
+    context.set('MastraMemory', { thread, resourceId: 'resource' });
+    const memory = new MockMemory({ storage, options: { messageHistory: { maxTokens: 32, atMaxRemoveTokens: 0 } } });
+    const limiter = (await memory.getInputProcessors([], context)).find(p => p.id === 'memory-token-limiter')!;
+    const list = new MessageList();
+    list.add([message('old'), message('newer', 1)], 'memory');
+    list.add(message('input', 2), 'input');
+
+    await limiter.processInput!(args(list, context));
+
+    expect(store.advanceMemoryTokenBoundary).toHaveBeenCalledOnce();
+    expect(thread.metadata).toEqual({ unrelated: true });
+    expect(getMemoryTokenBoundary(await store.getThreadById({ threadId: 'thread' }))).toBeUndefined();
+  });
+
+  it('does not crash when an asymmetric storage package lacks the new operation', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('memory'))!;
+    const thread = await store.saveThread({
+      thread: {
+        id: 'thread',
+        resourceId: 'resource',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    Object.defineProperty(store, 'advanceMemoryTokenBoundary', { value: undefined, configurable: true });
+    const context = new RequestContext();
+    context.set('MastraMemory', { thread, resourceId: 'resource' });
+    const memory = new MockMemory({ storage, options: { messageHistory: { maxTokens: 32, atMaxRemoveTokens: 0 } } });
+    const limiter = (await memory.getInputProcessors([], context)).find(p => p.id === 'memory-token-limiter')!;
+    const list = new MessageList();
+    list.add([message('old'), message('newer', 1)], 'memory');
+    list.add(message('input', 2), 'input');
+
+    await expect(limiter.processInput!(args(list, context))).resolves.toBe(list);
+    expect(getMemoryTokenBoundary(await store.getThreadById({ threadId: 'thread' }))).toBeUndefined();
   });
 
   it('persists trimming through real storage and does not reintroduce removed history next turn', async () => {
