@@ -6,6 +6,7 @@ import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClu
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
+const TRIM_PAGE_SIZE = 500;
 
 /**
  * Atomically nack a pending entry only if it is still owned by the given
@@ -351,7 +352,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     topic: string,
     event: Omit<Event, 'id' | 'createdAt'>,
     options?: { localOnly?: boolean },
-  ): Promise<string | void> {
+  ): Promise<void> {
     if (this.#closed) throw new Error('RedisStreamsPubSub: cannot publish on closed client');
 
     // `localOnly` events stay entirely within the publishing process. They are
@@ -374,13 +375,13 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const promise = this.#publishRemote(topic, event);
     this.#pendingPublishes.add(promise);
     try {
-      return await promise;
+      await promise;
     } finally {
       this.#pendingPublishes.delete(promise);
     }
   }
 
-  async #publishRemote(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<string> {
+  async #publishRemote(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
     await this.#ensureWriterConnected();
 
     const id = randomUUID();
@@ -405,23 +406,26 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // after a successful XADD — and on the *last* write before a topic is
     // abandoned there is no "next write" to self-heal, leaving an immortal
     // stream despite the TTL. Atomicity closes that window.
-    if (this.#streamIdleTtlMs <= 0) {
-      return this.#writeClient.xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions);
-    }
-    const replies = await this.#writeClient
-      .multi()
-      .xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions)
-      .pExpire(streamKey, this.#streamIdleTtlMs)
-      .exec();
-    // XADD in the same transaction guarantees the key exists, so PEXPIRE must
-    // reply 1; anything else means the TTL backstop is not actually armed.
-    if (Number(replies[1]) !== 1) {
-      this.#logger?.warn?.('redis-streams: PEXPIRE inside publish MULTI did not apply', {
-        streamKey,
-        reply: String(replies[1]),
-      });
-    }
-    return String(replies[0]);
+    const promise =
+      this.#streamIdleTtlMs > 0
+        ? this.#writeClient
+            .multi()
+            .xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions)
+            .pExpire(streamKey, this.#streamIdleTtlMs)
+            .exec()
+            .then(replies => {
+              // XADD in the same transaction guarantees the key exists, so
+              // PEXPIRE must reply 1; anything else means the TTL backstop is
+              // not actually armed for this stream.
+              if (Number(replies[1]) !== 1) {
+                this.#logger?.warn?.('redis-streams: PEXPIRE inside publish MULTI did not apply', {
+                  streamKey,
+                  reply: String(replies[1]),
+                });
+              }
+            })
+        : this.#writeClient.xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions);
+    await promise;
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
@@ -750,14 +754,31 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
-   * Delete specific entries (the IDs `publish` returned) via `XDEL`. Consumer
-   * groups tolerate the gaps; readers simply never see the deleted entries.
+   * Deletes a run's entries with `XDEL`: pages through the stream with `XRANGE`
+   * and matches each entry's `runId`. Entries of other runs, including those
+   * published by other processes, are untouched.
    */
-  async trimTopic(topic: string, entryIds: string[]): Promise<void> {
-    if (this.#closed || entryIds.length === 0) return;
+  override async trimTopic(topic: string, { runId }: { runId: string }): Promise<void> {
+    if (this.#closed) return;
     try {
       await this.#ensureWriterConnected();
-      await this.#writeClient.xDel(this.#streamKey(topic), entryIds);
+      const streamKey = this.#streamKey(topic);
+      let start = '-';
+      for (;;) {
+        const page = await this.#writeClient.xRange(streamKey, start, '+', { COUNT: TRIM_PAGE_SIZE });
+        const ids: string[] = [];
+        for (const entry of page) {
+          if (!entry) continue;
+          try {
+            if ((JSON.parse(entry.message.event ?? '{}') as { runId?: string }).runId === runId) ids.push(entry.id);
+          } catch {
+            // An unparseable entry can't belong to this run.
+          }
+        }
+        if (ids.length > 0) await this.#writeClient.xDel(streamKey, ids);
+        if (page.length < TRIM_PAGE_SIZE) break;
+        start = `(${page[page.length - 1]!.id}`;
+      }
     } catch (err) {
       this.#logger?.warn?.('redis-streams: trimTopic failed', {
         topic,

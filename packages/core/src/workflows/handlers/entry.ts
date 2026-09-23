@@ -24,7 +24,7 @@ function publishStepEvent(
   engine: DefaultExecutionEngine,
   pubsub: PubSub,
   ...args: Parameters<PubSub['publish']>
-): Promise<string | void> {
+): Promise<void> {
   return engine.options.emitStepEvents === false ? Promise.resolve() : pubsub.publish(...args);
 }
 

@@ -161,19 +161,18 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
   });
 
   describe('trimTopic', () => {
-    it('deletes exactly the entries whose publish IDs it is given', async () => {
+    it("deletes only the given run's entries", async () => {
       const ps = createPubSub();
       const topic = `trim-${randomUUID()}`;
-      const first = await ps.publish(topic, makeEvent({ data: { n: 1 } }));
-      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
-      const third = await ps.publish(topic, makeEvent({ data: { n: 3 } }));
-      expect(first).toMatch(/^\d+-\d+$/);
+      await ps.publish(topic, makeEvent({ runId: 'a', data: { n: 1 } }));
+      await ps.publish(topic, makeEvent({ runId: 'b', data: { n: 2 } }));
+      await ps.publish(topic, makeEvent({ runId: 'a', data: { n: 3 } }));
 
       const inspector = await createInspector();
       const streamKey = `mastra:topic:${topic}`;
       expect(await inspector.xLen(streamKey)).toBe(3);
 
-      await ps.trimTopic(topic, [first!, third!]);
+      await ps.trimTopic(topic, { runId: 'a' });
       expect(await inspector.xLen(streamKey)).toBe(1);
 
       const received: number[] = [];
@@ -184,18 +183,20 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       await expect.poll(() => received, { timeout: 5000 }).toEqual([2]);
     }, 15_000);
 
-    it('returns entry IDs when publishing with an idle TTL', async () => {
-      const ps = createPubSub({ streamIdleTtlMs: 60_000 });
-      const topic = `trim-ttl-${randomUUID()}`;
-      const id = await ps.publish(topic, makeEvent());
-      await ps.trimTopic(topic, [id!]);
+    it('pages through streams longer than one XRANGE page', async () => {
+      const ps = createPubSub();
+      const topic = `trim-paged-${randomUUID()}`;
+      for (let i = 0; i < 1_200; i++) {
+        await ps.publish(topic, makeEvent({ runId: i % 2 === 0 ? 'a' : 'b' }));
+      }
+      await ps.trimTopic(topic, { runId: 'a' });
       const inspector = await createInspector();
-      expect(await inspector.xLen(`mastra:topic:${topic}`)).toBe(0);
-    }, 15_000);
+      expect(await inspector.xLen(`mastra:topic:${topic}`)).toBe(600);
+    }, 30_000);
 
     it('is a no-op for a topic that was never published to', async () => {
       const ps = createPubSub();
-      await expect(ps.trimTopic(`never-${randomUUID()}`, ['1-0'])).resolves.toBeUndefined();
+      await expect(ps.trimTopic(`never-${randomUUID()}`, { runId: 'a' })).resolves.toBeUndefined();
     }, 15_000);
   });
 

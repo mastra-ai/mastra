@@ -228,13 +228,12 @@ Not every topic reaches a `clearTopic` call. Topics without a defined end of lif
 await pubsub.clearTopic('workflow.events.run-123')
 ```
 
-### `trimTopic(topic, entryIds)`
+### `trimTopic(topic, { runId })`
 
-Runs `XDEL` for the given entry IDs. `publish` returns each entry's stream ID, and Mastra deletes a thread run's entries once its messages are persisted, so an idle thread's stream empties instead of growing to `maxLen`. Entries from other runs, including those from other processes, are never touched. Best-effort; failures are logged at warn level.
+Pages through the stream with `XRANGE` and runs `XDEL` for every entry published with `runId`. Mastra calls this once a thread run's messages are persisted, so an idle thread's stream empties instead of growing to `maxLen`. Because entries are matched by `runId`, a run resumed after a restart also removes the entries it published before the restart. Entries from other runs, including those from other processes, are never touched. Best-effort; failures are logged at warn level.
 
 ```typescript
-const id = await pubsub.publish('agent.thread.thread-abc', event)
-await pubsub.trimTopic('agent.thread.thread-abc', [id!])
+await pubsub.trimTopic('agent.thread.thread-abc', { runId: 'run-123' })
 ```
 
 ### `close()`

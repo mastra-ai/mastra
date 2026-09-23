@@ -29,35 +29,31 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
   failPublish = new Set<string>();
   /** When true, topics keep every event and replay the backlog to new subscribers, like Redis Streams. */
   retain = false;
-  #retained = new Map<string, Array<{ entryId: string; event: any }>>();
-  #nextEntryId = 0;
+  #retained = new Map<string, any[]>();
 
   /** Delay each `stream-part` publish, like a remote round trip, so publishing lags production. */
   streamPartDelayMs = 0;
 
-  async publish(topic: string, event: any): Promise<string | void> {
+  async publish(topic: string, event: any): Promise<void> {
     if (this.failPublish.has(topic)) throw new Error(`publish to ${topic} failed`);
     if (this.streamPartDelayMs && event.data?.type === 'stream-part') {
       await new Promise(resolve => setTimeout(resolve, this.streamPartDelayMs));
     }
     const stamped = { ...event, id: 'evt', createdAt: event.createdAt ?? new Date() };
-    const entryId = `${++this.#nextEntryId}-0`;
-    if (this.retain) this.#retained.set(topic, [...(this.#retained.get(topic) ?? []), { entryId, event: stamped }]);
+    if (this.retain) this.#retained.set(topic, [...(this.#retained.get(topic) ?? []), stamped]);
     for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
       await this.#deliver(topic, stamped, subscriber);
     }
-    return this.retain ? entryId : undefined;
   }
-  override async trimTopic(topic: string, entryIds: string[]): Promise<void> {
-    const drop = new Set(entryIds);
+  override async trimTopic(topic: string, { runId }: { runId: string }): Promise<void> {
     this.#retained.set(
       topic,
-      (this.#retained.get(topic) ?? []).filter(entry => !drop.has(entry.entryId)),
+      (this.#retained.get(topic) ?? []).filter(event => event.runId !== runId),
     );
   }
   /** Events still retained on a topic, in publish order. */
   retainedEvents(topic: string): any[] {
-    return (this.#retained.get(topic) ?? []).map(entry => entry.event);
+    return this.#retained.get(topic) ?? [];
   }
   async #deliver(topic: string, event: any, subscriber: EventCallback) {
     {
@@ -79,7 +75,7 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
     const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
     subscribers.add(cb);
     this.#subscribers.set(topic, subscribers);
-    const backlog = (this.#retained.get(topic) ?? []).map(({ event }) => event);
+    const backlog = [...(this.#retained.get(topic) ?? [])];
     if (this.delayBacklog) {
       // Redis Streams returns from subscribe() before the backlog is read.
       setTimeout(

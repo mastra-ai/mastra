@@ -174,5 +174,18 @@ describe('agent thread history over Redis', () => {
     expect(collected.filter(p => p.type === 'text-delta')).toHaveLength(0);
     subscription.unsubscribe();
     await consumed;
+
+    // Answered after the restart: the resumed run reuses the runId on a fresh
+    // runtime, and its completion must also drop the pre-restart entries.
+    const resumed = startRun(
+      new AgentThreadStreamRuntime(),
+      agent,
+      makePubSub(),
+      { runId: 'suspended-run', threadId, resourceId, messageId: 'm1' },
+      [],
+    );
+    await resumed.registered;
+    resumed.end('success');
+    await waitFor(async () => (await entryCount(key)) === 0);
   });
 });

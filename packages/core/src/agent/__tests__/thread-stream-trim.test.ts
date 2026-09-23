@@ -149,6 +149,21 @@ describe('thread topic trim', () => {
     expect(entriesFor('trim-run-suspended')).toEqual(suspendedEntries);
   });
 
+  it('deletes the suspended half of a run resumed after a restart', async () => {
+    const { trim, register, entriesFor } = setup();
+    const suspended = register('trim-run-resumed', 'suspended', new AgentThreadStreamRuntime());
+    await suspended.registered;
+    suspended.complete();
+    await settle();
+    expect(entriesFor('trim-run-resumed').length).toBeGreaterThan(0);
+
+    const resumed = register('trim-run-resumed', 'success', new AgentThreadStreamRuntime());
+    await resumed.registered;
+    resumed.complete();
+    await waitFor(() => trim.mock.calls.length === 1);
+    expect(entriesFor('trim-run-resumed')).toEqual([]);
+  });
+
   it('keeps a run held by another runtime on the same pubsub', async () => {
     const { trim, register, entriesFor, published } = setup();
     const held = register('trim-run-held', 'success', new AgentThreadStreamRuntime());

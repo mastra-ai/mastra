@@ -157,14 +157,15 @@ export class CachingPubSub extends PubSub {
     topic: string,
     event: Omit<Event, 'id' | 'createdAt' | 'index'>,
     options?: { localOnly?: boolean },
-  ): Promise<string | void> {
+  ): Promise<void> {
     if (options?.localOnly || this.shouldCache?.(topic) === false) {
       const fullEvent: Event = {
         ...event,
         id: crypto.randomUUID(),
         createdAt: new Date(),
       };
-      return this.inner.publish(topic, fullEvent, options);
+      await this.inner.publish(topic, fullEvent, options);
+      return;
     }
 
     const cacheKey = this.getCacheKey(topic);
@@ -195,7 +196,7 @@ export class CachingPubSub extends PubSub {
     };
 
     // Always publish to inner PubSub — cache failure must not block live delivery
-    return this.inner.publish(topic, fullEvent, options);
+    await this.inner.publish(topic, fullEvent, options);
   }
 
   /**
@@ -379,10 +380,10 @@ export class CachingPubSub extends PubSub {
     }
   }
 
-  /** Forward entry trims to the inner transport; the per-process cache is left to its own bounds. */
-  override async trimTopic(topic: string, entryIds: string[]): Promise<void> {
+  /** Forward run trims to the inner transport; the per-process cache is left to its own bounds. */
+  override async trimTopic(topic: string, options: { runId: string }): Promise<void> {
     try {
-      await this.inner.trimTopic(topic, entryIds);
+      await this.inner.trimTopic(topic, options);
     } catch (error) {
       this.logError(`[CachingPubSub] Failed to trim topic ${topic}`, error);
     }

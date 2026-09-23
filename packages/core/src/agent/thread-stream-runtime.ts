@@ -330,8 +330,6 @@ type AgentThreadRuntimeState = {
   streamSeqByRunId: Map<string, number>;
   approvalSuspendedRunIds: Set<string>;
   suspendedRunIds: Set<string>;
-  /** Topic entry IDs each run published, so a saved run's entries can be deleted exactly. */
-  topicEntryIdsByRunId: Map<string, string[]>;
   suspensionMetadataByRunId: Map<string, Map<string | undefined, AgentThreadRunSuspension>>;
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
   // Signals queued for a run that is starting but has not made its first model
@@ -487,7 +485,6 @@ function createRuntimeState(): AgentThreadRuntimeState {
     streamSeqByRunId: new Map(),
     approvalSuspendedRunIds: new Set(),
     suspendedRunIds: new Set(),
-    topicEntryIdsByRunId: new Map(),
     suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
     preRunSignalsByThread: new Map(),
@@ -1471,18 +1468,12 @@ export class AgentThreadStreamRuntime {
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const topic = this.#threadTopic(key);
-    const entryId = await resolvedPubSub.publish(topic, {
+    await resolvedPubSub.publish(topic, {
       type: event.type,
       // Thread-scoped control events use the thread key as their envelope correlation ID.
       runId: 'runId' in event ? event.runId : key,
       data: event,
     });
-    if (entryId && 'runId' in event && event.runId) {
-      const entryIds = this.#getState(resolvedPubSub).topicEntryIdsByRunId;
-      const ids = entryIds.get(event.runId);
-      if (ids) ids.push(entryId);
-      else entryIds.set(event.runId, [entryId]);
-    }
   }
 
   async #deliverToClaimedThreadOwner(
@@ -2139,7 +2130,6 @@ export class AgentThreadStreamRuntime {
     state.preparedRunsById.clear();
     state.resumeTailsByRunId.clear();
     state.abortedRunIds.clear();
-    state.topicEntryIdsByRunId.clear();
   }
 
   #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string) {
@@ -2726,7 +2716,7 @@ export class AgentThreadStreamRuntime {
           persisted,
           status: record.output.status,
         })
-          .then(() => this.#settleRunTopicEntries(state, pubsub, key, record, trimmable))
+          .then(() => (trimmable ? this.#trimSavedRun(pubsub, key, record) : undefined))
           .catch(() => {});
         if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
@@ -2738,26 +2728,20 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Once a run is terminal, forget the topic entries it published and, when it
-   * saved successfully and the agent has storage, delete exactly those entries.
-   * Other runs' entries (in progress, suspended, or owned by another instance)
-   * are never touched. Suspended runs keep their entries until answered.
+   * Once a run saved successfully and the agent has storage, delete every topic
+   * entry published with its runId. Matching by runId (not tracked entry IDs)
+   * also removes entries published before a restart, e.g. the suspended half of
+   * a resumed run. Other runs' entries are never touched.
    */
-  async #settleRunTopicEntries(
-    state: AgentThreadRuntimeState,
+  async #trimSavedRun(
     pubsub: PubSub | undefined,
     key: string,
-    record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions' | 'runId' | 'output'>,
-    trimmable: boolean,
+    record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions' | 'runId'>,
   ) {
-    if (record.output.status === 'suspended') return;
-    const entryIds = state.topicEntryIdsByRunId.get(record.runId);
-    state.topicEntryIdsByRunId.delete(record.runId);
-    if (!trimmable || !entryIds?.length) return;
     // Without storage the topic is the only copy, so it stays.
     const memory = await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext });
     if (!memory) return;
-    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), entryIds);
+    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), { runId: record.runId });
   }
 
   async #drainPendingSignals(
