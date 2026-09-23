@@ -2208,12 +2208,14 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionGeneration,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    executionGeneration?: string;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const key = this.getWorkflowKey(workflowName, runId);
     for (let attempt = 1; ; attempt++) {
@@ -2243,6 +2245,17 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
       if (!working || !working?.context) {
         throw new Error(`Snapshot not found for runId ${runId}`);
+      }
+      // Compare-and-set guards run before any merge: a delayed result write
+      // from a deleted execution lifetime must not merge into the snapshot a
+      // reopened lifetime installed under the same runId (PF-4385 tombstone
+      // reopen). Mirrors the updateWorkflowState guard below.
+      if (
+        !matchesExpectedWorkflowState(working, {
+          expectedExecutionGeneration: executionGeneration,
+        })
+      ) {
+        return {};
       }
 
       mergeWorkflowStepResult({ snapshot: working, stepId, result, requestContext });
