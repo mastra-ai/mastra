@@ -281,9 +281,12 @@ importers:
       '@changesets/cli':
         specifier: ^2.31.1
         version: 2.31.1(@types/node@22.19.15)
+      '@clack/core':
+        specifier: ^1.1.0
+        version: 1.4.3
       '@clack/prompts':
-        specifier: ^1.7.0
-        version: 1.7.0
+        specifier: ^1.8.1
+        version: 1.8.1
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -5422,11 +5425,11 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mastra/mcp':
-        specifier: ^1.18.0
-        version: 1.18.0(@cfworker/json-schema@4.1.1)(@mastra/core@packages+core)(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(zod@4.6.5)
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.27.1
-        version: 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+        specifier: workspace:^
+        version: link:../mcp
+      '@mastra/mcp-legacy':
+        specifier: npm:@mastra/mcp@^1.18.0
+        version: '@mastra/mcp@1.18.0(@cfworker/json-schema@4.1.1)(@mastra/core@packages+core)(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(zod@4.6.5)'
       local-pkg:
         specifier: ^1.1.2
         version: 1.1.2
@@ -5443,6 +5446,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
+      '@modelcontextprotocol/client':
+        specifier: 2.0.0
+        version: 2.0.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -12817,8 +12823,16 @@ packages:
     resolution: {integrity: sha512-/kr3UWNtdJfxZtPgDqUOmG2pvwlmcLGheex5yiZKdwbzZJxhV+HMNR9QNmyY5cGwTNV6LrR7Jtp+KjhUAP1qBQ==}
     engines: {node: '>= 20.12.0'}
 
+  '@clack/core@1.5.1':
+    resolution: {integrity: sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ==}
+    engines: {node: '>= 20.12.0'}
+
   '@clack/prompts@1.7.0':
     resolution: {integrity: sha512-y7/yvZ2TPAnR9+jnc00klvNNLkJiXFFrQA/hlLCcxA9a2A4zQIOimyFQ9XfwYKiGD1fb5GY8vbKIIgO8d5Tb2A==}
+    engines: {node: '>= 20.12.0'}
+
+  '@clack/prompts@1.8.1':
+    resolution: {integrity: sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ==}
     engines: {node: '>= 20.12.0'}
 
   '@clerk/backend@3.17.2':
@@ -36434,9 +36448,21 @@ snapshots:
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5
 
+  '@clack/core@1.5.1':
+    dependencies:
+      fast-wrap-ansi: 0.2.2
+      sisteransi: 1.0.5
+
   '@clack/prompts@1.7.0':
     dependencies:
       '@clack/core': 1.4.3
+      fast-string-width: 3.0.2
+      fast-wrap-ansi: 0.2.2
+      sisteransi: 1.0.5
+
+  '@clack/prompts@1.8.1':
+    dependencies:
+      '@clack/core': 1.5.1
       fast-string-width: 3.0.2
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5

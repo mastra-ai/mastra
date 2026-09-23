@@ -2142,6 +2142,7 @@ type InputShared_Type_111 = {
 
 type Shared_Type_0 = {
   id: string;
+  title?: string | undefined;
   description?: string | undefined;
   inputSchema?: string | undefined;
   outputSchema?: string | undefined;

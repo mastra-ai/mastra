@@ -138,7 +138,6 @@ export function BulkTraceReviewDialog({
           <div className="flex items-center gap-2">
             <Button
               tooltip="Previous item"
-              variant="outline"
               size="icon-sm"
               disabled={currentIndex === 0}
               onClick={() => setCurrentIndex(prev => prev - 1)}
@@ -150,7 +149,6 @@ export function BulkTraceReviewDialog({
             </Txt>
             <Button
               tooltip="Next item"
-              variant="outline"
               size="icon-sm"
               disabled={currentIndex === total - 1}
               onClick={() => setCurrentIndex(prev => prev + 1)}
@@ -196,7 +194,7 @@ export function BulkTraceReviewDialog({
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button icon={<X />} type="button" variant="outline" onClick={onClose}>
+            <Button icon={<X />} type="button" onClick={onClose}>
               Cancel
             </Button>
             <Button variant="default" disabled={batchInsertItems.isPending} onClick={handleSubmit}>

@@ -148,7 +148,7 @@ export function MCPClientList() {
               titleSlot="No MCP clients configured yet."
               descriptionSlot="Add one to get started."
               actionSlot={
-                <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(true)} icon={<PlusIcon />}>
+                <Button size="sm" onClick={() => setIsCreateOpen(true)} icon={<PlusIcon />}>
                   Add MCP Client
                 </Button>
               }
@@ -187,7 +187,6 @@ export function MCPClientList() {
 
                   {!readOnly && (
                     <Button
-                      variant="outline"
                       size="sm"
                       onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                         e.stopPropagation();

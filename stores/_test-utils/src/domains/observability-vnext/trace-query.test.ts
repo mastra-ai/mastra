@@ -85,7 +85,9 @@ describe('trace-query reference evaluator', () => {
   for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
     it(testCase.name, () => {
       expect(
-        normalizeTraceQueryResponse(evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, testCase.request)),
+        normalizeTraceQueryResponse(
+          evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, testCase.request, testCase.scope),
+        ),
       ).toEqual(testCase.expected);
     });
     if (!testCase.request.group) {
@@ -96,13 +98,13 @@ describe('trace-query reference evaluator', () => {
           mode: 'delta' as const,
           limit: 2,
         };
-        const bootstrap = evaluateTraceQueryRequest({ spans: [], scores: [], feedback: [] }, request);
+        const bootstrap = evaluateTraceQueryRequest({ spans: [], scores: [], feedback: [] }, request, testCase.scope);
         if (!('delta' in bootstrap)) throw new Error('Expected delta');
         let after = bootstrap.deltaCursor;
         const ids: string[] = [];
         let completed = false;
         for (let page = 0; page < 20; page++) {
-          const batch = evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, { ...request, after });
+          const batch = evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, { ...request, after }, testCase.scope);
           if (!('delta' in batch)) throw new Error('Expected delta');
           ids.push(...batch.traces.map(trace => trace.traceId));
           if (batch.delta.hasMore) expect(batch.deltaCursor).not.toBe(after);
@@ -307,7 +309,7 @@ describe('trace-query reference evaluator', () => {
 describe('thread-query reference evaluator', () => {
   for (const testCase of THREAD_QUERY_CONFORMANCE_CASES) {
     it(testCase.name, () => {
-      expect(evaluateThreadQueryRequest(THREAD_QUERY_FIXTURE_DATA, testCase.request).threads).toEqual(
+      expect(evaluateThreadQueryRequest(THREAD_QUERY_FIXTURE_DATA, testCase.request, testCase.scope).threads).toEqual(
         testCase.expected,
       );
     });

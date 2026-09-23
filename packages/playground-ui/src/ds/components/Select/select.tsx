@@ -105,12 +105,11 @@ SelectValue.displayName = 'SelectValue';
 /**
  * A select is a form field, so it reuses the Button's size/shape recipe with
  * these looks: `default` (the Input's overlay surface — the default here too,
- * so a select sits next to an Input as the same kind of thing), `outline`
- * (bordered, transparent) and `ghost` (borderless, for dense toolbars/inline
- * pickers). The high-emphasis `primary` look is the only one intentionally NOT
+ * so a select sits next to an Input as the same kind of thing) and `ghost`
+ * (borderless, for dense toolbars/inline pickers). The high-emphasis `primary` look is the only one intentionally NOT
  * offered (a field is not a call-to-action).
  */
-export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
+export type SelectTriggerVariant = 'default' | 'ghost';
 type SelectTriggerLegacyVariant = 'primary';
 
 export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'> & {

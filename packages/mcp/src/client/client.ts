@@ -1300,6 +1300,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
     return {
       name: tool.name,
+      ...(tool.title ? { title: tool.title } : {}),
       ...(tool.description ? { description: tool.description } : {}),
       inputSchema: tool.inputSchema,
       ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
@@ -1320,6 +1321,7 @@ export class InternalMastraMCPClient extends MastraBase {
   toolFromDefinition({ definition }: { definition: SerializableMCPToolDefinition }): Tool<any, any, any, any> {
     const tool = {
       name: definition.name,
+      title: definition.title,
       description: definition.description,
       inputSchema: definition.inputSchema,
       outputSchema: definition.outputSchema,
@@ -1379,6 +1381,7 @@ export class InternalMastraMCPClient extends MastraBase {
       // Server-advertised annotations are exposed on `mcp.annotations` and forwarded to
       // the requireToolApproval callback so consumers can write annotation-driven policies.
       const annotations = tool.annotations;
+      const title = tool.title || annotations?.title;
 
       if (typeof this.requireToolApproval === 'function') {
         const serverApprovalFn = this.requireToolApproval;
@@ -1443,6 +1446,7 @@ export class InternalMastraMCPClient extends MastraBase {
       };
       const mastraTool = createTool({
         id: `${this.name}_${tool.name}`,
+        title,
         description: tool.description || '',
         inputSchema: this.convertInputSchema(tool.inputSchema),
         outputSchema: this.convertOutputSchema(tool.outputSchema),

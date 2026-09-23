@@ -141,7 +141,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      evaluatePersistencePredicateBeforeDurableOperation: true,
       validateInputs: false,
+      emitStepEvents: false,
     },
     steps: [],
   })
@@ -271,7 +273,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           internal: InternalSpans.WORKFLOW,
         },
         shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+        evaluatePersistencePredicateBeforeDurableOperation: true,
         validateInputs: false,
+        emitStepEvents: false,
       },
       steps: [],
     })

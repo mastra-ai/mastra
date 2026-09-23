@@ -201,7 +201,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       )}
 
       {hasSSO && sso && (
-        <Button onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg" variant="outline">
+        <Button onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg">
           {sso.icon && <span className="mr-2">{sso.icon}</span>}
           {isSSOPending ? 'Redirecting...' : sso.text || 'Sign in'}
         </Button>

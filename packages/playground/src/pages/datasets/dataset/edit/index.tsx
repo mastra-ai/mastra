@@ -1,9 +1,9 @@
 import { Card } from '@mastra/playground-ui/components/Card';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { DatabaseIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -53,9 +53,10 @@ function EditDatasetPage() {
   if (error || !dataset) {
     return (
       <EditDatasetPageShell>
-        <ErrorState
-          title="Failed to load dataset"
-          message={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
+        <EmptyState
+          tone="error"
+          titleSlot="Failed to load dataset"
+          descriptionSlot={error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
         />
       </EditDatasetPageShell>
     );

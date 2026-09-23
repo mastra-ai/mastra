@@ -52,7 +52,7 @@ export const Default: Story = {
 export const Variants: Story = {
   render: () => (
     <div className="grid gap-4">
-      {(['default', 'outline', 'ghost', 'primary'] as const).map(variant => (
+      {(['default', 'ghost', 'primary'] as const).map(variant => (
         <div key={variant} className="flex items-center gap-2">
           {(['sm', 'md', 'lg'] as const).map(size => (
             <DropdownMenu key={size}>
@@ -78,13 +78,7 @@ export const Variants: Story = {
 export const CustomRender: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button variant="outline" size="md">
-            Open Menu
-          </Button>
-        }
-      />
+      <DropdownMenu.Trigger render={<Button size="md">Open Menu</Button>} />
       {menuItems}
     </DropdownMenu>
   ),
