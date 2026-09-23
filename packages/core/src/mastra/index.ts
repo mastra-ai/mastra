@@ -4798,15 +4798,15 @@ export class Mastra<
     if (!processor) {
       throw createUndefinedPrimitiveError('processor', processor, key);
     }
+    // Register Mastra with every processor instance, even when another processor already uses its key.
+    if (typeof processor.__registerMastra === 'function') {
+      processor.__registerMastra(this);
+    }
+
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
       return;
-    }
-
-    // Register Mastra with the processor if it supports it
-    if (typeof processor.__registerMastra === 'function') {
-      processor.__registerMastra(this);
     }
 
     processors[processorKey] = processor;
