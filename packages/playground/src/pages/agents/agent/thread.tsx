@@ -108,7 +108,8 @@ function AgentThread() {
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
   // A first visit has nothing to list: give the landing the full width until a thread exists.
-  const hideThreadsPanel = isNewThread && (isThreadsLoading || sidebarThreads.length === 0);
+  // Memory-enabled agents keep the panel — it also hosts the memory card, which must stay reachable.
+  const hideThreadsPanel = isNewThread && !hasMemory && (isThreadsLoading || sidebarThreads.length === 0);
 
   const handleRefreshThreadList = async () => {
     if (isNewThread && activeNewThread.current === newThreadKey) {

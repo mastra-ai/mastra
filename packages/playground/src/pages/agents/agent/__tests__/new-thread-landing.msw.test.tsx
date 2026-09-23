@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { GetMemoryStatusResponse } from '@mastra/client-js';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import AgentPage from '../thread';
 import { StudioConfigContext } from '@/domains/configuration';
-import { memoryEnabled, v2Agent } from '@/lib/ai-ui/__tests__/fixtures/agent';
+import { memoryDisabled, memoryEnabled, v2Agent } from '@/lib/ai-ui/__tests__/fixtures/agent';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -33,7 +34,10 @@ const createGate = () => {
   return { promise, release };
 };
 
-const useHandlers = (threads: StorageThreadType[], agentGate?: Promise<void>) => {
+const useHandlers = (
+  threads: StorageThreadType[],
+  { agentGate, memory = memoryEnabled }: { agentGate?: Promise<void>; memory?: GetMemoryStatusResponse } = {},
+) => {
   server.use(
     http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, async () => {
       await agentGate;
@@ -41,7 +45,7 @@ const useHandlers = (threads: StorageThreadType[], agentGate?: Promise<void>) =>
     }),
     http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
-    http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabled)),
+    http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memory)),
     http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
     http.get(`${BASE_URL}/api/memory/threads`, () => HttpResponse.json({ threads })),
     http.get(`${BASE_URL}/api/memory/threads/:threadId`, () => new HttpResponse(null, { status: 404 })),
@@ -87,7 +91,7 @@ describe('new thread landing', () => {
   describe('when visiting /new while the agent is still loading', () => {
     it('shows the landing skeleton instead of the chat skeleton, then resolves to the greeting', async () => {
       const agentGate = createGate();
-      useHandlers([], agentGate.promise);
+      useHandlers([], { agentGate: agentGate.promise });
       renderPage();
 
       expect(await screen.findByTestId('agent-landing-skeleton')).not.toBeNull();
@@ -100,13 +104,23 @@ describe('new thread landing', () => {
     });
   });
 
-  describe('when visiting /new and the agent has no threads', () => {
+  describe('when visiting /new and the agent has no memory', () => {
     it('hides the threads panel', async () => {
-      useHandlers([]);
+      useHandlers([], { memory: memoryDisabled });
       renderPage();
 
       expect(await screen.findByRole('button', { name: SUGGESTED_PROMPT })).not.toBeNull();
       expect(screen.queryByTestId('left-slot')).toBeNull();
+    });
+  });
+
+  describe('when visiting /new and the agent has memory but no threads', () => {
+    it('keeps the panel so the memory card stays reachable', async () => {
+      useHandlers([]);
+      renderPage();
+
+      expect(await screen.findByRole('button', { name: SUGGESTED_PROMPT })).not.toBeNull();
+      expect(screen.getByTestId('left-slot')).not.toBeNull();
     });
 
     it('renders the greeting with the agent name', async () => {
