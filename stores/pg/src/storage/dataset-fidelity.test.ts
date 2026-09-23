@@ -47,43 +47,55 @@ describe('PostgreSQL dataset field fidelity', () => {
     expect(names).toEqual(expect.arrayContaining(['createdAtZ', 'updatedAtZ']));
   });
 
-  it.each(['\u0000', { nested: '\u0000' }, { '\u0000': 'key' }])(
-    'rejects artifact JSON %j containing NUL without partial writes',
-    async input => {
-      const dataset = await storage.createDataset({ name: 'unsupported-json' });
-      const snapshot = createDatasetSnapshot({
-        formatVersion: 1,
-        datasetIdentity: randomUUID(),
-        configuration: { name: dataset.name },
-        items: [
-          {
-            itemIdentity: randomUUID(),
-            createdAt: '2026-09-01T09:00:00.123Z',
-            updatedAt: '2026-09-10T10:00:00.456Z',
-            payload: { input },
-          },
-        ],
-        provenance: {
-          exportedAt: new Date().toISOString(),
-          sourceDatasetId: dataset.id,
-          itemVersion: dataset.version,
-          configurationBasis: 'export-time',
+  it.each([
+    { input: '\u0000', expected: '' },
+    { input: { nested: '\u0000' }, expected: { nested: '' } },
+    { input: { '\u0000': 'key' }, expected: { '': 'key' } },
+  ])('repairs artifact JSON %j containing NUL', async ({ input, expected }) => {
+    const dataset = await storage.createDataset({ name: 'repaired-json' });
+    const snapshot = createDatasetSnapshot({
+      formatVersion: 1,
+      datasetIdentity: randomUUID(),
+      configuration: { name: dataset.name },
+      items: [
+        {
+          itemIdentity: randomUUID(),
+          createdAt: '2026-09-01T09:00:00.123Z',
+          updatedAt: '2026-09-10T10:00:00.456Z',
+          payload: { input },
         },
-      });
-      const parsed = parseDatasetSnapshot(JSON.stringify(snapshot));
-      expect(parsed.items[0]?.payload.input).toEqual(input);
-      await expect(
-        storage.batchInsertItems({
-          datasetId: dataset.id,
-          items: [{ input: 'valid' }, { input: parsed.items[0]?.payload.input }],
-        }),
-      ).rejects.toThrow(/unsupported Unicode escape sequence/);
-      expect(
-        (await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: false } })).items,
-      ).toEqual([]);
-      expect((await storage.getDatasetById({ id: dataset.id }))?.version).toBe(dataset.version);
-    },
-  );
+      ],
+      provenance: {
+        exportedAt: new Date().toISOString(),
+        sourceDatasetId: dataset.id,
+        itemVersion: dataset.version,
+        configurationBasis: 'export-time',
+      },
+    });
+    const parsed = parseDatasetSnapshot(JSON.stringify(snapshot));
+    expect(parsed.items[0]?.payload.input).toEqual(input);
+    await storage.batchInsertItems({
+      datasetId: dataset.id,
+      items: [{ input: 'valid' }, { input: parsed.items[0]?.payload.input }],
+    });
+    const items = (await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: false } })).items;
+    expect(items.map(item => item.input)).toEqual(expect.arrayContaining(['valid', expected]));
+    expect(items).toHaveLength(2);
+  });
+
+  it('rejects colliding repaired keys without partial writes', async () => {
+    const dataset = await storage.createDataset({ name: 'colliding-json' });
+    await expect(
+      storage.batchInsertItems({
+        datasetId: dataset.id,
+        items: [{ input: 'valid' }, { input: { ab: 1, 'a\0b': 2 } }],
+      }),
+    ).rejects.toThrow(/JSON keys collide after PostgreSQL normalization/);
+    expect((await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: false } })).items).toEqual(
+      [],
+    );
+    expect((await storage.getDatasetById({ id: dataset.id }))?.version).toBe(dataset.version);
+  });
 
   it('keeps legacy SQL NULL absent and new JSON null distinct, including bulk tombstones', async () => {
     const dataset = await storage.createDataset({ name: 'nulls' });
