@@ -1,11 +1,13 @@
 import {
-  ToolCall as ToolCallRoot,
+  Activity,
+  ActivityContent,
+  ActivityHeadline,
+  ActivityTrigger,
+} from '@mastra/playground-ui/components/ai/activity';
+import {
   ToolCallArguments,
   ToolCallCommand,
-  ToolCallContent,
   ToolCallOutput,
-  ToolCallPresentedHeader,
-  ToolCallTrigger,
   presentTool,
   stringifyToolValue,
   stripSerializedAnsi,
@@ -57,20 +59,25 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
 }
 
 export function ToolCard({ tool }: { tool: ToolCall }) {
-  const { icon, label, detail, command } = presentTool(tool.toolName, tool.args);
+  const { icon: ToolIcon, label, detail, command } = presentTool(tool.toolName, tool.args);
 
   return (
-    <ToolCallRoot
+    <Activity
       status={toolCallStatus(tool.status)}
       aria-label={`Tool: ${tool.toolName}`}
       aria-busy={tool.status === 'running'}
     >
-      <ToolCallTrigger>
-        <ToolCallPresentedHeader leading={<ToolTime at={tool.createdAt} />} icon={icon} label={label} detail={detail} />
-      </ToolCallTrigger>
-      <ToolCallContent>
+      <ActivityTrigger>
+        <ActivityHeadline
+          leading={<ToolTime at={tool.createdAt} />}
+          icon={<ToolIcon aria-hidden />}
+          label={label}
+          detail={detail}
+        />
+      </ActivityTrigger>
+      <ActivityContent>
         <ToolBody tool={tool} command={command} />
-      </ToolCallContent>
-    </ToolCallRoot>
+      </ActivityContent>
+    </Activity>
   );
 }

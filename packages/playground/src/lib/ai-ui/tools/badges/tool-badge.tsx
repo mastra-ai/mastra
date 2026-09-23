@@ -1,12 +1,12 @@
+import { ActivityHeadline } from '@mastra/playground-ui/components/ai/activity';
+import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import {
   presentTool,
   stringifyToolValue,
   stripSerializedAnsi,
   ToolCallArguments,
   ToolCallOutput,
-  ToolCallPresentedHeader,
 } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
@@ -34,7 +34,7 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   suspendPayload?: any;
   toolCalled?: boolean;
   withoutArgs?: boolean;
-  status?: ToolCallStatus;
+  status?: ActivityStatus;
 }
 
 export const ToolBadge = ({
@@ -52,7 +52,7 @@ export const ToolBadge = ({
   status = 'idle',
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
-  const { icon, label, detail } = presentTool(toolName, argsObject);
+  const { icon: ToolIcon, label, detail } = presentTool(toolName, argsObject);
   const resultPretty =
     result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
 
@@ -71,7 +71,7 @@ export const ToolBadge = ({
   return (
     <BadgeWrapper
       data-testid="tool-badge"
-      header={<ToolCallPresentedHeader icon={icon} label={label} detail={detail} />}
+      header={<ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />}
       status={status}
       extraInfo={
         metadata?.mode === 'network' ? (

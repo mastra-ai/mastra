@@ -1,6 +1,6 @@
-import { Database, FileText, Info, Layers, Radio } from 'lucide-react';
-import { ChatEvent } from './chat-event';
+import { Info, Layers } from 'lucide-react';
 import { chatEventPreview, chatEventPreviewShowsAll } from './chat-event-preview';
+import { ActivityItem } from '@/ds/components/ai/activity';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 
@@ -8,63 +8,46 @@ export interface ChatSignalProps {
   kind: 'state' | 'reactive' | 'reminder';
   label: string;
   message: string;
+  /** Names the line instead of a preview of the message, e.g. the file a reminder injects. */
   detail?: string;
   mode?: string;
-  variant?: 'row' | 'card';
-  collapsible?: boolean;
   defaultOpen?: boolean;
 }
 
 const signalKinds = {
   state: {
-    rowIcon: <Layers size={13} className="text-purple-400" aria-hidden />,
-    cardIcon: <Database className="size-4" aria-hidden />,
+    icon: <Layers className="text-purple-400" aria-hidden />,
     body: { variant: 'caption' },
   },
   reactive: {
-    rowIcon: <Info size={13} className="text-muted-foreground" aria-hidden />,
-    cardIcon: <Radio className="size-4" aria-hidden />,
+    icon: <Info aria-hidden />,
     body: { variant: 'caption' },
   },
   reminder: {
-    rowIcon: <Info size={13} className="text-accent3" aria-hidden />,
-    cardIcon: <FileText className="size-4" aria-hidden />,
+    icon: <Info className="text-accent3" aria-hidden />,
     body: { variant: 'meta', font: 'mono' },
   },
 } as const;
 
-export function ChatSignal({
-  kind,
-  label,
-  message,
-  detail,
-  mode,
-  variant = 'row',
-  collapsible,
-  defaultOpen,
-}: ChatSignalProps) {
-  const { rowIcon, cardIcon, body } = signalKinds[kind];
-  const isCard = variant === 'card';
-  const preview = chatEventPreview(message);
-  const bodyRepeatsPreview = !isCard && chatEventPreviewShowsAll(message);
+export function ChatSignal({ kind, label, message, detail, mode, defaultOpen }: ChatSignalProps) {
+  const { icon, body } = signalKinds[kind];
+  const lineHoldsMessage = detail === undefined && chatEventPreviewShowsAll(message);
 
   return (
-    <ChatEvent
-      density={isCard ? 'card' : 'row'}
-      icon={isCard ? cardIcon : rowIcon}
+    <ActivityItem
+      icon={icon}
       label={label}
-      detail={isCard ? detail : preview}
-      badges={isCard && mode ? <Badge size="sm">{mode}</Badge> : undefined}
-      collapsible={collapsible}
+      detail={detail ?? chatEventPreview(message)}
+      badges={mode ? <Badge size="xs">{mode}</Badge> : undefined}
       defaultOpen={defaultOpen}
       data-signal-kind={kind}
       aria-label={`Signal: ${label}`}
     >
-      {message && !bodyRepeatsPreview && (
+      {message && !lineHoldsMessage && (
         <Txt {...body} className="break-words whitespace-pre-wrap">
           {message}
         </Txt>
       )}
-    </ChatEvent>
+    </ActivityItem>
   );
 }

@@ -1,20 +1,14 @@
-import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import {
-  ToolCall,
-  ToolCallContent,
-  ToolCallDetail,
-  ToolCallDisclosure,
-  ToolCallHeader,
-  ToolCallIcon,
-  ToolCallLabel,
-  ToolCallSpacer,
-  ToolCallTrailing,
-  ToolCallTrigger,
-} from '../../../ds/components/ai/tool-call';
-import type { ToolCallStatus } from '../../../ds/components/ai/tool-call';
 import { useChatRunning } from '../context/chat-context';
+import {
+  Activity,
+  ActivityContent,
+  ActivityHeadline,
+  ActivityTrailing,
+  ActivityTrigger,
+} from '@/ds/components/ai/activity';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { cn } from '@/lib/utils';
 
 export interface BadgeWrapperProps {
@@ -27,9 +21,9 @@ export interface BadgeWrapperProps {
   detail?: string;
   /** Interactive trailing extras (dialog triggers), kept outside the collapse trigger. */
   extraInfo?: React.ReactNode;
-  /** Replaces the assembled icon/title/detail header — the tool path passes ToolCallPresentedHeader. */
+  /** Replaces the assembled icon/title/detail line — the tool path passes its presented headline. */
   header?: React.ReactNode;
-  status?: ToolCallStatus;
+  status?: ActivityStatus;
   'data-testid'?: string;
 }
 
@@ -55,24 +49,13 @@ export const BadgeWrapper = ({
   }, [initialCollapsed]);
 
   const header = headerOverride ?? (
-    <ToolCallHeader>
-      <ToolCallIcon>{icon}</ToolCallIcon>
-      <ToolCallLabel>{title}</ToolCallLabel>
-      {detail && <ToolCallDetail>{detail}</ToolCallDetail>}
-      <ToolCallSpacer />
-      {status === 'error' && (
-        <ToolCallTrailing>
-          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-error" />
-        </ToolCallTrailing>
-      )}
-      {collapsible && <ToolCallDisclosure />}
-    </ToolCallHeader>
+    <ActivityHeadline icon={icon} label={title} detail={detail} disclosure={collapsible} />
   );
 
   const bodyOpen = !collapsible || open;
 
   return (
-    <ToolCall
+    <Activity
       open={bodyOpen}
       onOpenChange={setOpen}
       status={status}
@@ -81,13 +64,13 @@ export const BadgeWrapper = ({
     >
       <span className="flex w-full min-w-0 items-center">
         {collapsible ? (
-          <ToolCallTrigger className="min-w-0 flex-1">{header}</ToolCallTrigger>
+          <ActivityTrigger className="min-w-0 flex-1">{header}</ActivityTrigger>
         ) : (
           <span className="min-w-0 flex-1">{header}</span>
         )}
-        {extraInfo && <ToolCallTrailing className="gap-1 pr-1">{extraInfo}</ToolCallTrailing>}
+        {extraInfo && <ActivityTrailing className="gap-1 pr-1">{extraInfo}</ActivityTrailing>}
       </span>
-      <ToolCallContent>{children}</ToolCallContent>
-    </ToolCall>
+      <ActivityContent>{children}</ActivityContent>
+    </Activity>
   );
 };

@@ -1,13 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
-import {
-  ToolCall,
-  ToolCallArguments,
-  ToolCallContent,
-  ToolCallPresentedHeader,
-  ToolCallTrigger,
-  presentTool,
-} from '../tool-call';
+import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '../activity';
+import { ToolCallArguments, presentTool } from '../tool-call';
 import { ToolApproval, ToolApprovalActions } from './tool-approval';
 
 const toolArguments = { path: 'src/agent.ts' };
@@ -94,17 +88,20 @@ export const WithoutDetails: Story = { args: { children: undefined } };
 
 export const Inline: Story = {
   name: 'Embedded in tool details',
-  render: ({ children: _children, ...args }) => (
-    <ToolCall defaultOpen aria-label={`Tool: ${args.toolName}`}>
-      <ToolCallTrigger>
-        <ToolCallPresentedHeader {...presentTool(args.toolName, toolArguments)} />
-      </ToolCallTrigger>
-      <ToolCallContent>
-        <ToolCallArguments toolName={args.toolName} args={toolArguments} />
-        <ToolApprovalActions {...args} />
-      </ToolCallContent>
-    </ToolCall>
-  ),
+  render: ({ children: _children, ...args }) => {
+    const { icon: ToolIcon, label, detail } = presentTool(args.toolName, toolArguments);
+    return (
+      <Activity defaultOpen aria-label={`Tool: ${args.toolName}`}>
+        <ActivityTrigger>
+          <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />
+        </ActivityTrigger>
+        <ActivityContent>
+          <ToolCallArguments toolName={args.toolName} args={toolArguments} />
+          <ToolApprovalActions {...args} />
+        </ActivityContent>
+      </Activity>
+    );
+  },
   parameters: {
     docs: {
       description: {

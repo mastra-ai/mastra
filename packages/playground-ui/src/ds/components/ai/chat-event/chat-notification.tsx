@@ -1,16 +1,14 @@
 import { Bell, ExternalLink } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { ChatEvent } from './chat-event';
 import { chatEventPreview, chatEventPreviewShowsAll } from './chat-event-preview';
-import { getNotificationNoticeVariant } from './notification-variant';
+import { ActivityItem } from '@/ds/components/ai/activity';
 import { Badge } from '@/ds/components/Badge';
-import { Notice } from '@/ds/components/Notice';
+import type { BadgeVariant } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 
 export interface ChatNotificationProps {
   label: string;
   message: string;
-  variant?: 'row' | 'notice';
   state?: string;
   icon?: ReactNode;
   priority?: string;
@@ -20,10 +18,15 @@ export interface ChatNotificationProps {
   defaultOpen?: boolean;
 }
 
+const priorityBadgeVariants: Partial<Record<string, BadgeVariant>> = {
+  urgent: 'red',
+  high: 'orange',
+  medium: 'blue',
+};
+
 export function ChatNotification({
   label,
   message,
-  variant = 'row',
   state = 'notification',
   icon,
   priority,
@@ -32,47 +35,39 @@ export function ChatNotification({
   link,
   defaultOpen,
 }: ChatNotificationProps) {
-  if (variant === 'notice') {
-    const hasContent = Boolean(priority || status || pending || message || link);
-    return (
-      <Notice variant={getNotificationNoticeVariant(priority)} title={label} icon={icon ?? <Bell />}>
-        {hasContent && (
-          <div className="flex flex-col gap-2">
-            {(priority || status || pending) && (
-              <div className="flex flex-wrap items-center gap-2">
-                {priority && <Badge size="xs">{priority}</Badge>}
-                {status && <Badge size="xs">{status}</Badge>}
-                {pending && <Badge size="xs">{pending} pending</Badge>}
-              </div>
-            )}
-            {message && <Notice.Message className="break-words whitespace-pre-wrap">{message}</Notice.Message>}
-            {link && <NotificationLink link={link} message={message} />}
-          </div>
-        )}
-      </Notice>
-    );
-  }
-
-  const preview = chatEventPreview(message);
-  const bodyRepeatsPreview = chatEventPreviewShowsAll(message);
+  const lineHoldsMessage = chatEventPreviewShowsAll(message);
+  const hasBadges = Boolean(priority || status || pending);
 
   return (
-    <ChatEvent
+    <ActivityItem
       label={label}
-      detail={preview}
+      detail={chatEventPreview(message)}
       detailFont="sans"
-      icon={icon ?? <Bell size={13} className="text-warning1" aria-hidden />}
+      icon={icon ?? <Bell className="text-warning1" aria-hidden />}
+      badges={
+        hasBadges && (
+          <>
+            {priority && (
+              <Badge size="xs" variant={priorityBadgeVariants[priority]}>
+                {priority}
+              </Badge>
+            )}
+            {status && <Badge size="xs">{status}</Badge>}
+            {pending && <Badge size="xs">{pending} pending</Badge>}
+          </>
+        )
+      }
       defaultOpen={defaultOpen}
       data-notification-state={state}
       aria-label={`Notification: ${label}`}
     >
-      {(!bodyRepeatsPreview || link) && (
+      {(!lineHoldsMessage || link) && (
         <div className="flex flex-col gap-2">
-          {!bodyRepeatsPreview && <Txt variant="caption">{message}</Txt>}
+          {!lineHoldsMessage && <Txt variant="caption">{message}</Txt>}
           {link && <NotificationLink link={link} message={message} />}
         </div>
       )}
-    </ChatEvent>
+    </ActivityItem>
   );
 }
 

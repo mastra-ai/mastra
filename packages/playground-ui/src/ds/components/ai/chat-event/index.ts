@@ -1,5 +1,3 @@
-export { ChatEvent } from './chat-event';
-export type { ChatEventProps } from './chat-event';
 export { ChatNotification } from './chat-notification';
 export type { ChatNotificationProps } from './chat-notification';
 export { ChatSignal } from './chat-signal';

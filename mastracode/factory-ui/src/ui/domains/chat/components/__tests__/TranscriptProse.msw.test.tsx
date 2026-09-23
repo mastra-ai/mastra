@@ -66,12 +66,11 @@ describe('assistant prose', () => {
   it('shows waiting reasoning and removes it if the stream finishes without text', () => {
     const part = { type: 'reasoning' as const, reasoning: '', details: [], state: 'streaming' as const };
     const { rerender } = renderEntries([assistant([part], true)]);
-    expect(screen.getByText('Reasoning...')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Reasoning' }).getAttribute('aria-busy')).toBe('true');
 
     const finished = { ...part, state: 'done' as const };
     rerender(<TranscriptEntries entries={[assistant([finished])]} onApprove={() => {}} onRespond={() => {}} />);
-    expect(screen.queryByText('Reasoning...')).toBeNull();
-    expect(screen.queryByRole('button', { name: /reasoning/i })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Reasoning' })).toBeNull();
   });
 
   it('reads a reply cut into parts as one markdown document', () => {

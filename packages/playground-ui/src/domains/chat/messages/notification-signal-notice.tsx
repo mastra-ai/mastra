@@ -24,7 +24,6 @@ export const NotificationSignalNotice = ({ signal }: NotificationSignalNoticePro
   const text = signalContentsToText(signal.contents);
   return (
     <ChatNotification
-      variant="notice"
       label={getNotificationTitle(signal)}
       message={text}
       priority={priority}

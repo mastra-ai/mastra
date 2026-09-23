@@ -15,8 +15,6 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
 
   return (
     <ChatSignal
-      variant="card"
-      collapsible
       kind="reminder"
       label="System reminder"
       detail={reminder.path || reminder.type}

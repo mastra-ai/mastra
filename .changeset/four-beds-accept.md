@@ -2,23 +2,67 @@
 '@mastra/playground-ui': minor
 ---
 
-Chat events now have one shell. `ChatEvent` is exported and owns both presentations through `density`: `row` for a dense transcript line, `card` for a block in a conversation. `ChatSignal`, `ChatNotification` and `ChatSkill` are presets over it, so a system reminder and a state signal are the same component with a different icon and body — not two implementations.
+Everything an agent does in a chat now renders on one `Activity` line: tool calls, reasoning, signals, notifications, skills and plain "working" rows. A body is optional, and without one the line looks the same with no chevron, so a step that returns nothing reads like one that does.
 
 ```tsx
-import { ChatEvent } from '@mastra/playground-ui/components/ai/chat-event';
+import { ActivityItem } from '@mastra/playground-ui/components/ai/activity';
 
-<ChatEvent density="card" collapsible icon={<FileText className="size-4" />} label="System reminder" detail="/repo/AGENTS.md" aria-label="Signal: system reminder">
-  <Txt variant="meta" font="mono">Keep changes scoped to the requested package.</Txt>
-</ChatEvent>;
+<ActivityItem icon={<Sparkles aria-hidden />} label="Thinking" status="running" aria-label="Thinking" />;
+
+<ActivityItem icon={<FileText aria-hidden />} label="Read file" detail="src/agent.ts" aria-label="Tool: view">
+  <ToolCallOutput text={output} />
+</ActivityItem>;
 ```
 
-**A row only folds when its body says more than its line**
+**The `ToolCall` shell is renamed to `Activity`**
 
-A short single-line message fits in the row preview, so opening the disclosure used to reveal a copy of the line above it. Such a row is now a single line with no disclosure; rows whose message is truncated or spans several lines keep theirs, as do notifications carrying a link. A row without a disclosure wraps its message instead of clipping it, so a narrow transcript never hides the end of a sentence it offers no way to open. Because folding is now the exception, a row that folds shows its chevron at rest instead of on hover, and a row preset picks its own preview typography — a notification message reads as prose, a signal preview stays monospaced.
+The compound parts moved to `components/ai/activity` under new names: `ToolCall*` becomes `Activity*`, `ToolCallPresentedHeader` becomes `ActivityHeadline`, and `ToolCallStatus` becomes `ActivityStatus`. `ActivityHeadline` takes its icon as an element instead of a component. The tool-specific blocks stay in `components/ai/tool-call`: `ToolCallArguments`, `ToolCallOutput`, `ToolCallCommand`, `ToolCallGroup` and `presentTool`.
 
-**`ChatTimeGap` replaced by `TranscriptDivider`**
+```tsx
+// Before
+import { ToolCall, ToolCallTrigger, ToolCallPresentedHeader, ToolCallContent } from '@mastra/playground-ui/components/ai/tool-call';
 
-The transcript separator moved out of the chat-event family — it is a `role="separator"` rule, not an event — and no longer parses a time string. It takes the label and, separately, the timestamp that belongs in `title`, and renders nothing at all when the label is empty.
+<ToolCall status={status}>
+  <ToolCallTrigger>
+    <ToolCallPresentedHeader icon={Search} label={label} detail={detail} />
+  </ToolCallTrigger>
+  <ToolCallContent>{body}</ToolCallContent>
+</ToolCall>;
+
+// After
+import { Activity, ActivityTrigger, ActivityHeadline, ActivityContent } from '@mastra/playground-ui/components/ai/activity';
+
+<Activity status={status}>
+  <ActivityTrigger>
+    <ActivityHeadline icon={<Search aria-hidden />} label={label} detail={detail} />
+  </ActivityTrigger>
+  <ActivityContent>{body}</ActivityContent>
+</Activity>;
+```
+
+The screen-reader status text is now "Running" or "Failed" instead of "Tool call running" or "Tool call failed", because the line is no longer only for tools.
+
+**Signals and notifications have one presentation**
+
+The card presentation of `ChatSignal` and the notice presentation of `ChatNotification` are removed along with their `variant` prop. A notification's priority is now a coloured badge on the line: urgent is red, high is orange, medium is blue. Its status and pending count are badges beside it. A system reminder names its path as the detail of the line.
+
+```tsx
+// Before
+<ChatNotification variant="notice" label="github / issue-opened" message={message} priority="high" />;
+
+// After
+<ChatNotification label="github / issue-opened" message={message} priority="high" />;
+```
+
+`ReasoningStreamingLine` is removed. `Reasoning` covers the waiting state itself: while it streams with no text yet, it shows a busy "Reasoning" line with no disclosure.
+
+**A line only folds when its body says more than the line**
+
+A short single-line message fits in the preview, so opening a disclosure used to reveal a copy of the line above it. Such a line now has no disclosure and wraps its detail instead of clipping it, so a narrow transcript never hides the end of a sentence it offers no way to open. Because folding is now the exception, a line that folds shows a dimmed chevron at rest instead of only on hover.
+
+**`ChatTimeGap` is replaced by `TranscriptDivider`**
+
+The transcript separator is a `role="separator"` rule, not an event, and it no longer parses a time string. It takes the label and, separately, the timestamp that belongs in `title`, and renders nothing when the label is empty.
 
 ```tsx
 // Before
@@ -30,17 +74,6 @@ import { ChatTimeGap } from '@mastra/playground-ui/components/ai/chat-event';
 import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
 
 <TranscriptDivider label="24 minutes later" title="Sep 17, 2026, 2:24 PM" />;
-<TranscriptDivider label="Context compacted" />;
 ```
 
-**Placement moved to the caller**
-
-`ChatSignal` (card) and `ChatNotification` (notice) no longer set their own width or vertical margin, so they can be placed in a narrow container such as a user message bubble:
-
-```tsx
-<div className="my-2 max-w-[80%]">
-  <ChatSignal variant="card" kind="state" label="workspace" message="The workspace is ready." />
-</div>
-```
-
-The card also drops its own border and canvas fill for the shared raised-surface recipe, and its mode pill is now a `Badge`. Reminder bodies are monospaced in both densities; previously only the card was.
+`ChatSignal` and `ChatNotification` no longer set their own width or vertical margin, so the caller places them.

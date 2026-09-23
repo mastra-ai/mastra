@@ -6,7 +6,7 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
-import { ReasoningStreamingLine } from '@mastra/playground-ui/domains/chat/messages/reasoning-streaming-line';
+import { Reasoning } from '@mastra/playground-ui/domains/chat/messages/reasoning';
 import { MessageText } from '@mastra/playground-ui/domains/chat/messages/renderers/message-text';
 import {
   WarningStatusRenderer,
@@ -221,7 +221,7 @@ export const MessageRow = ({ message }: MessageRowProps) => {
     Reasoning: part => {
       const state = 'state' in part ? part.state : undefined;
       if (state !== 'streaming') return null;
-      return <ReasoningStreamingLine text="Reasoning..." />;
+      return <Reasoning text="" streaming />;
     },
     Data: part => (part.type === 'data-signal' && isSignalData(part.data) ? <SignalBadge signal={part.data} /> : null),
     ToolInvocation: (part: ToolInvocationPart) => {

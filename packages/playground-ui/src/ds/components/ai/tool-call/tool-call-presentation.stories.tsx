@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { ToolCall, ToolCallCommand, ToolCallContent, ToolCallPresentedHeader, ToolCallTrigger } from './tool-call';
+import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '../activity';
+import { ToolCallCommand } from './tool-call';
 import { ToolCallArguments } from './tool-call-arguments';
 import { ToolCallGroup } from './tool-call-group';
 import type { ToolCallGroupStep } from './tool-call-group';
@@ -27,15 +28,15 @@ function ToolPreview({
   maxOutputLength,
   defaultOpen,
 }: ToolPreviewProps) {
-  const presentation = presentTool(toolName, args);
+  const { icon: ToolIcon, label, detail, command } = presentTool(toolName, args);
   return (
-    <ToolCall status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
-      <ToolCallTrigger>
-        <ToolCallPresentedHeader {...presentation} />
-      </ToolCallTrigger>
-      <ToolCallContent>
-        {commandOnly && presentation.command ? (
-          <ToolCallCommand command={presentation.command} />
+    <Activity status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
+      <ActivityTrigger>
+        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />
+      </ActivityTrigger>
+      <ActivityContent>
+        {commandOnly && command ? (
+          <ToolCallCommand command={command} />
         ) : (
           <ToolCallArguments toolName={toolName} args={args} argsText={argsText} hideArguments={hideArguments} />
         )}
@@ -44,13 +45,13 @@ function ToolPreview({
             <ToolCallOutput text={output} error={status === 'error'} maxLength={maxOutputLength} />
           </section>
         )}
-      </ToolCallContent>
-    </ToolCall>
+      </ActivityContent>
+    </Activity>
   );
 }
 
 const meta = {
-  title: 'AI/Tool Call Presentation',
+  title: 'AI/Tool Call',
   component: ToolPreview,
   decorators: [
     Story => (

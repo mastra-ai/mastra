@@ -1,6 +1,5 @@
-import { ChevronRightIcon } from 'lucide-react';
-import { ReasoningStreamingLine } from './reasoning-streaming-line';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Brain } from 'lucide-react';
+import { ActivityItem } from '@/ds/components/ai/activity';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 export interface ReasoningProps {
@@ -11,23 +10,26 @@ export interface ReasoningProps {
 
 export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
   const body = redacted ? 'Reasoning was redacted by the provider.' : text;
+  const hasBody = body.trim().length > 0;
 
-  if (!body.trim()) {
-    return streaming ? <ReasoningStreamingLine text="Reasoning..." /> : null;
-  }
+  if (!hasBody && !streaming) return null;
 
   return (
-    <Collapsible defaultOpen className="my-1.5 min-w-0">
-      <CollapsibleTrigger className="flex cursor-pointer items-center gap-1.5 text-caption text-muted-foreground pointer-coarse:min-h-11">
-        <ChevronRightIcon className="size-3.5 shrink-0" />
-        Reasoning
-      </CollapsibleTrigger>
-
-      <CollapsibleContent className="mt-1.5 min-w-0 border-l-2 border-border pl-2.5 italic [&_p]:my-0.5">
-        <MarkdownRenderer className="text-caption text-muted-foreground" streaming={streaming && !redacted}>
+    <ActivityItem
+      icon={<Brain aria-hidden />}
+      label="Reasoning"
+      status={streaming ? 'running' : 'idle'}
+      defaultOpen
+      aria-label="Reasoning"
+    >
+      {hasBody && (
+        <MarkdownRenderer
+          className="text-caption text-muted-foreground [&_p]:my-0.5"
+          streaming={streaming && !redacted}
+        >
           {body}
         </MarkdownRenderer>
-      </CollapsibleContent>
-    </Collapsible>
+      )}
+    </ActivityItem>
   );
 };

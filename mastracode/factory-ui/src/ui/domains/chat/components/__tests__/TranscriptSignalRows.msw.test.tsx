@@ -99,21 +99,22 @@ describe('TranscriptEntries signal rows', () => {
   it('renders a state delta signal as a collapsible row instead of raw markdown', async () => {
     renderEntries([stateSignalEntry('sig-1', 'factory-phase', 'delta', FACTORY_TEXT)]);
 
-    const row = screen.getByRole('group', { name: 'Signal: State delta: factory-phase' });
-    expect(row).toBeInTheDocument();
+    const row = screen.getByRole('group', { name: 'Signal: factory-phase' });
+    expect(within(row).getByText('delta')).toBeVisible();
     expect(row).toHaveAttribute('data-signal-kind', 'state');
     // Collapsed: only the truncated preview is shown; the tail of the raw
     // contents (beyond the 72-char preview) must not be rendered.
     expect(screen.queryByText(/expectedRevision 4/)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /State delta: factory-phase/ }));
+    await userEvent.click(screen.getByRole('button', { name: /factory-phase/ }));
     expect(screen.getByText(/expectedRevision 4 to advance/)).toBeInTheDocument();
   });
 
   it('labels state snapshots distinctly from deltas', () => {
     renderEntries([stateSignalEntry('sig-1', 'browser', 'snapshot', 'Browser state contents')]);
 
-    expect(screen.getByRole('group', { name: 'Signal: State snapshot: browser' })).toBeInTheDocument();
+    const row = screen.getByRole('group', { name: 'Signal: browser' });
+    expect(within(row).getByText('snapshot')).toBeVisible();
   });
 
   it('suppresses tasks and goal state snapshots entirely', () => {

@@ -1,5 +1,5 @@
+import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import { ToolCallMono } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
@@ -38,7 +38,7 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   toolCalled?: boolean;
   isComplete?: boolean;
   keepOpenForStreamingChildMessages?: boolean;
-  status?: ToolCallStatus;
+  status?: ActivityStatus;
   /** Error message when the delegation failed (tool part state `output-error`). */
   errorText?: string;
   /** When set, shows a control that loads older messages from the sub-agent thread. */

@@ -44,30 +44,23 @@ function getTaskSignalData(signal: SignalData): TaskItem[] | undefined {
   return tasks;
 }
 
-const renderSignal = (value: SignalData) => {
+export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
+  if (!isSignalData(value)) return null;
+
   const text = signalContentsToText(value.contents);
 
   if (value.type === 'state') {
     if (getTaskSignalData(value)) return null;
 
     const state = getStateLabel(value);
-    return <ChatSignal variant="card" kind="state" label={state.id} mode={state.mode} message={text} />;
+    return <ChatSignal kind="state" label={state.id} mode={state.mode} message={text} />;
   }
 
   if (value.type === 'notification') return <NotificationSignalNotice signal={value} />;
 
   if (value.type === 'reactive') {
-    return <ChatSignal variant="card" kind="reactive" label={value.tagName ?? 'Signal'} message={text} />;
+    return <ChatSignal kind="reactive" label={value.tagName ?? 'Signal'} message={text} />;
   }
 
   return null;
-};
-
-export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
-  if (!isSignalData(value)) return null;
-
-  const signal = renderSignal(value);
-  if (!signal) return null;
-
-  return <div className="my-2 max-w-[80%]">{signal}</div>;
 };

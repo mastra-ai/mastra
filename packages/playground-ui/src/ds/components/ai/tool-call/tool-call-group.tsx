@@ -1,27 +1,27 @@
 import { FoldVertical, X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import {
-  ToolCall,
-  ToolCallContent,
-  ToolCallDetail,
-  ToolCallDisclosure,
-  ToolCallHeader,
-  ToolCallIcon,
-  ToolCallLabel,
-  ToolCallSpacer,
-  ToolCallSummary,
-  ToolCallTrailing,
-  ToolCallTrigger,
-} from './tool-call';
-import type { ToolCallStatus } from './tool-call';
 import { presentTool } from './tool-presentation';
+import {
+  Activity,
+  ActivityContent,
+  ActivityDetail,
+  ActivityDisclosure,
+  ActivityHeader,
+  ActivityIcon,
+  ActivityLabel,
+  ActivitySpacer,
+  ActivitySummary,
+  ActivityTrailing,
+  ActivityTrigger,
+} from '@/ds/components/ai/activity';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 
 export interface ToolCallGroupStep {
   toolName: string;
   args: unknown;
-  status: ToolCallStatus;
+  status: ActivityStatus;
   /** A successful tool result was recorded. Supply for every step to enable outcome counts; omit to keep legacy summaries. */
   hasResult?: boolean;
 }
@@ -40,29 +40,29 @@ export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) 
   const liveDetail = running && presentTool(running.toolName, running.args).detail;
 
   return (
-    <ToolCall status={running ? 'running' : 'idle'} aria-label={`Tool group: ${steps.length} steps`}>
-      <ToolCallTrigger>
-        <ToolCallHeader>
+    <Activity status={running ? 'running' : 'idle'} aria-label={`Tool group: ${steps.length} steps`}>
+      <ActivityTrigger>
+        <ActivityHeader>
           {leading}
-          <ToolCallIcon>
+          <ActivityIcon>
             <FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-placeholder" />
-          </ToolCallIcon>
-          <ToolCallLabel>{steps.length} steps</ToolCallLabel>
-          {liveDetail && <ToolCallDetail>{liveDetail}</ToolCallDetail>}
+          </ActivityIcon>
+          <ActivityLabel>{steps.length} steps</ActivityLabel>
+          {liveDetail && <ActivityDetail>{liveDetail}</ActivityDetail>}
           <GroupKinds steps={steps} />
-          <ToolCallSpacer rule />
-          <ToolCallTrailing>
+          <ActivitySpacer rule />
+          <ActivityTrailing>
             <GroupProgress steps={steps} />
-          </ToolCallTrailing>
-          <ToolCallDisclosure />
-        </ToolCallHeader>
-      </ToolCallTrigger>
-      <ToolCallContent className="py-0.5 pr-0 pl-2.5">
+          </ActivityTrailing>
+          <ActivityDisclosure />
+        </ActivityHeader>
+      </ActivityTrigger>
+      <ActivityContent className="py-0.5 pr-0 pl-2.5">
         <ScrollArea maxHeight="18rem" autoScroll={Boolean(running)} revealScrollbarOnHover={false}>
           {children}
         </ScrollArea>
-      </ToolCallContent>
-    </ToolCall>
+      </ActivityContent>
+    </Activity>
   );
 }
 
@@ -108,10 +108,10 @@ function GroupKinds({ steps }: { steps: ToolCallGroupStep[] }) {
   const kinds = [...iconByLabel].slice(0, MAX_KIND_GLYPHS);
 
   return (
-    <ToolCallSummary role="img" aria-label={kinds.map(([label]) => label).join(', ')} className="shrink-0 gap-1.5">
+    <ActivitySummary role="img" aria-label={kinds.map(([label]) => label).join(', ')} className="shrink-0 gap-1.5">
       {kinds.map(([label, Kind]) => (
         <Kind key={label} size={12} strokeWidth={1.75} className="text-placeholder" />
       ))}
-    </ToolCallSummary>
+    </ActivitySummary>
   );
 }
