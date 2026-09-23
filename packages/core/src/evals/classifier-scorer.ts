@@ -279,9 +279,10 @@ function resolveRegisteredClassifier(mastra: Mastra | undefined, classifierId: s
 
   try {
     return mastra.getClassifierById(classifierId) as Classifier<ClassifierQuestions>;
-  } catch {
+  } catch (error) {
     throw new Error(
       `Classifier '${classifierId}' not found for scorer '${scorerId}'. Register it with Mastra classifiers or pass the classifier instance directly.`,
+      { cause: error },
     );
   }
 }

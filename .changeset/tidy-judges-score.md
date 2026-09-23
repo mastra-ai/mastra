@@ -25,6 +25,6 @@ const scorer = createClassifierScorer({
   classifier,
   question: 'quality',
   type: 'agent',
-  state: ({ run }) => ({ output: getAssistantMessageFromRunOutput(run.output) }),
+  state: ({ run }) => ({ output: getAssistantMessageFromRunOutput(run.output) ?? '' }),
 });
 ```

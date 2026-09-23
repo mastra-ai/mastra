@@ -189,6 +189,23 @@ describe('createClassifierScorer', () => {
     );
   });
 
+  it('keeps the lookup error as the cause when a registered ID is unknown', async () => {
+    const classifier = createClassifier();
+    const scorer = createClassifierScorer<typeof classifier, 'quality'>({
+      id: 'unknown-id-score',
+      classifier: 'missing-classifier',
+      question: 'quality',
+      state: ({ run }) => run.output,
+    });
+    new Mastra({ classifiers: { classifier }, scorers: { scorer } });
+
+    const error = await scorer.run({ output: 'answer' }).catch(err => err);
+    expect(error).toBeInstanceOf(ScorerRunError);
+    const lookupError = error.cause;
+    expect(lookupError.message).toMatch(/Classifier 'missing-classifier' not found for scorer 'unknown-id-score'/);
+    expect(lookupError.cause).toMatchObject({ message: expect.stringContaining('missing-classifier') });
+  });
+
   it('validates choice score mappings at runtime', () => {
     const classifier = createClassifier();
     expect(() =>

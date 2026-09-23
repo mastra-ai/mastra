@@ -54,8 +54,8 @@ export const qualityScorer = createClassifierScorer({
   question: 'quality',
   type: 'agent',
   state: ({ run }) => ({
-    input: getUserMessageFromRunInput(run.input),
-    output: getAssistantMessageFromRunOutput(run.output),
+    input: getUserMessageFromRunInput(run.input) ?? '',
+    output: getAssistantMessageFromRunOutput(run.output) ?? '',
   }),
 })
 ```
@@ -78,8 +78,8 @@ const routeScorer = createClassifierScorer({
     incorrect: 0,
   },
   state: ({ run }) => ({
-    input: getUserMessageFromRunInput(run.input),
-    output: getAssistantMessageFromRunOutput(run.output),
+    input: getUserMessageFromRunInput(run.input) ?? '',
+    output: getAssistantMessageFromRunOutput(run.output) ?? '',
   }),
 })
 ```
@@ -97,8 +97,8 @@ const factualityScorer = createClassifierScorer({
   question: 'factual',
   type: 'agent',
   state: ({ run }) => ({
-    input: getUserMessageFromRunInput(run.input),
-    output: getAssistantMessageFromRunOutput(run.output),
+    input: getUserMessageFromRunInput(run.input) ?? '',
+    output: getAssistantMessageFromRunOutput(run.output) ?? '',
   }),
 })
 ```
@@ -108,14 +108,19 @@ const factualityScorer = createClassifierScorer({
 The `state` function receives the scorer run, including `run.requestContext`, so the classifier input can include per-request details such as a tenant policy. This lets one classifier judge the same output differently depending on who made the request:
 
 ```typescript
+import { RequestContext } from '@mastra/core/request-context'
+
 export const policyScorer = createClassifierScorer({
   id: 'policy-factuality',
   classifier: responseJudge,
   question: 'factual',
   type: 'agent',
   state: ({ run }) => ({
-    policy: run.requestContext?.policy,
-    output: getAssistantMessageFromRunOutput(run.output),
+    policy:
+      run.requestContext instanceof RequestContext
+        ? run.requestContext.get('policy')
+        : run.requestContext?.policy,
+    output: getAssistantMessageFromRunOutput(run.output) ?? '',
   }),
 })
 ```
@@ -133,8 +138,8 @@ const registeredScorer = createClassifierScorer<typeof responseJudge, 'quality'>
   question: 'quality',
   type: 'agent',
   state: ({ run }) => ({
-    input: getUserMessageFromRunInput(run.input),
-    output: getAssistantMessageFromRunOutput(run.output),
+    input: getUserMessageFromRunInput(run.input) ?? '',
+    output: getAssistantMessageFromRunOutput(run.output) ?? '',
   }),
 })
 
