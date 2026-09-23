@@ -149,18 +149,13 @@ th:has(header) {
     display: inline-block;
     overflow: hidden;
   }
-  /* A band of the page background sweeps over the glyphs, so they briefly lighten while the band stays invisible on the surface. */
+  /* A white band sweeps over the glyphs, so they briefly lighten while the band stays near-invisible on the light surface. */
   .starter-shimmer::after {
     content: '';
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background-image: linear-gradient(
-      115deg,
-      transparent 35%,
-      color-mix(in oklab, var(--color-background) 75%, transparent) 50%,
-      transparent 65%
-    );
+    background-image: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.85) 50%, transparent 65%);
     animation: starter-shimmer 1100ms ease-in-out 1000ms both;
   }
 
