@@ -566,6 +566,7 @@ describe('InngestAgent parity surface', () => {
           loadWorkflowSnapshot: vi.fn().mockResolvedValue({
             value: {},
             context: {},
+            status: 'suspended',
             suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
           }),
         }),
