@@ -40,6 +40,58 @@ describe('completed shell/process background status', () => {
   });
 });
 
+describe('agent_signal_send rendering', () => {
+  const args = {
+    targetId: 'code-agent:resource-2:thread-2',
+    message: ['Please review the auth refactor.', 'Focus on session renewal.', 'Report any blocking issues.'].join(
+      '\n',
+    ),
+    priority: 'high',
+    expectsReply: true,
+  };
+
+  it('shows the full sent message and routing outcome', () => {
+    const component = new ToolExecutionComponentEnhanced('agent_signal_send', args, {}, ui);
+    component.updateResult({
+      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
+      isError: false,
+    });
+
+    const visible = stripAnsi(component.render(80).join('\n'));
+    expect(visible).toContain('target:');
+    expect(visible).toContain(args.targetId);
+    expect(visible).toContain('priority: high');
+    expect(visible).toContain('expects reply: yes');
+    expect(visible).toContain('Please review the auth refactor.');
+    expect(visible).toContain('Focus on session renewal.');
+    expect(visible).toContain('Report any blocking issues.');
+    expect(visible).toContain('Delivered high signal to "Peer Reviewer" in run run-1');
+  });
+
+  it('does not truncate the message to the quiet preview line limit', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'agent_signal_send',
+      args,
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 2, collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({
+      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
+      isError: false,
+    });
+
+    const visible = stripAnsi(component.render(80).join('\n'));
+    expect(visible).toContain('send');
+    expect(visible).toContain(args.targetId);
+    expect(visible).toContain('high');
+    expect(visible).toContain('reply expected');
+    expect(visible).toContain('Please review the auth refactor.');
+    expect(visible).toContain('Focus on session renewal.');
+    expect(visible).toContain('Report any blocking issues.');
+    expect(visible).toContain('Outcome: Delivered high signal to "Peer Reviewer" in run run-1');
+  });
+});
+
 describe('ToolExecutionComponentEnhanced quiet display', () => {
   it('shows the latest lines from partial generic tool progress in quiet mode', () => {
     const component = new ToolExecutionComponentEnhanced(

@@ -438,6 +438,9 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       case MC_TOOLS.KILL_PROCESS:
         this.renderProcessToolEnhanced();
         break;
+      case MC_TOOLS.AGENT_SIGNAL_SEND:
+        this.renderAgentSignalSendEnhanced();
+        break;
       case 'task_write':
         this.renderTaskWriteEnhanced();
         break;
@@ -477,11 +480,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       } else {
         const firstLineWidth = Math.max(10, maxLineWidth - 4);
         const continuationWidth = Math.max(10, maxLineWidth - 4);
-        const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(
-          -this.quietPreviewLineLimit,
-        );
+        const wrapped = this.wrapPreviewLines(preview, firstLineWidth, continuationWidth);
+        const visibleLines =
+          this.toolName === MC_TOOLS.AGENT_SIGNAL_SEND ? wrapped : wrapped.slice(-this.quietPreviewLineLimit);
 
-        lines = wrapped.map(line => {
+        lines = visibleLines.map(line => {
           const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
           return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
         });
@@ -792,6 +795,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         return this.formatSearchDetail();
       case MC_TOOLS.LSP_INSPECT:
         return this.getFirstLineArg('match', 80);
+      case MC_TOOLS.AGENT_SIGNAL_SEND:
+        return this.formatAgentSignalSendPreview();
       default:
         return this.formatQuietGenericResultPreview();
     }
@@ -1137,6 +1142,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       case MC_TOOLS.GET_PROCESS_OUTPUT:
       case MC_TOOLS.KILL_PROCESS:
         return this.getFirstStringArg('pid');
+      case MC_TOOLS.AGENT_SIGNAL_SEND:
+        return this.formatAgentSignalSendSummary();
       case 'skill':
         return this.getFirstStringArg('name');
       case 'subagent':
@@ -1172,6 +1179,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         return 'kill';
       case MC_TOOLS.AST_SMART_EDIT:
         return 'ast_edit';
+      case MC_TOOLS.AGENT_SIGNAL_SEND:
+        return 'send';
       default:
         return this.toolName;
     }
@@ -2440,6 +2449,60 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
     // Not JSON (e.g. Tavily format) — already readable text, return as-is
     return raw;
+  }
+
+  private formatAgentSignalSendSummary(): string {
+    const args = this.args as Record<string, unknown> | undefined;
+    const target = sanitizeAnsiForRendering(typeof args?.targetId === 'string' ? args.targetId : 'unknown peer');
+    const priority = sanitizeAnsiForRendering(typeof args?.priority === 'string' ? args.priority : 'medium');
+    const reply = args?.expectsReply === true ? 'reply expected' : 'no reply expected';
+    return `${target} · ${priority} · ${reply}`;
+  }
+
+  private formatAgentSignalSendPreview(): string {
+    const message = sanitizeAnsiForRendering(this.getFirstStringArg('message'));
+    const outcome = sanitizeAnsiForRendering(this.getFormattedOutput());
+    if (!outcome) return message;
+    if (!message) return `Outcome: ${outcome}`;
+    return `${message}\nOutcome: ${outcome}`;
+  }
+
+  private renderAgentSignalSendEnhanced(): void {
+    const border = (char: string) => this.formatToolBorder(char);
+    const maxLineWidth = Math.max(10, this.renderWidth - BOX_INDENT * 2 - 4);
+    const args = this.args as Record<string, unknown> | undefined;
+    const target = sanitizeAnsiForRendering(typeof args?.targetId === 'string' ? args.targetId : 'unknown peer');
+    const priority = sanitizeAnsiForRendering(typeof args?.priority === 'string' ? args.priority : 'medium');
+    const expectsReply = args?.expectsReply === true ? 'yes' : 'no';
+    const message = sanitizeAnsiForRendering(this.getFirstStringArg('message'));
+    const outcome = sanitizeAnsiForRendering(this.getFormattedOutput());
+    const status = this.getStatusIndicator();
+    const footerText = `${theme.bold(theme.fg('toolTitle', MC_TOOLS.AGENT_SIGNAL_SEND))}${status}`;
+
+    const renderField = (label: string, value: string): void => {
+      const lines = this.wrapPreviewLines(value || '—', maxLineWidth, maxLineWidth);
+      this.contentBox.addChild(new Text(`${border('│')} ${theme.fg('toolArgs', `${label}:`)}`, 0, 0));
+      for (const line of lines) {
+        this.contentBox.addChild(new Text(`${border('│')}   ${theme.fg('text', line)}`, 0, 0));
+      }
+    };
+
+    this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+    renderField('target', target);
+    this.contentBox.addChild(
+      new Text(
+        `${border('│')} ${theme.fg('toolArgs', 'priority:')} ${theme.fg('text', priority)}  ${theme.fg('toolArgs', 'expects reply:')} ${theme.fg('text', expectsReply)}`,
+        0,
+        0,
+      ),
+    );
+    this.contentBox.addChild(new Text(border('│'), 0, 0));
+    renderField('message', message);
+    if (outcome) {
+      this.contentBox.addChild(new Text(border('│'), 0, 0));
+      renderField('outcome', outcome);
+    }
+    this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
   }
 
   private renderGenericToolEnhanced(): void {
