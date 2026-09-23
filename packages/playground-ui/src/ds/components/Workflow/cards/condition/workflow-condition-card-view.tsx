@@ -54,7 +54,7 @@ export function WorkflowConditionCardView({
           role="region"
           aria-label="Condition details"
           tabIndex={0}
-          className={`${surfaceClasses} nodrag nopan nowheel max-h-[220px] overflow-auto p-3.5 text-foreground [&_pre]:leading-relaxed [&_pre]:whitespace-pre-wrap`}
+          className={`${surfaceClasses} nodrag nopan nowheel max-h-55 overflow-auto p-3.5 text-foreground [&_pre]:leading-relaxed [&_pre]:whitespace-pre-wrap`}
         >
           {sources.map(({ condition, expression, key }) => (
             <div key={key}>

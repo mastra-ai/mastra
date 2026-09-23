@@ -152,7 +152,9 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
         </div>
 
         {rows.map(row => {
-          const deltas = Object.entries(row.deltas).filter(([, delta]) => delta != null && delta !== 0);
+          const deltas = Object.entries(row.deltas).flatMap(([scorerId, delta]) =>
+            delta == null || delta === 0 ? [] : [{ scorerId, delta }],
+          );
 
           return (
             <div
@@ -174,8 +176,8 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
                 </Link>
                 {deltas.length > 0 && (
                   <span className="flex flex-wrap items-center gap-2">
-                    {deltas.map(([scorerId, delta]) => (
-                      <ScoreDelta key={scorerId} delta={delta as number} />
+                    {deltas.map(({ scorerId, delta }) => (
+                      <ScoreDelta key={scorerId} delta={delta} />
                     ))}
                   </span>
                 )}

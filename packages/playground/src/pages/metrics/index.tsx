@@ -1,4 +1,5 @@
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -250,13 +251,13 @@ function MetricsContent() {
           </Notice>
         )}
 
-        <MetricsFlexGrid>
+        <MetricsCardGroup>
           <AgentRunsKpiCard />
           <ModelCostKpiCard />
           <TotalTokensKpiCard />
           <ActiveThreadsKpiCard />
           <ActiveResourcesKpiCard />
-        </MetricsFlexGrid>
+        </MetricsCardGroup>
 
         <MetricsFlexGrid>
           <ModelUsageCostCard />

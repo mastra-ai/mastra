@@ -479,7 +479,7 @@ describe('Board card pending states', () => {
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
     );
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
-    expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+    expect(matches?.at(-1)?.route.path).toBe('workspaces/:sessionId/threads/:threadId');
   });
 
   it('shows a related PR as a compact link to the exact source item', async () => {

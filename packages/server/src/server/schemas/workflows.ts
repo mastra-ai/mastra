@@ -51,6 +51,7 @@ const serializedStepFlowEntrySchema = z.object({
     'step',
     'agent',
     'tool',
+    'classifier',
     'mapping',
     'sleep',
     'sleepUntil',

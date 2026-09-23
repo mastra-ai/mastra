@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
 
@@ -172,7 +172,7 @@ describe('ThreadPage merge request link placement', () => {
       ]);
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       const composer = await screen.findByRole('region', { name: 'Thread composer' });
       const activeReviewLink = await within(factorySession).findByRole('link', {
         name: MERGE_REQUEST_ACCESSIBLE_NAME,
@@ -193,7 +193,7 @@ describe('ThreadPage merge request link placement', () => {
       ]);
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       await within(factorySession).findByRole('link', { name: MERGE_REQUEST_ACCESSIBLE_NAME });
       const mergeRequestLinks = within(factorySession)
         .getAllByRole('link')
@@ -208,7 +208,7 @@ describe('ThreadPage merge request link placement', () => {
       const { githubSubscriptionRequests } = stubThreadRoute(createWireWorkItem('issue'), [subscribedMergeRequest]);
       renderThreadRoute();
 
-      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const factorySession = await findPageHeader();
       const composer = await screen.findByRole('region', { name: 'Thread composer' });
       const link = await within(composer).findByRole('link', { name: SUBSCRIBED_ACCESSIBLE_NAME });
 

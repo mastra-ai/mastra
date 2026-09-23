@@ -1,9 +1,5 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-export function getRepoName(githubUrl: string) {
-  return githubUrl.replace(/\/$/, '').split('/').pop();
-}
-
 type ContainerProps = { children: React.ReactNode; className?: string };
 
 export function Container({ children, className }: ContainerProps) {
