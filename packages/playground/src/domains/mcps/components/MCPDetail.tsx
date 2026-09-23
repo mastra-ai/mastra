@@ -102,7 +102,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           </CardHeader>
 
           {endpoints.map(endpoint => (
-            <TabContent key={endpoint.value} value={endpoint.value}>
+            <TabContent key={endpoint.value} value={endpoint.value} flush>
               <CardContent className="flex flex-col gap-3">
                 <Txt tone="muted">{endpoint.description}</Txt>
                 <div className="flex items-center justify-between gap-3 rounded-lg bg-muted py-2 pr-2 pl-3">
