@@ -111,6 +111,16 @@ describe('inngest declarative step entries', () => {
     parent.__setPubsubFactory(factory);
     expect(loopBody.__getPubsubFactory()).toBe(factory);
     expect(foreachBody.__getPubsubFactory()).toBe(factory);
+
+    const lateBody = createWorkflow({
+      id: 'late-nested-foreach-body',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+    }).commit() as unknown as InngestWorkflow;
+
+    (parent as any).foreach(lateBody as any).commit();
+    expect(lateBody.__getPubsubFactory()).toBe(factory);
+    expect(lateBody.__getEmitWorkflowEvents()).toBe(false);
   });
 });
 

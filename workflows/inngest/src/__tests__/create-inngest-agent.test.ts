@@ -23,6 +23,7 @@ import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
 
 import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
+import { InngestExecutionEngine } from '../execution-engine';
 import { createInngestAgent, isInngestAgent } from '../index';
 
 // Mock model for testing
@@ -316,6 +317,57 @@ describe('createInngestAgent observe-replay wiring', () => {
       expect(inner.__getPubsubFactory()).toBe(factory);
       expect(inner.__getEmitWorkflowEvents()).toBe(false);
     }
+  });
+
+  it('routes runtime workflow error events through the configured pubsub exactly once', async () => {
+    const customPubsub = new EventEmitterPubSub();
+    const customPublish = vi.spyOn(customPubsub, 'publish');
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('runtime-custom-pubsub-routing'),
+      inngest,
+      pubsub: customPubsub,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const execute = vi.spyOn(InngestExecutionEngine.prototype, 'execute').mockResolvedValue({
+      status: 'failed',
+      steps: {},
+      state: {},
+      error: new Error('runtime failure'),
+    } as any);
+    const lifecycle = vi
+      .spyOn(InngestExecutionEngine.prototype as any, 'invokeLifecycleCallbacksInternal')
+      .mockResolvedValue(undefined);
+    const runId = 'inngest-runtime-custom-pubsub-run';
+    const step = {
+      run: vi.fn(async (_id: string, fn: () => unknown) => fn()),
+    };
+
+    try {
+      await expect(
+        workflow.getFunction().fn({
+          event: {
+            data: {
+              inputData: { __workflowKind: 'durable-agent', runId },
+              runId,
+            },
+          },
+          step,
+          attempt: 0,
+        }),
+      ).rejects.toThrow('Workflow failed');
+    } finally {
+      execute.mockRestore();
+      lifecycle.mockRestore();
+    }
+
+    expect(customPublish).toHaveBeenCalledOnce();
+    expect(customPublish).toHaveBeenCalledWith(
+      AGENT_STREAM_TOPIC(runId),
+      expect.objectContaining({ type: AgentStreamEventTypes.ERROR, runId }),
+      undefined,
+    );
   });
 
   it('should receive both cached and live events', async () => {

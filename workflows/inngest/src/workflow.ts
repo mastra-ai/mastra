@@ -199,6 +199,15 @@ export class InngestWorkflow<
     }
   }
 
+  override commit() {
+    const committed = super.commit();
+    if (this.#pubsubFactory) {
+      this.__setPubsubFactory(this.#pubsubFactory);
+    }
+    this.__setEmitWorkflowEvents(this.#emitWorkflowEvents);
+    return committed;
+  }
+
   __setEmitWorkflowEvents(enabled: boolean) {
     this.#emitWorkflowEvents = enabled;
     const updateNested = (step: StepFlowEntry) => {
