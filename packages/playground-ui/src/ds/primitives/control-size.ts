@@ -1,3 +1,5 @@
+import * as React from 'react';
+
 // Shared size rhythm for interactive controls (Button, Input, Select trigger,
 // InputGroup, and other form-shaped triggers). These height + text-size classes
 // are the single source of truth so controls line up pixel-for-pixel when placed
@@ -6,6 +8,12 @@
 // hugs its text), so it deliberately lives in each component, not here.
 
 export type ControlSize = 'sm' | 'md' | 'lg';
+
+// The rung a wrapper imposes on the controls inside it (ButtonsGroup). A control's box is
+// forced by the wrapper's stylesheet, which reaches segments a provider cannot name — Base
+// UI renders a trigger as its own child. This carries what a stylesheet cannot reach
+// instead: the type role and adornment scale a field keys off its own `data-size`.
+export const ControlSizeContext = React.createContext<ControlSize | undefined>(undefined);
 
 // Height only — for square/icon controls and wrappers that own height on the
 // border-box while their inner control inherits it.
@@ -36,14 +44,12 @@ export const controlSizeClasses: Record<ControlSize, string> = {
 
 export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';
 
-// Open ("popup-open") state per variant. `default` is the Button's own hover
-// (for Button-shaped triggers: DropdownMenu, Popover, DateTimePicker); `field`
-// is the Input-family material used by the filled Select/Combobox triggers, and
-// it washes through `--surface-tint` for the same reason its hover does — a
-// pinned card fill cannot be swapped without going translucent.
-export const controlTriggerOpenState: Record<ControlTriggerVisualVariant | 'field', string> = {
-  default: 'data-[popup-open]:bg-fill-hover data-[popup-open]:text-foreground',
-  field: 'data-[popup-open]:[--surface-tint:var(--fill)] data-[popup-open]:text-foreground',
+// Open ("popup-open") state per variant. `default` washes through `--surface-tint`, the
+// layer its raised material expresses every other state in: its fill is a pinned card
+// colour, and swapping that would drop the control out of the material it shares with a
+// field. The transparent variants have no material to wash, so they take a fill rung.
+export const controlTriggerOpenState: Record<ControlTriggerVisualVariant, string> = {
+  default: 'data-[popup-open]:[--surface-tint:var(--fill)] data-[popup-open]:text-foreground',
   outline: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground data-[popup-open]:border-border-hover',
   ghost: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground',
 };

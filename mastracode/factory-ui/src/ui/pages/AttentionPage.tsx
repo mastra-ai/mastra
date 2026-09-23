@@ -121,7 +121,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <ButtonsGroup role="group" aria-label="Attention filter">
+        <ButtonsGroup size="sm" role="group" aria-label="Attention filter">
           {VIEWS.map(option => {
             const Icon = option.icon;
             return (
@@ -129,7 +129,6 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
                 key={option.value}
                 type="button"
                 variant={view === option.value ? 'primary' : 'outline'}
-                size="sm"
                 aria-pressed={view === option.value}
                 onClick={() => setSearchParams(option.value === 'open' ? {} : { view: option.value })}
               >

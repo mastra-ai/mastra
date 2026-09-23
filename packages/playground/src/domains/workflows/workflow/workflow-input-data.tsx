@@ -165,7 +165,7 @@ export const WorkflowInputData = ({
 
         <div
           className={cn('pb-4', {
-            'opacity-50 pointer-events-none': isSubmitLoading,
+            'pointer-events-none opacity-50': isSubmitLoading,
           })}
         >
           {draft.type === 'json' ? (
@@ -230,7 +230,7 @@ export const WorkflowInputData = ({
   if (!collapsible) {
     return (
       <>
-        {!hideHeading && <div className="border-border/50 border-b pb-3">{headingSlot ?? defaultHeading}</div>}
+        {!hideHeading && <div className="border-b border-border/50 pb-3">{headingSlot ?? defaultHeading}</div>}
         <div>{body}</div>
       </>
     );
@@ -239,7 +239,7 @@ export const WorkflowInputData = ({
   return (
     <Collapsible defaultOpen>
       <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
-        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         {headingSlot ?? defaultHeading}
       </CollapsibleTrigger>
 

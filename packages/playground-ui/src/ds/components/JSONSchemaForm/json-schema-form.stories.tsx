@@ -28,7 +28,7 @@ type Story = StoryObj<typeof JSONSchemaForm.Root>;
 function JSONSchemaPreview({ schema }: { schema: JsonSchema | null }) {
   if (!schema) return null;
   return (
-    <pre className="bg-background text-muted-foreground text-caption mt-4 max-h-64 overflow-auto rounded-md p-4">
+    <pre className="mt-4 max-h-64 overflow-auto rounded-md bg-background p-4 text-caption text-muted-foreground">
       {JSON.stringify(schema, null, 2)}
     </pre>
   );
@@ -234,7 +234,7 @@ export const CustomStyling: Story = {
                 field={field}
                 parentPath={parentPath}
                 depth={depth}
-                className="border-border bg-sidebar rounded-lg border p-4"
+                className="rounded-lg border border-border bg-sidebar p-4"
               >
                 <div className="mb-3 grid grid-cols-2 gap-3">
                   <JSONSchemaForm.FieldName label="Property Name" placeholder="Enter name" />

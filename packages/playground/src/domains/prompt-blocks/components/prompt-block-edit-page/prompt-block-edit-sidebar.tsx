@@ -138,13 +138,13 @@ export function PromptBlockEditSidebar({
         </div>
 
         {/* Variables */}
-        <div className="border-border flex flex-col gap-4 border-t p-4">
+        <div className="flex flex-col gap-4 border-t border-border p-4">
           <SectionHeader
             title="Variables"
             subtitle={
               <>
                 Define variables for this prompt block. Use{' '}
-                <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax in your content.
+                <code className="font-medium text-accent1">{'{{variableName}}'}</code> syntax in your content.
               </>
             }
           />
@@ -172,7 +172,7 @@ export function PromptBlockEditSidebar({
 
         {/* Used by */}
         {mode === 'edit' && blockId && (
-          <div className="border-border flex flex-col gap-3 border-t p-4">
+          <div className="flex flex-col gap-3 border-t border-border p-4">
             <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
             {usedByAgents.length > 0 ? (
               <div className="flex flex-col gap-1.5">
@@ -181,7 +181,7 @@ export function PromptBlockEditSidebar({
                     key={agent.id}
                     type="button"
                     onClick={() => navigate(paths.agentLink(agent.id))}
-                    className="hover:bg-fill-subtle flex items-center gap-2 rounded-md px-2 py-1.5 text-left"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-fill-subtle"
                   >
                     <Txt variant="caption" tone="ink" className="truncate">
                       {agent.name || agent.id}

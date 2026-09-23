@@ -11,7 +11,6 @@ import { AgentLayout } from '../../agent-layout';
 import { systemPackages } from './fixtures/channels';
 import { v2Agent } from './fixtures/composer-model-settings';
 import { LinkComponentProvider } from '@/lib/framework';
-import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { server } from '@/test/msw-server';
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
@@ -60,21 +59,18 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={navigateSpy} paths={noopPaths}>
           <TooltipProvider>
-            <RouteHeaderActionsProvider>
-              <RouteHeaderActionsSlot />
-              <MemoryRouter initialEntries={[initialEntry]}>
-                <Routes>
-                  <Route
-                    path="/agents/:agentId/*"
-                    element={
-                      <AgentLayout>
-                        <div data-testid="agent-child" />
-                      </AgentLayout>
-                    }
-                  />
-                </Routes>
-              </MemoryRouter>
-            </RouteHeaderActionsProvider>
+            <MemoryRouter initialEntries={[initialEntry]}>
+              <Routes>
+                <Route
+                  path="/agents/:agentId/*"
+                  element={
+                    <AgentLayout>
+                      <div data-testid="agent-child" />
+                    </AgentLayout>
+                  }
+                />
+              </Routes>
+            </MemoryRouter>
           </TooltipProvider>
         </LinkComponentProvider>
       </QueryClientProvider>

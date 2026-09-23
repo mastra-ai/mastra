@@ -1,5 +1,5 @@
 import type { SignalCatalogEntry, ThemeLearningEntity } from '@mastra/client-js';
-import { Columns2, List, CircleSlashIcon } from 'lucide-react';
+import { Columns2, List } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { useThemeEntities } from '../hooks';
@@ -16,7 +16,6 @@ import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ErrorState } from '@/ds/components/ErrorState';
 import { ListSearch } from '@/ds/components/ListSearch';
-import { NoDataPageLayout, PageLayout } from '@/ds/components/PageLayout';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { SessionExpired } from '@/ds/components/SessionExpired';
@@ -41,22 +40,22 @@ export interface TraceIntelligenceEntityIndexProps {
 function EntityIndexError({ error }: { error: Error }) {
   if (is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <div className="flex h-full items-center justify-center">
         <SessionExpired />
-      </NoDataPageLayout>
+      </div>
     );
   }
   if (is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <div className="flex h-full items-center justify-center">
         <PermissionDenied resource="Trace Intelligence" />
-      </NoDataPageLayout>
+      </div>
     );
   }
   return (
-    <NoDataPageLayout>
+    <div className="flex h-full items-center justify-center">
       <ErrorState title="Failed to load Trace Intelligence" message={error.message} />
-    </NoDataPageLayout>
+    </div>
   );
 }
 
@@ -162,7 +161,6 @@ export function TraceIntelligenceEntityIndex({
   } else if (entitiesQuery.data.entities.length === 0 && !hasSearch) {
     body = (
       <EmptyState
-        iconSlot={<CircleSlashIcon aria-hidden="true" />}
         titleSlot="No Trace Intelligence entities yet"
         descriptionSlot="Entities appear after Trace Intelligence begins collecting generated signal data."
       />
@@ -179,8 +177,8 @@ export function TraceIntelligenceEntityIndex({
   }
 
   return (
-    <PageLayout width="narrow" height="full" className="max-w-7xl grid-rows-[auto_minmax(0,1fr)] content-normal">
-      <PageLayout.TopArea>
+    <div className="mx-auto grid size-full min-h-0 max-w-7xl grid-rows-[auto_minmax(0,1fr)]">
+      <div className="pb-3">
         <EntityIndexControls
           search={search}
           sort={sort}
@@ -200,7 +198,7 @@ export function TraceIntelligenceEntityIndex({
             ) : undefined
           }
         />
-      </PageLayout.TopArea>
+      </div>
       <div
         className={
           settingsOpen
@@ -211,6 +209,6 @@ export function TraceIntelligenceEntityIndex({
         <div className="min-h-0 min-w-0">{body}</div>
         {settingsOpen ? <TraceSignalSettingsPanel onClose={() => setSettingsOpen(false)} /> : null}
       </div>
-    </PageLayout>
+    </div>
   );
 }

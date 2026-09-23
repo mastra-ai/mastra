@@ -309,11 +309,10 @@ export function DataCodeSection({
               onMinimizedChange={setSearchMinimized}
             />
           )}
-          <ButtonsGroup>
-            <CopyButton content={codeStr || 'No content'} size="sm" />
+          <ButtonsGroup size="sm">
+            <CopyButton content={codeStr || 'No content'} />
             {hasMultilineText && (
               <Button
-                size="sm"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 tooltip={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
@@ -321,7 +320,7 @@ export function DataCodeSection({
                 {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
               </Button>
             )}
-            <Button size="sm" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
+            <Button aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
               <ExpandIcon />
             </Button>
           </ButtonsGroup>
@@ -331,11 +330,11 @@ export function DataCodeSection({
       <div
         className={cn(
           raisedSurfaceStyle,
-          'text-caption text-muted-foreground max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+          'max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
         )}
       >
         {usePlainTextView ? (
-          <div className="text-muted-foreground font-mono break-all">
+          <div className="font-mono break-all text-muted-foreground">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (
@@ -352,7 +351,7 @@ export function DataCodeSection({
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
         <DialogContent className="grid h-[calc(100vh-6rem)]! max-w-[90vw]! grid-rows-[auto_1fr] [&>.absolute]:hidden">
           <DialogHeader className="flex-row items-center justify-between">
-            <DialogTitle className="text-caption flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
+            <DialogTitle className="flex min-w-0 items-center gap-1.5 truncate text-caption [&>svg]:size-3.5">
               {dialogTitle ?? (
                 <>
                   {icon}
@@ -374,11 +373,10 @@ export function DataCodeSection({
                   size="sm"
                 />
               )}
-              <ButtonsGroup>
-                <CopyButton content={codeStr || 'No content'} size="sm" />
+              <ButtonsGroup size="sm">
+                <CopyButton content={codeStr || 'No content'} />
                 {hasMultilineText && (
                   <Button
-                    size="sm"
                     aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                     tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                     onClick={() => setExpandedMultiline(v => !v)}
@@ -387,7 +385,7 @@ export function DataCodeSection({
                   </Button>
                 )}
                 <DialogClose asChild>
-                  <Button size="sm" aria-label="Close" tooltip="Close">
+                  <Button aria-label="Close" tooltip="Close">
                     <XIcon />
                   </Button>
                 </DialogClose>
@@ -399,10 +397,10 @@ export function DataCodeSection({
               <div
                 className={cn(
                   raisedSurfaceStyle,
-                  'text-caption text-muted-foreground overflow-hidden overflow-y-auto rounded-lg p-3 break-all',
+                  'overflow-hidden overflow-y-auto rounded-lg p-3 text-caption break-all text-muted-foreground',
                 )}
               >
-                <div className="text-muted-foreground font-mono break-all">
+                <div className="font-mono break-all text-muted-foreground">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>
                 </div>
               </div>

@@ -1,10 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleIcon, GlobeIcon, HashIcon, PlayIcon, TagIcon, TimerIcon, TriangleAlertIcon } from 'lucide-react';
+import {
+  CircleIcon,
+  GlobeIcon,
+  HashIcon,
+  PlayIcon,
+  SearchIcon,
+  TagIcon,
+  TimerIcon,
+  TriangleAlertIcon,
+  UserIcon,
+} from 'lucide-react';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from './types';
+import { Avatar } from '@/ds/components/Avatar/Avatar';
 import { Txt } from '@/ds/components/Txt';
 import { themedHueColor } from '@/lib/colors';
 
@@ -104,7 +115,7 @@ function Demo({
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
       {children?.(items)}
-      <pre className="bg-card text-meta text-muted-foreground rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+      <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">{JSON.stringify(items, null, 2)}</pre>
     </div>
   );
 }
@@ -124,6 +135,36 @@ export const WithPrefilledFilters: Story = {
       ]}
     />
   ),
+};
+
+const TEAMMATES = [
+  { id: 'github:ada', name: 'Ada' },
+  { id: 'github:grace', name: 'Grace' },
+  { id: 'github:linus', name: 'Linus' },
+];
+
+export const FreeText: Story = {
+  name: 'Free text (search field) and option avatars',
+  render: function FreeTextStory() {
+    const fields: FilterBarField[] = [
+      { id: 'text', label: 'Text', icon: SearchIcon, search: true, operators: ['contains'] },
+      {
+        id: 'teammate',
+        label: 'Teammate',
+        icon: UserIcon,
+        color: themedHueColor(200),
+        operators: ['is'],
+        strict: true,
+        suggestions: TEAMMATES.map(teammate => ({
+          value: teammate.id,
+          label: teammate.name,
+          start: <Avatar name={teammate.name} />,
+        })),
+      },
+      ...FIELDS,
+    ];
+    return <Demo fields={fields} />;
+  },
 };
 
 const SLOW_MODELS = ['gpt-4o', 'gpt-4o-mini', 'claude-sonnet-4', 'claude-opus-4', 'gemini-2.5-pro', 'llama-3.3-70b'];
@@ -165,11 +206,11 @@ export const LazyValues: Story = {
     return (
       <Demo fields={fields}>
         {() => (
-          <div className="border-border rounded-lg border p-3">
+          <div className="rounded-lg border border-border p-3">
             <Txt variant="meta" tone="muted">
               Resolver calls ({calls.length}) — none until a field and operator are chosen:
             </Txt>
-            <ul className="text-caption text-foreground mt-1">
+            <ul className="mt-1 text-caption text-foreground">
               {calls.map((c, i) => (
                 <li key={i}>{c}</li>
               ))}
@@ -266,7 +307,7 @@ function ExpressionDemo({ initial }: { initial: FilterBarExpression }) {
         <FilterBar.Chips />
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
-      <pre className="bg-card text-meta text-muted-foreground rounded-lg p-3">
+      <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">
         {JSON.stringify(expression, null, 2)}
       </pre>
     </div>

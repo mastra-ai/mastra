@@ -1,5 +1,42 @@
 # @mastra/connect
 
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Added ten generated tool providers to @mastra/connect: Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot. Each ships checked-in tools generated from Nango integration templates, including new agent-focused actions (PostHog HogQL queries, Stripe balance/dispute/coupon/account reads, GitHub tags and trees, Slack Connect shared-channel invites, Twitter search and following lookups, HubSpot form submission). Attach a provider connection in Mastra Platform and the tools resolve through connect() with no extra configuration: ([#24606](https://github.com/mastra-ai/mastra/pull/24606))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { connect } from '@mastra/connect';
+
+  const agent = new Agent({
+    id: 'ops-agent',
+    model: 'anthropic/claude-sonnet-4-6',
+    tools: connect(),
+  });
+  ```
+
+### Patch Changes
+
+- Generated `@mastra/connect` providers now cover more of the upstream template catalog. Actions that authenticate with the raw connection credential — token-introspection endpoints, for example — are generated instead of skipped, and actions that validate their input with the template validation helper are generated too. The credential is fetched from the platform only for the specific actions that read it. Under the hood this extends the platform proxy runtime and the provider generator; agents consume the resulting tools through the normal provider workflow with no API changes: ([#24605](https://github.com/mastra-ai/mastra/pull/24605))
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { connect } from '@mastra/connect';
+
+  const assistant = new Agent({
+    id: 'assistant',
+    name: 'Assistant',
+    instructions: 'Help with connected services.',
+    model: 'anthropic/claude-sonnet-4-6',
+    tools: connect(), // tools for every connected provider, resolved per request
+  });
+  ```
+
+- Updated dependencies:
+  - @mastra/core@1.69.0-alpha.1
+
 ## 0.2.0
 
 ### Minor Changes

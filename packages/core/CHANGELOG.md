@@ -1,5 +1,40 @@
 # @mastra/core
 
+## 1.69.0-alpha.2
+
+### Minor Changes
+
+- Added a typed Classifier primitive for fixed-option evaluation with AI SDK evaluation models. ([#24458](https://github.com/mastra-ai/mastra/pull/24458))
+
+  ```ts
+  import { Classifier } from '@mastra/core/classifier';
+
+  const classifier = new Classifier({ id: 'router', model });
+  const result = await classifier.evaluate({
+    state: request,
+    questions: {
+      route: {
+        type: 'choice',
+        criteria: { support: 'Support request', sales: 'Sales request' },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed a crash where a background process started with the `execute_command` workspace tool could terminate the host process. If the exit callback threw or the process could not be observed after the PID was returned, the failure escaped as an unhandled promise rejection. These failures are now caught and logged instead. ([#24638](https://github.com/mastra-ai/mastra/pull/24638))
+
+## 1.69.0-alpha.1
+
+## 1.69.0-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf))
+
+- Fixed chat channel messages (Slack, Discord, etc.) silently disappearing when the agent failed during setup. If workspace, instructions, tools, or model resolution throws before the run starts, the error is now posted back to the chat thread instead of being dropped with no reply. ([#24300](https://github.com/mastra-ai/mastra/pull/24300))
+
 ## 1.68.0
 
 ### Minor Changes

@@ -28,3 +28,12 @@ export const CustomRecovery: Story = {
     actionSlot: <Button onClick={fn()}>Request access</Button>,
   },
 };
+
+export const Fill: Story = {
+  args: { variant: 'fill' },
+  render: args => (
+    <div className="h-120 border border-dashed border-border">
+      <PermissionDenied {...args} />
+    </div>
+  ),
+};
