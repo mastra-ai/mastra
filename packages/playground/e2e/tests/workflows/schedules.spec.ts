@@ -153,14 +153,16 @@ test.describe('Workflow schedules', () => {
   });
 
   test.describe('when a workflow graph has no schedules', () => {
-    test('still exposes the Schedules tab without a count', async ({ page }) => {
+    test('offers schedule setup guidance instead of navigation', async ({ page }) => {
       await page.goto('/workflows/complexWorkflow/graph');
 
-      const schedulesTab = page.getByRole('tab', { name: /^Schedules$/ });
-      await expect(schedulesTab).toBeVisible();
+      const schedulesButton = page.getByRole('button', { name: 'Schedules' });
+      await expect(schedulesButton).toBeDisabled();
+      await expect(page.getByRole('tab', { name: /^Schedules$/ })).toHaveCount(0);
 
-      await schedulesTab.click();
-      await expect(page).toHaveURL(/\/workflows\/complexWorkflow\/schedules$/);
+      await schedulesButton.locator('..').hover();
+      await expect(page.getByRole('tooltip')).toContainText('Configure a schedule on this workflow');
+      await expect(page).toHaveURL(/\/workflows\/complexWorkflow\/graph$/);
     });
   });
 });
