@@ -2309,7 +2309,15 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
-  handler: async ({ mastra, agentId, resourceId, threadId, abortSignal, requestContext: serverRequestContext }) => {
+  handler: async ({
+    mastra,
+    agentId,
+    resourceId,
+    threadId,
+    withInitialHistory,
+    abortSignal,
+    requestContext: serverRequestContext,
+  }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
       if (typeof (agent as { subscribeToThread?: unknown }).subscribeToThread !== 'function') {
@@ -2336,6 +2344,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       const subscription = await agent.subscribeToThread({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
+        ...(withInitialHistory ? { withInitialHistory, requestContext: serverRequestContext } : {}),
       });
 
       let cleanedUp = false;

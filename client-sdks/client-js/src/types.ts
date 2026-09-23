@@ -158,6 +158,11 @@ export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agent
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
+  /**
+   * Emit one `thread-history` chunk with the stored thread messages before any
+   * run parts; parts already covered by that history are not replayed.
+   */
+  withInitialHistory?: boolean | { perPage?: number };
 }
 
 /** @experimental Agent thread cancellation is experimental. */

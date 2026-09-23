@@ -2784,6 +2784,40 @@ describe('Agent Routes Authorization', () => {
       }
     });
 
+    it('should forward withInitialHistory with the server request context', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-history',
+        resourceId: 'user-a',
+        title: 'Subscribe History',
+      });
+      const subscribeToThread = vi.fn(async () => ({
+        activeRunId: () => null,
+        abort: vi.fn(),
+        unsubscribe: vi.fn(),
+        stream: (async function* () {})(),
+      }));
+      (mockAgent as any).subscribeToThread = subscribeToThread;
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-history',
+        withInitialHistory: { perPage: 10 },
+      } as any)) as ReadableStream;
+      await stream.cancel();
+
+      expect(subscribeToThread).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-history',
+        withInitialHistory: { perPage: 10 },
+        requestContext,
+      });
+    });
+
     it('should clear heartbeat timers when an idle subscription stream is aborted', async () => {
       vi.useFakeTimers();
       try {
