@@ -42,7 +42,7 @@ const processor = new MemoryInputFilter({
             name: 'retainFullInput',
             type: 'boolean',
             description:
-              'When true, the request input is processed exactly as supplied and is not filtered against stored history. Stored history is still loaded underneath. Set this when you assemble the input yourself and need the message sequence preserved.',
+              "When true, the request input is processed exactly as supplied and is not filtered against stored history. Stored history is still loaded underneath, and every input message that isn't already stored is saved to the thread, including few-shot examples. Set this when you assemble the input yourself and need the message sequence preserved.",
             isOptional: true,
             defaultValue: 'false',
           },

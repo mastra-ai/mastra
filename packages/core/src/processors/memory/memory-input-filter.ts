@@ -59,7 +59,7 @@
  * A caller that assembled the input itself can opt out of all of the above with
  * `retainFullInput`. The input is then processed exactly as supplied — no trim, no seed strip —
  * which is what the nested `useAgent` structuring pass needs so its replayed request keeps the
- * same shape as the parent run and provider prompt caching still hits.
+ * same message prefix as the parent run.
  *
  * ## What happens after this runs
  *
@@ -86,7 +86,7 @@ export interface MemoryInputFilterOptions {
    * When true, the request input is left exactly as supplied and no trimming or seeding is
    * performed. Used by callers that assemble the input themselves and need the message
    * sequence preserved (for example the nested `useAgent` structuring pass, which replays
-   * the parent request so prompt caching still hits).
+   * the parent request's messages).
    */
   retainFullInput?: boolean;
 }

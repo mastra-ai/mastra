@@ -303,8 +303,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           thread: threadId,
           ...(resourceId ? { resource: resourceId } : {}),
           // retainFullInput: the messages above replay the parent request deliberately, so
-          // the structuring run's prompt matches the parent's prefix and provider prompt
-          // caching still hits. Trimming the replay against stored history would rewrite
+          // the structuring run's prompt keeps the parent's message prefix, which provider
+          // prompt caching depends on. Trimming the replay against stored history would rewrite
           // that prefix (and on a retry would drop the attempt being structured).
           // readOnly keeps the replay from being persisted.
           options: { readOnly: true, retainFullInput: true },

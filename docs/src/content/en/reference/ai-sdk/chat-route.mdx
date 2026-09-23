@@ -143,7 +143,7 @@ export const mastra = new Mastra({
 You can use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent:
 
 ```typescript
-const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+const { error, status, sendMessage, messages, stop } = useChat({
   transport: new DefaultChatTransport({
     api: 'http://localhost:4111/chat',
     prepareSendMessagesRequest({ messages }) {
@@ -165,3 +165,5 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 ```
 
 Without memory, send the full `messages` array as the chat route uses it as the request context.
+
+With memory, the stored thread is the source of truth, so `regenerate` and editing an earlier message in `useChat` don't change it. To change stored history, use `memory.saveMessages` or the memory store's `updateMessages`, then send a new message.

@@ -1139,8 +1139,8 @@ type BaseMemoryConfig = {
    * with an assistant message, to that message's trailing tool results), and the stored
    * history is layered underneath. Set this to true when the caller assembled the input
    * itself and needs the exact message sequence preserved — for example a nested
-   * `useAgent` structuring pass that deliberately replays the parent request so provider
-   * prompt caching still hits.
+   * `useAgent` structuring pass that deliberately replays the parent request so its prompt
+   * keeps the parent's message prefix.
    *
    * This controls trimming only. When a memory-sourced message and an input message share
    * an id, the stored copy still occupies the slot and the input's parts are layered on top.

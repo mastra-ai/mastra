@@ -13,6 +13,6 @@ This prevents lossy client echoes from orphaning OpenAI reasoning items, re-pers
 
 This is a behavior change: on an existing thread, any input message before the last assistant message that isn't stored is removed. That includes few-shot examples and caller-assembled message arrays, not only assistant messages sent to modify the thread or user messages re-sent with a changed `createdAt` to reorder it. Use `memory.saveMessages` or the memory store's `updateMessages` to change stored history.
 
-To opt out, set the new `retainFullInput` memory option, per call on `memory.options` or agent-wide in the memory constructor options. The request input is then processed exactly as supplied, and history still loads. The `useAgent` structured output path uses it so its replayed request keeps the parent's prompt prefix and provider prompt caching still hits.
+To opt out, set the new `retainFullInput` memory option, per call on `memory.options` or agent-wide in the memory constructor options. The request input is then processed exactly as supplied, history still loads, and every input message that isn't already stored is saved to the thread. The `useAgent` structured output path uses it so its replayed request keeps the parent's message prefix.
 
 Fixes #24052.
