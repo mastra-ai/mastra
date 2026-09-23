@@ -295,7 +295,7 @@ describe('agent connection tools', () => {
       returnPeerId: 'code-agent:resource-1:thread-1',
       routingAction: 'deliver',
       runId: 'run-1',
-      content: 'Delivered high signal to "Renamed Peer" in run run-1: Please review this',
+      content: 'Delivered high signal to "Renamed Peer" in run run-1',
     });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -533,7 +533,7 @@ describe('agent connection tools', () => {
       isError: false,
       messageId: 'low-summary-message',
       routingAction: 'persist',
-      content: 'Persisted low signal for "Peer One" to process later: Read this later',
+      content: 'Persisted low signal for "Peer One" to process later',
     });
     expect(getStored().sentSignals).toEqual([
       expect.objectContaining({ messageId: 'low-summary-message', routingAction: 'persist' }),
@@ -702,7 +702,7 @@ describe('agent connection tools', () => {
       messageId: 'reply-1',
       replyTo: 'request-1',
       routingAction: 'persist',
-      content: 'Persisted low signal for "Peer One" to process later: Read this later',
+      content: 'Persisted low signal for "Peer One" to process later',
     });
   });
 

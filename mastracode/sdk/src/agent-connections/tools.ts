@@ -505,7 +505,6 @@ The target must already be saved and freshly advertise the same exact thread end
         return {
           content: formatSignalResult({
             target,
-            summary,
             priority: priority as AgentSignalPriority,
             accepted,
           }),
@@ -597,29 +596,27 @@ function formatDisconnectResult(
 
 function formatSignalResult({
   target,
-  summary,
   priority,
   accepted,
 }: {
   target: AgentPeerView;
-  summary: string;
   priority: AgentSignalPriority;
   accepted: SendAgentSignalAccepted;
 }): string {
   const label = untrustedPeerLabel(target);
   switch (accepted?.action) {
     case 'wake':
-      return `Woke ${label} with a ${priority} signal in run ${accepted.runId}: ${summary}`;
+      return `Woke ${label} with a ${priority} signal in run ${accepted.runId}`;
     case 'deliver':
-      return `Delivered ${priority} signal to ${label} in run ${accepted.runId}: ${summary}`;
+      return `Delivered ${priority} signal to ${label} in run ${accepted.runId}`;
     case 'persist':
-      return `Persisted ${priority} signal for ${label} to process later: ${summary}`;
+      return `Persisted ${priority} signal for ${label} to process later`;
     case 'discard':
-      return `The ${priority} signal to ${label} was discarded: ${summary}`;
+      return `The ${priority} signal to ${label} was discarded`;
     case 'blocked':
-      return `The ${priority} signal to ${label} was blocked because thread ${untrustedThreadId(target)} is suspended: ${summary}`;
+      return `The ${priority} signal to ${label} was blocked because thread ${untrustedThreadId(target)} is suspended`;
     default:
-      return `No signal routing outcome was produced for ${label}: ${summary}`;
+      return `No signal routing outcome was produced for ${label}`;
   }
 }
 
