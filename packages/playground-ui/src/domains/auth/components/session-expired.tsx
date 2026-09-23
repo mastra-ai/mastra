@@ -2,10 +2,9 @@ import { useMastraClient } from '@mastra/react';
 import { LogIn } from 'lucide-react';
 import { useState, useCallback } from 'react';
 
-import { Icon } from '../../icons/Icon';
-import { Button } from '../Button';
-import { EmptyState } from '../EmptyState';
-import type { EmptyStateProps } from '../EmptyState';
+import { Button } from '@/ds/components/Button';
+import { EmptyState } from '@/ds/components/EmptyState';
+import type { EmptyStateProps } from '@/ds/components/EmptyState';
 
 export interface SessionExpiredProps {
   /** Custom title override */
@@ -24,7 +23,7 @@ export function SessionExpired({ title, description, className, variant }: Sessi
   const handleLogin = useCallback(async () => {
     try {
       setIsPending(true);
-      const { baseUrl = '', apiPrefix } = (client as any).options || {};
+      const { baseUrl = '', apiPrefix } = client.options;
       const raw = (apiPrefix || '/api').trim();
       const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
       const params = new URLSearchParams({ redirect_uri: window.location.href });

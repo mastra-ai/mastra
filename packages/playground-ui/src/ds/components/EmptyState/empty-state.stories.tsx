@@ -78,3 +78,12 @@ export const Fill: Story = {
     </div>
   ),
 };
+
+export const ErrorTone: Story = {
+  args: {
+    tone: 'error',
+    titleSlot: 'Unable to load traces',
+    descriptionSlot: 'The observability store did not respond. Check the connection and try again.',
+    actionSlot: <Button>Try again</Button>,
+  },
+};

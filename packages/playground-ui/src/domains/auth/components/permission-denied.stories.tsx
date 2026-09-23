@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
 
-import { Button } from '../Button';
-import { PermissionDenied } from './PermissionDenied';
+import { PermissionDenied } from './permission-denied';
+import { Button } from '@/ds/components/Button';
 
 const meta: Meta<typeof PermissionDenied> = {
-  title: 'Feedback/PermissionDenied',
+  title: 'Domains/Auth/PermissionDenied',
   component: PermissionDenied,
   parameters: { layout: 'fullscreen' },
 };

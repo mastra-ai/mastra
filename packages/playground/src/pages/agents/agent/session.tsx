@@ -1,8 +1,8 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -71,7 +71,7 @@ function AgentSession() {
   }
 
   if (error) {
-    return <ErrorState title="Failed to load agent" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load agent" descriptionSlot={error.message} />;
   }
 
   if (!agent) {

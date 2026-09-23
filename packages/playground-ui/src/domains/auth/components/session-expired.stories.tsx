@@ -1,10 +1,10 @@
 import { MastraReactProvider } from '@mastra/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { SessionExpired } from './SessionExpired';
+import { SessionExpired } from './session-expired';
 
 const meta: Meta<typeof SessionExpired> = {
-  title: 'Feedback/SessionExpired',
+  title: 'Domains/Auth/SessionExpired',
   component: SessionExpired,
   parameters: { layout: 'fullscreen' },
   decorators: [

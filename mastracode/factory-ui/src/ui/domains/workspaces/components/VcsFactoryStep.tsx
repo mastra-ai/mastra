@@ -180,7 +180,7 @@ function ProviderConnection({
   return (
     <EmptyState
       className="min-w-0 py-8"
-      iconSlot={<span className="text-muted-foreground">{icon}</span>}
+      iconSlot={icon}
       titleSlot={`Connect ${provider}`}
       descriptionSlot={message}
       actionSlot={

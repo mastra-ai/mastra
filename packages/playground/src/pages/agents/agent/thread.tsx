@@ -1,7 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
@@ -98,7 +98,7 @@ function AgentThread() {
   }
 
   if (error) {
-    return <ErrorState title="Failed to load agent" message={error.message} />;
+    return <EmptyState tone="error" titleSlot="Failed to load agent" descriptionSlot={error.message} />;
   }
 
   if (!agent) {
